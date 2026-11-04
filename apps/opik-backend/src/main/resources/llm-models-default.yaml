@@ -1053,13 +1053,13 @@ openrouter:
   - id: "liquid/lfm-2.5-2.6b:free"
     label: "liquid/lfm-2.5-2.6b:free"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k]
-    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
+    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
   - id: "liquid/lfm-2.5-24b-a2b"
     label: "liquid/lfm-2.5-24b-a2b"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k]
-    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
+    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
   - id: "mancer/weaver"
     label: "mancer/weaver"
     structuredOutput: true
@@ -1087,7 +1087,7 @@ openrouter:
     label: "meta-llama/llama-3.3-70b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 128000}, stop: {accepted: true}, effort: {accepted: false}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "meta-llama/llama-4-maverick"
     label: "meta-llama/llama-4-maverick"
     structuredOutput: true
@@ -1340,9 +1340,9 @@ openrouter:
   - id: "moonshotai/kimi-k3.1-pro"
     label: "moonshotai/kimi-k3.1-pro"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort]
+    supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [max, high, low, none]
-    params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
   - id: "morph/morph-v3-fast"
     label: "morph/morph-v3-fast"
     structuredOutput: true
@@ -1369,7 +1369,7 @@ openrouter:
     label: "nousresearch/hermes-4-405b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: false}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}}
   - id: "nvidia/nemotron-3-nano-30b-a3b"
     label: "nvidia/nemotron-3-nano-30b-a3b"
     structuredOutput: true
@@ -1409,7 +1409,7 @@ openrouter:
     label: "nvidia/nemotron-3.5-super-vl"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}}
   - id: "nvidia/nemotron-3.5-super-vl:free"
     label: "nvidia/nemotron-3.5-super-vl:free"
     structuredOutput: true
@@ -2069,6 +2069,11 @@ openrouter:
     label: "scaledown/summarize"
     supportedParameters: [max_tokens]
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 4000}, stop: {accepted: false}, effort: {accepted: false}}
+  - id: "stealth/crouton-alpha"
+    label: "stealth/crouton-alpha"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [max, xhigh, high, medium, low, minimal]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: false}, effort: {accepted: true, levels: [minimal, low, medium, high, xhigh, max], default: max}}
   - id: "stepfun/step-3.5-flash"
     label: "stepfun/step-3.5-flash"
     supportedParameters: [frequency_penalty, max_tokens, reasoning, temperature, top_k, top_p]
@@ -2325,6 +2330,7 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: false}, effort: {accepted: true, levels: [low, high, max], default: max}}
   - id: "z-ai/glm-5.3-flashx-legal"
     label: "z-ai/glm-5.3-flashx-legal"
+    structuredOutput: true
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: false}, effort: {accepted: true, levels: [low, high, max], default: max}}
@@ -2744,8 +2750,8 @@ openrouter:
     structuredOutput: true
   - id: "meta-llama/llama-3.1-70b-instruct"
     structuredOutput: true
-    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
+    supportedParameters: [max_tokens, temperature, top_k, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "meta-llama/llama-3.2-11b-vision-instruct"
     structuredOutput: true
   - id: "meta-llama/llama-3.2-3b-instruct:free"
@@ -3308,6 +3314,14 @@ openrouter:
     supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
     reasoningEfforts: [high, medium, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 900000}, stop: {accepted: false}, effort: {accepted: true, levels: [none, low, medium, high], default: low}}
+  - id: "x-ai/grok-4.6:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [xhigh, high, medium, low]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 450000}, stop: {accepted: false}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: high}}
+  - id: "x-ai/grok-4.7:batch"
+    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature, top_p]
+    reasoningEfforts: [xhigh, high, medium, low]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 450000}, stop: {accepted: false}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: high}}
   - id: "x-ai/grok-code-fast-1"
   - id: "xiaomi/mimo-v2-flash"
   - id: "xiaomi/mimo-v2-omni"
