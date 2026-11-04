@@ -192,6 +192,11 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
                 index,
                 "key",
               ]);
+              const valueErrors = get(form.formState.errors, [
+                "authCredentials",
+                index,
+                "value",
+              ]);
 
               return (
                 <div
@@ -246,6 +251,9 @@ const AuthConfigSection: React.FC<AuthConfigSectionProps> = ({
                           )
                         }
                       />
+                    )}
+                    {valueErrors?.message && (
+                      <FormMessage>{String(valueErrors.message)}</FormMessage>
                     )}
                   </div>
                   <TooltipWrapper

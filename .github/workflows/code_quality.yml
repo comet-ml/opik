@@ -62,6 +62,7 @@ jobs:
         with:
           # Diff refs (base/head, push before/after) must be reachable.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Resolve diff range
         id: range

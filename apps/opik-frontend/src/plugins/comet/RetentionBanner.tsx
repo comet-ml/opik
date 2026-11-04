@@ -26,10 +26,12 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
   const [closed, setClosed] = useState(false);
   const activeWorkspaceName = useActiveWorkspaceName();
 
-  const { data: quotas } = useWorkspaceQuotas(
+  const { data: quotasResponse } = useWorkspaceQuotas(
     { workspaceName: activeWorkspaceName },
     { enabled: !!activeWorkspaceName && !!user?.loggedIn },
   );
+  const quotas = quotasResponse?.quotas;
+  const isTrialExpired = !!quotasResponse?.trialExpired;
 
   const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
@@ -47,19 +49,21 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     return org.id === workspace?.organizationId;
   });
 
-  const { data: organizationMembers } = useOrganizationMembers(
-    {
-      organizationId: organization?.id ?? "",
-    },
-    {
-      enabled: !!organization?.id,
-    },
-  );
+  const { data: organizationMembers, isError: isMembersError } =
+    useOrganizationMembers(
+      {
+        organizationId: organization?.id ?? "",
+      },
+      {
+        enabled: !!organization?.id,
+      },
+    );
 
-  const firstThreeAdmins = useMemo(() => {
-    return organizationMembers
-      ?.filter?.((m) => m.role === ORGANIZATION_ROLE_TYPE.admin)
-      .slice(0, 3);
+  const { admins, firstThreeAdmins } = useMemo(() => {
+    const admins = organizationMembers?.filter?.(
+      (m) => m.role === ORGANIZATION_ROLE_TYPE.admin,
+    );
+    return { admins, firstThreeAdmins: admins?.slice(0, 3) };
   }, [organizationMembers]);
 
   const isOrganizationAdmin =
@@ -71,9 +75,71 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     (spanQuota?.used || 0) / (spanQuota?.limit || 1) <
     SHOW_BANNER_MIN_THRESHOLD;
 
-  const hideBanner = !spanQuota || isUsedLess80 || closed || !user;
+  // The organization's role picks the message, so wait for it to avoid flashing the wrong one. Only the
+  // member message lists the admins, and the names are optional: members wait while the list loads,
+  // but a failed request still shows the message, just without names.
+  const isMembershipLoading =
+    !organization ||
+    (!isOrganizationAdmin && !organizationMembers && !isMembersError);
+  const isUsageWarningHidden = !spanQuota || isUsedLess80 || closed;
+  const hideBanner =
+    !user || (isTrialExpired ? isMembershipLoading : isUsageWarningHidden);
 
   const isExceededLimit = !!spanQuota && spanQuota.used >= spanQuota.limit;
+
+  const renderAdminNames = () => {
+    if (!firstThreeAdmins?.length) return "admins";
+
+    const isOneAdmin = firstThreeAdmins.length === 1;
+
+    return (
+      <>
+        {isOneAdmin ? "admin" : "admins"} (
+        {firstThreeAdmins?.map((user, idx) => (
+          <React.Fragment key={user.userName}>
+            <TooltipWrapper content={user.email}>
+              <span className="underline">{user.userName}</span>
+            </TooltipWrapper>
+            {idx !== firstThreeAdmins.length - 1 && ", "}
+          </React.Fragment>
+        ))}
+        {(admins?.length ?? 0) > 3 && "..."})
+      </>
+    );
+  };
+
+  const getTrialExpiredLabel = () => {
+    if (!isOrganizationAdmin) {
+      return (
+        <span>
+          Your Pro trial has ended, so your organization is limited to the Free
+          plan. Ask your organization {renderAdminNames()} to update the payment
+          details.
+        </span>
+      );
+    }
+
+    return (
+      <span>
+        Your Pro trial has ended, so your organization is limited to the Free
+        plan.{" "}
+        <a
+          // Opens the plan picker directly and keeps the admin on the billing page when it is closed.
+          href={buildUrl(
+            `organizations/${workspace?.organizationId}/billing`,
+            undefined,
+            "&initialOpenUpgradeCard=true&redirectFromTrialModal=true",
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="whitespace-nowrap underline"
+        >
+          Update your payment details
+        </a>{" "}
+        to keep Pro.
+      </span>
+    );
+  };
 
   const getExceededLabel = () => {
     if (isOrganizationAdmin) {
@@ -95,31 +161,24 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       );
     }
 
-    const isOneAdmin = firstThreeAdmins?.length === 1;
-
     return (
       <span>
         You&apos;ve hit your plan limits. To keep monitoring running, ask your
-        organization {isOneAdmin ? "admin" : "admins"} (
-        {firstThreeAdmins?.map((user, idx) => (
-          <React.Fragment key={user.userName}>
-            <TooltipWrapper content={user.email}>
-              <span className="underline">{user.userName}</span>
-            </TooltipWrapper>
-            {idx !== firstThreeAdmins.length - 1 && ", "}
-          </React.Fragment>
-        ))}
-        {!isOneAdmin && "..."}) to upgrade your plan.
+        organization {renderAdminNames()} to upgrade your plan.
       </span>
     );
   };
 
-  const label = isExceededLimit
-    ? getExceededLabel()
-    : `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure` +
-      "uninterrupted monitoring";
+  const getLabel = () => {
+    if (isTrialExpired) return getTrialExpiredLabel();
+    if (isExceededLimit) return getExceededLabel();
+    return (
+      `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure` +
+      "uninterrupted monitoring"
+    );
+  };
 
-  const closable = !isExceededLimit;
+  const closable = !isTrialExpired && !isExceededLimit;
 
   return (
     <Banner
@@ -131,7 +190,7 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
       className="min-h-12 p-1.5 transition-all"
       contentClassName="comet-body-s"
     >
-      {label}
+      {getLabel()}
     </Banner>
   );
 };

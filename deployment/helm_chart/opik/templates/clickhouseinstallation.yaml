@@ -69,7 +69,7 @@ spec:
     {{- end }}
 
     files:
-      config.d/logger.xml: "<yandex><logger><level>{{ .Values.clickhouse.logsLevel }}</level></logger></yandex>"
+      config.d/logger.xml: "<yandex><logger><level>{{ .Values.clickhouse.logsLevel }}</level><size>{{ .Values.clickhouse.logsMaxSize }}</size><count>{{ .Values.clickhouse.logsMaxCount }}</count></logger></yandex>"
       {{- if .Values.clickhouse.configuration }}
       {{- with .Values.clickhouse.configuration.files }}
       {{- toYaml . | nindent 6 }}
