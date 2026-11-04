@@ -127,6 +127,36 @@ export const convertLLMMessagesToPlaygroundMessages = (
     .filter((m): m is PlaygroundChatMessage => m !== null);
 
 /**
+ * Keeps logged text from being read as a Playground template: a message that
+ * contains "{{" starts with a delimiter switch, so the rest is plain text. A
+ * line holding nothing but this tag is dropped along with its line break, so a
+ * blank first line gets a spare line break to keep it.
+ */
+export const escapeMustache = (text: string): string => {
+  if (!text.includes("{{")) return text;
+
+  let pad = "%";
+  while (text.includes(`<${pad}`) || text.includes(`${pad}>`)) pad += "%";
+
+  const spareLineBreak = /^\s*?\n/.test(text) ? "\n" : "";
+  return `{{=<${pad} ${pad}>=}}${spareLineBreak}${text}`;
+};
+
+export const escapePlaygroundMessage = ({
+  role,
+  content,
+}: PlaygroundChatMessage): PlaygroundChatMessage => ({
+  role,
+  content: isString(content)
+    ? escapeMustache(content)
+    : content.map((part) =>
+        part.type === "text"
+          ? { ...part, text: escapeMustache(part.text) }
+          : part,
+      ),
+});
+
+/**
  * Detects the message format of an LLM call input the way the trace viewer's
  * Messages tab does (no format hint) and maps it to Playground chat messages.
  * Takes the raw input rather than the viewer's media-placeholder copy, so

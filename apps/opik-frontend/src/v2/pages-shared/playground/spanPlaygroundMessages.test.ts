@@ -1,11 +1,16 @@
+import mustache from "mustache";
 import { describe, expect, it } from "vitest";
 
+import { getPromptMustacheTags } from "@/lib/prompt";
 import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import { LLMMessageDescriptor } from "@/shared/PrettyLLMMessage/llmMessages";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
   canOpenSpanInPlayground,
   convertLLMMessagesToPlaygroundMessages,
+  escapeMustache,
+  escapePlaygroundMessage,
   getPlaygroundMessagesFromInput,
 } from "./spanPlaygroundMessages";
 
@@ -430,6 +435,66 @@ describe("convertLLMMessagesToPlaygroundMessages", () => {
     ];
 
     expect(convertLLMMessagesToPlaygroundMessages(messages)).toEqual([]);
+  });
+});
+
+describe("escapeMustache", () => {
+  it("leaves text without braces unchanged", () => {
+    expect(escapeMustache("Hello }} world")).toBe("Hello }} world");
+  });
+
+  it.each([
+    ["a variable", "Hello {{name}}"],
+    ["an unbalanced section", "{{#items}} never closed"],
+    ["a closing tag", "{{/items}}"],
+    ["triple braces", "{{{raw}}} and {{&raw}}"],
+    ["a comment and a partial", "{{! note }} {{> partial}}"],
+    ["a stray opening brace pair", "{{"],
+    ["JSON", '{"a":{"b":{{c}}}}'],
+    ["its own delimiter", "<% {{x}} %>"],
+    ["longer delimiters", "<%% {{x}} %%> <% %>"],
+    ["a delimiter switch", "{{=[ ]=}} [y] {{z}}"],
+    ["several lines", "line 1\n{{x}}\nline 3\n"],
+    ["leading spaces", "  {{x}}"],
+    ["a blank first line", "\n{{x}}"],
+    ["two blank first lines", "\n\n{{x}}"],
+    ["a whitespace-only first line", "   \n{{x}}"],
+    ["a blank CRLF first line", "\r\n{{x}}"],
+  ])("keeps %s as plain text", (_, text) => {
+    const escaped = escapeMustache(text);
+
+    expect(getPromptMustacheTags(escaped)).toEqual([]);
+    expect(
+      mustache.render(escaped, {}, {}, { escape: (value: string) => value }),
+    ).toBe(text);
+  });
+});
+
+describe("escapePlaygroundMessage", () => {
+  it("escapes string content", () => {
+    expect(
+      escapePlaygroundMessage({
+        role: LLM_MESSAGE_ROLE.user,
+        content: "{{x}}",
+      }),
+    ).toEqual({ role: "user", content: escapeMustache("{{x}}") });
+  });
+
+  it("escapes text parts and leaves media parts as they are", () => {
+    const image = {
+      type: "image_url" as const,
+      image_url: { url: `${IMAGE_URL}?a={{b}}` },
+    };
+
+    expect(
+      escapePlaygroundMessage({
+        role: LLM_MESSAGE_ROLE.user,
+        content: [{ type: "text", text: "{{x}}" }, image],
+      }),
+    ).toEqual({
+      role: "user",
+      content: [{ type: "text", text: escapeMustache("{{x}}") }, image],
+    });
   });
 });
 

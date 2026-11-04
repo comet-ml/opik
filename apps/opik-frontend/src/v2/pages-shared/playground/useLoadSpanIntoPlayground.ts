@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
-import { getSpanPlaygroundMessages } from "@/v2/pages-shared/playground/spanPlaygroundMessages";
+import {
+  escapePlaygroundMessage,
+  getSpanPlaygroundMessages,
+} from "@/v2/pages-shared/playground/spanPlaygroundMessages";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { Span } from "@/types/traces";
@@ -35,7 +38,7 @@ function useLoadSpanIntoPlayground() {
       if (messages.length === 0) return;
 
       loadPlayground({
-        promptContent: JSON.stringify(messages),
+        promptContent: JSON.stringify(messages.map(escapePlaygroundMessage)),
         templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
         // A logged model name is free-form; useLoadPlayground keeps it only
         // when a configured provider offers it in the model dropdown.

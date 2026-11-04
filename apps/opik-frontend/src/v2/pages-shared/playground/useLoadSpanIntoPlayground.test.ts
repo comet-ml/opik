@@ -1,6 +1,8 @@
 import { renderHook } from "@testing-library/react";
+import mustache from "mustache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { getPromptMustacheTags } from "@/lib/prompt";
 import { PlaygroundPromptType } from "@/types/playground";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { Span, SPAN_TYPE } from "@/types/traces";
@@ -134,6 +136,26 @@ describe("useLoadSpanIntoPlayground", () => {
       to: "/$workspaceName/projects/$projectId/playground",
       params: { workspaceName: "workspace", projectId: "project-1" },
     });
+  });
+
+  it("keeps logged braces as plain text", () => {
+    const text = "Fill in {{name}} and {{#unbalanced}}";
+    const prompt = loadSpan(
+      createSpan({
+        input: { messages: [{ role: "user", content: text }] },
+      }),
+    );
+
+    const content = prompt.messages[0].content as string;
+
+    expect(getPromptMustacheTags(content)).toEqual([]);
+    expect(mustache.render(content, {})).toBe(text);
+  });
+
+  it("leaves messages without braces unchanged", () => {
+    const prompt = loadSpan(createSpan());
+
+    expect(prompt.messages[1].content).toBe("Hi");
   });
 
   it("selects the span model when a configured provider serves it", () => {
