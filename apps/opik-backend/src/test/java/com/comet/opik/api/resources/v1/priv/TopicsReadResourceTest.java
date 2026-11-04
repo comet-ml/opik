@@ -553,6 +553,40 @@ class TopicsReadResourceTest {
         }
 
         @Test
+        @DisplayName("created_at ranges bound the topic subquery: a topic row whose trace_created_at is outside the "
+                + "range is not read, while the same traces as without the bound pass")
+        void createdAtBoundsTheSubquery() {
+            var seed = seed();
+            // A topic row with a trace_created_at the trace does not have: only the bound tells it apart.
+            var outside = ID_GENERATOR.generateId();
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, List.of(TraceRow.shown(
+                    seed.caller().workspaceId(), seed.projectId(), outside, now.minus(Duration.ofMinutes(5)))));
+            traceTopicsDAO.insert(List.of(TraceTopic.builder()
+                    .workspaceId(seed.caller().workspaceId())
+                    .projectId(seed.projectId())
+                    .traceId(outside)
+                    .traceCreatedAt(now.minus(Duration.ofDays(40)))
+                    .topicId(seed.labelled().id())
+                    .source(TraceTopic.Source.NIGHT)
+                    .runId(seed.saved().toString())
+                    .build())).block();
+            var labelled = filter(TraceField.TOPIC_ID, Operator.EQUAL, seed.labelled().id().toString());
+            var from = now.minus(Duration.ofDays(1)).toString();
+            var to = now.plus(Duration.ofDays(1)).toString();
+            var expected = seed.traces("labelled", "labelled again", "relabelled by a failed run");
+
+            assertTraces(seed.caller(), seed.projectId(), List.of(labelled), Stream.concat(expected.stream(),
+                    Stream.of(outside)).collect(Collectors.toSet()));
+            assertTraces(seed.caller(), seed.projectId(), List.of(
+                    filter(TraceField.CREATED_AT, Operator.GREATER_THAN_EQUAL, from),
+                    filter(TraceField.CREATED_AT, Operator.LESS_THAN_EQUAL, to), labelled), expected);
+            assertTraces(seed.caller(), seed.projectId(), List.of(labelled,
+                    filter(TraceField.CREATED_AT, Operator.GREATER_THAN, from),
+                    filter(TraceField.CREATED_AT, Operator.LESS_THAN, to)), expected);
+        }
+
+        @Test
         @DisplayName("a workspace without Topics: every operator gives no trace, with no error")
         void workspaceWithoutTopics() {
             var caller = caller();
@@ -689,18 +723,23 @@ class TopicsReadResourceTest {
             assertFilter(seed.caller(), seed.projectId(), operator, value, expected);
         }
 
-        /** The list, its count, the stats' trace count and the stream give the same traces. */
         private void assertFilter(Caller caller, UUID projectId, Operator operator, String value,
                 Set<UUID> expected) {
-            var filters = List.of(filter(TraceField.TOPIC_ID, operator, value));
+            assertTraces(caller, projectId, List.of(filter(TraceField.TOPIC_ID, operator, value)), expected);
+        }
 
+        /** The list, its count, the stats' trace count and the stream give the same traces. */
+        private void assertTraces(Caller caller, UUID projectId, List<TraceFilter> filters, Set<UUID> expected) {
             var page = list(caller, projectId, filters);
             var stats = traceClient.getTraceStats(null, projectId, caller.apiKey(), caller.workspaceName(), filters,
                     Map.of());
             var streamed = traceClient.getStreamAndAssertContent(caller.apiKey(), caller.workspaceName(),
                     TraceSearchStreamRequest.builder().projectId(projectId).filters(filters).build());
 
-            var description = "%s %s".formatted(operator.getQueryParamOperator(), value);
+            var description = filters.stream()
+                    .map(filter -> "%s %s %s".formatted(filter.field().getQueryParamField(),
+                            filter.operator().getQueryParamOperator(), filter.value()))
+                    .collect(Collectors.joining(", "));
             assertThat(page.content()).as(description).extracting(Trace::id)
                     .containsExactlyInAnyOrderElementsOf(expected);
             assertThat(page.total()).as(description).isEqualTo(expected.size());

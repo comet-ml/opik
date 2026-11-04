@@ -1056,9 +1056,11 @@ two requests can change both.
 
 The backend reads the live topics and the saved run ids from MySQL first, as this endpoint does. Then each trace
 query gets `AND id IN (<subquery>)`, as score filters do. The subquery reads the project's `trace_topics` rows, keeps
-the latest counted row of each trace, and returns the ids that pass the filter. It reads only the trace id range when
-the list has `from_time`, `to_time` or a cursor. It has no `log_comment` of its own: in `system.query_log` it is part
-of the list's queries (`find_traces_by_project_id`, `count_traces_by_project`).
+the latest counted row of each trace, and returns the ids that pass the filter. It reads only the rows of traces the
+list can return: the trace id range when the list has `from_time`, `to_time` or a cursor, and the `trace_created_at`
+range when it has `created_at` filters (`>`, `>=`, `<`, `<=`). With neither, it reads the project's whole history in
+`trace_topics`. It has no `log_comment` of its own: in `system.query_log` it is part of the list's queries
+(`find_traces_by_project_id`, `count_traces_by_project`).
 
 ### Errors
 

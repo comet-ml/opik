@@ -489,9 +489,12 @@ class TopicsReadLoadTest {
         cases.put("topic_id = the largest topic", Map.entry(withTopic(window, largest.id().toString()),
                 largest.count()));
         cases.put("topic_id = Other", Map.entry(withTopic(window, OTHER), body.other().count()));
+        // The created_at range bounds the topic subquery, so a range with no trace reads almost none of its rows.
+        cases.put("topic_id = the largest topic, the 30 days before the window", Map.entry(withTopic(
+                logs(body.windowFrom().minusDays(30), body.windowFrom()), largest.id().toString()), 0L));
         report.append(("The trace list as Logs asks for it (the API's window by created_at, source sdk, visibility "
-                + "default), page size 100, %d calls in a row per case. Each total equals the API's count.\n\n")
-                .formatted(LIST_CALLS));
+                + "default), page size 100, %d calls in a row per case. Each total equals the API's count; the "
+                + "30 days before the window have no trace.\n\n").formatted(LIST_CALLS));
         cases.forEach((name, filtersAndCount) -> {
             var start = Instant.now();
             var millis = new double[LIST_CALLS];

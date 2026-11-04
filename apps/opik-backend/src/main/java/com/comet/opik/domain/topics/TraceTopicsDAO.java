@@ -2,6 +2,9 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.Source;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
@@ -33,6 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -138,8 +142,9 @@ public class TraceTopicsDAO {
      * The ids of the project's traces whose topic matches {@code <topic_filters>}, the TOPICS filter strategy on
      * {@code topic}: the traces filter by topic. A trace's topic is its latest arrival row or row of a saved run, as in
      * {@link #COUNT_BY_TOPIC_AND_DAY}, and a topic that is no longer live is Other. A trace with no such row has no
-     * topic, so no operator keeps it, {@code !=} and {@code not_in} included. The search's time window and cursor bound
-     * the read to the trace ids the search can return; they never split a trace's rows, which all share its id.
+     * topic, so no operator keeps it, {@code !=} and {@code not_in} included. The search's time window, cursor and
+     * {@code created_at} ranges bound the read to the traces the search can return; they never split a trace's rows,
+     * which all share its id and its {@code trace_created_at}.
      */
     private static final String TRACE_IDS_BY_TOPIC = """
             SELECT trace_id
@@ -149,6 +154,7 @@ public class TraceTopicsDAO {
                 FROM trace_topics
                 WHERE workspace_id = :workspace_id
                 AND project_id = :topic_project_id
+                <if(created_at_bounds)> AND <created_at_bounds> <endif>
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time
                     AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
                         >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
@@ -163,6 +169,13 @@ public class TraceTopicsDAO {
             )
             WHERE <topic_filters>
             """;
+
+    /** {@link #TRACE_IDS_BY_TOPIC}'s bound per {@code created_at} range operator, on the filter's parameter. */
+    private static final Map<Operator, String> CREATED_AT_BOUNDS = Map.of(
+            Operator.GREATER_THAN, "trace_created_at >= toStartOfSecond(parseDateTime64BestEffort(:filter%d, 9))",
+            Operator.GREATER_THAN_EQUAL, "trace_created_at >= toStartOfSecond(parseDateTime64BestEffort(:filter%d, 9))",
+            Operator.LESS_THAN, "trace_created_at < parseDateTime64BestEffort(:filter%d, 9)",
+            Operator.LESS_THAN_EQUAL, "trace_created_at <= parseDateTime64BestEffort(:filter%d, 9)");
 
     /** The latest topic of each of the project's traces created in the window. */
     private static final String FIND_LABELS = """
@@ -373,7 +386,27 @@ public class TraceTopicsDAO {
         Optional.ofNullable(criteria.uuidFromTime()).ifPresent(id -> template.add("uuid_from_time", true));
         Optional.ofNullable(criteria.uuidToTime()).ifPresent(id -> template.add("uuid_to_time", true));
         Optional.ofNullable(criteria.lastReceivedId()).ifPresent(id -> template.add("last_received_id", true));
+        createdAtBounds(criteria.filters()).ifPresent(bounds -> template.add("created_at_bounds", bounds));
         return template.render();
+    }
+
+    /**
+     * The search's {@code created_at} range filters as bounds on {@code trace_created_at}, so the minmax index
+     * {@code idx_trace_created_at} skips the rows of traces outside them: with no time window, the subquery would
+     * otherwise read the project's whole history. Each bound reads its filter's own parameter, which the TRACE
+     * strategy binds. A lower bound goes down to the second, as {@code trace_created_at} keeps microseconds and a
+     * filter value can have more: the subquery must keep every trace the list keeps.
+     */
+    private static Optional<String> createdAtBounds(List<? extends Filter> filters) {
+        if (filters == null) {
+            return Optional.empty();
+        }
+        var bounds = IntStream.range(0, filters.size())
+                .filter(i -> filters.get(i).field() == TraceField.CREATED_AT
+                        && CREATED_AT_BOUNDS.containsKey(filters.get(i).operator()))
+                .mapToObj(i -> CREATED_AT_BOUNDS.get(filters.get(i).operator()).formatted(i))
+                .toList();
+        return bounds.isEmpty() ? Optional.empty() : Optional.of(String.join(" AND ", bounds));
     }
 
     /**
