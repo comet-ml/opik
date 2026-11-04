@@ -423,6 +423,52 @@ class TopicsNightlyJobTest {
         live.forEach(topic -> assertThat(labels.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
         assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS + 1);
+
+        // The update writes its own counts: the live topics by tonight's size, then Other; none for the merged topic.
+        var labelled = labels.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
+        var counts = counts(projectId).stream().filter(count -> count.runId().equals(update.runId())).toList();
+        assertThat(counts).hasSize(live.size() + 1).allSatisfy(count -> {
+            assertThat(count.savedAt()).isEqualTo(update.finishedAt());
+            assertThat(count.traces()).isEqualTo(labelled.getOrDefault(count.topicId(), 0L));
+        });
+        assertThat(counts).extracting(TopicRunCount::topicId).doesNotContain(retiredId).contains(TraceTopic.OTHER)
+                .containsAll(liveIds);
+        assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(stats.path("vectors").asLong());
+        var ranks = new ArrayList<Integer>(java.util.stream.IntStream.rangeClosed(1, live.size()).boxed().toList());
+        ranks.add(null);
+        assertThat(counts).extracting(TopicRunCount::rank).containsExactlyElementsOf(ranks);
+        live.forEach(topic -> assertThat(counts).filteredOn(count -> count.topicId().equals(topic.id()))
+                .singleElement().satisfies(count -> assertThat(count.traces()).isEqualTo(topic.size())));
+        // The first build's counts stay: the topics API compares the two runs.
+        assertThat(counts(projectId)).extracting(TopicRunCount::runId).containsOnly(runs(projectId).getFirst()
+                .runId(), update.runId());
+    }
+
+    @Test
+    @DisplayName("an update ranks an inactive topic after the active ones in its counts, with tonight's flags")
+    void inactiveRanksLast() {
+        var workspaceId = enabledWorkspace();
+        var projectId = firstBuilt(workspaceId);
+        // The first build's largest topic, inactive since yesterday: one night under the active share cannot
+        // switch it back (two are needed).
+        var largest = counts(projectId).getFirst();
+        assertThat(largest.rank()).isEqualTo(1);
+        template.inTransaction(WRITE, handle -> handle.execute(
+                "UPDATE topics SET inactive_since = ?, lo7 = 0, hi7 = 0 WHERE id = ?",
+                secondNight().minusDays(1), largest.topicId().toString()));
+        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+
+        assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
+
+        var update = nightlyRun(projectId);
+        var live = topics(projectId);
+        assertThat(live).filteredOn(topic -> topic.id().equals(largest.topicId())).singleElement()
+                .satisfies(topic -> assertThat(topic.inactiveSince()).isNotNull());
+        var counts = counts(projectId).stream().filter(count -> count.runId().equals(update.runId())).toList();
+        assertThat(counts).filteredOn(count -> count.topicId().equals(largest.topicId())).singleElement()
+                .satisfies(count -> assertThat(count.rank()).isEqualTo(live.size()));
+        assertThat(counts.subList(0, live.size() - 1)).extracting(TopicRunCount::traces)
+                .isSortedAccordingTo(Comparator.reverseOrder());
     }
 
     @Test

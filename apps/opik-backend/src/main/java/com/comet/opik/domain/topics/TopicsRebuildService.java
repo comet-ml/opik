@@ -829,7 +829,8 @@ public class TopicsRebuildService {
         /**
          * As {@link #save}: {@code trace_topics} first, then one MySQL transaction: tonight's new topics inserted, the
          * ones read updated (definition, lifecycle columns, size, retirement), the prototypes replaced (live topics in
-         * list order, then known Other), the state with {@code rebuilds} + 1, the run saved.
+         * list order, then known Other), the state with {@code rebuilds} + 1, the run's counts (the topics live after
+         * the lifecycle, ranked with tonight's inactive flags, and Other), the run saved.
          */
         private void saveUpdate(List<TopicWindowRow> rows, UUID[] labels, NightState state, SavedList saved,
                 int bornTonight) {
@@ -882,12 +883,17 @@ public class TopicsRebuildService {
             for (var vector : state.getOtherPrototypes()) {
                 prototypes.add(prototype(prototypes.size(), null, vector));
             }
+            var live = new ArrayList<Topic>();
+            inserted.stream().filter(topic -> topic.retiredAt() == null).forEach(live::add);
+            updated.stream().filter(topic -> topic.retiredAt() == null).forEach(live::add);
+            long other = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
             var statsJson = stats.toString();
             boolean attempted = false;
             try {
                 attempted = true;
                 traceTopicsDAO.insert(traceTopics).block();
                 var now = Instant.now();
+                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, live, other, now);
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
                     // First, so a run that saved this project meanwhile fails the save before anything else.
@@ -907,7 +913,9 @@ public class TopicsRebuildService {
                     if (!prototypes.isEmpty()) {
                         topicDAO.insertPrototypes(prototypes);
                     }
-                    if (handle.attach(TopicRunDAO.class).markSaved(runId, now, statsJson) != 1) {
+                    var runDAO = handle.attach(TopicRunDAO.class);
+                    runDAO.insertCounts(counts);
+                    if (runDAO.markSaved(runId, now, statsJson) != 1) {
                         throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
                     }
                     return null;
