@@ -149,8 +149,8 @@
     "@types/uuid": "^11.0.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
-    "@vitejs/plugin-react-swc": "^3.7.0",
-    "@vitest/ui": "^3.0.5",
+    "@vitejs/plugin-react-swc": "^3.11.0",
+    "@vitest/ui": "^4.0.0",
     "autoprefixer": "^10.4.19",
     "dependency-cruiser": "^17.3.6",
     "eslint": "^8.57.0",
@@ -169,9 +169,9 @@
     "stylelint-prettier": "^5.0.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.4.5",
-    "vite": "^5.2.11",
+    "vite": "^7.0.0",
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^4.3.2",
-    "vitest": "^3.0.5"
+    "vitest": "^4.0.0"
   }
 }
