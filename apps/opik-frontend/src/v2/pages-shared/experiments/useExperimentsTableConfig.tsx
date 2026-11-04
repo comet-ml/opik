@@ -338,12 +338,14 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
-    const baseColumns = [
-      ...firstColumns,
-      ...groupColumns,
-      ...regularColumns,
-      ...scoresColumns,
-    ];
+    // Group rows show only the group label. Without an explicit empty cell,
+    // TanStack falls back to rendering the summed column value.
+    const statColumns = [...regularColumns, ...scoresColumns].map((column) => ({
+      ...column,
+      aggregatedCell: () => null,
+    }));
+
+    const baseColumns = [...firstColumns, ...groupColumns, ...statColumns];
 
     if (actionsCell) {
       baseColumns.push(
