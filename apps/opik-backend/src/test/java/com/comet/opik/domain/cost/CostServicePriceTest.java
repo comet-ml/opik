@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -126,7 +127,15 @@ class CostServicePriceTest {
         return Stream.of(
                 Arguments.of("no usage", null),
                 Arguments.of("empty usage", Map.of()),
-                Arguments.of("zero counts", usage(0, 0, 0)));
+                Arguments.of("zero counts", usage(0, 0, 0)),
+                Arguments.of("null and zero counts", nullAndZeroCounts()));
+    }
+
+    private static Map<String, Integer> nullAndZeroCounts() {
+        var usage = new HashMap<String, Integer>();
+        usage.put("prompt_tokens", null);
+        usage.put("completion_tokens", 0);
+        return usage;
     }
 
     @ParameterizedTest(name = "{0}")
