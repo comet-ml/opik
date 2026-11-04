@@ -173,6 +173,6 @@
     "vite": "^5.2.11",
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^4.3.2",
-    "vitest": "^3.0.5"
+    "vitest": "^4.0.0"
   }
 }
