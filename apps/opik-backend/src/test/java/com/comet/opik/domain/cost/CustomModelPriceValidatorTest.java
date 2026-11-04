@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -203,24 +204,24 @@ class CustomModelPriceValidatorTest {
         assertThat(result.rows().getFirst().price().aliasModelName()).isEqualTo("team-base");
     }
 
-    private static Stream<Arguments> spanProviders() {
-        return Stream.of(
-                Arguments.of("openai", true),
-                Arguments.of("azure", true),
-                Arguments.of("github_copilot", true),
-                Arguments.of("anthropic", false));
+    @ParameterizedTest
+    @ValueSource(strings = {"openai", "azure", "github_copilot"})
+    void validateAcceptsAnAnyProviderAliasThatPricesUnderASpansProvider(String spanProvider) {
+        assertThat(ModelPriceResolver.resolve("team-mini", spanProvider, anyProviderAliasOfGpt5Mini())).isPresent();
     }
 
-    @ParameterizedTest(name = "{0} prices: {1}")
-    @MethodSource("spanProviders")
-    void validateAcceptsAnAnyProviderAliasPricedUnderEachSpansProvider(String spanProvider, boolean priced) {
+    @Test
+    void validateAcceptsAnAnyProviderAliasThatPricesNothingUnderAProviderWithoutTheTarget() {
+        assertThat(ModelPriceResolver.resolve("team-mini", "anthropic", anyProviderAliasOfGpt5Mini())).isEmpty();
+    }
+
+    private static PriceLayers anyProviderAliasOfGpt5Mini() {
         var result = CustomModelPriceValidator.validate(rows("""
                 [{"model": "team-mini", "kind": "alias", "alias_of": {"model": "gpt-5-mini"}}]
                 """));
 
         assertThat(result.isValid()).isTrue();
-        var layers = PriceLayers.of("org-1", 1, result.rows().stream().map(ValidRow::price).toList());
-        assertThat(ModelPriceResolver.resolve("team-mini", spanProvider, layers).isPresent()).isEqualTo(priced);
+        return PriceLayers.of("org-1", 1, result.rows().stream().map(ValidRow::price).toList());
     }
 
     @Test
