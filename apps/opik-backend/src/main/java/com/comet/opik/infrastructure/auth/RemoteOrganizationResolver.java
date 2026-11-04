@@ -35,13 +35,24 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     @Override
     public Mono<String> organizationId() {
-        return Mono.deferContextual(ctx -> ctx.<String>getOrEmpty(RequestContext.ORGANIZATION_ID)
-                .map(Mono::just)
-                .orElseGet(() -> ctx.<String>getOrEmpty(RequestContext.WORKSPACE_ID)
-                        .filter(workspaceId -> lookupEnabled)
-                        .map(cache::organizationId)
-                        .orElseGet(Mono::empty)))
-                .filter(organizationId -> !ProjectService.DEFAULT_ORGANIZATION_ID.equals(organizationId));
+        return Mono.deferContextual(ctx -> {
+            Optional<String> carried = ctx.getOrEmpty(RequestContext.ORGANIZATION_ID);
+            if (carried.isPresent()) {
+                return Mono.just(carried.get());
+            }
+            Optional<String> workspaceId = ctx.<String>getOrEmpty(RequestContext.WORKSPACE_ID)
+                    .filter(StringUtils::isNotBlank);
+            if (!lookupEnabled || workspaceId.isEmpty()) {
+                return Mono.empty();
+            }
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
+            return ctx.<RequestOrganizationLookup>getOrEmpty(RequestContext.ORGANIZATION_LOOKUP)
+                    .filter(lookup -> StringUtils.isNotBlank(workspaceName)
+                            && !ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName))
+                    .map(lookup -> lookup.organization(
+                            credentials -> resolve(workspaceId.get(), workspaceName, credentials)))
+                    .orElseGet(() -> cache.organizationId(workspaceId.get()));
+        }).filter(organizationId -> !ProjectService.DEFAULT_ORGANIZATION_ID.equals(organizationId));
     }
 
     @Override
@@ -70,43 +81,30 @@ class RemoteOrganizationResolver implements OrganizationResolver {
         });
     }
 
-    @Override
-    public void resolveRequestOrganization() {
-        if (!lookupEnabled) {
-            return;
-        }
-        var context = requestContext.get();
-        if (StringUtils.isBlank(context.getWorkspaceId())
-                || ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(context.getWorkspaceName())) {
-            return;
-        }
-        try {
-            context.setOrganizationId(resolve(context));
-        } catch (RuntimeException error) {
-            log.warn("Could not resolve the organization of workspace '{}'", context.getWorkspaceId(), error);
-        }
+    private Mono<String> resolve(String workspaceId, String workspaceName, CometCredentials credentials) {
+        return cache.find(workspaceId)
+                .map(Optional::of)
+                .defaultIfEmpty(Optional.empty())
+                .flatMap(cached -> cached.filter(entry -> entry.isFresh(cache.now())).isPresent()
+                        ? Mono.justOrEmpty(cached.map(WorkspaceOrganizationCache.Entry::organizationId))
+                        : ask(workspaceId, workspaceName, credentials, cached))
+                .onErrorResume(error -> {
+                    log.warn("Could not resolve the organization of workspace '{}'", workspaceId, error);
+                    return Mono.empty();
+                });
     }
 
-    private String resolve(RequestContext context) {
-        var workspaceId = context.getWorkspaceId();
-        var cached = cache.find(workspaceId).blockOptional();
-        if (cached.map(entry -> entry.isFresh(cache.now())).orElse(false)
-                || context.getCometCredentials() == null
-                || StringUtils.isBlank(context.getWorkspaceName())) {
-            return cached.map(WorkspaceOrganizationCache.Entry::organizationId).orElse(null);
-        }
-        try {
-            var lookup = client.fetch(context.getCometCredentials(), context.getWorkspaceName()).block();
-            remember(workspaceId, lookup).block();
-            return lookup instanceof Found found
-                    ? found.organizationId()
-                    : cached.map(WorkspaceOrganizationCache.Entry::organizationId).orElse(null);
-        } catch (RuntimeException cometFailed) {
-            log.warn("Comet could not resolve the organization of workspace '{}', using the cached one",
-                    workspaceId, cometFailed);
-            cached.ifPresent(entry -> cache.retryLater(workspaceId).block());
-            return cached.map(WorkspaceOrganizationCache.Entry::organizationId).orElse(null);
-        }
+    private Mono<String> ask(String workspaceId, String workspaceName, CometCredentials credentials,
+            Optional<WorkspaceOrganizationCache.Entry> cached) {
+        var cachedOrganization = Mono.justOrEmpty(cached.map(WorkspaceOrganizationCache.Entry::organizationId));
+        return client.fetch(credentials, workspaceName)
+                .flatMap(lookup -> remember(workspaceId, lookup)
+                        .then(lookup instanceof Found found ? Mono.just(found.organizationId()) : cachedOrganization))
+                .onErrorResume(cometFailed -> {
+                    log.warn("Comet could not resolve the organization of workspace '{}', using the cached one",
+                            workspaceId, cometFailed);
+                    return cached.isPresent() ? cache.retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
+                });
     }
 
     private Mono<Void> remember(String workspaceId, Lookup lookup) {

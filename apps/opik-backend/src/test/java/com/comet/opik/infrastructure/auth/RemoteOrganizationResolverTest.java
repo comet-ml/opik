@@ -7,6 +7,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.RedisConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
@@ -26,6 +27,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.testcontainers.lifecycle.Startables;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
@@ -110,12 +113,23 @@ class RemoteOrganizationResolverTest {
     class RequestOrganization {
 
         @Test
+        void requestThatNeverAsksTouchesNeitherCometNorTheCache() {
+            var untouchedCache = mock(WorkspaceOrganizationCache.class);
+            resolver = new RemoteOrganizationResolver(() -> requestContext, client, untouchedCache, true);
+            stubApiKey(organization(organizationId, false));
+
+            Mono.just("span").contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext)).block();
+
+            assertCometCalls(API_KEY_PATH, 0);
+            verifyNoInteractions(untouchedCache);
+        }
+
+        @Test
         void coldCacheAsksCometAndRemembersTheAnswer() {
             stubApiKey(organization(organizationId, false));
 
-            resolver.resolveRequestOrganization();
+            assertThat(ask()).isEqualTo(organizationId);
 
-            assertThat(requestContext.getOrganizationId()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 1);
             StepVerifier.create(cache.find(workspaceId).map(WorkspaceOrganizationCache.Entry::organizationId))
                     .expectNext(organizationId)
@@ -123,31 +137,59 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
+        void oneRequestAsksAtMostOnce() {
+            stubApiKey(organization(organizationId, false));
+            assertThat(ask()).isEqualTo(organizationId);
+            wireMock.server().resetAll();
+            stubApiKey(organization(UUID.randomUUID().toString(), false));
+            clock.advance(FRESH_FOR);
+
+            assertThat(ask()).isEqualTo(organizationId);
+
+            assertCometCalls(API_KEY_PATH, 0);
+        }
+
+        @Test
+        void lookupOffTheRequestThreadStillUsesTheCallersCredential() {
+            stubApiKey(organization(organizationId, false));
+            resolver = new RemoteOrganizationResolver(() -> {
+                throw new OutOfScopeException("Not in a request");
+            }, client, cache, true);
+
+            var found = Mono.just("span")
+                    .publishOn(Schedulers.boundedElastic())
+                    .flatMap(unused -> resolver.organizationId())
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                    .block();
+
+            assertThat(found).isEqualTo(organizationId);
+            assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        @Test
         void warmCacheAnswersWithoutComet() {
             stubApiKey(organization(organizationId, false));
-            resolver.resolveRequestOrganization();
+            ask();
 
             requestContext = request(CometCredentials.apiKey(apiKey));
             clock.advance(FRESH_FOR.minusSeconds(1));
-            resolver.resolveRequestOrganization();
 
-            assertThat(requestContext.getOrganizationId()).isEqualTo(organizationId);
+            assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 1);
         }
 
         @Test
         void staleCacheAsksCometAgain() {
             stubApiKey(organization(organizationId, false));
-            resolver.resolveRequestOrganization();
+            ask();
             var movedOrganizationId = UUID.randomUUID().toString();
             wireMock.server().resetAll();
             stubApiKey(organization(movedOrganizationId, false));
 
             requestContext = request(CometCredentials.apiKey(apiKey));
             clock.advance(FRESH_FOR);
-            resolver.resolveRequestOrganization();
 
-            assertThat(requestContext.getOrganizationId()).isEqualTo(movedOrganizationId);
+            assertThat(ask()).isEqualTo(movedOrganizationId);
             assertCometCalls(API_KEY_PATH, 1);
         }
 
@@ -155,31 +197,28 @@ class RemoteOrganizationResolverTest {
         void notFoundMeansNoOrganizationAndIsRemembered() {
             stubApiKey(notFound());
 
-            resolver.resolveRequestOrganization();
+            assertThat(ask()).isNull();
             requestContext = request(CometCredentials.apiKey(apiKey));
-            resolver.resolveRequestOrganization();
 
-            assertThat(requestContext.getOrganizationId()).isNull();
+            assertThat(ask()).isNull();
             assertCometCalls(API_KEY_PATH, 1);
         }
 
         @Test
         void cometErrorKeepsTheStaleOrganizationAndWaitsBeforeAskingAgain() {
             stubApiKey(organization(organizationId, false));
-            resolver.resolveRequestOrganization();
+            ask();
             wireMock.server().resetAll();
             stubApiKey(serverError());
             clock.advance(FRESH_FOR);
 
             requestContext = request(CometCredentials.apiKey(apiKey));
-            resolver.resolveRequestOrganization();
-            assertThat(requestContext.getOrganizationId()).isEqualTo(organizationId);
+            assertThat(ask()).isEqualTo(organizationId);
 
             requestContext = request(CometCredentials.apiKey(apiKey));
             clock.advance(WorkspaceOrganizationCache.RETRY_AFTER_FAILURE.minusSeconds(1));
-            resolver.resolveRequestOrganization();
 
-            assertThat(requestContext.getOrganizationId()).isEqualTo(organizationId);
+            assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 1);
         }
 
@@ -187,18 +226,14 @@ class RemoteOrganizationResolverTest {
         void cometErrorWithNothingCachedLeavesNoOrganization() {
             stubApiKey(serverError());
 
-            resolver.resolveRequestOrganization();
-
-            assertThat(requestContext.getOrganizationId()).isNull();
+            assertThat(ask()).isNull();
         }
 
         @Test
         void requestWithoutCometCredentialsOnlyReadsTheCache() {
             requestContext = request(null);
 
-            resolver.resolveRequestOrganization();
-
-            assertThat(requestContext.getOrganizationId()).isNull();
+            assertThat(ask()).isNull();
             assertThat(wireMock.server().getAllServeEvents()).isEmpty();
         }
 
@@ -208,9 +243,7 @@ class RemoteOrganizationResolverTest {
                     .workspaceName(ProjectService.DEFAULT_WORKSPACE_NAME)
                     .build();
 
-            resolver.resolveRequestOrganization();
-
-            assertThat(requestContext.getOrganizationId()).isNull();
+            assertThat(ask()).isNull();
             assertThat(wireMock.server().getAllServeEvents()).isEmpty();
         }
 
@@ -235,9 +268,7 @@ class RemoteOrganizationResolverTest {
             wireMock.server().stubFor(stub.willReturn(organization(organizationId, false)));
             requestContext = request(new CometCredentials(kind, value));
 
-            resolver.resolveRequestOrganization();
-
-            assertThat(requestContext.getOrganizationId()).isEqualTo(organizationId);
+            assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(path, 1);
         }
     }
@@ -255,7 +286,7 @@ class RemoteOrganizationResolverTest {
         @Test
         void jobWithoutAnOrganizationFindsItInTheCache() {
             stubApiKey(organization(organizationId, false));
-            resolver.resolveRequestOrganization();
+            ask();
             clock.advance(KEPT_FOR.minusMinutes(1));
 
             StepVerifier.create(resolver.organizationId().contextWrite(job(null)))
@@ -310,7 +341,7 @@ class RemoteOrganizationResolverTest {
         @Test
         void everyCheckAsksComet() {
             stubApiKey(organization(organizationId, true));
-            resolver.resolveRequestOrganization();
+            ask();
 
             StepVerifier.create(resolver.requireOrganizationAdmin().then(resolver.requireOrganizationAdmin()))
                     .expectNext(organizationId)
@@ -382,9 +413,11 @@ class RemoteOrganizationResolverTest {
         void requestMakesNoCometCallAndGetsNoOrganization() {
             stubApiKey(organization(organizationId, false));
 
-            offResolver().resolveRequestOrganization();
+            var found = offResolver().organizationId()
+                    .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                    .block();
 
-            assertThat(requestContext.getOrganizationId()).isNull();
+            assertThat(found).isNull();
             assertCometCalls(API_KEY_PATH, 0);
             verifyNoInteractions(untouchedCache);
         }
@@ -411,7 +444,14 @@ class RemoteOrganizationResolverTest {
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
                 .cometCredentials(credentials)
+                .organizationLookup(credentials == null ? null : new RequestOrganizationLookup(credentials))
                 .build();
+    }
+
+    private String ask() {
+        return resolver.organizationId()
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, requestContext))
+                .block();
     }
 
     private Context job(String jobOrganizationId) {

@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.auth;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.utils.AsyncUtils;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonReactiveClient;
@@ -40,20 +41,20 @@ class AuthModuleOrganizationResolverTest {
 
     @Test
     void organizationResolverWhenModelPricesAreOffMakesNoCometOrRedisCall() {
+        var credentials = CometCredentials.apiKey(UUID.randomUUID().toString());
         var request = RequestContext.builder()
                 .userName("user")
                 .workspaceId(UUID.randomUUID().toString())
                 .workspaceName("workspace")
-                .cometCredentials(CometCredentials.apiKey(UUID.randomUUID().toString()))
+                .cometCredentials(credentials)
+                .organizationLookup(new RequestOrganizationLookup(credentials))
                 .build();
 
         var resolver = authModule.organizationResolver(enabledAuthentication(), toggles(false), () -> request,
                 retriableHttpClient, redissonClient);
-        resolver.resolveRequestOrganization();
 
-        assertThat(request.getOrganizationId()).isNull();
         StepVerifier.create(resolver.organizationId()
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, request.getWorkspaceId())))
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, request)))
                 .verifyComplete();
         verifyNoInteractions(retriableHttpClient, redissonClient);
     }

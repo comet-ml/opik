@@ -35,9 +35,9 @@ public class AsyncUtils {
                 .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
-        return StringUtils.isBlank(requestContext.getOrganizationId())
+        return requestContext.getOrganizationLookup() == null
                 ? context
-                : context.put(RequestContext.ORGANIZATION_ID, requestContext.getOrganizationId());
+                : context.put(RequestContext.ORGANIZATION_LOOKUP, requestContext.getOrganizationLookup());
     }
 
     public static Context setRequestContext(Context ctx, String workspaceId, String userName, Visibility visibility) {

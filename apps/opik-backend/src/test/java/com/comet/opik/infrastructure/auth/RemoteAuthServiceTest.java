@@ -164,6 +164,7 @@ class RemoteAuthServiceTest {
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
+        assertThat(requestContext.getOrganizationLookup()).isNotNull();
     }
 
     /**
@@ -200,6 +201,7 @@ class RemoteAuthServiceTest {
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
+        assertThat(requestContext.getOrganizationLookup()).isNotNull();
     }
 
     @Test
@@ -430,6 +432,7 @@ class RemoteAuthServiceTest {
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
+        assertThat(requestContext.getOrganizationLookup()).isNotNull();
     }
 
     @Test
@@ -824,6 +827,7 @@ class RemoteAuthServiceTest {
                 .cometCredentials(CometCredentials.username(token.userName()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
+        assertThat(requestContext.getOrganizationLookup()).isNotNull();
     }
 
     // --- Auth-call timeout and retry (see AuthenticationConfig, and authPost/authCall which apply
@@ -913,6 +917,7 @@ class RemoteAuthServiceTest {
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
+        assertThat(requestContext.getOrganizationLookup()).isNotNull();
         assertThat(authRequestCount()).isEqualTo(2);
     }
 

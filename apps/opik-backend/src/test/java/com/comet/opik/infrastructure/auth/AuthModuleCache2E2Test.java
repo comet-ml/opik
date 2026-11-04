@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.utils.AsyncUtils;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import com.redis.testcontainers.RedisContainer;
@@ -142,7 +143,7 @@ class AuthModuleCache2E2Test {
     }
 
     @Test
-    void testOrganization__whenRequestsAuthenticate__thenCometIsAskedOnceAndJobsFindItInTheCache(
+    void testOrganization__whenRequestsDoNotAskForIt__thenCometIsNotCalledAndAJobFindsWhatALookupCached(
             OrganizationResolver resolver) {
         var apiKey = UUID.randomUUID().toString();
         var workspaceName = UUID.randomUUID().toString();
@@ -163,12 +164,26 @@ class AuthModuleCache2E2Test {
             }
         }
 
-        wireMock.server().verify(1, WireMock.postRequestedFor(WireMock.urlEqualTo(ORGANIZATION_PATH))
-                .withHeader(HttpHeaders.AUTHORIZATION, WireMock.equalTo(apiKey)));
+        wireMock.server().verify(0, WireMock.postRequestedFor(WireMock.urlEqualTo(ORGANIZATION_PATH)));
+
+        var credentials = CometCredentials.apiKey(apiKey);
+        var request = RequestContext.builder()
+                .userName(USER)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .cometCredentials(credentials)
+                .organizationLookup(new RequestOrganizationLookup(credentials))
+                .build();
+        StepVerifier.create(resolver.organizationId()
+                .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, request)))
+                .expectNext(organizationId)
+                .verifyComplete();
         StepVerifier.create(resolver.organizationId()
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)))
                 .expectNext(organizationId)
                 .verifyComplete();
+        wireMock.server().verify(1, WireMock.postRequestedFor(WireMock.urlEqualTo(ORGANIZATION_PATH))
+                .withHeader(HttpHeaders.AUTHORIZATION, WireMock.equalTo(apiKey)));
     }
 
     private static RequestPatternBuilder authRequests() {

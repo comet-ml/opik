@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure.auth;
 import com.comet.opik.domain.mcpoauth.McpOAuthService;
 import com.comet.opik.infrastructure.CipxTokenValidationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -36,12 +35,10 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -75,9 +72,6 @@ class AuthFilterTest {
         @Mock
         private CipxTokenValidationService cipxTokenValidationService;
 
-        @Mock
-        private OrganizationResolver organizationResolver;
-
         private final RequestContext requestContext = new RequestContext();
         private final MultivaluedMap<String, String> requestHeaders = new MultivaluedHashMap<>();
 
@@ -86,7 +80,7 @@ class AuthFilterTest {
         @BeforeEach
         void setUp() {
             filter = new AuthFilter(authService, mcpOAuthService, cipxTokenValidationService,
-                    new OpikConfiguration(), () -> requestContext, organizationResolver);
+                    new OpikConfiguration(), () -> requestContext);
         }
 
         static Stream<Arguments> authenticatedTemplates() {
@@ -134,26 +128,10 @@ class AuthFilterTest {
 
             verify(authService).authenticateSession(isNull());
             verifyNoMoreInteractions(authService);
-            verifyNoInteractions(mcpOAuthService, cipxTokenValidationService, organizationResolver);
+            verifyNoInteractions(mcpOAuthService, cipxTokenValidationService);
             verify(uriInfo).getMatchedTemplates();
             verifyNoMoreInteractions(uriInfo);
             assertThat(requestContext.getHeaders()).isSameAs(requestHeaders);
-        }
-
-        @Test
-        @DisplayName("resolves no organization when authentication fails")
-        void skipsTheOrganizationWhenAuthenticationFails() {
-            var context = mock(ContainerRequestContext.class);
-            var uriInfo = uriInfo(templates("/v1/private/projects"));
-            when(context.getCookies()).thenReturn(Map.of());
-            when(context.getUriInfo()).thenReturn(uriInfo);
-            when(context.getMethod()).thenReturn("GET");
-            var refused = new ForbiddenException();
-            doThrow(refused).when(authService).authenticate(any(), isNull(), any());
-
-            assertThatThrownBy(() -> filter.filter(context)).isSameAs(refused);
-
-            verifyNoInteractions(organizationResolver);
         }
 
         static Stream<Arguments> unauthenticatedTemplates() {
@@ -172,7 +150,7 @@ class AuthFilterTest {
 
             filter.filter(context);
 
-            verifyNoInteractions(authService, mcpOAuthService, cipxTokenValidationService, organizationResolver);
+            verifyNoInteractions(authService, mcpOAuthService, cipxTokenValidationService);
             verify(uriInfo).getMatchedTemplates();
             verifyNoMoreInteractions(uriInfo);
             assertThat(requestContext.getHeaders()).isSameAs(requestHeaders);
@@ -190,7 +168,6 @@ class AuthFilterTest {
             assertThat(headers.getValue().getRequestHeaders()).isSameAs(requestHeaders);
             verifyNoMoreInteractions(authService);
             verifyNoInteractions(mcpOAuthService, cipxTokenValidationService);
-            verify(organizationResolver).resolveRequestOrganization();
             assertThat(requestContext.getHeaders()).isSameAs(requestHeaders);
         }
 
@@ -265,7 +242,7 @@ class AuthFilterTest {
             var cipxTokenValidationService = new CipxTokenValidationService(client, config, cacheService,
                     () -> requestContext);
             filter = new AuthFilter(authService, mcpOAuthService, cipxTokenValidationService, config,
-                    () -> requestContext, new DefaultOrganizationResolver());
+                    () -> requestContext);
         }
 
         @Test

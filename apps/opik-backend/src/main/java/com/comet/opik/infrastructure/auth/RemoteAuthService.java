@@ -609,6 +609,7 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setQuotas(credentials.quotas());
         requestContext.get().setApiKey(apiKey);
         requestContext.get().setCometCredentials(cometCredentials);
+        requestContext.get().setOrganizationLookup(new RequestOrganizationLookup(cometCredentials));
         requestContext.get().setPermissions(credentials.permissions() == null
                 ? Set.of()
                 : Set.copyOf(credentials.permissions()));
