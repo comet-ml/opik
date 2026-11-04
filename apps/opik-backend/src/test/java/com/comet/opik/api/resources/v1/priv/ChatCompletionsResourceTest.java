@@ -109,7 +109,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -1616,7 +1615,7 @@ class ChatCompletionsResourceTest {
 
             assertThat(actualErrors).extracting(ErrorMessage::getMessage)
                     .containsExactly(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
-            WIRE_MOCK.server().verify(moreThanOrExactly(1), postRequestedFor(urlPathMatching(PROVIDER_PATHS)));
+            WIRE_MOCK.server().verify(1, postRequestedFor(urlPathMatching(PROVIDER_PATHS)));
             WIRE_MOCK.server().verify(0, anyRequestedFor(urlPathEqualTo(redirectTarget)));
         }
 
