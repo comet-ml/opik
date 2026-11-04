@@ -32,6 +32,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -141,15 +144,11 @@ class TestSuiteAssertionSamplerTest {
             verify(datasetVersionService).resolveVersionId(workspaceId, datasetId, versionHash);
         }
 
-        @Test
-        @DisplayName("includes item-level evaluators in scoring messages")
-        void includesItemLevelEvaluators() {
+        private Trace traceWithOneItemEvaluator(String workspaceId) {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
             UUID versionId = Generators.timeBasedEpochGenerator().generate();
             UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
             UUID ruleId = Generators.timeBasedEpochGenerator().generate();
-            String workspaceId = "test-workspace";
-            String userName = "test-user";
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
@@ -203,6 +202,15 @@ class TestSuiteAssertionSamplerTest {
                     .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
                     .metadata(metadata)
                     .build();
+            return trace;
+        }
+
+        @Test
+        @DisplayName("includes item-level evaluators in scoring messages")
+        void includesItemLevelEvaluators() {
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            var trace = traceWithOneItemEvaluator(workspaceId);
 
             var event = new TracesCreated(List.of(trace), workspaceId, userName);
             sampler.onTracesCreated(event);
@@ -233,6 +241,25 @@ class TestSuiteAssertionSamplerTest {
 
             // Verify score name mapping: assertion_1 → original name ("check")
             assertThat(message.scoreNameMapping()).containsEntry("assertion_1", "check");
+        }
+
+        @ParameterizedTest
+        @NullSource
+        @ValueSource(strings = "org-1")
+        @DisplayName("judge messages carry the organization of the traces' event")
+        void judgeMessagesCarryTheEventsOrganization(String organizationId) {
+            String workspaceId = "test-workspace";
+            var trace = traceWithOneItemEvaluator(workspaceId);
+
+            sampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, "test-user", null, null,
+                    organizationId));
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(), eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            assertThat(captor.getValue()).singleElement()
+                    .extracting(TraceToScoreLlmAsJudge::organizationId)
+                    .isEqualTo(organizationId);
         }
 
         @Test

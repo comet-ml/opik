@@ -1,11 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
-import com.fasterxml.jackson.databind.node.TextNode;
+import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +17,7 @@ import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.stream.StreamAddParams;
 import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.UUID;
@@ -33,6 +33,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ExperimentItemPublisher: the organization an experiment item carries")
 class ExperimentItemPublisherOrganizationTest {
+
+    private static final PodamFactory PODAM_FACTORY = PodamFactoryUtils.newPodamFactory();
 
     private final ExperimentExecutionConfig config = new ExperimentExecutionConfig();
 
@@ -67,6 +69,16 @@ class ExperimentItemPublisherOrganizationTest {
 
         assertThat(published()).extracting(ExperimentItemToProcess::organizationId)
                 .containsExactly("organization-1", "organization-1");
+    }
+
+    @Test
+    @DisplayName("Stamps the run's organization over a blank one")
+    void stampsOverABlankOrganization() {
+        publisher(FixedOrganizationResolver.of("organization-1"))
+                .publish(UUID.randomUUID(), List.of(message("   "))).block();
+
+        assertThat(published()).extracting(ExperimentItemToProcess::organizationId)
+                .containsExactly("organization-1");
     }
 
     @Test
@@ -105,23 +117,7 @@ class ExperimentItemPublisherOrganizationTest {
     }
 
     private static ExperimentItemToProcess message(String organizationId) {
-        var experimentId = UUID.randomUUID();
-        return ExperimentItemToProcess.builder()
-                .batchId(UUID.randomUUID())
-                .prompt(ExperimentExecutionRequest.PromptVariant.builder()
-                        .model("gpt-5-mini")
-                        .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
-                                .role("user")
-                                .content(new TextNode("Hello"))
-                                .build()))
-                        .build())
-                .datasetItemId(UUID.randomUUID())
-                .experimentId(experimentId)
-                .datasetId(UUID.randomUUID())
-                .projectName("project")
-                .workspaceId("workspace")
-                .userName("user")
-                .allExperimentIds(List.of(experimentId))
+        return PODAM_FACTORY.manufacturePojo(ExperimentItemToProcess.class).toBuilder()
                 .organizationId(organizationId)
                 .build();
     }

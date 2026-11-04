@@ -231,6 +231,19 @@ class OnlineScorePublisherTest {
         }
 
         @Test
+        @DisplayName("Stamps the resolved organization over a blank one")
+        void stampsTheResolvedOrganizationOverABlankOne() {
+            organizationResolver = FixedOrganizationResolver.of(ORGANIZATION_ID);
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var message = threadMessage().toBuilder().organizationId("   ").build();
+
+            publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE).block();
+
+            assertThat(capturePayloads()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                    .containsExactly(ORGANIZATION_ID);
+        }
+
+        @Test
         @DisplayName("Enqueues without an organization when none is known")
         void enqueuesWithoutAnOrganizationWhenNoneIsKnown() {
             var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));

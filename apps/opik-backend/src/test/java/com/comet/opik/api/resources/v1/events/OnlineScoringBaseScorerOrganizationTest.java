@@ -13,20 +13,22 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import reactor.util.context.ContextView;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 @DisplayName("The organization a scoring message carries reaches the scorer's context")
 class OnlineScoringBaseScorerOrganizationTest {
+
+    private static final PodamFactory PODAM_FACTORY = PodamFactoryUtils.newPodamFactory();
 
     private final ContextCapturingScorer scorer = new ContextCapturingScorer();
 
@@ -41,6 +43,7 @@ class OnlineScoringBaseScorerOrganizationTest {
 
     @ParameterizedTest
     @NullAndEmptySource
+    @ValueSource(strings = "   ")
     @DisplayName("A message with no organization is scored without one, as before")
     void scoresWithoutAnOrganization(String organizationId) {
         scorer.processEvent(message(organizationId)).block();
@@ -50,13 +53,8 @@ class OnlineScoringBaseScorerOrganizationTest {
     }
 
     private static TraceThreadToScoreLlmAsJudge message(String organizationId) {
-        return TraceThreadToScoreLlmAsJudge.builder()
-                .threadIds(List.of("thread-1"))
-                .ruleId(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .code(PodamFactoryUtils.newPodamFactory().manufacturePojo(TraceThreadLlmAsJudgeCode.class))
+        return PODAM_FACTORY.manufacturePojo(TraceThreadToScoreLlmAsJudge.class).toBuilder()
                 .workspaceId("workspace")
-                .userName("user")
                 .organizationId(organizationId)
                 .build();
     }
