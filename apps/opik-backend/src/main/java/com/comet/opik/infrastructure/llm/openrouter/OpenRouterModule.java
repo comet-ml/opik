@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.utils.JsonUtils;
@@ -36,8 +37,9 @@ public class OpenRouterModule extends AbstractModule {
     @Provides
     @Singleton
     public OpenRouterDecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new OpenRouterDecisionsClient(client, config);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
+        return new OpenRouterDecisionsClient(client, config, providerBaseUrlGuard);
     }
 
     @Provides
