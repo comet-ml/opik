@@ -70,7 +70,7 @@ public class GuardrailsResource {
     }
 
     @POST
-    @Path("/v2/validations")
+    @Path("/validations")
     @Operation(operationId = "validateGuardrails", summary = "Run guardrail checks on a text", description = "Runs the requested checks on the text through the Opik inference decision service and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.", responses = {
             @ApiResponse(responseCode = "200", description = "A verdict per check", content = @Content(schema = @Schema(implementation = GuardrailsValidationResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request: invalid settings for a check, or checks that need more than 32 questions (each PII class and each topic list is one question)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

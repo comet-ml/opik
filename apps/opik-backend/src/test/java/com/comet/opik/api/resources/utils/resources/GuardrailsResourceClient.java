@@ -37,7 +37,6 @@ public class GuardrailsResourceClient {
 
     public Response validate(Object request, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("v2")
                 .path("validations")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

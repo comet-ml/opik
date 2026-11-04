@@ -107,12 +107,10 @@ class RequiredPermissionsCoverageArchTest {
             // workspace may call it, as any member may log the traces the checks belong to.
             "GuardrailsResource.validateGuardrails",
             // Guardrail policies: any workspace member creates and edits them, as the design decided; there is no
-            // guardrails role. The gate is the same as for validateGuardrails. retrieve is read-shaped: the SDK
-            // loads the policies a guardrail checks with the API key of whoever runs the agent.
+            // guardrails role. The gate is the same as for validateGuardrails.
             "GuardrailPoliciesResource.createGuardrailPolicy",
             "GuardrailPoliciesResource.updateGuardrailPolicy",
-            "GuardrailPoliciesResource.deleteGuardrailPoliciesBatch",
-            "GuardrailPoliciesResource.retrieveGuardrailPolicies");
+            "GuardrailPoliciesResource.deleteGuardrailPolicy");
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only

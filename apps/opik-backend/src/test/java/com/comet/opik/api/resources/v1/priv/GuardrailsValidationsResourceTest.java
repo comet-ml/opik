@@ -54,7 +54,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Guardrails v2 validations Resource Test")
+@DisplayName("Guardrails Validations Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class GuardrailsValidationsResourceTest {

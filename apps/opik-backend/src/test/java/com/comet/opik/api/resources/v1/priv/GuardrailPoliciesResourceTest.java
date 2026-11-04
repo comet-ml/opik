@@ -1,11 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.GuardrailExecutionScope;
 import com.comet.opik.api.GuardrailPolicy;
 import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyPage;
-import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyRetrieve;
-import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyRetrieveResponse;
 import com.comet.opik.api.GuardrailPolicyRule;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -27,6 +24,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,7 +43,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -201,11 +198,18 @@ class GuardrailPoliciesResourceTest {
         }
     }
 
-    private List<GuardrailPolicy> retrieve(Workspace workspace, Set<String> names) {
-        try (var response = request(workspace, "/retrieve").post(Entity.json(new GuardrailPolicyRetrieve(names)))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(GuardrailPolicyRetrieveResponse.class).policies();
+    private Response find(Workspace workspace, String names, GuardrailExecutionScope executionScope) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI));
+        if (names != null) {
+            target = target.queryParam("names", names);
         }
+        if (executionScope != null) {
+            target = target.queryParam("execution_scope", executionScope.getValue());
+        }
+        return target.request()
+                .header(HttpHeaders.AUTHORIZATION, workspace.apiKey())
+                .header(WORKSPACE_HEADER, workspace.name())
+                .get();
     }
 
     @Test
@@ -316,16 +320,13 @@ class GuardrailPoliciesResourceTest {
         try (var response = request(workspace, "").get()) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
-        try (var response = request(workspace, "/retrieve").post(Entity.json(new GuardrailPolicyRetrieve(Set.of())))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
-        }
         try (var response = request(workspace, "/" + randomUUID()).get()) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
         try (var response = request(workspace, "/" + randomUUID()).put(Entity.json(piiPolicy("policy")))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
-        try (var response = request(workspace, "/delete").post(Entity.json(new BatchDelete(Set.of(randomUUID()))))) {
+        try (var response = request(workspace, "/" + randomUUID()).delete()) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
     }
@@ -432,7 +433,7 @@ class GuardrailPoliciesResourceTest {
     }
 
     @Test
-    @DisplayName("delete removes the workspace's policies and leaves other workspaces alone")
+    @DisplayName("delete removes the workspace's policy and leaves other workspaces alone")
     void delete() {
         var workspace = newWorkspace();
         var otherWorkspace = newWorkspace();
@@ -440,10 +441,11 @@ class GuardrailPoliciesResourceTest {
         var kept = create(workspace, piiPolicy("kept"));
         var otherWorkspacePolicy = create(otherWorkspace, piiPolicy("deleted"));
 
-        var batch = new BatchDelete(Set.of(deleted.id(), otherWorkspacePolicy.id(), randomUUID()));
-        try (var response = request(workspace, "/delete").post(Entity.json(batch))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-        }
+        Stream.of(deleted.id(), otherWorkspacePolicy.id(), randomUUID()).forEach(id -> {
+            try (var response = request(workspace, "/" + id).delete()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        });
 
         assertThat(getStatus(workspace, deleted.id())).isEqualTo(HttpStatus.SC_NOT_FOUND);
         assertThat(getStatus(workspace, kept.id())).isEqualTo(HttpStatus.SC_OK);
@@ -452,52 +454,54 @@ class GuardrailPoliciesResourceTest {
         create(workspace, piiPolicy("deleted"));
     }
 
-    static Stream<Arguments> retrieveCases() {
+    static Stream<Arguments> filterCases() {
         return Stream.of(
-                Arguments.of("a name in another case", Set.of("SUPPORT-BOT"),
-                        List.of("all-requests", "support-bot", "workspace-wide")),
-                Arguments.of("the name of a global policy", Set.of("workspace-wide"),
-                        List.of("all-requests", "workspace-wide")),
-                Arguments.of("no names", Set.of(), List.of("all-requests", "workspace-wide")),
-                Arguments.of("a name stored with a trailing space", Set.of("padded-bot"),
-                        List.of("all-requests", "padded-bot ", "workspace-wide")),
-                Arguments.of("several names, in name order", Set.of("support-bot", "padded-bot"),
-                        List.of("all-requests", "padded-bot ", "support-bot", "workspace-wide")));
+                Arguments.of("a name in another case", "[\"SUPPORT-BOT\"]", null, List.of("support-bot")),
+                Arguments.of("a name stored with a trailing space", "[\"padded-bot\"]", null,
+                        List.of("padded-bot ")),
+                Arguments.of("several names", "[\"support-bot\",\"padded-bot\"]", null,
+                        List.of("support-bot", "padded-bot ")),
+                Arguments.of("a name that does not exist", "[\"missing\"]", null, List.of()),
+                Arguments.of("the global scope", null, GuardrailExecutionScope.GLOBAL,
+                        List.of("workspace-wide", "all-requests")),
+                Arguments.of("the on request scope", null, GuardrailExecutionScope.ON_REQUEST,
+                        List.of("support-bot", "padded-bot ", "sales-bot")),
+                Arguments.of("names and a scope together", "[\"support-bot\",\"workspace-wide\"]",
+                        GuardrailExecutionScope.GLOBAL, List.of("workspace-wide")));
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("retrieveCases")
-    @DisplayName("retrieve returns the named policies plus every global policy")
-    void retrieve(String scenario, Set<String> names, List<String> expectedNames) {
+    @MethodSource("filterCases")
+    @DisplayName("find filters by exact names and by execution scope")
+    void findByNamesAndExecutionScope(String scenario, String names, GuardrailExecutionScope executionScope,
+            List<String> expectedNames) {
         var workspace = newWorkspace();
         var created = Stream.of(
-                piiPolicy("support-bot").toBuilder().description("Support bot checks").build(),
+                piiPolicy("support-bot"),
                 piiPolicy("padded-bot "),
                 piiPolicy("sales-bot"),
                 policy("workspace-wide", rule(GuardrailType.TOPIC, "{\"restricted_topics\":[\"politics\"]}"))
                         .toBuilder().executionScope(GuardrailExecutionScope.GLOBAL).build(),
-                // A global policy that sorts before the named ones, so the merged order is checked.
                 piiPolicy("all-requests").toBuilder().executionScope(GuardrailExecutionScope.GLOBAL).build())
                 .map(policy -> create(workspace, policy))
                 .collect(Collectors.toMap(GuardrailPolicy::name, Function.identity()));
         create(newWorkspace(), piiPolicy("other-global").toBuilder()
                 .executionScope(GuardrailExecutionScope.GLOBAL).build());
 
-        assertThat(retrieve(workspace, names))
-                .containsExactlyElementsOf(expectedNames.stream().map(created::get).toList());
+        try (var response = find(workspace, names, executionScope)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(GuardrailPolicyPage.class).content())
+                    .containsExactlyInAnyOrderElementsOf(expectedNames.stream().map(created::get).toList());
+        }
     }
 
     @Test
-    @DisplayName("retrieve fails when a named policy does not exist")
-    void retrieveUnknownName() {
-        var workspace = newWorkspace();
-        create(workspace, piiPolicy("support-bot"));
-
-        try (var response = request(workspace, "/retrieve")
-                .post(Entity.json(new GuardrailPolicyRetrieve(Set.of("support-bot", "missing"))))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+    @DisplayName("find rejects names that are not a JSON array")
+    void findWithInvalidNames() {
+        try (var response = find(newWorkspace(), "support-bot", null)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(response.readEntity(ErrorMessage.class).getMessage())
-                    .isEqualTo("Guardrail policies not found: missing");
+                    .isEqualTo("Invalid query param names 'support-bot'");
         }
     }
 }
