@@ -34,7 +34,8 @@ public class ServiceTogglesResource {
     public Response getToggles() {
         ServiceTogglesConfig toggles = config.getServiceToggles();
         return Response.ok()
-                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles)))
+                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles))
+                        .withTopicsEnabled(config.getTopics().isEnabled()))
                 .build();
     }
 }

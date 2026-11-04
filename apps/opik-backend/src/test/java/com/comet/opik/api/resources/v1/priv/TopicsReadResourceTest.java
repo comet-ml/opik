@@ -58,6 +58,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -412,6 +414,26 @@ class TopicsReadResourceTest {
         try (var response = request(caller, UUID.randomUUID()).get()) {
             assertThat(response.getStatus()).isEqualTo(501);
             assertThat(response.hasEntity()).isFalse();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @DisplayName("the toggles' topics_enabled is topics.enabled; false exactly when this API answers 501")
+    void togglesTopicsEnabled(boolean enabled) {
+        var caller = caller();
+        opikConfig.getTopics().setEnabled(enabled);
+
+        try (var response = client.target("%s/v1/private/toggles/".formatted(baseUrl))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, caller.apiKey())
+                .header(RequestContext.WORKSPACE_HEADER, caller.workspaceName())
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.readEntity(JsonNode.class).get("topics_enabled").asBoolean()).isEqualTo(enabled);
+        }
+        try (var response = request(caller, project(caller)).get()) {
+            assertThat(response.getStatus() == 501).isEqualTo(!enabled);
         }
     }
 
