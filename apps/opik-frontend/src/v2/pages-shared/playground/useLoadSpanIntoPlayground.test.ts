@@ -10,6 +10,7 @@ import useLoadSpanIntoPlayground from "./useLoadSpanIntoPlayground";
 
 const navigate = vi.fn();
 const setPromptMap = vi.fn();
+const toast = vi.fn();
 
 const mocks = vi.hoisted(() => ({
   providerKeys: [] as string[],
@@ -18,6 +19,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
+}));
+
+vi.mock("@/ui/use-toast", () => ({
+  useToast: () => ({ toast }),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -156,6 +161,37 @@ describe("useLoadSpanIntoPlayground", () => {
     const prompt = loadSpan(createSpan());
 
     expect(prompt.messages[1].content).toBe("Hi");
+  });
+
+  it("tells the user when attachments weren't loaded", () => {
+    const prompt = loadSpan(
+      createSpan({
+        input: {
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Describe this" },
+                {
+                  type: "image_url",
+                  image_url: { url: "[input-attachment-1-1700000000.png]" },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(prompt.messages[0].content).toBe("Describe this");
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast.mock.calls[0][0].description).toContain("attachments");
+  });
+
+  it("doesn't show the attachment message when nothing was skipped", () => {
+    loadSpan(createSpan());
+
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("selects the span model when a configured provider serves it", () => {

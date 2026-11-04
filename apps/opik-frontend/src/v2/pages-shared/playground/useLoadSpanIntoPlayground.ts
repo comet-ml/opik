@@ -1,9 +1,11 @@
 import { useCallback } from "react";
 
+import { useToast } from "@/ui/use-toast";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import {
   escapePlaygroundMessage,
   getSpanPlaygroundMessages,
+  hasSkippedMedia,
 } from "@/v2/pages-shared/playground/spanPlaygroundMessages";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
@@ -25,6 +27,7 @@ const getProviderKey = (loggedProvider?: string) =>
  * wrapper over `useLoadPlayground`, like `useLoadPromptIntoPlayground`.
  */
 function useLoadSpanIntoPlayground() {
+  const { toast } = useToast();
   const {
     loadPlayground,
     isPlaygroundEmpty,
@@ -45,8 +48,15 @@ function useLoadSpanIntoPlayground() {
         preferredModel: span.model as PROVIDER_MODEL_TYPE | undefined,
         preferredProvider: getProviderKey(span.provider),
       });
+
+      if (hasSkippedMedia(span)) {
+        toast({
+          description:
+            "Images and other media stored as attachments weren't added to the Playground",
+        });
+      }
     },
-    [loadPlayground],
+    [loadPlayground, toast],
   );
 
   return {

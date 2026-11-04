@@ -12,6 +12,7 @@ import {
   escapeMustache,
   escapePlaygroundMessage,
   getPlaygroundMessagesFromInput,
+  hasSkippedMedia,
 } from "./spanPlaygroundMessages";
 
 const IMAGE_URL = "https://example.com/cat.png";
@@ -495,6 +496,50 @@ describe("escapePlaygroundMessage", () => {
       role: "user",
       content: [{ type: "text", text: escapeMustache("{{x}}") }, image],
     });
+  });
+});
+
+describe("hasSkippedMedia", () => {
+  const ATTACHMENT = "[input-attachment-1-1700000000.png]";
+
+  const createImageSpan = (url: string, role = "user") =>
+    createSpan({
+      input: {
+        messages: [
+          {
+            role,
+            content: [
+              { type: "text", text: "Describe this" },
+              { type: "image_url", image_url: { url } },
+            ],
+          },
+        ],
+      },
+    });
+
+  it("is true for an image stored as an attachment", () => {
+    expect(hasSkippedMedia(createImageSpan(ATTACHMENT))).toBe(true);
+  });
+
+  it.each([
+    ["a URL", IMAGE_URL],
+    ["a data URI", DATA_URI],
+  ])("is false for an image that is %s", (_, url) => {
+    expect(hasSkippedMedia(createImageSpan(url))).toBe(false);
+  });
+
+  it("is false for text-only input", () => {
+    expect(hasSkippedMedia(createSpan())).toBe(false);
+  });
+
+  it("is false for an attachment on a role that can't carry media", () => {
+    expect(hasSkippedMedia(createImageSpan(ATTACHMENT, "assistant"))).toBe(
+      false,
+    );
+  });
+
+  it("is false for input that isn't messages", () => {
+    expect(hasSkippedMedia(createSpan({ input: { query: "Hi" } }))).toBe(false);
   });
 });
 

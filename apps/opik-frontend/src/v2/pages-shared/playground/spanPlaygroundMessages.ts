@@ -58,6 +58,19 @@ const getBlockText = (block: LLMBlockDescriptor): string | null =>
     ? block.props.children
     : null;
 
+const getBlockMedia = (block: LLMBlockDescriptor): { url: string }[] => {
+  switch (block.blockType) {
+    case "image":
+      return block.props.images;
+    case "video":
+      return block.props.videos;
+    case "audio":
+      return block.props.audios;
+    default:
+      return [];
+  }
+};
+
 const getBlockMediaParts = (block: LLMBlockDescriptor): MediaPart[] => {
   switch (block.blockType) {
     case "image":
@@ -158,15 +171,13 @@ export const escapePlaygroundMessage = ({
 
 /**
  * Detects the message format of an LLM call input the way the trace viewer's
- * Messages tab does (no format hint) and maps it to Playground chat messages.
- * Takes the raw input rather than the viewer's media-placeholder copy, so
- * image URLs stay usable. Returns an empty array when the input isn't messages,
- * or when a provider mapper can't read it (this runs while the toolbar
- * renders, so malformed input hides the action instead of throwing).
+ * Messages tab does (no format hint) and maps it to message descriptors. Takes
+ * the raw input rather than the viewer's media-placeholder copy, so image URLs
+ * stay usable. Returns an empty array when the input isn't messages, or when a
+ * provider mapper can't read it (this runs while the toolbar renders, so
+ * malformed input hides the action instead of throwing).
  */
-export const getPlaygroundMessagesFromInput = (
-  input: unknown,
-): PlaygroundChatMessage[] => {
+const readInputMessages = (input: unknown): LLMMessageDescriptor[] => {
   try {
     const detection = detectLLMMessages(input, { fieldType: "input" });
     const format =
@@ -174,15 +185,16 @@ export const getPlaygroundMessagesFromInput = (
         ? getFormat(detection.format)
         : null;
 
-    if (!format) return [];
-
-    return convertLLMMessagesToPlaygroundMessages(
-      format.mapper(input, { fieldType: "input" }).messages,
-    );
+    return format ? format.mapper(input, { fieldType: "input" }).messages : [];
   } catch {
     return [];
   }
 };
+
+export const getPlaygroundMessagesFromInput = (
+  input: unknown,
+): PlaygroundChatMessage[] =>
+  convertLLMMessagesToPlaygroundMessages(readInputMessages(input));
 
 export const getSpanPlaygroundMessages = (
   data: Trace | Span,
@@ -190,6 +202,21 @@ export const getSpanPlaygroundMessages = (
   "type" in data && data.type === SPAN_TYPE.llm
     ? getPlaygroundMessagesFromInput(data.input)
     : [];
+
+/**
+ * Whether loading this span leaves out media a message could have carried, such
+ * as an image the SDK moved to an attachment, leaving "[file_name]" in the input.
+ */
+export const hasSkippedMedia = (span: Span): boolean =>
+  readInputMessages(span.input).some(({ role, blocks }) => {
+    const playgroundRole = PLAYGROUND_ROLES[role];
+
+    return (
+      !!playgroundRole &&
+      isMediaAllowedForRole(playgroundRole) &&
+      blocks.flatMap(getBlockMedia).some((media) => !isSendable(media))
+    );
+  });
 
 export const canOpenSpanInPlayground = (data: Trace | Span): data is Span =>
   getSpanPlaygroundMessages(data).length > 0;
