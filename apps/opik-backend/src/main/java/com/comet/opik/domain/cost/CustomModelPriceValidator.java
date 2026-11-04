@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -196,19 +197,24 @@ public class CustomModelPriceValidator {
     private void checkAliasTargets(List<ParsedRow> rows, List<Problem> errors) {
         Map<RowKey, CustomModelPrice> byKey = new HashMap<>();
         rows.forEach(row -> byKey.put(keyOf(row.price()), row.price()));
-        var fixedRows = PriceLayers.of("validation", 0, rows.stream()
+        List<CustomModelPrice> fixedPrices = rows.stream()
                 .map(ParsedRow::price)
                 .filter(price -> price.kind() == CustomModelPrice.Kind.FIXED)
-                .toList());
+                .toList();
+        var fixedRows = PriceLayers.of("validation", 0, fixedPrices);
+        // A fixed row can be filed under a provider no built-in price uses, so its spans still price.
+        Set<String> spanProviders = new HashSet<>(ModelPriceTable.pricedProviders());
+        fixedPrices.stream().map(CustomModelPrice::provider).filter(provider -> !provider.isEmpty())
+                .forEach(spanProviders::add);
         for (ParsedRow row : rows) {
             if (row.price().kind() == CustomModelPrice.Kind.ALIAS) {
-                aliasTargetProblem(row, byKey, fixedRows).ifPresent(errors::add);
+                aliasTargetProblem(row, byKey, fixedRows, spanProviders).ifPresent(errors::add);
             }
         }
     }
 
     private Optional<Problem> aliasTargetProblem(ParsedRow row, Map<RowKey, CustomModelPrice> byKey,
-            PriceLayers fixedRows) {
+            PriceLayers fixedRows, Set<String> spanProviders) {
         CustomModelPrice alias = row.price();
         boolean underSpanProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider());
         String targetProvider = underSpanProvider ? alias.provider() : alias.aliasProvider();
@@ -222,12 +228,12 @@ public class CustomModelPriceValidator {
             return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_is_alias",
                     "'%s' is an alias too: point this row at a model with a price".formatted(target.modelName())));
         }
-        // An any-provider alias whose target names no provider is looked up under each span's own provider, so
-        // whether it prices can only be known per span.
-        if (underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider())) {
-            return Optional.empty();
-        }
-        if (ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedRows).isEmpty()) {
+        // An any-provider alias whose target names no provider is looked up under each span's own provider, so it
+        // is only an error when no provider prices the target.
+        boolean priced = underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider())
+                ? pricedUnderSomeProvider(alias.aliasModelName(), spanProviders, fixedRows)
+                : ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedRows).isPresent();
+        if (!priced) {
             return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_unpriced",
                     "Neither the built-in prices nor these rows price '%s' on %s".formatted(alias.aliasModelName(),
                             describeProvider(targetProvider))));
@@ -255,8 +261,14 @@ public class CustomModelPriceValidator {
                     : ModelPriceResolver.resolve(price.modelName(), price.provider())
                             .map(ModelPriceResolver.PriceMatch::price);
             if (price.kind() == CustomModelPrice.Kind.ALIAS) {
-                builtIn.ifPresent(ignored -> warnings.add(new Problem(row.index(), "model", "shadows_builtin",
-                        "'%s' has a built-in price, which this alias replaces".formatted(price.modelName()))));
+                boolean shadows = price.provider().isEmpty()
+                        ? pricedUnderSomeProvider(price.modelName(), ModelPriceTable.pricedProviders(),
+                                PriceLayers.BUILT_IN_ONLY)
+                        : builtIn.isPresent();
+                if (shadows) {
+                    warnings.add(new Problem(row.index(), "model", "shadows_builtin",
+                            "'%s' has a built-in price, which this alias replaces".formatted(price.modelName())));
+                }
             } else if (!price.provider().isEmpty()) {
                 builtIn.ifPresentOrElse(base -> warnings.addAll(fixedRowWarnings(row.index(), price, base)),
                         () -> warnings.add(new Problem(row.index(), "model", "no_base",
@@ -394,6 +406,11 @@ public class CustomModelPriceValidator {
     private boolean isSet(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value != null && !value.isNull();
+    }
+
+    private boolean pricedUnderSomeProvider(String modelName, Set<String> providers, PriceLayers layers) {
+        return providers.stream()
+                .anyMatch(provider -> ModelPriceResolver.resolve(modelName, provider, layers).isPresent());
     }
 
     private RowKey keyOf(CustomModelPrice price) {

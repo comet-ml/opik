@@ -73,6 +73,10 @@ public class ModelPriceTable {
         return pricedProviders.contains(provider);
     }
 
+    static Set<String> pricedProviders() {
+        return pricedProviders;
+    }
+
     private static Map<String, ModelPrice> parseModelPrices() {
         Map<String, ModelCostData> modelCosts = readModelCosts();
 
