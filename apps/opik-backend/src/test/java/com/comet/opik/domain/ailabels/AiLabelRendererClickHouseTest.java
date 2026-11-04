@@ -74,7 +74,6 @@ class AiLabelRendererClickHouseTest {
             .spansDistributedWrapEnabled(true)
             .build();
     private static final DatabaseAnalyticsDataModelConfig CUT_OVER_SPANS_WEEKS_BOUND = CUT_OVER_SPANS.toBuilder()
-            .spanWeeksWriteEnabled(true)
             .spanWeeksReadEnabled(true)
             .build();
 

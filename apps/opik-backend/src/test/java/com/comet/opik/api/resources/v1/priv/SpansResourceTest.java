@@ -2554,6 +2554,30 @@ class SpansResourceTest {
                 assertThat(actualError.getMessage()).isEqualTo(expectedError);
             }
         }
+
+        @Test
+        void getWhenSpanIdIsInTwoProjectsReturnsLatest() {
+            var latestProjectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var latestProjectId = projectResourceClient.createProject(latestProjectName, API_KEY, TEST_WORKSPACE);
+            var olderProjectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            projectResourceClient.createProject(olderProjectName, API_KEY, TEST_WORKSPACE);
+
+            var now = Instant.now();
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(latestProjectName)
+                    .lastUpdatedAt(now)
+                    .feedbackScores(null)
+                    .build();
+            var olderSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(expectedSpan.id())
+                    .projectName(olderProjectName)
+                    .lastUpdatedAt(now.minus(1, ChronoUnit.MINUTES))
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(expectedSpan), API_KEY, TEST_WORKSPACE);
+            spanResourceClient.batchCreateSpans(List.of(olderSpan), API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(expectedSpan, latestProjectId, API_KEY, TEST_WORKSPACE);
+        }
     }
 
     @Nested

@@ -1,5 +1,4 @@
 /// <reference types="vitest" />
-import { TanStackRouterVite } from "@tanstack/router-vite-plugin";
 import react from "@vitejs/plugin-react-swc";
 import * as path from "path";
 import { defineConfig, loadEnv, UserConfig } from "vite";
@@ -39,7 +38,6 @@ export default defineConfig(({ mode }) => {
       }),
       react(),
       tsconfigPaths(),
-      TanStackRouterVite({ enableRouteGeneration: false }),
     ],
     test: {
       globals: true,
