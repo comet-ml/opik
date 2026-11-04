@@ -26,7 +26,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -132,9 +131,8 @@ class ClickHouseAppenderTest {
         appender.start();
 
         append(appender, 21); // forces the first insert of 10, which hangs; 11 stay queued
-        await().atMost(5, TimeUnit.SECONDS).until(() -> appenderLogs.list.stream()
-                .anyMatch(event -> event.getLevel() == Level.ERROR && event.getThrowableProxy() != null
-                        && event.getThrowableProxy().getClassName().equals(TimeoutException.class.getName())));
+        await().atMost(5, TimeUnit.SECONDS).until(() -> warnings()
+                .contains("User-facing log insert timed out after 'PT0.1S', dropped '10' logs"));
 
         resumeScheduler.countDown();
         appender.stop();

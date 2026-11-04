@@ -126,8 +126,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         // lastInsert is set before subscribing and always completes normally, so stop() waits for this insert.
         var done = new CompletableFuture<Void>();
         lastInsert = done;
-        insert(batch)
-                .timeout(insertTimeout)
+        insert(batch, insertTimeout)
                 .doFinally(signal -> {
                     done.complete(null);
                     insertInFlight.set(false);
@@ -135,16 +134,27 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                         submit(this::flushLogs);
                     }
                 })
-                .subscribe(null, e -> log.error("Failed to insert logs", e));
+                .subscribe();
     }
 
-    private Mono<Void> insert(List<ILoggingEvent> batch) {
+    // Never errors: a timeout is expected under load and logged as a warning, anything else as an error.
+    private Mono<Void> insert(List<ILoggingEvent> batch, Duration timeout) {
         Map<String, List<ILoggingEvent>> eventsPerTable = batch.stream()
                 .collect(groupingBy(event -> event.getMDCPropertyMap().getOrDefault(UserLog.MARKER, "")));
 
         return Mono.when(eventsPerTable.entrySet().stream()
                 .map(entry -> save(entry.getKey(), entry.getValue()))
-                .toList());
+                .toList())
+                .timeout(timeout)
+                .onErrorResume(e -> {
+                    if (e instanceof TimeoutException) {
+                        log.warn("User-facing log insert timed out after '{}', dropped '{}' logs", timeout,
+                                batch.size());
+                    } else {
+                        log.error("Failed to insert logs", e);
+                    }
+                    return Mono.empty();
+                });
     }
 
     private Mono<Void> save(String userLogMarker, List<ILoggingEvent> events) {
@@ -210,20 +220,23 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     }
 
     // The flush thread is gone: wait for its last insert, so there is still one at a time, then insert what is
-    // left from here, a batch at a time.
+    // left from here, a batch at a time. A batch that times out doesn't end the drain; the deadline does.
     private void drainOnStop(long deadline) {
         try {
             lastInsert.get(remainingNanos(deadline), TimeUnit.NANOSECONDS);
-            while (!logQueue.isEmpty()) {
+            while (!logQueue.isEmpty() && remainingNanos(deadline) > 0) {
                 List<ILoggingEvent> batch = new ArrayList<>(batchSize);
                 logQueue.drainTo(batch, batchSize);
-                insert(batch).block(Duration.ofNanos(remainingNanos(deadline)));
+                insert(batch, Duration.ofNanos(Math.min(insertTimeout.toNanos(), remainingNanos(deadline)))).block();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("Interrupted flushing user-facing logs on shutdown, dropping '{}'", logQueue.size());
-        } catch (ExecutionException | TimeoutException | RuntimeException e) {
-            log.warn("Failed to flush user-facing logs on shutdown, dropping '{}'", logQueue.size(), e);
+        } catch (ExecutionException | TimeoutException e) {
+            // The last insert outlived the shutdown timeout; what is still queued is dropped below.
+        }
+
+        if (!logQueue.isEmpty()) {
+            log.warn("Shutdown timeout reached, dropping '{}' user-facing logs", logQueue.size());
         }
     }
 
