@@ -227,6 +227,7 @@ Arrays.asList("A", "B", "C")
 
 ## API Design
 - **Query parameters that accept lists**: Use plural names from the start (e.g., `exclude_category_names` not `exclude_category_name`). Starting with a singular name and later adding a plural variant results in two redundant query params on the same endpoint. Plural names are backward-compatible since they work for both single and multiple values.
+- **Optional query parameters**: don't annotate `@QueryParam` parameters with `@Nullable`; none of the backend's query params are. A `@QueryParam` without `@NotNull` or `@DefaultValue` is already optional and arrives as `null` when omitted. Document what omitting it means in its `@Schema(description = ...)`. `@Nullable` stays appropriate on API models and on internal methods, including private helpers inside resource classes.
 
 ## Error Handling
 

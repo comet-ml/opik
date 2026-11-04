@@ -2,12 +2,11 @@
 
 The opening user message carries a pre-rendered flat trace overview, so
 the judge can decide on the first turn whether any drill-in tool
-(`read` / `scan` / `search`) is needed. `tool_choice` stays on `"auto"`
-throughout, and `response_format` is set on every turn — so any turn
-where the model declines to call a tool already produces the structured
-JSON verdict the caller parses. A dedicated wrap-up turn only runs as a
-force-finalize when the loop exits via `max_rounds`, or for models whose
-`supported_features` say they take no `response_format` next to tools.
+(`read` / `scan` / `search`) is needed. The verdict is a tool too
+(`submit_verdict`, whose input schema is the verdict schema), and
+`tool_choice` is `"required"`, so every turn is either a drill-in or the
+verdict. A dedicated wrap-up turn only runs as a force-finalize when the
+loop exits via `max_rounds` without a verdict.
 
 Telemetry is emitted via `LOGGER` at the end of each loop run so an
 operator running `evaluate()` over a dataset can spot misconfigured
@@ -18,7 +17,7 @@ signal in particular).
 import collections
 import dataclasses
 import logging
-from typing import Any, Dict, List, Set, Tuple, Type
+from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 import pydantic
 
@@ -32,6 +31,8 @@ from .tools import registry as tool_registry
 LOGGER = logging.getLogger(__name__)
 
 MAX_TOOL_CALL_ROUNDS = 10
+
+VERDICT_TOOL_NAME = "submit_verdict"
 
 
 # Rewritten from an earlier version that included an "or return your
@@ -50,6 +51,12 @@ _DEDUP_HINT_TEMPLATE = (
     "content surfaced in a `[TRUNCATED ... — use read(...)]` hint, `scan` "
     "for a specific path, or `search` for a keyword. Repeating this call "
     "cannot produce new information."
+)
+
+_VERDICT_SET_ASIDE_HINT = (
+    "Verdict not accepted: it was sent in the same turn as lookup tools whose "
+    "results you had not seen yet. Review their results, then call "
+    "`submit_verdict` again."
 )
 
 
@@ -85,19 +92,17 @@ def run_agentic_judge(
     overview_truncated: bool = False,
     max_rounds: int = MAX_TOOL_CALL_ROUNDS,
 ) -> str:
-    """Drive the tool-call loop and return the raw structured-output JSON.
+    """Drive the tool-call loop and return the raw verdict JSON.
 
-    Returns the assistant's final text content (the JSON the response_format
-    schema constrains). Caller parses it via the same path the one-shot
-    LLMJudge uses.
+    Normally this is the raw arguments of the `submit_verdict` call. If the
+    model ends without calling it, or `max_rounds` drill-in rounds run out,
+    it is the content of a tools-free wrap-up request (empty string when
+    absent). Caller parses it via the same path the one-shot LLMJudge uses.
 
     Raises whatever the underlying model raises on hard failures — the same
     contract as `LLMJudge._generate_and_parse`.
     """
-    tool_specs: List[Any] = registry.specs()
-    tool_round_format = (
-        response_format if model.supported_features.response_format_with_tools else None
-    )
+    tool_specs: List[Any] = registry.specs() + [_verdict_tool_spec(response_format)]
     telemetry = LoopTelemetry()
     # Tracks every (tool_name, arguments) pair seen during this loop run.
     # Second and subsequent occurrences are short-circuited with a hint
@@ -113,32 +118,37 @@ def run_agentic_judge(
         {"role": "user", "content": user_prompt},
     ]
 
-    # First turn: the overview is already in the user message, so the
-    # judge may either drill in via a tool call or short-circuit to the
-    # final verdict when the overview alone is enough. `response_format`
-    # is supplied on every turn — when the model emits content instead
-    # of a tool call, that content is already structured JSON we can
-    # return without a separate wrap-up round-trip.
+    # `required` makes every turn either a drill-in or the verdict, so text
+    # the model writes alongside a tool call can't end the loop early.
     response = model.generate_chat_completion(
         messages=messages,
         tools=tool_specs,
-        tool_choice="auto",
-        response_format=tool_round_format,
+        tool_choice="required",
         temperature=0,
     )
     messages.append(_assistant_message_from_response(response))
 
-    max_rounds_exhausted = True
+    verdict = _verdict_arguments(response)
     for round_index in range(max_rounds):
         tool_calls = response.get("tool_calls") or []
-        if not tool_calls:
-            max_rounds_exhausted = False
+        if verdict is not None or not tool_calls:
             break
         telemetry.rounds += 1
 
         for call in tool_calls:
             tool_name = call["function"]["name"]
             arguments = call["function"].get("arguments", "{}")
+            if tool_name == VERDICT_TOOL_NAME:
+                # Only reached for a verdict mixed with lookups; it was
+                # decided before their results, so the model must resubmit.
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call["id"],
+                        "content": _VERDICT_SET_ASIDE_HINT,
+                    }
+                )
+                continue
             telemetry.tool_calls_by_name[tool_name] += 1
 
             call_key = (tool_name, arguments)
@@ -177,72 +187,73 @@ def run_agentic_judge(
                 )
                 span.output = {"output": result}
 
-        # Follow-up turns let the model decide whether more tools are
-        # needed. Stop the loop as soon as the model produces no further
-        # tool calls.
         response = model.generate_chat_completion(
             messages=messages,
             tools=tool_specs,
-            tool_choice="auto",
-            response_format=tool_round_format,
+            tool_choice="required",
             temperature=0,
         )
         messages.append(_assistant_message_from_response(response))
-    else:
-        LOGGER.warning(
-            "Agentic judge reached MAX_TOOL_CALL_ROUNDS=%d without terminating; "
-            "forcing wrap-up.",
-            max_rounds,
-        )
+        verdict = _verdict_arguments(response)
 
     _emit_telemetry(telemetry, overview_truncated=overview_truncated)
 
-    # Skip the wrap-up round-trip when the model already finalized: the
-    # latest response has no pending tool calls and carries content,
-    # which — thanks to `response_format` being set on every turn — is
-    # already the structured JSON we'd otherwise ask the wrap-up call
-    # to produce.
-    pending_tool_calls = response.get("tool_calls") or []
-    content = response.get("content")
-    if (
-        not max_rounds_exhausted
-        and content
-        and not pending_tool_calls
-        and tool_round_format is not None
-    ):
-        return content
+    if verdict is not None:
+        return verdict
 
-    # Otherwise (max rounds reached, or the last response lacked usable
-    # content) force a final, tools-less, structured-output turn so the
-    # caller always gets a parseable verdict to retry on.
-    #
-    # If the loop exited via `max_rounds_exhausted` with the last
-    # assistant turn carrying tool_calls, those calls were never given
-    # a tool reply. Providers (OpenAI in particular) reject any further
-    # request on a conversation where an assistant `tool_calls` block
-    # isn't followed by a tool message for every `tool_call_id` — so
-    # we must synthesize stub replies before the wrap-up call.
-    if pending_tool_calls:
-        for call in pending_tool_calls:
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "content": (
-                        "Tool call not executed: agentic loop reached "
-                        "MAX_TOOL_CALL_ROUNDS. Finalize the verdict now "
-                        "based on what you've already observed."
-                    ),
-                }
-            )
+    LOGGER.warning(
+        "Agentic judge ended without calling `%s` (rounds=%d, max=%d); "
+        "forcing wrap-up.",
+        VERDICT_TOOL_NAME,
+        telemetry.rounds,
+        max_rounds,
+    )
+    # The last assistant turn's tool calls never got a reply; providers
+    # reject a follow-up request until every `tool_call_id` has one.
+    for call in response.get("tool_calls") or []:
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": call["id"],
+                "content": (
+                    "Tool call not executed: agentic loop reached "
+                    "MAX_TOOL_CALL_ROUNDS. Finalize the verdict now "
+                    "based on what you've already observed."
+                ),
+            }
+        )
 
     messages.append({"role": "user", "content": wrapup_instruction})
-    verdict = model.generate_chat_completion(
+    final = model.generate_chat_completion(
         messages=messages,
         response_format=response_format,
         temperature=0,
     )
-    return verdict.get("content") or ""
+    return final.get("content") or ""
+
+
+def _verdict_tool_spec(response_format: Type[pydantic.BaseModel]) -> Dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": VERDICT_TOOL_NAME,
+            "description": (
+                "Submit the final verdict for every assertion. Call this as "
+                "soon as every assertion is decidable; it ends the evaluation."
+            ),
+            "parameters": response_format.model_json_schema(),
+        },
+    }
+
+
+def _verdict_arguments(response: base_model.ConversationDict) -> Optional[str]:
+    """Return the verdict arguments only when it is the turn's sole tool use."""
+    tool_calls = response.get("tool_calls") or []
+    if tool_calls and all(
+        c["function"]["name"] == VERDICT_TOOL_NAME for c in tool_calls
+    ):
+        return tool_calls[0]["function"].get("arguments") or "{}"
+    return None
 
 
 def _emit_telemetry(
