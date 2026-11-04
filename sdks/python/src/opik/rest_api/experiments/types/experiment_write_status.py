@@ -2,4 +2,4 @@
 
 import typing
 
-ExperimentWriteStatus = typing.Union[typing.Literal["running", "completed", "cancelled"], typing.Any]
+ExperimentWriteStatus = typing.Union[typing.Literal["running", "completed", "cancelled", "failed"], typing.Any]

@@ -93,6 +93,59 @@ export class TracePanelPage {
     return this.root.getByTestId(`trace-tree-node-${name}`);
   }
 
+  /**
+   * Wait for the span tree to list every named span, re-issuing the panel's
+   * span query if the tree came back empty.
+   *
+   * The tree is filled by one request — `GET /v1/private/spans?trace_id=…` —
+   * and that endpoint is rate limited per workspace (`getSpans:{workspaceId}`).
+   * When parallel specs have spent the budget, the panel's own call is shed
+   * with a 429, the empty answer is kept, and nothing refetches: the tree
+   * renders `Spans (0)` permanently, so a DOM wait of ANY length cannot
+   * succeed. Observed on staging for 2.2.136 — a 429 on the panel's spans call
+   * while the same spans read back fine through `backendClient.listSpanCosts`,
+   * which carries `withRateLimitRetry` for exactly this burst. The browser has
+   * no such retry, so the spec supplies it with a reload.
+   *
+   * This is not a loosened assertion. Every name must still resolve to exactly
+   * one node, and the last attempt rethrows the locator's own failure — so a
+   * tree that genuinely never lists a seeded span still fails here, with that
+   * span named, rather than being reported as a rate limit.
+   */
+  async waitForSpanTreeNodes(
+    names: readonly string[],
+    opts: { attempts?: number; timeout?: number } = {},
+  ): Promise<void> {
+    const attempts = opts.attempts ?? 3;
+    const timeout = opts.timeout ?? 20_000;
+    return test.step(`Wait for the span tree to list ${names.length} span(s)`, async () => {
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const isLast = attempt === attempts;
+        try {
+          for (const name of names) {
+            await expect(
+              this.spanTreeNode(name),
+              `the tree lists '${name}' exactly once`,
+            ).toHaveCount(1, { timeout: isLast ? timeout + 10_000 : timeout });
+          }
+          return;
+        } catch (error) {
+          if (isLast) throw error;
+          // The reload re-mounts the panel from the `?trace=` param, so the
+          // spans query is issued again rather than read from the cache that
+          // holds the shed answer.
+          await this.page.reload();
+          await this.waitForFullyLoaded();
+        }
+      }
+    });
+  }
+
+  /** A node of the agent graph drawn from the trace's `_opik_graph_definition`. */
+  agentGraphNode(name: string): Locator {
+    return this.root.locator('[data-panel-id="agent-graph"]').getByTestId(`mermaid-node-${name}`);
+  }
+
   /** The expand/collapse toggle within a given tree node. */
   spanTreeToggle(name: string): Locator {
     return this.spanTreeNode(name).getByRole('button', { name: 'Expand or collapse span' });
@@ -272,6 +325,27 @@ export class TracePanelPage {
    */
   estimatedCost(formatted: string): Locator {
     return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
+  /**
+   * Every dollar amount the data viewer renders, however formatted.
+   *
+   * The counterpart to {@link estimatedCost} for a span the backend attributed
+   * NO cost to. `formatCost` maps a zero or absent cost to its `noValue` dash,
+   * and a bare "-" is not a claim worth holding the UI to — it is a default
+   * that could reasonably become an em dash, a blank, or a tooltip. What is
+   * worth asserting is that no AMOUNT is shown: an unpriced span must not
+   * render a figure beside identical siblings that do.
+   *
+   * Matched on `$` followed by a digit so the `<$0.01` floor marker counts as
+   * an amount too — a span rendering the floor marker has been priced, just
+   * below the threshold, and must not pass for an unpriced one. Scoped to the
+   * data viewer, not the whole panel, for the reason `estimatedCost` is: the
+   * span tree renders a cost per node, so a panel-wide lookup would also match
+   * the sibling rows.
+   */
+  get costAmountsInViewer(): Locator {
+    return this.dataViewer.getByText(/\$\d/);
   }
 
   // --- Quick attribute filters (Details tab) ---
@@ -759,6 +833,30 @@ export class TracePanelPage {
    * section's own header row (the button's parent element) so it cannot resolve
    * to a sibling section's icon.
    */
+  /**
+   * A marker string rendered inside ONE named section's own body.
+   *
+   * Scoped to the section rather than to the whole panel, which is the entire
+   * point: a payload that landed in the wrong field, or one field's content
+   * leaking into another, renders the marker somewhere in the panel either way.
+   *
+   * `xpath=../..` and not `xpath=..`, which is the hop `sectionSearchButton`
+   * takes: `CodeBlock` puts the header button and the mode/search/copy controls
+   * in one row div, and the BODY in a sibling of that row. So the row is enough
+   * to reach the Search icon and one level short of reaching the content.
+   * `CodeBlock` accepts a `testId` but `DetailsTab` passes none, so the two hops
+   * are the only handle on the section until the FE grows one.
+   *
+   * Substring, not exact: the marker is one scalar of a payload the viewer
+   * pretty-prints, so the rendered node carries the YAML/JSON punctuation around
+   * it. Callers should put the marker at the TOP of the payload — the body is a
+   * CodeMirror editor and renders the lines in view, so a marker buried under a
+   * megabyte of filler is not guaranteed to be in the DOM at all.
+   */
+  sectionText(title: string, marker: string): Locator {
+    return this.sectionHeader(title).locator('xpath=../..').getByText(marker);
+  }
+
   sectionSearchButton(title: string): Locator {
     return this.sectionHeader(title)
       .locator('xpath=..')

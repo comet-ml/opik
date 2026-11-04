@@ -1,13 +1,13 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { ArrowUpRight, Loader2, MessagesSquare } from "lucide-react";
-import last from "lodash/last";
 import { Thread } from "@/types/traces";
 import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
-import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages";
+import DefaultThreadView from "@/v2/pages-shared/annotation-queues/AnnotatorView/DefaultThreadView";
+import AnnotatorViewFallbackAlert from "@/v2/pages-shared/annotation-queues/AnnotatorView/AnnotatorViewFallbackAlert";
 import InternalTracesToggle from "@/v2/pages-shared/traces/InternalTracesToggle";
 import {
   ONLY_INTERNAL_CALLS_MESSAGE,
@@ -21,6 +21,10 @@ import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
 import TraceIdentifier from "./TraceIdentifier";
 import { Button } from "@/ui/button";
 import { formatThreadDateRange } from "@/lib/annotation-queues";
+import Loader from "@/shared/Loader/Loader";
+import SandboxedAnnotatorThreadView from "@/v2/pages-shared/annotation-queues/AnnotatorView/SandboxedAnnotatorThreadView";
+import { LATEST_KIT_VERSION } from "@/shared/SandboxedView/kit/loadKit";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000;
@@ -48,7 +52,11 @@ const useThreadData = () => {
   );
 
   // Fetch current thread traces (not truncated)
-  const { data: tracesData, isFetching } = useTracesList(
+  const {
+    data: tracesData,
+    isFetching,
+    isPlaceholderData,
+  } = useTracesList(
     {
       projectId: thread?.project_id || "",
       filters: [
@@ -138,6 +146,7 @@ const useThreadData = () => {
     traces,
     visibleTraces,
     isFetching,
+    isLoaded: Boolean(tracesData) && !isPlaceholderData,
     traceId,
     setTraceId,
     spanId,
@@ -187,6 +196,7 @@ const ThreadContent: React.FC = () => {
     thread,
     traces,
     visibleTraces,
+    isLoaded,
     traceId,
     setTraceId,
     spanId,
@@ -198,17 +208,54 @@ const ThreadContent: React.FC = () => {
   } = useThreadData();
 
   const { annotationQueue } = useSMEFlow();
+  const customHtml = annotationQueue?.annotator_view?.html;
+  const kitVersion =
+    annotationQueue?.annotator_view?.kit_version ?? LATEST_KIT_VERSION;
+  const [viewFailure, setViewFailure] = useState<{
+    threadId: string;
+    message: string;
+  }>();
+  const viewError =
+    viewFailure && viewFailure.threadId === thread?.id
+      ? viewFailure.message
+      : undefined;
+
+  const renderDefaultView = () =>
+    traces.length > 0 && !visibleTraces.length ? (
+      <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+    ) : (
+      <DefaultThreadView traces={visibleTraces} onOpenTrace={handleOpenTrace} />
+    );
+
+  const renderCustomView = () =>
+    isLoaded ? (
+      <SandboxedAnnotatorThreadView
+        html={customHtml ?? ""}
+        kitVersion={kitVersion}
+        thread={thread}
+        traces={visibleTraces}
+        onError={(message, kind) => {
+          setViewFailure({ threadId: thread.id, message });
+          trackEvent(OpikEvent.ANNOTATION_QUEUE_VIEW_FAILED, {
+            queue_id: annotationQueue?.id,
+            thread_id: thread.id,
+            kind,
+          });
+        }}
+      />
+    ) : (
+      <Loader />
+    );
 
   return (
     <>
-      {traces.length > 0 && !visibleTraces.length ? (
-        <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+      {customHtml && thread && !viewError ? (
+        renderCustomView()
       ) : (
-        <TraceMessages
-          traces={visibleTraces}
-          traceId={last(visibleTraces)?.id}
-          handleOpenTrace={handleOpenTrace}
-        />
+        <>
+          {viewError && <AnnotatorViewFallbackAlert className="mb-3" />}
+          {renderDefaultView()}
+        </>
       )}
       <TraceDetailsPanel
         projectId={thread?.project_id || ""}

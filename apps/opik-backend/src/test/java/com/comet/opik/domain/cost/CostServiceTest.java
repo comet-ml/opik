@@ -3,7 +3,6 @@ package com.comet.opik.domain.cost;
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
@@ -16,7 +15,6 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 
+/**
+ * These tests guard what every span is billed: add a case for each cost path and each bug found, and never remove one.
+ * When a fix shows a case expected the wrong cost, correct that case in the same change and say why.
+ */
 class CostServiceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -252,6 +254,81 @@ class CostServiceTest {
                 Arguments.of("at threshold uses base rate", 272_000, "0.695"),
                 // 300_000 * 5e-6 + 1_000 * 2.25e-5 = 1.5 + 0.0225 = 1.5225
                 Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
+    }
+
+    /**
+     * Tier thresholds are parsed while the price table loads. An int overflow would bill every prompt at the tier rate,
+     * and a NumberFormatException would stop the price table, and with it span ingestion, from loading. So a threshold
+     * of seven digits or more, too large for any prompt, isn't read as a tier.
+     */
+    @Test
+    void promptTierRateSkipsAThresholdTooLargeForAnyPrompt() {
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_99999999999k_tokens").matches())
+                .isFalse();
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_1000000k_tokens").matches())
+                .isFalse();
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_999999k_tokens").matches())
+                .isTrue();
+
+        var modelCost = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString("""
+                {"litellm_provider": "openai", "input_cost_per_token": 1e-06,
+                 "input_cost_per_token_above_999999k_tokens": 2e-06,
+                 "input_cost_per_token_above_1000000k_tokens": 3e-06,
+                 "input_cost_per_token_above_99999999999k_tokens": 4e-06}"""), ModelCostData.class);
+
+        assertThat(ModelPriceTable.buildModelPrice("gpt-huge-tiers", modelCost).promptTiers())
+                .singleElement()
+                .satisfies(tier -> {
+                    assertThat(tier.threshold()).isEqualTo(999_999_000);
+                    assertThat(tier.inputPrice()).isEqualByComparingTo("2e-06");
+                });
+    }
+
+    /** A price row that doesn't read as one would stop the price table from loading, and with it span ingestion. */
+    @Test
+    void aPriceRowThatDoesNotReadAsAPriceSkipsOnlyItsModel() {
+        var rows = Map.of(
+                "gpt-good", JsonUtils.getJsonNodeFromString(
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": 1e-06}"),
+                "gpt-rate-as-object", JsonUtils.getJsonNodeFromString(
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": {\"usd\": 1e-06}}"),
+                "gpt-null-row", JsonUtils.getJsonNodeFromString("null"),
+                "gpt-number-row", JsonUtils.getJsonNodeFromString("1e-06"));
+
+        assertThat(ModelPriceTable.toModelCosts("test prices", rows)).containsOnlyKeys("gpt-good");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"n/a", ""})
+    void aRateThatIsNotANumberSkipsOnlyItsModel(String rate) {
+        var modelCost = ModelCostData.builder().litellmProvider("openai").inputCostPerToken(rate).build();
+
+        assertThat(ModelPriceTable.buildModelPrice("gpt-bad-rate", modelCost)).isNull();
+    }
+
+    /** Base rates are read as strings, so a tier rate written as one is billed like them, not dropped. */
+    @Test
+    void aTierRateWrittenAsAStringIsBilled() {
+        var modelCost = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString("""
+                {"litellm_provider": "anthropic", "input_cost_per_token": "3e-06",
+                 "input_cost_per_token_above_200k_tokens": "6e-06"}"""), ModelCostData.class);
+
+        assertThat(ModelPriceTable.buildModelPrice("claude-string-tier", modelCost).promptTiers())
+                .singleElement()
+                .satisfies(tier -> {
+                    assertThat(tier.threshold()).isEqualTo(200_000);
+                    assertThat(tier.inputPrice()).isEqualByComparingTo("6e-06");
+                });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"n/a", ""})
+    void aTierRateThatIsNotANumberSkipsOnlyItsModel(String rate) {
+        var modelCost = ModelCostData.builder().litellmProvider("anthropic").inputCostPerToken("3e-06")
+                .otherFields(Map.of("input_cost_per_token_above_200k_tokens", JsonUtils.valueToTree(rate)))
+                .build();
+
+        assertThat(ModelPriceTable.buildModelPrice("claude-bad-tier-rate", modelCost)).isNull();
     }
 
     @Test
@@ -491,6 +568,41 @@ class CostServiceTest {
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
 
+    /**
+     * Before the fix these priced at $0: each lower-case retry was skipped when the name differed from its
+     * lower-case form only in letter case, and these providers' price table keys are lower case.
+     */
+    @ParameterizedTest
+    @MethodSource("provideUpperCaseModelNames")
+    void calculateCost_upperCaseNamePricesLikeLowerCase(String upperCaseName, String lowerCaseName,
+            String provider, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal lowerCaseCost = CostService.calculateCost(lowerCaseName, provider, usage, null);
+        BigDecimal upperCaseCost = CostService.calculateCost(upperCaseName, provider, usage, null);
+
+        assertThat(lowerCaseCost).isEqualByComparingTo(expectedCost);
+        assertThat(upperCaseCost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideUpperCaseModelNames() {
+        return Stream.of(
+                // 1000*2.5e-7 + 500*2e-6
+                Arguments.of("GPT-5-MINI", "gpt-5-mini", "openai", "0.00125"),
+                // 1000*2.5e-6 + 500*1e-5
+                Arguments.of("Gpt-4o", "gpt-4o", "openai", "0.0075"),
+                // 1000*2e-6 + 500*8e-6
+                Arguments.of("GPT-4.1", "gpt-4.1", "openai", "0.006"),
+                // 1000*1.75e-6 + 500*1.4e-5
+                Arguments.of("GPT-5.2", "gpt-5.2", "openai", "0.00875"),
+                Arguments.of("openai/GPT-5-MINI", "gpt-5-mini", "openai", "0.00125"),
+                // 1000*5e-6 + 500*2.5e-5
+                Arguments.of("ANTHROPIC.CLAUDE-OPUS-4-6-V1", "anthropic.claude-opus-4-6-v1", "bedrock", "0.0175"),
+                Arguments.of("GPT-5-MINI-2025-08-07", "gpt-5-mini-2025-08-07", "openai", "0.00125"));
+    }
+
     @ParameterizedTest
     @MethodSource("provideModelNamesWithDateSuffixes")
     void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
@@ -698,16 +810,14 @@ class CostServiceTest {
                 Arguments.of("elser_model_2", "elastic"),
                 Arguments.of("gemini-3-flash", "google_ai"),
                 Arguments.of("gemini-3.1-pro", "google_ai"),
-                Arguments.of("gemini-embedding-002", "google_ai"),
-                Arguments.of("mistral-medium-3-5", "mistral"),
-                Arguments.of("mistral-small-2603", "mistral"));
+                Arguments.of("gemini-embedding-002", "google_ai"));
     }
 
     /**
      * Mistral cost tracking: until `mistral` was registered in CostService the entire set of
      * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
-     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
-     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     * Mistral span returned cost = 0. This locks in the upstream rows, Medium 3.5 and Small 4
+     * among them, which Opik's overrides priced until upstream did.
      */
     @ParameterizedTest
     @MethodSource("provideMistralModels")
@@ -732,9 +842,9 @@ class CostServiceTest {
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
                 Arguments.of("codestral-2508", "1.20"),
-                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                // Upstream LiteLLM row: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
                 Arguments.of("mistral-medium-3-5", "9.00"),
-                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                // Upstream LiteLLM row: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
                 Arguments.of("mistral-small-2603", "0.75"));
     }
 
@@ -1111,6 +1221,19 @@ class CostServiceTest {
                 Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
     }
 
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @CsvSource({
+            "llama-3.3-70b, api.cerebras.ai, 0.00109",
+            "deepseek-chat, api.deepseek.com, 0.000364",
+            "grok-4.3, api.x.ai:443, 0.00175"})
+    void calculateCostPricesAProviderSentAsItsApiHost(String model, String provider, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
     /**
      * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
      * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
@@ -1387,13 +1510,13 @@ class CostServiceTest {
                 // vercel_ai_gateway/alibaba/qwen-3-14b: input 8e-08, output 2.4e-07
                 // -> 1000*8e-08 + 200*2.4e-07 = 0.000128
                 Arguments.of("vercel_ai_gateway", "vercel_ai_gateway/alibaba/qwen-3-14b", "0.000128"),
-                // openrouter/anthropic/claude-3.5-sonnet: input 3e-06, output 1.5e-05
+                // openrouter/anthropic/claude-sonnet-4.5: input 3e-06, output 1.5e-05
                 // -> 1000*3e-06 + 200*1.5e-05 = 0.006
-                Arguments.of("openrouter", "openrouter/anthropic/claude-3.5-sonnet", "0.006"));
+                Arguments.of("openrouter", "openrouter/anthropic/claude-sonnet-4.5", "0.006"));
     }
 
     /**
-     * Every provider in the bundled LiteLLM price file is priced under its exact
+     * Every provider in the bundled LiteLLM and OpenRouter price files is priced under its exact
      * {@code litellm_provider} name, with no per-provider registration in {@link CostService}.
      * Covers providers that used to be dropped at load time, and price-file names that used to be
      * folded into another provider ({@code bedrock_converse}, {@code vertex_ai-language-models}, ...).
@@ -1411,11 +1534,9 @@ class CostServiceTest {
                         .multiply(BigDecimal.valueOf(1000))));
     }
 
-    private static Stream<Arguments> provideTokenPricedProviders() throws IOException {
-        Map<String, ModelCostData> prices = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
-                new TypeReference<>() {
-                });
-        Map<String, Map<String, ModelCostData>> rowsByModelByProvider = prices.entrySet().stream()
+    private static Stream<Arguments> provideTokenPricedProviders() {
+        var modelCosts = ModelPriceTable.readModelCosts();
+        Map<String, Map<String, ModelCostData>> rowsByModelByProvider = modelCosts.entrySet().stream()
                 .filter(entry -> StringUtils.isNotBlank(entry.getValue().litellmProvider()))
                 .filter(entry -> price(entry.getValue().inputCostPerToken()).signum() > 0
                         || price(entry.getValue().outputCostPerToken()).signum() > 0)

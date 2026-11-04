@@ -7,8 +7,15 @@ import useUser from "@/plugins/comet/useUser";
 import { ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
 import { buildUrl } from "@/plugins/comet/utils";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/ui/button";
 
-type BillingLinkVariant = "inline" | "action" | "popover" | "external" | "menu";
+type BillingLinkVariant =
+  | "inline"
+  | "action"
+  | "popover"
+  | "external"
+  | "menu"
+  | "button";
 
 const VARIANT_CLASS: Record<BillingLinkVariant, string> = {
   inline: "underline underline-offset-4 hover:text-primary",
@@ -18,6 +25,7 @@ const VARIANT_CLASS: Record<BillingLinkVariant, string> = {
     "comet-body-xs mt-1.5 flex h-6 items-center gap-1 rounded border-t border-border px-1 pt-1.5 text-foreground hover:bg-primary-foreground",
   external:
     "comet-body-xs flex w-fit items-center gap-1 text-foreground-secondary underline underline-offset-4",
+  button: buttonVariants({ variant: "outline", size: "2xs" }),
   // Last item of a dropdown menu, with its own separator line above it so the line
   // goes away together with the link for non-admins.
   menu: "comet-body-xs relative mt-[9px] flex h-6 items-center gap-1 rounded p-1 text-foreground before:absolute before:inset-x-0 before:-top-[5px] before:h-px before:bg-border",
@@ -76,6 +84,7 @@ const BillingLink = React.forwardRef<HTMLAnchorElement, BillingLinkProps>(
           <ArrowUpRight className="size-3 text-light-slate" />
         )}
         {variant === "external" && <ArrowUpRight className="size-3.5" />}
+        {variant === "button" && <ArrowUpRight className="ml-1 size-3" />}
       </a>
     );
   },

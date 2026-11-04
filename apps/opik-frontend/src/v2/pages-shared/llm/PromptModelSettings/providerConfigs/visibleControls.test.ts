@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   createSupports,
@@ -24,6 +24,14 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import {
+  resetModelRegistryStoreForTesting,
+  getLatestProviderModelsSnapshot,
+  setLatestModelFlags,
+  setLatestModelParams,
+  setLatestProviderModelsSnapshot,
+  setLatestProviderProfiles,
+} from "@/lib/modelRegistryStore";
 
 const ANTHROPIC_CONFIG = {
   temperature: 0.4,
@@ -67,7 +75,7 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it("is false for an OpenAI reasoning model on a rule", () => {
+  it("is true for an OpenAI reasoning model on a rule, for its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.OPEN_AI,
@@ -75,7 +83,7 @@ describe("hasVisibleControls", () => {
         RULE_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for an OpenAI model that takes temperature on a rule", () => {
@@ -239,6 +247,140 @@ describe("the OpenRouter sampling and penalty sliders", () => {
       frequencyPenalty: penalties,
       presencePenalty: penalties,
     });
+  });
+});
+
+describe("the OpenRouter panel on a model with OpenRouter's lists", () => {
+  const OPEN_ROUTER_CONFIG: LLMOpenRouterConfigsType = {
+    maxTokens: 0,
+    temperature: 1,
+    topP: 1,
+    topK: 0,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+    repetitionPenalty: 1,
+    minP: 0,
+    topA: 0,
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it.each<[string, string[], string[], string[]]>([
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI,
+      [
+        "frequency_penalty",
+        "max_tokens",
+        "presence_penalty",
+        "temperature",
+        "top_p",
+      ],
+      [],
+      [
+        "temperature",
+        "maxTokens",
+        "topP",
+        "frequencyPenalty",
+        "presencePenalty",
+      ],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+      ["max_tokens", "reasoning", "reasoning_effort"],
+      ["high", "medium", "low", "minimal"],
+      ["maxTokens", "reasoningEffort"],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
+      ["max_tokens", "reasoning", "temperature", "top_k", "top_p"],
+      [],
+      ["samplingParams", "maxTokens", "topK"],
+    ],
+    [
+      PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
+      [
+        "frequency_penalty",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "repetition_penalty",
+        "temperature",
+        "top_k",
+        "top_p",
+      ],
+      [],
+      [
+        "temperature",
+        "maxTokens",
+        "topP",
+        "topK",
+        "frequencyPenalty",
+        "presencePenalty",
+        "repetitionPenalty",
+        "minP",
+      ],
+    ],
+  ])("on %s shows only what it lists", (model, params, efforts, shown) => {
+    setLatestModelFlags(
+      new Map([
+        [
+          model,
+          {
+            reasoning: false,
+            structuredOutput: false,
+            supportedParameters: params,
+            reasoningEfforts: efforts,
+          },
+        ],
+      ]),
+    );
+
+    const visible = getOpenRouterVisibleControls({
+      model: model as PROVIDER_MODEL_TYPE,
+      configs: OPEN_ROUTER_CONFIG,
+      supports: createSupports(
+        new Set(["throttling", "maxConcurrentRequests"]),
+      ),
+    });
+
+    expect(
+      Object.entries(visible)
+        .filter(([, isVisible]) => isVisible)
+        .map(([control]) => control),
+    ).toEqual(shown);
+  });
+
+  it("hides the effort only on a surface that cannot store it", () => {
+    setLatestModelFlags(
+      new Map([
+        [
+          PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+          {
+            reasoning: false,
+            structuredOutput: false,
+            supportedParameters: ["reasoning_effort"],
+            reasoningEfforts: ["low"],
+          },
+        ],
+      ]),
+    );
+
+    expect(
+      getOpenRouterVisibleControls({
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+        configs: { temperature: 0 },
+        supports: createSupports(new Set(["reasoningEffort"])),
+      }).reasoningEffort,
+    ).toBe(false);
+    expect(
+      getOpenRouterVisibleControls({
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+        configs: { temperature: 0 },
+        supports: createSupports(RULE_UNSUPPORTED_PARAMS),
+      }).reasoningEffort,
+    ).toBe(true);
   });
 });
 
@@ -440,4 +582,88 @@ describe("Anthropic sampling params while Claude thinks", () => {
       expectAllAgree(model, configs, thinking);
     },
   );
+});
+
+describe("hasVisibleControls on the catalog panel", () => {
+  const MODEL = "claude-fixture-1" as PROVIDER_MODEL_TYPE;
+  const REFUSES_ALL = {
+    temperature: { accepted: false },
+    top_p: { accepted: false },
+    max_output_tokens: { accepted: true, min: 1, max: 8000, default: 4000 },
+    effort: { accepted: false },
+    sampling_exclusive: true,
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("hides the settings button on a rule when the model's params leave nothing to set", () => {
+    setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
+    setLatestProviderProfiles({ [PROVIDER_TYPE.ANTHROPIC]: REFUSES_ALL });
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("shows it once the model takes an effort", () => {
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      [PROVIDER_TYPE.ANTHROPIC]: [{ value: MODEL, label: MODEL }],
+    });
+    setLatestModelParams(
+      new Map([
+        [
+          PROVIDER_TYPE.ANTHROPIC,
+          new Map([
+            [
+              MODEL,
+              {
+                ...REFUSES_ALL,
+                effort: {
+                  accepted: true,
+                  levels: ["low", "high"],
+                  default: "high",
+                },
+              },
+            ],
+          ]),
+        ],
+      ]),
+    );
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(true);
+  });
+
+  it("offers no effort for a Claude id the registry doesn't list, as the request sends none for it", () => {
+    setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
+    setLatestProviderProfiles({
+      [PROVIDER_TYPE.ANTHROPIC]: {
+        ...REFUSES_ALL,
+        effort: { accepted: true, levels: ["low", "high"], default: "high" },
+      },
+    });
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
 });

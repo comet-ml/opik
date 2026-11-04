@@ -1,7 +1,8 @@
 package com.comet.opik.infrastructure.llm.openai;
 
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -42,7 +43,7 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         openAi.stubFor(post(urlPathEqualTo(RESPONSES_PATH)).willReturn(aResponse()
                 .withStatus(400)
@@ -98,10 +99,12 @@ class LlmProviderOpenAiResponsesReasoningEffortTest {
 
     private List<Throwable> sendBlockingAndStreaming(ChatCompletionRequest request) {
         var provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig()),
+                new OpenAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                        LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
-                        .baseUrl(openAi.baseUrl())
+                        .baseUrl(LlmTestClients.baseUrlOf(openAi))
                         .build());
         var errors = new ArrayList<Throwable>();
 

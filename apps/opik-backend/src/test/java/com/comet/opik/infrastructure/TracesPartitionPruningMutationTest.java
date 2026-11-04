@@ -50,6 +50,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -551,6 +552,16 @@ class TracesPartitionPruningMutationTest {
                 .block();
     }
 
+    /** One trace id per page, so every page past the first is read under a cursor. */
+    private List<UUID> traceIdsPage(UUID projectId, UUID lastId) {
+        return appTemplate.nonTransaction(connection -> traceDAO.getTraceIdsByProjectId(projectId, lastId, 1,
+                connection).collectList())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER))
+                .block();
+    }
+
     /**
      * The SQL of the trace delete that carried {@code traceId}, as ClickHouse received it. Two filters, because either
      * alone is ambiguous: {@code log_comment} narrows to this one template ({@code TraceDAO} stamps every statement
@@ -719,6 +730,18 @@ class TracesPartitionPruningMutationTest {
                 .usage(null);
     }
 
+    /**
+     * An INSERT through the {@code Distributed} {@code traces} reaches the shard through its background queue (see
+     * {@code users.xml}), so a trace created through the API is awaited before it is read back.
+     */
+    private void awaitListed(Trace... traces) {
+        var expectedIds = Arrays.stream(traces).map(Trace::id).toList();
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(traceIdsOf(traces[0].projectName())).containsAll(expectedIds));
+    }
+
     private UUID projectIdOf(Trace trace) {
         return traceResourceClient
                 .getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, List.of(), List.of(), 100, Map.of())
@@ -793,7 +816,7 @@ class TracesPartitionPruningMutationTest {
         var bystander = newTrace().projectName(target.projectName()).build();
         traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
         traceResourceClient.createTrace(bystander, API_KEY, WORKSPACE_NAME);
-        assertThat(traceIdsOf(target.projectName())).contains(target.id(), bystander.id());
+        awaitListed(target, bystander);
 
         // The live user path, end to end.
         traceResourceClient.deleteTrace(target.id(), WORKSPACE_NAME, API_KEY);
@@ -853,6 +876,29 @@ class TracesPartitionPruningMutationTest {
                         partitionNameOf(ERA_MONDAYS.get(1)),
                         partitionNameOf(ERA_MONDAYS.get(2)),
                         LEGACY_WEEK_OF_2200);
+    }
+
+    @Test
+    @DisplayName("a project's trace ids paged one at a time come back from every era, past each cursor's week bound")
+    void traceIdsByProjectIdPagedPastEachCursorReturnEveryEra() {
+        // Each page past the first is bound to the cursor's week and later, so a bound naming a later week than the
+        // one ClickHouse filed a row under would skip that row. Seeded raw in a minted project, as in
+        // deleteClearsEveryEraAndBindsExactlyThosePartitions, plus two ids whose id_at saturates, so one is paged
+        // past the other's cursor.
+        var projectId = ID_GENERATOR.generateId();
+        var ids = new ArrayList<>(ERA_MONDAYS.stream().map(TracesPartitionPruningMutationTest::idInWeekOf).toList());
+        ids.add(newOutOfRangeId());
+        ids.add(newOutOfRangeId());
+        ids.forEach(id -> insertRawTrace(projectId, id));
+
+        var actualIds = new ArrayList<UUID>();
+        var page = traceIdsPage(projectId, null);
+        while (!page.isEmpty()) {
+            actualIds.addAll(page);
+            page = traceIdsPage(projectId, page.getLast());
+        }
+
+        assertThat(actualIds).containsExactlyInAnyOrderElementsOf(ids);
     }
 
     @Test
@@ -995,9 +1041,7 @@ class TracesPartitionPruningMutationTest {
         // intact rather than merely that the wrapper exists.
         var existing = newTrace().build();
         traceResourceClient.createTrace(existing, API_KEY, WORKSPACE_NAME);
-        assertThat(traceIdsOf(existing.projectName()))
-                .as("the pre-existing row is readable before the setup re-runs")
-                .contains(existing.id());
+        awaitListed(existing);
 
         // Not a tautology either: if either step failed to early-return it would THROW, not quietly repeat itself.
         // The EXCHANGE needs `traces_local_v2`, which the install renamed to `traces_pre_cutover_backup`; and the
@@ -1126,6 +1170,7 @@ class TracesPartitionPruningMutationTest {
         // all-or-nothing rule exists to prevent.
         var target = newTrace().build();
         traceResourceClient.createTrace(target, API_KEY, WORKSPACE_NAME);
+        awaitListed(target);
         var projectId = projectIdOf(target);
         insertRawTrace(projectId, underivableId);
         assertThat(liveRowCount(projectId, underivableId))

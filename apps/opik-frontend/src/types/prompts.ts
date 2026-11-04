@@ -21,6 +21,7 @@ export enum PROMPT_VERSION_ACTION {
 export interface Prompt {
   id: string;
   name: string;
+  project_id?: string;
   description: string;
   last_updated_at: string;
   created_at: string;

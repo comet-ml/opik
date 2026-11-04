@@ -10,10 +10,15 @@ import {
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
+import { applyArtifact } from "@/lib/ollieArtifacts";
 import useExplainStore, {
   ConsoleEmit,
   handleConsoleEvent,
 } from "@/plugins/comet/explain/explainStore";
+
+// The bridge version that added `duplicate` on `chart:edit`. Gated on its own, like Explain, so a later bump for
+// unrelated events doesn't hide it.
+const DUPLICATE_BRIDGE_VERSION = 6;
 
 /**
  * Host side of the assistant bridge: the in-page channel the Ollie console
@@ -46,7 +51,15 @@ export function createHostListeners(): HostListeners {
     "explain:cancel": new Set(),
     "chat:continue": new Set(),
     "chart:edit": new Set(),
+    "artifact:result": new Set(),
   };
+}
+
+/** Drops every console subscription, once the iframe document that made them is gone. */
+export function clearHostListeners(
+  listenersRef: MutableRefObject<HostListeners>,
+) {
+  Object.values(listenersRef.current).forEach((set) => set.clear());
 }
 
 /** A request made before the console subscribed (sidebar closed or still loading), delivered once it does. */
@@ -107,6 +120,9 @@ export interface BridgeRefs {
     (data: SidebarEventMap["dashboard:updated"]) => void
   >;
   lastRunnerState: MutableRefObject<RunnerBridgeState | null>;
+  conversationStartedListeners: MutableRefObject<
+    Set<(data: SidebarEventMap["conversation:started"]) => void>
+  >;
   pendingChartEdit?: MutableRefObject<PendingRequest<ChartEditRequest> | null>;
   pendingConversation?: MutableRefObject<PendingRequest<
     HostEventMap["conversation:start"]
@@ -157,6 +173,7 @@ const SINGLE_SUBSCRIBER_EVENTS: ReadonlySet<keyof HostEventMap> = new Set([
   "chat:continue",
   "conversation:start",
   "chart:edit",
+  "artifact:result",
 ]);
 
 export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
@@ -238,6 +255,18 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           data as SidebarEventMap["dashboard:updated"],
         );
         break;
+      case "artifact:proposed":
+        emitHostEvent(
+          refs.listeners,
+          "artifact:result",
+          applyArtifact(data as SidebarEventMap["artifact:proposed"]),
+        );
+        break;
+      case "conversation:started":
+        refs.conversationStartedListeners.current.forEach((listener) =>
+          listener(data as SidebarEventMap["conversation:started"]),
+        );
+        break;
       case "runner:request-pair":
         refs.onRequestPair.current(
           data as SidebarEventMap["runner:request-pair"],
@@ -262,16 +291,50 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   },
   canEditChart: () =>
     useExplainStore.getState().capabilities.includes("charts"),
+  canDuplicateChart: () => {
+    const { capabilities, consoleBridgeVersion } = useExplainStore.getState();
+    return (
+      capabilities.includes("charts") &&
+      consoleBridgeVersion !== null &&
+      consoleBridgeVersion >= DUPLICATE_BRIDGE_VERSION
+    );
+  },
+  canProposeArtifacts: () =>
+    useExplainStore.getState().capabilities.includes("artifacts"),
+  subscribeCapabilities: (listener) =>
+    useExplainStore.subscribe((state, previous) => {
+      if (state.capabilities !== previous.capabilities) listener();
+    }),
+  setOpen: (open) => refs.onRequestVisibility.current(open),
+  subscribeConversationStarted: (listener) => {
+    refs.conversationStartedListeners.current.add(listener);
+    return () => {
+      refs.conversationStartedListeners.current.delete(listener);
+    };
+  },
 });
 
-/** Emit a host event to all subscribed sidebar listeners. */
+/**
+ * Emit a host event to all subscribed sidebar listeners.
+ *
+ * Listeners are console closures. `AssistantSidebar` drops them when their
+ * iframe document goes away, but one that slips through runs against a dead
+ * frame, where Chromium returns `null` for `localStorage`; it then throws
+ * "Cannot read properties of null (reading 'setItem')" from inside a host
+ * click handler or effect, and an uncaught throw there takes the whole route
+ * down. Isolate each listener so the console can never crash the host.
+ */
 export function emitHostEvent<E extends keyof HostEventMap>(
   listenersRef: MutableRefObject<HostListeners>,
   event: E,
   data: HostEventMap[E],
 ) {
   for (const listener of listenersRef.current[event]) {
-    (listener as (d: HostEventMap[E]) => void)(data);
+    try {
+      (listener as (d: HostEventMap[E]) => void)(data);
+    } catch (error) {
+      console.error(`[AssistantBridge] "${event}" listener failed`, error);
+    }
   }
 }
 

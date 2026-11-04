@@ -3,7 +3,7 @@ import filter from "lodash/filter";
 import uniq from "lodash/uniq";
 import { Filter, FilterRowConfig, Filters } from "@/types/filters";
 import { ColumnData, OnChangeFn } from "@/types/shared";
-import FilterRow from "@/shared/FiltersContent/FilterRow";
+import FilterRow, { FilterRowVariant } from "@/shared/FiltersContent/FilterRow";
 import { cn } from "@/lib/utils";
 
 type FiltersContentProps<TColumnData> = {
@@ -12,6 +12,7 @@ type FiltersContentProps<TColumnData> = {
   columns: ColumnData<TColumnData>[];
   config?: { rowsMap: Record<string, FilterRowConfig> };
   className?: string;
+  variant?: FilterRowVariant;
 };
 
 const FiltersContent = <TColumnData,>({
@@ -20,6 +21,7 @@ const FiltersContent = <TColumnData,>({
   columns,
   config,
   className,
+  variant = "table",
 }: FiltersContentProps<TColumnData>) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +91,7 @@ const FiltersContent = <TColumnData,>({
           prefix={prefix}
           onRemove={onRemoveRow}
           onChange={onChangeRow}
+          variant={variant}
         />
       );
     });
@@ -100,9 +103,13 @@ const FiltersContent = <TColumnData,>({
       className={cn("overflow-y-auto overflow-x-hidden py-4", className)}
       onWheel={handleWheel}
     >
-      <table className="table-auto">
-        <tbody>{renderFilters()}</tbody>
-      </table>
+      {variant === "card" ? (
+        <div className="flex flex-col gap-1.5">{renderFilters()}</div>
+      ) : (
+        <table className="table-auto">
+          <tbody>{renderFilters()}</tbody>
+        </table>
+      )}
     </div>
   );
 };

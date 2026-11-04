@@ -29,6 +29,7 @@ import { ProviderAuthConfig } from "@/types/providers";
 import {
   convertCustomProviderModels,
   DEFAULT_OPENAI_PIPELINE_MODE,
+  normalizeBedrockApi,
 } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -149,6 +150,11 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             data.providerName ?? "",
             true,
           ),
+          ...(isBedrock && {
+            bedrock_api: normalizeBedrockApi(
+              "bedrockApi" in data ? data.bedrockApi : undefined,
+            ),
+          }),
         };
 
         // Add headers if present

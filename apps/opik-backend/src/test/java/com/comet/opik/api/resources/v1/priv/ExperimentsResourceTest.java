@@ -12,6 +12,7 @@ import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
 import com.comet.opik.api.ExperimentItemBulkUpload;
@@ -84,6 +85,7 @@ import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -355,6 +357,54 @@ class ExperimentsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.EXPERIMENT_CREATE.getValue()))));
+        }
+
+        // Running creates experiment records and queues provider calls, so it asks for the same
+        // permission as creating one directly rather than the read it used to settle for.
+        @Test
+        @DisplayName("Execute experiment passes required permissions to auth endpoint")
+        void executeExperimentPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.callExecute(buildExecutionRequest(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Execute experiment returns 403 when permission is denied")
+        void executeExperimentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.EXPERIMENT_CREATE.getValue());
+
+            try (var response = experimentResourceClient.callExecute(buildExecutionRequest(), apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        private ExperimentExecutionRequest buildExecutionRequest() {
+            return ExperimentExecutionRequest.builder()
+                    .datasetId(UUID.randomUUID())
+                    .datasetName("dataset-" + UUID.randomUUID())
+                    .prompts(List.of(ExperimentExecutionRequest.PromptVariant.builder()
+                            .model("gpt-4o")
+                            .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
+                                    .role("user")
+                                    .content(TextNode.valueOf("hello"))
+                                    .build()))
+                            .build()))
+                    .build();
         }
 
         @Test

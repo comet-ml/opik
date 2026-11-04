@@ -83,7 +83,7 @@ public class ServiceTogglesConfig {
     @Min(5) @Max(100) int defaultPageSize;
 
     // Set per request by the toggles endpoint, never from config. No getter: the shared instance always holds false,
-    // so the code checks CustomChartsConfig.isEnabledFor instead.
+    // so the code checks CustomChartsConfig.isEnabled instead.
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @With
     @Getter(AccessLevel.NONE)

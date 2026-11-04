@@ -38,10 +38,10 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Install dependencies
-        run: uv pip install --system requests
+        run: uv pip install --system requests pyyaml==6.0.3
 
       - name: Set branch name
         run: |

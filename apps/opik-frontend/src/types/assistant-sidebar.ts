@@ -34,12 +34,41 @@ export interface BridgeContext {
 
 // An Ollie chart widget opened for editing ("Edit in Ollie"). The dashboard is the bridge context's `dashboard`.
 // The host button that started a chat, reported to BI with the new session.
-export type ConversationOrigin = "describe_widget";
+export type ConversationOrigin = "describe_widget" | "annotator_view";
 
 export interface ConversationStartOptions {
   origin?: ConversationOrigin;
   // Id of the click, so BI matches it to the session it opens.
   entryId?: string;
+  // The section the Add widget dialog was opened from, so Ollie adds the widget there.
+  section?: string;
+  // Its id, which Ollie prefers to the title: titles can repeat or be renamed.
+  sectionId?: string;
+  // What the chat should produce for the host; Ollie reads `context` into hidden context and answers with `artifact:proposed`.
+  artifact?: ArtifactRequest;
+  sessionId?: string;
+}
+
+export interface ArtifactRequest {
+  kind: string;
+  context: unknown;
+}
+
+// Something Ollie made for the host. `target` names what it is for; the handler registered for `kind` validates both.
+export interface ArtifactProposal {
+  proposalId: string;
+  kind: string;
+  target: unknown;
+  payload: unknown;
+  summary: string;
+}
+
+export type ArtifactRejection = "no_handler" | "target_mismatch" | "invalid";
+
+export interface ArtifactResult {
+  proposalId: string;
+  applied: boolean;
+  reason?: ArtifactRejection;
 }
 
 export interface ChartEditRequest {
@@ -53,6 +82,8 @@ export interface ChartEditRequest {
   rows?: Record<string, unknown>[] | null;
   // Id of the click, so BI matches it to the session it opens.
   entryId?: string;
+  // "Duplicate": the chat refines a copy, which is added as a new widget and never replaces this one.
+  duplicate?: boolean;
 }
 
 export interface BridgeDashboard {
@@ -125,12 +156,20 @@ export interface ExplainButtonProps {
  * capability in `console:ready`.
  * 4 = `origin` and `entryId` on `conversation:start`, and `entryId` on
  * `chart:edit`, so BI can match a host click to the session it opens.
+ * 5 = `artifact` on `conversation:start`, `artifact:proposed` (shell → host)
+ * carrying something Ollie made for the host, `artifact:result` (host → shell)
+ * saying whether it was applied, and the `artifacts` capability.
+ * 6 = widget mode: `section` and `sectionId` on `conversation:start` and
+ * `duplicate` on `chart:edit`.
+ * 7 = `sessionId` on `conversation:start` (continue that chat if it still exists),
+ * `conversation:started` (shell → host) with the id of the chat a host request
+ * started, and `visibility:changed` read by the console as a request to open or collapse.
  *
  * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
  * VER-4 assertions guard the event-shape contract. Bump here AND there together
  * whenever a bridge event is added/removed/reshaped.
  */
-export const BRIDGE_PROTOCOL_VERSION = 4;
+export const BRIDGE_PROTOCOL_VERSION = 7;
 
 /** Host → Sidebar events */
 export interface HostEventMap {
@@ -146,6 +185,7 @@ export interface HostEventMap {
   "explain:run": { explainId: string; target: ExplainTarget };
   "explain:cancel": { explainId: string };
   "chat:continue": { question: string; answer: string; target: ExplainTarget };
+  "artifact:result": ArtifactResult;
 }
 
 /** Sidebar → Host events */
@@ -167,6 +207,8 @@ export interface SidebarEventMap {
   "console:ready": { bridgeVersion: number; capabilities: string[] };
   // A chart was added to this dashboard from the console; refetch so an open dashboard shows it.
   "dashboard:updated": BridgeDashboard;
+  "artifact:proposed": ArtifactProposal;
+  "conversation:started": { entryId?: string; sessionId: string };
   "explain:chunk": { explainId: string; delta: string };
   "explain:done": { explainId: string };
   // `code` is an optional, machine-readable reason (e.g. "unavailable",
@@ -192,6 +234,17 @@ export interface AssistantSidebarBridge {
   editChart?(request: ChartEditRequest): void;
   // Whether the console announced the `charts` capability; an older console never handles `chart:edit`.
   canEditChart?(): boolean;
+  // Whether the console handles `chart:edit`'s `duplicate` (bridge v6). An older one opens a plain edit, whose card
+  // would save over the widget the user meant to copy.
+  canDuplicateChart?(): boolean;
+  // Whether the console announced the `artifacts` capability; an older console never sends `artifact:proposed`.
+  canProposeArtifacts?(): boolean;
+  // Calls back when the console announces its capabilities, so hosts that read them can update.
+  subscribeCapabilities?(listener: () => void): () => void;
+  setOpen?(open: boolean): void;
+  subscribeConversationStarted?(
+    listener: (data: SidebarEventMap["conversation:started"]) => void,
+  ): () => void;
 }
 
 declare global {

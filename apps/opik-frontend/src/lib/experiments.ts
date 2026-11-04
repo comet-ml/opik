@@ -121,7 +121,26 @@ export const isExperimentTerminal = (
   status: EXPERIMENT_STATUS | undefined | null,
 ): boolean =>
   status === EXPERIMENT_STATUS.COMPLETED ||
-  status === EXPERIMENT_STATUS.CANCELLED;
+  status === EXPERIMENT_STATUS.CANCELLED ||
+  status === EXPERIMENT_STATUS.FAILED;
+
+/**
+ * How long a run is worth watching before it is treated as abandoned rather than slow.
+ *
+ * Measured from the experiment's own created_at rather than from when this tab started looking,
+ * so it survives a reload: isRunInFlight is persisted, and a session-local timer would restart
+ * with every visit and never reach its own ceiling.
+ */
+export const MAX_WATCH_AGE_MS = 6 * 60 * 60 * 1000;
+
+export const isPastWatchAge = (
+  experiment: Pick<Experiment, "created_at"> | undefined,
+): boolean => {
+  if (!experiment?.created_at) return false;
+  return (
+    Date.now() - new Date(experiment.created_at).getTime() > MAX_WATCH_AGE_MS
+  );
+};
 
 export function isTestSuiteExperiment(
   experiment: Experiment | null | undefined,

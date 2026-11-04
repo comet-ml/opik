@@ -1,7 +1,27 @@
 import logging
+from unittest.mock import AsyncMock, Mock
+
 import pytest
+from opik.evaluation.models import base_model, models_factory
+from opik.evaluation.models.litellm import litellm_chat_model
 from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
+
+
+def _assert_unsupported_score_result(result, *, schema_name, description, type_):
+    expected_reason = (
+        f"LLMJudge cannot score assertion(s) {schema_name} ({type_}); "
+        "only BOOLEAN assertion scores are currently supported."
+    )
+    assert result.name == description
+    assert result.value == 0.0
+    assert result.reason == expected_reason
+    assert result.category_name == "suite_assertion"
+    assert result.scoring_failed is True
+    assert result.metadata["unsupported_type"] == type_
+    assert result.metadata["error_info"]["exception_type"] == "EvaluationError"
+    assert result.metadata["error_info"]["message"] == expected_reason
 
 
 class TestLLMJudgeInit:
@@ -78,7 +98,6 @@ class TestLLMJudgeToConfig:
         assert config_dict["model"] == {
             "temperature": 0.0,
             "seed": 123,
-            "customParameters": {"reasoning_effort": "low"},
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
         # Schema items: name, type, description (matching backend's LlmAsJudgeOutputSchema)
@@ -126,6 +145,80 @@ class TestLLMJudgeToConfig:
         assert "schema_" not in config_dict
 
 
+class _FakeModel:
+    def __init__(self, reasoning_effort: bool) -> None:
+        self.supported_features = base_model.ModelFeatures(
+            reasoning_effort=reasoning_effort
+        )
+
+
+class _FakeModelsFactory:
+    def __init__(self) -> None:
+        self.takes_reasoning_effort = True
+        self.calls: list = []
+
+    def get(self, model_name, track=True, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeModel(reasoning_effort=self.takes_reasoning_effort)
+
+
+@pytest.fixture
+def fake_models_factory(monkeypatch):
+    factory = _FakeModelsFactory()
+    monkeypatch.setattr(models_factory, "get", factory.get)
+    return factory
+
+
+class TestLLMJudgeReasoningEffort:
+    def test_init__model_takes_an_effort__defaults_to_low(self, fake_models_factory):
+        fake_models_factory.takes_reasoning_effort = True
+
+        llm_judge.LLMJudge(assertions=["ok"], track=False)
+
+        assert fake_models_factory.calls[-1]["reasoning_effort"] == "low"
+
+    def test_init__model_without_reasoning__sends_no_effort(self, fake_models_factory):
+        fake_models_factory.takes_reasoning_effort = False
+
+        llm_judge.LLMJudge(assertions=["ok"], track=False)
+
+        assert all("reasoning_effort" not in call for call in fake_models_factory.calls)
+
+    def test_init__explicit_effort__sent_whatever_the_model(self, fake_models_factory):
+        fake_models_factory.takes_reasoning_effort = False
+
+        llm_judge.LLMJudge(assertions=["ok"], reasoning_effort="high", track=False)
+
+        assert fake_models_factory.calls == [{"reasoning_effort": "high"}]
+
+    def test_init__model_drops_the_temperature__warns_once(self, monkeypatch):
+        monkeypatch.setattr(models_factory, "_MODEL_CACHE", {})
+        log_warning = Mock()
+        monkeypatch.setattr(litellm_chat_model, "_log_warning", log_warning)
+
+        llm_judge.LLMJudge(
+            assertions=["ok"], model="gpt-5-nano", temperature=0.2, track=False
+        )
+
+        temperature_warnings = [
+            call
+            for call in log_warning.call_args_list
+            if "only supports temperature=1" in call.args[0]
+        ]
+        assert len(temperature_warnings) == 1
+
+    def test_to_config__explicit_effort__stored_for_the_backend_judge(self):
+        evaluator = llm_judge.LLMJudge(
+            assertions=["ok"], reasoning_effort="medium", track=False
+        )
+
+        config_dict = evaluator.to_config().model_dump(by_alias=True, exclude_none=True)
+
+        assert config_dict["model"] == {
+            "customParameters": {"reasoning_effort": "medium"}
+        }
+
+
 class TestLLMJudgeSerializedFormat:
     def test_to_config__serialized_json__matches_expected_format(self):
         """Shows the full serialized JSON that gets stored in the backend."""
@@ -148,7 +241,6 @@ class TestLLMJudgeSerializedFormat:
             "model": {
                 "temperature": 0.0,
                 "seed": 42,
-                "customParameters": {"reasoning_effort": "low"},
             },
             "messages": [
                 {
@@ -228,6 +320,299 @@ class TestLLMJudgeFromConfig:
         assert evaluator.assertions[0] == "Is accurate"
         assert evaluator.assertions[1] == "Is helpful"
 
+    @pytest.mark.parametrize("assertion_type", ["INTEGER", "DOUBLE"])
+    def test_from_config__preserves_unsupported_type_and_returns_failed_score(
+        self, assertion_type, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="numeric_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type=assertion_type,
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        monkeypatch.setattr(
+            evaluator,
+            "_generate_and_parse",
+            lambda **kwargs: pytest.fail("unsupported numeric assertion was scored"),
+        )
+
+        results = evaluator.score(input="input", output="output")
+
+        assert len(results) == 1
+        _assert_unsupported_score_result(
+            results[0],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_=assertion_type,
+        )
+        assert evaluator.to_config().schema_[0].type == assertion_type
+        assert evaluator.to_config().schema_[0].name == "usefulness"
+
+    def test_from_config__mixed_types__scores_boolean_and_fails_numeric(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        generate_and_parse = Mock(
+            return_value=[
+                score_result.ScoreResult(
+                    name="Response is accurate",
+                    value=True,
+                    reason="The response is accurate.",
+                    category_name="suite_assertion",
+                )
+            ]
+        )
+        monkeypatch.setattr(evaluator, "_generate_and_parse", generate_and_parse)
+
+        results = evaluator.score(input="input", output="output")
+
+        generate_and_parse.assert_called_once()
+        assert generate_and_parse.call_args.kwargs["assertions"] == [
+            "Response is accurate"
+        ]
+        assert len(results) == 2
+        assert [result.name for result in results] == [
+            "Response is accurate",
+            "Rate usefulness from 0.0 to 1.0",
+        ]
+        assert results[0].value is True
+        assert results[0].scoring_failed is False
+        _assert_unsupported_score_result(
+            results[1],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
+
+    def test_from_config__missing_boolean_result__returns_failed_score(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        generate_and_parse = Mock(return_value=[])
+        monkeypatch.setattr(evaluator, "_generate_and_parse", generate_and_parse)
+
+        results = evaluator.score(input="input", output="output")
+
+        generate_and_parse.assert_called_once_with(
+            input="input",
+            output="output",
+            assertions=["Response is accurate"],
+        )
+        missing_boolean = results[0]
+        assert missing_boolean.name == "Response is accurate"
+        assert missing_boolean.value == 0.0
+        assert missing_boolean.scoring_failed is True
+        assert missing_boolean.category_name == "suite_assertion"
+        assert missing_boolean.metadata["error_info"]["exception_type"] == (
+            "EvaluationError"
+        )
+        assert missing_boolean.metadata["error_info"]["message"] == (
+            missing_boolean.reason
+        )
+        assert "did not return a score" in missing_boolean.reason
+
+        unsupported_numeric = results[1]
+        _assert_unsupported_score_result(
+            unsupported_numeric,
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
+
+    @pytest.mark.asyncio
+    async def test_ascore__missing_boolean_result__returns_failed_score(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+
+        agenerate_and_parse = AsyncMock(return_value=[])
+        monkeypatch.setattr(evaluator, "_agenerate_and_parse", agenerate_and_parse)
+
+        results = await evaluator.ascore(input="input", output="output")
+
+        agenerate_and_parse.assert_awaited_once_with(
+            input="input",
+            output="output",
+            assertions=["Response is accurate"],
+        )
+        assert [result.name for result in results] == [
+            "Response is accurate",
+            "Rate usefulness from 0.0 to 1.0",
+        ]
+        missing_boolean = results[0]
+        assert missing_boolean.value == 0.0
+        assert missing_boolean.scoring_failed is True
+        assert missing_boolean.category_name == "suite_assertion"
+        assert missing_boolean.metadata["error_info"]["exception_type"] == (
+            "EvaluationError"
+        )
+        assert missing_boolean.metadata["error_info"]["message"] == (
+            missing_boolean.reason
+        )
+        assert "did not return a score" in missing_boolean.reason
+
+        unsupported_numeric = results[1]
+        _assert_unsupported_score_result(
+            unsupported_numeric,
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
+
+    @pytest.mark.asyncio
+    async def test_ascore__numeric_only__returns_failed_without_calling_model(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="numeric_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                )
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+
+        async def fail_if_called(**kwargs):
+            pytest.fail("numeric-only ascore called the model")
+
+        monkeypatch.setattr(evaluator, "_agenerate_and_parse", fail_if_called)
+
+        results = await evaluator.ascore(input="input", output="output")
+
+        assert len(results) == 1
+        _assert_unsupported_score_result(
+            results[0],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
+
+    @pytest.mark.asyncio
+    async def test_ascore__mixed_types__preserves_order_and_scores_boolean(
+        self, monkeypatch
+    ):
+        config = llm_judge_config.LLMJudgeConfig(
+            name="mixed_evaluator",
+            model=llm_judge_config.LLMJudgeModelConfig(),
+            variables={"input": "input", "output": "output"},
+            schema=[
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="accurate",
+                    type="BOOLEAN",
+                    description="Response is accurate",
+                ),
+                llm_judge_config.LLMJudgeSchemaItem(
+                    name="usefulness",
+                    type="DOUBLE",
+                    description="Rate usefulness from 0.0 to 1.0",
+                ),
+            ],
+            messages=[],
+        )
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
+        generate_and_parse = Mock()
+
+        async def agenerate_and_parse(**kwargs):
+            generate_and_parse(**kwargs)
+            return [
+                score_result.ScoreResult(
+                    name="Response is accurate",
+                    value=True,
+                    reason="The response is accurate.",
+                    category_name="suite_assertion",
+                )
+            ]
+
+        monkeypatch.setattr(evaluator, "_agenerate_and_parse", agenerate_and_parse)
+
+        results = await evaluator.ascore(input="input", output="output")
+
+        generate_and_parse.assert_called_once_with(
+            input="input",
+            output="output",
+            assertions=["Response is accurate"],
+        )
+        assert [result.name for result in results] == [
+            "Response is accurate",
+            "Rate usefulness from 0.0 to 1.0",
+        ]
+        assert results[0].value is True
+        _assert_unsupported_score_result(
+            results[1],
+            schema_name="usefulness",
+            description="Rate usefulness from 0.0 to 1.0",
+            type_="DOUBLE",
+        )
+
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""
         config = llm_judge_config.LLMJudgeConfig(
@@ -289,7 +674,6 @@ class TestLLMJudgeFromConfig:
         assert new_config_dict["model"] == {
             "temperature": 0.7,
             "seed": 123,
-            "customParameters": {"reasoning_effort": "low"},
         }
 
 

@@ -241,6 +241,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
+    /**
+     * Under {@code spanWeeksReadBounded}, the {@code spans} reads of a span type are bound to the weeks
+     * {@code span_weeks} holds for the project, so they skip the partitions without a span of the project.
+     */
     private static final String SELECT_SPAN_FEEDBACK_SCORE_NAMES = """
             SELECT
                 distinct name
@@ -257,6 +261,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT id_week FROM span_weeks
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id)<endif>
                     AND type = :type
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -278,6 +285,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(project_span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT id_week FROM span_weeks
+                        WHERE workspace_id = :workspace_id AND project_id = :project_id)<endif>
                     AND type = :type
                     ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -628,6 +638,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             if (type != null) {
                 template.add("type", type.name());
+                if (configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded()) {
+                    template.add("project_span_weeks_bound", true);
+                }
             }
 
             var statement = connection.createStatement(template.render())

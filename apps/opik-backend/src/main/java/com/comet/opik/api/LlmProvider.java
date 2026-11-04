@@ -43,11 +43,15 @@ public enum LlmProvider {
     }
 
     /**
-     * Providers whose requests route through {@code CustomLlmClientGenerator} — the only client
-     * that injects a dynamically fetched bearer, so the only ones where an {@code auth_config}
-     * takes effect.
+     * Providers whose requests route through {@code CustomLlmClientGenerator}, the only client that:
+     * <ul>
+     *     <li>injects a dynamically fetched bearer, so these are the only providers where an {@code auth_config}
+     *     takes effect;</li>
+     *     <li>substitutes {@code {model}} into the URL and checks the final request URL against the destination
+     *     guard.</li>
+     * </ul>
      */
-    public boolean supportsDynamicTokenAuth() {
+    public boolean routesThroughCustomLlmClient() {
         return this == CUSTOM_LLM || this == BEDROCK || this == OLLAMA;
     }
 }

@@ -1,6 +1,8 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.EncryptionDeserializer;
+import com.comet.opik.utils.LoggableMaps;
 import com.comet.opik.utils.MaskedSecretTokenSerializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -15,7 +17,6 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -49,17 +50,24 @@ public record Webhook(
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
+    /**
+     * Without the secret token, with only the names of the headers, whose values are never logged, and with the URL's
+     * scheme, host and port only, as its path can hold a token.
+     */
     @Override
     public String toString() {
-        return "Webhook[id=" + Objects.toString(id)
-                + ", name=" + Objects.toString(name)
-                + ", url=" + Objects.toString(url)
-                + ", secretToken=[REDACTED]"
-                + ", headers=" + Objects.toString(headers)
-                + ", createdAt=" + Objects.toString(createdAt)
-                + ", createdBy=" + Objects.toString(createdBy)
-                + ", lastUpdatedAt=" + Objects.toString(lastUpdatedAt)
-                + ", lastUpdatedBy=" + Objects.toString(lastUpdatedBy)
-                + "]";
+        return """
+                Webhook[id=%s, name=%s, url=%s, secretToken=[REDACTED], headers=%s, createdAt=%s, createdBy=%s, \
+                lastUpdatedAt=%s, lastUpdatedBy=%s]""".formatted(id, name, LoggableUrl.of(url),
+                LoggableMaps.keys(headers), createdAt,
+                createdBy, lastUpdatedAt, lastUpdatedBy);
+    }
+
+    /** Hand-declared so that Lombok's toString, which would print the secret token and the header values, isn't. */
+    public static class WebhookBuilder {
+        @Override
+        public String toString() {
+            return "WebhookBuilder[id=%s, name=%s, headers=%s]".formatted(id, name, LoggableMaps.keys(headers));
+        }
     }
 }

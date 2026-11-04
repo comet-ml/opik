@@ -49,6 +49,9 @@ from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
 from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
+from .annotation_queue_annotator_view import AnnotationQueueAnnotatorView
+from .annotation_queue_annotator_view_public import AnnotationQueueAnnotatorViewPublic
+from .annotation_queue_annotator_view_write import AnnotationQueueAnnotatorViewWrite
 from .annotation_queue_automation import AnnotationQueueAutomation
 from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
 from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
@@ -312,6 +315,7 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .effort_param import EffortParam
 from .environment import Environment
 from .environment_page_public import EnvironmentPagePublic
 from .environment_public import EnvironmentPublic
@@ -425,6 +429,7 @@ from .feedback_update import (
     FeedbackUpdate_Categorical,
     FeedbackUpdate_Numerical,
 )
+from .flag_param import FlagParam
 from .function import Function
 from .function_call import FunctionCall
 from .generate_report_response import GenerateReportResponse
@@ -441,7 +446,6 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
@@ -502,7 +506,9 @@ from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
+from .model_params import ModelParams
 from .multipart_upload_part import MultipartUploadPart
+from .number_param import NumberParam
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
 from .numerical_feedback_definition_public import NumericalFeedbackDefinitionPublic
@@ -681,6 +687,8 @@ from .tool import Tool
 from .tool_call import ToolCall
 from .tool_call_type import ToolCallType
 from .tool_type import ToolType
+from .tools_param import ToolsParam
+from .tools_param_chat_completions import ToolsParamChatCompletions
 from .trace import Trace
 from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
@@ -806,6 +814,9 @@ __all__ = [
     "AlertWriteAlertType",
     "AnalyticsQueryResponse",
     "AnnotationQueue",
+    "AnnotationQueueAnnotatorView",
+    "AnnotationQueueAnnotatorViewPublic",
+    "AnnotationQueueAnnotatorViewWrite",
     "AnnotationQueueAutomation",
     "AnnotationQueueAutomationPublic",
     "AnnotationQueueAutomationWrite",
@@ -1031,6 +1042,7 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "EffortParam",
     "Environment",
     "EnvironmentPagePublic",
     "EnvironmentPublic",
@@ -1137,6 +1149,7 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
+    "FlagParam",
     "Function",
     "FunctionCall",
     "GenerateReportResponse",
@@ -1153,7 +1166,6 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
@@ -1214,7 +1226,9 @@ __all__ = [
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
     "Message",
+    "ModelParams",
     "MultipartUploadPart",
+    "NumberParam",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
     "NumericalFeedbackDefinitionPublic",
@@ -1391,6 +1405,8 @@ __all__ = [
     "ToolCall",
     "ToolCallType",
     "ToolType",
+    "ToolsParam",
+    "ToolsParamChatCompletions",
     "Trace",
     "TraceBatch",
     "TraceCountResponse",

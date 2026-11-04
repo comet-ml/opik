@@ -10,6 +10,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.base.Suppliers;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -38,6 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -59,6 +63,15 @@ public class LlmModelRegistryService {
     private volatile Map<String, List<ModelEntry>> lastGoodRemote;
     private final Set<String> reportedAwaitingSyncRows = ConcurrentHashMap.newKeySet();
     private final Set<String> reportedUnknownProfiles = ConcurrentHashMap.newKeySet();
+    private final Set<String> reportedUnknownOnlyRoutes = ConcurrentHashMap.newKeySet();
+    // Kept across reloads because the curated files ship with the release; the reasoning flag, which a reload can
+    // change, is part of the key. Bounded because the effort check asks with whatever model name a request carries.
+    private final LoadingCache<CuratedParamsKey, Optional<ModelParams>> curatedParams = CacheBuilder.newBuilder()
+            .maximumSize(1_000)
+            .build(CacheLoader.from(this::resolveCuratedParams));
+
+    private record CuratedParamsKey(String provider, String modelId, boolean reasoning) {
+    }
 
     @Inject
     public LlmModelRegistryService(@NonNull @Config OpikConfiguration configuration,
@@ -90,7 +103,8 @@ public class LlmModelRegistryService {
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ModelEntry(String id, String qualifiedName, String label, Boolean structuredOutput, Boolean reasoning,
-            String profile, ModelParams params, Boolean awaitingSync) {
+            List<String> supportedParameters, List<String> reasoningEfforts, String profile, ModelParams params,
+            Boolean awaitingSync) {
 
         LlmModelDefinition toDefinition(ModelParams resolvedParams) {
             return LlmModelDefinition.builder()
@@ -99,6 +113,8 @@ public class LlmModelRegistryService {
                     .label(label)
                     .structuredOutput(BooleanUtils.isTrue(structuredOutput))
                     .reasoning(BooleanUtils.isTrue(reasoning))
+                    .supportedParameters(supportedParameters)
+                    .reasoningEfforts(reasoningEfforts)
                     .params(resolvedParams)
                     .build();
         }
@@ -106,7 +122,26 @@ public class LlmModelRegistryService {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record ProviderDefaults(String profile, String reasoningProfile) {
+    record ProviderDefaults(String profile, String reasoningProfile, List<IdProfile> idProfiles) {
+
+        ProviderDefaults {
+            idProfiles = idProfiles == null ? List.of() : idProfiles;
+        }
+
+        String idProfile(String modelId) {
+            if (modelId == null) {
+                return null;
+            }
+            return idProfiles.stream()
+                    .filter(idProfile -> idProfile.match().matcher(modelId).find())
+                    .map(IdProfile::profile)
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record IdProfile(@NonNull Pattern match, @NonNull String profile) {
     }
 
     @Builder(toBuilder = true)
@@ -147,14 +182,15 @@ public class LlmModelRegistryService {
         }
 
         /**
-         * Provider profile, then the reasoning profile, then the model's own params, into which
-         * {@link #foldProfiles} has already merged the model's own profile.
+         * Provider profile, then the profile its id matches, then the reasoning profile, then the model's own params,
+         * into which {@link #foldProfiles} has already merged the model's own profile.
          */
         ModelParams resolve(String provider, ModelEntry entry) {
             var providerDefaults = defaults.get(provider);
             ModelParams resolved = null;
             if (providerDefaults != null) {
                 resolved = profile(providerDefaults.profile());
+                resolved = ModelParams.overlay(resolved, profile(providerDefaults.idProfile(entry.id())));
                 if (BooleanUtils.isTrue(entry.reasoning())) {
                     resolved = ModelParams.overlay(resolved, profile(providerDefaults.reasoningProfile()));
                 }
@@ -179,7 +215,8 @@ public class LlmModelRegistryService {
             var named = Stream.concat(
                     defaults.values().stream()
                             .filter(Objects::nonNull)
-                            .flatMap(d -> Stream.of(d.profile(), d.reasoningProfile())),
+                            .flatMap(d -> Stream.concat(Stream.of(d.profile(), d.reasoningProfile()),
+                                    d.idProfiles().stream().map(IdProfile::profile))),
                     models.values().stream()
                             .filter(Objects::nonNull)
                             .flatMap(List::stream)
@@ -195,10 +232,40 @@ public class LlmModelRegistryService {
             }
             return this;
         }
+
+        CuratedCatalog requireKnownOnlyRoutes() {
+            var unknown = Stream.concat(
+                    profiles.values().stream(),
+                    models.values().stream()
+                            .filter(Objects::nonNull)
+                            .flatMap(List::stream)
+                            .filter(Objects::nonNull)
+                            .map(ModelEntry::params))
+                    .filter(Objects::nonNull)
+                    .flatMap(ModelParams::unknownOnlyRoutes)
+                    .distinct()
+                    .toList();
+            if (!unknown.isEmpty()) {
+                throw new IllegalStateException("The curated model catalog names an onlyRoute that isn't one of "
+                        + ModelParams.ROUTE_NAMES + ": " + unknown);
+            }
+            return this;
+        }
     }
 
     public Map<String, List<LlmModelDefinition>> getRegistry() {
         return registry;
+    }
+
+    public Map<String, ModelParams> getProfiles() {
+        var profiles = new LinkedHashMap<String, ModelParams>();
+        for (var provider : LlmProvider.values()) {
+            var params = paramsOf(provider.getValue(), null);
+            if (params != null) {
+                profiles.put(provider.getValue(), params);
+            }
+        }
+        return profiles;
     }
 
     public Optional<ModelLookupResult> findModel(@NonNull String model) {
@@ -346,12 +413,16 @@ public class LlmModelRegistryService {
      * veto, so a bad row in remote data can cost a param but never fail every request for a model.
      */
     public @Nullable ModelParams curatedParamsOf(@NonNull String provider, @Nullable String modelId) {
-        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
         var reasoning = listed(provider, modelId).map(LlmModelDefinition::reasoning).orElse(false);
-        var row = rules.row(provider, modelId)
-                .map(curated -> curated.toBuilder().reasoning(reasoning).build())
-                .orElseGet(() -> ModelEntry.builder().id(modelId).reasoning(reasoning).build());
-        return rules.resolve(provider, rules.foldProfile(row));
+        return curatedParams.getUnchecked(new CuratedParamsKey(provider, modelId, reasoning)).orElse(null);
+    }
+
+    private Optional<ModelParams> resolveCuratedParams(CuratedParamsKey key) {
+        var rules = curatedLayerOff() ? shippedCatalog.get() : catalog;
+        var row = rules.row(key.provider(), key.modelId())
+                .map(curated -> curated.toBuilder().reasoning(key.reasoning()).build())
+                .orElseGet(() -> ModelEntry.builder().id(key.modelId()).reasoning(key.reasoning()).build());
+        return Optional.ofNullable(rules.resolve(key.provider(), rules.foldProfile(row)));
     }
 
     private boolean curatedLayerOff() {
@@ -373,12 +444,39 @@ public class LlmModelRegistryService {
             return CuratedCatalog.EMPTY;
         }
         return readClasspathYaml(resourceName, new TypeReference<CuratedCatalog>() {
-        }).requireKnownProfiles();
+        }).requireKnownProfiles().requireKnownOnlyRoutes();
     }
 
     private Map<String, List<ModelEntry>> foldLayerProfiles(Map<String, List<ModelEntry>> layer) {
         reportUnknownProfiles(layer);
-        return catalog.foldProfiles(layer);
+        return catalog.foldProfiles(dropUnknownOnlyRoutes(layer));
+    }
+
+    // Data like an unknown profile, so only the value goes, not the layer: the CDN copy is also read by older
+    // backends, and one route name they don't know must not cost them every other update.
+    private Map<String, List<ModelEntry>> dropUnknownOnlyRoutes(Map<String, List<ModelEntry>> layer) {
+        var result = new LinkedHashMap<String, List<ModelEntry>>(layer.size());
+        layer.forEach((provider, rows) -> result.put(provider, rows == null
+                ? null
+                : rows.stream().map(row -> withoutUnknownOnlyRoutes(provider, row)).toList()));
+        return result;
+    }
+
+    private ModelEntry withoutUnknownOnlyRoutes(String provider, ModelEntry row) {
+        if (row == null || row.params() == null) {
+            return row;
+        }
+        var unknown = row.params().unknownOnlyRoutes().distinct().toList();
+        if (unknown.isEmpty()) {
+            return row;
+        }
+        var message = "Unknown onlyRoute {} for model '{}' of provider '{}', keeping the model without a route limit";
+        if (reportedUnknownOnlyRoutes.add(provider + "/" + row.id() + "/" + unknown)) {
+            log.warn(message, unknown, row.id(), provider);
+        } else {
+            log.debug(message, unknown, row.id(), provider);
+        }
+        return row.toBuilder().params(row.params().withoutUnknownOnlyRoutes()).build();
     }
 
     // A generated layer or the local override is data, so a profile it names wrongly is skipped rather than
@@ -535,13 +633,16 @@ public class LlmModelRegistryService {
 
     // An upper layer can lag the classpath file a release ships (the remote copy) or set only a few fields
     // (a local override). A field it leaves out keeps the lower layer's value, so only an entry that sets a
-    // field may change it.
+    // field may change it. An empty list is set: it says the model takes none of the panel's parameters.
     private static ModelEntry inheritUnsetFields(ModelEntry existing, ModelEntry override) {
         return override.toBuilder()
                 .qualifiedName(ObjectUtils.getIfNull(override.qualifiedName(), existing.qualifiedName()))
                 .label(ObjectUtils.getIfNull(override.label(), existing.label()))
                 .structuredOutput(ObjectUtils.getIfNull(override.structuredOutput(), existing.structuredOutput()))
                 .reasoning(ObjectUtils.getIfNull(override.reasoning(), existing.reasoning()))
+                .supportedParameters(
+                        ObjectUtils.getIfNull(override.supportedParameters(), existing.supportedParameters()))
+                .reasoningEfforts(ObjectUtils.getIfNull(override.reasoningEfforts(), existing.reasoningEfforts()))
                 .profile(ObjectUtils.getIfNull(override.profile(), existing.profile()))
                 .params(ModelParams.overlay(existing.params(), override.params()))
                 .build();

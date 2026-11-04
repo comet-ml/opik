@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -101,17 +102,26 @@ class SpanWeeksReadFixtures {
     }
 
     FarFutureTrace createFarFutureTrace(String threadId) {
-        var farFutureTrace = writeFarFutureTrace(threadId);
+        return createFarFutureTrace(threadId, UnaryOperator.identity());
+    }
+
+    /** The trace of {@link #createFarFutureTrace()}, with its far-future span changed by {@code farFutureSpan}. */
+    FarFutureTrace createFarFutureTrace(UnaryOperator<Span> farFutureSpan) {
+        return createFarFutureTrace(randomThreadId(), farFutureSpan);
+    }
+
+    private FarFutureTrace createFarFutureTrace(String threadId, UnaryOperator<Span> farFutureSpan) {
+        var farFutureTrace = writeFarFutureTrace(threadId, farFutureSpan);
         awaitIndexed(farFutureTrace.projectId(), farFutureTrace.trace().id(), farFutureTrace.spans());
         return farFutureTrace;
     }
 
     /** The trace of {@link #createFarFutureTrace}, without waiting for its weeks to be indexed. */
     FarFutureTrace createFarFutureTraceWithoutWaiting() {
-        return writeFarFutureTrace(randomThreadId());
+        return writeFarFutureTrace(randomThreadId(), UnaryOperator.identity());
     }
 
-    private FarFutureTrace writeFarFutureTrace(String threadId) {
+    private FarFutureTrace writeFarFutureTrace(String threadId, UnaryOperator<Span> farFutureSpan) {
         var now = now();
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
@@ -128,7 +138,7 @@ class SpanWeeksReadFixtures {
                 .usage(null)
                 .build();
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
-        var spans = Stream.of(now, farFutureInstant())
+        var defaultSpans = Stream.of(now, farFutureInstant())
                 .map(idAt -> factory.manufacturePojo(Span.class).toBuilder()
                         .id(ID_GENERATOR.getTimeOrderedEpoch(idAt.toEpochMilli()))
                         .projectName(projectName)
@@ -140,6 +150,7 @@ class SpanWeeksReadFixtures {
                         .totalEstimatedCost(BigDecimal.valueOf(RandomUtils.secure().randomInt(1, 100_000), 2))
                         .build())
                 .toList();
+        var spans = List.of(defaultSpans.getFirst(), farFutureSpan.apply(defaultSpans.getLast()));
         spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
         return FarFutureTrace.builder().projectName(projectName).projectId(projectId).trace(trace).spans(spans)
                 .build();

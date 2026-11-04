@@ -189,7 +189,6 @@ public class TestDropwizardAppExtensionUtils {
 
         if (appContextConfig.redisUrl() != null) {
             configs.add("redis.singleNodeUrl: %s".formatted(appContextConfig.redisUrl()));
-            configs.add("redis.sentinelMode: false");
             configs.add("redis.lockTimeout: 500");
         }
 

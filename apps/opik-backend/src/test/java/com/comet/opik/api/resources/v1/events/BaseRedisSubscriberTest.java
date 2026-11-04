@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.ParamResolver;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -395,6 +396,25 @@ class BaseRedisSubscriberTest {
             // Non-retryable errors should be removed from the stream
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+            assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(messages);
+        }
+
+        @Test
+        void shouldRemoveRetiredMessagesEvenWhenTheRetireHookFails() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(new TestRedisSubscriber(config, redissonClient,
+                    message -> Mono.error(new NullPointerException("Non-retryable"))) {
+                @Override
+                protected Mono<Void> onRetired(String message, Throwable error) {
+                    return Mono.error(new IllegalStateException("retire hook failed"));
+                }
+            });
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size());
         }
 
         /**
@@ -432,6 +452,7 @@ class BaseRedisSubscriberTest {
                                 .isEqualTo((long) messages.size());
                     });
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+            assertThat(subscriber.getRetiredMessages()).isEmpty();
         }
 
         static Stream<Arguments> transientClientErrors() {
@@ -455,6 +476,7 @@ class BaseRedisSubscriberTest {
         private static RuntimeException thrownByRealScoreTrace(int status, String reason) {
             var clientConfig = mock(LlmProviderClientConfig.class);
             when(clientConfig.getMaxAttempts()).thenReturn(1);
+            when(clientConfig.getProviderErrorMessageMaxLength()).thenReturn(300);
 
             var chatModel = mock(ChatModel.class);
             when(chatModel.chat(any(ChatRequest.class)))
@@ -464,7 +486,8 @@ class BaseRedisSubscriberTest {
             when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
 
             var service = new ChatCompletionService(clientConfig, providerFactory,
-                    new ParamResolver(providerFactory, bundledRegistry()));
+                    new ParamResolver(providerFactory, bundledRegistry()),
+                    new ProviderErrorMessageValidator(clientConfig));
             var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
             var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
 
@@ -657,6 +680,7 @@ class BaseRedisSubscriberTest {
             // Messages should be eventually removed after max retries
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+            assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(messages);
         }
 
         @Test
@@ -705,6 +729,7 @@ class BaseRedisSubscriberTest {
             retryableMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(2));
             // Verify success messages were attempted only once
             successMessages.forEach(msg -> assertThat(attemptCount.get(msg).get()).isEqualTo(1));
+            assertThat(subscriber.getRetiredMessages()).containsExactlyInAnyOrderElementsOf(nonRetryableMessages);
         }
     }
 

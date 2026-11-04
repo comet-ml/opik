@@ -1,11 +1,9 @@
 import { useMemo } from "react";
-import isObject from "lodash/isObject";
-import mergeWith from "lodash/mergeWith";
 
 import useTracesByIds from "@/api/traces/useTracesByIds";
 import useSpansByIds from "@/api/traces/useSpansByIds";
 import { Span, Trace } from "@/types/traces";
-import { JsonObject } from "@/types/shared";
+import { mergeSampleEntities } from "@/lib/traces";
 
 export const MAPPING_SAMPLE_SIZE = 5;
 
@@ -51,18 +49,7 @@ const useMappingSampleEntities = ({
     [results],
   );
 
-  const treeData = useMemo(
-    () =>
-      entities.reduce<JsonObject>(
-        (acc, entity) =>
-          mergeWith(acc, entity, (objValue, srcValue) => {
-            if (isObject(objValue) || isObject(srcValue)) return undefined;
-            return objValue === undefined ? srcValue : objValue;
-          }),
-        {},
-      ),
-    [entities],
-  );
+  const treeData = useMemo(() => mergeSampleEntities(entities), [entities]);
 
   const isPending =
     (traceIds.length > 0 || spanIds.length > 0) &&

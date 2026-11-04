@@ -147,6 +147,9 @@ public class FilterQueryBuilder {
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String EXPERIMENT_ID_DB = "experiment_id";
+    // Comments reference the trace id and the thread model id (not the user-facing thread id)
+    private static final String TRACE_HAS_COMMENTS_DB = "id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'trace')";
+    private static final String THREAD_HAS_COMMENTS_DB = "thread_model_id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'thread')";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -325,7 +328,9 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY_STATE_DB,
                             "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
                             FieldType.ENUM,
-                            "empty(%1$s)")))
+                            "empty(%1$s)",
+                            FieldType.COMMENTS,
+                            "NOT (%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
@@ -338,7 +343,9 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY_STATE_DB,
                             "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
                             FieldType.ENUM,
-                            "notEmpty(%1$s)")))
+                            "notEmpty(%1$s)",
+                            FieldType.COMMENTS,
+                            "%1$s")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
                             FieldType.ENUM, "%1$s IN :filter%2$d",
                             FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
@@ -374,6 +381,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .put(TraceField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceField.COMMENTS, TRACE_HAS_COMMENTS_DB)
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.EXPERIMENT_IDS, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
@@ -397,6 +405,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
                     .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceThreadField.COMMENTS, THREAD_HAS_COMMENTS_DB)
                     .put(TraceThreadField.SOURCE, SOURCE_DB)
                     .put(TraceThreadField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());
@@ -571,6 +580,7 @@ public class FilterQueryBuilder {
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
                     .put(ExperimentsComparisonValidKnownField.ID, ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.TAGS, TAGS_DB)
                     .put(ExperimentsComparisonValidKnownField.SOURCE, SOURCE_DB)
                     .put(ExperimentsComparisonValidKnownField.TRACE_ID, TRACE_ID_DB)
                     .put(ExperimentsComparisonValidKnownField.SPAN_ID, SPAN_ID_DB)
@@ -612,6 +622,7 @@ public class FilterQueryBuilder {
                 TraceField.ERROR_TYPE,
                 TraceField.SOURCE,
                 TraceField.ENVIRONMENT,
+                TraceField.COMMENTS,
                 TraceThreadField.SOURCE,
                 TraceThreadField.ENVIRONMENT));
 
@@ -747,10 +758,12 @@ public class FilterQueryBuilder {
                 TraceThreadField.START_TIME,
                 TraceThreadField.END_TIME,
                 TraceThreadField.STATUS,
-                TraceThreadField.TAGS));
+                TraceThreadField.TAGS,
+                TraceThreadField.COMMENTS));
 
         map.put(FilterStrategy.DATASET_ITEM, Set.of(
                 DatasetItemField.ID,
+                ExperimentsComparisonValidKnownField.TAGS,
                 DatasetItemField.DATA,
                 DatasetItemField.FULL_DATA,
                 DatasetItemField.SOURCE,

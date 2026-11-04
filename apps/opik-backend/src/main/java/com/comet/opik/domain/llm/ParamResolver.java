@@ -1,14 +1,20 @@
 package com.comet.opik.domain.llm;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ModelParams;
+import com.comet.opik.api.ModelParams.EffortParam;
+import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +41,7 @@ public class ParamResolver {
 
         public enum Reason {
             REFUSED_BY_MODEL,
+            REFUSED_BY_ROUTE,
             THINKING_ENABLED,
             EXCLUSIVE_SAMPLING
         }
@@ -42,11 +49,14 @@ public class ParamResolver {
 
     private static final String TEMPERATURE = "temperature";
     private static final String TOP_P = "top_p";
+    private static final String REASONING_EFFORT = "reasoning_effort";
+    private static final String REASONING = "reasoning";
+    private static final String EFFORT = "effort";
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
 
-    public Resolution<ChatCompletionRequest> resolve(@NonNull ChatCompletionRequest request) {
+    public Resolution<ChatCompletionRequest> resolve(@NonNull ChatCompletionRequest request, @Nullable String route) {
         var changes = new ArrayList<ParamChange>();
         var builder = ChatCompletionRequest.builder().from(request);
         var model = request.model();
@@ -87,23 +97,38 @@ public class ParamResolver {
             changes.add(new ParamChange(TOP_P, ParamChange.Reason.EXCLUSIVE_SAMPLING));
         }
 
-        var params = openAiParams(model);
+        var params = catalogParams(model, route);
         if (params.isPresent()) {
-            if (temperature != null && isRefused(params.get().temperature())) {
+            var modelParams = params.get();
+            var effectiveParams = route == null || modelParams.routes() == null
+                    ? modelParams
+                    : modelParams.routes().getOrDefault(route, modelParams);
+            if (temperature != null && isRefused(effectiveParams.temperature())) {
                 builder.temperature(null);
-                changes.add(new ParamChange(TEMPERATURE, ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(new ParamChange(TEMPERATURE, refusalReason(isRefused(modelParams.temperature()))));
             }
-            if (topP != null && isRefused(params.get().topP())) {
+            if (topP != null && isRefused(effectiveParams.topP())) {
                 builder.topP(null);
-                changes.add(new ParamChange(TOP_P, ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(new ParamChange(TOP_P, refusalReason(isRefused(modelParams.topP()))));
             }
-            if (request.frequencyPenalty() != null && isRefused(params.get().frequencyPenalty())) {
+            if (request.frequencyPenalty() != null && isRefused(effectiveParams.frequencyPenalty())) {
                 builder.frequencyPenalty(null);
-                changes.add(new ParamChange("frequency_penalty", ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(
+                        new ParamChange("frequency_penalty", refusalReason(isRefused(modelParams.frequencyPenalty()))));
             }
-            if (request.presencePenalty() != null && isRefused(params.get().presencePenalty())) {
+            if (request.presencePenalty() != null && isRefused(effectiveParams.presencePenalty())) {
                 builder.presencePenalty(null);
-                changes.add(new ParamChange("presence_penalty", ParamChange.Reason.REFUSED_BY_MODEL));
+                changes.add(
+                        new ParamChange("presence_penalty", refusalReason(isRefused(modelParams.presencePenalty()))));
+            }
+            if (CollectionUtils.isNotEmpty(request.stop()) && isRefused(effectiveParams.stop())) {
+                // stop(null) keeps the list from() copied; an empty one is left out of the body (NON_EMPTY).
+                builder.stop(List.of());
+                changes.add(new ParamChange("stop", refusalReason(isRefused(modelParams.stop()))));
+            }
+            if (request.seed() != null && isRefused(effectiveParams.seed())) {
+                builder.seed(null);
+                changes.add(new ParamChange("seed", refusalReason(isRefused(modelParams.seed()))));
             }
         }
 
@@ -113,36 +138,88 @@ public class ParamResolver {
     }
 
     /**
-     * Of these settings a judge sends only temperature. Saved judge rules keep the temperature they were created
-     * with, and the frontend strips it only on save, so a rule saved before a model stopped taking it still sends it.
+     * Of these settings a judge sends only temperature, plus whatever its custom parameters carry. Saved judge rules
+     * keep the temperature they were created with, and the frontend strips it only on save, so a rule saved before a
+     * model stopped taking it still sends it.
      */
     public Resolution<LlmAsJudgeModelParameters> resolve(@NonNull LlmAsJudgeModelParameters parameters) {
-        if (parameters.temperature() == null) {
-            return new Resolution<>(parameters, List.of());
-        }
+        var changes = new ArrayList<ParamChange>();
+        var builder = parameters.toBuilder();
         var model = parameters.name();
-        var refused = ModelCapabilities.rejectsTemperature(model, registryService)
-                || openAiParams(model).map(ModelParams::temperature).filter(this::isRefused).isPresent();
-        // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match), unlike
-        // the chat path: a judge on another provider's thinking model keeps the temperature it was saved with.
-        var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
-                && (SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters())
-                        || SamplingParamsNormalizer.effortTurnsOnThinking(model, parameters.customParameters()));
-        if (!refused && !claudeThinks) {
-            return new Resolution<>(parameters, List.of());
+        var catalogParams = catalogParams(model, null);
+        if (parameters.temperature() != null) {
+            var refused = ModelCapabilities.rejectsTemperature(model, registryService)
+                    || catalogParams.map(ModelParams::temperature).filter(this::isRefused).isPresent();
+            // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match),
+            // unlike the chat path: a judge on another provider's thinking model keeps the temperature it was saved
+            // with.
+            var claudeThinks = ModelCapabilities.requiresExclusiveSamplingParams(model)
+                    && (SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters())
+                            || SamplingParamsNormalizer.effortTurnsOnThinking(model, parameters.customParameters()));
+            if (refused || claudeThinks) {
+                builder.temperature(null);
+                changes.add(new ParamChange(TEMPERATURE,
+                        refused ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.THINKING_ENABLED));
+            }
         }
-        var reason = refused ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.THINKING_ENABLED;
-        return new Resolution<>(parameters.toBuilder().temperature(null).build(),
-                List.of(new ParamChange(TEMPERATURE, reason)));
+        // A rule made through the API can carry an effort its model has no levels for, and gpt-4o-mini answers
+        // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there.
+        if (parameters.customParameters() instanceof ObjectNode customParameters
+                && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
+            var kept = customParameters.deepCopy();
+            var removed = removeReasoningEffort(kept);
+            if (!removed.isEmpty()) {
+                builder.customParameters(kept.isEmpty() ? null : kept);
+                removed.forEach(param -> changes.add(new ParamChange(param, ParamChange.Reason.REFUSED_BY_MODEL)));
+            }
+        }
+        return changes.isEmpty()
+                ? new Resolution<>(parameters, List.of())
+                : new Resolution<>(builder.build(), List.copyOf(changes));
     }
 
-    private Optional<ModelParams> openAiParams(String model) {
-        return model == null ? Optional.empty() : llmProviderFactory.openAiParams(model);
+    // The Responses-shaped reasoning object carries the same effort, but the rest of it, such as summary, can still
+    // apply to a reasoning model whose catalog row lists no effort levels.
+    public static List<String> removeReasoningEffort(@NonNull ObjectNode customParameters) {
+        var removed = new ArrayList<String>();
+        if (customParameters.remove(REASONING_EFFORT) != null) {
+            removed.add(REASONING_EFFORT);
+        }
+        if (customParameters.get(REASONING) instanceof ObjectNode reasoning && reasoning.remove(EFFORT) != null) {
+            removed.add(REASONING + "." + EFFORT);
+            if (reasoning.isEmpty()) {
+                customParameters.remove(REASONING);
+            }
+        }
+        return removed;
     }
 
-    // A param the catalog leaves out counts as accepted: an OpenAI model keeps every setting its catalog row doesn't
-    // refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
+    // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
+    private Optional<ModelParams> catalogParams(String model, String route) {
+        if (model == null) {
+            return Optional.empty();
+        }
+        return llmProviderFactory.catalogParams(model)
+                .or(() -> route == null
+                        ? Optional.empty()
+                        : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));
+    }
+
+    private static ParamChange.Reason refusalReason(boolean refusedByModel) {
+        return refusedByModel ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.REFUSED_BY_ROUTE;
+    }
+
+    // A param the catalog leaves out counts as accepted: an OpenAI, Gemini or Vertex AI model keeps every setting its
+    // catalog row doesn't refuse. ModelCapabilities.isAccepted reads a missing Claude param the other way on purpose.
     private boolean isRefused(NumberParam param) {
+        return param != null && Boolean.FALSE.equals(param.accepted());
+    }
+
+    private boolean isRefused(FlagParam param) {
+        return param != null && Boolean.FALSE.equals(param.accepted());
+    }
+
+    private boolean isRefused(EffortParam param) {
         return param != null && Boolean.FALSE.equals(param.accepted());
     }
 }

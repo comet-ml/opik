@@ -47,7 +47,7 @@ On Opik Cloud, some projects get their first scan automatically instead: the pag
 that the first diagnostic runs for free once the project has logged 100 traces in the last 7 days.
 That first scan covers those 7 days and doesn't use your credits.
 
-To scan the project every day, open the settings icon next to **Run diagnostic** and switch on
+To scan the project every day, open **Settings** next to **Run diagnostic** and switch on
 **Automatic daily diagnostics** (see [Settings](#settings)).
 
 ## Reviewing issues
@@ -71,19 +71,75 @@ Opening an issue shows:
   <img src="/img/v2/observability/diagnostics-ollie-fix.png" alt="Occurrence over time chart and affected traces sample for a diagnostics issue" />
 </Frame>
 
-## Resolving issues
+## Closing issues
 
-Once you've fixed the underlying problem, click **Resolve** on the issue. Resolved issues move to
-the **Resolved issues** page, where you can reopen them at any time if the pattern comes back.
+Click **Close issue** on an issue and pick why you're closing it:
+
+- **Resolved:** you fixed it. Later scans keep adding new occurrences to the issue, but it stays
+  closed. If it keeps growing, the fix didn't hold and you can reopen it.
+- **Not useful:** the finding is wrong or describes behavior you intend. You can add a reason. Later
+  scans read your Not useful issues and their reasons and try not to raise the same finding, or a
+  similar one, again. This lowers the chance of a repeat without ruling it out.
+
+<Frame>
+  <img src="/img/v2/observability/diagnostics-close-issue.png" alt="Close issue dialog with Not useful selected and a reason filled in" />
+</Frame>
+
+Use **Not useful** only for findings you don't want to see at all. A real bug you haven't fixed yet
+should stay open: closing it as Not useful teaches later scans to skip that kind of problem for the
+whole project.
+
+Closed issues move to the **Closed issues** page, which has a tab for each choice. Click **Reopen**
+to move an issue back to the open list. A reopened issue no longer counts as Not useful.
+
+<Frame>
+  <img src="/img/v2/observability/diagnostics-closed-issues.png" alt="Closed issues page showing a Not useful issue with who closed it and the reason" />
+</Frame>
+
+## Project guidance
+
+Diagnostics only sees your traces, so it doesn't know what your agent is for or which behavior you
+chose on purpose. Project guidance is a note that tells it. Use it to describe:
+
+- what the agent does and who uses it
+- behavior that looks wrong but is intended
+- known problems you're already tracking elsewhere
+- areas you want it to skip, or the only areas you care about
+
+To edit it, open **Settings** next to **Run diagnostic** and choose **Edit project guidance**. Click
+**Save and run diagnostic** to save and start a scan right away, or open the menu on that button
+and choose **Save guidance** to save it for the next scan. Saving guidance doesn't use credits; the
+scan does.
+
+<Frame>
+  <img src="/img/v2/observability/diagnostics-guidance.png" alt="Diagnostics guidance panel with a project description" />
+</Frame>
+
+Guidance is shared by everyone on the project, and every later scan uses it, daily or on demand. If
+it changed after the last scan, the page shows **Guidance changed since the last diagnostic run and
+results might be outdated** until the next scan.
+
+Guidance only affects what later scans raise and doesn't touch issues that are already open. For a
+false alarm that's already in the list, close it as **Not useful** and, if it's a whole class of
+findings, describe it in the guidance too.
+
+<Tip>
+  Phrase guidance as instructions. "Upstream 503 errors from the planner model are a known
+  incident. Don't report them." works more reliably than "503 errors are expected", which a scan
+  may still report. Check the next scan's results to confirm the guidance worked.
+</Tip>
 
 ## Settings
 
-Use the settings icon next to **Run diagnostic** to turn the daily automated scan on or off. This
-doesn't affect on-demand scans: you can still click **Run diagnostic** manually while automated
-scans are paused.
+Open **Settings** next to **Run diagnostic** to:
+
+- turn **Automatic daily diagnostics** on or off. This doesn't affect on-demand scans: you can still
+  click **Run diagnostic** while daily scans are off.
+- edit the [project guidance](#project-guidance).
+- open **Manage billing** to see your Ollie credits.
 
 <Frame>
-  <img src="/img/v2/observability/diagnostics-settings.png" alt="Diagnostics settings dialog with daily scan toggle" />
+  <img src="/img/v2/observability/diagnostics-settings.png" alt="Diagnostics settings menu with the daily scan toggle, Edit project guidance and Manage billing" />
 </Frame>
 
 ## Cost and credits
@@ -104,6 +160,10 @@ whole installation while keeping the Ollie chat, set `TOGGLE_AGENT_INSIGHTS_ENAB
 `opik-backend`. This stops the daily scans and hides the Diagnostics page. To run the daily scan at
 a different time, set `AGENT_INSIGHTS_REPORT_SCHEDULE` to a Quartz cron expression (the default is
 `0 5 0 * * ?`, 00:05 UTC).
+
+Project guidance and closing issues as **Not useful** are off by default. To turn them on, set
+`TOGGLE_AGENT_INSIGHTS_GUIDANCE_ENABLED=true` on `opik-backend` and restart it. While it's off, scans
+run without guidance, and the guidance controls and the Not useful option are hidden.
 
 ## Next steps
 

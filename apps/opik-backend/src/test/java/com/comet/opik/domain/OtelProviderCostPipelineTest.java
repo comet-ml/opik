@@ -104,6 +104,10 @@ class OtelProviderCostPipelineTest {
                 Arguments.of("gen_ai.provider.name gcp.gen_ai + vertex host", "gen_ai.provider.name", "gcp.gen_ai",
                         "gemini-2.5-flash", "us-central1-aiplatform.googleapis.com", "google_vertexai"),
 
+                // --- #7772: kept as the reported API host, priced under the provider it names ---
+                Arguments.of("api.cerebras.ai", "gen_ai.system", "api.cerebras.ai", "llama-3.3-70b", null,
+                        "api.cerebras.ai"),
+
                 // --- Canonical values already in the price vocabulary must survive untouched ---
                 Arguments.of("openai passes through", "gen_ai.system", "openai", "gpt-4o", null, "openai"),
                 Arguments.of("anthropic passes through", "gen_ai.system", "anthropic", "claude-sonnet-4-5",

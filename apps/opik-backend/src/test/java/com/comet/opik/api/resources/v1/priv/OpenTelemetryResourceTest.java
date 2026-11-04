@@ -545,7 +545,11 @@ class OpenTelemetryResourceTest {
                     // Vertex also serves Claude, which Opik prices under a different provider than
                     // the Gemini rows — so the Vertex alias alone would still leave this span at $0.
                     arguments("vertex_ai + claude", "gen_ai.system", "vertex_ai", "claude-haiku-4-5", null,
-                            "anthropic_vertexai"));
+                            "anthropic_vertexai"),
+                    // #7772: an OpenAI-compatible SDK pointed at Cerebras reports its API host. The span keeps
+                    // the host as sent and is priced under the provider the host names.
+                    arguments("api.cerebras.ai", "gen_ai.system", "api.cerebras.ai", "llama-3.3-70b", null,
+                            "api.cerebras.ai"));
         }
 
         @ParameterizedTest(name = "OTel provider {0} is stored as {5} and priced")
@@ -1530,6 +1534,37 @@ class OpenTelemetryResourceTest {
             assertThat(topSpans.stream().map(com.comet.opik.api.Span::name))
                     .containsExactlyInAnyOrder("mcp_registration", "llm_request");
             topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
+        }
+
+        @ParameterizedTest(name = "a later batch with {0} top-level spans of an existing trace stores its spans")
+        @ValueSource(ints = {1, 2})
+        void laterBatchWithTopLevelSpansOfExistingTraceStoresSpans(int laterTopLevelSpans) {
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var projectName = "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
+            var now = System.currentTimeMillis();
+            var firstSpan = topLevelSpan(otelTraceId, now - 1_000);
+            var laterSpans = IntStream.rangeClosed(1, laterTopLevelSpans)
+                    .mapToObj(i -> topLevelSpan(otelTraceId, now - 1_000 + i * 100L))
+                    .toList();
+
+            sendProtobufTraces(List.of(firstSpan), projectName, workspaceName, okApikey, HttpStatus.SC_OK, null);
+            sendProtobufTraces(laterSpans, projectName, workspaceName, okApikey, HttpStatus.SC_OK, null);
+
+            var expectedSpans = Stream.concat(Stream.of(firstSpan), laterSpans.stream()).toList();
+            assertTraceStoredInProject(expectedSpans, projectName, workspaceName);
+        }
+
+        private Span topLevelSpan(ByteString otelTraceId, long startTimeMs) {
+            return Span.newBuilder()
+                    .setName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .setTraceId(otelTraceId)
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setParentSpanId(otelTraceId)
+                    .setStartTimeUnixNano(startTimeMs * 1_000_000L)
+                    .setEndTimeUnixNano((startTimeMs + 50) * 1_000_000L)
+                    .build();
         }
 
         Stream<Arguments> sendProtobufTracesOutOfWindowTimestampThrowsException() {

@@ -62,6 +62,7 @@ jobs:
         with:
           # Diff refs (base/head, push before/after) must be reachable.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Resolve diff range
         id: range
@@ -150,7 +151,7 @@ jobs:
         if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts'
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "26"
 
       - name: Install frontend deps
         if: matrix.leg.toolchain == 'node-fe'
@@ -163,7 +164,7 @@ jobs:
         working-directory: sdks/typescript
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Cache pre-commit environments
         uses: actions/cache@v6

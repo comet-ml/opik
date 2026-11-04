@@ -11,6 +11,10 @@ logging:
     # Default: INFO
     # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
     com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -200,34 +204,15 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED:-false}
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
-  #  Description: Bound the spans reads keyed by traces (by trace id, a trace range or a project's traces) to the weeks
-  #   the span_weeks index holds for them. Effective only while spanColumnsNonNullable is also true (the legacy spans
-  #   id_at wraps far-future ids). New spans are indexed by span_weeks_mv in their insert, older ones by the span weeks
-  #   backfill: turn true once the backfill logs that it is complete, as spans it has not indexed yet would be skipped.
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: ${SPAN_WEEKS_REGISTRATION_MAX_RETRIES:-3}
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: ${SPAN_WEEKS_REGISTRATION_MIN_BACKOFF:-200ms}
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: ${SPAN_WEEKS_REGISTRATION_MAX_BACKOFF:-2s}
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -298,7 +283,7 @@ databaseAnalyticsReadOnlyFreeFormSql:
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # Description: credentials for the extended free-form SQL read-only ClickHouse user.
-# Only used for workspaces in customCharts.enabledWorkspaces.
+# Only used when customCharts.enabled is true.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: comet_readonly_freeform_extended_sql_user
   #  Description: The read-only username used to connect to the server
@@ -313,12 +298,12 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
 # Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
 # those describe a database connection and keep the same shape as the account Agent Insights uses.
 customCharts:
-  #  Default: empty (feature off everywhere)
-  #  Description: Comma-separated workspace ids allowed to call POST /v1/internal/analytics-queries, which runs as
-  #   the wider ClickHouse account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account
-  #   for every workspace. Requires serviceToggles.ollieEnabled, which
-  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
-  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: false (feature off everywhere)
+  #  Description: Lets every workspace call POST /v1/internal/analytics-queries, which runs as the wider ClickHouse
+  #   account. The path-scoped Agent Insights endpoint is unaffected and keeps its own account for every workspace.
+  #   Requires serviceToggles.ollieEnabled, which gates the endpoint, and the account to be provisioned first
+  #   (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED).
+  enabled: ${TOGGLE_CUSTOM_CHARTS_ENABLED:-false}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
@@ -375,8 +360,8 @@ health:
     - name: clickhouse-readonly-freeform-sql
       critical: false
       type: ready
-    # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
-    # workspace is allowlisted the probe reports healthy without querying ClickHouse.
+    # Non-critical for the same reason as the check above: Custom Charts is opt-in, and when it is off the probe
+    # reports healthy without querying ClickHouse.
     - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
@@ -447,6 +432,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: ${OPIK_REDIS_SENTINEL_ENABLED:-false}
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ${OPIK_REDIS_SENTINEL_MASTER_NAME:-''}
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ${OPIK_REDIS_SENTINEL_NODES:-''}
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ${OPIK_REDIS_SENTINEL_USERNAME:-''}
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ${OPIK_REDIS_SENTINEL_PASSWORD:-''}
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: ${OPIK_REDIS_SENTINEL_RETRY_ATTEMPTS:-3}
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_BASE:-500ms}
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: ${OPIK_REDIS_SENTINEL_RETRY_BACKOFF_CAP:-2s}
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: ${OPIK_REDIS_SENTINEL_CHECK_SENTINELS_LIST:-true}
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: ${OPIK_REDIS_SENTINEL_CONNECT_TIMEOUT:-10s}
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: ${OPIK_REDIS_SENTINEL_TIMEOUT:-5s}
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: ${OPIK_REDIS_SENTINEL_SCAN_INTERVAL:-2s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
@@ -576,6 +603,13 @@ cipxTokenValidation:
   # Default: http://ai-cost-backend
   # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
   url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
+
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: ${SERVER_ADMIN_ENABLED:-true}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -1184,7 +1218,7 @@ experimentExecution:
   # Description: Duration for long-polling reads on the Redis Stream
   longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
   # Default: 10000
-  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly). A run is admitted against a lower bound derived from it, so that launches arriving together overshoot into headroom instead of trimming entries no consumer has taken
   streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
   # Default: 100
   # Description: Trim limit for the Redis Stream
@@ -1201,6 +1235,12 @@ experimentExecution:
   # Default: 24h
   # Description: TTL for the batch completion counter in Redis
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+  # Default: 60s
+  # Description: Lease on the lock that serialises launching a run, held from the queue-capacity check through publishing so the check cannot be overtaken. Must exceed the time to publish the largest run; a pod that dies holding it stalls launches until it expires
+  publishLockLease: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_LEASE:-60s}
+  # Default: 10s
+  # Description: How long a run waits for the publish lock before being refused with 429. Several times the time to publish a run, so a queued launch waits rather than being turned away; under publishLockLease, so a pod that died holding the lock refuses quickly instead of holding the request
+  publishLockWait: ${EXPERIMENT_EXECUTION_PUBLISH_LOCK_WAIT:-10s}
 
 # Configuration for Dataset Export
 datasetExport:
@@ -1545,7 +1585,7 @@ llmProviderTokenAuth:
   # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
   refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
   # Default: 10s
-  # Description: Timeout for the token fetch call to the configured auth service
+  # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
   # Description: Lease time for the cross-pod single-flight lock around a token fetch
@@ -1595,6 +1635,72 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
   logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  destinationGuard: ${LLM_PROVIDER_DESTINATION_GUARD:-strict}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: ${LLM_PROVIDER_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: media URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for media URLs in a caller's message or in trace data: the HEAD request that
+  #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
+  #   that Gemini and Vertex AI receive as inline data
+  videoUrlDestinationGuard: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-strict}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: ${LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: 30s
+  # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
+  #   connecting included; at most 2m
+  mediaDownloadTimeout: ${LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT:-30s}
+  # Default: 20MB
+  # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
+  #   20 MB of inline data; at most 100MB
+  mediaDownloadMaxSize: ${LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE:-20MB}
+  # Default: 300
+  # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
+  providerErrorMessageMaxLength: ${LLM_PROVIDER_ERROR_MESSAGE_MAX_LENGTH:-300}
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a
+  #   stream waits for its headers up to the longer of this and readTimeout, a call that isn't one up to readTimeout
+  #   only. Above the 90s ingress idle timeout, as models that reason before answering can be silent for a while;
+  #   between 1s and 10m
+  streamReadTimeout: ${LLM_PROVIDER_STREAM_READ_TIMEOUT:-120s}
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
+  httpClientMaxThreads: ${LLM_PROVIDER_CLIENT_MAX_THREADS:-1024}
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 5m
+  httpClientThreadKeepAlive: ${LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE:-60s}
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
+  httpClientMaxRequests: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS:-1024}
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST:-1024}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
@@ -1630,6 +1736,11 @@ llmProviderClient:
       global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
       eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}
       us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-https://aiplatform.us.rep.googleapis.com}
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - ${LLM_PROVIDER_VERTEXAI_TOKEN_URI:-https://oauth2.googleapis.com/token}
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:
@@ -2128,6 +2239,15 @@ webhook:
   #   link-local, private and unresolvable destinations; 'relaxed' allows them, as self-hosted
   #   deployments legitimately point webhooks at internal services
   destinationGuard: ${WEBHOOK_DESTINATION_GUARD:-relaxed}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: ${WEBHOOK_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: 512B
+  # Description: Maximum bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: ${WEBHOOK_RESPONSE_BODY_MAX_SIZE:-512B}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}

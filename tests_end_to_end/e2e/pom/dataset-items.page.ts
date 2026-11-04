@@ -1,7 +1,8 @@
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { ItemReturnNav } from './item-return-nav.page';
+import { VersionRecordsSidebarPage } from './version-records-sidebar.page';
 
 export class DatasetItemsPage {
   constructor(
@@ -198,6 +199,18 @@ export class DatasetItemsPage {
     });
   }
 
+  /**
+   * Back to the first tab. Needed after the Version history tab, because
+   * `waitForReady` waits on the Records tab being *selected* and the tab choice
+   * is persisted in the URL.
+   */
+  async openRecords(): Promise<void> {
+    return test.step('Open the Records tab', async () => {
+      await this.page.getByRole('tab', { name: 'Records' }).click();
+      await this.waitForReady();
+    });
+  }
+
   /** Second tab of the dataset page: one row per committed version. */
   async openVersionHistory(): Promise<void> {
     return test.step('Open the Version history tab', async () => {
@@ -215,6 +228,26 @@ export class DatasetItemsPage {
     return this.versionsTableBody
       .locator('tr[data-row-id]')
       .filter({ has: this.page.getByRole('cell', { name: versionName, exact: true }) });
+  }
+
+  /**
+   * Open one version's read-only records sheet by clicking its row.
+   *
+   * Only a NON-latest row opens: the latest version's row is deliberately
+   * inert, its click handler returning early. The row lookup is asserted to
+   * resolve to exactly one element rather than taking `.first()`, so an
+   * ambiguous version name fails loudly instead of opening whichever row the
+   * grid happened to render first.
+   */
+  async openVersionRecords(versionName: string): Promise<VersionRecordsSidebarPage> {
+    return test.step(`Open version ${versionName}'s records sheet`, async () => {
+      const row = this.versionHistoryRow(versionName);
+      await expect(row).toHaveCount(1);
+      await row.click();
+      const sidebar = new VersionRecordsSidebarPage(this.page);
+      await sidebar.waitForReady();
+      return sidebar;
+    });
   }
 
   /**
