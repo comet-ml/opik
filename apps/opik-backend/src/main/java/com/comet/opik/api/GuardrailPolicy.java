@@ -15,7 +15,6 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -59,20 +58,5 @@ public record GuardrailPolicy(
             @JsonView({GuardrailPolicy.View.Public.class}) int size,
             @JsonView({GuardrailPolicy.View.Public.class}) long total,
             @JsonView({GuardrailPolicy.View.Public.class}) List<String> sortableBy) implements Page<GuardrailPolicy> {
-    }
-
-    @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record GuardrailPolicyRetrieve(
-            @Schema(description = "Names of the policies to return. Every global policy is returned as well") @Nullable @Size(max = 1000) Set<@NotBlank String> names) {
-    }
-
-    @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record GuardrailPolicyRetrieveResponse(
-            @JsonView({
-                    GuardrailPolicy.View.Public.class}) List<GuardrailPolicy> policies) {
     }
 }
