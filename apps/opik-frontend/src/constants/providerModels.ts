@@ -1352,6 +1352,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "scaledown/summarize",
     },
     {
+      value: PROVIDER_MODEL_TYPE.STEALTH_CROUTON_ALPHA,
+      label: "stealth/crouton-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_5_FLASH,
       label: "stepfun/step-3.5-flash",
     },
