@@ -201,20 +201,20 @@ public class CustomModelPriceValidator {
                 .map(ParsedRow::price)
                 .filter(price -> price.kind() == CustomModelPrice.Kind.FIXED)
                 .toList();
-        var fixedRows = PriceLayers.of("validation", 0, fixedPrices);
+        var fixedPriceLayer = PriceLayers.of("validation", 0, fixedPrices);
         // A fixed row can be filed under a provider no built-in price uses, so its spans still price.
         Set<String> spanProviders = new HashSet<>(ModelPriceTable.pricedProviders());
         fixedPrices.stream().map(CustomModelPrice::provider).filter(provider -> !provider.isEmpty())
                 .forEach(spanProviders::add);
         for (ParsedRow row : rows) {
             if (row.price().kind() == CustomModelPrice.Kind.ALIAS) {
-                aliasTargetProblem(row, byKey, fixedRows, spanProviders).ifPresent(errors::add);
+                aliasTargetProblem(row, byKey, fixedPriceLayer, spanProviders).ifPresent(errors::add);
             }
         }
     }
 
     private Optional<Problem> aliasTargetProblem(ParsedRow row, Map<RowKey, CustomModelPrice> byKey,
-            PriceLayers fixedRows, Set<String> spanProviders) {
+            PriceLayers fixedPriceLayer, Set<String> spanProviders) {
         CustomModelPrice alias = row.price();
         boolean underSpanProvider = CustomModelPrice.SPAN_PROVIDER.equals(alias.aliasProvider());
         String targetProvider = underSpanProvider ? alias.provider() : alias.aliasProvider();
@@ -231,8 +231,8 @@ public class CustomModelPriceValidator {
         // An any-provider alias whose target names no provider is looked up under each span's own provider, so it
         // is only an error when no provider prices the target.
         boolean priced = underSpanProvider && CustomModelPrice.ANY_PROVIDER.equals(alias.provider())
-                ? pricedUnderSomeProvider(alias.aliasModelName(), spanProviders, fixedRows)
-                : ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedRows).isPresent();
+                ? pricedUnderSomeProvider(alias.aliasModelName(), spanProviders, fixedPriceLayer)
+                : ModelPriceResolver.resolve(alias.aliasModelName(), targetProvider, fixedPriceLayer).isPresent();
         if (!priced) {
             return Optional.of(new Problem(row.index(), ALIAS_OF, "alias_target_unpriced",
                     "Neither the built-in prices nor these rows price '%s' on %s".formatted(alias.aliasModelName(),
