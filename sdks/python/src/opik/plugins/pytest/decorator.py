@@ -1,8 +1,9 @@
-from typing import Callable, Any, Dict, Tuple
+from typing import Callable, Any, Dict, List, Tuple
 import os
 import functools
 import logging
 import opik
+import pytest
 import opik.opik_context as opik_context
 from . import test_runs_storage, test_run_content
 from opik.decorator import inspect_helpers
@@ -41,24 +42,30 @@ def llm_unit(
         if not config_.pytest_experiment_enabled:
             return func
 
+        @opik.track(name=func.__name__, capture_input=False)
+        def tracked(stopped_by: List[BaseException], *args: Any, **kwargs: Any) -> Any:
+            _register_test_run(func, args, kwargs, argnames_mapping)
+            try:
+                return func(*args, **kwargs)
+            except (pytest.skip.Exception, pytest.fail.Exception) as exception:
+                # pytest.skip(), pytest.xfail() and pytest.fail() raise
+                # BaseExceptions that @opik.track doesn't handle, which would
+                # leave the trace open for the next test. Hold the exception
+                # until the trace has ended. pytest.fail.Exception also
+                # covers xfail.
+                stopped_by.append(exception)
+                return None
+
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             if not tracing_runtime_config.is_tracing_active():
                 return func(*args, **kwargs)
 
-            # The trace must end even when pytest.skip(), pytest.xfail() or
-            # pytest.fail() stops the test, so the next test doesn't log
-            # into this test's trace.
-            with opik.start_as_current_span(name=func.__name__):
-                _register_test_run(func, args, kwargs, argnames_mapping)
-                result = func(*args, **kwargs)
-                if result is not None:
-                    opik_context.update_current_span(
-                        output=result
-                        if isinstance(result, dict)
-                        else {"output": result}
-                    )
-                return result
+            stopped_by: List[BaseException] = []
+            result = tracked(stopped_by, *args, **kwargs)
+            if stopped_by:
+                raise stopped_by[0]
+            return result
 
         setattr(wrapper, "_opik_llm_unit", True)
         return wrapper

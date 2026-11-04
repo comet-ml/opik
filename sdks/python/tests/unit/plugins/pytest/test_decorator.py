@@ -111,3 +111,70 @@ def test_llm_unit__tracing_disabled__test_runs_without_trace_or_experiment(
 
     assert fake_backend.trace_trees == []
     assert test_runs_storage.LLM_UNIT_TEST_RUNS == set()
+
+
+@pytest.mark.parametrize(
+    "stop_test, outcome",
+    [
+        pytest.param(
+            lambda: pytest.skip("not today"), pytest.skip.Exception, id="skip"
+        ),
+        pytest.param(
+            lambda: pytest.xfail("known bug"), pytest.xfail.Exception, id="xfail"
+        ),
+        pytest.param(lambda: pytest.fail("broken"), pytest.fail.Exception, id="fail"),
+    ],
+)
+def test_llm_unit__test_body_stops_early__pytest_still_gets_the_outcome(
+    fake_backend, monkeypatch, stop_test, outcome
+):
+    @decorator.llm_unit()
+    def test_stopped():
+        stop_test()
+
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_x.py::test_stopped (call)")
+    with pytest.raises(outcome):
+        test_stopped()
+
+
+def test_llm_unit__test_fails__no_error_logged(fake_backend, monkeypatch, caplog):
+    @decorator.llm_unit()
+    def test_failing():
+        assert False
+
+    with caplog.at_level("ERROR"):
+        _run_test(monkeypatch, "tests/test_x.py::test_failing", test_failing)
+        opik.flush_tracker()
+
+    assert [r for r in caplog.records if r.levelname == "ERROR"] == []
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        pytest.param(
+            "opik.decorator.base_track_decorator.add_start_candidates", id="start"
+        ),
+        pytest.param(
+            "opik.decorator.base_track_decorator.BaseTrackDecorator._BaseTrackDecorator__after_call_unsafe",
+            id="end",
+        ),
+    ],
+)
+def test_llm_unit__opik_fails_around_the_test__test_result_is_its_own(
+    fake_backend, monkeypatch, broken
+):
+    def fail(*args, **kwargs):
+        raise RuntimeError("opik is down")
+
+    monkeypatch.setattr(broken, fail)
+    calls = []
+
+    @decorator.llm_unit()
+    def test_passing():
+        calls.append("ran")
+        return 42
+
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_x.py::test_passing (call)")
+    assert test_passing() == 42
+    assert calls == ["ran"]
