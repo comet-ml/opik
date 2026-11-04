@@ -9109,6 +9109,25 @@ class DatasetsResourceTest {
             assertThat(actualPage.total()).isZero();
         }
 
+        @Test
+        @DisplayName("when experiment_ids is set, then size is not bound by the all-experiments cap")
+        void findWhenExperimentIdsSetThenSizeAboveAllExperimentsCapAccepted() {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem));
+            var experimentId = createExperiment(dataset);
+            var expectedExperimentItem = createExperimentItem(experimentId, targetItem);
+            createExperimentItems(expectedExperimentItem);
+
+            // The SDK pages this endpoint at 2000 with explicit experiment_ids
+            try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
+                    dataset.id(), JsonUtils.writeValueAsString(List.of(experimentId)), null, 2000, null,
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertItemWithExperimentItems(response.readEntity(DatasetItemPage.class), targetItem,
+                        expectedExperimentItem);
+            }
+        }
+
         Stream<Arguments> findWhenInvalidParams() {
             return Stream.of(
                     arguments("[]", null, null, "experiment_ids cannot be empty"),
