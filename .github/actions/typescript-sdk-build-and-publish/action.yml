@@ -50,7 +50,7 @@ runs:
   using: composite
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         # npm trusted publishing (OIDC) requires Node >= 22.14.0 and npm >= 11.5.1.
         # Node 22.14.0 ships npm 10.x, so the npm CLI is bumped explicitly below.
@@ -280,7 +280,7 @@ runs:
 
     - name: Push changes
       if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
-      uses: ad-m/github-push-action@v0.8.0
+      uses: ad-m/github-push-action@v1.3.0
       with:
         github_token: ${{ inputs.github_token }}
         branch: ${{ github.ref }}
