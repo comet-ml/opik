@@ -329,10 +329,11 @@ def _export_all_experiments(
     format: str,
     filter_string: Optional[str] = None,
     max_workers: int = 10,
-) -> tuple[int, int, int, int, bool]:
+) -> tuple[int, int, int, int, int, bool]:
     """Export all experiments in the project.
 
-    Returns (exported, skipped, traces_exported, traces_skipped, had_errors).
+    Returns (exported, skipped, traces_exported, traces_skipped, traces_failed,
+    had_errors).
     """
     exported = 0
     skipped = 0
@@ -343,11 +344,11 @@ def _export_all_experiments(
         all_experiments = list(_paginate_experiments(client, project_id))
     except Exception as e:
         console.print(f"[red]Error listing experiments: {e}[/red]")
-        return 0, 0, 0, 0, True
+        return 0, 0, 0, 0, 0, True
 
     if not all_experiments:
         console.print("[yellow]No experiments found.[/yellow]")
-        return 0, 0, 0, 0, False
+        return 0, 0, 0, 0, 0, False
 
     console.print(f"[blue]Found {len(all_experiments)} experiment(s)[/blue]")
 
@@ -426,7 +427,7 @@ def _export_all_experiments(
     if traces_failed:
         had_errors = True
 
-    return exported, skipped, traces_exported, traces_skipped, had_errors
+    return exported, skipped, traces_exported, traces_skipped, traces_failed, had_errors
 
 
 def export_all(
@@ -530,7 +531,7 @@ def export_all(
             console.print("\n[bold blue]--- Exporting Experiments ---[/bold blue]")
             experiments_dir = project_root / "experiments"
             experiments_dir.mkdir(parents=True, exist_ok=True)
-            exp_exp, exp_skip, exp_tr_exp, exp_tr_skip, exp_errors = (
+            exp_exp, exp_skip, exp_tr_exp, exp_tr_skip, exp_tr_failed, exp_errors = (
                 _export_all_experiments(
                     client,
                     project_root,
@@ -550,6 +551,9 @@ def export_all(
             total_stats["traces"] = total_stats.get("traces", 0) + exp_tr_exp
             total_stats["traces_skipped"] = (
                 total_stats.get("traces_skipped", 0) + exp_tr_skip
+            )
+            total_stats["traces_failed"] = (
+                total_stats.get("traces_failed", 0) + exp_tr_failed
             )
             if exp_errors:
                 any_errors = True

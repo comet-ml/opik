@@ -814,6 +814,7 @@ def export_experiment_by_name(
             "prompts_skipped": prompts_skipped + aggregated_stats["prompts_skipped"],
             "traces": traces_exported,
             "traces_skipped": traces_skipped,
+            "traces_failed": traces_failed,
         }
 
         # Show export summary
@@ -969,6 +970,7 @@ def export_experiment_by_name_or_id(
                 "prompts_skipped": exp_stats.get("prompts_skipped", 0),
                 "traces": traces_exported,
                 "traces_skipped": traces_skipped,
+                "traces_failed": traces_failed,
             }
 
             # Show export summary

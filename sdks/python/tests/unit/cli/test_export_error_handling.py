@@ -111,6 +111,7 @@ class TestExportTracesByIdsRetry:
         )
 
         assert exported == 0, "404 trace must not be exported"
+        assert (skipped, failed) == (1, 0)
         assert call_count == 1, "404 must not trigger a retry"
 
     def test_export_traces_by_ids__success__exports_trace(self, tmp_path):
@@ -191,7 +192,7 @@ class TestExportExperimentByIdPropagatesErrors:
             ),
             patch(f"{_ALL_MODULE}.export_collected_trace_ids", return_value=(0, 0, 0)),
         ):
-            _, _, _, _, had_errors = _export_all_experiments(
+            _, _, _, _, _, had_errors = _export_all_experiments(
                 client=client,
                 project_dir=tmp_path,
                 project_name="proj",

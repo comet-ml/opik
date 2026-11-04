@@ -128,6 +128,7 @@ class TestExportExperimentReportsTraceFailures:
                 f"{_EXPERIMENT_MODULE}._fetch_trace_data",
                 side_effect=RuntimeError("boom"),
             ),
+            patch(f"{_EXPERIMENT_MODULE}.print_export_summary") as summary,
         ):
             with pytest.raises(SystemExit) as exc_info:
                 experiment_module.export_experiment_by_name(
@@ -135,6 +136,7 @@ class TestExportExperimentReportsTraceFailures:
                 )
 
         assert exc_info.value.code == 1
+        assert summary.call_args.args[0]["traces_failed"] == 1
 
     def test_export_experiment_by_name_or_id__id_path_trace_failure__exits_1(
         self, tmp_path
@@ -179,6 +181,7 @@ class TestExportExperimentReportsTraceFailures:
                 f"{_EXPERIMENT_MODULE}._fetch_trace_data",
                 side_effect=RuntimeError("boom"),
             ),
+            patch(f"{_EXPERIMENT_MODULE}.print_export_summary") as summary,
         ):
             with pytest.raises(SystemExit) as exc_info:
                 experiment_module.export_experiment_by_name_or_id(
@@ -186,6 +189,7 @@ class TestExportExperimentReportsTraceFailures:
                 )
 
         assert exc_info.value.code == 1
+        assert summary.call_args.args[0]["traces_failed"] == 1
 
     def test_export_experiment_by_name__trace_failure__prints_summary(self, tmp_path):
         """The failure summary must name traces as well as set the exit code."""
@@ -268,7 +272,7 @@ class TestExportExperimentReportsTraceFailures:
                 side_effect=RuntimeError("boom"),
             ),
         ):
-            _, _, _, _, had_errors = _export_all_experiments(
+            _, _, _, _, traces_failed, had_errors = _export_all_experiments(
                 client=client,
                 project_dir=tmp_path,
                 project_name="proj",
@@ -280,6 +284,124 @@ class TestExportExperimentReportsTraceFailures:
                 format="json",
             )
 
+        assert traces_failed == 1
         assert had_errors is True, (
             "a failed trace export must set had_errors so the CLI exits 1"
         )
+
+
+def test_write_failure_keeps_manifest_open_and_retry_fetches_only_missing(tmp_path):
+    from opik.cli import export_manifest
+    from opik.cli.exports import experiment
+
+    client = MagicMock()
+    client.get_trace_content.side_effect = lambda trace_id: MagicMock(
+        model_dump=lambda: {"id": trace_id}
+    )
+    client.search_spans.return_value = []
+    manifest = export_manifest.ExportManifest(
+        tmp_path / "experiments", filename="manifest_e1.db"
+    )
+    real_write = experiment.write_json_data
+
+    def write(data, path):
+        if path.name == "trace_t2.json":
+            raise OSError("disk full")
+        return real_write(data, path)
+
+    try:
+        with patch.object(experiment, "write_json_data", side_effect=write):
+            first = experiment.export_traces_by_ids(
+                client,
+                ["t1", "t2"],
+                tmp_path,
+                "proj",
+                None,
+                "json",
+                False,
+                False,
+                manifest=manifest,
+            )
+        assert first == (1, 0, 1)
+        assert not manifest.is_completed
+        assert manifest.load_downloaded_set() == {"t1"}
+
+        # Reopen the on-disk manifest to exercise a separate CLI invocation.
+        manifest.close()
+        manifest = export_manifest.ExportManifest(
+            tmp_path / "experiments", filename="manifest_e1.db"
+        )
+        client.reset_mock()
+        second = experiment.export_traces_by_ids(
+            client,
+            ["t1", "t2"],
+            tmp_path,
+            "proj",
+            None,
+            "json",
+            False,
+            False,
+            manifest=manifest,
+        )
+        assert second == (1, 1, 0)
+        client.get_trace_content.assert_called_once_with("t2")
+        assert manifest.is_completed
+        assert manifest.load_downloaded_set() == {"t1", "t2"}
+    finally:
+        manifest.close()
+
+
+@pytest.mark.parametrize(
+    "exported,skipped,failed", [(4, 0, 1), (0, 0, 5), (2, 2, 1), (5, 0, 0)]
+)
+@pytest.mark.parametrize("format_", ["json", "csv"])
+def test_summary_trace_row_includes_failed_count(exported, skipped, failed, format_):
+    from opik.cli.exports import utils
+
+    with patch.object(utils.console, "print") as printed:
+        utils.print_export_summary(
+            {"traces": exported, "traces_skipped": skipped, "traces_failed": failed},
+            format_,
+        )
+    table = printed.call_args_list[1].args[0]
+    assert [column.header for column in table.columns] == [
+        "Type",
+        "Exported",
+        "Skipped",
+        "Failed",
+        "Files",
+    ]
+    rows = list(zip(*(column._cells for column in table.columns)))
+    assert rows[0] == (
+        "🔍 Traces",
+        str(exported),
+        str(skipped) if skipped else "",
+        str(failed) if failed else "",
+        f"trace_*.{format_}",
+    )
+    assert rows[-1][3] == (str(failed) if failed else "")
+    assert rows[-1][4] == f"{exported + skipped} files"
+
+
+def test_export_all_passes_failed_trace_count_to_summary(tmp_path):
+    import importlib
+
+    all_exports = importlib.import_module(_ALL_MODULE)
+
+    with (
+        patch.object(all_exports.opik, "Opik"),
+        patch.object(
+            all_exports, "prepare_project_export_dir", return_value=("pid", tmp_path)
+        ),
+        patch.object(
+            all_exports, "_export_all_experiments", return_value=(1, 0, 4, 0, 1, True)
+        ),
+        patch.object(all_exports, "print_export_summary") as summary,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            all_exports.export_all(
+                "ws", "proj", str(tmp_path), ["experiments"], None, False, False, "json"
+            )
+    assert exc_info.value.code == 1
+    assert summary.call_args.args[0]["traces_failed"] == 1
+    assert summary.call_args.args[0]["traces"] == 4
