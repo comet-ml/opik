@@ -57,6 +57,30 @@
       "dependencyDashboardApproval": true
     },
     {
+      "description": "The chart's ClickHouse stays on an LTS line (year.3 or year.8), the one the backend tests and docker-compose run, so a new line waits for a Dependency Dashboard tick and moves with them",
+      "matchDepNames": ["clickhouse/clickhouse-server"],
+      "allowedVersions": "/^\\d+\\.(3|8)\\./"
+    },
+    {
+      "matchDepNames": ["clickhouse/clickhouse-server"],
+      "matchUpdateTypes": ["major", "minor"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "litellm 1.106+ breaks completion() with tools (BerriAI/litellm#46045), so the SDK this backend installs caps it below 1.106 (sdks/python/setup.py). Lift together",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["apps/opik-python-backend/**"],
+      "matchPackageNames": ["litellm"],
+      "allowedVersions": "<1.106"
+    },
+    {
+      "description": "litellm 1.104+ requires filelock<4, and the sandbox executor is on filelock 4",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["apps/opik-sandbox-executor-python/**"],
+      "matchPackageNames": ["litellm"],
+      "allowedVersions": "<1.104"
+    },
+    {
       "description": "Python SDK: Renovate moves only the cooldown caps, the `name<=X` lines in setup.py; the requirements themselves are maintained by hand",
       "matchManagers": ["pip_setup"],
       "matchCurrentValue": "!/^<=/",
@@ -70,6 +94,12 @@
       "separateMajorMinor": false,
       "schedule": ["* * * * 1-5"],
       "commitMessagePrefix": "chore(deps):"
+    },
+    {
+      "description": "Runtimes set in a setup action's with: (node-version, python-version, pnpm version) are the toolchain a job builds or tests with, often deliberately the oldest supported; they move by hand",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["uses-with"],
+      "enabled": false
     }
   ]
 }
