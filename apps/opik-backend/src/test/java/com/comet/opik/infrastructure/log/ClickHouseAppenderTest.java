@@ -1,47 +1,105 @@
 package com.comet.opik.infrastructure.log;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.LoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.domain.evaluators.UserLog;
+import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.google.common.util.concurrent.Uninterruptibles;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+// Appenders are built directly, not via init(): that returns the process-wide instance other tests may have created.
 class ClickHouseAppenderTest {
 
-    @Test
-    void dropsLogsInsteadOfQueueingWithoutLimitWhileInsertsAreSlow() {
-        int batchSize = 10;
-        int capacity = batchSize * ClickHouseAppender.MAX_QUEUED_BATCHES;
-        var insertsBlocked = new CountDownLatch(1);
-        var saved = new AtomicInteger();
+    private final Logger appenderLogger = (Logger) LoggerFactory.getLogger(ClickHouseAppender.class);
+    private final ListAppender<ILoggingEvent> appenderLogs = new ListAppender<>();
+    private final CountDownLatch resumeScheduler = new CountDownLatch(1);
 
-        // Not via init(): that returns the process-wide instance other tests may have created.
+    @BeforeEach
+    void captureAppenderLogs() {
+        appenderLogs.start();
+        appenderLogger.addAppender(appenderLogs);
+    }
+
+    @AfterEach
+    void releaseResources() {
+        resumeScheduler.countDown();
+        appenderLogger.detachAppender(appenderLogs);
+    }
+
+    @Test
+    void dropsLogsOnlyWhileAnInsertIsInFlightAndTheQueueIsFull() {
+        var insertDone = new CompletableFuture<Void>();
+        var inFlight = new AtomicInteger();
+        var maxInFlight = new AtomicInteger();
+        var batchSizes = new CopyOnWriteArrayList<Integer>();
+
         var appender = new ClickHouseAppender(
-                userLog -> events -> Mono.fromRunnable(() -> {
-                    Uninterruptibles.awaitUninterruptibly(insertsBlocked);
-                    saved.addAndGet(events.size());
-                }),
-                Duration.ofMinutes(1), batchSize);
+                userLog -> events -> Mono.defer(() -> {
+                    batchSizes.add(events.size());
+                    maxInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+                    return Mono.fromFuture(insertDone);
+                }).doFinally(signal -> inFlight.decrementAndGet()),
+                config(10, 2), pausedScheduler());
         appender.setContext(new LoggerContext());
         appender.start();
 
-        for (int i = 0; i < 10_000; i++) {
-            appender.doAppend(event(UserLog.AUTOMATION_RULE_EVALUATOR));
-        }
-        insertsBlocked.countDown();
+        // The 21st append finds the queue full and forces a flush: 10 go to the insert, 11 stay queued.
+        append(appender, 21);
+        assertThat(batchSizes).containsExactly(10);
+
+        // 9 more fill the queue again; with that insert still in flight, the last 5 are dropped.
+        append(appender, 14);
+        assertThat(inFlight).hasValue(1);
+
+        insertDone.complete(null);
+        resumeScheduler.countDown();
         appender.stop();
 
-        // At most one batch drained before the insert blocked, plus a full queue.
-        assertThat(saved.get()).isPositive().isLessThanOrEqualTo(2 * capacity);
+        assertThat(batchSizes).containsExactly(10, 10, 10);
+        assertThat(maxInFlight).hasValue(1);
+        assertThat(warnings()).containsExactly("Log queue is full, dropped '5' user-facing logs");
+    }
+
+    @Test
+    void forcedFlushMakesRoomWhenNoInsertIsInFlight() {
+        var saved = new AtomicInteger();
+
+        var appender = new ClickHouseAppender(
+                userLog -> events -> Mono.<Void>fromRunnable(() -> saved.addAndGet(events.size())),
+                config(10, 1), pausedScheduler());
+        appender.setContext(new LoggerContext());
+        appender.start();
+
+        // The scheduler is paused, so only the forced flushes on a full queue can have inserted these.
+        append(appender, 25);
+        assertThat(saved).hasValue(20);
+
+        resumeScheduler.countDown();
+        appender.stop();
+
+        assertThat(saved).hasValue(25);
+        assertThat(warnings()).isEmpty();
     }
 
     @Test
@@ -56,7 +114,7 @@ class ClickHouseAppenderTest {
                     case AUTOMATION_RULE_EVALUATOR ->
                         events -> Mono.<Void>fromRunnable(() -> saved.addAndGet(events.size()));
                 },
-                Duration.ofMinutes(1), 100);
+                config(100, 10), Executors.newSingleThreadScheduledExecutor());
         appender.setContext(new LoggerContext());
         appender.start();
 
@@ -67,7 +125,36 @@ class ClickHouseAppenderTest {
         appender.stop();
 
         assertThat(alertInsertAttempted).isTrue();
-        assertThat(saved.get()).isEqualTo(5);
+        assertThat(saved).hasValue(5);
+    }
+
+    // Holds back every scheduled flush until resumeScheduler opens, leaving only the inline ones.
+    private ScheduledExecutorService pausedScheduler() {
+        var scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.execute(() -> Uninterruptibles.awaitUninterruptibly(resumeScheduler));
+        return scheduler;
+    }
+
+    private List<String> warnings() {
+        return appenderLogs.list.stream()
+                .filter(event -> event.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage)
+                .toList();
+    }
+
+    private static ClickHouseLogAppenderConfig config(int batchSize, int maxQueuedBatches) {
+        var config = new ClickHouseLogAppenderConfig();
+        config.setBatchSize(batchSize);
+        config.setMaxQueuedBatches(maxQueuedBatches);
+        config.setFlushIntervalDuration(Duration.ofMinutes(1));
+        config.setShutdownTimeout(Duration.ofSeconds(5));
+        return config;
+    }
+
+    private static void append(ClickHouseAppender appender, int count) {
+        for (int i = 0; i < count; i++) {
+            appender.doAppend(event(UserLog.AUTOMATION_RULE_EVALUATOR));
+        }
     }
 
     private static LoggingEvent event(UserLog userLog) {

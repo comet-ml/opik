@@ -12,10 +12,16 @@ import java.time.Duration;
 @Data
 public class ClickHouseLogAppenderConfig {
 
-    // The appender queues up to 10 batches, so this also bounds its memory.
     @JsonProperty
-    @Min(1) @Max(100_000) private int batchSize = 1000;
+    @Min(1) @Max(100_000) private int batchSize;
+
+    // The queue holds batchSize * maxQueuedBatches logs: that bounds its memory, and past it logs are dropped.
+    @JsonProperty
+    @Min(1) @Max(1_000) private int maxQueuedBatches;
 
     @Valid @JsonProperty
     @NotNull private Duration flushIntervalDuration;
+
+    @JsonProperty
+    @NotNull private Duration shutdownTimeout;
 }

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
 import com.comet.opik.domain.evaluators.UserLog;
+import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,11 +32,12 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
 
     private static ClickHouseAppender instance;
 
-    public static synchronized ClickHouseAppender init(@NonNull UserLogTableFactory userLogTableFactory, int batchSize,
-            @NonNull Duration flushIntervalDuration, @NonNull LoggerContext context) {
+    public static synchronized ClickHouseAppender init(@NonNull UserLogTableFactory userLogTableFactory,
+            @NonNull ClickHouseLogAppenderConfig config, @NonNull LoggerContext context) {
 
         if (instance == null) {
-            ClickHouseAppender appender = new ClickHouseAppender(userLogTableFactory, flushIntervalDuration, batchSize);
+            ClickHouseAppender appender = new ClickHouseAppender(userLogTableFactory, config,
+                    Executors.newSingleThreadScheduledExecutor());
             setInstance(appender);
             appender.setContext(context);
             instance.start();
@@ -47,69 +50,90 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         ClickHouseAppender.instance = instance;
     }
 
-    // Caps the backlog at this many batches; past it, logs are dropped rather than filling the heap.
-    static final int MAX_QUEUED_BATCHES = 10;
+    // A stopped appender must not clear the instance that init() handed out to everyone else.
+    private static synchronized void clearInstance(ClickHouseAppender appender) {
+        if (instance == appender) {
+            setInstance(null);
+        }
+    }
 
     private final @NonNull UserLogTableFactory userLogTableFactory;
     private final @NonNull Duration flushIntervalDuration;
+    private final @NonNull Duration shutdownTimeout;
     private final int batchSize;
     private volatile boolean running = true;
 
     private final BlockingQueue<ILoggingEvent> logQueue;
+    // Set while an insert is in flight, so there is at most one at a time.
     private final AtomicBoolean flushPending = new AtomicBoolean();
+    // Set while a threshold-triggered flush is queued, so appends don't queue one each.
+    private final AtomicBoolean flushScheduled = new AtomicBoolean();
     private final AtomicLong dropped = new AtomicLong();
 
-    private final AtomicReference<ScheduledExecutorService> scheduler = new AtomicReference<>(
-            Executors.newSingleThreadScheduledExecutor());
+    private final AtomicReference<ScheduledExecutorService> scheduler;
 
-    ClickHouseAppender(@NonNull UserLogTableFactory userLogTableFactory, @NonNull Duration flushIntervalDuration,
-            int batchSize) {
+    ClickHouseAppender(@NonNull UserLogTableFactory userLogTableFactory, @NonNull ClickHouseLogAppenderConfig config,
+            @NonNull ScheduledExecutorService scheduler) {
         this.userLogTableFactory = userLogTableFactory;
-        this.flushIntervalDuration = flushIntervalDuration;
-        if (batchSize < 1) {
-            throw new IllegalArgumentException("clickHouseLogAppender.batchSize must be at least 1, got " + batchSize);
-        }
-        this.batchSize = batchSize;
-        this.logQueue = new LinkedBlockingQueue<>(batchSize * MAX_QUEUED_BATCHES);
+        this.flushIntervalDuration = config.getFlushIntervalDuration();
+        this.shutdownTimeout = config.getShutdownTimeout();
+        this.batchSize = config.getBatchSize();
+        this.logQueue = new LinkedBlockingQueue<>(batchSize * config.getMaxQueuedBatches());
+        this.scheduler = new AtomicReference<>(scheduler);
     }
 
     @Override
     public void start() {
         // Background flush thread
-        scheduler.get().scheduleAtFixedRate(this::flushLogs, flushIntervalDuration.toMillis(),
+        scheduler.get().scheduleAtFixedRate(this::flushOnTick, flushIntervalDuration.toMillis(),
                 flushIntervalDuration.toMillis(), TimeUnit.MILLISECONDS);
 
         super.start();
     }
 
-    private void flushLogs() {
+    private void flushOnTick() {
+        reportDropped();
+        flushLogs();
+    }
+
+    private void reportDropped() {
         long droppedCount = dropped.getAndSet(0);
         if (droppedCount > 0) {
             log.warn("Log queue is full, dropped '{}' user-facing logs", droppedCount);
         }
+    }
 
-        if (logQueue.isEmpty()) return;
+    private void flushLogs() {
+        if (!flushPending.compareAndSet(false, true)) {
+            return; // an insert is already in flight
+        }
 
-        List<ILoggingEvent> batch = new ArrayList<>(logQueue.size());
-        logQueue.drainTo(batch, logQueue.size());
+        List<ILoggingEvent> batch = new ArrayList<>(batchSize);
+        logQueue.drainTo(batch, batchSize);
 
-        if (batch.isEmpty()) return;
+        if (batch.isEmpty()) {
+            flushPending.set(false);
+            return;
+        }
 
+        // The flag clears when the insert completes, not before: a slow ClickHouse backs up into the bounded queue.
+        insert(batch)
+                .doFinally(signal -> {
+                    flushPending.set(false);
+                    if (running && logQueue.size() >= batchSize) {
+                        submit(this::flushLogs);
+                    }
+                })
+                .subscribe();
+    }
+
+    private Mono<Void> insert(List<ILoggingEvent> batch) {
         Map<String, List<ILoggingEvent>> eventsPerTable = batch.stream()
                 .collect(groupingBy(event -> event.getMDCPropertyMap().getOrDefault(UserLog.MARKER, "")));
 
-        var inserts = eventsPerTable.entrySet().stream()
+        return Mono.when(eventsPerTable.entrySet().stream()
                 .map(entry -> save(entry.getKey(), entry.getValue()))
-                .toList();
-
-        // Wait for the inserts on this dedicated thread, so a slow ClickHouse backs up into the bounded queue
-        // instead of piling up in-flight inserts. Tables are inserted concurrently, not one after another.
-        // Never throw: an exception would cancel the periodic flush.
-        try {
-            Mono.when(inserts).block();
-        } catch (RuntimeException e) {
-            log.error("Failed to insert logs", e);
-        }
+                .toList());
     }
 
     private Mono<Void> save(String userLogMarker, List<ILoggingEvent> events) {
@@ -127,6 +151,14 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                 });
     }
 
+    private void submit(Runnable task) {
+        try {
+            scheduler.get().execute(task);
+        } catch (RejectedExecutionException e) {
+            log.debug("ClickHouseAppender is stopping, skipping flush");
+        }
+    }
+
     @Override
     protected void append(ILoggingEvent event) {
         if (!running) {
@@ -135,13 +167,15 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         }
 
         if (!logQueue.offer(event)) {
-            dropped.incrementAndGet();
+            flushLogs(); // makes room unless an insert is already in flight
+            if (!logQueue.offer(event)) {
+                dropped.incrementAndGet();
+            }
         }
 
-        // One pending flush at a time, rather than a task per log once the queue passes batchSize.
-        if (logQueue.size() >= batchSize && flushPending.compareAndSet(false, true)) {
-            scheduler.get().execute(() -> {
-                flushPending.set(false);
+        if (logQueue.size() >= batchSize && flushScheduled.compareAndSet(false, true)) {
+            submit(() -> {
+                flushScheduled.set(false);
                 flushLogs();
             });
         }
@@ -151,22 +185,36 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     public void stop() {
         running = false;
         super.stop();
-        flushLogs();
-        // A stopped appender must not clear the instance that init() handed out to everyone else.
-        if (instance == this) {
-            setInstance(null);
-        }
+        clearInstance(this);
         scheduler.get().shutdown();
         awaitTermination();
+        drainOnStop();
+        reportDropped();
         logQueue.clear();
+        flushPending.set(false);
+        flushScheduled.set(false);
         scheduler.set(Executors.newSingleThreadScheduledExecutor());
+    }
+
+    // The flush thread is gone, so insert what is left from here, a batch at a time, within the shutdown timeout.
+    private void drainOnStop() {
+        long deadline = System.nanoTime() + shutdownTimeout.toNanos();
+        try {
+            while (!logQueue.isEmpty()) {
+                List<ILoggingEvent> batch = new ArrayList<>(batchSize);
+                logQueue.drainTo(batch, batchSize);
+                insert(batch).block(Duration.ofNanos(Math.max(0, deadline - System.nanoTime())));
+            }
+        } catch (RuntimeException e) {
+            log.warn("Failed to flush user-facing logs on shutdown, dropping '{}'", logQueue.size(), e);
+        }
     }
 
     private void awaitTermination() {
         try {
-            if (!scheduler.get().awaitTermination(5, TimeUnit.SECONDS)) {
+            if (!scheduler.get().awaitTermination(shutdownTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 scheduler.get().shutdownNow();
-                if (!scheduler.get().awaitTermination(5, TimeUnit.SECONDS)) { // Final attempt
+                if (!scheduler.get().awaitTermination(shutdownTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
                     log.error("ClickHouseAppender did not terminate");
                 }
             }

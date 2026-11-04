@@ -1803,6 +1803,14 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}
 
+  # Default: 10
+  # Description: Number of batches the log queue holds (batchSize * maxQueuedBatches logs). Past it, new logs are dropped
+  maxQueuedBatches: ${CLICKHOUSE_LOG_APPENDER_MAX_QUEUED_BATCHES:-10}
+
+  # Default: PT5S or 5s
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted
+  shutdownTimeout: ${CLICKHOUSE_LOG_APPENDER_SHUTDOWN_TIMEOUT:-PT5S}
+
 workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting.
