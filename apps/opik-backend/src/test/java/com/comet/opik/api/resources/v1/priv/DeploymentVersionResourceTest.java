@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.DeploymentVersion;
 import com.comet.opik.api.DeploymentVersion.DeploymentVersionHistory;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -109,22 +110,33 @@ class DeploymentVersionResourceTest {
         }
     }
 
+    /**
+     * The rows for this test's own version. CI reuses the MySQL container across test classes, so the
+     * table may already hold the versions other classes booted with; only this version is ours to assert on.
+     */
+    private List<DeploymentVersion> ownVersionRows(DeploymentVersionHistory history) {
+        return history.versions().stream()
+                .filter(deployed -> TEST_VERSION.equals(deployed.version()))
+                .toList();
+    }
+
     @Test
-    @DisplayName("returns the running version and records it as this install's first version")
+    @DisplayName("returns the running version and records its first start exactly once")
     void returnsRunningVersionAndRecordsIt() {
         var history = getVersionHistory();
 
         assertThat(history.currentVersion()).isEqualTo(TEST_VERSION);
-        assertThat(history.versions()).hasSize(1);
+        // Newest first: the version this app booted with is the most recent start on this install.
         assertThat(history.versions().getFirst().version()).isEqualTo(TEST_VERSION);
-        assertThat(history.versions().getFirst().firstSeenAt()).isNotNull();
+        assertThat(ownVersionRows(history)).hasSize(1);
+        assertThat(ownVersionRows(history).getFirst().firstSeenAt()).isNotNull();
     }
 
     @Test
     @DisplayName("concurrent replicas booting the same version produce exactly one history row")
     void concurrentStartsProduceASingleRow() throws InterruptedException {
         var before = getVersionHistory();
-        var originalFirstSeenAt = before.versions().getFirst().firstSeenAt();
+        var originalFirstSeenAt = ownVersionRows(before).getFirst().firstSeenAt();
 
         // Stand in for N backend replicas booting at once — they all race to record the same version.
         int replicas = 8;
@@ -151,9 +163,9 @@ class DeploymentVersionResourceTest {
 
         var after = getVersionHistory();
 
-        assertThat(after.versions()).hasSize(1);
+        assertThat(ownVersionRows(after)).hasSize(1);
         // The first writer's timestamp must survive: it is when this deployment actually started
         // on the version, and later replicas must not overwrite it.
-        assertThat(after.versions().getFirst().firstSeenAt()).isEqualTo(originalFirstSeenAt);
+        assertThat(ownVersionRows(after).getFirst().firstSeenAt()).isEqualTo(originalFirstSeenAt);
     }
 }
