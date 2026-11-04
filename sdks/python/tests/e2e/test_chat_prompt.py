@@ -195,6 +195,30 @@ def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Op
     )
 
 
+def test_chat_prompt__direct_class_instantiation__no_project_name__created_in_default_project(
+    opik_client: opik.Opik,
+):
+    prompt_name = f"chat-prompt-direct-{str(uuid.uuid4())[-6:]}"
+    messages = [
+        {"role": "system", "content": "You are an expert."},
+        {"role": "user", "content": "Explain {{concept}}."},
+    ]
+
+    ChatPrompt(name=prompt_name, messages=messages)
+
+    prompts_from_api = opik_client.search_prompts(
+        filter_string=f'name = "{prompt_name}"', project_name=PROJECT_NAME
+    )
+
+    assert len(prompts_from_api) == 1
+    verifiers.verify_chat_prompt_version(
+        prompts_from_api[0],
+        name=prompt_name,
+        messages=messages,
+        project_name=PROJECT_NAME,
+    )
+
+
 def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
     """Test chat prompt with multimodal content (text + images)."""
     unique_identifier = str(uuid.uuid4())[-6:]

@@ -120,6 +120,7 @@ class ChatPrompt(base_prompt.BasePrompt):
 
             opik_client_ = opik_client.get_global_client()
             prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
+            self._project_name = opik_client_._resolve_project_name(self._project_name)
 
             # Convert messages array to JSON string for backend storage
             messages_str = json.dumps(self._messages)
