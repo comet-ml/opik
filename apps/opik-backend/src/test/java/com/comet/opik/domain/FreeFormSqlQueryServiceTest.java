@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.ServerException;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
@@ -206,8 +207,8 @@ class FreeFormSqlQueryServiceTest {
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
                 .join()).cause().satisfies(error -> {
                     assertThat(error).isInstanceOf(BadRequestException.class);
-                    var entity = String.valueOf(((WebApplicationException) error).getResponse().getEntity());
-                    assertThat(entity).contains(message.strip()).doesNotContain("opik.spans");
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(message)));
                 });
     }
 
