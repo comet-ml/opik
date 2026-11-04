@@ -196,15 +196,6 @@ public class ChatCompletionService {
                 throw new ClientErrorException(detail, status, cause);
             }
             throw new ServerErrorException(detail, status, cause);
-        } finally {
-            // Release whatever a closeable client (reused across retries) holds; other providers self-reclaim.
-            if (languageModelClient instanceof AutoCloseable closeable) {
-                try {
-                    closeable.close();
-                } catch (Exception e) {
-                    log.warn("Failed to close language model client", e);
-                }
-            }
         }
     }
 

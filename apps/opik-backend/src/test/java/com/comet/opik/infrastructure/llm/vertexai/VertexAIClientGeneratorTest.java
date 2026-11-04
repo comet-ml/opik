@@ -95,7 +95,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -248,9 +247,8 @@ class VertexAIClientGeneratorTest {
                 .configuration(configuredLocation == null ? Map.of() : Map.of("location", configuredLocation))
                 .build();
 
-        try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-            client.chat(UserMessage.from("hello"));
-        }
+        var client = generator.generate(config, request);
+        client.chat(UserMessage.from("hello"));
     }
 
     /**
@@ -285,10 +283,9 @@ class VertexAIClientGeneratorTest {
         var validator = new ProviderErrorMessageValidator(clientConfig());
 
         var failure = catchThrowable(() -> {
-            try (var client = (CloseableVertexAiChatModel) generator.generate(apiConfig,
-                    ChatCompletionRequest.builder().model(MODEL).build())) {
-                client.chat(UserMessage.from("hello"));
-            }
+            var client = generator.generate(apiConfig,
+                    ChatCompletionRequest.builder().model(MODEL).build());
+            client.chat(UserMessage.from("hello"));
         });
 
         var actualError = new LlmProviderVertexAI(generator, apiConfig).getLlmProviderError(failure)
@@ -310,12 +307,11 @@ class VertexAIClientGeneratorTest {
                 .configuration(Map.of("location", "global"))
                 .build();
 
-        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+        var client = new VertexAIClientGenerator(clientConfig(), registry,
                 LlmTestClients.REMOTE_MEDIA_INLINER,
                 LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                .generate(config, request)) {
-            client.chat(UserMessage.from("hello"));
-        }
+                .generate(config, request);
+        client.chat(UserMessage.from("hello"));
     }
 
     /**
@@ -459,9 +455,8 @@ class VertexAIClientGeneratorTest {
                     .configuration(location == null ? Map.of() : Map.of("location", location))
                     .build();
 
-            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                return VertexAITestClients.apiEndpointOf(client);
-            }
+            var client = generator.generate(config, request);
+            return VertexAITestClients.apiEndpointOf(client);
         }
     }
 
@@ -492,60 +487,17 @@ class VertexAIClientGeneratorTest {
                     .build();
             var request = ChatCompletionRequest.builder().model(MODEL).build();
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(config, registry,
+            var client = new VertexAIClientGenerator(config, registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generate(apiConfig, request)) {
-                return VertexAITestClients.timeoutOf(client);
-            }
+                    .generate(apiConfig, request);
+            return VertexAITestClients.timeoutOf(client);
         }
     }
 
     @Nested
     @DisplayName("Client ownership")
     class ClientOwnership {
-
-        /**
-         * Closing twice must stay safe: the streaming path closes on the stream terminal and callers close the
-         * wrapper too.
-         */
-        @Test
-        @DisplayName("closing the returned client is idempotent")
-        void closingTheReturnedClientIsIdempotent() {
-            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
-            var request = ChatCompletionRequest.builder().model(MODEL).build();
-            var config = LlmProviderClientApiConfig.builder()
-                    .apiKey(serviceAccountJson)
-                    .configuration(Map.of("location", "global"))
-                    .build();
-
-            var client = (CloseableVertexAiChatModel) generator.generate(config, request);
-
-            assertThatCode(() -> {
-                client.close();
-                client.close();
-            }).doesNotThrowAnyException();
-        }
-
-        @Test
-        @DisplayName("closing the returned streaming client is idempotent")
-        void closingTheReturnedStreamingClientIsIdempotent() {
-            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
-            var request = ChatCompletionRequest.builder().model(MODEL).build();
-            var config = LlmProviderClientApiConfig.builder()
-                    .apiKey(serviceAccountJson)
-                    .configuration(Map.of("location", "global"))
-                    .build();
-
-            var client = generator.newVertexAIStreamingClient(config, request);
-
-            assertThatCode(() -> {
-                client.close();
-                client.close();
-            }).doesNotThrowAnyException();
-        }
 
         /** A client built for an unresolvable model must not outlive the failure. */
         @Test
@@ -595,9 +547,8 @@ class VertexAIClientGeneratorTest {
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                client.chat(UserMessage.from("hello"));
-            }
+            var client = generator.generate(config, request);
+            client.chat(UserMessage.from("hello"));
 
             wireMock.server().verify(postRequestedFor(urlPathMatching(
                     ".*/publishers/google/models/gemini-9\\.9-flash:generateContent")));
@@ -700,12 +651,11 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(config, modelParameters)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                    .generateChat(config, modelParameters);
+            client.chat(UserMessage.from("hello"));
 
             assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
                     .isEqualTo(24576);
@@ -765,12 +715,11 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString(customParameters));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(config, modelParameters)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                    .generateChat(config, modelParameters);
+            client.chat(UserMessage.from("hello"));
 
             assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
         }
@@ -801,15 +750,14 @@ class VertexAIClientGeneratorTest {
                     .build();
             var question = UserMessage.from("Read trace t1");
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null))) {
-                var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
-                client.chat(ChatRequest.builder()
-                        .messages(question, call,
-                                ToolExecutionResultMessage.from(call.toolExecutionRequests().getFirst(), "banana"))
-                        .build());
-            }
+                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null));
+            var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
+            client.chat(ChatRequest.builder()
+                    .messages(question, call,
+                            ToolExecutionResultMessage.from(call.toolExecutionRequests().getFirst(), "banana"))
+                    .build());
 
             var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
             assertThat(requests).hasSize(2);
@@ -964,10 +912,9 @@ class VertexAIClientGeneratorTest {
                     .build();
 
             completeVia(generator, "global");
-            try (var client = (CloseableVertexAiChatModel) generator.generate(otherKey,
-                    ChatCompletionRequest.builder().model(MODEL).build())) {
-                client.chat(UserMessage.from("hello"));
-            }
+            var client = generator.generate(otherKey,
+                    ChatCompletionRequest.builder().model(MODEL).build());
+            client.chat(UserMessage.from("hello"));
 
             wireMock.server().verify(2, postRequestedFor(urlPathMatching(TOKEN_PATH)));
             wireMock.server().verify(1, postRequestedFor(urlPathMatching(
@@ -991,15 +938,14 @@ class VertexAIClientGeneratorTest {
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(config, new LlmAsJudgeModelParameters(MODEL, null, null, null))) {
-                client.chat(ChatRequest.builder()
-                        .messages(UserMessage.from("Read trace t1"))
-                        .toolSpecifications(tool)
-                        .toolChoice(ToolChoice.REQUIRED)
-                        .build());
-            }
+                    .generateChat(config, new LlmAsJudgeModelParameters(MODEL, null, null, null));
+            client.chat(ChatRequest.builder()
+                    .messages(UserMessage.from("Read trace t1"))
+                    .toolSpecifications(tool)
+                    .toolChoice(ToolChoice.REQUIRED)
+                    .build());
 
             var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
             assertThat(requests).hasSize(1);
@@ -1055,12 +1001,11 @@ class VertexAIClientGeneratorTest {
         void judgeSendsTemperatureAndSeed() {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, 0.2, 7, null);
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(apiConfig(), modelParameters)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                    .generateChat(apiConfig(), modelParameters);
+            client.chat(UserMessage.from("hello"));
 
             assertThat(only(sentGenerationConfig(), "temperature", "seed"))
                     .isEqualTo(JsonUtils.getJsonNodeFromString("{\"temperature\": 0.2, \"seed\": 7}"));
@@ -1151,12 +1096,11 @@ class VertexAIClientGeneratorTest {
                 Integer expected) {
             var request = request(MODEL, maxCompletionTokens, maxTokens);
 
-            try (var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+            var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
                     .newVertexAIClient(apiConfig(),
-                            request)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                            request);
+            client.chat(UserMessage.from("hello"));
 
             assertSentMaxOutputTokens(sentGenerationConfig(), expected);
         }
@@ -1169,22 +1113,21 @@ class VertexAIClientGeneratorTest {
             var request = request(MODEL, maxCompletionTokens, maxTokens);
             var completed = new CompletableFuture<ChatResponse>();
 
-            try (var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+            var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
                     LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .newVertexAIStreamingClient(apiConfig(), request)) {
-                client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
-                    @Override
-                    public void onCompleteResponse(ChatResponse response) {
-                        completed.complete(response);
-                    }
+                    .newVertexAIStreamingClient(apiConfig(), request);
+            client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
+                @Override
+                public void onCompleteResponse(ChatResponse response) {
+                    completed.complete(response);
+                }
 
-                    @Override
-                    public void onError(Throwable error) {
-                        completed.completeExceptionally(error);
-                    }
-                });
-                completed.get(10, TimeUnit.SECONDS);
-            }
+                @Override
+                public void onError(Throwable error) {
+                    completed.completeExceptionally(error);
+                }
+            });
+            completed.get(10, TimeUnit.SECONDS);
 
             assertSentMaxOutputTokens(sentGenerationConfig(STREAM_GENERATE_CONTENT_PATH), expected);
         }
@@ -1379,25 +1322,23 @@ class VertexAIClientGeneratorTest {
                     .willReturn(aResponse().withFault(fault)));
             var generator = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
-            try (var warmUp = (CloseableVertexAiChatModel) generator.generate(apiConfig(), request())) {
-                warmUp.chat(UserMessage.from("hello"));
-            }
+            var warmUp = generator.generate(apiConfig(), request());
+            warmUp.chat(UserMessage.from("hello"));
             var failed = new CompletableFuture<Throwable>();
 
-            try (var client = generator.newVertexAIStreamingClient(apiConfig(), request())) {
-                client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
-                    @Override
-                    public void onCompleteResponse(ChatResponse response) {
-                        failed.complete(null);
-                    }
+            var client = generator.newVertexAIStreamingClient(apiConfig(), request());
+            client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
+                @Override
+                public void onCompleteResponse(ChatResponse response) {
+                    failed.complete(null);
+                }
 
-                    @Override
-                    public void onError(Throwable error) {
-                        failed.complete(error);
-                    }
-                });
-                assertThat(failed.get(45, TimeUnit.SECONDS)).isNotNull();
-            }
+                @Override
+                public void onError(Throwable error) {
+                    failed.complete(error);
+                }
+            });
+            assertThat(failed.get(45, TimeUnit.SECONDS)).isNotNull();
 
             wireMock.server().verify(EXPECTED_SDK_ATTEMPTS, postRequestedFor(urlPathMatching(
                     STREAM_GENERATE_CONTENT_PATH)));
@@ -1419,9 +1360,8 @@ class VertexAIClientGeneratorTest {
             var generator = generatorBehind(routes);
 
             String actualText;
-            try (var client = (CloseableVertexAiChatModel) generator.generate(apiConfig(), request())) {
-                actualText = client.chat("hello");
-            }
+            var client = generator.generate(apiConfig(), request());
+            actualText = client.chat("hello");
 
             assertThat(actualText).isEqualTo(expectedText);
             assertThat(routes.selections).hasValue(1);
@@ -1495,15 +1435,14 @@ class VertexAIClientGeneratorTest {
                 .build();
         var request = ChatCompletionRequest.builder().model(MODEL).build();
 
-        try (var first = (CloseableVertexAiChatModel) generator.generate(config, request);
-                var second = generator.newVertexAIStreamingClient(config, request)) {
-            var expectedTransport = Transport.of(VertexAITestClients.httpClientOf(first.client()));
+        var first = (VertexAiChatModel) generator.generate(config, request);
+        var second = generator.newVertexAIStreamingClient(config, request);
+        var expectedTransport = Transport.of(VertexAITestClients.httpClientOf(first.client()));
 
-            var actualTransport = Transport.of(VertexAITestClients.httpClientOf(second.client()));
+        var actualTransport = Transport.of(VertexAITestClients.httpClientOf(second.client()));
 
-            assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
-            assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
-        }
+        assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
+        assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
     }
 
     /** Calls made per kind, chat and streamed, by {@link #callsLeaveNoThreadsBehind}. */

@@ -57,13 +57,12 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        try (var client = llmProviderClientGenerator.newVertexAIClient(config, request)) {
-            ChatResponse response = client.chat(getChatMessages(request));
-            if (isCutOffBeforeAnswering(response)) {
-                throw cutOffBeforeAnswering(request);
-            }
-            return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
+        var client = llmProviderClientGenerator.newVertexAIClient(config, request);
+        ChatResponse response = client.chat(getChatMessages(request));
+        if (isCutOffBeforeAnswering(response)) {
+            throw cutOffBeforeAnswering(request);
         }
+        return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
     @Override
@@ -73,7 +72,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
         Schedulers.boundedElastic()
                 .schedule(() -> {
-                    CloseableVertexAiStreamingChatModel client;
+                    VertexAiStreamingChatModel client;
                     try {
                         client = llmProviderClientGenerator.newVertexAIStreamingClient(config, request);
                     } catch (Exception e) {
@@ -82,34 +81,22 @@ public class LlmProviderVertexAI implements LlmProviderService {
                         return;
                     }
 
-                    // Release the client's GAX threads exactly once, once the stream terminates
-                    // (onComplete/onError) — never when this task returns, which is before the first token.
-                    var closed = new AtomicBoolean(false);
-                    Runnable closeOnce = () -> {
-                        if (closed.compareAndSet(false, true)) {
-                            client.close();
-                        }
-                    };
                     // The consumer gets exactly one terminal; a handler that throws is logged, not propagated.
                     var terminalReached = new AtomicBoolean(false);
-                    Runnable handleCloseAndRelease = () -> {
+                    Runnable handleCloseLogged = () -> {
                         terminalReached.set(true);
                         try {
                             handleClose.run();
                         } catch (Exception e) {
                             log.warn("Vertex AI stream close handler failed", e);
-                        } finally {
-                            closeOnce.run();
                         }
                     };
-                    Consumer<Throwable> handleErrorAndRelease = throwable -> {
+                    Consumer<Throwable> handleErrorLogged = throwable -> {
                         terminalReached.set(true);
                         try {
                             handleError.accept(throwable);
                         } catch (Exception e) {
                             log.warn("Vertex AI stream error handler failed", e);
-                        } finally {
-                            closeOnce.run();
                         }
                     };
 
@@ -125,8 +112,8 @@ public class LlmProviderVertexAI implements LlmProviderService {
                             }
                         };
                         client.chat(chatMessages, failingWhenCutOffBeforeAnswering(request,
-                                new ChunkedResponseHandler(handleMessageOrCancel, handleCloseAndRelease,
-                                        handleErrorAndRelease, request.model())));
+                                new ChunkedResponseHandler(handleMessageOrCancel, handleCloseLogged,
+                                        handleErrorLogged, request.model())));
                     } catch (Exception e) {
                         if (terminalReached.compareAndSet(false, true)) {
                             // Synchronous failure before any terminal — deliver the error and close the stream.
@@ -145,7 +132,6 @@ public class LlmProviderVertexAI implements LlmProviderService {
                                     "Vertex AI stream failed after a terminal callback had already run, error type '{}'",
                                     ProviderFailures.rootType(e), ProviderFailures.redacted(e));
                         }
-                        closeOnce.run();
                     }
                 });
     }

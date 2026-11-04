@@ -104,8 +104,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return LlmProviderLangChainMapper.INSTANCE.mapMessages(request, videoMimeTypeUtils);
     }
 
-    CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request, (client, calls, model) -> {
+    VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
+        return buildPerCallClient(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -120,13 +120,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiChatModel(builder.build(), client, remoteMediaInliner);
+            return new VertexAiChatModel(builder.build(), client, remoteMediaInliner);
         });
     }
 
-    CloseableVertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
+    VertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request, (client, calls, model) -> {
+        return buildPerCallClient(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiStreamingChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -141,7 +141,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiStreamingChatModel(builder.build(), client, calls, remoteMediaInliner);
+            return new VertexAiStreamingChatModel(builder.build(), client, calls, remoteMediaInliner);
         });
     }
 
@@ -162,8 +162,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
     // A Client per call, on the shared transport, so that the call's own calls can be cancelled. Built here rather
     // than by the model builder, which keeps its client private.
-    private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
-            OwnedClientFactory<T> factory) {
+    private <T> T buildPerCallClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
+            PerCallClientFactory<T> factory) {
         // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
         var modelId = registryService.findModel(request.model())
                 .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
@@ -176,7 +176,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     @FunctionalInterface
-    private interface OwnedClientFactory<T> {
+    private interface PerCallClientFactory<T> {
         T create(Client client, CancellableCalls calls, String model);
     }
 

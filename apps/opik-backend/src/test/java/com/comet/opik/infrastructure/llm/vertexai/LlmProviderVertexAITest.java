@@ -6,7 +6,6 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.google.genai.Client;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
@@ -23,26 +22,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.withSettings;
 
 @DisplayName("Vertex AI provider")
 class LlmProviderVertexAITest {
 
     private static final String MODEL = "vertex_ai/gemini-2.5-flash";
 
-    /** The streaming model the last {@link #providerStreaming} hands out, spied on to verify its release. */
-    private CloseableVertexAiStreamingChatModel streamingModel;
-
     private LlmProviderVertexAI providerStreaming(StreamingChatModel delegate, Client client) {
         var generator = mock(VertexAIClientGenerator.class);
-        streamingModel = spy(new CloseableVertexAiStreamingChatModel(delegate, client, new CancellableCalls(),
-                LlmTestClients.REMOTE_MEDIA_INLINER));
-        when(generator.newVertexAIStreamingClient(any(), any())).thenReturn(streamingModel);
+        when(generator.newVertexAIStreamingClient(any(), any())).thenReturn(new VertexAiStreamingChatModel(delegate,
+                client, new CancellableCalls(), LlmTestClients.REMOTE_MEDIA_INLINER));
         return new LlmProviderVertexAI(generator,
                 LlmProviderClientApiConfig.builder().apiKey("key").configuration(Map.of()).build());
     }
@@ -74,7 +64,7 @@ class LlmProviderVertexAITest {
     }
 
     @Test
-    @DisplayName("a synchronous chat failure delivers one error then releases the model")
+    @DisplayName("a synchronous chat failure delivers one error then one close")
     void streamingSynchronousFailureDeliversErrorThenClose() throws Exception {
         var client = mock(Client.class);
         var errors = new AtomicInteger();
@@ -102,31 +92,5 @@ class LlmProviderVertexAITest {
         assertThat(terminals.await(2, TimeUnit.SECONDS)).isTrue();
         assertThat(errors.get()).isEqualTo(1);
         assertThat(closes.get()).isEqualTo(1);
-        verify(streamingModel, timeout(2_000)).close();
-    }
-
-    @Test
-    @DisplayName("closing the streaming wrapper closes the delegate, and leaves the client on the shared transport")
-    void streamingWrapperCloseClosesTheDelegateOnly() throws Exception {
-        var client = mock(Client.class);
-        var delegate = mock(StreamingChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
-
-        new CloseableVertexAiStreamingChatModel(delegate, client, new CancellableCalls(),
-                LlmTestClients.REMOTE_MEDIA_INLINER).close();
-
-        verify(client, never()).close();
-        verify((AutoCloseable) delegate).close();
-    }
-
-    @Test
-    @DisplayName("closing the chat wrapper closes the delegate, and leaves the client on the shared transport")
-    void chatWrapperCloseClosesTheDelegateOnly() throws Exception {
-        var client = mock(Client.class);
-        var delegate = mock(ChatModel.class, withSettings().extraInterfaces(AutoCloseable.class));
-
-        new CloseableVertexAiChatModel(delegate, client, LlmTestClients.REMOTE_MEDIA_INLINER).close();
-
-        verify(client, never()).close();
-        verify((AutoCloseable) delegate).close();
     }
 }
