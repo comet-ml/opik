@@ -198,10 +198,7 @@ export const createItemSourceGroupCell = <TData,>(
         className="items-center p-0 pr-2"
         stopClickPropagation
       >
-        <div
-          className="flex max-w-full items-center overflow-hidden"
-          style={{ paddingLeft: `${row.depth * 20}px` }}
-        >
+        <div className="flex max-w-full items-center overflow-hidden">
           <Checkbox
             variant="muted"
             checked={

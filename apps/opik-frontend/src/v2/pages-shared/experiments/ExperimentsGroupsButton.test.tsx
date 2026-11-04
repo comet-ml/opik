@@ -18,7 +18,7 @@ describe("Experiments GroupsButton", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Groups (1)" }),
+      screen.getByRole("button", { name: "Group (1)" }),
     ).toBeInTheDocument();
   });
 
@@ -32,7 +32,7 @@ describe("Experiments GroupsButton", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Groups (0)" }),
+      screen.getByRole("button", { name: "Group (0)" }),
     ).toBeInTheDocument();
   });
 });

@@ -54,11 +54,7 @@ import {
   createItemSourceGroupCell,
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
-import {
-  DATASET_TYPE,
-  Experiment,
-  ExperimentsAggregations,
-} from "@/types/datasets";
+import { DATASET_TYPE, Experiment } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -174,11 +170,8 @@ export const useExperimentsTableConfig = <
             scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
             accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
             customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                getExperimentScore(id, aggregation)?.value,
               scoreName,
             },
           };
