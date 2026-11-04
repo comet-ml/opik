@@ -190,9 +190,11 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         running = false;
         super.stop();
         clearInstance(this);
+        // One deadline for every shutdown step, so stop() stays within shutdownTimeout.
+        long deadline = System.nanoTime() + shutdownTimeout.toNanos();
         scheduler.get().shutdown();
-        awaitTermination();
-        drainOnStop();
+        awaitTermination(deadline);
+        drainOnStop(deadline);
         reportDropped();
         logQueue.clear();
         insertInFlight.set(false);
@@ -200,10 +202,9 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         scheduler.set(Executors.newSingleThreadScheduledExecutor());
     }
 
-    // The flush thread is gone: wait for its last insert, then insert what is left from here, a batch at a time.
-    // Both share one deadline, so there is still one insert at a time and stop() stays within shutdownTimeout.
-    private void drainOnStop() {
-        long deadline = System.nanoTime() + shutdownTimeout.toNanos();
+    // The flush thread is gone: wait for its last insert, so there is still one at a time, then insert what is
+    // left from here, a batch at a time.
+    private void drainOnStop(long deadline) {
         try {
             lastInsert.get(remainingNanos(deadline), TimeUnit.NANOSECONDS);
             while (!logQueue.isEmpty()) {
@@ -223,11 +224,11 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         return Math.max(0, deadline - System.nanoTime());
     }
 
-    private void awaitTermination() {
+    private void awaitTermination(long deadline) {
         try {
-            if (!scheduler.get().awaitTermination(shutdownTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+            if (!scheduler.get().awaitTermination(remainingNanos(deadline), TimeUnit.NANOSECONDS)) {
                 scheduler.get().shutdownNow();
-                if (!scheduler.get().awaitTermination(shutdownTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+                if (!scheduler.get().awaitTermination(remainingNanos(deadline), TimeUnit.NANOSECONDS)) {
                     log.error("ClickHouseAppender did not terminate");
                 }
             }

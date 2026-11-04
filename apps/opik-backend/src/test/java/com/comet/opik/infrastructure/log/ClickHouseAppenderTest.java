@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 // Appenders are built directly, not via init(): that returns the process-wide instance other tests may have created.
 class ClickHouseAppenderTest {
@@ -79,7 +81,7 @@ class ClickHouseAppenderTest {
     }
 
     @Test
-    void stopWaitsForTheInFlightInsertBeforeDraining() throws Exception {
+    void stopWaitsForTheInFlightInsertBeforeDraining() throws InterruptedException {
         var insertDone = new CompletableFuture<Void>();
         var inFlight = new AtomicInteger();
         var maxInFlight = new AtomicInteger();
@@ -93,13 +95,17 @@ class ClickHouseAppenderTest {
         append(appender, 21); // forces one insert of 10, which stays in flight; 11 stay queued
         resumeScheduler.countDown();
 
-        var stopped = CompletableFuture.runAsync(appender::stop);
-        Thread.sleep(200);
-        assertThat(stopped).isNotDone();
+        var stopThread = new Thread(appender::stop);
+        stopThread.start();
+        // Parked inside drainOnStop(): waiting on the in-flight insert, or, if it didn't wait, on a second insert
+        // that would already be in batchSizes.
+        await().atMost(5, TimeUnit.SECONDS).until(() -> stopThread.getState() == Thread.State.TIMED_WAITING
+                && Arrays.stream(stopThread.getStackTrace()).anyMatch(f -> f.getMethodName().equals("drainOnStop")));
         assertThat(batchSizes).containsExactly(10);
 
         insertDone.complete(null);
-        stopped.get(5, TimeUnit.SECONDS);
+        stopThread.join(TimeUnit.SECONDS.toMillis(5));
+        assertThat(stopThread.isAlive()).isFalse();
 
         assertThat(batchSizes).containsExactly(10, 10, 1);
         assertThat(maxInFlight).hasValue(1);

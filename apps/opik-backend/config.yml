@@ -1808,7 +1808,7 @@ clickHouseLogAppender:
   maxQueuedBatches: ${CLICKHOUSE_LOG_APPENDER_MAX_QUEUED_BATCHES:-10}
 
   # Default: PT5S or 5s
-  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
   shutdownTimeout: ${CLICKHOUSE_LOG_APPENDER_SHUTDOWN_TIMEOUT:-PT5S}
 
 workspaceSettings:
