@@ -29,10 +29,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,14 +50,12 @@ public interface GuardrailPolicyService {
 
     GuardrailPolicy findById(UUID id);
 
-    GuardrailPolicyPage find(int page, int size, String name, List<SortingField> sortingFields);
+    GuardrailPolicyPage find(int page, int size, String name, Set<String> names,
+            GuardrailExecutionScope executionScope, List<SortingField> sortingFields);
 
     void update(UUID id, GuardrailPolicy policy);
 
-    void delete(Set<UUID> ids);
-
-    /** The named policies plus every global policy of the workspace. */
-    List<GuardrailPolicy> retrieve(Set<String> names);
+    void delete(UUID id);
 }
 
 @Slf4j
@@ -122,15 +118,17 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
     }
 
     @Override
-    public GuardrailPolicyPage find(int page, int size, String name, @NonNull List<SortingField> sortingFields) {
+    public GuardrailPolicyPage find(int page, int size, String name, @NonNull Set<String> names,
+            GuardrailExecutionScope executionScope, @NonNull List<SortingField> sortingFields) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String nameTerm = StringUtils.trimToNull(name);
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(GuardrailPolicyDAO.class);
-            long total = dao.count(workspaceId, nameTerm);
-            var pageIds = dao.findPageIds(workspaceId, nameTerm, sortingFieldsSql, size, (page - 1) * size);
+            long total = dao.count(workspaceId, nameTerm, names, executionScope);
+            var pageIds = dao.findPageIds(workspaceId, nameTerm, names, executionScope, sortingFieldsSql, size,
+                    (page - 1) * size);
             Map<UUID, GuardrailPolicy> byId = pageIds.isEmpty()
                     ? Map.of()
                     : dao.findByIds(pageIds, workspaceId).stream()
@@ -171,46 +169,18 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
     }
 
     @Override
-    public void delete(@NonNull Set<UUID> ids) {
+    public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(GuardrailPolicyDAO.class);
-            // Rules carry no workspace, so only the rules of this workspace's policies are deleted.
-            var existing = dao.findIds(ids, workspaceId);
-            if (!existing.isEmpty()) {
-                dao.deleteRules(existing);
-                dao.delete(existing, workspaceId);
+            // Rules carry no workspace, so they go only once this workspace's policy is gone.
+            if (dao.delete(id, workspaceId) > 0) {
+                dao.deleteRules(List.of(id));
             }
-            log.info("Deleted '{}' guardrail policies in workspace '{}'", existing.size(), workspaceId);
             return null;
         });
-    }
-
-    @Override
-    public List<GuardrailPolicy> retrieve(@NonNull Set<String> names) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        return template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(GuardrailPolicyDAO.class);
-            var named = names.isEmpty() ? List.<GuardrailPolicy>of() : dao.findByNames(names, workspaceId);
-            // Names match ignoring case and trailing spaces, as the schema collation does.
-            var missing = names.stream()
-                    .filter(name -> named.stream().noneMatch(policy -> StringUtils.stripEnd(policy.name(), " ")
-                            .equalsIgnoreCase(StringUtils.stripEnd(name, " "))))
-                    .sorted()
-                    .toList();
-            if (!missing.isEmpty()) {
-                throw new NotFoundException("Guardrail policies not found: " + String.join(", ", missing));
-            }
-            var policies = new LinkedHashMap<UUID, GuardrailPolicy>();
-            named.forEach(policy -> policies.put(policy.id(), policy));
-            dao.findGlobal(workspaceId).forEach(policy -> policies.putIfAbsent(policy.id(), policy));
-            // Each query is in name order, but the two together are not; names are unique ignoring case.
-            return policies.values().stream()
-                    .sorted(Comparator.comparing(GuardrailPolicy::name, String.CASE_INSENSITIVE_ORDER))
-                    .toList();
-        });
+        log.info("Deleted guardrail policy with id '{}' in workspace '{}'", id, workspaceId);
     }
 
     private void saveRules(GuardrailPolicyDAO dao, GuardrailPolicy policy, String userName) {

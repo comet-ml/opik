@@ -1,12 +1,11 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.GuardrailExecutionScope;
 import com.comet.opik.api.GuardrailPolicy;
 import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyPage;
-import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyRetrieve;
-import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyRetrieveResponse;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryGuardrailPolicies;
 import com.comet.opik.domain.GuardrailPolicyService;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -26,6 +25,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -42,8 +42,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 @Path("/v1/private/guardrails/policies")
@@ -94,17 +92,21 @@ public class GuardrailPoliciesResource {
 
     @GET
     @Operation(operationId = "findGuardrailPolicies", summary = "Find guardrail policies", description = "Find guardrail policies in a workspace", responses = {
-            @ApiResponse(responseCode = "200", description = "Guardrail policy page", content = @Content(schema = @Schema(implementation = GuardrailPolicyPage.class)))})
+            @ApiResponse(responseCode = "200", description = "Guardrail policy page", content = @Content(schema = @Schema(implementation = GuardrailPolicyPage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request: names is not a JSON array of strings", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)
     public Response findGuardrailPolicies(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter policies by name (partial match, case insensitive)") String name,
+            @QueryParam("names") @Schema(description = "Filter policies by exact names, ignoring case, as a JSON array of names") String names,
+            @QueryParam("execution_scope") @Schema(description = "Filter policies by execution scope") GuardrailExecutionScope executionScope,
             @QueryParam("sorting") String sorting) {
         featureFlags.checkGuardrailsValidationsEnabled();
 
         var sortingFields = sortingFactory.newSorting(sorting);
-        return Response.ok(service.find(page, size, name, sortingFields)).build();
+        var exactNames = ParamsValidator.get(names, String.class, "names");
+        return Response.ok(service.find(page, size, name, exactNames, executionScope, sortingFields)).build();
     }
 
     @PUT
@@ -125,31 +127,15 @@ public class GuardrailPoliciesResource {
         return Response.noContent().build();
     }
 
-    @POST
-    @Path("/delete")
-    @Operation(operationId = "deleteGuardrailPoliciesBatch", summary = "Delete guardrail policies", description = "Delete guardrail policies and their rules", responses = {
+    @DELETE
+    @Path("/{id}")
+    @Operation(operationId = "deleteGuardrailPolicy", summary = "Delete guardrail policy", description = "Delete a guardrail policy and its rules", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
-    public Response deleteGuardrailPoliciesBatch(
-            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+    public Response deleteGuardrailPolicy(@PathParam("id") UUID id) {
         featureFlags.checkGuardrailsValidationsEnabled();
 
-        log.info("Deleting '{}' guardrail policies in workspace '{}'", batchDelete.ids().size(),
-                requestContext.get().getWorkspaceId());
-        service.delete(batchDelete.ids());
+        log.info("Deleting guardrail policy with id '{}' in workspace '{}'", id, requestContext.get().getWorkspaceId());
+        service.delete(id);
         return Response.noContent().build();
-    }
-
-    @POST
-    @Path("/retrieve")
-    @Operation(operationId = "retrieveGuardrailPolicies", summary = "Retrieve guardrail policies by name", description = "Return the named policies plus every global policy of the workspace, ordered by name. Fails when a named policy does not exist", responses = {
-            @ApiResponse(responseCode = "200", description = "Guardrail policies", content = @Content(schema = @Schema(implementation = GuardrailPolicyRetrieveResponse.class))),
-            @ApiResponse(responseCode = "404", description = "A named policy does not exist", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    @JsonView(GuardrailPolicy.View.Public.class)
-    public Response retrieveGuardrailPolicies(
-            @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailPolicyRetrieve.class))) @NotNull @Valid GuardrailPolicyRetrieve retrieve) {
-        featureFlags.checkGuardrailsValidationsEnabled();
-
-        var names = Optional.ofNullable(retrieve.names()).orElse(Set.of());
-        return Response.ok(new GuardrailPolicyRetrieveResponse(service.retrieve(names))).build();
     }
 }

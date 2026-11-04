@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.GuardrailExecutionScope;
 import com.comet.opik.api.GuardrailPolicy;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.infrastructure.db.GuardrailExecutionScopeMapper;
@@ -23,6 +24,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -72,53 +74,43 @@ public interface GuardrailPolicyDAO {
     @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.id = :id")
     Optional<GuardrailPolicy> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("""
-            SELECT COUNT(*) FROM guardrail_policies WHERE workspace_id = :workspaceId
+    // Exact names and the scope each have an index of their own (see migration 000112).
+    String FILTERS = """
             <if(name)> AND name LIKE CONCAT('%', :name, '%') <endif>
-            """)
+            <if(names)> AND name IN (<names>) <endif>
+            <if(execution_scope)> AND execution_scope = :executionScope <endif>
+            """;
+
+    @SqlQuery("SELECT COUNT(*) FROM guardrail_policies WHERE workspace_id = :workspaceId " + FILTERS)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    long count(@Bind("workspaceId") String workspaceId, @Define("name") @Bind("name") String name);
+    long count(@Bind("workspaceId") String workspaceId, @Define("name") @Bind("name") String name,
+            @Define("names") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "names") Set<String> names,
+            @Define("execution_scope") @Bind("executionScope") GuardrailExecutionScope executionScope);
 
     /**
      * The ids of one page, in order. Selects only {@code id} so the rules JSON never enters a sort buffer, as in
      * the two-step dashboard page fetch (OPIK-6482); {@link #findByIds(Collection, String)} loads the bodies.
      */
-    @SqlQuery("""
-            SELECT id FROM guardrail_policies WHERE workspace_id = :workspaceId
-            <if(name)> AND name LIKE CONCAT('%', :name, '%') <endif>
+    @SqlQuery("SELECT id FROM guardrail_policies WHERE workspace_id = :workspaceId " + FILTERS + """
             ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
             LIMIT :limit OFFSET :offset
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<UUID> findPageIds(@Bind("workspaceId") String workspaceId, @Define("name") @Bind("name") String name,
+            @Define("names") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "names") Set<String> names,
+            @Define("execution_scope") @Bind("executionScope") GuardrailExecutionScope executionScope,
             @Define("sort_fields") String sortFields, @Bind("limit") int limit, @Bind("offset") int offset);
 
     @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.id IN (<ids>)")
     @UseStringTemplateEngine
     List<GuardrailPolicy> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
 
-    // Names and global policies are two statements: each uses its own index, while a single
-    // `name IN (...) OR execution_scope = 'global'` scans the whole workspace (see migration 000112).
-    @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.name IN (<names>) ORDER BY p.name, p.id")
-    @UseStringTemplateEngine
-    List<GuardrailPolicy> findByNames(@BindList("names") Collection<String> names,
-            @Bind("workspaceId") String workspaceId);
-
-    @SqlQuery(SELECT_POLICIES
-            + "WHERE p.workspace_id = :workspaceId AND p.execution_scope = 'global' ORDER BY p.name, p.id")
-    List<GuardrailPolicy> findGlobal(@Bind("workspaceId") String workspaceId);
-
-    @SqlQuery("SELECT id FROM guardrail_policies WHERE workspace_id = :workspaceId AND id IN (<ids>)")
-    @UseStringTemplateEngine
-    List<UUID> findIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
-
     @SqlUpdate("DELETE FROM guardrail_policy_rules WHERE policy_id IN (<policyIds>)")
     @UseStringTemplateEngine
     void deleteRules(@BindList("policyIds") Collection<UUID> policyIds);
 
-    @SqlUpdate("DELETE FROM guardrail_policies WHERE workspace_id = :workspaceId AND id IN (<ids>)")
-    @UseStringTemplateEngine
-    void delete(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
+    @SqlUpdate("DELETE FROM guardrail_policies WHERE workspace_id = :workspaceId AND id = :id")
+    int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 }
