@@ -8,19 +8,23 @@ import com.comet.opik.api.modelprice.CustomModelPriceRow;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.ContextView;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -72,7 +76,8 @@ class ModelPriceServiceImpl implements ModelPriceService {
     private static final Duration LOAD_FAILURE_LOG_INTERVAL = Duration.ofMinutes(1);
     private static final LongCounter LOAD_FAILURES = GlobalOpenTelemetry.get().getMeter("opik.cost")
             .counterBuilder("opik.cost.model_prices.load_failures")
-            .setDescription("Span batches priced with built-in prices because the organization's prices failed to load")
+            .setDescription("Model price lookups (span writes and LLM-as-judge spend limits) that used built-in prices "
+                    + "because the organization's prices failed to load")
             .build();
 
     private final TransactionTemplate transactionTemplate;
@@ -163,13 +168,18 @@ class ModelPriceServiceImpl implements ModelPriceService {
                 .flatMap(organizationId -> findOrganizationList(organizationId).map(ModelPriceList::toLayers))
                 .defaultIfEmpty(PriceLayers.NO_ORGANIZATION)
                 .timeout(LOAD_TIMEOUT)
-                .onErrorResume(this::builtInAfterLoadFailure);
+                .onErrorResume(error -> Mono.deferContextual(ctx -> builtInAfterLoadFailure(error, ctx)));
     }
 
     // Spans are never refused for prices: a failed load prices them with built-in prices and stamps them as such.
-    // One warning a minute is enough to see it; the counter shows how many batches it touched.
-    private Mono<PriceLayers> builtInAfterLoadFailure(Throwable error) {
-        LOAD_FAILURES.add(1);
+    // One warning a minute is enough to see it; the counter shows how many lookups it touched, per workspace.
+    private Mono<PriceLayers> builtInAfterLoadFailure(Throwable error, ContextView ctx) {
+        LOAD_FAILURES.add(1, Attributes.of(
+                ErrorMetricsResolver.WORKSPACE_ID_KEY,
+                ctx.getOrDefault(RequestContext.WORKSPACE_ID, ErrorMetricsResolver.UNKNOWN),
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY,
+                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ErrorMetricsResolver.UNKNOWN),
+                ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)));
         long now = System.currentTimeMillis();
         long last = lastLoadFailureLoggedAt.get();
         if (now - last >= LOAD_FAILURE_LOG_INTERVAL.toMillis() && lastLoadFailureLoggedAt.compareAndSet(last, now)) {

@@ -21,14 +21,16 @@ public class CostVersion {
 
     /**
      * {@code 1.1;o<list version>} when the organization's rows set the cost, {@code 1.1;b<price files>} for built-in
-     * prices, {@code 1.1;fb} when the organization's prices couldn't be loaded, even at 0 for a span with usage, as
-     * those are the spans to find later. A cost from {@code metadata.cost} keeps plain {@code 1.1}.
+     * prices, {@code 1.1;fb} when the organization's prices couldn't be loaded for a span with usage, even at 0, as
+     * those are the spans to find later. Only a span with usage can be priced by the organization's rows, so a span
+     * without usage keeps its version when the load fails, and a cost from {@code metadata.cost} keeps plain
+     * {@code 1.1}.
      */
     public static String of(@NonNull CostService.PricedCost priced, @NonNull PriceLayers layers, boolean hasUsage) {
         if (priced.source() == CostService.CostSource.ORGANIZATION) {
             return ESTIMATED + ORGANIZATION_PREFIX + layers.getListVersion();
         }
-        if (layers.getOrigin() == PriceLayers.Origin.LOAD_FAILED && (hasUsage || priced.cost().signum() > 0)) {
+        if (layers.getOrigin() == PriceLayers.Origin.LOAD_FAILED && hasUsage) {
             return ESTIMATED + LOAD_FAILED_SUFFIX;
         }
         if (priced.cost().signum() <= 0) {

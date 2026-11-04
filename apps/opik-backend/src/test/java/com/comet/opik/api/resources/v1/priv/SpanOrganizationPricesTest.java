@@ -14,7 +14,6 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.domain.ProjectService;
-import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -103,7 +102,8 @@ class SpanOrganizationPricesTest {
         var rows = List.of(
                 fixed("gpt-5-mini", "openai", "1.00", "10.00"),
                 fixed("custom-llm/local/llama3.2", "ollama:local", "0.50", "1.50"),
-                fixed("meta-llama/Llama-3-8B", "openai", "0.10", "0.20"));
+                fixed("meta-llama/Llama-3-8B", "openai", "0.10", "0.20"),
+                fixed("aide-free", "openai", "0", "0"));
         try (var response = client.target(pricesUrl).request()
                 .put(Entity.json(Map.of("rows", rows, "expected_version", expectedVersion)))) {
             assertThat(response.getStatus()).isEqualTo(200);
@@ -195,8 +195,28 @@ class SpanOrganizationPricesTest {
         spanResourceClient.batchCreateSpans(List.of(span), API_KEY, WORKSPACE_NAME);
 
         var stored = storedCost(span.id());
-        assertThat(stored.cost()).isEqualByComparingTo(
-                CostService.calculateCost("gpt-4o", "openai", ONE_MILLION_IN_100K_OUT, null));
+        // 1M*2.5e-6 + 100k*1e-5
+        assertThat(stored.cost()).isEqualByComparingTo("3.5");
+        assertThat(stored.version()).matches("1\\.1;b[0-9a-f]{8}");
+    }
+
+    @Test
+    void createAfterAFreeUpdateStampsTheCostItStores() {
+        var span = span("gpt-4o", "openai", ONE_MILLION_IN_100K_OUT);
+        spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                .projectName(span.projectName())
+                .traceId(span.traceId())
+                .parentSpanId(span.parentSpanId())
+                .model("aide-free")
+                .provider("openai")
+                .usage(ONE_MILLION_IN_100K_OUT)
+                .build(), API_KEY, WORKSPACE_NAME);
+        assertCost(storedCost(span.id()), "0", organizationVersion);
+
+        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+
+        var stored = storedCost(span.id());
+        assertThat(stored.cost()).isEqualByComparingTo("3.5");
         assertThat(stored.version()).matches("1\\.1;b[0-9a-f]{8}");
     }
 

@@ -65,6 +65,18 @@ class CostVersionTest {
     }
 
     @Test
+    void failedLoadKeepsThePlainVersionOfAMetadataCostWithoutUsage() {
+        assertThat(CostVersion.of(priced("0.45", CostSource.METADATA), PriceLayers.LOAD_FAILED, false))
+                .isEqualTo("1.1");
+    }
+
+    @Test
+    void failedLoadIsStampedOnAMetadataCostWithUsage() {
+        assertThat(CostVersion.of(priced("0.45", CostSource.METADATA), PriceLayers.LOAD_FAILED, true))
+                .isEqualTo("1.1;fb");
+    }
+
+    @Test
     void failedLoadLeavesASpanWithoutUsageOrCostBlank() {
         assertThat(CostVersion.of(priced("0", CostSource.NONE), PriceLayers.LOAD_FAILED, false)).isEmpty();
     }

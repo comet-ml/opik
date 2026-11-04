@@ -121,6 +121,8 @@ public class SpanDAO {
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
     // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
+    // total_estimated_cost_version comes from the row the cost comes from: a 0 cost can carry a version now (a free
+    // organization row, a failed price load), so picking the two separately could label a cost with another's version.
     private static final String INSERT = """
             INSERT INTO spans (
                 id,
@@ -211,7 +213,7 @@ public class SpanDAO {
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
-                    LENGTH(old_span.total_estimated_cost_version) > 0, old_span.total_estimated_cost_version,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost_version,
                     new_span.total_estimated_cost_version
                 ) as total_estimated_cost_version,
                 multiIf(
@@ -393,6 +395,7 @@ public class SpanDAO {
      */
     //TODO: refactor to implement proper conflict resolution
     // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
+    // total_estimated_cost_version comes from the row the cost comes from, as in INSERT.
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
@@ -467,8 +470,8 @@ public class SpanDAO {
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
-                    LENGTH(new_span.total_estimated_cost_version) > 0, new_span.total_estimated_cost_version,
-                    LENGTH(old_span.total_estimated_cost_version) > 0, old_span.total_estimated_cost_version,
+                    new_span.total_estimated_cost > 0, new_span.total_estimated_cost_version,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost_version,
                     new_span.total_estimated_cost_version
                 ) as total_estimated_cost_version,
                 multiIf(
