@@ -281,7 +281,10 @@ def test_the_console_table_shows_the_failed_count(monkeypatch: pytest.MonkeyPatc
     assert cells[-1] == "5"
 
 
-@pytest.mark.parametrize("non_finite", [float("nan"), float("inf")])
+NON_FINITE = [float("nan"), float("inf"), float("-inf")]
+
+
+@pytest.mark.parametrize("non_finite", NON_FINITE)
 def test_the_experiment_results_average_leaves_out_non_finite_values_like_the_statistics(
     non_finite: float,
 ):
@@ -298,8 +301,11 @@ def test_the_experiment_results_average_leaves_out_non_finite_values_like_the_st
     assert failed_scores == {"m": 0}
 
 
-def test_the_experiment_results_average_is_none_when_every_value_is_non_finite():
-    results = [_result("item-0", 1, [_score("m", float("nan"))])]
+@pytest.mark.parametrize("non_finite", NON_FINITE)
+def test_the_experiment_results_average_is_none_when_every_value_is_non_finite(
+    non_finite: float,
+):
+    results = [_result("item-0", 1, [_score("m", non_finite)])]
 
     average_scores, failed_scores = report._compute_average_scores(results)
 
