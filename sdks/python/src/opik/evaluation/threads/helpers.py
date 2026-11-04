@@ -1,3 +1,4 @@
+import logging
 from typing import List, Callable, Optional
 
 from . import evaluation_result
@@ -6,6 +7,8 @@ from ...api_objects.conversation import conversation_thread, conversation_factor
 from ...rest_api import TraceThread, JsonListStringPublic, TracePublic
 from ...types import BatchFeedbackScoreDict
 from ...api_objects.threads import threads_client
+
+LOGGER = logging.getLogger(__name__)
 
 
 def log_feedback_scores(
@@ -51,6 +54,19 @@ def load_conversation_thread(
         max_results=max_results,
         truncate=False,
     )
+    if len(traces) == max_results:
+        # Traces come back newest first, so the ones past the limit are the
+        # start of the conversation.
+        LOGGER.warning(
+            "Thread '%s' has at least %d traces, the max_traces_per_thread=%d "
+            "limit. Only its %d most recent traces are evaluated, so the start "
+            "of the conversation is missing: raise max_traces_per_thread to "
+            "evaluate the whole thread.",
+            thread.id,
+            len(traces),
+            max_results,
+            len(traces),
+        )
     return conversation_factory.create_conversation_from_traces(
         traces=traces,
         input_transform=trace_input_transform,
