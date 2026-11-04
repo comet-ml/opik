@@ -13,6 +13,8 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.cost.ModelPriceService;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -80,6 +82,10 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
+
+    // Built-in prices only, as before organization prices: every scorer test charges the bundled price table.
+    private final ModelPriceService modelPriceService = mock(ModelPriceService.class,
+            invocation -> Mono.just(PriceLayers.BUILT_IN_ONLY));
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -170,7 +176,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 agenticScoringService,
                 spanService,
                 onlineEvaluationRecorder,
-                attachmentService);
+                attachmentService,
+                modelPriceService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();

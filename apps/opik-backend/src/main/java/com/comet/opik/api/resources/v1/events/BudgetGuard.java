@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.ModelPriceService;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.evaluation.LlmUsageExtractor;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -20,9 +22,9 @@ import java.math.BigDecimal;
  * and do its wrap-up call. That wrap-up call is charged too, so actual spend is expected to overshoot
  * the limit slightly — by design. There is no per-call pre-estimation and no hard kill.
  *
- * <p>Cost is computed fully in-process via {@link CostService#calculateCost} (a static price table
- * loaded once at class-load) from the {@link ChatResponse}'s own token usage — no DB / network /
- * provider round-trip. Everything is fail-open: a resolution or pricing failure degrades to
+ * <p>Cost is computed fully in-process via {@link CostService#price} from the {@link ChatResponse}'s own
+ * token usage, with the price layers the scorer loaded once for the evaluation (the organization's
+ * prices over the built-in table) — no DB / network / provider round-trip per call. Everything is fail-open: a resolution or pricing failure degrades to
  * "no limit" and never disturbs the scoring call. A successful-but-unpriced lookup (model resolves
  * but the {@code (model, provider)} pair has no price-table entry) prices at zero, so the limit is
  * silently ineffective — this case has no exception to log, so {@link #charge(ChatResponse)} warns
@@ -38,19 +40,21 @@ import java.math.BigDecimal;
 public final class BudgetGuard {
 
     /** No-limit guard: passes calls through untouched and never triggers wrap-up. */
-    public static final BudgetGuard UNLIMITED = new BudgetGuard(null, null, null);
+    public static final BudgetGuard UNLIMITED = new BudgetGuard(null, null, null, PriceLayers.BUILT_IN_ONLY);
 
     private final BigDecimal limitUsd;
     private final String model;
     private final String provider;
+    private final PriceLayers priceLayers;
     private BigDecimal spentUsd = BigDecimal.ZERO;
     private boolean budgetEnforced = false;
     private boolean unpricedWarned = false;
 
-    private BudgetGuard(BigDecimal limitUsd, String model, String provider) {
+    private BudgetGuard(BigDecimal limitUsd, String model, String provider, PriceLayers priceLayers) {
         this.limitUsd = limitUsd;
         this.model = model;
         this.provider = provider;
+        this.priceLayers = priceLayers;
     }
 
     /**
@@ -66,18 +70,31 @@ public final class BudgetGuard {
      * work — worse than ignoring it.
      */
     public static BudgetGuard create(BigDecimal maxCostUsd, @NonNull String modelName,
-            LlmProviderFactory llmProviderFactory) {
+            LlmProviderFactory llmProviderFactory, @NonNull PriceLayers priceLayers) {
         if (maxCostUsd == null || maxCostUsd.signum() <= 0) {
             return UNLIMITED;
         }
         try {
             var resolved = llmProviderFactory.getResolvedModelInfo(modelName);
-            return new BudgetGuard(maxCostUsd, resolved.actualModel(), resolved.provider());
+            return new BudgetGuard(maxCostUsd, resolved.actualModel(), resolved.provider(), priceLayers);
         } catch (Exception exception) {
             log.warn("Failed to resolve model '{}' for budget guard; proceeding without a spend limit",
                     modelName, exception);
             return UNLIMITED;
         }
+    }
+
+    /**
+     * Like {@link #create}, with the price layers of the current organization, loaded only when there's a limit to
+     * enforce: the scorers' jobs carry the organization in their context.
+     */
+    public static Mono<BudgetGuard> load(BigDecimal maxCostUsd, @NonNull String modelName,
+            LlmProviderFactory llmProviderFactory, @NonNull ModelPriceService modelPriceService) {
+        if (maxCostUsd == null || maxCostUsd.signum() <= 0) {
+            return Mono.just(UNLIMITED);
+        }
+        return modelPriceService.layersFor()
+                .map(priceLayers -> create(maxCostUsd, modelName, llmProviderFactory, priceLayers));
     }
 
     /** Taps the LLM call to charge its cost, returning the response unchanged. Pass-through when unlimited. */
@@ -94,8 +111,9 @@ public final class BudgetGuard {
             if (usage == null) {
                 return;
             }
-            var cost = CostService.calculateCost(model, provider, usage, null);
-            if (cost.signum() == 0 && !unpricedWarned) {
+            var priced = CostService.price(model, provider, usage, null, priceLayers);
+            var cost = priced.cost();
+            if (cost.signum() == 0 && priced.source() != CostService.CostSource.ORGANIZATION && !unpricedWarned) {
                 // The model resolved but (model, provider) has no entry in the price table, so every
                 // call prices at zero and the budget can never trip. Unlike the resolution/pricing
                 // exception paths, this is a successful-but-unpriced lookup with no other operator

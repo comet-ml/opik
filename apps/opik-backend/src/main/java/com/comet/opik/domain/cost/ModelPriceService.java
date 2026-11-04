@@ -6,6 +6,7 @@ import com.comet.opik.api.modelprice.CustomModelPriceResolution;
 import com.comet.opik.api.modelprice.CustomModelPriceResolveRequest;
 import com.comet.opik.api.modelprice.CustomModelPriceRow;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
@@ -13,17 +14,22 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -49,7 +55,10 @@ public interface ModelPriceService {
 
     Mono<CustomModelPriceHistoryPage> findHistory(@NonNull String organizationId, int page, int size);
 
-    /** The price layers the current workspace's spans are priced with: its organization's rows, or built-in only. */
+    /**
+     * The price layers the current workspace's spans are priced with: its organization's rows, or built-in only.
+     * Never fails: prices that can't be loaded in time give {@link PriceLayers#LOAD_FAILED}.
+     */
     Mono<PriceLayers> layersFor();
 
     Mono<CustomModelPriceResolution> resolve(@NonNull CustomModelPriceResolveRequest request);
@@ -59,15 +68,26 @@ public interface ModelPriceService {
 @Slf4j
 class ModelPriceServiceImpl implements ModelPriceService {
 
+    static final Duration LOAD_TIMEOUT = Duration.ofSeconds(2);
+    private static final Duration LOAD_FAILURE_LOG_INTERVAL = Duration.ofMinutes(1);
+    private static final LongCounter LOAD_FAILURES = GlobalOpenTelemetry.get().getMeter("opik.cost")
+            .counterBuilder("opik.cost.model_prices.load_failures")
+            .setDescription("Span batches priced with built-in prices because the organization's prices failed to load")
+            .build();
+
     private final TransactionTemplate transactionTemplate;
     private final OrganizationResolver organizationResolver;
+    private final ServiceTogglesConfig serviceToggles;
     private final ModelPriceStore store;
+    private final AtomicLong lastLoadFailureLoggedAt = new AtomicLong();
 
     @Inject
     ModelPriceServiceImpl(@NonNull TransactionTemplate transactionTemplate, @NonNull IdGenerator idGenerator,
-            @NonNull OrganizationResolver organizationResolver) {
+            @NonNull OrganizationResolver organizationResolver,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles) {
         this.transactionTemplate = transactionTemplate;
         this.organizationResolver = organizationResolver;
+        this.serviceToggles = serviceToggles;
         this.store = new ModelPriceStore(idGenerator::generateId);
     }
 
@@ -136,9 +156,26 @@ class ModelPriceServiceImpl implements ModelPriceService {
 
     @Override
     public Mono<PriceLayers> layersFor() {
+        if (!serviceToggles.isModelPricesEnabled()) {
+            return Mono.just(PriceLayers.BUILT_IN_ONLY);
+        }
         return organizationResolver.organizationId()
                 .flatMap(organizationId -> findOrganizationList(organizationId).map(ModelPriceList::toLayers))
-                .defaultIfEmpty(PriceLayers.BUILT_IN_ONLY);
+                .defaultIfEmpty(PriceLayers.NO_ORGANIZATION)
+                .timeout(LOAD_TIMEOUT)
+                .onErrorResume(this::builtInAfterLoadFailure);
+    }
+
+    // Spans are never refused for prices: a failed load prices them with built-in prices and stamps them as such.
+    // One warning a minute is enough to see it; the counter shows how many batches it touched.
+    private Mono<PriceLayers> builtInAfterLoadFailure(Throwable error) {
+        LOAD_FAILURES.add(1);
+        long now = System.currentTimeMillis();
+        long last = lastLoadFailureLoggedAt.get();
+        if (now - last >= LOAD_FAILURE_LOG_INTERVAL.toMillis() && lastLoadFailureLoggedAt.compareAndSet(last, now)) {
+            log.warn("Failed to load model prices, pricing with built-in prices", error);
+        }
+        return Mono.just(PriceLayers.LOAD_FAILED);
     }
 
     @Override

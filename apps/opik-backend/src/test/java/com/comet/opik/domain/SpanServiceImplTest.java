@@ -8,6 +8,8 @@ import com.comet.opik.api.events.SpansDeleted;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.cost.ModelPriceService;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -50,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -97,6 +100,8 @@ class SpanServiceImplTest {
     private SpanWeeksDAO spanWeeksDAO;
 
     private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
+    private final ModelPriceService modelPriceService = mock(ModelPriceService.class,
+            invocation -> Mono.just(PriceLayers.BUILT_IN_ONLY));
 
     private SpanService newSpanService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
         return newSpanService(databaseAnalyticsDataModelConfig, idGenerator);
@@ -119,7 +124,8 @@ class SpanServiceImplTest {
                 eventBus,
                 deletionEventDAO,
                 spanWeeksDAO,
-                opikConfiguration);
+                opikConfiguration,
+                modelPriceService);
     }
 
     @Nested
@@ -315,12 +321,12 @@ class SpanServiceImplTest {
             when(spanDAO.getPartialById(span.id())).thenReturn(Mono.empty());
             when(attachmentStripperService.stripAttachments(expectedSpan, BYPASS_WORKSPACE_ID, DEFAULT_USER,
                     PROJECT_NAME)).thenReturn(Mono.just(expectedSpan));
-            when(spanDAO.insert(expectedSpan)).thenReturn(Mono.empty());
+            when(spanDAO.insert(expectedSpan, PriceLayers.BUILT_IN_ONLY)).thenReturn(Mono.empty());
 
             var actualSpanId = create(span, BYPASS_WORKSPACE_ID).block();
 
             assertThat(actualSpanId).isEqualTo(span.id());
-            verify(spanDAO).insert(expectedSpan);
+            verify(spanDAO).insert(expectedSpan, PriceLayers.BUILT_IN_ONLY);
         }
 
         @Test

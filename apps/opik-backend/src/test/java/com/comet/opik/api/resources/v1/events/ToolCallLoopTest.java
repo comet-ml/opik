@@ -6,6 +6,7 @@ import com.comet.opik.api.resources.v1.events.tools.MediaPayload;
 import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -127,7 +128,7 @@ class ToolCallLoopTest {
         var factory = mock(LlmProviderFactory.class);
         when(factory.getResolvedModelInfo("gpt-4o"))
                 .thenReturn(new LlmProviderFactory.ResolvedModelInfo("gpt-4o", "openai"));
-        var costGuard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factory);
+        var costGuard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factory, PriceLayers.BUILT_IN_ONLY);
 
         AtomicInteger scoreInvocations = new AtomicInteger();
         var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
@@ -513,7 +514,7 @@ class ToolCallLoopTest {
         var factory = mock(LlmProviderFactory.class);
         when(factory.getResolvedModelInfo("gpt-4o"))
                 .thenReturn(new LlmProviderFactory.ResolvedModelInfo("gpt-4o", "openai"));
-        return BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factory);
+        return BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factory, PriceLayers.BUILT_IN_ONLY);
     }
 
     // Runs runWithWrapUp with a model that always requests a tool, so the loop only ends via the

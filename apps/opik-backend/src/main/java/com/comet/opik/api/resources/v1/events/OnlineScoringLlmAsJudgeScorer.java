@@ -19,6 +19,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.cost.ModelPriceService;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -93,6 +94,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
     private final DecisionScoringService decisionScoringService;
+    private final ModelPriceService modelPriceService;
     private final LongCounter routingDecisions;
 
     @Inject
@@ -111,9 +113,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull OpikConfiguration opikConfiguration,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
             @NonNull AttachmentService attachmentService,
-            @NonNull DecisionScoringService decisionScoringService) {
+            @NonNull DecisionScoringService decisionScoringService,
+            @NonNull ModelPriceService modelPriceService) {
         super(config, redisson, feedbackScoreService, traceService, spanService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
+        this.modelPriceService = modelPriceService;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
@@ -435,11 +439,18 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private Mono<List<FeedbackScoreBatchItem>> evaluate(TraceToScoreLlmAsJudge message, List<Span> spans,
             String traceStructureJson, JsonNode prebuiltFullJson, boolean referencesTrace, Map<String, String> mdc,
             EvaluationRecorder recorder) {
-        var trace = message.trace();
         // One guard per trace evaluation; UNLIMITED when the rule sets no maxCostUsd. Charges every
         // LLM call (initial + tool rounds + wrap-up) and tells the tool loop when to start wrapping up.
-        var costGuard = BudgetGuard.create(message.llmAsJudgeCode().maxCostUsd(),
-                message.llmAsJudgeCode().model().name(), llmProviderFactory);
+        return BudgetGuard.load(message.llmAsJudgeCode().maxCostUsd(), message.llmAsJudgeCode().model().name(),
+                llmProviderFactory, modelPriceService)
+                .flatMap(costGuard -> evaluate(message, spans, traceStructureJson, prebuiltFullJson, referencesTrace,
+                        mdc, recorder, costGuard));
+    }
+
+    private Mono<List<FeedbackScoreBatchItem>> evaluate(TraceToScoreLlmAsJudge message, List<Span> spans,
+            String traceStructureJson, JsonNode prebuiltFullJson, boolean referencesTrace, Map<String, String> mdc,
+            EvaluationRecorder recorder, BudgetGuard costGuard) {
+        var trace = message.trace();
         // Sync prep is CPU-bound (JSON serialization for the size estimate + prompt rendering)
         // — schedule on Schedulers.parallel() so we don't tax the R2DBC scheduler that emits
         // the spans fetch upstream, and don't pin a workersScheduler thread on the inline path.
