@@ -5,6 +5,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetExperimentItemStreamRequest;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -127,6 +128,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -8992,8 +8994,11 @@ class DatasetsResourceTest {
         private void assertItemWithExperimentItems(DatasetItemPage actualPage, DatasetItem expectedItem,
                 ExperimentItem... expectedExperimentItems) {
             assertPage(List.of(expectedItem), actualPage.content());
+            assertExperimentItems(actualPage.content().getFirst().experimentItems(), expectedExperimentItems);
+        }
 
-            var actualExperimentItems = actualPage.content().getFirst().experimentItems();
+        private void assertExperimentItems(List<ExperimentItem> actualExperimentItems,
+                ExperimentItem... expectedExperimentItems) {
             assertThat(actualExperimentItems)
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
                     .containsExactlyInAnyOrder(expectedExperimentItems);
@@ -9147,6 +9152,257 @@ class DatasetsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                         .isEqualTo(expectedError);
+            }
+        }
+
+        // Reads every page the way a stream client does: until a page comes back shorter than the limit
+        private List<ExperimentItem> streamAll(DatasetExperimentItemStreamRequest request) {
+            var allItems = new ArrayList<ExperimentItem>();
+            var pageRequest = request;
+            for (int pageCount = 0; pageCount < 50; pageCount++) {
+                var page = datasetResourceClient.streamDatasetExperimentItems(pageRequest, apiKey, workspaceName);
+                allItems.addAll(page);
+                if (page.size() < pageRequest.limit()) {
+                    return allItems;
+                }
+                pageRequest = pageRequest.toBuilder()
+                        .lastRetrievedExperimentId(page.getLast().experimentId())
+                        .lastRetrievedId(page.getLast().id())
+                        .build();
+            }
+            throw new AssertionError("stream did not end within 50 pages");
+        }
+
+        private List<UUID> inStreamOrder(List<ExperimentItem> experimentItems) {
+            return experimentItems.stream()
+                    .sorted(Comparator.comparing((ExperimentItem item) -> item.experimentId().toString())
+                            .thenComparing(item -> item.datasetItemId().toString())
+                            .thenComparing(item -> item.id().toString())
+                            .reversed())
+                    .map(ExperimentItem::id)
+                    .toList();
+        }
+
+        @ParameterizedTest
+        @CsvSource({"5, 1", "3, 3"})
+        @DisplayName("when streaming by dataset name, then return every experiment item exactly once in key order")
+        void streamWhenPagedThenEveryItemOnceInKeyOrder(int itemCount, int experimentCount) {
+            var datasetItems = IntStream.range(0, itemCount)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
+                    .toList();
+            var dataset = createDatasetWithItems(datasetItems);
+            var otherDatasetExperimentId = createExperiment(
+                    createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory))));
+
+            var expectedExperimentItems = new ArrayList<ExperimentItem>();
+            for (int i = 0; i < experimentCount; i++) {
+                var experimentId = createExperiment(dataset);
+                datasetItems.forEach(item -> expectedExperimentItems.add(createExperimentItem(experimentId, item)));
+            }
+            var allExperimentItems = new ArrayList<>(expectedExperimentItems);
+            allExperimentItems.add(createExperimentItem(otherDatasetExperimentId, datasetItems.getFirst()));
+            createExperimentItems(allExperimentItems.toArray(ExperimentItem[]::new));
+
+            var actualExperimentItems = streamAll(DatasetExperimentItemStreamRequest.builder()
+                    .datasetName(dataset.name())
+                    .limit(2)
+                    .build());
+
+            assertThat(actualExperimentItems)
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyElementsOf(inStreamOrder(expectedExperimentItems));
+            assertExperimentItems(actualExperimentItems, expectedExperimentItems.toArray(ExperimentItem[]::new));
+        }
+
+        @Test
+        @DisplayName("when aggregated and raw experiments are mixed, then stream the same items the paged mode returns")
+        void streamWhenAggregatedAndRawExperimentsThenMatchPagedMode() {
+            var datasetItems = IntStream.range(0, 3)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
+                    .toList();
+            var dataset = createDatasetWithItems(datasetItems);
+            var aggregatedExperimentId = createExperiment(dataset);
+            var rawExperimentId = createExperiment(dataset);
+            createExperimentItems(datasetItems.stream()
+                    .flatMap(item -> Stream.of(createExperimentItem(aggregatedExperimentId, item),
+                            createExperimentItem(rawExperimentId, item)))
+                    .toArray(ExperimentItem[]::new));
+            experimentAggregatesService.populateAggregations(aggregatedExperimentId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            var actualExperimentItems = streamAll(DatasetExperimentItemStreamRequest.builder()
+                    .datasetId(dataset.id())
+                    .limit(2)
+                    .build());
+
+            var pagedExperimentItems = getPage(dataset.id(), null, null).content().stream()
+                    .flatMap(item -> item.experimentItems().stream())
+                    .toList();
+            assertThat(pagedExperimentItems).hasSize(6);
+            assertThat(actualExperimentItems)
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyElementsOf(inStreamOrder(pagedExperimentItems));
+            assertThat(actualExperimentItems)
+                    .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                            .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                            .build())
+                    .containsExactlyInAnyOrderElementsOf(pagedExperimentItems);
+        }
+
+        @Test
+        @DisplayName("when dataset_version and an id filter are set, then stream only those experiment items")
+        void streamWhenDatasetVersionAndIdFilterSet() {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var otherItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem, otherItem));
+            var datasetId = dataset.id();
+            var experimentOnVersion1 = createExperiment(dataset);
+
+            var version1 = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content()
+                    .getFirst();
+            var version2 = datasetResourceClient.applyDatasetItemChanges(datasetId,
+                    DatasetItemChanges.builder()
+                            .baseVersion(version1.id())
+                            .addedItems(List.of(DatasetResourceClient.buildDatasetItem(factory)))
+                            .build(),
+                    false, apiKey, workspaceName);
+            var experimentOnVersion2 = createExperiment(dataset);
+
+            var expectedOnVersion1 = createExperimentItem(experimentOnVersion1, targetItem);
+            var expectedOnVersion2 = createExperimentItem(experimentOnVersion2, targetItem);
+            createExperimentItems(expectedOnVersion1, expectedOnVersion2,
+                    createExperimentItem(experimentOnVersion1, otherItem),
+                    createExperimentItem(experimentOnVersion2, otherItem));
+
+            var request = DatasetExperimentItemStreamRequest.builder()
+                    .datasetId(datasetId)
+                    .filters(JsonUtils.writeValueAsString(idFilter(targetItem.id())))
+                    .build();
+
+            assertExperimentItems(streamAll(request.toBuilder().datasetVersion(version1.versionHash()).build()),
+                    expectedOnVersion1);
+            assertExperimentItems(streamAll(request.toBuilder().datasetVersion(version2.versionHash()).build()),
+                    expectedOnVersion2);
+            assertExperimentItems(
+                    streamAll(request.toBuilder().datasetVersion(DatasetVersionService.LATEST_TAG).build()),
+                    expectedOnVersion2);
+            assertExperimentItems(streamAll(request), expectedOnVersion1, expectedOnVersion2);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = ExperimentType.class, names = "REGULAR", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("when streaming, then exclude optimizer experiments")
+        void streamWhenOptimizerExperimentsThenExclude(ExperimentType optimizerType) {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem));
+            var regularExperimentId = createExperiment(dataset);
+            var optimizerExperimentId = createExperiment(dataset, optimizerType);
+
+            var expectedExperimentItem = createExperimentItem(regularExperimentId, targetItem);
+            createExperimentItems(expectedExperimentItem, createExperimentItem(optimizerExperimentId, targetItem));
+
+            assertExperimentItems(
+                    streamAll(DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).build()),
+                    expectedExperimentItem);
+        }
+
+        @Test
+        @DisplayName("when the cursor's experiment item was deleted, then resume from the start of its experiment")
+        void streamWhenCursorItemDeletedThenResumeFromItsExperiment() {
+            var datasetItems = IntStream.range(0, 3)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory))
+                    .toList();
+            var dataset = createDatasetWithItems(datasetItems);
+            var experimentId = createExperiment(dataset);
+            var experimentItems = datasetItems.stream()
+                    .map(item -> createExperimentItem(experimentId, item))
+                    .toList();
+            createExperimentItems(experimentItems.toArray(ExperimentItem[]::new));
+            var request = DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).limit(1).build();
+
+            var firstPage = datasetResourceClient.streamDatasetExperimentItems(request, apiKey, workspaceName);
+            var cursorItem = firstPage.getFirst();
+            experimentResourceClient.deleteExperimentItems(Set.of(cursorItem.id()), apiKey, workspaceName);
+
+            var remainingExperimentItems = streamAll(request.toBuilder()
+                    .lastRetrievedExperimentId(cursorItem.experimentId())
+                    .lastRetrievedId(cursorItem.id())
+                    .build());
+
+            var expectedRemaining = experimentItems.stream()
+                    .filter(item -> !item.id().equals(cursorItem.id()))
+                    .toArray(ExperimentItem[]::new);
+            assertExperimentItems(remainingExperimentItems, expectedRemaining);
+        }
+
+        @Test
+        @DisplayName("when the dataset has no experiments, then stream nothing")
+        void streamWhenDatasetHasNoExperiments() {
+            var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
+
+            assertThat(streamAll(DatasetExperimentItemStreamRequest.builder().datasetId(dataset.id()).build()))
+                    .isEmpty();
+        }
+
+        Stream<Arguments> streamWhenNotFound() {
+            return Stream.of(
+                    arguments(DatasetExperimentItemStreamRequest.builder().datasetId(GENERATOR.generate()).build()),
+                    arguments(DatasetExperimentItemStreamRequest.builder()
+                            .datasetName(RandomStringUtils.secure().nextAlphanumeric(20)).build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when the dataset does not exist, then return not found")
+        void streamWhenNotFound(DatasetExperimentItemStreamRequest request) {
+            try (var response = datasetResourceClient.callStreamDatasetExperimentItems(request, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("when dataset_version does not exist, then return not found")
+        void streamWhenDatasetVersionNotFound() {
+            var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
+            var request = DatasetExperimentItemStreamRequest.builder()
+                    .datasetId(dataset.id())
+                    .datasetVersion("unknown-version")
+                    .build();
+
+            try (var response = datasetResourceClient.callStreamDatasetExperimentItems(request, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        Stream<Arguments> streamWhenInvalidRequest() {
+            var datasetId = GENERATOR.generate();
+            var valid = DatasetExperimentItemStreamRequest.builder().datasetId(datasetId).build();
+            return Stream.of(
+                    arguments(valid.toBuilder().limit(2001).build(), "limit must be less than or equal to 2000"),
+                    arguments(valid.toBuilder().limit(0).build(), "limit must be greater than or equal to 1"),
+                    arguments(valid.toBuilder().lastRetrievedId(GENERATOR.generate()).build(),
+                            "cursorComplete last_retrieved_experiment_id and last_retrieved_id must be set together"),
+                    arguments(valid.toBuilder().datasetId(null).build(),
+                            "datasetIdentified exactly one of dataset_id or dataset_name must be set"),
+                    arguments(valid.toBuilder().datasetName("dataset").build(),
+                            "datasetIdentified exactly one of dataset_id or dataset_name must be set"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when the request is invalid, then return unprocessable entity")
+        void streamWhenInvalidRequest(DatasetExperimentItemStreamRequest request, String expectedError) {
+            try (var response = datasetResourceClient.callStreamDatasetExperimentItems(request, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                // The endpoint produces octet-stream, so the error body has to be parsed by hand
+                var errorMessage = JsonUtils.readValue(response.readEntity(String.class), ErrorMessage.class);
+                assertThat(errorMessage.errors()).containsExactly(expectedError);
             }
         }
     }

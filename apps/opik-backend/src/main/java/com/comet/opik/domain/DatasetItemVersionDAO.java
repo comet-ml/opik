@@ -8,6 +8,7 @@ import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.ExecutionPolicy;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
@@ -94,6 +95,8 @@ public interface DatasetItemVersionDAO {
      */
     Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria searchCriteria, int page, int size,
             String versionId);
+
+    Flux<ExperimentItem> streamExperimentItems(DatasetExperimentItemStreamCriteria criteria);
 
     Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -2105,6 +2108,609 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
+    /**
+     * Cursor stream over a dataset's experiment items: one flat row per experiment item, a page bounded by
+     * {@code :limit} regardless of how many experiments each dataset item has.
+     *
+     * <p><b>Why a separate query.</b> {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} pages dataset
+     * items and nests their experiment items; this pages the experiment items themselves. Experiment scope,
+     * version scope, legacy item id aliases, dataset item filters and the per-item projection are the same, so
+     * a row here equals the matching element of that query's {@code experiment_items_array}.
+     *
+     * <p><b>Page order follows the sort key.</b> Rows are ordered by
+     * {@code (experiment_id, dataset_item_id, id) DESC}, the stored {@code dataset_item_id}, not the stable one
+     * the row reports. That is the {@code experiment_items} key prefix
+     * {@code (workspace_id, experiment_id, dataset_item_id, trace_id, id)}, so the cursor predicate is a key
+     * range and a page reads about {@code :limit} rows instead of re-scanning the in-scope experiments; an
+     * {@code id}-only cursor prunes nothing here since {@code id} is the last key column. {@code trace_id} is
+     * skipped: an (experiment, dataset item) pair holds one or two rows, and keeping it out keeps the cursor
+     * to what a row identifies. {@code experiment_item_aggregates}
+     * ({@code (workspace_id, experiment_id, id)}) is ordered the same way, which bounds its page by the
+     * experiment prefix and keeps the order stable when an experiment moves from raw to aggregated mid-stream.
+     *
+     * <p><b>The cursor.</b> Callers send the last row's {@code experiment_id} and {@code id}; its stored
+     * {@code dataset_item_id} is looked up by {@link #RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR} and bound as
+     * {@code :cursor_dataset_item_id}. If that row is gone, the stream resumes from the start of its experiment
+     * ({@code cursor_unresolved}): it repeats rows rather than skipping any.
+     *
+     * <p><b>Item filters are applied before {@code LIMIT}.</b> A row dropped after the limit would shorten the
+     * page, and a short page is how stream callers detect the end. The filtered id sets hold every row id and
+     * stable id of the items whose newest referenced version passes, which is the paged query's final
+     * stable-id filter expressed on the stored id.
+     *
+     * <p>The page is materialized once as a scalar {@code groupArray} ({@code page_rows}), the idiom
+     * {@code top_dataset_items_raw} uses, since ClickHouse re-inlines a CTE at every reference.
+     */
+    private static final String STREAM_DATASET_EXPERIMENT_ITEMS = """
+            WITH legacy_dataset_item_aliases AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), experiment_aggregated_scope_ids AS (
+                SELECT
+                    id,
+                    COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
+                FROM experiment_aggregates FINAL
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id IN :experiment_ids
+            ), experiments_resolved AS (
+                SELECT
+                    id,
+                    COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id IN :experiment_ids
+                AND id NOT IN (SELECT id FROM experiment_aggregated_scope_ids)
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )<if(has_raw)>
+            , dataset_items_resolved AS (
+                SELECT
+                    div_dedup.dataset_item_id AS id,
+                    div_dedup.id AS row_id,
+                    div_dedup.dataset_version_id AS dataset_version_id,
+                    div_dedup.data AS data,
+                    div_dedup.description AS description,
+                    div_dedup.source AS source,
+                    div_dedup.trace_id AS trace_id,
+                    div_dedup.span_id AS span_id,
+                    div_dedup.tags AS tags,
+                    div_dedup.evaluators AS evaluators,
+                    div_dedup.execution_policy AS execution_policy,
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
+                FROM (
+                    SELECT *
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :datasetId
+                    AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiments_resolved)
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY dataset_item_id
+                ) AS div_dedup
+            )<if(dataset_item_filters)>
+            , raw_passing_dataset_item_ids AS (
+                SELECT arrayJoin([dataset_item_id, id]) AS id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_item_id IN (SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>)
+            )<endif>
+            , raw_page_keys AS (
+                SELECT id, experiment_id, dataset_item_id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experiment_ids
+                AND experiment_id IN (SELECT id FROM experiments_resolved)
+                <if(dataset_item_filters)>AND dataset_item_id IN (SELECT id FROM raw_passing_dataset_item_ids)<endif>
+                <if(cursor_resolved)>
+                AND (experiment_id \\< :cursor_experiment_id
+                    OR (experiment_id = :cursor_experiment_id
+                        AND (dataset_item_id \\< :cursor_dataset_item_id
+                            OR (dataset_item_id = :cursor_dataset_item_id AND id \\< :cursor_id))))
+                <endif>
+                <if(cursor_unresolved)>AND experiment_id \\<= :cursor_experiment_id<endif>
+                ORDER BY experiment_id DESC, dataset_item_id DESC, id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+                LIMIT :limit
+            )<endif><if(has_aggregated)>
+            , dataset_items_aggr_resolved AS (
+                SELECT
+                    div_dedup.dataset_item_id AS id,
+                    div_dedup.id AS row_id,
+                    div_dedup.dataset_version_id AS dataset_version_id,
+                    div_dedup.data AS data,
+                    div_dedup.description AS description,
+                    div_dedup.source AS source,
+                    div_dedup.trace_id AS trace_id,
+                    div_dedup.span_id AS span_id,
+                    div_dedup.tags AS tags,
+                    div_dedup.evaluators AS evaluators,
+                    div_dedup.execution_policy AS execution_policy,
+                    div_dedup.item_created_at AS created_at,
+                    div_dedup.item_last_updated_at AS last_updated_at,
+                    div_dedup.item_created_by AS created_by,
+                    div_dedup.item_last_updated_by AS last_updated_by
+                FROM (
+                    SELECT *
+                    FROM dataset_item_versions
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :datasetId
+                    AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY dataset_item_id
+                ) AS div_dedup
+            )<if(dataset_item_filters)>
+            , aggr_passing_dataset_item_ids AS (
+                SELECT arrayJoin([dataset_item_id, id]) AS id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_item_id IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
+            )<endif>
+            , aggr_page_keys AS (
+                SELECT id, experiment_id, dataset_item_id, trace_id
+                FROM experiment_item_aggregates
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experiment_ids
+                AND experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
+                <if(dataset_item_filters)>AND dataset_item_id IN (SELECT id FROM aggr_passing_dataset_item_ids)<endif>
+                <if(cursor_resolved)>
+                AND (experiment_id \\< :cursor_experiment_id
+                    OR (experiment_id = :cursor_experiment_id
+                        AND (dataset_item_id \\< :cursor_dataset_item_id
+                            OR (dataset_item_id = :cursor_dataset_item_id AND id \\< :cursor_id))))
+                <endif>
+                <if(cursor_unresolved)>AND experiment_id \\<= :cursor_experiment_id<endif>
+                ORDER BY experiment_id DESC, dataset_item_id DESC, id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+                LIMIT :limit
+            )<endif>
+            , page AS (
+                SELECT id, experiment_id, dataset_item_id, trace_id, aggregated
+                FROM (
+                    <if(has_raw)>SELECT id, experiment_id, dataset_item_id, trace_id, 0 AS aggregated FROM raw_page_keys<endif>
+                    <if(has_raw && has_aggregated)>UNION ALL<endif>
+                    <if(has_aggregated)>SELECT id, experiment_id, dataset_item_id, trace_id, 1 AS aggregated FROM aggr_page_keys<endif>
+                )
+                ORDER BY experiment_id DESC, dataset_item_id DESC, id DESC
+                LIMIT :limit
+            ), page_rows AS (
+                SELECT
+                    page_row.1 AS id,
+                    page_row.2 AS experiment_id,
+                    page_row.3 AS dataset_item_id,
+                    page_row.4 AS trace_id,
+                    page_row.5 AS aggregated
+                FROM (
+                    SELECT arrayJoin((
+                        SELECT groupArray(tuple(id, experiment_id, dataset_item_id, trace_id, aggregated)) FROM page
+                    )) AS page_row
+                )
+            )<if(has_raw)>
+            , raw_items AS (
+                SELECT
+                    ei.id AS id,
+                    ei.experiment_id AS experiment_id,
+                    ei.dataset_item_id AS dataset_item_id,
+                    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id,
+                    ei.trace_id AS trace_id,
+                    ei.created_at AS created_at,
+                    ei.last_updated_at AS last_updated_at,
+                    ei.created_by AS created_by,
+                    ei.last_updated_by AS last_updated_by,
+                    ei.execution_policy AS execution_policy
+                FROM (
+                    SELECT *
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND experiment_id IN (SELECT experiment_id FROM page_rows WHERE aggregated = 0)
+                    AND dataset_item_id IN (SELECT dataset_item_id FROM page_rows WHERE aggregated = 0)
+                    AND id IN (SELECT id FROM page_rows WHERE aggregated = 0)
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS ei
+                LEFT JOIN legacy_dataset_item_aliases AS lookup_div ON lookup_div.id = ei.dataset_item_id
+            ), raw_trace_ids AS (
+                SELECT trace_id FROM page_rows WHERE aggregated = 0
+            ), trace_data AS (
+                SELECT
+                    id,
+                    if(isNaN(duration), NULL, duration) AS duration,
+                    <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                    <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
+                    metadata,
+                    visibility_mode
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND id IN (SELECT trace_id FROM raw_trace_ids)
+                <if(traces_partitioned)>
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                    SELECT toYYYYMMDD(toDate32(trace_id_at) - toIntervalDay(toDayOfWeek(trace_id_at, 1)))
+                    FROM (
+                        SELECT toDateTime64(UUIDv7ToDateTime(toUUIDOrZero(trace_id), 'UTC'), 0, 'UTC') AS trace_id_at
+                        FROM raw_trace_ids
+                    )
+                )
+                <endif>
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), feedback_scores_deduped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    category_name,
+                    value,
+                    reason,
+                    source,
+                    created_by,
+                    last_updated_by,
+                    created_at,
+                    last_updated_at,
+                    author,
+                    source_queue_id
+                FROM (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
+                    FROM feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                      AND entity_id IN (SELECT trace_id FROM raw_trace_ids)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        author,
+                        source_queue_id
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'trace'
+                      AND workspace_id = :workspace_id
+                      <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                      AND entity_id IN (SELECT trace_id FROM raw_trace_ids)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
+                    IF(length(entries) = 1, arrayElement(entries, 1).1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
+                    IF(length(entries) = 1, arrayElement(entries, 1).2, arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), arrayMap(e -> e.2, entries)), ', ')) AS reason,
+                    arrayElement(entries, 1).4 AS source,
+                    mapFromArrays(
+                        arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, CAST(e.9 AS DateTime64(9, 'UTC')), '', '', e.10, e.5), entries)
+                    ) AS value_by_author,
+                    arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
+                    arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
+                    CAST(arrayMin(arrayMap(e -> e.8, entries)) AS DateTime64(9, 'UTC')) AS created_at,
+                    CAST(arrayMax(arrayMap(e -> e.9, entries)) AS DateTime64(9, 'UTC')) AS last_updated_at
+                FROM feedback_scores_grouped
+            ), comments_final AS (
+                SELECT
+                    id AS comment_id,
+                    text,
+                    created_at AS comment_created_at,
+                    last_updated_at AS comment_last_updated_at,
+                    created_by AS comment_created_by,
+                    last_updated_by AS comment_last_updated_by,
+                    entity_id
+                FROM comments
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND entity_id IN (SELECT trace_id FROM raw_trace_ids)
+                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), assertion_results_per_trace AS (
+                SELECT
+                    entity_id,
+                    toJSONString(
+                        groupArray(
+                            CAST(
+                                (name, toString(passed), reason),
+                                'Tuple(value String, passed String, reason String)'
+                            )
+                        )
+                    ) AS assertions_array
+                FROM assertion_results FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                  AND entity_id IN (SELECT trace_id FROM raw_trace_ids)
+                GROUP BY entity_id
+            )<endif>
+            SELECT
+                experiment_id,
+                sort_dataset_item_id,
+                id,
+                experiment_items_array
+            FROM (
+                <if(has_raw)>
+                SELECT
+                    ei.experiment_id AS experiment_id,
+                    ei.dataset_item_id AS sort_dataset_item_id,
+                    ei.id AS id,
+                    [tuple(
+                        ei.id,
+                        ei.experiment_id,
+                        ei.stable_dataset_item_id,
+                        ei.trace_id,
+                        tfs.input,
+                        tfs.output,
+                        toString(tfs.feedback_scores_array),
+                        ei.created_at,
+                        ei.last_updated_at,
+                        ei.created_by,
+                        ei.last_updated_by,
+                        tfs.comments_array_agg,
+                        tfs.duration,
+                        tfs.total_estimated_cost,
+                        tfs.usage,
+                        tfs.visibility_mode,
+                        tfs.metadata,
+                        di.description,
+                        ei.execution_policy,
+                        arp.assertions_array
+                    )] AS experiment_items_array
+                FROM raw_items AS ei
+                LEFT JOIN dataset_items_resolved AS di ON di.id = ei.stable_dataset_item_id
+                LEFT JOIN (
+                    SELECT
+                        ei2.id AS item_id,
+                        t.input,
+                        t.output,
+                        t.metadata,
+                        t.duration,
+                        t.visibility_mode,
+                        s.total_estimated_cost,
+                        s.usage,
+                        any(fsa.feedback_scores_array) AS feedback_scores_array,
+                        any(co.comments_array_agg) AS comments_array_agg
+                    FROM raw_items ei2
+                    INNER JOIN trace_data AS t ON ei2.trace_id = t.id
+                    LEFT JOIN (
+                        SELECT
+                            entity_id,
+                            toJSONString(
+                                groupUniqArray(
+                                    CAST(
+                                        (
+                                            name,
+                                            category_name,
+                                            value,
+                                            reason,
+                                            toString(source),
+                                            concat(replaceOne(toString(created_at), ' ', 'T'), 'Z'),
+                                            concat(replaceOne(toString(last_updated_at), ' ', 'T'), 'Z'),
+                                            created_by,
+                                            last_updated_by,
+                                            mapFromArrays(
+                                                mapKeys(value_by_author),
+                                                arrayMap(
+                                                    v -> CAST(
+                                                        (
+                                                            v.1,
+                                                            v.2,
+                                                            v.3,
+                                                            toString(v.4),
+                                                            concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                            v.6,
+                                                            v.7,
+                                                            v.8,
+                                                            v.9
+                                                        ),
+                                                        'Tuple(
+                                                            value Decimal(18,9),
+                                                            reason String,
+                                                            category_name String,
+                                                            source String,
+                                                            last_updated_at String,
+                                                            span_type String,
+                                                            span_id String,
+                                                            source_queue_id String,
+                                                            author String
+                                                        )'
+                                                    ),
+                                                    mapValues(value_by_author)
+                                                )
+                                            )
+                                        ),
+                                        'Tuple(
+                                            name String,
+                                            category_name String,
+                                            value Decimal(18,9),
+                                            reason String,
+                                            source String,
+                                            created_at String,
+                                            last_updated_at String,
+                                            created_by String,
+                                            last_updated_by String,
+                                            value_by_author Map(
+                                                String,
+                                                Tuple(
+                                                    value Decimal(18,9),
+                                                    reason String,
+                                                    category_name String,
+                                                    source String,
+                                                    last_updated_at String,
+                                                    span_type String,
+                                                    span_id String,
+                                                    source_queue_id String,
+                                                    author String
+                                                )
+                                            )
+                                        )'
+                                    )
+                                )
+                            ) AS feedback_scores_array
+                        FROM feedback_scores_final
+                        GROUP BY entity_id
+                    ) AS fsa ON t.id = fsa.entity_id
+                    LEFT JOIN (
+                        SELECT
+                            entity_id,
+                            toJSONString(groupUniqArray(CAST(tuple(
+                                c.comment_id,
+                                c.text,
+                                concat(replaceOne(toString(c.comment_created_at), ' ', 'T'), 'Z'),
+                                concat(replaceOne(toString(c.comment_last_updated_at), ' ', 'T'), 'Z'),
+                                c.comment_created_by,
+                                c.comment_last_updated_by,
+                                c.entity_id
+                            ), 'Tuple(
+                                id FixedString(36),
+                                text String,
+                                created_at String,
+                                last_updated_at String,
+                                created_by String,
+                                last_updated_by String,
+                                entity_id FixedString(36)
+                            )'))) AS comments_array_agg
+                        FROM comments_final AS c
+                        GROUP BY entity_id
+                    ) AS co ON t.id = co.entity_id
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            SUM(total_estimated_cost) AS total_estimated_cost,
+                            sumMap(usage) AS usage
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND trace_id IN (SELECT trace_id FROM raw_trace_ids)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM raw_trace_ids))<endif>
+                        GROUP BY workspace_id, project_id, trace_id
+                    ) s ON t.id = s.trace_id
+                    GROUP BY
+                        ei2.id,
+                        t.input,
+                        t.output,
+                        t.metadata,
+                        t.duration,
+                        t.visibility_mode,
+                        s.total_estimated_cost,
+                        s.usage
+                ) AS tfs ON ei.id = tfs.item_id
+                LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
+                <endif>
+                <if(has_raw && has_aggregated)>UNION ALL<endif>
+                <if(has_aggregated)>
+                SELECT
+                    eia.experiment_id AS experiment_id,
+                    eia.dataset_item_id AS sort_dataset_item_id,
+                    eia.id AS id,
+                    [tuple(
+                        eia.id,
+                        eia.experiment_id,
+                        eia.stable_dataset_item_id,
+                        eia.trace_id,
+                        <if(truncate)>replaceRegexpAll(if(notEmpty(eia.input_slim), eia.input_slim, eia.input), '<truncate>', '"[image]"')<else>eia.input<endif>,
+                        <if(truncate)>replaceRegexpAll(if(notEmpty(eia.output_slim), eia.output_slim, eia.output), '<truncate>', '"[image]"')<else>eia.output<endif>,
+                        eia.feedback_scores_array,
+                        eia.created_at,
+                        eia.last_updated_at,
+                        eia.created_by,
+                        eia.last_updated_by,
+                        eia.comments_array_agg,
+                        eia.duration,
+                        eia.total_estimated_cost,
+                        eia.usage,
+                        eia.visibility_mode,
+                        eia.metadata,
+                        di.description,
+                        eia.execution_policy,
+                        eia.assertions_array
+                    )] AS experiment_items_array
+                FROM (
+                    SELECT
+                        eia_dedup.*,
+                        if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_dedup.dataset_item_id) AS stable_dataset_item_id
+                    FROM (
+                        SELECT *
+                        FROM experiment_item_aggregates
+                        WHERE workspace_id = :workspace_id
+                        AND experiment_id IN (SELECT experiment_id FROM page_rows WHERE aggregated = 1)
+                        AND id IN (SELECT id FROM page_rows WHERE aggregated = 1)
+                        ORDER BY (workspace_id, experiment_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS eia_dedup
+                    LEFT JOIN legacy_dataset_item_aliases AS lookup_div ON lookup_div.id = eia_dedup.dataset_item_id
+                ) AS eia
+                LEFT JOIN dataset_items_aggr_resolved AS di ON di.id = eia.stable_dataset_item_id
+                <endif>
+            )
+            ORDER BY experiment_id DESC, sort_dataset_item_id DESC, id DESC
+            SETTINGS log_comment = '<log_comment>', output_format_json_named_tuples_as_objects = 1
+            ;
+            """;
+
+    private static final String RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR = """
+            SELECT dataset_item_id
+            FROM (
+                SELECT dataset_item_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id = :experiment_id
+                AND id = :id
+                UNION ALL
+                SELECT dataset_item_id
+                FROM experiment_item_aggregates
+                WHERE workspace_id = :workspace_id
+                AND experiment_id = :experiment_id
+                AND id = :id
+            )
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     // Batch update items using INSERT ... SELECT with conditional field updates
     // Similar to legacy table's bulk update but for versioned items
     // Supports both ID-based and filter-based updates
@@ -3176,7 +3782,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .build();
 
             // Run pre-queries in parallel: target project IDs and aggregated experiment IDs
-            var targetProjectIdsMono = getTargetProjectIdsCached(workspaceId, targetProjectsScopeKey(criteria),
+            var targetProjectIdsMono = getTargetProjectIdsCached(workspaceId,
+                    targetProjectsScopeKey(criteria.datasetId(), criteria.experimentIds()),
                     criteria.datasetId(), criteria.experimentIds())
                     .defaultIfEmpty(List.of());
             var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
@@ -3305,6 +3912,117 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         });
     }
 
+    @Override
+    @WithSpan
+    public Flux<ExperimentItem> streamExperimentItems(@NonNull DatasetExperimentItemStreamCriteria criteria) {
+        log.info("Streaming experiment items for dataset '{}', experiments '{}', limit '{}', cursor '{}'/'{}'",
+                criteria.datasetId(), criteria.experimentIds().size(), criteria.limit(),
+                criteria.lastRetrievedExperimentId(), criteria.lastRetrievedId());
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            var targetProjectIdsMono = getTargetProjectIdsCached(workspaceId,
+                    targetProjectsScopeKey(criteria.datasetId(), criteria.experimentIds()),
+                    criteria.datasetId(), criteria.experimentIds())
+                    .defaultIfEmpty(List.of());
+            var branchCountsMono = getAggregationBranchCounts(AggregationBranchCountsCriteria.builder()
+                    .datasetId(criteria.datasetId())
+                    .experimentIds(criteria.experimentIds())
+                    .build());
+
+            return Mono.zip(targetProjectIdsMono, branchCountsMono, resolveStreamCursor(criteria, workspaceId))
+                    .map(preQueryResults -> new StreamPreQueryResults(workspaceId, preQueryResults.getT1(),
+                            preQueryResults.getT2(), preQueryResults.getT3()));
+        }).flatMapMany(preQueryResults -> streamExperimentItems(criteria, preQueryResults));
+    }
+
+    private record StreamPreQueryResults(String workspaceId, List<UUID> targetProjectIds,
+            AggregatedExperimentCounts counts, Optional<String> cursorDatasetItemId) {
+    }
+
+    private Mono<Optional<String>> resolveStreamCursor(DatasetExperimentItemStreamCriteria criteria,
+            String workspaceId) {
+        if (criteria.lastRetrievedId() == null) {
+            return Mono.just(Optional.empty());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var template = getSTWithLogComment(RESOLVE_EXPERIMENT_ITEM_STREAM_CURSOR,
+                    "resolve_experiment_item_stream_cursor", workspaceId, "", criteria.datasetId());
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("experiment_id", criteria.lastRetrievedExperimentId().toString())
+                    .bind("id", criteria.lastRetrievedId().toString());
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("dataset_item_id", String.class)))
+                    .next()
+                    .map(Optional::of)
+                    .defaultIfEmpty(Optional.empty());
+        });
+    }
+
+    private Flux<ExperimentItem> streamExperimentItems(DatasetExperimentItemStreamCriteria criteria,
+            StreamPreQueryResults preQueryResults) {
+        var counts = preQueryResults.counts();
+        if (!counts.hasAggregated() && !counts.hasRaw()) {
+            return Flux.empty();
+        }
+
+        boolean hasCursor = criteria.lastRetrievedId() != null;
+        var cursorDatasetItemId = preQueryResults.cursorDatasetItemId();
+        if (hasCursor && cursorDatasetItemId.isEmpty()) {
+            log.warn("Experiment item stream cursor '{}'/'{}' not found, resuming from the start of its experiment",
+                    criteria.lastRetrievedExperimentId(), criteria.lastRetrievedId());
+        }
+
+        return asyncTemplate.stream(connection -> {
+            var template = getSTWithLogComment(STREAM_DATASET_EXPERIMENT_ITEMS,
+                    "stream_dataset_experiment_items", preQueryResults.workspaceId(), "",
+                    "dataset_id=%s, experiment_ids=%s, limit=%s".formatted(criteria.datasetId(),
+                            criteria.experimentIds().size(), criteria.limit()));
+            addTracesPartitionedFlag(template);
+            addSpanWeeksBound(template);
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template.add("has_raw", counts.hasRaw());
+            template.add("has_aggregated", counts.hasAggregated());
+            template.add("cursor_resolved", cursorDatasetItemId.isPresent());
+            template.add("cursor_unresolved", hasCursor && cursorDatasetItemId.isEmpty());
+            addDatasetItemFiltersToTemplate(template, criteria.filters());
+            var targetProjectIds = preQueryResults.targetProjectIds();
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                template.add("has_target_projects", true);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", criteria.datasetId())
+                    .bind("versionId", criteria.fallbackVersionId())
+                    .bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new))
+                    .bind("limit", criteria.limit());
+            if (hasCursor) {
+                statement.bind("cursor_experiment_id", criteria.lastRetrievedExperimentId().toString());
+            }
+            cursorDatasetItemId.ifPresent(datasetItemId -> statement
+                    .bind("cursor_dataset_item_id", datasetItemId)
+                    .bind("cursor_id", criteria.lastRetrievedId().toString()));
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+            }
+            bindDatasetItemFilters(statement, criteria.filters());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_dataset_experiment_items");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("experiment_items_array",
+                            List[].class)))
+                    .flatMapIterable(experimentItemsArray -> Optional
+                            .ofNullable(DatasetItemResultMapper.getExperimentItems(experimentItemsArray))
+                            .orElseGet(List::of));
+        });
+    }
+
     /**
      * Key for {@link #TARGET_PROJECTS_CACHE}, covering every input that can change the target projects: the
      * dataset and the experiment set, order-independent.
@@ -3313,15 +4031,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code $workspaceId}, so that a caller cannot end up sharing an entry across tenants by forgetting to
      * include it here.
      */
-    private static String targetProjectsScopeKey(DatasetItemSearchCriteria criteria) {
-        String experimentIds = Optional.ofNullable(criteria.experimentIds())
+    private static String targetProjectsScopeKey(UUID datasetId, Set<UUID> experimentIds) {
+        String joinedExperimentIds = Optional.ofNullable(experimentIds)
                 .orElseGet(Set::of)
                 .stream()
                 .map(UUID::toString)
                 .sorted()
                 .collect(Collectors.joining(","));
 
-        return DigestUtils.sha256Hex(String.join("|", criteria.datasetId().toString(), experimentIds));
+        return DigestUtils.sha256Hex(String.join("|", datasetId.toString(), joinedExperimentIds));
     }
 
     /**
