@@ -96,15 +96,19 @@ class ClickHouseAppenderTest {
         resumeScheduler.countDown();
 
         var stopThread = new Thread(appender::stop);
+        stopThread.setDaemon(true);
         stopThread.start();
-        // Parked inside drainOnStop(): waiting on the in-flight insert, or, if it didn't wait, on a second insert
-        // that would already be in batchSizes.
-        await().atMost(5, TimeUnit.SECONDS).until(() -> stopThread.getState() == Thread.State.TIMED_WAITING
-                && Arrays.stream(stopThread.getStackTrace()).anyMatch(f -> f.getMethodName().equals("drainOnStop")));
-        assertThat(batchSizes).containsExactly(10);
-
-        insertDone.complete(null);
-        stopThread.join(TimeUnit.SECONDS.toMillis(5));
+        try {
+            // Parked inside drainOnStop(): waiting on the in-flight insert, or, if it didn't wait, on a second
+            // insert that would already be in batchSizes.
+            await().atMost(5, TimeUnit.SECONDS).until(() -> stopThread.getState() == Thread.State.TIMED_WAITING
+                    && Arrays.stream(stopThread.getStackTrace())
+                            .anyMatch(f -> f.getMethodName().equals("drainOnStop")));
+            assertThat(batchSizes).containsExactly(10);
+        } finally {
+            insertDone.complete(null);
+            stopThread.join(TimeUnit.SECONDS.toMillis(5));
+        }
         assertThat(stopThread.isAlive()).isFalse();
 
         assertThat(batchSizes).containsExactly(10, 10, 1);
