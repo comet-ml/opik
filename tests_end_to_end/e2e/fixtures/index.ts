@@ -1,4 +1,4 @@
-export { test, expect } from './cost-breakdown-spans.fixture';
+export { test, expect } from './thread-search-turns.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -645,3 +645,21 @@ export type {
   CostBreakdownSpansRef,
   CostBreakdownSpansFixtures,
 } from './cost-breakdown-spans.fixture';
+export type {
+  OpenRouterRemovedRowSeed,
+  OpenRouterRemovedRowSpansRef,
+  OpenRouterRemovedRowSpansFixtures,
+} from './openrouter-removed-row-spans.fixture';
+export { OPENROUTER_CATALOG_PROVIDER } from './openrouter-removed-row-spans.fixture';
+export type {
+  CommentedOn,
+  CommentedTraceRef,
+  CommentedEntitiesRef,
+  CommentedEntitiesFixtures,
+} from './commented-entities.fixture';
+export type {
+  ThreadSearchTurnRef,
+  ThreadSearchTermRef,
+  ThreadSearchTurnsRef,
+  ThreadSearchTurnsFixtures,
+} from './thread-search-turns.fixture';

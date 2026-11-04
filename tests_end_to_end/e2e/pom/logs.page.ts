@@ -36,6 +36,19 @@ export type LogsUrlFilter = {
   value?: string;
 };
 
+/**
+ * Which of the three Logs tabs' filter state a read is about.
+ *
+ * All three mount the same `FilterChipBar` over their own `useFilterChips`, and
+ * the two things a spec reads back are keyed by the tab in the same shape: the
+ * URL carries `<scope>_filters` and localStorage carries
+ * `chips:pinnedConfig:logs.<scope>`. Threads is in the union because the
+ * `comments` chip (opik#8724) is defined on the Threads tab as well as on
+ * Traces, and the whole point of that filter is that the two tabs answer
+ * DIFFERENT questions — so a spec about it has to be able to read either.
+ */
+export type LogsFilterScope = 'traces' | 'spans' | 'threads';
+
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
 const EXPLAIN_COLUMN: Record<ExplainKind, string> = {
@@ -180,7 +193,7 @@ export class LogsPage {
    * the filter's wire shape lives — field, type, operator and key, exactly as
    * the table will send them.
    */
-  async readUrlFilters(type: 'traces' | 'spans'): Promise<LogsUrlFilter[] | null> {
+  async readUrlFilters(type: LogsFilterScope): Promise<LogsUrlFilter[] | null> {
     return test.step(`Read the ${type} filters from the URL`, async () => {
       const raw = new URL(this.page.url()).searchParams.get(`${type}_filters`);
       if (raw === null) return null;
@@ -197,7 +210,7 @@ export class LogsPage {
    * URL) keeps the wait honest about JSON key order and encoding.
    */
   async waitForUrlFilters(
-    type: 'traces' | 'spans',
+    type: LogsFilterScope,
     predicate: (filters: LogsUrlFilter[]) => boolean,
   ): Promise<LogsUrlFilter[]> {
     return test.step(`Wait for the ${type} filters in the URL`, async () => {
@@ -225,7 +238,7 @@ export class LogsPage {
    * id identically, so the DOM cannot distinguish "already there" from
    * "just added".
    */
-  async readPinnedChipIds(type: 'traces' | 'spans'): Promise<string[] | null> {
+  async readPinnedChipIds(type: LogsFilterScope): Promise<string[] | null> {
     return test.step(`Read the pinned chips stored for the ${type} table`, async () => {
       const key = `chips:pinnedConfig:logs.${type}`;
       const raw = await this.page.evaluate((k) => window.localStorage.getItem(k), key);
@@ -1245,16 +1258,42 @@ export class LogsPage {
     });
   }
 
+  /** The "All filters" manager's trigger — shared by all three Logs tabs. */
+  get filterManagerTrigger(): Locator {
+    return this.page.getByTestId('filter-chip-manager-trigger');
+  }
+
+  /** The open "All filters" menu. */
+  get filterManagerMenu(): Locator {
+    return this.page.getByRole('menu');
+  }
+
   /**
-   * Pin a chip that isn't shown by default by picking it from the "All filters"
-   * manager. Selecting an item pins the chip and opens its popover, so callers
-   * that follow with applyKeyedFilter() get a popover that's already open —
-   * openFilterChip() tolerates that.
+   * Pick a chip out of the "All filters" manager.
+   *
+   * What this does depends on the chip, and that is the point rather than an
+   * inconvenience. `FilterManagerPopover.handleSelectUnpinned` pins the chip and
+   * opens its popover for every kind, and for two kinds it ALSO applies a filter
+   * on the spot (opik#8724):
+   *
+   *  - a `boolean` chip is applied as `{ applied: true }`;
+   *  - a `query-builder` chip with no `key` whose default operator takes no
+   *    value — `comments`, whose `defaultOperator` is `is_not_empty` — is
+   *    applied as a complete one-row filter.
+   *
+   * Everything else (a value-taking default like Trace name's `contains`, a
+   * keyed chip like Trace feedback scores) is pinned and opened with nothing
+   * applied, which is why `applyKeyedFilter()` follows this call rather than
+   * being replaced by it — and `openFilterChip()` tolerates the already-open
+   * popover.
+   *
+   * Deliberately no settle on a filter landing: whether one did is the
+   * assertion for the specs that care, so a wait here would decide it.
    */
   async pinFilterChip(menuItemLabel: string): Promise<void> {
-    return test.step(`Pin the "${menuItemLabel}" filter chip`, async () => {
-      await this.page.getByTestId('filter-chip-manager-trigger').click();
-      const menu = this.page.getByRole('menu');
+    return test.step(`Pick "${menuItemLabel}" from the All filters manager`, async () => {
+      await this.filterManagerTrigger.click();
+      const menu = this.filterManagerMenu;
       await menu.waitFor({ state: 'visible' });
       await menu.getByText(menuItemLabel, { exact: true }).click();
     });

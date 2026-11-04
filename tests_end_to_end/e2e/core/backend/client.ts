@@ -4245,6 +4245,61 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The experiment's AGGREGATED feedback scores — `feedback_scores` on
+     * `GET /v1/private/experiments/{id}`, a `List<FeedbackScoreAverage>` the
+     * backend computes as the mean per score name across the run's items.
+     *
+     * Raw rather than through the pinned SDK because the subject is the average
+     * the server computed, and these are the numbers the Experiments table's
+     * score columns render. Not derivable from the per-item scores a caller
+     * already has: those come from the SDK's own `evaluate()` return, so
+     * comparing them to each other would never leave the client — this is the
+     * read that says the scores were STORED under the right names.
+     *
+     * Flattened to name -> value, and the array is required rather than
+     * defaulted to `[]`: an experiment that aggregated nothing is the failure a
+     * caller is here to catch, and an empty map compares equal to "no scores
+     * were expected" in every assertion that follows. Throws rather than
+     * asserting so this module stays free of test-runner imports.
+     */
+    async getExperimentFeedbackScores(id: string): Promise<Record<string, number>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getExperimentFeedbackScores: experiment ${id} read answered ${status}: ${message}`,
+        );
+      }
+      const scores = (json as { feedback_scores?: unknown } | null)?.feedback_scores;
+      if (!Array.isArray(scores)) {
+        throw new Error(
+          `getExperimentFeedbackScores: experiment ${id} carried no feedback_scores array ` +
+            `(got ${scores === undefined ? 'nothing' : typeof scores})`,
+        );
+      }
+      return Object.fromEntries(
+        scores.map((entry) => {
+          const score = (entry ?? {}) as { name?: unknown; value?: unknown };
+          if (typeof score.name !== 'string' || score.name === '') {
+            throw new Error(
+              `getExperimentFeedbackScores: experiment ${id} carried a nameless score: ${JSON.stringify(entry)}`,
+            );
+          }
+          const value = Number(score.value);
+          if (!Number.isFinite(value)) {
+            throw new Error(
+              `getExperimentFeedbackScores: score '${score.name}' on experiment ${id} is not ` +
+                `a finite number (got ${JSON.stringify(score.value)})`,
+            );
+          }
+          return [score.name, value];
+        }),
+      );
+    },
+
+    /**
      * `GET /v1/private/experiments/{id}`'s `metadata`, exactly as the wire
      * carried it.
      *
@@ -5448,6 +5503,73 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return id;
     },
 
+    /**
+     * Comment on a THREAD, returning the comment's id.
+     *
+     * Separate from `addComment` rather than a third `entity` value, because
+     * the path is not the same shape: thread comments hang off
+     * `POST /v1/private/traces/threads/{id}/comments`, under the TRACES
+     * resource, and the `{id}` is the thread's `thread_model_id` — the UUID the
+     * backend minted for the materialised thread — not the producer-chosen
+     * `thread_id` string every other thread call takes. Passing the wrong one of
+     * those two answers 404 (or, worse, 500 on a non-UUID), so the argument is
+     * named for the id it actually wants and callers resolve it through
+     * `getThread(...).threadModelId`.
+     *
+     * Through `rawFetch` for the reason `addComment` is: the id comes back in
+     * `Location` and the server ignores any id the caller sends.
+     */
+    async addThreadComment(args: { threadModelId: string; text: string }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        `/v1/private/traces/threads/${args.threadModelId}/comments`,
+        { body: { text: args.text } },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `addThreadComment on thread model ${args.threadModelId}: expected 201, got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `addThreadComment on thread model ${args.threadModelId}: 201 carried no usable ` +
+            `Location header (got ${location ?? '<none>'})`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * Delete thread comments by id — `POST /v1/private/traces/threads/comments/delete`.
+     *
+     * A thread comment is the one annotation in this area that NOTHING
+     * cascades. Deleting a trace fires `TraceDeletedListener`, which prunes its
+     * feedback scores, its attachments, its spans and its TRACE comments, and
+     * `SpanService` prunes SPAN comments the same way — but no listener
+     * subscribes for the thread's side, and a thread is not an entity you can
+     * delete at all: it is materialised from the traces that share a
+     * `thread_id`. So a comment written against a `thread_model_id` outlives
+     * every trace it was about, and a fixture that created one has to come back
+     * for it.
+     *
+     * Answers 204, and takes the comment ids rather than the thread's — there
+     * is no delete-by-entity route for these.
+     */
+    async deleteThreadComments(commentIds: string[]): Promise<void> {
+      if (commentIds.length === 0) return;
+      const { status, message } = await rawFetch(
+        'POST',
+        '/v1/private/traces/threads/comments/delete',
+        { body: { ids: commentIds } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `deleteThreadComments(${commentIds.join(', ')}): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
     /** One trace comment by id, or null once it is no longer readable. */
     async getTraceComment(traceId: string, commentId: string): Promise<string | null> {
       try {
@@ -5457,6 +5579,29 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return null;
         throw err;
       }
+    },
+
+    /**
+     * One thread comment by id, or null once it is no longer readable.
+     *
+     * The sibling of `getTraceComment`/`getSpanComment`, through `rawFetch`
+     * because the pinned SDK has no binding for the thread route. `threadId`
+     * here is the `thread_model_id` the write took, not the producer's
+     * `thread_id` string — see `addThreadComment`.
+     */
+    async getThreadComment(threadModelId: string, commentId: string): Promise<string | null> {
+      const { status, json, message } = await rawFetch(
+        'GET',
+        `/v1/private/traces/threads/${threadModelId}/comments/${commentId}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(
+          `getThreadComment(${threadModelId}, ${commentId}): expected 200 or 404, got ${status}: ${message}`,
+        );
+      }
+      const text = (json as { text?: unknown } | null)?.text;
+      return typeof text === 'string' ? text : '';
     },
 
     /** One span comment by id, or null once it is no longer readable. */
@@ -6582,6 +6727,44 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * `GET /v1/private/traces`. Returned as ids only: these tests assert *which*
      * traces a scoped view is entitled to, never their content.
      */
+    /**
+     * One page of `GET /v1/private/traces` under `filters`, as the envelope's
+     * `total` plus the row ids — the full answer, not just the rows.
+     *
+     * The counterpart to `listTraceIds`, which drops `total` on the floor. A
+     * filter can fail in two ways that look alike from the ids alone: it can
+     * return the wrong rows, and it can return the right rows beside a `total`
+     * that counted more of them (the listing and the count are separate
+     * queries over the same clause). A spec asserting a filter is EXACT wants
+     * both pinned, so this returns both and the caller compares each.
+     *
+     * `total` is asserted to be a number rather than defaulted: an envelope
+     * that stopped carrying it would otherwise compare as 0 against a seed that
+     * expected 0, which is the one case where the bug and the expectation agree.
+     */
+    async listTracePage(
+      args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
+    ): Promise<{ total: number; ids: string[] }> {
+      const page = await withRateLimitRetry(() =>
+        opik.api.traces.getTracesByProject({
+          projectId: args.projectId,
+          size: args.size ?? 200,
+          page: 1,
+          truncate: true,
+          ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          ...(args.fromTime ? { fromTime: args.fromTime } : {}),
+          ...(args.toTime ? { toTime: args.toTime } : {}),
+        }),
+      );
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          'listTracePage: the traces listing carried no numeric `total` — that field is ' +
+            'half of what an exactness assertion compares, so it cannot be assumed.',
+        );
+      }
+      return { total: page.total, ids: (page.content ?? []).map((t) => String(t.id)) };
+    },
+
     async listTraceIds(
       args: { projectId: string; filters?: BackendFilter[]; size?: number } & ReadWindow,
     ): Promise<string[]> {
