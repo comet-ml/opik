@@ -398,9 +398,6 @@ export const generateDataRowCellDef = <
         >
           <Checkbox
             variant="muted"
-            style={{
-              marginLeft: `${context.row.depth * 28}px`,
-            }}
             checked={context.row.getIsSelected()}
             disabled={!context.row.getCanSelect()}
             onCheckedChange={(value) => context.row.toggleSelected(!!value)}
@@ -445,10 +442,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
           className="items-center p-0 pr-2"
           stopClickPropagation
         >
-          <div
-            className="flex max-w-full items-center overflow-hidden"
-            style={{ paddingLeft: `${context.row.depth * 20}px` }}
-          >
+          <div className="flex max-w-full items-center overflow-hidden">
             <Checkbox
               variant="muted"
               checked={
