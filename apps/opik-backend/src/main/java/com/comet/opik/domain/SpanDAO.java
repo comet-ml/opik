@@ -47,6 +47,8 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -96,6 +98,9 @@ public class SpanDAO {
      * and {@code SpanMutationRoutingArchTest}.
      */
     private static final String SPANS_TABLE = "spans";
+
+    private static final Comparator<Span> LATEST_SPAN_ORDER = Comparator.comparing(Span::lastUpdatedAt)
+            .thenComparing(Span::projectId);
 
     /** The {@code MergeTree} shard beneath the {@code Distributed} wrapper, and the mutation target once it is live. */
     private static final String SPANS_LOCAL_TABLE = "spans_local";
@@ -2526,8 +2531,28 @@ public class SpanDAO {
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
         log.info("Getting span by id '{}'", id);
-        return getByIds(Set.of(id))
-                .singleOrEmpty();
+        return Mono.deferContextual(ctx -> getByIds(Set.of(id))
+                .index()
+                .reduce((current, next) -> Tuples.of(next.getT1(),
+                        LATEST_SPAN_ORDER.compare(current.getT2(), next.getT2()) >= 0 ? current.getT2() : next.getT2()))
+                .doOnNext(lastIndexed -> logFanOut(lastIndexed.getT1() + 1, id,
+                        ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))
+                .map(Tuple2::getT2));
+    }
+
+    /**
+     * The rows returned for a single span id are reduced to at most one {@link Span} as they stream, keeping the
+     * current pick and the last row's index. The by-ids query dedups per {@code (workspace_id, project_id, id)}, so a
+     * span id written under more than one project returns one row per project; a strict single-item reducer throws
+     * {@code IndexOutOfBoundsException} ("Source emitted more than one item"), which surfaces as a 500. The latest write
+     * wins, as it does within a project, the project id breaks a tie so repeated reads return the same span, and the
+     * fan-out is logged once per read so the duplication stays visible.
+     */
+    private static void logFanOut(long rows, UUID id, String workspaceId) {
+        if (rows > 1) {
+            log.warn("Span get-by-id fanned out, returning the latest. rows '{}', workspaceId '{}', spanId '{}'",
+                    rows, workspaceId, id);
+        }
     }
 
     @WithSpan
