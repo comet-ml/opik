@@ -28,4 +28,9 @@ public class ClickHouseLogAppenderConfig {
     @NotNull @DurationMin(millis = 1)
     @DurationMax(minutes = 1)
     private Duration shutdownTimeout;
+
+    @JsonProperty
+    @NotNull @DurationMin(millis = 1)
+    @DurationMax(minutes = 10)
+    private Duration insertTimeout;
 }

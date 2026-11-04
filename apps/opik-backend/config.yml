@@ -1792,6 +1792,10 @@ clickHouseLogAppender:
   # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
   shutdownTimeout: ${CLICKHOUSE_LOG_APPENDER_SHUTDOWN_TIMEOUT:-PT5S}
 
+  # Default: PT1M or 1 minute
+  # Description: Upper bound on one log insert; past it the insert is abandoned so later flushes can run (max PT10M)
+  insertTimeout: ${CLICKHOUSE_LOG_APPENDER_INSERT_TIMEOUT:-PT1M}
+
 workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting.

@@ -26,6 +26,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -116,6 +117,32 @@ class ClickHouseAppenderTest {
     }
 
     @Test
+    void hungInsertTimesOutAndLaterFlushesRun() {
+        var inserts = new AtomicInteger();
+        var saved = new AtomicInteger();
+        var config = config(10, 2);
+        config.setInsertTimeout(Duration.ofMillis(100));
+
+        var appender = new ClickHouseAppender(
+                userLog -> events -> inserts.getAndIncrement() == 0
+                        ? Mono.never()
+                        : Mono.<Void>fromRunnable(() -> saved.addAndGet(events.size())),
+                config, pausedScheduler());
+        appender.setContext(new LoggerContext());
+        appender.start();
+
+        append(appender, 21); // forces the first insert of 10, which hangs; 11 stay queued
+        await().atMost(5, TimeUnit.SECONDS).until(() -> appenderLogs.list.stream()
+                .anyMatch(event -> event.getLevel() == Level.ERROR && event.getThrowableProxy() != null
+                        && event.getThrowableProxy().getClassName().equals(TimeoutException.class.getName())));
+
+        resumeScheduler.countDown();
+        appender.stop();
+
+        assertThat(saved).hasValue(11);
+    }
+
+    @Test
     void forcedFlushMakesRoomWhenNoInsertIsInFlight() {
         var saved = new AtomicInteger();
 
@@ -193,6 +220,7 @@ class ClickHouseAppenderTest {
         config.setMaxQueuedBatches(maxQueuedBatches);
         config.setFlushIntervalDuration(Duration.ofMinutes(1));
         config.setShutdownTimeout(Duration.ofSeconds(5));
+        config.setInsertTimeout(Duration.ofMinutes(1));
         return config;
     }
 

@@ -63,6 +63,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
     private final @NonNull UserLogTableFactory userLogTableFactory;
     private final @NonNull Duration flushIntervalDuration;
     private final @NonNull Duration shutdownTimeout;
+    private final @NonNull Duration insertTimeout;
     private final int batchSize;
     private volatile boolean running = true;
 
@@ -81,6 +82,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         this.userLogTableFactory = userLogTableFactory;
         this.flushIntervalDuration = config.getFlushIntervalDuration();
         this.shutdownTimeout = config.getShutdownTimeout();
+        this.insertTimeout = config.getInsertTimeout();
         this.batchSize = config.getBatchSize();
         this.logQueue = new LinkedBlockingQueue<>(batchSize * config.getMaxQueuedBatches());
         this.scheduler = new AtomicReference<>(scheduler);
@@ -121,14 +123,19 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
         }
 
         // The flag clears when the insert completes, not before: a slow ClickHouse backs up into the bounded queue.
-        lastInsert = insert(batch)
+        // lastInsert is set before subscribing and always completes normally, so stop() waits for this insert.
+        var done = new CompletableFuture<Void>();
+        lastInsert = done;
+        insert(batch)
+                .timeout(insertTimeout)
                 .doFinally(signal -> {
+                    done.complete(null);
                     insertInFlight.set(false);
                     if (running && logQueue.size() >= batchSize) {
                         submit(this::flushLogs);
                     }
                 })
-                .toFuture();
+                .subscribe(null, e -> log.error("Failed to insert logs", e));
     }
 
     private Mono<Void> insert(List<ILoggingEvent> batch) {
