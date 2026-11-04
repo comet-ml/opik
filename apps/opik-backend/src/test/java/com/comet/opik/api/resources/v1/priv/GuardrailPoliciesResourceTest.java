@@ -1,8 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.GuardrailPolicy;
-import com.comet.opik.api.GuardrailPolicy.GuardrailPolicyRetrieve;
 import com.comet.opik.api.GuardrailPolicyRule;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -20,6 +18,7 @@ import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.apache.http.HttpStatus;
@@ -39,7 +38,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -98,8 +96,11 @@ class GuardrailPoliciesResourceTest {
     }
 
     private Invocation.Builder request(String path) {
-        return client.target(RESOURCE_PATH.formatted(baseURI) + path)
-                .request()
+        return request(client.target(RESOURCE_PATH.formatted(baseURI) + path));
+    }
+
+    private Invocation.Builder request(WebTarget target) {
+        return target.request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
                 .header(WORKSPACE_HEADER, TEST_WORKSPACE);
     }
@@ -123,12 +124,16 @@ class GuardrailPoliciesResourceTest {
                         .get()),
                 Arguments.of("find", (Function<GuardrailPoliciesResourceTest, Response>) test -> test.request("")
                         .get()),
+                Arguments.of("find by names and execution scope",
+                        (Function<GuardrailPoliciesResourceTest, Response>) test -> test
+                                .request(test.client.target(RESOURCE_PATH.formatted(test.baseURI))
+                                        .queryParam("names", "[\"support-bot\"]")
+                                        .queryParam("execution_scope", "global"))
+                                .get()),
                 Arguments.of("update", (Function<GuardrailPoliciesResourceTest, Response>) test -> test.request(id)
                         .put(Entity.json(policy()))),
-                Arguments.of("delete", (Function<GuardrailPoliciesResourceTest, Response>) test -> test
-                        .request("/delete").post(Entity.json(new BatchDelete(Set.of(randomUUID()))))),
-                Arguments.of("retrieve", (Function<GuardrailPoliciesResourceTest, Response>) test -> test
-                        .request("/retrieve").post(Entity.json(new GuardrailPolicyRetrieve(Set.of("support-bot"))))));
+                Arguments.of("delete", (Function<GuardrailPoliciesResourceTest, Response>) test -> test.request(id)
+                        .delete()));
     }
 
     @ParameterizedTest(name = "{0}")
