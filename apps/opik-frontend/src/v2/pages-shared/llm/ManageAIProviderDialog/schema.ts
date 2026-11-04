@@ -102,7 +102,7 @@ export const CloudAIProviderDetailsFormSchema = z
     composedProviderType: z.string(),
     apiKey: z
       .string({
-        required_error: "API key is required",
+        error: "API key is required",
       })
       .min(1, { message: "API key is required" }),
     // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
@@ -124,7 +124,7 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   composedProviderType: z.string(),
   apiKey: z
     .string({
-      required_error: "API key is required",
+      error: "API key is required",
     })
     .min(1, { message: "API key is required" }),
   location: z.string(),
