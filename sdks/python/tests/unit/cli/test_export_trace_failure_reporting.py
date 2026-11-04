@@ -86,7 +86,7 @@ class TestExportTracesByIdsFailureCount:
 
 
 class TestExportExperimentReportsTraceFailures:
-    def test_export_experiment_by_name__trace_failure__exits_1(self, tmp_path):
+    def test_export_experiment_by_name__trace_failure__exits_1(self, tmp_path, capsys):
         """A failed trace export must make the command exit non-zero."""
         from opik.cli.exports import experiment as experiment_module
 
@@ -137,9 +137,12 @@ class TestExportExperimentReportsTraceFailures:
 
         assert exc_info.value.code == 1
         assert summary.call_args.args[0]["traces_failed"] == 1
+        output = capsys.readouterr().out
+        assert "Export completed with errors" in output
+        assert "Successfully exported" not in output
 
     def test_export_experiment_by_name_or_id__id_path_trace_failure__exits_1(
-        self, tmp_path
+        self, tmp_path, capsys
     ):
         """A failed trace export on the direct-ID path must exit non-zero."""
         from opik.cli.exports import experiment as experiment_module
@@ -190,6 +193,9 @@ class TestExportExperimentReportsTraceFailures:
 
         assert exc_info.value.code == 1
         assert summary.call_args.args[0]["traces_failed"] == 1
+        output = capsys.readouterr().out
+        assert "Export completed with errors" in output
+        assert "Successfully exported" not in output
 
     def test_export_experiment_by_name__trace_failure__prints_summary(self, tmp_path):
         """The failure summary must name traces as well as set the exit code."""

@@ -820,6 +820,12 @@ def export_experiment_by_name(
         # Show export summary
         print_export_summary(stats, format)
 
+        if had_errors:
+            console.print(
+                "[bold yellow]Export completed with errors — some datasets, prompts or traces could not be exported.[/bold yellow]"
+            )
+            sys.exit(1)
+
         if exported_count > 0:
             if len(experiments) > 1:
                 console.print(
@@ -833,12 +839,6 @@ def export_experiment_by_name(
             console.print(
                 f"[yellow]All {len(experiments)} experiment(s) with name '{name}' already exist (use --force to re-download)[/yellow]"
             )
-
-        if had_errors:
-            console.print(
-                "[bold yellow]Export completed with errors — some datasets, prompts or traces could not be exported.[/bold yellow]"
-            )
-            sys.exit(1)
 
     except Exception as e:
         console.print(f"[red]Error exporting experiment: {e}[/red]")
@@ -976,6 +976,12 @@ def export_experiment_by_name_or_id(
             # Show export summary
             print_export_summary(stats, format)
 
+            if had_ds_errors or traces_failed:
+                console.print(
+                    "[bold yellow]Export completed with errors — some datasets or traces could not be exported.[/bold yellow]"
+                )
+                sys.exit(1)
+
             if file_written > 0:
                 console.print(
                     f"[green]Successfully exported experiment '{experiment.name}' (ID: {experiment.id}) to {output_dir}[/green]"
@@ -985,11 +991,6 @@ def export_experiment_by_name_or_id(
                     f"[yellow]Experiment '{experiment.name}' (ID: {experiment.id}) already exists (use --force to re-download)[/yellow]"
                 )
 
-            if had_ds_errors or traces_failed:
-                console.print(
-                    "[bold yellow]Export completed with errors — some datasets or traces could not be exported.[/bold yellow]"
-                )
-                sys.exit(1)
             return
 
         except exceptions.ExperimentNotFound:
