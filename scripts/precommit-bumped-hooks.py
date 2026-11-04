@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Print the hook ids whose repo `rev:` differs between two pre-commit configs.
+"""Print the hook ids whose repo `rev:` or hook `entry:` differs between two
+pre-commit configs.
 
 The weekly autobump (precommit_autoupdate.yml) re-scans the whole repo with only
 the hooks `pre-commit autoupdate` just bumped — a new linter version can add
@@ -8,8 +9,10 @@ say. Ids are de-duplicated: the same hook id recurs once per scope, and
 `pre-commit run <id> --all-files` already runs every hook sharing it.
 
 Repos are compared positionally: autoupdate only rewrites `rev:` lines, so both
-configs list the same repos in the same order. Local repos have no rev and are
-never bumped.
+configs list the same repos in the same order. A repo also counts as bumped
+when only a hook's `entry:` changed (e.g. an image tag re-synced below), so the
+config change never goes un-rescanned. Local repos have no rev and are never
+bumped.
 
 With --sync-entry-tags, also rewrites <new-config> in place so every remote hook
 that pins a container image in `entry:` (image:tag) carries the tag equal to
@@ -36,7 +39,9 @@ def bumped_hook_ids(old_config, new_config):
         sys.exit("error: configs list different repos; expected only rev: changes")
     ids = []
     for old, new in zip(old_repos, new_repos):
-        if old.get("rev") == new.get("rev"):
+        old_entries = [h.get("entry") for h in old.get("hooks", [])]
+        new_entries = [h.get("entry") for h in new.get("hooks", [])]
+        if old.get("rev") == new.get("rev") and old_entries == new_entries:
             continue
         for hook in new.get("hooks", []):
             if hook["id"] not in ids:
@@ -51,7 +56,7 @@ def sync_entry_tags(text):
     for line in text.splitlines(keepends=True):
         if re.match(r"^\s*- repo:", line):
             rev = None
-        elif m := re.match(r"^\s*rev:\s*(\S+)", line):
+        elif m := re.match(r"""^\s*rev:\s*['"]?([^'"\s]+)""", line):
             rev = m.group(1)
         elif rev:
             line = ENTRY_IMAGE_RE.sub(rf"\g<1>\g<2>:{rev}\g<4>", line)
@@ -65,16 +70,17 @@ def main(argv):
     if len(paths) != 2:
         sys.exit(__doc__)
     old_path, new_path = paths
-    if sync:
-        with open(new_path) as f:
-            text = f.read()
-        with open(new_path, "w") as f:
-            f.write(sync_entry_tags(text))
     with open(old_path) as f:
         old_config = yaml.safe_load(f)
     with open(new_path) as f:
-        new_config = yaml.safe_load(f)
-    for hook_id in bumped_hook_ids(old_config, new_config):
+        text = f.read()
+    synced = sync_entry_tags(text) if sync else text
+    # Parse and validate before writing, so a bad config is never left rewritten.
+    ids = bumped_hook_ids(old_config, yaml.safe_load(synced))
+    if synced != text:
+        with open(new_path, "w") as f:
+            f.write(synced)
+    for hook_id in ids:
         print(hook_id)
 
 

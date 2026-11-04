@@ -170,6 +170,22 @@ check "bumped docker hook is listed" "hadolint-docker" "$bumped"
 check "entry tag synced to rev" "ghcr.io/hadolint/hadolint:v2.1.0 hadolint" "$(cat "$bump_dir/new.yaml")"
 check "local entry untouched" "entry: scripts/precommit-spotless.sh" "$(cat "$bump_dir/new.yaml")"
 check "codespell rev untouched" "rev: v2.0.0" "$(cat "$bump_dir/new.yaml")"
+# A tag drifted from its rev (no rev bump): the sync rewrites the entry, so the
+# hook must still be reported for a re-scan.
+sed 's/hadolint:v2\.0\.0/hadolint:v1.9.0/' "$bump_dir/old.yaml" >"$bump_dir/drift.yaml"
+cp "$bump_dir/drift.yaml" "$bump_dir/new.yaml"
+check "tag-only resync is reported" "hadolint-docker" \
+	"$(python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/drift.yaml" "$bump_dir/new.yaml")"
+# Quoted revs must not leak their quotes into the image tag.
+sed 's/rev: v2\.0\.0$/rev: "v2.1.0"/' "$bump_dir/old.yaml" >"$bump_dir/new.yaml"
+python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/old.yaml" "$bump_dir/new.yaml" >/dev/null
+check "quoted rev → unquoted tag" "ghcr.io/hadolint/hadolint:v2.1.0 hadolint" "$(cat "$bump_dir/new.yaml")"
+# A config that fails validation (different repo list) is never rewritten.
+sed -e 's|codespell-project/codespell|example/other|' -e 's/hadolint:v2\.0\.0/hadolint:v1.9.0/' \
+	"$bump_dir/old.yaml" >"$bump_dir/new.yaml"
+cp "$bump_dir/new.yaml" "$bump_dir/before.yaml"
+python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/old.yaml" "$bump_dir/new.yaml" >/dev/null 2>&1 || true
+check_empty "invalid config left unmodified" "$(diff "$bump_dir/before.yaml" "$bump_dir/new.yaml" || true)"
 rm -rf "$bump_dir"
 
 echo "precommit-skipped-table.sh:"
