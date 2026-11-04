@@ -148,7 +148,7 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
                 .timeout(timeout)
                 .onErrorResume(e -> {
                     if (e instanceof TimeoutException) {
-                        log.warn("User-facing log insert timed out after '{}', dropped '{}' logs", timeout,
+                        log.warn("User-facing log insert timed out after '{}', up to '{}' logs lost", timeout,
                                 batch.size());
                     } else {
                         log.error("Failed to insert logs", e);
@@ -231,6 +231,8 @@ class ClickHouseAppender extends AppenderBase<ILoggingEvent> {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("Interrupted flushing user-facing logs on shutdown, dropping '{}'", logQueue.size());
+            return;
         } catch (ExecutionException | TimeoutException e) {
             // The last insert outlived the shutdown timeout; what is still queued is dropped below.
         }

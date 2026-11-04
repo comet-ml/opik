@@ -132,7 +132,7 @@ class ClickHouseAppenderTest {
 
         append(appender, 21); // forces the first insert of 10, which hangs; 11 stay queued
         await().atMost(5, TimeUnit.SECONDS).until(() -> warnings()
-                .contains("User-facing log insert timed out after 'PT0.1S', dropped '10' logs"));
+                .contains("User-facing log insert timed out after 'PT0.1S', up to '10' logs lost"));
 
         resumeScheduler.countDown();
         appender.stop();
