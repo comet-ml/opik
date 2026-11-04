@@ -12,6 +12,9 @@ import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -180,6 +183,32 @@ class FreeFormSqlQueryServiceTest {
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
                 .join()).cause().satisfies(withheld(503));
+    }
+
+    static Stream<Arguments> limitErrors() {
+        return Stream.of(
+                Arguments.of(158, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(159, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(241, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(396, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(307, FreeFormSqlQueryService.BYTES_LIMIT_MESSAGE));
+    }
+
+    @ParameterizedTest(name = "code {0}")
+    @MethodSource("limitErrors")
+    @DisplayName("a ClickHouse limit error is a 400 with a constant message, not a 500")
+    void limitErrorIsBadRequest(int code, String message) {
+        givenClickHouseReturnsOneRow();
+        when(dao.execute(any(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ServerException(code, "DB::Exception: limit exceeded on opik.spans", 500, "query-id")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
+                .join()).cause().satisfies(error -> {
+                    assertThat(error).isInstanceOf(BadRequestException.class);
+                    var entity = String.valueOf(((WebApplicationException) error).getResponse().getEntity());
+                    assertThat(entity).contains(message.strip()).doesNotContain("opik.spans");
+                });
     }
 
     @Test
