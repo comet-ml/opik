@@ -135,7 +135,10 @@ const OllieChartWidget: React.FunctionComponent<
     !queryWidgetId ||
     !savedWidgetIds.includes(queryWidgetId);
 
-  const config = (widget?.config ?? {}) as OllieChartWidgetType["config"];
+  const config = useMemo(
+    () => (widget?.config ?? {}) as OllieChartWidgetType["config"],
+    [widget?.config],
+  );
   const { spec, query, rows: snapshotRows } = config;
   const kpi = parseKpiSpec(spec);
 
@@ -210,6 +213,21 @@ const OllieChartWidget: React.FunctionComponent<
     query?.id,
   ]);
 
+  // Saved with the widget only where the dashboard can be edited; elsewhere the table still sorts and resizes.
+  const tableState = useMemo(() => {
+    const saveConfig = (patch: Partial<OllieChartWidgetType["config"]>) => {
+      if (preview || readOnly || !sectionId || !widgetId) return;
+      updateWidget(sectionId, widgetId, { config: { ...config, ...patch } });
+    };
+    return {
+      sorting: config.sorting,
+      columnsWidth: config.columnsWidth,
+      onSortingChange: (sorting: Sorting) => saveConfig({ sorting }),
+      onColumnsWidthChange: (columnsWidth: Record<string, number>) =>
+        saveConfig({ columnsWidth }),
+    };
+  }, [config, preview, readOnly, sectionId, widgetId, updateWidget]);
+
   if (!widget) {
     return null;
   }
@@ -257,19 +275,6 @@ const OllieChartWidget: React.FunctionComponent<
           });
         }
       : undefined;
-
-  // Saved with the widget only where the dashboard can be edited; elsewhere the table still sorts and resizes.
-  const saveConfig = (patch: Partial<OllieChartWidgetType["config"]>) => {
-    if (preview || readOnly || !sectionId || !widgetId) return;
-    updateWidget(sectionId, widgetId, { config: { ...config, ...patch } });
-  };
-  const tableState = {
-    sorting: config.sorting,
-    columnsWidth: config.columnsWidth,
-    onSortingChange: (sorting: Sorting) => saveConfig({ sorting }),
-    onColumnsWidthChange: (columnsWidth: Record<string, number>) =>
-      saveConfig({ columnsWidth }),
-  };
 
   const renderContent = () => {
     if (!spec) {

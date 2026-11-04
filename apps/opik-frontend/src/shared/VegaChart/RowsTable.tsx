@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ColumnDef, ColumnSizingState } from "@tanstack/react-table";
 
 import { coerceNumericRows, VegaRows, VegaSpec } from "@/lib/charts/vega";
@@ -33,16 +39,17 @@ const formatCell = (value: unknown): string => {
   return toText(value);
 };
 
-// Numbers before text so a mostly numeric column still ranks; empty cells always go last.
-const compareCells = (x: unknown, y: unknown): number => {
-  if (typeof x === "number" && typeof y === "number") return x - y;
-  if (typeof x === "number") return -1;
-  if (typeof y === "number") return 1;
-  return toText(x).localeCompare(toText(y), undefined, {
-    numeric: true,
-    sensitivity: "base",
-  });
-};
+const compareSameKind = (x: unknown, y: unknown): number =>
+  typeof x === "number" && typeof y === "number"
+    ? x - y
+    : toText(x).localeCompare(toText(y), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+
+// Either direction keeps numbers, then text, then empty cells, so a mostly numeric column still ranks.
+const kindRank = (value: unknown) =>
+  isEmpty(value) ? 2 : typeof value === "number" ? 0 : 1;
 
 const sortRows = (rows: Row[], sorting: Sorting): Row[] => {
   const [sort] = sorting;
@@ -51,15 +58,52 @@ const sortRows = (rows: Row[], sorting: Sorting): Row[] => {
   return [...rows].sort((a, b) => {
     const x = a[sort.id];
     const y = b[sort.id];
-    if (isEmpty(x) || isEmpty(y))
-      return Number(isEmpty(x)) - Number(isEmpty(y));
-    return direction * compareCells(x, y);
+    const byKind = kindRank(x) - kindRank(y);
+    return byKind || direction * compareSameKind(x, y);
   });
+};
+
+// Widths change on every mouse move; they are saved once, when the drag ends.
+const usePersistColumnWidths = (
+  onChange?: (columnsWidth: ColumnSizingState) => void,
+) => {
+  const pendingRef = useRef<ColumnSizingState | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      const widths = pendingRef.current;
+      if (!widths) return;
+      pendingRef.current = null;
+      onChangeRef.current?.(widths);
+    };
+    // After the table's own drag-end handler, which sets the final width.
+    const onDragEnd = () => {
+      clearTimeout(timer);
+      timer = setTimeout(flush);
+    };
+    document.addEventListener("mouseup", onDragEnd);
+    document.addEventListener("touchend", onDragEnd);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mouseup", onDragEnd);
+      document.removeEventListener("touchend", onDragEnd);
+    };
+  }, []);
+
+  return useCallback((widths: ColumnSizingState) => {
+    pendingRef.current = widths;
+  }, []);
 };
 
 // The default table frame, scrolling inside the widget with the header stuck to its top; it hugs a short table.
 const RowsTableWrapper: React.FC<DataTableWrapperProps> = ({ children }) => (
-  <div className="relative max-h-full overflow-auto rounded-md border [&_thead[data-sticky-vertical]]:!top-0">
+  <div
+    className="relative max-h-full overflow-auto rounded-md border [&_thead[data-sticky-vertical]]:!top-0"
+    data-table-scroll-container
+  >
     {children}
   </div>
 );
@@ -148,26 +192,7 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
     [activeSorting, onSortingChange],
   );
 
-  // Widths change on every mouse move; they are saved once, when the drag ends.
-  const pendingWidthsRef = useRef<ColumnSizingState | null>(null);
-  const onColumnsWidthChangeRef = useRef(onColumnsWidthChange);
-  onColumnsWidthChangeRef.current = onColumnsWidthChange;
-  useEffect(() => {
-    const flush = () => {
-      const widths = pendingWidthsRef.current;
-      if (!widths) return;
-      pendingWidthsRef.current = null;
-      onColumnsWidthChangeRef.current?.(widths);
-    };
-    // After the table's own drag-end handler, which sets the final width.
-    const onDragEnd = () => setTimeout(flush);
-    document.addEventListener("mouseup", onDragEnd);
-    document.addEventListener("touchend", onDragEnd);
-    return () => {
-      document.removeEventListener("mouseup", onDragEnd);
-      document.removeEventListener("touchend", onDragEnd);
-    };
-  }, []);
+  const markWidthsPending = usePersistColumnWidths(onColumnsWidthChange);
 
   const resizeConfig = useMemo(
     () => ({
@@ -176,11 +201,11 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
       onColumnResize: ((updater) => {
         const next =
           typeof updater === "function" ? updater(columnSizing) : updater;
-        pendingWidthsRef.current = next;
+        markWidthsPending(next);
         setColumnSizing(next);
       }) as OnChangeFn<ColumnSizingState>,
     }),
-    [columnSizing],
+    [columnSizing, markWidthsPending],
   );
 
   return (

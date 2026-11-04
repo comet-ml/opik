@@ -30,6 +30,21 @@ describe("RowsTable", () => {
     expect(columnValues(1)).toEqual(["2", "9.5", "10", "-"]);
   });
 
+  it("keeps text below numbers in either direction", () => {
+    render(
+      <RowsTable
+        rows={[...ROWS, { model: "x", cost: "n/a" }]}
+        columns={["model", "cost"]}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("cost"));
+    expect(columnValues(1)).toEqual(["10", "9.5", "2", "n/a", "-"]);
+
+    fireEvent.click(screen.getByText("cost"));
+    expect(columnValues(1)).toEqual(["2", "9.5", "10", "n/a", "-"]);
+  });
+
   it("sorts text columns alphabetically", () => {
     render(<RowsTable rows={ROWS} columns={["model", "cost"]} />);
 
@@ -74,6 +89,11 @@ describe("RowsTable", () => {
         onColumnsWidthChange={onColumnsWidthChange}
       />,
     );
+    // The resizer stops a column at the frame's right edge, which has no layout here.
+    const frame = document.querySelector<HTMLElement>(
+      "[data-table-scroll-container]",
+    )!;
+    frame.getBoundingClientRect = () => ({ right: 1000 }) as DOMRect;
     const resizer = header("model").querySelector(".cursor-ew-resize")!;
 
     fireEvent.mouseDown(resizer, { clientX: 100 });
@@ -85,5 +105,27 @@ describe("RowsTable", () => {
       expect(onColumnsWidthChange).toHaveBeenCalledWith({ model: 260 }),
     );
     expect(onColumnsWidthChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report widths after it unmounts mid-save", () => {
+    vi.useFakeTimers();
+    const onColumnsWidthChange = vi.fn();
+    const { unmount } = render(
+      <RowsTable
+        rows={ROWS}
+        columns={["model", "cost"]}
+        onColumnsWidthChange={onColumnsWidthChange}
+      />,
+    );
+    const resizer = header("model").querySelector(".cursor-ew-resize")!;
+
+    fireEvent.mouseDown(resizer, { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 130 });
+    fireEvent.mouseUp(document, { clientX: 130 });
+    unmount();
+    vi.runAllTimers();
+
+    expect(onColumnsWidthChange).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
