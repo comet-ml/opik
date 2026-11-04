@@ -122,11 +122,44 @@ export class ThreadPanelPage {
     return this.page.getByTestId('thread');
   }
 
-  async waitForFullyLoaded(): Promise<void> {
+  /**
+   * Wait for the panel to open on its thread and render at least one turn,
+   * re-issuing the panel's own reads if the turn list came back empty.
+   *
+   * The turns are filled by `useTracesList` filtered on `thread_id`, and that
+   * listing is rate limited per workspace (`getTraces:{workspaceId}`). When
+   * parallel specs have spent the budget the panel's call is shed with a 429,
+   * the empty answer is KEPT, and nothing refetches — so the panel renders with
+   * no turn at all and a DOM wait of any length cannot succeed. Observed on
+   * staging for 2.2.140 under three workers, on this spec and on
+   * `thread-logging-smoke`, both of which pass immediately on their own.
+   *
+   * The reload is what makes it recoverable: it remounts the panel from the
+   * `?thread=` param the first line has already waited for, so the listing is
+   * issued again rather than read from the cache holding the shed answer. Same
+   * remedy, and the same reasoning, as `TracePanelPage.waitForSpanTreeNodes`.
+   *
+   * This is not a loosened assertion. The panel must still show a turn, and the
+   * last attempt rethrows the locator's own failure — so a thread that
+   * genuinely renders nothing still fails here, with the same message as before.
+   */
+  async waitForFullyLoaded(opts: { attempts?: number; timeout?: number } = {}): Promise<void> {
+    const attempts = opts.attempts ?? 3;
+    const timeout = opts.timeout ?? 30_000;
     return test.step(`Wait for thread panel ${this.threadId} to load`, async () => {
       await this.page.waitForURL((url) => url.searchParams.get('thread') === this.threadId);
-      await this.root.waitFor({ state: 'visible', timeout: 30_000 });
-      await this.turns.first().waitFor({ state: 'visible', timeout: 30_000 });
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const isLast = attempt === attempts;
+        try {
+          await this.root.waitFor({ state: 'visible', timeout });
+          await this.turns.first().waitFor({ state: 'visible', timeout });
+          return;
+        } catch (error) {
+          if (isLast) throw error;
+          await this.page.reload();
+          await this.page.waitForURL((url) => url.searchParams.get('thread') === this.threadId);
+        }
+      }
     });
   }
 

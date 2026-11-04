@@ -1193,6 +1193,23 @@ export class LogsPage {
    * one themselves (it resets the draft and blurs the input) without letting it
    * reach the popover, so a single press leaves the popover open. The second
    * press — now that focus has left the input — dismisses the popover itself.
+   *
+   * Focus is dropped out of the popover before each press, rather than relying
+   * on the previous press having moved it. Radix's `DismissableLayer` listens
+   * for Escape on the document, so a press from anywhere dismisses the popover
+   * — UNLESS a focused descendant stops it propagating, which the autocomplete
+   * input does for exactly as long as it holds focus. "The first press frees
+   * the input" holds while the popover is quiet, but a chip whose options are
+   * still being fetched (the Trace feedback scores chip fetches its score names)
+   * re-renders and can take focus back, and then every press in the loop is
+   * eaten and the poll times out with the popover still open. Blurring is the
+   * non-destructive way to break that: it cannot activate a control the way a
+   * click somewhere neutral could, and it has no effect at all on a popover
+   * that is about to be dismissed anyway.
+   *
+   * The budget is stated rather than inherited for the same reason: the
+   * implicit `expect.timeout` is 10s, which is the whole of a slow chip's own
+   * option fetch on a loaded staging workspace.
    */
   async closeFilterChip(): Promise<void> {
     return test.step('Close the open filter chip popover', async () => {
@@ -1201,10 +1218,19 @@ export class LogsPage {
         .poll(
           async () => {
             if (!(await popover.isVisible().catch(() => true))) return false;
+            await this.page
+              .evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+              .catch(() => {});
             await this.page.keyboard.press('Escape');
             return popover.isVisible().catch(() => false);
           },
-          { intervals: [100, 250, 500, 1000] },
+          {
+            intervals: [100, 250, 500, 1000],
+            timeout: 20_000,
+            message:
+              'the chip popover must detach — it is modal, so while it is up every later click ' +
+              'on the table is swallowed',
+          },
         )
         .toBe(false);
     });
