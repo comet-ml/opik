@@ -27,13 +27,14 @@ jobs:
   cleanup:
     name: Cleanup CI images
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Delete CI images
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
           MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days || '7' }}
         run: |
           DELETED=0
@@ -47,21 +48,62 @@ jobs:
             CUTOFF=""
           else
             echo "Mode: stale sweep — deleting ci-e2e-* images older than ${MAX_AGE_DAYS} days"
+            # shellcheck disable=SC2089 # jq program, passed as a single argument
             JQ_FILTER='.[] | select(.metadata.container.tags | any(startswith("ci-e2e-"))) | {id: .id, tags: .metadata.container.tags, created_at: .created_at}'
             CUTOFF=$(date -u -d "${MAX_AGE_DAYS} days ago" +%s 2>/dev/null \
               || date -u -v-"${MAX_AGE_DAYS}"d +%s)
           fi
 
+          PAGES_DIR=$(mktemp -d)
+          # shellcheck disable=SC2090
+          export JQ_FILTER PAGES_DIR
+
           for IMAGE in ${{ env.IMAGES }}; do
             echo "=== Scanning ${IMAGE} ==="
+            VERSIONS_URL="/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions?per_page=100"
+            rm -f "${PAGES_DIR}"/*
 
-            if ! VERSIONS=$(gh api \
-              "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions?per_page=100" \
-              --paginate \
-              --jq "$JQ_FILTER" 2>&1); then
-              echo "  Failed to list versions: ${VERSIONS}"
+            if [ -n "$PR_CREATED_AT" ]; then
+              # Versions are listed newest first and a PR's images can't predate the PR,
+              # so stop at the first page that reaches past the PR's creation.
+              PAGE=1
+              LIST_OK=true
+              while :; do
+                if ! PAGE_JSON=$(gh api "${VERSIONS_URL}&page=${PAGE}"); then
+                  LIST_OK=false
+                  break
+                fi
+                echo "$PAGE_JSON" | jq -c "$JQ_FILTER" > "${PAGES_DIR}/${PAGE}"
+                OLDEST=$(echo "$PAGE_JSON" | jq -r '.[-1].created_at // empty')
+                if [ -z "$OLDEST" ] || [[ "$OLDEST" < "$PR_CREATED_AT" ]]; then
+                  break
+                fi
+                PAGE=$((PAGE + 1))
+              done
+              echo "  Scanned ${PAGE} pages (stopped at PR creation ${PR_CREATED_AT})"
+            else
+              # Packages contain ~40k versions (mostly untagged release manifests) and the API
+              # has no tag filter, so sequential --paginate takes ~12 min per image.
+              # Pages are independent, so fetch them concurrently.
+              LINK=$(gh api --include "${VERSIONS_URL}&page=1" 2>/dev/null | grep -i '^link:' || true)
+              LAST_PAGE=$(echo "$LINK" | sed -n 's/.*[?&]page=\([0-9]*\)>; rel="last".*/\1/p')
+              LAST_PAGE=${LAST_PAGE:-1}
+              echo "  Fetching ${LAST_PAGE} pages"
+
+              export VERSIONS_URL
+              LIST_OK=true
+              # shellcheck disable=SC2016 # expanded by the child sh from the exported env
+              seq 1 "$LAST_PAGE" | xargs -P 10 -I{} sh -c \
+                'gh api "${VERSIONS_URL}&page={}" --jq "$JQ_FILTER" > "${PAGES_DIR}/{}"' \
+                || LIST_OK=false
+            fi
+
+            if [ "$LIST_OK" != true ]; then
+              echo "  Failed to list versions for ${IMAGE}"
+              FAILED=$((FAILED + 1))
               continue
             fi
+            VERSIONS=$(cat "${PAGES_DIR}"/*)
 
             if [ -z "$VERSIONS" ]; then
               echo "  No matching versions found"
