@@ -105,15 +105,17 @@ public class ModelPricesResource {
                         .map(CustomModelPriceReplaceResult::from)
                         .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                         .block();
-                log.info("Replaced model prices, workspace '{}', version '{}', saved '{}'", workspaceId,
-                        result.version(), result.saved());
+                log.info("{} model prices, workspace '{}', version '{}', saved '{}'",
+                        dryRun ? "Previewed" : "Replaced", workspaceId, result.version(), result.saved());
                 return Response.ok(result).build();
             } catch (ModelPriceValidationException exception) {
                 log.info("Refused model prices, workspace '{}', errors '{}'", workspaceId,
                         exception.getResult().errors().size());
                 return Response.status(422)
-                        .entity(new CustomModelPriceProblems(exception.getResult().errors(),
-                                exception.getResult().warnings()))
+                        .entity(CustomModelPriceProblems.builder()
+                                .errors(exception.getResult().errors())
+                                .warnings(exception.getResult().warnings())
+                                .build())
                         .build();
             }
         });

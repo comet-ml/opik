@@ -5,17 +5,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
 import lombok.NonNull;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+@Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CustomModelPriceHistoryPage(int page, int size, long total, @NonNull List<Entry> content)
         implements
             Page<CustomModelPriceHistoryPage.Entry> {
 
+    @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Entry(
             @Schema(description = "The list version this change produced") long listVersion,
@@ -29,6 +32,6 @@ public record CustomModelPriceHistoryPage(int page, int size, long total, @NonNu
     }
 
     public static CustomModelPriceHistoryPage empty(int page, int size) {
-        return new CustomModelPriceHistoryPage(page, size, 0, List.of());
+        return CustomModelPriceHistoryPage.builder().page(page).size(size).total(0).content(List.of()).build();
     }
 }
