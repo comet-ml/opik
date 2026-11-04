@@ -47,10 +47,13 @@ export const useModelFormHandlers = (
       const startConfig = { ...defaultConfig, ...pickedThinkingSettings };
       // Strip params the model doesn't accept (e.g. temperature on models that
       // deprecate it), matching the playground's reconciler.
+      // The runner calls LiteLLM rather than Opik's OpenAI pipeline, so the panel and the request
+      // read Chat Completions whatever the key's mode is, and the switch must too.
       const adjustedConfig =
         updateProviderConfig(startConfig, {
           model: newModel,
           provider: newProvider,
+          openAiPipelineMode: "chat_completions_api",
           previousModel: sameProvider ? previousModel : undefined,
         }) ?? startConfig;
 

@@ -14,7 +14,7 @@ RUN apk add --no-cache python3 py3-pip build-base python3-dev musl-dev gcc libff
 
 # uv is a drop-in faster pip; the binary is copied from the official distroless
 # image (pinned) and used only in this builder stage — it never reaches runtime.
-COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
 
 WORKDIR /opt/opik-python-backend
 
@@ -46,11 +46,9 @@ RUN set -eux; \
 #######################################################################
 FROM docker:29.9.2@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977
 
-# libexpat --upgrade mitigates CVEs; tini (PID 1 reaper) + python3 are the
-# runtime-only OS deps.
+# tini (PID 1 reaper) + python3 are the runtime-only OS deps.
 # hadolint ignore=DL3018
-RUN apk add --no-cache --upgrade libexpat && \
-    apk add --no-cache tini python3
+RUN apk add --no-cache tini python3
 
 WORKDIR /opt/opik-python-backend
 

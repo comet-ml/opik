@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -52,6 +53,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -313,6 +315,7 @@ class LlmProviderApiKeyResourceTest {
 
         Function<ProviderApiKey, ProviderApiKey> getExpectedBaseUrl = (ProviderApiKey original) -> original.toBuilder()
                 .apiKey(updateAll.apiKey())
+                .headers(updateAll.headers())
                 .baseUrl(updateAll.baseUrl())
                 .build();
 
@@ -330,7 +333,7 @@ class LlmProviderApiKeyResourceTest {
                         .baseUrl(null).build()), getExpectedName),
                 arguments(named("only apiKey", updateAll.toBuilder().name(null).headers(null).configuration(null)
                         .baseUrl(null).build()), getExpectedApiKey),
-                arguments(named("baseUrl with apiKey", updateAll.toBuilder().name(null).headers(null)
+                arguments(named("baseUrl with apiKey and headers", updateAll.toBuilder().name(null)
                         .configuration(null).build()), getExpectedBaseUrl),
                 arguments(named("only headers", updateAll.toBuilder().name(null).apiKey(null).configuration(null)
                         .baseUrl(null).build()), getExpectedHeaders),
@@ -369,6 +372,58 @@ class LlmProviderApiKeyResourceTest {
                 HttpStatus.SC_BAD_REQUEST);
 
         getAndAssertProviderApiKey(created, apiKey, workspaceName);
+    }
+
+    @Test
+    @DisplayName("Update provider Api Key - changing baseUrl without resubmitting the headers is rejected")
+    void testUpdateProviderApiKeyBaseUrlWithoutHeadersIsRejected() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(createProviderApiKey(), apiKey,
+                workspaceName, HttpStatus.SC_CREATED);
+        var update = ProviderApiKeyUpdate.builder()
+                .baseUrl(created.baseUrl() + "/changed")
+                .apiKey(UUID.randomUUID().toString())
+                .build();
+
+        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                HttpStatus.SC_BAD_REQUEST);
+
+        getAndAssertProviderApiKey(created, apiKey, workspaceName);
+    }
+
+    @Test
+    @DisplayName("Update provider Api Key - changing baseUrl with the api key and headers resubmitted is accepted")
+    void testUpdateProviderApiKeyBaseUrlWithCredentialsAndHeaders() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(createProviderApiKey(), apiKey,
+                workspaceName, HttpStatus.SC_CREATED);
+        var update = ProviderApiKeyUpdate.builder()
+                .baseUrl(created.baseUrl() + "/changed")
+                .apiKey(UUID.randomUUID().toString())
+                .headers(Map.of(RandomStringUtils.secure().nextAlphabetic(10),
+                        RandomStringUtils.secure().nextAlphanumeric(20)))
+                .build();
+
+        var expectedProviderApiKey = created.toBuilder()
+                .baseUrl(update.baseUrl())
+                .apiKey(update.apiKey())
+                .headers(update.headers())
+                .build();
+
+        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                HttpStatus.SC_NO_CONTENT);
+
+        getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
     }
 
     @Test
@@ -415,6 +470,48 @@ class LlmProviderApiKeyResourceTest {
                 .provider(LlmProvider.OPEN_AI) // avoid using a custom provider as it has additional requirements
                 .providerName(null)
                 .build();
+    }
+
+    Stream<Arguments> headersThatCannotBeSentAreRejected() {
+        return Stream.of(
+                arguments(named("a header without a value", "{\"X-Route\": null}"),
+                        "header value must not be null, header 'X-Route'"),
+                arguments(named("a header with a blank name", "{\" \": \"value\"}"),
+                        "header names must not be blank"),
+                arguments(named("names differing only in case", "{\"X-Route\": \"a\", \"x-route\": \"b\"}"),
+                        "header names must differ in more than case, header 'x-route'"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("Create and update provider Api Key - headers that can't be sent are rejected")
+    void headersThatCannotBeSentAreRejected(String headers, String expectedMessage) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, expectedMessage);
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(createProviderApiKey(), apiKey,
+                workspaceName, HttpStatus.SC_CREATED);
+        var createBody = JsonUtils.getMapper().<ObjectNode>valueToTree(createProviderApiKey());
+        createBody.set("headers", JsonUtils.getJsonNodeFromString(headers));
+        var updateBody = """
+                {"api_key": "%s", "headers": %s}""".formatted(UUID.randomUUID(), headers);
+
+        ErrorMessage actualCreateError;
+        try (var response = llmProviderApiKeyResourceClient.createProviderApiKey(createBody.toString(), apiKey,
+                workspaceName, HttpStatus.SC_BAD_REQUEST)) {
+            actualCreateError = response.readEntity(ErrorMessage.class);
+        }
+        ErrorMessage actualUpdateError;
+        try (var response = llmProviderApiKeyResourceClient.callUpdateProviderApiKey(created.id(), updateBody,
+                apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            actualUpdateError = response.readEntity(ErrorMessage.class);
+        }
+
+        assertThat(actualCreateError).isEqualTo(expectedError);
+        assertThat(actualUpdateError).isEqualTo(expectedError);
+        getAndAssertProviderApiKey(created, apiKey, workspaceName);
     }
 
     @Test
@@ -732,7 +829,11 @@ class LlmProviderApiKeyResourceTest {
                     customProviderWithAuthConfig(), apiKey, workspaceName, HttpStatus.SC_CREATED);
             var newBaseUrl = created.baseUrl() + "/changed";
 
-            var update = ProviderApiKeyUpdate.builder().baseUrl(newBaseUrl).authConfig(authConfig).build();
+            var update = ProviderApiKeyUpdate.builder()
+                    .baseUrl(newBaseUrl)
+                    .authConfig(authConfig)
+                    .headers(created.headers())
+                    .build();
             llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
                     expectedStatus);
 

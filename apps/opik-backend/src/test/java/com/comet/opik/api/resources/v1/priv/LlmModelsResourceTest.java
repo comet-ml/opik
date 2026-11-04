@@ -96,7 +96,11 @@ class LlmModelsResourceTest {
                                 .effort(new EffortParam(true, List.of("low", "high"), "high"))
                                 .samplingExclusive(true)
                                 .thinksByDefault(false)
-                                .routes(Map.of("some_route", ModelParams.builder().stop(new FlagParam(false)).build()))
+                                .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                .routes(Map.of("some_route", ModelParams.builder()
+                                        .stop(new FlagParam(false))
+                                        .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                        .build()))
                                 .build())
                         .build())));
 
@@ -121,9 +125,34 @@ class LlmModelsResourceTest {
                                   "effort": {"accepted": true, "levels": ["low", "high"], "default": "high"},
                                   "sampling_exclusive": true,
                                   "thinks_by_default": false,
-                                  "routes": {"some_route": {"stop": {"accepted": false}}}
+                                  "only_route": "responses_api",
+                                  "routes": {"some_route": {"stop": {"accepted": false}, "only_route": "responses_api"}}
                                 }
                               }]
+                            }"""));
+        }
+    }
+
+    @Test
+    void servesProfilesByProviderInSnakeCase() {
+        when(REGISTRY_SERVICE.getProfiles()).thenReturn(Map.of("anthropic", ModelParams.builder()
+                .maxOutputTokens(new NumberParam(true, BigDecimal.ONE, BigDecimal.valueOf(64000),
+                        BigDecimal.valueOf(4000)))
+                .effort(new EffortParam(true, List.of("low", "high"), "high"))
+                .samplingExclusive(true)
+                .build()));
+
+        try (Response response = EXT.target("/v1/private/llm/models/profiles").request().get()) {
+            assertThat(response.getStatus()).isEqualTo(OK.getStatusCode());
+
+            assertThat(JsonUtils.getJsonNodeFromString(response.readEntity(String.class)))
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("""
+                            {
+                              "anthropic": {
+                                "max_output_tokens": {"accepted": true, "min": 1, "max": 64000, "default": 4000},
+                                "effort": {"accepted": true, "levels": ["low", "high"], "default": "high"},
+                                "sampling_exclusive": true
+                              }
                             }"""));
         }
     }

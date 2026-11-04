@@ -15,7 +15,7 @@ from . import constants
 
 
 class _ExampleFlow(Flow):
-    model = constants.MODEL_NAME_SHORT
+    model = constants.OPENAI_MODEL
 
     @start()
     def generate_city(self):
@@ -27,9 +27,11 @@ class _ExampleFlow(Flow):
             messages=[
                 {
                     "role": "user",
-                    "content": "Return the name of a random city in the world.",
+                    "content": "Return the name of a random city in the world. Answer with the city name only.",
                 }
             ],
+            max_tokens=64,
+            **constants.OPENAI_MODEL_KWARGS,
         )
 
         return response["choices"][0]["message"]["content"]
@@ -43,9 +45,11 @@ class _ExampleFlow(Flow):
             messages=[
                 {
                     "role": "user",
-                    "content": f"Tell me a fun fact about {random_city}",
+                    "content": f"Tell me a fun fact about {random_city} in one sentence.",
                 }
             ],
+            max_tokens=64,
+            **constants.OPENAI_MODEL_KWARGS,
         )
 
         return response["choices"][0]["message"]["content"]

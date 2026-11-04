@@ -1,18 +1,52 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useForm } from "react-hook-form";
 
 import { useModelFormHandlers } from "./useModelFormHandlers";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { getProviderFromModel } from "@/lib/provider";
+import FIXTURE from "@/lib/openaiCatalog.fixture.json";
+import {
+  buildFlagsIndex,
+  buildParamsIndex,
+} from "@/hooks/useLLMProviderModelsData";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import { ModelParamsByProvider } from "@/types/modelParams";
+import {
+  getLatestProviderModelsSnapshot,
+  resetModelRegistryStoreForTesting,
+  setLatestModelFlags,
+  setLatestModelParams,
+  setLatestProviderModelsSnapshot,
+  setLatestProviderProfiles,
+} from "@/lib/modelRegistryStore";
 
-vi.mock("@/hooks/useLLMProviderModelsData", () => ({
+vi.mock("@/hooks/useLLMProviderModelsData", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/hooks/useLLMProviderModelsData")
+  >()),
   default: () => ({
     calculateModelProvider: (model: PROVIDER_MODEL_TYPE) =>
       getProviderFromModel(model),
   }),
 }));
+
+const seedOpenAICatalog = () => {
+  const registry = FIXTURE.models as unknown as LlmModelsByProvider;
+  setLatestProviderModelsSnapshot({
+    ...getLatestProviderModelsSnapshot(),
+    [PROVIDER_TYPE.OPEN_AI]: registry[PROVIDER_TYPE.OPEN_AI].map((m) => ({
+      value: m.id as PROVIDER_MODEL_TYPE,
+      label: m.label ?? m.id,
+    })),
+  });
+  setLatestModelFlags(buildFlagsIndex(registry));
+  setLatestModelParams(buildParamsIndex(registry));
+  setLatestProviderProfiles(
+    FIXTURE.profiles as unknown as ModelParamsByProvider,
+  );
+};
 
 const switchModel = (
   from: PROVIDER_MODEL_TYPE,
@@ -96,5 +130,23 @@ describe("useModelFormHandlers on a model switch", () => {
     );
 
     expect(config.temperature).not.toBe(0.9);
+  });
+});
+
+describe("useModelFormHandlers on an OpenAI catalog model switch", () => {
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("gives gpt-6-luna its default for a max its panel never offered on gpt-6-sol", () => {
+    seedOpenAICatalog();
+
+    expect(
+      switchModel(
+        "gpt-6-sol" as PROVIDER_MODEL_TYPE,
+        { reasoningEffort: "max" },
+        "gpt-6-luna" as PROVIDER_MODEL_TYPE,
+      ).reasoningEffort,
+    ).toBe("medium");
   });
 });

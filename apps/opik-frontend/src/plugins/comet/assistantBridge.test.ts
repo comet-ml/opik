@@ -25,6 +25,7 @@ const makeRefs = (listeners: HostListeners): BridgeRefs => ({
   context: ref({} as BridgeRefs["context"]["current"]),
   listeners: ref(listeners),
   lastRunnerState: ref(null),
+  conversationStartedListeners: ref(new Set()),
 });
 
 describe("assistantBridge — single-subscriber invariant", () => {
@@ -86,6 +87,34 @@ describe("assistantBridge — single-subscriber invariant", () => {
 
     unsub();
     expect(listeners["explain:run"].size).toBe(0);
+  });
+});
+
+describe("assistantBridge — a failing console listener", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Regression: a closure from a removed Ollie iframe reads its own (now null)
+  // localStorage and threw "Cannot read properties of null (reading 'setItem')"
+  // out of a host effect, taking the whole page down.
+  it("does not throw into the host and still reaches the other listeners", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const listeners = createHostListeners();
+    const bridge = createBridge(makeRefs(listeners));
+    const detachedStorage = null as unknown as Storage;
+    const live = vi.fn();
+
+    bridge.subscribe("visibility:changed", ({ isOpen }) =>
+      detachedStorage.setItem("assistant-sidebar-open", String(isOpen)),
+    );
+    bridge.subscribe("visibility:changed", live);
+
+    expect(() =>
+      emitHostEvent(ref(listeners), "visibility:changed", { isOpen: false }),
+    ).not.toThrow();
+    expect(live).toHaveBeenCalledWith({ isOpen: false });
+    expect(console.error).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -216,6 +245,39 @@ describe("assistantBridge — chart editing capability", () => {
     });
     expect(bridge.canEditChart!()).toBe(true);
   });
+
+  it("offers Duplicate in Ollie only to a console that handles the duplicate flag", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    // A v5 console edits charts but drops `duplicate`: its card would save over the original.
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 5,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canEditChart!()).toBe(true);
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.getState().onConsoleReady({
+      bridgeVersion: 6,
+      capabilities: ["explain", "charts"],
+    });
+    expect(bridge.canDuplicateChart!()).toBe(true);
+  });
+
+  it("hides Duplicate in Ollie without chart editing or a known console version", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+
+    useExplainStore
+      .getState()
+      .onConsoleReady({ bridgeVersion: 6, capabilities: ["explain"] });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+
+    useExplainStore.setState({
+      capabilities: ["explain", "charts"],
+      consoleBridgeVersion: null,
+    });
+    expect(bridge.canDuplicateChart!()).toBe(false);
+  });
 });
 
 describe("assistantBridge — artifacts", () => {
@@ -323,5 +385,30 @@ describe("assistantBridge — artifacts", () => {
     useExplainStore
       .getState()
       .onConsoleReady({ bridgeVersion: 2, capabilities: [] });
+  });
+});
+
+describe("assistantBridge — annotator view chats", () => {
+  it("tells subscribers which chat a host request started", () => {
+    const bridge = createBridge(makeRefs(createHostListeners()));
+    const listener = vi.fn();
+    const unsubscribe = bridge.subscribeConversationStarted!(listener);
+
+    bridge.emit("conversation:started", { entryId: "e-1", sessionId: "s-1" });
+    unsubscribe();
+    bridge.emit("conversation:started", { entryId: "e-2", sessionId: "s-2" });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ entryId: "e-1", sessionId: "s-1" });
+  });
+
+  it("asks the console to expand or collapse", () => {
+    const refs = makeRefs(createHostListeners());
+    const onRequestVisibility = vi.fn();
+    refs.onRequestVisibility = ref(onRequestVisibility);
+
+    createBridge(refs).setOpen!(false);
+
+    expect(onRequestVisibility).toHaveBeenCalledWith(false);
   });
 });

@@ -1,7 +1,8 @@
 package com.comet.opik.infrastructure.llm.openai;
 
-import com.comet.opik.infrastructure.LlmProviderClientConfig;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -60,13 +61,15 @@ class LlmProviderOpenAiResponsesUsageTest {
 
     @BeforeEach
     void setUp() {
-        openAi = new WireMockServer(0);
+        openAi = LlmTestClients.newLoopbackWireMock();
         openAi.start();
         provider = new LlmProviderOpenAiResponses(
-                new OpenAIClientGenerator(new LlmProviderClientConfig()),
+                new OpenAIClientGenerator(TestConfigUtils.loadConfigTest().getLlmProviderClient(),
+                        LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
                 LlmProviderClientApiConfig.builder()
                         .apiKey("test-key")
-                        .baseUrl(openAi.baseUrl())
+                        .baseUrl(LlmTestClients.baseUrlOf(openAi))
                         .build());
     }
 

@@ -31,7 +31,9 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * what differs — the flattening, the ordering, and that the all-or-nothing rule survives both — rather than
  * re-deriving every era. Their ids are therefore minted at random instants and their expectations built from the
  * derivation's single-id answer, which the era cases below pin: what they assert is the relationship between the two,
- * which holds whatever week the ids land in. The far-future case is the exception and says why.
+ * which holds whatever week the ids land in. The far-future case is the exception and says why. The
+ * {@link WeeklyPartitions#weekOf} cases pin an instant's week the same way, against an id minted at it, plus the one
+ * boundary an instant adds: the week starts on Monday in UTC.
  * <p>
  * The expected values are not hand-computed: each is what ClickHouse itself returned for
  * {@code toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))} for that id, evaluated once with
@@ -341,6 +343,26 @@ class WeeklyPartitionsTest {
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThatThrownBy(() -> grouped.get(partition).remove(ordinary))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void weekOfAnInstantIsTheWeekOfAnIdMintedAtIt() {
+        var idAt = randomIdAt();
+
+        var actualWeek = WeeklyPartitions.weekOf(idAt);
+
+        assertThat(actualWeek).isEqualTo(weekOf(ID_GENERATOR.generateId(idAt)));
+    }
+
+    @Test
+    void weekOfStartsOnMondayInUtc() {
+        var mondayStart = Instant.parse("2026-10-26T00:00:00Z");
+
+        var actualWeek = WeeklyPartitions.weekOf(mondayStart);
+        var actualPreviousWeek = WeeklyPartitions.weekOf(mondayStart.minusSeconds(1));
+
+        assertThat(actualWeek).isEqualTo(20261026L);
+        assertThat(actualPreviousWeek).isEqualTo(20261019L);
     }
 
     /**

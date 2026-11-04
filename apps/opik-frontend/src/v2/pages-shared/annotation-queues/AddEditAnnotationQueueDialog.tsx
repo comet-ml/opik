@@ -89,20 +89,20 @@ export const formSchema = z
     instructions: z.string().optional(),
     scope: z.nativeEnum(ANNOTATION_QUEUE_SCOPE),
     comments_enabled: z.boolean(),
-    feedback_definition_names: z.array(z.string()).default([]),
-    annotators_per_item: z.coerce.number().int().min(1).default(1),
+    feedback_definition_names: z.array(z.string()),
+    annotators_per_item: z.coerce
+      .number<number | string>()
+      .int("Must be a whole number")
+      .min(1, "Must be at least 1"),
     lock_timeout_minutes: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(60)
-      .default(DEFAULT_LOCK_TIMEOUT_SECONDS / 60),
-    automation_enabled: z.boolean().default(false),
-    automation_cap_enabled: z.boolean().default(false),
+      .number<number | string>()
+      .int("Must be a whole number")
+      .min(1, "Must be between 1 and 60 minutes")
+      .max(60, "Must be between 1 and 60 minutes"),
+    automation_enabled: z.boolean(),
+    automation_cap_enabled: z.boolean(),
     // A string like the thresholds: a number field's raw text is what validation needs to see.
-    automation_max_items: z
-      .string()
-      .default(String(DEFAULT_AUTOMATION_MAX_ITEMS)),
+    automation_max_items: z.string(),
     // Held in the shared condition shape (name/operator/threshold) so the builder can be reused as-is,
     // then mapped to the API's score_name/operator/value on submit. Only validated when the toggle is on:
     // conditions left half-filled while automation is off must not block saving the queue.
@@ -128,8 +128,7 @@ export const formSchema = z
       .max(
         AUTOMATION_MAX_GROUPS,
         `Cannot exceed ${AUTOMATION_MAX_GROUPS} groups`,
-      )
-      .default([]),
+      ),
   })
   .superRefine((data, ctx) => {
     if (!data.automation_enabled) {
@@ -191,7 +190,8 @@ export const formSchema = z
     });
   });
 
-type FormData = z.infer<typeof formSchema>;
+type FormData = z.output<typeof formSchema>;
+type FormInput = z.input<typeof formSchema>;
 
 type AddEditAnnotationQueueDialogProps = {
   open: boolean;
@@ -280,7 +280,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     FeatureToggleKeys.ANNOTATION_QUEUE_AUTOMATION_ENABLED,
   );
 
-  const form = useForm<FormData>({
+  const form = useForm<FormInput, unknown, FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: defaultQueue?.name || "",
@@ -364,43 +364,44 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   const isEdit = Boolean(defaultQueue);
   const title = isEdit ? "Edit annotation queue" : "Create annotation queue";
-  const submitText = isEdit ? "Update queue" : "Create queue";
+  const submitText = isEdit ? "Save changes" : "Create queue";
 
-  const getQueue = useCallback(() => {
-    const formData = form.getValues();
-    const {
-      lock_timeout_minutes,
-      automation_enabled,
-      automation_groups,
-      automation_cap_enabled,
-      automation_max_items,
-      ...rest
-    } = formData;
+  const getQueue = useCallback(
+    (formData: FormData) => {
+      const {
+        lock_timeout_minutes,
+        automation_enabled,
+        automation_groups,
+        automation_cap_enabled,
+        automation_max_items,
+        ...rest
+      } = formData;
 
-    return {
-      ...rest,
-      name: formData.name.trim(),
-      project_id: formData.project_id,
-      lock_timeout_seconds: lock_timeout_minutes * 60,
-      automation: buildAutomationPayload({
-        isFeatureEnabled: isAutomationEnabled,
-        hasStoredAutomation: Boolean(defaultQueue?.automation),
-        enabled: automation_enabled,
-        capEnabled: automation_cap_enabled,
-        maxItems: automation_max_items,
-        groups: automation_groups,
-      }),
-      ...(annotatorViewEditor.isUnsaved
-        ? { annotator_view: annotatorView }
-        : {}),
-    };
-  }, [
-    defaultQueue,
-    form,
-    isAutomationEnabled,
-    annotatorView,
-    annotatorViewEditor.isUnsaved,
-  ]);
+      return {
+        ...rest,
+        name: formData.name.trim(),
+        project_id: formData.project_id,
+        lock_timeout_seconds: lock_timeout_minutes * 60,
+        automation: buildAutomationPayload({
+          isFeatureEnabled: isAutomationEnabled,
+          hasStoredAutomation: Boolean(defaultQueue?.automation),
+          enabled: automation_enabled,
+          capEnabled: automation_cap_enabled,
+          maxItems: automation_max_items,
+          groups: automation_groups,
+        }),
+        ...(annotatorViewEditor.isUnsaved
+          ? { annotator_view: annotatorView }
+          : {}),
+      };
+    },
+    [
+      defaultQueue,
+      isAutomationEnabled,
+      annotatorView,
+      annotatorViewEditor.isUnsaved,
+    ],
+  );
 
   const onQueueCreatedEdited = useCallback(
     (queue: Partial<AnnotationQueue>) => {
@@ -411,39 +412,46 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
     [onQueueCreated],
   );
 
-  const createQueue = useCallback(() => {
-    createMutate(
-      {
-        annotationQueue: getQueue(),
-      },
-      {
-        onSuccess: (queue) => {
-          onQueueCreatedEdited(queue);
-          setOpen(false);
+  const createQueue = useCallback(
+    (formData: FormData) => {
+      createMutate(
+        {
+          annotationQueue: getQueue(formData),
         },
-      },
-    );
-  }, [createMutate, getQueue, onQueueCreatedEdited, setOpen]);
+        {
+          onSuccess: (queue) => {
+            onQueueCreatedEdited(queue);
+            setOpen(false);
+          },
+        },
+      );
+    },
+    [createMutate, getQueue, onQueueCreatedEdited, setOpen],
+  );
 
-  const editQueue = useCallback(() => {
-    updateMutate(
-      {
-        annotationQueue: {
-          id: defaultQueue?.id || "",
-          ...getQueue(),
+  const editQueue = useCallback(
+    (formData: FormData) => {
+      updateMutate(
+        {
+          annotationQueue: {
+            id: defaultQueue?.id || "",
+            ...getQueue(formData),
+          },
         },
-      },
-      {
-        onSuccess: (queue) => {
-          onQueueCreatedEdited(queue);
-          setOpen(false);
+        {
+          onSuccess: (queue) => {
+            onQueueCreatedEdited(queue);
+            setOpen(false);
+          },
         },
-      },
-    );
-  }, [updateMutate, defaultQueue?.id, getQueue, onQueueCreatedEdited, setOpen]);
+      );
+    },
+    [updateMutate, defaultQueue?.id, getQueue, onQueueCreatedEdited, setOpen],
+  );
 
   const onSubmit = useCallback(
-    () => (isEdit ? editQueue() : createQueue()),
+    (formData: FormData) =>
+      isEdit ? editQueue(formData) : createQueue(formData),
     [isEdit, editQueue, createQueue],
   );
 
@@ -472,10 +480,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
             variant="form"
             title={
               page === "preview" ? (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="text-muted-slate hover:text-foreground"
+                    className="hover:text-muted-slate"
                     onClick={() => setPage("form")}
                   >
                     {title}
@@ -503,12 +511,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         }
       >
         {page === "preview" && (
-          <div className="min-h-0 flex-1 overflow-y-auto py-3 pl-[19px] pr-5">
-            <AnnotatorViewPreviewPage
-              editor={annotatorViewEditor}
-              onBack={() => setPage("form")}
-            />
-          </div>
+          <AnnotatorViewPreviewPage
+            editor={annotatorViewEditor}
+            onBack={() => setPage("form")}
+          />
         )}
         <div
           className={cn(
@@ -837,7 +843,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                   editor={annotatorViewEditor}
                   onPreview={() => setPage("preview")}
                   onStartOllie={startAnnotatorViewOllie}
-                  isVisible={page === "form"}
                 />
               )}
             </form>

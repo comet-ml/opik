@@ -6,13 +6,14 @@ import IconTag from "@/shared/IconTag/IconTag";
 import { ADD_WIDGET_OPTIONS } from "./addWidgetOptions";
 
 interface DashboardWidgetGridEmptyProps {
+  sectionId: string;
   onAddWidget: () => void;
   readOnly?: boolean;
 }
 
 const DashboardWidgetGridEmpty: React.FunctionComponent<
   DashboardWidgetGridEmptyProps
-> = ({ onAddWidget, readOnly }) => {
+> = ({ sectionId, onAddWidget, readOnly }) => {
   const { isOllieAvailable, askOllie } = useAskOllieForWidget();
 
   const renderActions = () => {
@@ -47,7 +48,9 @@ const DashboardWidgetGridEmpty: React.FunctionComponent<
               key={value}
               type="button"
               onClick={() =>
-                value === "add" ? onAddWidget() : askOllie("empty_state")
+                value === "add"
+                  ? onAddWidget()
+                  : askOllie("empty_state", sectionId)
               }
               className="flex flex-col gap-1 rounded-lg border border-border bg-background px-3 py-2.5 text-left transition-colors hover:border-primary hover:bg-toggle-outline-active"
             >

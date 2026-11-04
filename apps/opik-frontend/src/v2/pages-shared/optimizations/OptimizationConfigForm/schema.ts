@@ -40,14 +40,14 @@ import {
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
-  model_parameters: z.record(z.unknown()).optional(),
+  model_parameters: z.record(z.string(), z.unknown()).optional(),
   verbose: z.boolean().optional(),
   seed: z.number().optional(),
 });
 
 export const HierarchicalReflectiveOptimizerParamsSchema = z.object({
   model: z.string().optional(),
-  model_parameters: z.record(z.unknown()).optional(),
+  model_parameters: z.record(z.string(), z.unknown()).optional(),
   convergence_threshold: z
     .number()
     .min(0, "Must be between 0 and 1")
@@ -102,7 +102,7 @@ export const CodeMetricParamsSchema = z
     // backend `_build_code_metric` arguments contract (plain column names, not
     // trace paths). Optional/partial: unmapped params fall back to same-named
     // columns backend-side, so only explicit renames need entries here.
-    arguments: z.record(z.string()).optional(),
+    arguments: z.record(z.string(), z.string()).optional(),
   })
   .superRefine((params, ctx) => {
     // `.min(1)` above already reports empty code; only run the syntax check when

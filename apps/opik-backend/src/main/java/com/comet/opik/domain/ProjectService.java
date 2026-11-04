@@ -10,6 +10,7 @@ import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
@@ -21,6 +22,7 @@ import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.collect.Lists;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -164,6 +166,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull EventBus eventBus;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -336,21 +339,23 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        template.inTransaction(WRITE, handle -> {
+        boolean deleted = template.inTransaction(WRITE, handle -> {
 
             var repository = handle.attach(ProjectDAO.class);
             Optional<Project> project = repository.fetch(id, workspaceId);
 
             if (project.isEmpty()) {
-                // Void return
-                return null;
+                return false;
             }
 
             repository.delete(id, workspaceId);
 
-            // Void return
-            return null;
+            return true;
         });
+
+        if (deleted) {
+            eventBus.post(new ProjectsDeleted(Set.of(id), workspaceId, userName));
+        }
     }
 
     @Override
@@ -367,6 +372,8 @@ class ProjectServiceImpl implements ProjectService {
             handle.attach(ProjectDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        eventBus.post(new ProjectsDeleted(ids, workspaceId, userName));
     }
 
     @Override
@@ -517,10 +524,7 @@ class ProjectServiceImpl implements ProjectService {
             return Mono.just(Optional.empty());
         }
 
-        return Mono.deferContextual(ctx -> Mono.fromCallable(
-                () -> Optional.of(getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
-                        projectName, ctx.get(RequestContext.USER_NAME)).id()))
-                .subscribeOn(Schedulers.boundedElastic()));
+        return getOrCreate(projectName).map(project -> Optional.of(project.id()));
     }
 
     @Override
@@ -565,7 +569,6 @@ class ProjectServiceImpl implements ProjectService {
     public Mono<Project> getOrCreate(@NonNull String projectName) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
@@ -765,16 +768,6 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
-    }
-
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> Mono.fromCallable(
-                    () -> findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                            .orElseThrow())
-                    .subscribeOn(Schedulers.boundedElastic());
-            default -> Mono.error(exception);
-        };
     }
 
     @Override

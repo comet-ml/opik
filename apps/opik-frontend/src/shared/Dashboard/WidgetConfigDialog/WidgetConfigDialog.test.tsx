@@ -5,6 +5,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { AssistantSidebarBridge } from "@/types/assistant-sidebar";
+import { useDashboardStore } from "@/store/DashboardStore";
 
 let enabledToggles: Set<FeatureToggleKeys>;
 
@@ -81,6 +82,9 @@ describe("WidgetConfigDialog Ollie prompt", () => {
     window.opikBridge = {
       startConversation,
     } as unknown as AssistantSidebarBridge;
+    useDashboardStore.setState({
+      sections: [{ id: "section", title: "Spend", widgets: [], layout: [] }],
+    } as never);
 
     renderDialog();
     fireEvent.click(screen.getByRole("button", { name: "Ask Ollie" }));
@@ -89,6 +93,9 @@ describe("WidgetConfigDialog Ollie prompt", () => {
     expect(options).toEqual({
       origin: "describe_widget",
       entryId: expect.any(String),
+      // The section's id goes with its title: Ollie adds by id, since titles can repeat or be renamed.
+      section: "Spend",
+      sectionId: "section",
     });
     expect(trackEvent).toHaveBeenCalledWith(
       OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED,

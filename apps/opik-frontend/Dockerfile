@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.20.2-alpine3.23@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
+FROM node:26.13.0-alpine3.23@sha256:e6c03d42b46af3b1e98207e59f06a43cfe5efd3ec4b4d3d9802bddf04f833374 AS builder
 
 WORKDIR /opt/frontend
 
@@ -24,8 +24,15 @@ RUN npm run build -- --mode $BUILD_MODE \
     && printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
-# Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.30.6-alpine-otel@sha256:53cf1f780c33f6e599e9a001e9425fc6ba33e513c31855e3448f75613e95656f AS nginx
+# Slim plus only the OpenTelemetry module: the -otel image is built on the full alpine variant, whose other
+# modules we don't use and which bring in brotli and expat CVEs. The module comes from nginx.org, signed with the
+# key slim already trusts, pinned the way nginx's own -otel Dockerfile pins it. curl is for the compose healthcheck.
+FROM nginx:1.30.6-alpine-slim@sha256:dede8895648b461178c3bc604f7eed4423efe5220b2c4d839f5eb3d34ac3f8f7 AS nginx
+ARG OTEL_VERSION=0.1.2
+# curl stays unpinned: Alpine keeps only the latest build in a release's repo, so a pin breaks the next rebuild.
+# hadolint ignore=DL3018
+RUN apk add --no-cache -X "https://nginx.org/packages/alpine/v$(grep -oE '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" \
+    "nginx-module-otel=${NGINX_VERSION}.${OTEL_VERSION}-r${PKG_RELEASE}" curl
 
 # Add label for later inspection
 ARG BUILD_MODE=production
@@ -37,10 +44,7 @@ COPY --chown=1001:1001 nginx /etc/nginx
 # Copy entrypoint script to the docker-entrypoint.d directory so it runs automatically
 COPY --chmod=0755 patch-nginx.conf.sh /docker-entrypoint.d/99-patch-nginx.conf.sh
       
-# Refresh libexpat and fix permissions
-# hadolint ignore=DL3018
-RUN apk add --no-cache --upgrade libexpat \
- && chown -R 1001:1001 /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
+RUN chown -R 1001:1001 /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
  && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
 
 # Copy the built files from the builder stage

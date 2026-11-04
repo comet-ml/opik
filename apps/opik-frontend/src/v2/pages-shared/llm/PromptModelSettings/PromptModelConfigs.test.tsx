@@ -1,4 +1,12 @@
-import { describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 // The custom panel embeds the real CodeMirror editor for custom_parameters, which does not mount
@@ -17,6 +25,16 @@ import {
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { TooltipProvider } from "@/ui/tooltip";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import ANTHROPIC_FIXTURE from "@/lib/anthropicCatalog.fixture.json";
+import GEMINI_FIXTURE from "@/lib/geminiCatalog.fixture.json";
+import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelParams,
+  setLatestProviderProfiles,
+} from "@/lib/modelRegistryStore";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
+import { ModelParamsByProvider } from "@/types/modelParams";
 
 const renderTrigger = (
   provider: COMPOSED_PROVIDER_TYPE,
@@ -128,6 +146,45 @@ describe("PromptModelConfigs typed values", () => {
   });
 });
 
+describe("PromptModelConfigs when the provider profiles load after the model list", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    setLatestModelParams(
+      buildParamsIndex(
+        ANTHROPIC_FIXTURE.models as unknown as LlmModelsByProvider,
+      ),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("redraws the panel of an id the registry doesn't list from its profile", () => {
+    render(
+      <TooltipProvider delayDuration={700}>
+        <PromptModelConfigs
+          provider={PROVIDER_TYPE.ANTHROPIC}
+          model={"claude-unlisted-1" as PROVIDER_MODEL_TYPE}
+          configs={{ temperature: 0.4, maxCompletionTokens: 4000 }}
+          onChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    openPanel();
+    expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
+
+    act(() => {
+      setLatestProviderProfiles(
+        ANTHROPIC_FIXTURE.profiles as unknown as ModelParamsByProvider,
+      );
+    });
+
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("maxCompletionTokens-input")).toHaveValue("4000");
+  });
+});
+
 describe("PromptModelConfigs panel and the rest of the page", () => {
   const renderOpenPanelBesideAButton = () => {
     renderTrigger(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O);
@@ -166,4 +223,37 @@ describe("PromptModelConfigs panel and the rest of the page", () => {
 
     expect(panelHeading()).toBeVisible();
   });
+});
+
+describe("PromptModelConfigs for Gemini and Vertex AI", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    setLatestModelParams(
+      buildParamsIndex(GEMINI_FIXTURE.models as unknown as LlmModelsByProvider),
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  // Both forms mount the slider under the same id. 2.0 Flash's catalog limit is 8,192 while the old
+  // panel shows the stored value as it is, so the shown value tells them apart.
+  it.each([
+    [PROVIDER_TYPE.GEMINI, "gemini-2.0-flash", "8192"],
+    [PROVIDER_TYPE.VERTEX_AI, "vertex_ai/gemini-2.0-flash-001", "8192"],
+    [PROVIDER_TYPE.GEMINI, "gemini-9-unlisted", "20000"],
+    [PROVIDER_TYPE.VERTEX_AI, "vertex_ai/gemini-9-unlisted", "20000"],
+  ])(
+    "opens the catalog panel only for a listed model: %s %s shows %s",
+    (provider, model, shown) => {
+      renderTrigger(provider, model as PROVIDER_MODEL_TYPE, {
+        ...getDefaultConfigByProvider(provider, model as PROVIDER_MODEL_TYPE),
+        maxCompletionTokens: 20000,
+      });
+      openPanel();
+
+      expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue(shown);
+    },
+  );
 });

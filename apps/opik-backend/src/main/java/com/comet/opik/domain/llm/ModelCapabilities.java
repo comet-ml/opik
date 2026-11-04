@@ -132,6 +132,19 @@ public class ModelCapabilities {
                 params -> Boolean.FALSE.equals(params.thinksByDefault()));
     }
 
+    /**
+     * Whether the model answers a forced tool_choice (any, or a named tool) with a 400. An Anthropic id we cannot place
+     * keeps the forced choice every Claude took until the 5.5 generation.
+     */
+    public boolean refusesForcedToolChoice(String modelName, @NonNull LlmModelRegistryService registryService) {
+        return isAnthropicModelWithout(modelName, registryService, ModelCapabilities::acceptsForcedToolChoice);
+    }
+
+    private boolean acceptsForcedToolChoice(ModelParams params) {
+        var forcedChoice = params.tools() == null ? null : params.tools().forcedChoice();
+        return forcedChoice == null || !Boolean.FALSE.equals(forcedChoice.accepted());
+    }
+
     private boolean isAnthropicModelWithout(String modelName, LlmModelRegistryService registryService,
             Predicate<ModelParams> earlierBehaviour) {
         var canonical = canonicalAnthropicId(modelName);

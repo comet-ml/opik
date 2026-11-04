@@ -83,6 +83,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_6_LUNA = "gpt-6-luna",
   GPT_6_SOL = "gpt-6-sol",
   GPT_6_1_SOL = "gpt-6.1-sol",
+  GPT_6_1_TERRA = "gpt-6.1-terra",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
@@ -376,6 +377,7 @@ export enum PROVIDER_MODEL_TYPE {
   LIQUID_LFM_2_2_6B = "liquid/lfm-2.2-6b",
   LIQUID_LFM_2_5_1_2B_INSTRUCT_FREE = "liquid/lfm-2.5-1.2b-instruct:free",
   LIQUID_LFM_2_5_1_2B_THINKING_FREE = "liquid/lfm-2.5-1.2b-thinking:free",
+  LIQUID_LFM_2_5_2_6B = "liquid/lfm-2.5-2.6b",
   LIQUID_LFM_2_5_2_6B_FREE = "liquid/lfm-2.5-2.6b:free",
   LIQUID_LFM_2_5_24B_A2B = "liquid/lfm-2.5-24b-a2b",
   LIQUID_LFM2_8B_A1B = "liquid/lfm2-8b-a1b",
@@ -499,6 +501,7 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_7_CODE_BATCH = "moonshotai/kimi-k2.7-code:batch",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_K3 = "moonshotai/kimi-k3",
+  MOONSHOTAI_KIMI_K3_1_PRO = "moonshotai/kimi-k3.1-pro",
   MOONSHOTAI_KIMI_K3_BATCH = "moonshotai/kimi-k3:batch",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",
@@ -642,6 +645,10 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_6_1_SOL_PRO = "openai/gpt-6.1-sol-pro",
   OPENAI_GPT_6_1_SOL_PRO_BATCH = "openai/gpt-6.1-sol-pro:batch",
   OPENAI_GPT_6_1_SOL_BATCH = "openai/gpt-6.1-sol:batch",
+  OPENAI_GPT_6_1_TERRA = "openai/gpt-6.1-terra",
+  OPENAI_GPT_6_1_TERRA_PRO = "openai/gpt-6.1-terra-pro",
+  OPENAI_GPT_6_1_TERRA_PRO_BATCH = "openai/gpt-6.1-terra-pro:batch",
+  OPENAI_GPT_6_1_TERRA_BATCH = "openai/gpt-6.1-terra:batch",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
   OPENAI_GPT_CHAT_LATEST = "openai/gpt-chat-latest",
@@ -682,6 +689,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
   OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",
   OPENROUTER_PARETO_CODE = "openrouter/pareto-code",
+  PARTICLE_AI_PARTICLE_1 = "particle-ai/particle-1",
   PERCEPTRON_PERCEPTRON_MK1 = "perceptron/perceptron-mk1",
   PERCEPTRON_PERCEPTRON_MK1_5 = "perceptron/perceptron-mk1.5",
   PERPLEXITY_SONAR = "perplexity/sonar",
@@ -700,6 +708,7 @@ export enum PROVIDER_MODEL_TYPE {
   POOLSIDE_LAGUNA_XS_2_FREE = "poolside/laguna-xs.2:free",
   PRIME_INTELLECT_INTELLECT_3 = "prime-intellect/intellect-3",
   PRISM_ML_TERNARY_BONSAI_2_27B = "prism-ml/ternary-bonsai-2-27b",
+  PRISM_ML_TERNARY_BONSAI_2_9B = "prism-ml/ternary-bonsai-2-9b",
   QWEN_QWEN_2_5_72B_INSTRUCT = "qwen/qwen-2.5-72b-instruct",
   QWEN_QWEN_2_5_72B_INSTRUCT_FREE = "qwen/qwen-2.5-72b-instruct:free",
   QWEN_QWEN_2_5_7B_INSTRUCT = "qwen/qwen-2.5-7b-instruct",
@@ -798,6 +807,7 @@ export enum PROVIDER_MODEL_TYPE {
   SAO10K_L3_3_EURYALE_70B = "sao10k/l3.3-euryale-70b",
   SCALEDOWN_EXTRACT = "scaledown/extract",
   SCALEDOWN_SUMMARIZE = "scaledown/summarize",
+  STEALTH_CROUTON_ALPHA = "stealth/crouton-alpha",
   STEALTH_OX_ALPHA = "stealth/ox-alpha",
   STEALTH_SPACE_BUNNY_ALPHA = "stealth/space-bunny-alpha",
   STEALTH_UNION_ALPHA = "stealth/union-alpha",
@@ -857,7 +867,9 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_3_BATCH = "x-ai/grok-4.3:batch",
   X_AI_GROK_4_5 = "x-ai/grok-4.5",
   X_AI_GROK_4_6 = "x-ai/grok-4.6",
+  X_AI_GROK_4_6_BATCH = "x-ai/grok-4.6:batch",
   X_AI_GROK_4_7 = "x-ai/grok-4.7",
+  X_AI_GROK_4_7_BATCH = "x-ai/grok-4.7:batch",
   X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
@@ -889,6 +901,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_3_FLASH = "z-ai/glm-5.3-flash",
   Z_AI_GLM_5_3_FLASH_BATCH = "z-ai/glm-5.3-flash:batch",
   Z_AI_GLM_5_3_FLASHX = "z-ai/glm-5.3-flashx",
+  Z_AI_GLM_5_3_FLASHX_LEGAL = "z-ai/glm-5.3-flashx-legal",
   Z_AI_GLM_5_3_PRIME = "z-ai/glm-5.3-prime",
   Z_AI_GLM_5_3_BATCH = "z-ai/glm-5.3:batch",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
@@ -978,9 +991,12 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
   VERTEX_AI_GEMINI_3_8_FLASH = "vertex_ai/gemini-3.8-flash",
   VERTEX_AI_GEMINI_3_8_FLASH_CYBER = "vertex_ai/gemini-3.8-flash-cyber",
+  VERTEX_AI_GEMINI_4_ARGON = "vertex_ai/gemini-4-argon",
+  VERTEX_AI_GEMINI_4_ARGON_CYBER_PERMISSIVE = "vertex_ai/gemini-4-argon-cyber-permissive",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH = "vertex_ai/gemini-omni-1.1-flash",
   VERTEX_AI_GEMINI_OMNI_1_1_FLASH_PREVIEW = "vertex_ai/gemini-omni-1.1-flash-preview",
   VERTEX_AI_GEMINI_ROBOTICS_ER_2 = "vertex_ai/gemini-robotics-er-2",
+  VERTEX_AI_GEMINI_ROBOTICS_ER_2_PREVIEW = "vertex_ai/gemini-robotics-er-2-preview",
 }
 
 export interface ProviderModelsMap {
@@ -1004,6 +1020,14 @@ export const OPENAI_PIPELINE_MODE_VALUES = [
 
 export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
+export const BEDROCK_API_VALUES = [
+  "chat_completions",
+  "anthropic_messages",
+  "converse",
+] as const;
+
+export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -1018,6 +1042,7 @@ export interface ProviderKeyConfiguration {
   /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
    * and falls back to chat_completions_api on unknown values. */
   openai_pipeline_mode?: OpenAiPipelineMode;
+  bedrock_api?: BedrockApi;
 }
 
 /** Read-back sentinel for secret credential values: the backend never returns a stored secret,
@@ -1053,6 +1078,8 @@ export interface BaseProviderKey {
   created_at: string;
   provider: PROVIDER_TYPE;
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
+  // masked by the backend, or the string "null" when no key is stored
+  api_key?: string;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
   auth_config?: ProviderAuthConfig;
@@ -1110,6 +1137,16 @@ export type ResponsesApiOnlyReasoningEffort = "max";
 export type OpenAIReasoningEffort =
   | ReasoningEffort
   | ResponsesApiOnlyReasoningEffort;
+
+export const OPENAI_REASONING_EFFORT_VALUES = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly OpenAIReasoningEffort[];
 
 export interface LLMOpenAIConfigsType {
   temperature: number;

@@ -21,6 +21,7 @@ const DESCRIBE_TEMPLATE_WIDGET_MESSAGE =
 
 const useAskOllieForWidget = () => {
   const runtimeConfig = useDashboardStore(selectRuntimeConfig);
+  const getSectionById = useDashboardStore((state) => state.getSectionById);
 
   // The sidebar plugin is what answers the bridge; without it the request would go nowhere.
   const assistantAvailable = usePluginsStore((state) =>
@@ -35,9 +36,10 @@ const useAskOllieForWidget = () => {
     customChartsEnabledForWorkspace &&
     assistantAvailable;
 
-  // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart.
+  // Hands the request to Ollie, which draws it and offers "Add to <this dashboard>" on the chart. The section the
+  // user asked from goes with it, by id as well as title, so the widget lands there.
   const askOllie = useCallback(
-    (source: AskOllieForWidgetSource) => {
+    (source: AskOllieForWidgetSource, sectionId?: string) => {
       const entryId = uuidv4();
       trackEvent(OpikEvent.DASHBOARD_ASK_OLLIE_CLICKED, {
         entry_id: entryId,
@@ -51,10 +53,16 @@ const useAskOllieForWidget = () => {
         isTemplateId(runtimeConfig.dashboardId ?? null)
           ? DESCRIBE_TEMPLATE_WIDGET_MESSAGE
           : DESCRIBE_WIDGET_MESSAGE,
-        { origin: "describe_widget", entryId },
+        {
+          origin: "describe_widget",
+          entryId,
+          ...(sectionId
+            ? { section: getSectionById(sectionId)?.title, sectionId }
+            : {}),
+        },
       );
     },
-    [runtimeConfig],
+    [runtimeConfig, getSectionById],
   );
 
   return { isOllieAvailable, askOllie };
