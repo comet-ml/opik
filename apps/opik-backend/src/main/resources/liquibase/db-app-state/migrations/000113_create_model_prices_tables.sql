@@ -3,8 +3,8 @@
 --comment: Create model_price_lists, model_prices and model_prices_history — an organization's custom model prices (OPIK-8626)
 
 -- One header per organization: the list version that each saved change raises, which spans record with their
--- cost, and the row count that enforces the row cap without a COUNT(*). Writers lock this row first, so two
--- saves of one organization's list run one after the other.
+-- cost, and the number of rows in the list. Writers lock this row first, so two saves of one organization's list
+-- run one after the other.
 CREATE TABLE IF NOT EXISTS model_price_lists
 (
     organization_id VARCHAR(150) NOT NULL,

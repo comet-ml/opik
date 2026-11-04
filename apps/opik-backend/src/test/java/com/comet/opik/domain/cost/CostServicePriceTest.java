@@ -43,6 +43,14 @@ class CostServicePriceTest {
                 .build();
     }
 
+    private static CustomModelPrice withoutRates(String modelName) {
+        return CustomModelPrice.builder()
+                .modelName(modelName)
+                .provider("openai")
+                .kind(CustomModelPrice.Kind.FIXED)
+                .build();
+    }
+
     private static PriceLayers layers(CustomModelPrice... rows) {
         return PriceLayers.of("org-1", 12, List.of(rows));
     }
@@ -112,6 +120,33 @@ class CostServicePriceTest {
 
         assertThat(priced.cost()).isEqualByComparingTo("0");
         assertThat(priced.source()).isEqualTo(CostSource.ORGANIZATION);
+    }
+
+    @Test
+    void priceOfAnAliasToAFreeOrganizationRowIsFree() {
+        var priced = CostService.price("aide-gpt-5-mini", "azure", usage(1000, 0, 500), HALF_A_DOLLAR_METADATA,
+                layers(alias("aide-gpt-5-mini", "azure", "aide-free", "azure"), fixed("aide-free", "azure", "0", "0")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0");
+        assertThat(priced.source()).isEqualTo(CostSource.ORGANIZATION);
+    }
+
+    @Test
+    void priceOfAnAliasToARowThatPricesNothingUsesTheSpansBuiltInPrice() {
+        var priced = CostService.price("gpt-5-mini", "openai", usage(1000, 0, 500), null,
+                layers(alias("gpt-5-mini", "openai", "aide-unlisted", "openai"), withoutRates("aide-unlisted")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0.00125");
+        assertThat(priced.source()).isEqualTo(CostSource.BUILT_IN);
+    }
+
+    @Test
+    void priceOfARowThatPricesNothingFallsBackToTheMetadataCost() {
+        var priced = CostService.price("aide-unlisted", "openai", usage(1000, 0, 500), HALF_A_DOLLAR_METADATA,
+                layers(withoutRates("aide-unlisted")));
+
+        assertThat(priced.cost()).isEqualByComparingTo("0.5");
+        assertThat(priced.source()).isEqualTo(CostSource.METADATA);
     }
 
     @Test
