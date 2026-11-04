@@ -126,7 +126,7 @@
     "vega-embed": "^7.3.0",
     "vega-interpreter": "^2.3.2",
     "vega-lite": "^6.4.3",
-    "yaml": "^2.4.5",
+    "yaml": "^2.8.3",
     "zod": "^4.6.7",
     "zustand": "^4.5.2"
   },
