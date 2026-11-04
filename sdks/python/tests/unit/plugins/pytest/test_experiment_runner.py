@@ -3,7 +3,6 @@ from unittest import mock
 
 import pytest
 
-from opik import dict_utils
 from opik.api_objects.dataset import dataset_item
 from opik.plugins.pytest import experiment_runner, test_run_content, test_runs_storage
 
@@ -27,10 +26,13 @@ class _FakeDataset:
 
 
 def _stored_item(item_id: str, content: test_run_content.TestRunContent):
-    # Items are stored the way run() creates them: without None fields.
-    return dataset_item.DatasetItem(
-        id=item_id, **dict_utils.remove_none_from_dict(content.__dict__)
-    )
+    # Stored items have no key for a field the test did not set.
+    fields = {"input": content.input}
+    if content.expected_output is not None:
+        fields["expected_output"] = content.expected_output
+    if content.metadata is not None:
+        fields["metadata"] = content.metadata
+    return dataset_item.DatasetItem(id=item_id, **fields)
 
 
 @pytest.mark.parametrize(
