@@ -487,12 +487,12 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Fails runs left {@code running} by a pod that died, and deletes runs past {@code runsRetention}. A run counts as
-     * left only once it is older than a run can last ({@code projectTimeout} plus slack): this night holds the night
-     * lock, but a run started by hand holds only its project's lock. Each run failed so is counted, as
-     * {@code abandoned}, once the transaction commits: a run whose own failure mark threw was not counted then. Then
-     * does the same for nights: fails those left {@code running} past the night's lease, and deletes those past the
-     * retention.
+     * Fails runs left {@code running} by a pod that died, and deletes runs and their counts past
+     * {@code runsRetention}. A run counts as left only once it is older than a run can last ({@code projectTimeout}
+     * plus slack): this night holds the night lock, but a run started by hand holds only its project's lock. Each run
+     * failed so is counted, as {@code abandoned}, once the transaction commits: a run whose own failure mark threw was
+     * not counted then. Then does the same for nights: fails those left {@code running} past the night's lease, and
+     * deletes those past the retention.
      */
     private void housekeeping(Instant start) {
         try {
@@ -504,9 +504,10 @@ public class TopicsNightlyService {
                 var workspaceIds = runs.findAbandonedWorkspaceIds(startedBefore);
                 int failed = runs.failAbandoned(startedBefore, Instant.now());
                 int deleted = runs.deleteStartedBefore(start.minus(retention));
-                if (failed > 0 || deleted > 0) {
-                    log.info("Topics night housekeeping, abandoned runs failed '{}', old runs deleted '{}'",
-                            failed, deleted);
+                int deletedCounts = runs.deleteCountsSavedBefore(start.minus(retention));
+                if (failed > 0 || deleted > 0 || deletedCounts > 0) {
+                    log.info("Topics night housekeeping, abandoned runs failed '{}', old runs deleted '{}', old run "
+                            + "counts deleted '{}'", failed, deleted, deletedCounts);
                 }
                 return workspaceIds;
             });

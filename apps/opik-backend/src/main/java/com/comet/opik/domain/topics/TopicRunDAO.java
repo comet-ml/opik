@@ -8,6 +8,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
@@ -19,7 +20,8 @@ import java.util.UUID;
 
 /**
  * {@code topic_runs}: a run is inserted {@code running} when it starts and moves once, to {@code saved} in the save
- * transaction or to {@code failed}. Only a {@code running} row moves.
+ * transaction or to {@code failed}. Only a {@code running} row moves. Also {@code topic_run_counts}, the counts a saved
+ * run writes in its save transaction.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(TopicRunDAO.ModeMapper.class)
@@ -27,6 +29,7 @@ import java.util.UUID;
 @RegisterColumnMapper(TopicRunDAO.ModeMapper.class)
 @RegisterColumnMapper(TopicRunDAO.StatusMapper.class)
 @RegisterConstructorMapper(TopicRun.class)
+@RegisterConstructorMapper(TopicRunCount.class)
 public interface TopicRunDAO {
 
     @SqlUpdate("""
@@ -78,6 +81,26 @@ public interface TopicRunDAO {
 
     @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
     int deleteStartedBefore(@Bind("before") Instant before);
+
+    @SqlBatch("""
+            INSERT INTO topic_run_counts (run_id, workspace_id, project_id, topic_id, traces, `rank`, saved_at)
+            VALUES (:runId, :workspaceId, :projectId, :topicId, :traces, :rank, :savedAt)
+            """)
+    void insertCounts(@BindMethods List<TopicRunCount> counts);
+
+    @SqlUpdate("DELETE FROM topic_run_counts WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deleteCountsByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
+
+    @SqlUpdate("DELETE FROM topic_run_counts WHERE saved_at < :before")
+    int deleteCountsSavedBefore(@Bind("before") Instant before);
+
+    /** A project's counts, oldest run first; in a run, by rank, Other last. */
+    @SqlQuery("""
+            SELECT * FROM topic_run_counts WHERE project_id = :projectId
+            ORDER BY saved_at, run_id, `rank` IS NULL, `rank`
+            """)
+    List<TopicRunCount> findCountsByProject(@Bind("projectId") UUID projectId);
 
     @SqlQuery("SELECT * FROM topic_runs WHERE run_id = :runId")
     TopicRun findById(@Bind("runId") UUID runId);

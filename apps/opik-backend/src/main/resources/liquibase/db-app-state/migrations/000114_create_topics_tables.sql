@@ -1,6 +1,6 @@
 --liquibase formatted sql
 --changeset yaroslavb:000114_create_topics_tables
---comment: Create topics, topic_prototypes, topic_project_states, topic_runs, topic_nights and topic_night_projects: a project's topic list, the nightly runs that build it, and what each night decided (OPIK-8987)
+--comment: Create topics, topic_prototypes, topic_project_states, topic_runs, topic_run_counts, topic_nights and topic_night_projects: a project's topic list, the nightly runs that build it, each saved run's counts, and what each night decided (OPIK-8987)
 
 -- One row per topic a project's nightly run created. An id is never reused: a renamed or merged topic keeps its id, a
 -- retired one keeps its row with retired_at set. inactive_since, low_nights, lo7 and hi7 are the lifecycle streaks of
@@ -93,6 +93,30 @@ CREATE TABLE topic_runs
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
 
+-- One row per live topic of a saved run, and one for Other (the all-zeros topic_id, as in trace_topics): the run's
+-- counts, which the topics API compares between a project's last two saved runs. traces is the topic's count in the
+-- run's window; rank is its 1-based rank in the run, null for Other. A share is traces over the sum of the run's rows,
+-- as every window trace gets a topic or Other. The save transaction writes them, so a failed run has none. Rows are
+-- deleted with the runs, by saved_at.
+CREATE TABLE topic_run_counts
+(
+    run_id       CHAR(36)     NOT NULL,
+    workspace_id VARCHAR(150) NOT NULL,
+    project_id   CHAR(36)     NOT NULL,
+    topic_id     CHAR(36)     NOT NULL,
+    traces       BIGINT       NOT NULL,
+    `rank`       INT          NULL,
+    saved_at     TIMESTAMP(6) NOT NULL,
+
+    PRIMARY KEY (run_id, topic_id),
+    -- A project's last two saved runs, for the topics API.
+    INDEX topic_run_counts_project_saved_idx (project_id, saved_at),
+    -- The cleanup after topics.nightly.runsRetention.
+    INDEX topic_run_counts_saved_idx (saved_at)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci;
+
 -- One row per night of the nightly job (the UTC date it runs for): written 'running' when the night starts and again
 -- when it ends, also when it looked at no project. A night run again for the same date, by hand, replaces the row and
 -- the date's topic_night_projects rows. outcome is 'failed' when the night threw, or when a pod that died left it
@@ -141,6 +165,7 @@ CREATE TABLE topic_night_projects
 
 --rollback DROP TABLE IF EXISTS topic_night_projects;
 --rollback DROP TABLE IF EXISTS topic_nights;
+--rollback DROP TABLE IF EXISTS topic_run_counts;
 --rollback DROP TABLE IF EXISTS topic_runs;
 --rollback DROP TABLE IF EXISTS topic_project_states;
 --rollback DROP TABLE IF EXISTS topic_prototypes;

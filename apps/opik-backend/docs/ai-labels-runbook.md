@@ -314,6 +314,7 @@ or to Other. It writes:
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
 | `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds` (saved nights), `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
+| `topic_run_counts` | MySQL | One row per topic of a saved run, and one for Other: `traces` in the run's window and `rank` (null for Other). The topics API compares a project's last two saved runs. Kept 90 days. |
 | `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins; a failed run deletes its rows (best effort). |
 
 ### Turning it on and off
@@ -328,7 +329,7 @@ or to Other. It writes:
 | `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
 | `TOPICS_NIGHTLY_MAX_VECTORS` | `30000` | A larger window keeps its newest traces. |
 | `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the first build's author call and the nightly update's revise call. The verify (60s) and naming (30s) deadlines are fixed. Every call uses the `batch` lane, which takes up to 300s. |
-| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. |
+| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` and `topic_run_counts` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. |
 
 To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay and freeze at their last saved night.
 This is also the rollback of the nightly update.
@@ -379,9 +380,9 @@ Every record write after the start is best-effort: a failed one is logged and th
   dies during the night (a deploy), the rest of the night waits for the next night: the cron does not fire again, and
   the night endpoint answers `409` until the lock expires. To finish the night sooner, delete the Redis key
   `topics:nightly:lock` and call the night endpoint (see "Running by hand").
-- The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs older
-  than the retention. It does the same for the night records: a night left `running` past the night lock's lease is
-  set to `failed`, and records older than the retention are deleted.
+- The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs and
+  run counts older than the retention. It does the same for the night records: a night left `running` past the night
+  lock's lease is set to `failed`, and records older than the retention are deleted.
 - It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS`, and runs
   the rest smallest first, one at a time: a `nightly_update` for a project with live topics, else a `first_build`. A
   project whose last saved run already covers the night (a run by hand) is skipped.

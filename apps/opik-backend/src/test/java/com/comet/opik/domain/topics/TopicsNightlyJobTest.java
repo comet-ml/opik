@@ -58,6 +58,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -284,6 +285,25 @@ class TopicsNightlyJobTest {
         topics.forEach(topic -> assertThat(traceTopics.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
 
+        // The run's counts: each topic's labels and size, ranked 1..n by size, then Other; they add up to the window.
+        var labelled = traceTopics.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
+        var counts = counts(built);
+        assertThat(counts).hasSize(topics.size() + 1).allSatisfy(count -> {
+            assertThat(count.runId()).isEqualTo(runId);
+            assertThat(count.workspaceId()).isEqualTo(workspaceId);
+            assertThat(count.savedAt()).isEqualTo(run.getFirst().finishedAt());
+            assertThat(count.traces()).isEqualTo(labelled.getOrDefault(count.topicId(), 0L));
+        });
+        assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(BUILT);
+        var ranks = new ArrayList<Integer>(java.util.stream.IntStream.rangeClosed(1, topics.size()).boxed().toList());
+        ranks.add(null);
+        assertThat(counts).extracting(TopicRunCount::rank).containsExactlyElementsOf(ranks);
+        assertThat(counts.getLast().topicId()).isEqualTo(TraceTopic.OTHER);
+        assertThat(counts.subList(0, topics.size())).extracting(TopicRunCount::traces)
+                .isSortedAccordingTo(Comparator.reverseOrder());
+        topics.forEach(topic -> assertThat(counts).filteredOn(count -> count.topicId().equals(topic.id()))
+                .singleElement().satisfies(count -> assertThat(count.traces()).isEqualTo(topic.size())));
+
         assertThat(state(built)).satisfies(state -> {
             assertThat(state.rebuilds()).isEqualTo(1);
             assertThat(state.lastRunId()).isEqualTo(runId);
@@ -403,6 +423,52 @@ class TopicsNightlyJobTest {
         live.forEach(topic -> assertThat(labels.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
         assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS + 1);
+
+        // The update writes its own counts: the live topics by tonight's size, then Other; none for the merged topic.
+        var labelled = labels.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
+        var counts = counts(projectId).stream().filter(count -> count.runId().equals(update.runId())).toList();
+        assertThat(counts).hasSize(live.size() + 1).allSatisfy(count -> {
+            assertThat(count.savedAt()).isEqualTo(update.finishedAt());
+            assertThat(count.traces()).isEqualTo(labelled.getOrDefault(count.topicId(), 0L));
+        });
+        assertThat(counts).extracting(TopicRunCount::topicId).doesNotContain(retiredId).contains(TraceTopic.OTHER)
+                .containsAll(liveIds);
+        assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(stats.path("vectors").asLong());
+        var ranks = new ArrayList<Integer>(java.util.stream.IntStream.rangeClosed(1, live.size()).boxed().toList());
+        ranks.add(null);
+        assertThat(counts).extracting(TopicRunCount::rank).containsExactlyElementsOf(ranks);
+        live.forEach(topic -> assertThat(counts).filteredOn(count -> count.topicId().equals(topic.id()))
+                .singleElement().satisfies(count -> assertThat(count.traces()).isEqualTo(topic.size())));
+        // The first build's counts stay: the topics API compares the two runs.
+        assertThat(counts(projectId)).extracting(TopicRunCount::runId).containsOnly(runs(projectId).getFirst()
+                .runId(), update.runId());
+    }
+
+    @Test
+    @DisplayName("an update ranks an inactive topic after the active ones in its counts, with tonight's flags")
+    void inactiveRanksLast() {
+        var workspaceId = enabledWorkspace();
+        var projectId = firstBuilt(workspaceId);
+        // The first build's largest topic, inactive since yesterday: one night under the active share cannot
+        // switch it back (two are needed).
+        var largest = counts(projectId).getFirst();
+        assertThat(largest.rank()).isEqualTo(1);
+        template.inTransaction(WRITE, handle -> handle.execute(
+                "UPDATE topics SET inactive_since = ?, lo7 = 0, hi7 = 0 WHERE id = ?",
+                secondNight().minusDays(1), largest.topicId().toString()));
+        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+
+        assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
+
+        var update = nightlyRun(projectId);
+        var live = topics(workspaceId, projectId);
+        assertThat(live).filteredOn(topic -> topic.id().equals(largest.topicId())).singleElement()
+                .satisfies(topic -> assertThat(topic.inactiveSince()).isNotNull());
+        var counts = counts(projectId).stream().filter(count -> count.runId().equals(update.runId())).toList();
+        assertThat(counts).filteredOn(count -> count.topicId().equals(largest.topicId())).singleElement()
+                .satisfies(count -> assertThat(count.rank()).isEqualTo(live.size()));
+        assertThat(counts.subList(0, live.size() - 1)).extracting(TopicRunCount::traces)
+                .isSortedAccordingTo(Comparator.reverseOrder());
     }
 
     @Test
@@ -675,6 +741,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.errorMessage()).contains("another run saved this project meanwhile");
                 }));
         assertThat(topics(workspaceId, projectId)).isEmpty();
+        assertThat(counts(projectId)).isEmpty();
         assertThat(state(projectId).lastRunId()).isEqualTo(other);
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
     }
@@ -703,6 +770,7 @@ class TopicsNightlyJobTest {
                     assertThat(run.errorMessage()).contains("the project was deleted during the run");
                 }));
         assertThat(topics(workspaceId, projectId)).isEmpty();
+        assertThat(counts(projectId)).isEmpty();
         List<TopicProjectState> states = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
         assertThat(states).isEmpty();
@@ -710,7 +778,7 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("deleting a project deletes its topics, prototypes, state and runs")
+    @DisplayName("deleting a project deletes its topics, prototypes, state, runs and run counts")
     void projectDeleted() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
@@ -726,8 +794,10 @@ class TopicsNightlyJobTest {
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
         assertThat(runs(projectId)).isEmpty();
+        assertThat(counts(projectId)).isEmpty();
         assertThat(topics(workspaceId, kept)).isNotEmpty();
         assertThat(runs(kept)).hasSize(1);
+        assertThat(counts(kept)).isNotEmpty();
     }
 
     @Test
@@ -887,6 +957,25 @@ class TopicsNightlyJobTest {
         });
     }
 
+    @Test
+    @DisplayName("housekeeping deletes run counts saved before the runs retention, and keeps newer ones")
+    void housekeepingDeletesOldRunCounts() {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        var old = UUID.randomUUID();
+        var recent = UUID.randomUUID();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicRunDAO.class).insertCounts(List.of(
+                    otherCount(old, workspaceId, projectId, Instant.now().minus(Duration.ofDays(91))),
+                    otherCount(recent, workspaceId, projectId, Instant.now().minus(Duration.ofDays(1)))));
+            return null;
+        });
+
+        nightlyService.runNight(Instant.now());
+
+        assertThat(counts(projectId)).extracting(TopicRunCount::runId).containsExactly(recent);
+    }
+
     /** A project with a saved first build on the fixture's night. */
     private UUID firstBuilt(String workspaceId) {
         var projectId = UUID.randomUUID();
@@ -1021,7 +1110,19 @@ class TopicsNightlyJobTest {
         assertThat(topics(workspaceId, projectId)).isEmpty();
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
+        assertThat(counts(projectId)).isEmpty();
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+    }
+
+    private static TopicRunCount otherCount(UUID runId, String workspaceId, UUID projectId, Instant savedAt) {
+        return TopicRunCount.builder()
+                .runId(runId)
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .topicId(TraceTopic.OTHER)
+                .traces(10)
+                .savedAt(savedAt)
+                .build();
     }
 
     /** The night after the fixture's last trace: its window is the fixture's. */
@@ -1146,6 +1247,11 @@ class TopicsNightlyJobTest {
     private List<Topic> topics(String workspaceId, UUID projectId) {
         return template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findLive(workspaceId, projectId));
+    }
+
+    private List<TopicRunCount> counts(UUID projectId) {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicRunDAO.class).findCountsByProject(projectId));
     }
 
     private List<TopicPrototype> prototypes(UUID projectId) {
