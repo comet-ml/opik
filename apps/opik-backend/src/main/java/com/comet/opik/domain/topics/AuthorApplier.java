@@ -16,15 +16,19 @@ import java.util.regex.Pattern;
 /**
  * Turns the author answer into topics, as the stand's {@code apply_author} (v4): topics with the same name merged
  * first (see {@link #mergeSameNames}); topics ordered by the total size of
- * their valid group ids (largest first, ties in answer order); catch-all names dropped; the first {@code maxTopics}
- * kept; each takes the groups no earlier topic claimed, and one left with none creates nothing; every unclaimed group is
- * Other. The answer's {@code other} list is ignored. A group listed twice in one topic counts once (the stand kept the
- * duplicate prototype, which never changes an assignment).
+ * their valid group ids (largest first, ties in answer order); names that are a catch-all as a whole dropped
+ * ({@link #isCatchAllName}); the first {@code maxTopics} kept; each takes the groups no earlier topic claimed, and one
+ * left with none creates nothing; every unclaimed group is Other. The answer's {@code other} list is ignored. The
+ * per-cluster answer lists each group once, so the order matters only for the same-name merge and the cap.
  */
 @UtilityClass
 public class AuthorApplier {
 
     static final Pattern CATCH_ALL = Pattern.compile("\\b(other|others|misc|miscellaneous|general|various)\\b",
+            Pattern.UNICODE_CHARACTER_CLASS);
+    /** A whole name that is a catch-all: a catch-all word, with at most a generic noun after it. */
+    static final Pattern CATCH_ALL_NAME = Pattern.compile(
+            "(other|others|misc|miscellaneous|general|various)( (requests|queries|questions|inquiries|tasks|topics|items|things|stuff))?",
             Pattern.UNICODE_CHARACTER_CLASS);
 
     public static Applied apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups, int maxTopics) {
@@ -36,7 +40,7 @@ public class AuthorApplier {
         int taken = 0;
         for (var topic : ordered) {
             // A blank name is no name: its groups go to Other, as a catch-all's do.
-            if (isCatchAll(topic.name()) || TopicText.pythonStrip(topic.name()).isEmpty()) {
+            if (isCatchAllName(topic.name()) || TopicText.pythonStrip(topic.name()).isEmpty()) {
                 continue;
             }
             if (taken++ >= maxTopics) {
@@ -110,8 +114,17 @@ public class AuthorApplier {
         return out.toString().toLowerCase(Locale.ROOT);
     }
 
+    /** The name holds a catch-all word ({@link #CATCH_ALL}): "General Job Search" included. */
     public static boolean isCatchAll(@NonNull String name) {
         return CATCH_ALL.matcher(name.toLowerCase(Locale.ROOT)).find();
+    }
+
+    /**
+     * The name is a catch-all as a whole ({@link #CATCH_ALL_NAME}), stripped and case-folded: "Other Requests" is,
+     * "General Job Search" is not.
+     */
+    public static boolean isCatchAllName(@NonNull String name) {
+        return CATCH_ALL_NAME.matcher(TopicText.pythonStrip(name).toLowerCase(Locale.ROOT)).matches();
     }
 
     /** As the stand: every listed valid id counts, a repeated one each time. */

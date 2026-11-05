@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,8 +31,8 @@ final class TopicsFixture {
     final float[] vectors;
     final float[] centres;
     final JsonNode expected;
+    /** The stand's author answer, in the per-cluster form the service reads ({@link #assignment}). */
     final JsonNode answer;
-    final String authorPrompt;
 
     private TopicsFixture() {
         var window = json("window.json");
@@ -49,12 +48,34 @@ final class TopicsFixture {
         vectors = floats("window.f32");
         centres = floats("centres.f32");
         expected = json("expected.json");
-        answer = json("answer.json");
-        authorPrompt = new String(bytes("author_prompt.txt"), StandardCharsets.UTF_8);
+        answer = assignment(json("answer.json"));
     }
 
     static TopicsFixture load() {
         return new TopicsFixture();
+    }
+
+    /**
+     * The stand's answer, {@code {topics: [{name, definition, clusters}], other}}, as the per-cluster answer
+     * {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}: each topic's clusters in topic order, then
+     * the {@code other} clusters as -1.
+     */
+    static JsonNode assignment(JsonNode stand) {
+        var out = MAPPER.createObjectNode();
+        var topics = out.putArray("topics");
+        var assignment = out.putArray("assignment");
+        for (int t = 0; t < stand.get("topics").size(); t++) {
+            var topic = stand.get("topics").get(t);
+            topics.addObject().put("name", topic.get("name").asText())
+                    .put("definition", topic.get("definition").asText());
+            for (var cluster : topic.get("clusters")) {
+                assignment.addObject().put("cluster", cluster.asInt()).put("topic", t);
+            }
+        }
+        for (var cluster : stand.get("other")) {
+            assignment.addObject().put("cluster", cluster.asInt()).put("topic", -1);
+        }
+        return out;
     }
 
     int size() {

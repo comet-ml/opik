@@ -73,16 +73,26 @@ public class TopicsRebuildService {
     static final int MAX_TOPICS = 10;
     private static final List<String> REVIVABLE = Arrays.stream(NightState.RetiredReason.values())
             .filter(NightState.RetiredReason::isRevivable).map(NightState.RetiredReason::value).toList();
-    static final int MIN_GROUPS = 15;
+    /** The first build's fine groups: one per {@value #TEXTS_PER_GROUP} unique texts, within these bounds. */
+    static final int MIN_GROUPS = 30;
     static final int MAX_GROUPS = 50;
-    static final int TEXTS_PER_GROUP = 60;
+    static final int TEXTS_PER_GROUP = 30;
+    /**
+     * The author sees {@value #AUTHOR_FREQUENT} most frequent texts per group plus the ones nearest its centre, in all
+     * clamp(round({@value #AUTHOR_BUDGET} / k), {@value #AUTHOR_MIN}, {@value #AUTHOR_MAX}) texts, so the prompt stays
+     * about as long as the longest one known to work (5 texts on 50 groups).
+     */
+    static final int AUTHOR_FREQUENT = 5;
+    static final int AUTHOR_BUDGET = 250;
+    static final int AUTHOR_MIN = 5;
+    static final int AUTHOR_MAX = 10;
     static final int RECENT_DAYS = 7;
     static final int QWEN_MAX_TOKENS = 2500;
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
     static final double UNIT_TOLERANCE = 1e-3;
     static final String AUTHOR_KIND = "author";
-    /** Stage 2b D5: the revise deadline is {@code topics.nightly.qwenDeadline}. */
+    /** The author call's deadline is {@code topics.nightly.qwenDeadline}; verify and naming have their own. */
     static final Duration VERIFY_DEADLINE = Duration.ofSeconds(60);
     static final Duration NAMING_DEADLINE = Duration.ofSeconds(30);
 
@@ -97,6 +107,19 @@ public class TopicsRebuildService {
     /** How a run ended. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
+    }
+
+    /**
+     * The first build's number of fine groups: min({@value #MAX_GROUPS}, max({@value #MIN_GROUPS}, unique /
+     * {@value #TEXTS_PER_GROUP})), at most the unique texts.
+     */
+    static int groups(int unique) {
+        return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+    }
+
+    /** The author's texts per group for {@code k} groups. */
+    static int authorExamples(int k) {
+        return Math.min(AUTHOR_MAX, Math.max(AUTHOR_MIN, (int) Math.round((double) AUTHOR_BUDGET / k)));
     }
 
     /** Inserts the run as {@code running} and returns its id. */
@@ -225,7 +248,7 @@ public class TopicsRebuildService {
 
             var merged = IntentMerger.merge(texts, vectors, DIMENSIONS);
             int unique = merged.size();
-            int k = Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+            int k = groups(unique);
             // The seed is the project's saved nights: 0 for the first build.
             long seed = 0;
             var weights = new double[unique];
@@ -246,7 +269,11 @@ public class TopicsRebuildService {
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
             var groups = GroupSummaries.summarize(texts, vectors, groupOf, fit.centres(), recent, DIMENSIONS);
-            var prompt = TopicPrompts.author(groups, MAX_TOPICS);
+            int perGroup = authorExamples(k);
+            stats.put("author_examples", perGroup);
+            var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
+                    Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
+            var prompt = TopicPrompts.author(groups, MAX_TOPICS, examples);
             // The prompt and the answer hold trace-derived text: DEBUG only, never in production logs by default.
             log.debug("Topics run '{}' author prompt, project '{}':\n{}", runId, projectId, prompt);
             var answer = timed("qwen", () -> author(prompt));
@@ -325,20 +352,12 @@ public class TopicsRebuildService {
             var previous = timed("churn", () -> readPreviousLabels(saved.projectState().lastRunId()));
             var churn = TopicChurn.of(previous, traceIds, labels);
 
-            stats.put("review_night", result.reviewNight());
-            stats.put("review", result.review());
             stats.put("unassigned", result.unassigned());
             stats.put("candidates", result.candidates().size());
             stats.put("big", result.big().size());
-            if (result.verified() != null) {
-                stats.put("verify_pairs", result.verified().pairs().size());
-                stats.put("verify_failed", result.verified().failed());
-            }
-            if (result.forced() != null) {
-                var forced = stats.putObject("forced");
-                result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
-                        forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
-            }
+            var forced = stats.putObject("forced");
+            result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
+                    forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
             var born = stats.putArray("born");
             var revived = stats.putArray("revived");
             result.revived().forEach(t -> revived.add(state.topic(t).getName()));
@@ -358,10 +377,10 @@ public class TopicsRebuildService {
             stats.put("churn", churn == null ? null : churn.churn());
             stats.put("churn_any", churn == null ? null : churn.churnAny());
             stats.set("seconds", seconds);
-            log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', review '{}', "
+            log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', "
                     + "unassigned '{}', candidates '{}', big '{}', born '{}', revived '{}', retired '{}', topics '{}', "
                     + "Other share "
-                    + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n, result.review(),
+                    + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n,
                     result.unassigned(), result.candidates().size(), result.big().size(), born.size(),
                     revived.size(), retired,
                     state.liveCount(), TopicText.fixed((double) other / n, 3), churn, seconds);
@@ -471,9 +490,8 @@ public class TopicsRebuildService {
         }
 
         /**
-         * {@link NightLlm} for the nightly update: the revise deadline is {@code qwenDeadline}, verify and naming have
-         * their own (D5). A failed call throws and fails the run, whichever call it is; the project keeps yesterday's
-         * list.
+         * {@link NightLlm} for the nightly update: verify and naming have their own deadlines (D5). A failed call
+         * throws and fails the run, whichever call it is; the project keeps yesterday's list.
          */
         private JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens) {
             var kind = switch (tag) {
@@ -677,7 +695,7 @@ public class TopicsRebuildService {
                 throw invariant("'%s' topics, at most '%s'".formatted(topics.size(), MAX_TOPICS));
             }
             for (var topic : topics) {
-                if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAll(topic.name())) {
+                if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAllName(topic.name())) {
                     throw invariant("topic '%s' has a blank or catch-all name".formatted(topics.indexOf(topic)));
                 }
                 if (!topic.born().equals(night)) {

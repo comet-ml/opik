@@ -4,16 +4,14 @@ import com.comet.opik.domain.topics.NightState.RetiredReason;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
-import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Step l of the nightly update, after the final assignment, as the stand's lifecycle variant v7f:
+ * Step g of the nightly update, after the final assignment, as the stand's lifecycle variant v7f on one share:
  * <ul>
- * <li>share = the topic's window count over the window's traces; a topic born after the first build whose
- * {@code born - 7 days} is later than the window's start is measured from then on (newborn protection); a revived
- * topic has its history in the window and is measured on all of it;</li>
+ * <li>share = the topic's window count over the window's traces; a topic born after the first build, or revived, is
+ * measured as any other;</li>
  * <li>{@code lowNights} + 1 when the share is below {@value #RETIRE_SHARE}, else 0; {@value #RETIRE_NIGHTS} retires;</li>
  * <li>while more than {@code maxTopics} are live, the one with the smallest count is retired;</li>
  * <li>inactive (display): an active topic counts {@code lo7} nights with a 7-day share below {@value #RETIRE_SHARE}
@@ -29,7 +27,6 @@ public class Lifecycle {
     static final int RETIRE_NIGHTS = 3;
     static final double ACTIVE_SHARE = 0.01;
     static final int ACTIVE_NIGHTS = 2;
-    static final int NEWBORN_DAYS = 7;
 
     /**
      * Retirements by share and by the cap.
@@ -44,22 +41,7 @@ public class Lifecycle {
         var shares = new LinkedHashMap<Integer, Double>();
         for (int t : state.live()) {
             var topic = state.topic(t);
-            var since = topic.getBorn().minusDays(NEWBORN_DAYS).atStartOfDay(ZoneOffset.UTC).toInstant();
-            double share;
-            if (topic.getBorn().isAfter(state.getFirstBuild()) && window.from().isBefore(since)) {
-                var newborn = window.since(since);
-                int members = 0;
-                int total = 0;
-                for (int i = 0; i < n; i++) {
-                    if (newborn[i]) {
-                        total++;
-                        members += labels[i] == t ? 1 : 0;
-                    }
-                }
-                share = (double) members / Math.max(1, total);
-            } else {
-                share = (double) counts[t] / n;
-            }
+            double share = (double) counts[t] / n;
             shares.put(t, share);
             topic.setLowNights(share < RETIRE_SHARE ? topic.getLowNights() + 1 : 0);
             if (topic.getLowNights() >= RETIRE_NIGHTS) {

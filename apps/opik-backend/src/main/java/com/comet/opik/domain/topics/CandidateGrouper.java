@@ -36,7 +36,6 @@ public class CandidateGrouper {
         var merged = IntentMerger.merge(texts, vectors, d);
         int k = Math.min(Math.min(MAX_GROUPS, Math.max(2, unassigned.length / TRACES_PER_GROUP)), merged.size());
         var result = clusterer.fit(NightClusterer.Request.builder()
-                .kind(NightClusterer.Kind.UNASSIGNED)
                 .points(merged)
                 .k(k)
                 .seed(seed)
