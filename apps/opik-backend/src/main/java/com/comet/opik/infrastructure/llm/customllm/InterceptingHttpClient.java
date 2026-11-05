@@ -77,6 +77,12 @@ class InterceptingHttpClient extends DelegatingHttpClient {
     static final String SUPPRESS_DEFAULT_AUTH_CONFIG_KEY = "suppress_default_auth";
     static final String MODEL_PLACEHOLDER = "{model}";
 
+    /**
+     * The key given, in token mode, to a client that refuses to be built without one. Never sent: a header carrying
+     * it is dropped, whatever its name.
+     */
+    static final String TOKEN_MODE_PLACEHOLDER_KEY = "replaced-by-fetched-token";
+
     /** The request body field whose value replaces {@link #MODEL_PLACEHOLDER}. */
     private static final String MODEL_FIELD = "model";
 
@@ -435,6 +441,9 @@ class InterceptingHttpClient extends DelegatingHttpClient {
 
         var mutated = new LinkedHashMap<String, List<String>>(headers.size() + 1);
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if (entry.getValue().contains(TOKEN_MODE_PLACEHOLDER_KEY)) {
+                continue;
+            }
             if (AUTHORIZATION_HEADER.equalsIgnoreCase(entry.getKey())
                     || targetHeader.equalsIgnoreCase(entry.getKey())) {
                 log.warn("Dropping pre-configured '{}' header: the fetched token takes precedence", entry.getKey());

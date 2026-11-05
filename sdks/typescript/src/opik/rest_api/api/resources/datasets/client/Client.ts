@@ -1371,13 +1371,11 @@ export class DatasetsClient {
      * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.datasets.findDatasetItemsWithExperimentItems("id", {
-     *         experimentIds: "experiment_ids"
-     *     })
+     *     await client.datasets.findDatasetItemsWithExperimentItems("id")
      */
     public findDatasetItemsWithExperimentItems(
         id: string,
-        request: OpikApi.FindDatasetItemsWithExperimentItemsRequest,
+        request: OpikApi.FindDatasetItemsWithExperimentItemsRequest = {},
         requestOptions?: DatasetsClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.DatasetItemPageCompare> {
         return core.HttpResponsePromise.fromPromise(
@@ -1387,14 +1385,15 @@ export class DatasetsClient {
 
     private async __findDatasetItemsWithExperimentItems(
         id: string,
-        request: OpikApi.FindDatasetItemsWithExperimentItemsRequest,
+        request: OpikApi.FindDatasetItemsWithExperimentItemsRequest = {},
         requestOptions?: DatasetsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetItemPageCompare>> {
-        const { page, size, experimentIds, filters, sorting, search, truncate } = request;
+        const { page, size, experimentIds, datasetVersion, filters, sorting, search, truncate } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             experiment_ids: experimentIds,
+            dataset_version: datasetVersion,
             filters,
             sorting,
             search,
