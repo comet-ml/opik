@@ -1,7 +1,5 @@
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Sequence
-
-import pydantic
+from typing import Any, Dict, List, Optional, Sequence
 
 from opik import exceptions, id_helpers
 from opik.rest_api import types as rest_api_types
@@ -197,61 +195,6 @@ def validate_records(
         )
 
 
-def _wire_value(value: Any) -> Any:
-    """One field of a generated wire model, as the request body carries it.
-
-    Only the generated models are rewritten. A caller's own ``input``, ``metadata`` or
-    ``evaluate_task_result`` is handed on by reference for the JSON encoder to walk in
-    C, which is the Python walk this whole path exists to remove -- so nothing here
-    recurses into one. A list is rebuilt because ``spans`` and ``feedback_scores`` are
-    lists of models; that costs one ``isinstance`` per element of a caller's list and
-    still never descends into it.
-    """
-    if isinstance(value, pydantic.BaseModel):
-        return _wire_fields(value)
-    if isinstance(value, list):
-        return [
-            _wire_fields(member) if isinstance(member, pydantic.BaseModel) else member
-            for member in value
-        ]
-    return value
-
-
-def _wire_fields(model: pydantic.BaseModel) -> Dict[str, Any]:
-    """One generated wire model as the dict the generated client would have sent.
-
-    ``UniversalBaseModel.dict`` unions an ``exclude_unset`` dump with an
-    ``exclude_none`` one, so a field reaches the wire when it was set -- even to None --
-    or when it has a non-None default. Every field on these bulk write views defaults to
-    None, so that reduces to the fields that were set, which is exactly what
-    :func:`to_rest_record` decides.
-
-    Omitted-versus-null is the point rather than a detail: the backend maps
-    ``evaluate_task_result`` to a Jackson ``JsonNode``, where an explicit null
-    deserializes to ``NullNode`` and trips the "either evaluate_task_result or trace"
-    validator. Serialising the model itself would emit every unset field as null and
-    fail every record that carries a trace.
-
-    The models are built before this runs, so pydantic has already applied the
-    coercions the wire form depends on -- an integer feedback score is a float by the
-    time it is read here, as it was on the wire before.
-    """
-    # pydantic v2 keeps the set names on `__pydantic_fields_set__` and extras off
-    # `__dict__`; v1 has `__fields_set__` and puts extras on `__dict__`.
-    fields_set = getattr(model, "__pydantic_fields_set__", None)
-    if fields_set is None:
-        fields_set = model.__fields_set__
-    values: Mapping[str, Any] = model.__dict__
-    extra = getattr(model, "__pydantic_extra__", None)
-    if extra:
-        # Declared fields in declaration order, then extras -- the order the generated
-        # dump produces.
-        values = {**values, **extra}
-    return {
-        name: _wire_value(value) for name, value in values.items() if name in fields_set
-    }
-
-
 class UnmeasurableRecordError(Exception):
     """This record could not be serialised, so it can be neither measured nor sent.
 
@@ -305,7 +248,7 @@ def serialize_record(rest_record: Any) -> bytes:
     own data: an encoder hook reaches ``__str__`` on a value that may raise anything.
     """
     try:
-        return streaming_upload.dumps(_wire_fields(rest_record))
+        return streaming_upload.dumps(streaming_upload.wire_fields(rest_record))
     except Exception as error:
         LOGGER.warning(
             "Could not serialize an experiment item; the upload will reject it.",

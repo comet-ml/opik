@@ -1,15 +1,18 @@
+import gzip
 import logging
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 
 import httpx
 import pydantic
 import tenacity
 
-from opik import dict_utils, exceptions, logging_messages
+from opik import dict_utils, exceptions, httpx_client, logging_messages
+from opik.api_objects import streaming_upload
 from opik.file_upload import base_upload_manager, types as upload_types
 from opik.file_upload.s3_multipart_upload import s3_upload_error
 from opik.rate_limit import rate_limit
 from opik.rest_api import client as rest_api_client, core as rest_api_core
+from opik.rest_client_configurator import retry_decorator
 from opik.rest_api.types import (
     feedback_score_batch_item,
     feedback_score_batch_item_thread,
@@ -438,7 +441,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             batch = payload_truncation.truncate_writes(
                 batch, self._max_payload_size_mb, kind="span"
             )
-        self._rest_client.spans.create_spans(spans=batch)
+        self._send_write_batch("v1/private/spans/batch", "spans", batch)
         LOGGER.debug("Sent spans batch of size %d", len(batch))
 
     def _process_create_traces_batch_message(
@@ -450,8 +453,53 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             batch = payload_truncation.truncate_writes(
                 batch, self._max_payload_size_mb, kind="trace"
             )
-        self._rest_client.traces.create_traces(traces=batch)
+        self._send_write_batch("v1/private/traces/batch", "traces", batch)
         LOGGER.debug("Sent trace batch of size %d", len(batch))
+
+    def _send_write_batch(
+        self, path: str, key: str, batch: Sequence[pydantic.BaseModel]
+    ) -> None:
+        """POST a span or trace batch, serialised once.
+
+        The generated client converts every model through type introspection and then
+        re-encodes the body in Python, which made serialisation most of the SDK's CPU
+        cost per span. This sends the same body built in one encoder pass, through the
+        same HTTP client, with the same gzip rule, retry and `ApiError` on failure.
+        """
+        body = streaming_upload.dumps(
+            {key: [streaming_upload.wire_fields(item) for item in batch]}
+        )
+        client, base_url = httpx_client.upload_transport(self._rest_client)
+        # Mirrors OpikHttpxClient.build_request, which a prepared body bypasses.
+        if (
+            httpx_client.compresses_json_requests(client, default=False)
+            and len(body) >= httpx_client.MIN_COMPRESSED_ENTITY_BYTES
+        ):
+            body = gzip.compress(
+                body,
+                getattr(
+                    client, "compression_level", httpx_client.DEFAULT_COMPRESSION_LEVEL
+                ),
+            )
+        headers = httpx_client.wrapper_headers(self._rest_client)
+
+        @retry_decorator.opik_rest_retry
+        def send() -> None:
+            response = httpx_client.send_prepared_json(
+                client, base_url, path, body, headers=headers, method="POST"
+            )
+            if response.status_code >= 300:
+                try:
+                    response_body = response.json()
+                except ValueError:
+                    response_body = response.text
+                raise rest_api_core.ApiError(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=response_body,
+                )
+
+        send()
 
     def _process_guardrail_batch_message(
         self,

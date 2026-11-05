@@ -50,19 +50,22 @@ def processor(
 ) -> online_message_processor.OpikMessageProcessor:
     registry = mock.MagicMock(spec=permissions.UnauthorizedMessageTypeRegistry)
     registry.is_authorized.return_value = True
-    return online_message_processor.OpikMessageProcessor(
+    processor = online_message_processor.OpikMessageProcessor(
         rest_client=rest_client,
         file_upload_manager=mock.MagicMock(),
         fallback_replay_manager=mock.MagicMock(spec=replay_manager.ReplayManager),
         unauthorized_message_types_registry=registry,
         data_loss_tracker=tracker,
     )
+    # Span/trace batches are sent as a prepared body, not through the REST client.
+    processor._send_write_batch = mock.Mock()
+    return processor
 
 
 def test_process__batch_403__recorded_as_client_error_data_loss(
     processor, rest_client, tracker
 ):
-    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
+    processor._send_write_batch.side_effect = rest_api_core.ApiError(
         status_code=403, body="<html>Forbidden</html>"
     )
 
@@ -79,7 +82,7 @@ def test_process__batch_403__recorded_as_client_error_data_loss(
 def test_process__batch_500__recorded_as_server_error_data_loss(
     processor, rest_client, tracker
 ):
-    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
+    processor._send_write_batch.side_effect = rest_api_core.ApiError(
         status_code=500, body="oops"
     )
 
@@ -91,7 +94,7 @@ def test_process__batch_500__recorded_as_server_error_data_loss(
 def test_process__unexpected_exception__recorded_as_unknown_data_loss(
     processor, rest_client, tracker
 ):
-    rest_client.spans.create_spans.side_effect = ValueError("boom")
+    processor._send_write_batch.side_effect = ValueError("boom")
 
     processor.process(_spans_batch_message())
 
@@ -101,7 +104,7 @@ def test_process__unexpected_exception__recorded_as_unknown_data_loss(
 def test_process__429_with_usable_headers__retried_not_recorded(
     processor, rest_client, tracker
 ):
-    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
+    processor._send_write_batch.side_effect = rest_api_core.ApiError(
         status_code=429, headers={"retry-after": "1"}
     )
 
@@ -152,8 +155,8 @@ def test_process__batch_401__recorded_as_unauthorized_and_type_registered(
         unauthorized_message_types_registry=registry,
         data_loss_tracker=tracker,
     )
-    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
-        status_code=401, body="no access"
+    processor._send_write_batch = mock.Mock(
+        side_effect=rest_api_core.ApiError(status_code=401, body="no access")
     )
 
     processor.process(_spans_batch_message(item_count=2))
@@ -175,7 +178,7 @@ def test_process__validation_error__recorded_as_serialization(
     try:
         _Model(value="not-an-int")
     except pydantic.ValidationError as validation_error:
-        rest_client.spans.create_spans.side_effect = validation_error
+        processor._send_write_batch.side_effect = validation_error
 
     processor.process(_spans_batch_message(item_count=3))
 
@@ -191,7 +194,7 @@ def test_process__retry_error__recorded_with_cause_status_code(
     last_attempt.exception.return_value = rest_api_core.ApiError(
         status_code=500, body="upstream down"
     )
-    rest_client.spans.create_spans.side_effect = tenacity.RetryError(last_attempt)
+    processor._send_write_batch.side_effect = tenacity.RetryError(last_attempt)
 
     processor.process(_spans_batch_message())
 
