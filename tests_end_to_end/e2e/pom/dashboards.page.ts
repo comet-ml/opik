@@ -410,6 +410,109 @@ export class DashboardsPage {
   }
 
   /**
+   * Picks a widget type in the open widget-config dialog's type selector.
+   *
+   * The selector renders each type as a `CardSelector` button whose accessible
+   * name is the type's own title ("Time series", "Markdown", "Single metric",
+   * …), so this is a plain `getByRole` — no test id needed. `exact: true`
+   * because "Metrics" is a prefix of nothing here but "Markdown" and "Metrics"
+   * both sit in the same list and a loose match on a future "Markdown table"
+   * would silently take the wrong card.
+   *
+   * The count is asserted before the click so a renamed or permission-hidden
+   * type fails saying the card was not there, rather than timing out on the
+   * editor that was never going to mount. Selecting a type REPLACES the
+   * dialog's preview widget, which is what swaps in that type's own editor and
+   * its own zod schema.
+   */
+  async selectWidgetType(dialog: Locator, typeTitle: string): Promise<void> {
+    await test.step(`Select the "${typeTitle}" widget type`, async () => {
+      const card = dialog.getByRole('button', { name: typeTitle, exact: true });
+      await expect(card, `exactly one "${typeTitle}" widget type card`).toHaveCount(1);
+      await card.click();
+      // The editor for the chosen type mounts after the preview widget is
+      // replaced; the heading the dialog renders above it is the first thing
+      // that says the swap happened.
+      await dialog
+        .getByRole('heading', { name: typeTitle, exact: true })
+        .waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * The Markdown widget editor's CodeMirror content node.
+   *
+   * `.cm-content` is how the estate addresses every CodeMirror in the app
+   * (`online-evaluation.page.ts`, `optimization-studio.page.ts`,
+   * `test-suite-items.page.ts`): the editor is rendered by `@uiw/react-codemirror`,
+   * which exposes no role and takes no props this page could hang a test id on.
+   * Scoped to the dialog so it cannot match an editor elsewhere on the page.
+   */
+  markdownEditor(dialog: Locator): Locator {
+    return dialog.locator('.cm-content').first();
+  }
+
+  /** The markdown content the editor currently holds, placeholder stripped. */
+  async markdownEditorContent(dialog: Locator): Promise<string> {
+    return test.step('Read the Markdown editor content', async () => {
+      return this.markdownEditor(dialog).evaluate((editor) => {
+        const clone = editor.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('.cm-placeholder').forEach((node) => node.remove());
+        return (clone.textContent ?? '').trim();
+      });
+    });
+  }
+
+  /**
+   * Types markdown into the editor and settles once it really holds the text.
+   *
+   * Click-then-type rather than `fill()`: `fill()` on a CodeMirror editor does
+   * not reliably reach the editor's own state, and the content here is read
+   * back out of that state by the form AND pushed into the dashboard store on
+   * every change. Resolving on the content rather than on the keystrokes is
+   * what makes the assertions that follow about the form, not about typing.
+   *
+   * Single-line content on purpose at the call sites: CodeMirror auto-indents,
+   * so a multi-line string typed key by key is not necessarily the string that
+   * ends up stored.
+   */
+  async fillMarkdownContent(dialog: Locator, content: string): Promise<void> {
+    await test.step('Type markdown into the widget editor', async () => {
+      const editor = this.markdownEditor(dialog);
+      await editor.click();
+      await editor.press('ControlOrMeta+A');
+      await this.page.keyboard.type(content);
+      await expect
+        .poll(async () => this.markdownEditorContent(dialog), { timeout: 15_000 })
+        .toBe(content);
+    });
+  }
+
+  /**
+   * A validation message rendered inside the open widget dialog.
+   *
+   * `FormMessage` renders the zod issue's message as plain text in an
+   * unlabelled div, so text is the only handle — and that is fine here, because
+   * the message string IS what is under test: the assertion is that the
+   * resolver mapped the issue to this field's message and the form rendered it.
+   */
+  widgetValidationMessage(dialog: Locator, message: string): Locator {
+    return dialog.getByText(message, { exact: true });
+  }
+
+  /**
+   * The dashboard's autosave indicator once it reports a completed save.
+   *
+   * A dashboard page keeps its widgets in a client store and persists them
+   * asynchronously, so a widget can render from memory before (or without) the
+   * write landing. A caller about to reload the page, or to read the dashboard
+   * back over the API, has to wait on this first or it races the save.
+   */
+  savedIndicator(): Locator {
+    return this.page.getByText('Saved', { exact: true });
+  }
+
+  /**
    * One label in a widget's chart legend.
    *
    * `toHaveCount(1)` rather than `toBeVisible()` is what a caller wants here:

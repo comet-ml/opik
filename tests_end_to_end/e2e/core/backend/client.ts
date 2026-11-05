@@ -130,6 +130,28 @@ export interface ComparePairedRowRef {
 }
 
 /**
+ * One page of the compare read, projected to the two facts the all-experiments
+ * mode decides: how many rows there are, and WHICH experiments composed them.
+ *
+ * Separate from `ComparePairedRowRef`, which carries the row → trace join. The
+ * question here is the other one — the experiment SET the server resolved. In
+ * all-experiments mode the caller never names it, so the only way to assert the
+ * resolution is to read back every `experiment_id` that appears and compare it
+ * against the experiments the seed created, by type.
+ *
+ * `experimentItemCounts` is the per-row width, kept because the exclusion rule
+ * is visible in it too: a trial experiment wrongly resolved shows up as a row
+ * carrying three results where every other row carries two, and a read asserted
+ * only on the id SET would still see the same ids and pass.
+ */
+export interface CompareExperimentSetRef {
+  total: number;
+  ids: string[];
+  experimentIds: string[];
+  experimentItemCounts: number[];
+}
+
+/**
  * A dataset item read back with its tags. Separate from `DatasetItemRef`
  * because a filter-scoped batch update is asserted on exactly which rows did
  * and did not gain a tag, so `tags` must be present on every row rather than
@@ -2305,6 +2327,64 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/dashboards/{id}`, flattened to every stored widget's
+     * type, section and own `config` — the read that says what a widget dialog
+     * actually SAVED, as opposed to what the page happens to be rendering.
+     *
+     * Through `rawFetch` because `config` is a `JsonNode` on the wire and the
+     * pinned SDK types it as an opaque value. The widget `config` is handed
+     * back as the record it is rather than decoded, because it is a per-type
+     * shape — a markdown widget's `content`, a time-series widget's metric and
+     * scope — that no single typed accessor can express; each caller reads its
+     * own field.
+     *
+     * Flattened ACROSS sections rather than per-section (unlike
+     * `getInsightsView`, which keeps the section structure because its callers
+     * assert section order): a widget's section is carried on the widget here
+     * so a caller can still tell "two widgets in one section" from "one in
+     * each", while the common question — how many widgets exist at all —
+     * stays a single length check. A dashboard whose `config` has no
+     * `sections` array throws rather than reading as empty: "saved nothing"
+     * and "this read cannot see what was saved" are different failures.
+     *
+     * Why a server-side read matters here at all: the dashboard page keeps its
+     * widgets in a client store and autosaves them, so a widget can render
+     * perfectly from memory while the write that was supposed to persist it
+     * silently dropped or mangled its config. A reload catches some of that;
+     * only this read can say the stored value is the exact string that was
+     * typed. Callers must wait for the page to report the save first — this
+     * read is otherwise racing it.
+     */
+    async getDashboardWidgets(
+      id: string,
+    ): Promise<Array<{ sectionId: string; type: string; config: Record<string, unknown> }>> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/dashboards/${id}`);
+      if (status !== 200) {
+        throw new Error(`getDashboardWidgets(${id}): answered ${status}: ${message}`);
+      }
+      const config = ((json ?? {}) as { config?: unknown }).config as
+        | { sections?: Array<{ id?: unknown; widgets?: Array<Record<string, unknown>> }> }
+        | undefined;
+      if (!Array.isArray(config?.sections)) {
+        throw new Error(
+          `getDashboardWidgets(${id}): 200 carried no config.sections array — ` +
+            'cannot tell a dashboard that saved no widgets from one this read cannot see.',
+        );
+      }
+      return config.sections.flatMap((section) =>
+        // A section the backend stored without `widgets` contributes nothing
+        // rather than throwing: an empty section is a legitimate state (every
+        // new dashboard opens with one), and only the whole-dashboard shape
+        // above is a sign this read is looking in the wrong place.
+        (section.widgets ?? []).map((widget) => ({
+          sectionId: String(section.id ?? ''),
+          type: String(widget.type ?? ''),
+          config: (widget.config ?? {}) as Record<string, unknown>,
+        })),
+      );
+    },
+
+    /**
      * A dashboard does not hang off a project, so no project delete reaches
      * it. `global-teardown` sweeps dashboards by run prefix, but only at the
      * end of the run — a spec that builds one deletes it per-test.
@@ -3544,6 +3624,121 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           data: (item.data ?? {}) as Record<string, unknown>,
         })),
       };
+    },
+
+    /**
+     * The same compare read, in the mode opik#9263 added: `experiment_ids`
+     * OMITTED, so the server resolves the dataset's own experiments instead of
+     * being told which ones to compare.
+     *
+     * A separate helper rather than an optional `experimentIds` on
+     * `compareItemsPage`, and sent through `rawFetch` rather than the pinned
+     * SDK client, for the same reason: the parameter has to be genuinely absent
+     * from the query string. `findDatasetItemsWithExperimentItems` takes
+     * `experimentIds` as a required argument, and an empty string or a `"[]"`
+     * is NOT the same request — both are rejected 400 ("experiment_ids cannot
+     * be empty"), which is the rejection a sibling here asserts. A helper that
+     * could be called either way would make "omitted" one typo away from
+     * "blank", and the two answers are different by design.
+     *
+     * `datasetVersion` travels verbatim as `dataset_version`, the second
+     * parameter 9263 added: a version hash or the `latest` tag, scoping the
+     * resolution to experiments run against that version. It is only legal with
+     * `experiment_ids` omitted, so it lives here and not on the supplied-ids
+     * readers.
+     *
+     * Throws on anything but a 200. The validation and not-found paths are the
+     * contract of `compareItemsReadStatus` below, which is built to report a
+     * status rather than to be asserted against a row set.
+     */
+    async compareItemsAllExperiments(args: {
+      datasetId: string;
+      page?: number;
+      size?: number;
+      datasetVersion?: string;
+    }): Promise<CompareExperimentSetRef> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'true',
+        ...(args.datasetVersion === undefined ? {} : { dataset_version: args.datasetVersion }),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items`,
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `compareItemsAllExperiments(${args.datasetId}` +
+            `${args.datasetVersion === undefined ? '' : `, version=${args.datasetVersion}`}) ` +
+            `-> ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `compareItemsAllExperiments: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      const content = body.content ?? [];
+      const experimentIds: string[] = [];
+      const experimentItemCounts: number[] = [];
+      for (const item of content) {
+        const items = (item.experiment_items ?? []) as Array<Record<string, unknown>>;
+        experimentItemCounts.push(items.length);
+        for (const ei of items) experimentIds.push(String(ei.experiment_id ?? ''));
+      }
+      return {
+        total: body.total,
+        ids: content.map((item) => String(item.id ?? '')),
+        // De-duplicated, since the caller is asking which experiments the read
+        // resolved, not how many rows each of them reached. Sorted so a
+        // comparison against the seed's own list does not depend on the order
+        // rows happened to come back in.
+        experimentIds: [...new Set(experimentIds)].sort(),
+        experimentItemCounts,
+      };
+    },
+
+    /**
+     * The status and message the compare read answers with, without throwing —
+     * for opik#9263's validation and not-found paths.
+     *
+     * Every argument is a raw string (or deliberately absent) rather than a
+     * typed value, because what is under test is precisely the shapes a typed
+     * signature would make unrepresentable: `experiment_ids` present but BLANK,
+     * `experiment_ids=[]`, a page size above the all-experiments cap, a
+     * `dataset_version` that no version carries, and `dataset_version` sent
+     * TOGETHER with `experiment_ids`. Each has its own message, and the message
+     * is the contract — a 400 for the wrong reason is a different defect from
+     * the one a caller is asserting.
+     */
+    async compareItemsReadStatus(args: {
+      datasetId: string;
+      /** Omitted entirely when absent — not sent as an empty value. */
+      experimentIds?: string;
+      datasetVersion?: string;
+      page?: number;
+      size?: number;
+    }): Promise<RawApiResult> {
+      const query = new URLSearchParams({
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        truncate: 'true',
+        ...(args.experimentIds === undefined ? {} : { experiment_ids: args.experimentIds }),
+        ...(args.datasetVersion === undefined ? {} : { dataset_version: args.datasetVersion }),
+      });
+      const { status, message } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items`,
+        { query },
+      );
+      return { status, message };
     },
 
     /**

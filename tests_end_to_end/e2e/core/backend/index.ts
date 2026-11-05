@@ -10,6 +10,7 @@ export {
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
   type ComparePairedRowRef,
+  type CompareExperimentSetRef,
   type TraceEnrichmentOptions,
   type SpanEnrichmentOptions,
   type DatasetSummaryRef,
