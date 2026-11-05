@@ -27,6 +27,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,14 +36,16 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * What a run counts, with every store mocked: each failed run once, Qwen outcomes after the answer is read, and the
- * take-back failure. A run builds the fixture's window, so its steps are the real ones. Also the window read's time
- * bound.
+ * save order (MySQL first, then the retried trace_topics insert). A run builds the fixture's window, so its steps are
+ * the real ones. Also the window read's time bound.
  */
 @DisplayName("topics rebuild service metrics")
 class TopicsRebuildServiceTest {
@@ -83,7 +86,6 @@ class TopicsRebuildServiceTest {
         when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
-        when(traceTopicsDAO.deleteByRunId(anyString(), any(), any())).thenReturn(Mono.just(0L));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         var names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
@@ -152,25 +154,85 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a failed save whose trace_topics delete fails too counts the take-back failure and the run")
-    void takeBackFailureIsCounted() {
+    @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
+    void failedSaveWritesNoLabels() {
         when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
         when(topicDAO.lockProject(anyString(), any())).thenThrow(new IllegalStateException("MySQL down"));
-        when(traceTopicsDAO.deleteByRunId(anyString(), any(), any()))
-                .thenReturn(Mono.error(new IllegalStateException("ClickHouse down")));
         answer(FIXTURE.answer);
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
         assertThat(outcome.errorCode()).isEqualTo("save");
+        verify(traceTopicsDAO, never()).insert(any());
         assertThat(meter.sum("topics.qwen.calls", "outcome", "ok")).isEqualTo(1);
-        assertThat(meter.points("topics.save.take_back_failures")).singleElement().satisfies(point -> {
-            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
-            assertThat(point.get("error_type")).isNotBlank();
-        });
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
         assertThat(meter.sum("topics.runs", "status", "saved")).isZero();
         assertThat(meter.points("topics.save.rows")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the trace_topics insert comes after the MySQL commit, and a failed insert is retried")
+    void insertAfterCommitIsRetried() {
+        var attempts = new AtomicInteger();
+        when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> attempts.incrementAndGet() <= 2
+                ? Mono.error(new IllegalStateException("ClickHouse down"))
+                : Mono.just((long) TRACES)));
+        answer(FIXTURE.answer);
+
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(attempts).hasValue(3);
+        var order = inOrder(runDAO, traceTopicsDAO);
+        order.verify(runDAO).markSaved(eq(runId), any(), any());
+        order.verify(traceTopicsDAO).insert(any());
+        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
+    }
+
+    @Test
+    @DisplayName("an insert that fails after its 3 retries leaves the run saved, with no trace_topics rows counted")
+    void insertThatKeepsFailingLeavesTheRunSaved() {
+        var attempts = new AtomicInteger();
+        when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> {
+            attempts.incrementAndGet();
+            return Mono.error(new IllegalStateException("ClickHouse down"));
+        }));
+        answer(FIXTURE.answer);
+
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(attempts).hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
+        verify(runDAO, never()).markFailed(any(), any(), any(), any(), any());
+        assertThat(meter.points("topics.runs")).singleElement()
+                .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
+        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
+        assertThat(meter.sum("topics.save.rows", "table", "topics")).isPositive();
+    }
+
+    @Test
+    @DisplayName("a timeout that interrupts the run after the commit does not stop the insert, and the interrupt is "
+            + "kept")
+    void insertGoesOnThroughAnInterrupt() {
+        when(runDAO.markSaved(any(), any(), any())).thenAnswer(invocation -> {
+            Thread.currentThread().interrupt();
+            return 1;
+        });
+        when(traceTopicsDAO.insert(any()))
+                .thenReturn(Mono.just((long) TRACES).delayElement(java.time.Duration.ofMillis(200)));
+        answer(FIXTURE.answer);
+
+        TopicsRebuildService.Outcome outcome;
+        boolean interrupted;
+        try {
+            outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        } finally {
+            interrupted = Thread.interrupted();
+        }
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(interrupted).isTrue();
+        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
     }
 
     @Test

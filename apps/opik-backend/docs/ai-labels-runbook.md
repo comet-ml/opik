@@ -396,6 +396,12 @@ Every record write after the start is best-effort: a failed one is logged and th
 
 A failed run writes nothing but its `topic_runs` row; the project is built again the next night.
 
+A run saves in this order: one MySQL transaction (state, topics, prototypes, run counts, the run `saved`), then the
+`trace_topics` insert, retried up to 3 times. If the insert still fails, the run stays saved and an ERROR names it
+(`saved, but its trace_topics insert failed`); the window's traces keep the topics they had (none, after a first build)
+until a later saved run writes the window again. To write them now, forget the project's list and build it again (see
+"Running by hand").
+
 | `error_code` | Meaning |
 |---|---|
 | `qwen_timeout` | The Qwen call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
@@ -404,7 +410,7 @@ A failed run writes nothing but its `topic_runs` row; the project is built again
 | `window_read` | The ClickHouse window read failed (it stops after 120s, or after `TOPICS_NIGHTLY_PROJECT_TIMEOUT` if shorter), or the window had no usable vector. |
 | `invariant` | A check before the save failed: more than 10 topics, a blank name or one that is a catch-all as a whole, a prototype not of unit length, a trace not labelled once. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
-| `save` | The ClickHouse insert or the MySQL transaction failed, or another run saved the project meanwhile (`error_message` says so; only if the project's Redis lock was lost). The run deletes the `trace_topics` rows it inserted; if that delete fails too (a WARN names the run), they stay until the next saved run replaces them. |
+| `save` | The MySQL transaction failed, or another run saved the project meanwhile (`error_message` says so; only if the project's Redis lock was lost). Nothing of the run is written: the `trace_topics` insert comes after the commit. |
 | `abandoned` | The pod stopped during the run. |
 | `internal` | A bug: read the logs for the run id. |
 
@@ -496,8 +502,7 @@ event that creates it: the alerts read the state gauges further down, not these.
 | `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run left `running`. A run is counted by the write that ends its row: when marking a run failed throws, its row stays `running` and nothing counts it until housekeeping fails it as `abandoned`. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
 | `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
-| `topics.save.rows` by `table` | Rows saved runs wrote. |
-| `topics.save.take_back_failures` by workspace, `error_type` | Failed saves whose `trace_topics` rows could not be deleted. Readers see those rows until the project's next saved run. |
+| `topics.save.rows` by `table` | Rows saved runs wrote. A `trace_topics` insert that failed after the save adds none. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |
 | `topics.nightly.count_failures` by workspace, `error_type` | Workspaces whose window count read failed. The night skips all their projects; they run the next night. |
 | `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |

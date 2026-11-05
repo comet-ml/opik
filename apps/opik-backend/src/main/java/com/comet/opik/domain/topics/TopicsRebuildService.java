@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.util.concurrent.Uninterruptibles;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -20,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import reactor.util.retry.Retry;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -36,6 +38,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
@@ -48,10 +51,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * nearest prototype, check the invariants and save. Synchronous: the nightly job calls it on its own thread, one
  * project at a time.
  *
- * <p>The save writes {@code trace_topics} first, then one MySQL transaction: the new topics, the project's prototypes
- * (replaced), its state, the run's counts ({@code topic_run_counts}) and the run as {@code saved}. A failure before the
- * save writes nothing but the failed run; a MySQL failure after the ClickHouse insert leaves rows no saved run points
- * at, which the next night's insert replaces (the latest row per trace wins).
+ * <p>The save commits one MySQL transaction first: the project's state, the new topics, its prototypes (replaced), the
+ * run's counts ({@code topic_run_counts}) and the run as {@code saved}. Then it inserts {@code trace_topics}, retried up
+ * to {@value #INSERT_RETRIES} times. A failure before the commit writes nothing but the failed run. An insert that still
+ * fails after the commit leaves the run saved and the window's traces with the topics they had, until a later saved run
+ * rewrites the window (the latest row per trace wins).
  */
 @Slf4j
 @Singleton
@@ -80,6 +84,9 @@ public class TopicsRebuildService {
     static final double UNIT_TOLERANCE = 1e-3;
     /** A run's ClickHouse read stops after this, so one slow read does not hold the server for the whole run. */
     static final long READ_SECONDS = 120;
+    /** The {@code trace_topics} insert after the commit: retries, and the first backoff (it doubles each time). */
+    static final int INSERT_RETRIES = 3;
+    static final Duration INSERT_BACKOFF = Duration.ofMillis(500);
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -451,26 +458,25 @@ public class TopicsRebuildService {
         }
 
         /**
-         * Deletes the trace_topics rows of a run whose MySQL save did not commit. Best effort: a row left behind
-         * belongs to a run that never saved, and the next saved run replaces it. It runs after any insert
-         * attempt, as a failed insert may have reached ClickHouse, and clears the interrupt of a timed-out run while it
-         * deletes: {@code block()} on an interrupted thread throws at once.
+         * Inserts the saved run's trace topics, retried up to {@value #INSERT_RETRIES} times: a repeat writes the same
+         * rows, one per trace. The run is saved by now, so the insert goes on through an interrupt (a timeout that
+         * came after the commit) and the interrupt is kept. False when it still failed.
          */
-        private void takeBack(boolean attempted) {
-            if (!attempted) {
-                return;
-            }
-            boolean interrupted = Thread.interrupted();
+        private boolean insertTraceTopics(List<TraceTopic> traceTopics) {
+            var insert = traceTopicsDAO.insert(traceTopics)
+                    .retryWhen(Retry.backoff(INSERT_RETRIES, INSERT_BACKOFF)
+                            .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
+                                    + "project '{}', attempt '{}'", runId, projectId, signal.totalRetries() + 2,
+                                    signal.failure()))
+                            .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
             try {
-                traceTopicsDAO.deleteByRunId(workspaceId, projectId, runId).block();
-            } catch (RuntimeException exception) {
-                metrics.takeBackFailure(workspaceId, exception);
-                log.warn("Topics run '{}' could not delete its trace_topics rows after a failed save, project '{}'",
-                        runId, projectId, exception);
-            } finally {
-                if (interrupted) {
-                    Thread.currentThread().interrupt();
-                }
+                Uninterruptibles.getUninterruptibly(insert.toFuture());
+                metrics.saved(workspaceId, "trace_topics", traceTopics.size());
+                return true;
+            } catch (ExecutionException | RuntimeException exception) {
+                log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the window's "
+                        + "traces keep the topics they had until a later saved run", runId, projectId, exception);
+                return false;
             }
         }
 
@@ -518,10 +524,7 @@ public class TopicsRebuildService {
             }
             var statsJson = stats.toString();
             long other = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-            boolean attempted = false;
             try {
-                attempted = true;
-                traceTopicsDAO.insert(traceTopics).block();
                 var now = Instant.now();
                 var counts = TopicRanking.runCounts(runId, workspaceId, projectId, topics, other, now);
                 template.inTransaction(WRITE, handle -> {
@@ -552,20 +555,18 @@ public class TopicsRebuildService {
                     return null;
                 });
             } catch (TopicsRunException exception) {
-                takeBack(attempted);
                 throw exception;
             } catch (RuntimeException exception) {
-                takeBack(attempted);
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
             metrics.run(workspaceId, TopicRun.Status.SAVED, null);
-            metrics.saved(workspaceId, "trace_topics", traceTopics.size());
             metrics.saved(workspaceId, "topics", topics.size());
             metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
             // The value the run saved in its stats, not computed again.
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
+            int inserted = insertTraceTopics(traceTopics) ? traceTopics.size() : 0;
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', prototypes '{}'", runId,
-                    projectId, traceTopics.size(), topics.size(), prototypes.size());
+                    projectId, inserted, topics.size(), prototypes.size());
         }
 
         Outcome failed(Code code, Exception exception) {

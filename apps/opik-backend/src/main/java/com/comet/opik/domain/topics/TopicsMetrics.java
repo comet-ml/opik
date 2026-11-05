@@ -54,7 +54,6 @@ public class TopicsMetrics {
     private final LongCounter saveRows;
     private final DoubleHistogram budgetUsed;
     private final LongCounter countFailures;
-    private final LongCounter takeBackFailures;
     private final DoubleHistogram otherShare;
 
     @Inject
@@ -94,10 +93,6 @@ public class TopicsMetrics {
                 .setDescription("Workspaces whose window count read failed, by error_type: the night skips all "
                         + "their projects")
                 .build();
-        this.takeBackFailures = meter.counterBuilder("topics.save.take_back_failures")
-                .setDescription("Failed saves whose trace_topics rows could not be deleted, by error_type: readers "
-                        + "see them until the project's next saved run")
-                .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's window traces labelled Other, the stats.other_share of its "
@@ -136,11 +131,6 @@ public class TopicsMetrics {
 
     void countFailure(@NonNull String workspaceId, @NonNull Throwable error) {
         countFailures.add(1,
-                names.builder(workspaceId).put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
-    }
-
-    void takeBackFailure(@NonNull String workspaceId, @NonNull Throwable error) {
-        takeBackFailures.add(1,
                 names.builder(workspaceId).put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 

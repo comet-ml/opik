@@ -405,7 +405,7 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("a run whose project another run saved meanwhile fails with save and takes its labels back")
+    @DisplayName("a run whose project another run saved meanwhile fails with save and writes no labels")
     void savedMeanwhile() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
