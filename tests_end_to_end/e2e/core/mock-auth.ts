@@ -27,10 +27,14 @@ export const mockAuthBaseUrlForBackend =
 /** Fixed identities the mock accepts (see mock_token_auth_service.py). */
 export const MOCK_AUTH_CLIENT_ID = 'opik-test';
 export const MOCK_AUTH_CLIENT_SECRET = 'opik-secret';
+export const MOCK_AUTH_SA_USERNAME = 'opik-service-account';
+export const MOCK_AUTH_SA_PASSWORD = 'opik-sa-password'; // betterleaks:allow — fixed credential of the local mock service
 /** The bearer the mock gateway accepts without a token fetch (STATIC_API_KEY in the service). */
 export const MOCK_STATIC_API_KEY = 'mock-static-key';
 
 export const mockTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/oauth/token`;
+/** Replies with the bare token as text/plain and no lifetime (SA_USERNAME/SA_PASSWORD in the service). */
+export const mockServiceAccountTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/service-account/token`;
 export const mockGatewayUrlForBackend = `${mockAuthBaseUrlForBackend}/v1`;
 
 /**
