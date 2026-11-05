@@ -15,7 +15,10 @@ import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,9 +106,26 @@ class ModelUsageServiceTest {
                 .doesNotThrowAnyException());
 
         assertThat(logs).anySatisfy(line -> assertThat(line)
-                .contains("Failed to give back the claims of the models used")
-                .contains("organization 'org-1', workspace 'ws-a', models '[openai/gpt-5-mini]'")
+                .contains("Failed to give back the claims of the models used, so they are saved again from the next "
+                        + "UTC day")
+                .contains("organization 'org-1', workspace 'ws-a', claims '1', first models '[openai/gpt-5-mini]'")
                 .contains("Redis is down"));
+    }
+
+    @Test
+    void theLoggedSampleIsCappedShortAndFreeOfControlCharacters() {
+        var models = IntStream.range(0, ModelUsageServiceImpl.MAX_LOGGED_MODELS + 2)
+                .mapToObj(index -> new UsedModel("model-" + index, "openai"))
+                .collect(Collectors.toCollection(ArrayList::new));
+        models.set(0, new UsedModel("line\nbreak", "openai"));
+        models.set(1, new UsedModel("x".repeat(300), "openai"));
+
+        var sample = ModelUsageServiceImpl.loggedSample(models);
+
+        assertThat(sample).hasSize(ModelUsageServiceImpl.MAX_LOGGED_MODELS);
+        assertThat(sample.get(0)).isEqualTo("openai/line?break");
+        assertThat(sample.get(1)).hasSize(100).endsWith("...");
+        assertThat(sample.get(2)).isEqualTo("openai/model-2");
     }
 
     @Test

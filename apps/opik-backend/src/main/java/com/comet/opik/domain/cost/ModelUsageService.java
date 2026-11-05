@@ -59,6 +59,8 @@ class ModelUsageServiceImpl implements ModelUsageService {
     private static final Duration CLAIM_TTL = Duration.ofHours(26);
     private static final Duration SAVE_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration FAILURE_LOG_INTERVAL = Duration.ofMinutes(1);
+    static final int MAX_LOGGED_MODELS = 5;
+    private static final int MAX_LOGGED_NAME_LENGTH = 100;
     private static final String ORGANIZATION = "organization";
     private static final String BUILT_IN = "built_in";
     private static final String NONE = "none";
@@ -173,24 +175,31 @@ class ModelUsageServiceImpl implements ModelUsageService {
     }
 
     private void logFailure(String organizationId, Throwable error) {
-        if (dueToLog(lastFailureLoggedAt)) {
+        if (shouldLog(lastFailureLoggedAt)) {
             log.warn("Failed to save the models used, organization '{}'", organizationId, error);
         }
     }
 
+    // Each claim's key holds the UTC day, so a claim left behind only blocks that model until the day changes.
     private void logReleaseFailure(String organizationId, String workspaceId, List<UsedModel> claimed,
             Throwable error) {
-        if (dueToLog(lastReleaseFailureLoggedAt)) {
-            log.warn("Failed to give back the claims of the models used, so they are saved again only after the "
-                    + "claims expire in '{}', organization '{}', workspace '{}', models '{}'", CLAIM_TTL,
-                    organizationId, workspaceId, claimed.stream()
-                            .map(model -> model.provider() + "/" + model.modelName())
-                            .toList(),
-                    error);
+        if (shouldLog(lastReleaseFailureLoggedAt)) {
+            log.warn("Failed to give back the claims of the models used, so they are saved again from the next UTC "
+                    + "day, organization '{}', workspace '{}', claims '{}', first models '{}'", organizationId,
+                    workspaceId, claimed.size(), loggedSample(claimed), error);
         }
     }
 
-    private static boolean dueToLog(AtomicLong lastLoggedAt) {
+    static List<String> loggedSample(List<UsedModel> models) {
+        return models.stream()
+                .limit(MAX_LOGGED_MODELS)
+                .map(model -> StringUtils.abbreviate(
+                        (model.provider() + "/" + model.modelName()).replaceAll("\\p{Cntrl}", "?"),
+                        MAX_LOGGED_NAME_LENGTH))
+                .toList();
+    }
+
+    private static boolean shouldLog(AtomicLong lastLoggedAt) {
         long now = System.currentTimeMillis();
         long last = lastLoggedAt.get();
         return now - last >= FAILURE_LOG_INTERVAL.toMillis() && lastLoggedAt.compareAndSet(last, now);
