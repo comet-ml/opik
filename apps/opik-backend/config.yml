@@ -2510,6 +2510,10 @@ aiLabels:
     #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
     #  sends get past tickBudget, so it lengthens the leader lease
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+    #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+    #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+    #  upstream_error without being read further
+    maxResponseBytes: ${AI_LABELS_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}

@@ -17,6 +17,9 @@ have.
   (the cut-over `traces` table). The `spans` cutover doesn't need to be done.
 - opik-inference: the deployment needs its own `deployments` entry and credential in `config/inference.yaml`, with
   `allowed_orgs: "*"`. Opik sends workspace ids as `org_id`, so a real-org allow-list answers 403 `org_not_allowed`.
+- Calls to opik-inference (ai-labels and topic vectors) never follow a redirect, and read at most
+  `AI_LABELS_INFERENCE_MAX_RESPONSE_BYTES` (32 MiB) of a response body. A redirect or a longer body fails the call
+  as `upstream_error`.
 - Every other `aiLabels` setting is in `apps/opik-backend/config.yml` and overridable as `AI_LABELS_*`.
 
 ## Opting workspaces in and out
