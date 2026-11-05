@@ -2,7 +2,6 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
     ChoiceDeltaToolCallFunction,
 )
-from together.types import tool_choice as together_tool_choice
 
 from opik.integrations.together import _streamed_tool_calls
 
@@ -15,7 +14,7 @@ def _together_fragment(index, call_id=None, name=None, arguments=None):
     """
     fields = {
         "index": index,
-        "function": together_tool_choice.Function.model_construct(
+        "function": ChoiceDeltaToolCallFunction.model_construct(
             **{
                 key: value
                 for key, value in (("name", name), ("arguments", arguments))
@@ -26,7 +25,7 @@ def _together_fragment(index, call_id=None, name=None, arguments=None):
     if call_id is not None:
         fields["id"] = call_id
         fields["type"] = "function"
-    return together_tool_choice.ToolChoice.model_construct(**fields)
+    return ChoiceDeltaToolCall.model_construct(**fields)
 
 
 def _fragment(index=None, call_id=None, name=None, arguments=None):
