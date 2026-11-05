@@ -345,12 +345,14 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
-    const baseColumns = [
-      ...firstColumns,
-      ...groupColumns,
-      ...regularColumns,
-      ...scoresColumns,
-    ];
+    // Columns without a group stat need an explicit empty cell, otherwise
+    // TanStack falls back to rendering the summed column value.
+    const statColumns = [...regularColumns, ...scoresColumns].map((column) => ({
+      ...column,
+      aggregatedCell: column.aggregatedCell ?? (() => null),
+    }));
+
+    const baseColumns = [...firstColumns, ...groupColumns, ...statColumns];
 
     if (actionsCell) {
       baseColumns.push(

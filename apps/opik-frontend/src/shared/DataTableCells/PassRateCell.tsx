@@ -59,7 +59,6 @@ const PassRateAggregationCell = <TData,>(
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
-  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const data = aggregationMap?.[rowId] ?? {};
   const passRate = get(data, aggregationKey ?? "", undefined) as
@@ -75,21 +74,18 @@ const PassRateAggregationCell = <TData,>(
   const tooltip = hasData
     ? formatPassRate(passRate, passedCount, totalCount)
     : undefined;
-  const badgeLabel = hasData ? `${Math.round(passRate * 100)}%` : undefined;
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {hasData ? (
+      {hasData && (
         <TooltipWrapper content={tooltip}>
-          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
-            {badgeLabel}
-          </Tag>
+          <span className="truncate text-light-slate">
+            {`${Math.round(passRate * 100)}%`}
+          </span>
         </TooltipWrapper>
-      ) : (
-        <span className="truncate text-light-slate">-</span>
       )}
     </CellWrapper>
   );
