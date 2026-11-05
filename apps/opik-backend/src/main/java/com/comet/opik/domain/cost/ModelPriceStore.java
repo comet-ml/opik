@@ -1,6 +1,8 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.modelprice.CustomModelPriceRow;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.ws.rs.ClientErrorException;
@@ -14,6 +16,8 @@ import javax.annotation.Nullable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -27,7 +31,8 @@ class ModelPriceStore {
     private final @NonNull Supplier<UUID> newId;
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    private record HistorySnapshot(String model, String provider, String kind, BigDecimal inputPrice,
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record HistorySnapshot(String model, String provider, String kind, BigDecimal inputPrice,
             BigDecimal outputPrice, BigDecimal cacheReadPrice, BigDecimal cacheWritePrice, String aliasModel,
             String aliasProvider, String note) {
 
@@ -36,6 +41,26 @@ class ModelPriceStore {
                     row.inputPerMillion(), row.outputPerMillion(), row.cacheReadPerMillion(),
                     row.cacheWritePerMillion(), row.aliasModelName(), row.aliasProvider(), row.note());
             return JsonUtils.valueToTree(snapshot).toString();
+        }
+
+        /** The stored snapshot as the API lists rows: string prices and alias_of, so history matches the list. */
+        static @Nullable CustomModelPriceRow rowOf(@Nullable String json) {
+            if (json == null) {
+                return null;
+            }
+            var snapshot = JsonUtils.readValue(json, HistorySnapshot.class);
+            var price = CustomModelPrice.builder()
+                    .modelName(snapshot.model())
+                    .provider(Objects.requireNonNullElse(snapshot.provider(), CustomModelPrice.ANY_PROVIDER))
+                    .kind(CustomModelPrice.Kind.valueOf(snapshot.kind().toUpperCase(Locale.ROOT)))
+                    .inputPerMillion(snapshot.inputPrice())
+                    .outputPerMillion(snapshot.outputPrice())
+                    .cacheReadPerMillion(snapshot.cacheReadPrice())
+                    .cacheWritePerMillion(snapshot.cacheWritePrice())
+                    .aliasModelName(snapshot.aliasModel())
+                    .aliasProvider(snapshot.aliasProvider())
+                    .build();
+            return CustomModelPriceRow.from(price).toBuilder().note(snapshot.note()).build();
         }
     }
 
