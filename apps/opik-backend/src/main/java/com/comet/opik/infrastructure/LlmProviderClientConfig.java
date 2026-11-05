@@ -56,9 +56,7 @@ public class LlmProviderClientConfig {
 
     @Valid @NotNull private VertexAIClientConfig vertexAIClient;
 
-    private String openRouterUrl;
-
-    @NotBlank private String openRouterDecisionsUrl;
+    @NotBlank private String openRouterUrl;
 
     /**
      * Destination policy for user-configured provider base URLs: {@code strict} refuses private and
