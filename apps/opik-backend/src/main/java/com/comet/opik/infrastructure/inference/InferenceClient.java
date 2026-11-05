@@ -27,6 +27,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 /**
@@ -35,9 +36,10 @@ import java.util.function.Function;
  * 0.2 s or honoring {@code Retry-After}, except that a submit answered with {@code quota_exceeded} fails at once, so
  * the caller can back that one workspace off.
  * <p>
- * Every call takes a deadline: no attempt outlasts it (its connect and read timeouts are cut to the time left), no
- * retry starts that can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without
- * sending anything.
+ * Every call takes a deadline: each attempt's connect and read timeouts are cut to the time left, no retry starts that
+ * can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without sending anything.
+ * Those timeouts bound each socket wait, not a whole attempt, so {@link #decide}, which a request waits on, is also cut
+ * off at its deadline.
  * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
@@ -122,7 +124,8 @@ public class InferenceClient {
     /**
      * One synchronous decide call: every question answered about the same state. {@code request.deadlineMs()}, when
      * set, is the time the service may spend; {@code deadline} bounds the client, retries included, and should leave
-     * room for one retry on top of the service's.
+     * room for one retry on top of the service's. A {@code deadline_exceeded} is not retried: a second attempt would
+     * miss it too, and would double the load on a service that is already behind.
      */
     public Mono<DecideResponse> decide(@NonNull DecideRequest request, @NonNull Instant deadline) {
         Preconditions.checkArgument(!request.questions().isEmpty()
@@ -134,6 +137,7 @@ public class InferenceClient {
                 "a decide deadline must be positive when set, deadlineMs '%s'", request.deadlineMs());
         return Mono.defer(() -> {
             var withId = request.requestId() == null ? request.toBuilder().requestId(newRequestId()).build() : request;
+            var left = Duration.between(Instant.now(), deadline);
             return execute(Call.<DecideResponse>builder()
                     .method(HttpMethod.POST)
                     .path(DECIDE_PATH)
@@ -142,7 +146,11 @@ public class InferenceClient {
                     .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
                     .deadline(deadline)
                     .type(DecideResponse.class)
-                    .build());
+                    .failFastOnDeadlineExceeded(true)
+                    .build())
+                    // The wait for a pooled connection, or a body that trickles in, escapes the socket timeouts.
+                    .timeout(left.isNegative() ? Duration.ZERO : left)
+                    .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime());
         });
     }
 
@@ -181,7 +189,8 @@ public class InferenceClient {
             return left.toMillis() >= 1 ? send(call, left) : Mono.<T>error(InferenceException.outOfTime());
         }).onErrorResume(InferenceException.class, exception -> {
             if (attempt >= MAX_RETRIES || !exception.isRetryable()
-                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())) {
+                    || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
+                    || (call.failFastOnDeadlineExceeded() && exception.isDeadlineExceeded())) {
                 return Mono.error(exception);
             }
             var backoff = exception.getRetryAfter() != null
@@ -245,6 +254,11 @@ public class InferenceClient {
                 // A connection reset or truncated body after the headers: as retryable as one before them.
                 throw InferenceException.transport(exception);
             }
+            if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
+                // Redirects are not followed, and the same request would only be redirected again.
+                throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
+                        null);
+            }
             if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
                 throw InferenceException.fromResponse(status, response.getHeaderString(HttpHeaders.RETRY_AFTER),
                         body);
@@ -280,6 +294,7 @@ public class InferenceClient {
             @NonNull Duration readTimeout,
             @NonNull Instant deadline,
             @NonNull Class<T> type,
-            boolean failFastOnQuotaExceeded) {
+            boolean failFastOnQuotaExceeded,
+            boolean failFastOnDeadlineExceeded) {
     }
 }

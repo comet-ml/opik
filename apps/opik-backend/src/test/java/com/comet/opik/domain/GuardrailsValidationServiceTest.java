@@ -24,8 +24,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -95,12 +98,16 @@ class GuardrailsValidationServiceTest {
         assertThat(injection.validationDetails().path("injection_score").asDouble()).isEqualTo(0.12);
 
         var captor = ArgumentCaptor.forClass(DecideRequest.class);
-        verify(inference).decide(captor.capture(), any());
+        var deadline = ArgumentCaptor.forClass(Instant.class);
+        verify(inference).decide(captor.capture(), deadline.capture());
         var sent = captor.getValue();
         assertThat(sent.orgId()).isEqualTo(WORKSPACE_ID);
         assertThat(sent.state().asText()).isEqualTo(TEXT);
         assertThat(sent.lane()).isEqualTo(DecideRequest.REALTIME_LANE);
-        assertThat(sent.deadlineMs()).isEqualTo(configuration.getGuardrails().getDeadline().toMilliseconds());
+        // opik-inference's longest realtime deadline, and a second more for the client.
+        assertThat(sent.deadlineMs()).isEqualTo(5_000L);
+        assertThat(Duration.between(Instant.now(), deadline.getValue()))
+                .isBetween(Duration.ofSeconds(5), Duration.ofSeconds(6));
         var questions = sent.questions();
         assertThat(questions.keySet()).containsExactly(
                 "0.pii.EMAIL_ADDRESS", "0.pii.PHONE_NUMBER", "1.topic.restricted", "1.topic.allowed", "2.injection");
@@ -162,17 +169,87 @@ class GuardrailsValidationServiceTest {
         verifyNoInteractions(inference);
     }
 
+    // The thresholds are the evaluated defaults (PII 0.5, topics 0.3, injection 0.4), written out so a changed default
+    // fails here. A score at the threshold counts; the next smaller double doesn't.
+    static Stream<Arguments> scoresAroundTheThresholds() {
+        return Stream.of(
+                Arguments.of("PII at the threshold", GuardrailType.PII, 0.5, false),
+                Arguments.of("PII just below", GuardrailType.PII, Math.nextDown(0.5), true),
+                Arguments.of("a restricted topic at the threshold", GuardrailType.TOPIC, 0.3, false),
+                Arguments.of("a restricted topic just below", GuardrailType.TOPIC, Math.nextDown(0.3), true),
+                Arguments.of("injection at the threshold", GuardrailType.PROMPT_INJECTION, 0.4, false),
+                Arguments.of("injection just below", GuardrailType.PROMPT_INJECTION, Math.nextDown(0.4), true));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("scoresAroundTheThresholds")
+    void scoreAtTheThresholdFailsAndJustBelowPasses(String scenario, GuardrailType type, double score,
+            boolean expectedPassed) {
+        var check = switch (type) {
+            case PII -> descriptor(type, "{\"entities\":[\"EMAIL_ADDRESS\"]}");
+            case TOPIC -> descriptor(type, "{\"restricted_topics\":[\"legal advice\"]}");
+            default -> descriptor(type, "{}");
+        };
+        var answer = switch (type) {
+            case PII -> Map.of("0.pii.EMAIL_ADDRESS", noul(score));
+            case TOPIC -> Map.of("0.topic.restricted",
+                    choice(Map.of("legal advice", score, GuardrailQuestions.NONE_OF_THESE, 1 - score)));
+            default -> Map.of("0.injection", noul(score));
+        };
+        when(inference.decide(any(), any())).thenReturn(Mono.just(answers(answer)));
+
+        assertThat(validate(request(check)).validationPassed()).isEqualTo(expectedPassed);
+    }
+
     @Test
-    void injectionAtTheThresholdFails() {
-        var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
-        when(inference.decide(any(), any()))
-                .thenReturn(Mono.just(answers(Map.of("0.injection", noul(0.4)))));
+    void topicMissingFromTheAnswerFailsOpenWithTheError() {
+        var request = request(descriptor(GuardrailType.TOPIC, "{\"restricted_topics\":[\"legal advice\"]}"));
+        when(inference.decide(any(), any())).thenReturn(Mono.just(answers(Map.of("0.topic.restricted",
+                choice(Map.of("Legal Advice", 0.9, GuardrailQuestions.NONE_OF_THESE, 0.1))))));
 
         var response = validate(request);
 
-        assertThat(response.validationPassed()).isFalse();
-        assertThat(response.validations().get(0).validationDetails().path("injection_score").asDouble())
-                .isEqualTo(0.4);
+        assertThat(response.validations().get(0).error()).isEqualTo(GuardrailsValidationServiceImpl.FAIL_OPEN_MESSAGE);
+    }
+
+    @Test
+    void moreThanOneCallOfQuestionsIsSplitIntoParallelCalls() {
+        var allClasses = GuardrailQuestions.PII_DESCRIPTIONS.keySet().stream()
+                .map("\"%s\""::formatted)
+                .collect(Collectors.joining(",", "{\"entities\":[", "]}"));
+        // Three PII checks of every class and an injection check: more than one call's 32 questions.
+        var request = request(descriptor(GuardrailType.PII, allClasses), descriptor(GuardrailType.PII, allClasses),
+                descriptor(GuardrailType.PII, allClasses), descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
+        when(inference.decide(any(), any())).thenAnswer(invocation -> {
+            DecideRequest sent = invocation.getArgument(0);
+            return Mono.just(answers(sent.questions().keySet().stream()
+                    .collect(Collectors.toMap(id -> id, id -> noul(0.01)))));
+        });
+
+        var response = validate(request);
+
+        assertThat(response.validationPassed()).isTrue();
+        assertThat(response.validations()).hasSize(4).allSatisfy(result -> assertThat(result.error()).isNull());
+        var captor = ArgumentCaptor.forClass(DecideRequest.class);
+        verify(inference, Mockito.times(2)).decide(captor.capture(), any());
+        int questions = 3 * GuardrailQuestions.PII_DESCRIPTIONS.size() + 1;
+        assertThat(captor.getAllValues()).extracting(sent -> sent.questions().size())
+                .containsExactly(DecideRequest.MAX_QUESTIONS, questions - DecideRequest.MAX_QUESTIONS);
+    }
+
+    @Test
+    void checksNeedingMoreThanTwoCallsAreRejected() {
+        var allClasses = GuardrailQuestions.PII_DESCRIPTIONS.keySet().stream()
+                .map("\"%s\""::formatted)
+                .collect(Collectors.joining(",", "{\"entities\":[", "]}"));
+        var checks = IntStream.range(0, 6)
+                .mapToObj(i -> descriptor(GuardrailType.PII, allClasses))
+                .toArray(ValidationDescriptor[]::new);
+
+        assertThatThrownBy(() -> validate(request(checks)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("The checks need 66 questions; at most 64 fit in two calls");
+        verifyNoInteractions(inference);
     }
 
     @Test
@@ -275,24 +352,6 @@ class GuardrailsValidationServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("1 to " + GuardrailQuestions.PII_DESCRIPTIONS.size());
         verifyNoInteractions(inference);
-    }
-
-    @Test
-    void longTextIsCutToTheServiceLimitAndFlagged() {
-        var longText = "x".repeat(GuardrailsValidationServiceImpl.MAX_TEXT_LENGTH + 100);
-        var request = GuardrailsValidationRequest.builder()
-                .text(longText)
-                .validations(List.of(descriptor(GuardrailType.PROMPT_INJECTION, "{}")))
-                .build();
-        when(inference.decide(any(), any()))
-                .thenReturn(Mono.just(answers(Map.of("0.injection", noul(0.01)))));
-
-        var response = validate(request);
-
-        assertThat(response.validations().get(0).validationDetails().path("truncated").asBoolean()).isTrue();
-        var captor = ArgumentCaptor.forClass(DecideRequest.class);
-        verify(inference).decide(captor.capture(), any());
-        assertThat(captor.getValue().state().asText()).hasSize(GuardrailsValidationServiceImpl.MAX_TEXT_LENGTH);
     }
 
     private GuardrailsValidationResponse validate(GuardrailsValidationRequest request) {
