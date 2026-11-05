@@ -89,8 +89,9 @@ public class AuthTokenProvider {
     private static final List<BasicCredentialKeys> BASIC_CREDENTIAL_KEYS = List.of(
             new BasicCredentialKeys("client_id", "client_secret"),
             new BasicCredentialKeys("username", "password"));
-    // A reply whose whole body is the token: one run of visible ASCII, so an HTML or prose page is never taken for one
-    private static final Pattern BARE_TOKEN = Pattern.compile("[\\x21-\\x7E]+");
+    // A reply whose whole body is the token: the characters a bearer token may contain (RFC 6750 b64token), so a
+    // compact HTML page or truncated JSON is never cached as one
+    private static final Pattern BARE_TOKEN = Pattern.compile("[A-Za-z0-9._~+/-]+=*");
     private static final String REDACTED = "***";
     private static final int ERROR_BODY_SNIPPET_CHARS = 500;
     // Upper bound on any token lifetime (1 year): beyond this a reply is malformed or malicious

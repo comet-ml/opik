@@ -22,6 +22,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.options.KeysScanOptions;
@@ -609,12 +611,13 @@ class AuthTokenProviderTest {
                 .hasMessageContaining("no fallback lifetime");
     }
 
-    @Test
-    @DisplayName("a non-JSON reply that isn't a bare token (e.g. a login page) is a clear error")
-    void nonJsonReplyIsRejected() {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"<html>gateway login page</html>", "<html>Unauthorized</html>", "{\"error\""})
+    @DisplayName("a non-JSON reply that isn't a bare token (e.g. a login page or truncated JSON) is a clear error")
+    void nonJsonReplyIsRejected(String reply) {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withStatus(200)
-                .withBody("<html>gateway login page</html>")));
+                .withBody(reply)));
 
         assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
