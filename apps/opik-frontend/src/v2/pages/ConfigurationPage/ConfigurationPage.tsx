@@ -6,7 +6,11 @@ import usePluginsStore from "@/store/PluginsStore";
 import FeedbackDefinitionsTab from "@/v2/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
 import EnvironmentsTab from "@/v2/pages/ConfigurationPage/EnvironmentsTab/EnvironmentsTab";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
+import CostCenterTab from "./CostCenterTab/CostCenterTab";
 import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { Tag } from "@/ui/tag";
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
@@ -17,6 +21,9 @@ const ConfigurationPage = () => {
     (state) => state.CollaboratorsTabTrigger,
   );
   const CollaboratorsTab = usePluginsStore((state) => state.CollaboratorsTab);
+  const isModelPricesEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.MODEL_PRICES_ENABLED,
+  );
 
   useEffect(() => {
     if (!tab) {
@@ -53,6 +60,18 @@ const ConfigurationPage = () => {
             >
               AI Providers
             </TabsTrigger>
+            {isModelPricesEnabled && (
+              <TabsTrigger
+                variant="underline"
+                value={CONFIGURATION_TABS.COST_CENTER}
+                className="gap-1.5"
+              >
+                Cost center
+                <Tag size="sm" variant="gray">
+                  Organization
+                </Tag>
+              </TabsTrigger>
+            )}
             <TabsTrigger
               variant="underline"
               value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}
@@ -75,6 +94,12 @@ const ConfigurationPage = () => {
           <TabsContent value={CONFIGURATION_TABS.AI_PROVIDER}>
             <AIProvidersTab />
           </TabsContent>
+
+          {isModelPricesEnabled && (
+            <TabsContent value={CONFIGURATION_TABS.COST_CENTER}>
+              <CostCenterTab />
+            </TabsContent>
+          )}
 
           <TabsContent value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}>
             <WorkspacePreferencesTab />

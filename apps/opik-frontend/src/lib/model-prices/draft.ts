@@ -28,6 +28,7 @@ export interface ModelPricesDraft {
 
 export type ModelPricesDraftAction =
   | { type: "loaded"; list: ModelPriceList }
+  | { type: "reset"; list: ModelPriceList }
   | { type: "edited"; key: string; changes: Partial<ModelPriceRow> }
   | { type: "added"; row: ModelPriceRow }
   | { type: "removed"; key: string }
@@ -135,17 +136,17 @@ const load = (
     if (!mine?.saved || statusOf(mine) === "unchanged") {
       return freshRow;
     }
-    if (!isSameRow(mine.saved, freshRow.row)) {
-      changedElsewhere.push(freshRow.key);
-    }
+    const theyChanged = !isSameRow(mine.saved, freshRow.row);
     if (mine.deleted) {
+      if (theyChanged) changedElsewhere.push(freshRow.key);
       return { ...freshRow, deleted: true };
     }
-    return {
-      ...freshRow,
-      changes: mine.changes,
-      row: { ...freshRow.row, ...mine.changes },
-    };
+    const row = { ...freshRow.row, ...mine.changes };
+    if (isSameRow(row, freshRow.row)) {
+      return freshRow;
+    }
+    if (theyChanged) changedElsewhere.push(freshRow.key);
+    return { ...freshRow, changes: mine.changes, row };
   });
 
   const added: DraftRow[] = [];
@@ -196,6 +197,9 @@ export const modelPricesReducer = (
   switch (action.type) {
     case "loaded":
       return load(draft, action.list);
+
+    case "reset":
+      return load({ ...EMPTY_DRAFT, nextKey: draft.nextKey }, action.list);
 
     case "edited":
       return {

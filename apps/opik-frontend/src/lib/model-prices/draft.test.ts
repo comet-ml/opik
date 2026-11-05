@@ -206,6 +206,29 @@ describe("modelPricesReducer", () => {
     expect(draft.errors).toEqual({});
   });
 
+  it("resets to the saved list after a save, without repeating the rows just added", () => {
+    const afterSave: ModelPriceList = {
+      version: 8,
+      rows: [
+        GPT_4O,
+        { id: "row-9", model: "a", kind: "fixed", input_price: "1" },
+      ],
+    };
+    const draft = run(
+      { type: "loaded", list: LIST },
+      { type: "added", row: { model: "A", kind: "fixed", input_price: "1.0" } },
+      { type: "removed", key: "row-2" },
+      { type: "reset", list: afterSave },
+    );
+
+    expect(draft.rows.map((draftRow) => draftRow.key)).toEqual([
+      "row-1",
+      "row-9",
+    ]);
+    expect(hasChanges(draft)).toBe(false);
+    expect(draft.version).toBe(8);
+  });
+
   describe("reloading while there are changes (after a 409)", () => {
     const theirs: ModelPriceList = {
       version: 8,
@@ -266,6 +289,17 @@ describe("modelPricesReducer", () => {
       });
       expect(kept.row.id).toBeUndefined();
       expect(draft.changedElsewhere).toEqual(["row-2"]);
+    });
+
+    it("doesn't flag a row whose newer version already matches my edit", () => {
+      const draft = run(
+        { type: "loaded", list: LIST },
+        { type: "edited", key: "row-1", changes: { input_price: "1.9" } },
+        { type: "loaded", list: theirs },
+      );
+
+      expect(statusOf(rowByKey(draft, "row-1")!)).toBe("unchanged");
+      expect(draft.changedElsewhere).toEqual([]);
     });
 
     it("replaces everything when there are no changes", () => {
