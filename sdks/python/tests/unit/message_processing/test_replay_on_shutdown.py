@@ -285,9 +285,11 @@ class TestShutdownWhileServerLooksUnreachable:
         start = time.monotonic()
         assert st.flush(timeout=0.5) is False
         assert time.monotonic() - start < 1.0
-        delivered_by_first_flush = len(_delivered(processor))
+        # The rest stays parked: nothing replays it until the next flush. The
+        # last replayed batch may still be on its way through the queue.
+        parked = rm.database_manager.failed_messages_count()
         time.sleep(0.5)
-        assert len(_delivered(processor)) == delivered_by_first_flush < 100
+        assert rm.database_manager.failed_messages_count() == parked > 0
 
         assert st.flush(timeout=None) is True
         assert _delivered(processor) == trace_ids

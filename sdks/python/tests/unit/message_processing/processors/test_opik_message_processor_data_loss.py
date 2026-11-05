@@ -144,13 +144,16 @@ def clock(monkeypatch) -> list:
 
 
 def _send_rate_limited_with_retry_after(processor, rest_client) -> bool:
-    """Returns whether the message was re-queued."""
+    """Returns whether the message was re-queued, checking it was re-queued for
+    the wait the 429 asked for."""
     rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
         status_code=429, headers={"Retry-After": "1"}
     )
     try:
         processor.process(_spans_batch_message())
-    except exceptions.OpikCloudRequestsRateLimited:
+    except exceptions.OpikCloudRequestsRateLimited as rate_limited:
+        assert rate_limited.retry_after == 1.0
+        assert rate_limited.headers == {"Retry-After": "1"}
         return True
     return False
 
