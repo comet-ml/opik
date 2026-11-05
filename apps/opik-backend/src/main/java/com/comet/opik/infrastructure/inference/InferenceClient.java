@@ -54,6 +54,8 @@ import java.util.function.Function;
  * usual retries. A call cut off at its deadline frees its caller, but its thread reads on until the response ends and
  * keeps its slot until then, so a slow service ties up decide's slots, never the shared client.
  * <p>
+ * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}.
+ * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
 @Slf4j
