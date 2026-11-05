@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class AuthenticationConfigTest {
@@ -51,15 +52,25 @@ class AuthenticationConfigTest {
                         "authentication.organizationCacheStaleTTL must be at least authentication.organizationCacheTTL");
     }
 
-    private static Stream<Arguments> organizationCacheTtlsOverTheirMaximum() {
+    private static Stream<Arguments> organizationCacheTtlLimits() {
         return Stream.of(
-                arguments("organizationCacheTTL", organizationCache(Duration.days(2), Duration.days(3))),
-                arguments("organizationCacheStaleTTL", organizationCache(Duration.minutes(10), Duration.days(8))));
+                arguments("organizationCacheTTL",
+                        organizationCache(Duration.days(1), Duration.days(1)),
+                        organizationCache(Duration.hours(25), Duration.days(2)),
+                        "must be less than or equal to 1 DAYS"),
+                arguments("organizationCacheStaleTTL",
+                        organizationCache(Duration.minutes(10), Duration.days(7)),
+                        organizationCache(Duration.minutes(10), Duration.hours(169)),
+                        "must be less than or equal to 7 DAYS"));
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("organizationCacheTtlsOverTheirMaximum")
-    void organizationCacheTtlOverItsMaximumIsRejected(String property, AuthenticationConfig config) {
-        assertThat(validator.validateProperty(config, property)).hasSize(1);
+    @MethodSource("organizationCacheTtlLimits")
+    void organizationCacheTtlAcceptsItsMaximumAndRejectsAnHourMore(String property, AuthenticationConfig atMaximum,
+            AuthenticationConfig overMaximum, String message) {
+        assertThat(validator.validateProperty(atMaximum, property)).isEmpty();
+        assertThat(validator.validateProperty(overMaximum, property))
+                .extracting(violation -> violation.getPropertyPath().toString(), ConstraintViolation::getMessage)
+                .containsExactly(tuple(property, message));
     }
 }

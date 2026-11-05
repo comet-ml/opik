@@ -24,6 +24,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 class RemoteOrganizationResolver implements OrganizationResolver {
 
+    static final String ADMIN_CHECK = "admin check";
+    static final String ORGANIZATION_LOOKUP = "organization lookup";
     static final String UNKNOWN_ORGANIZATION = "The organization of this workspace is unknown, so its organization "
             + "settings can't be changed";
     static final String NOT_ORGANIZATION_ADMIN = "Only organization admins can change organization settings";
@@ -69,7 +71,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             var context = caller.get();
             return client.fetch(context.getCometCredentials(), context.getWorkspaceName())
                     .onErrorMap(error -> {
-                        warnCometFailed("Organization admin check failed", context.getWorkspaceId(), error);
+                        warnCometFailed(ADMIN_CHECK, context.getWorkspaceId(), error);
                         return new ServiceUnavailableException(ADMIN_CHECK_FAILED);
                     })
                     .flatMap(lookup -> remember(context.getWorkspaceId(), lookup).thenReturn(lookup))
@@ -106,20 +108,23 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                     case Denied denied -> cachedOrganization;
                 }))
                 .onErrorResume(cometFailed -> {
-                    warnCometFailed("Comet could not resolve the organization, using the cached one", workspaceId,
-                            cometFailed);
+                    warnCometFailed(ORGANIZATION_LOOKUP, workspaceId, cometFailed);
                     return cached.isPresent() ? cache.retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
                 });
     }
 
     // Comet being down or answering an error is expected and handled, so its stack trace is only noise.
-    private static void warnCometFailed(String message, String workspaceId, Throwable error) {
-        if (error instanceof WorkspaceOrganizationClient.UnexpectedResponseException
-                || error instanceof RetryUtils.RetryableHttpException
-                || error instanceof ProcessingException) {
-            log.warn("{}, workspace '{}': '{}'", message, workspaceId, error.getMessage());
+    private static void warnCometFailed(String operation, String workspaceId, Throwable error) {
+        Integer status = switch (error) {
+            case WorkspaceOrganizationClient.UnexpectedResponseException unexpected -> unexpected.getStatus();
+            case RetryUtils.RetryableHttpException retryable -> retryable.getStatusCode();
+            default -> null;
+        };
+        if (status != null || error instanceof ProcessingException) {
+            log.warn("Comet organization call failed, operation '{}', workspace '{}', error type '{}', status '{}'",
+                    operation, workspaceId, error.getClass().getSimpleName(), status);
         } else {
-            log.warn("{}, workspace '{}'", message, workspaceId, error);
+            log.warn("Comet organization call failed, operation '{}', workspace '{}'", operation, workspaceId, error);
         }
     }
 

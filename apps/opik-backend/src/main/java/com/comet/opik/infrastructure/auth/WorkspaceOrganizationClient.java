@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -8,6 +9,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,9 +37,13 @@ class WorkspaceOrganizationClient {
     record Denied() implements Lookup {
     }
 
+    @Getter
     static final class UnexpectedResponseException extends RuntimeException {
+        private final int status;
+
         UnexpectedResponseException(int status) {
             super("Unexpected status while resolving the workspace organization: " + status);
+            this.status = status;
         }
     }
 
@@ -84,9 +90,11 @@ class WorkspaceOrganizationClient {
                             .build();
         }
         // A Comet release without the endpoint answers 404 too, and it knows no organization either. Comet answers
-        // 400 for a workspace name it doesn't know, which has no organization either.
+        // 400 "No such workspace!" for a workspace name it doesn't know; any other 400 (a missing user name, say)
+        // says nothing about the organization, so it isn't remembered as "none".
         if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()
-                || response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+                || (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()
+                        && isUnknownWorkspace(response))) {
             return new NoOrganization();
         }
         if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()
@@ -95,5 +103,14 @@ class WorkspaceOrganizationClient {
         }
         log.warn("Comet answered '{}' while resolving the workspace organization", response.getStatus());
         throw new UnexpectedResponseException(response.getStatus());
+    }
+
+    private static boolean isUnknownWorkspace(Response response) {
+        try {
+            var error = response.readEntity(ReactServiceErrorResponse.class);
+            return error != null && ReactServiceErrorResponse.NO_SUCH_WORKSPACE.equals(StringUtils.strip(error.msg()));
+        } catch (RuntimeException notCometsErrorBody) {
+            return false;
+        }
     }
 }

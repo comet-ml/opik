@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
@@ -42,6 +43,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.badRequest;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.forbidden;
@@ -234,14 +236,15 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
-        void cometErrorIsLoggedWithoutAStackTrace() {
+        void cometErrorIsLoggedAsOneLineWithItsStatus() {
             stubApiKey(serverError());
 
             var logs = LogCaptureUtils.logEventsOf(() -> ask());
 
-            assertThat(logs).filteredOn(line -> line.startsWith("Comet could not resolve the organization"))
-                    .isNotEmpty()
-                    .allSatisfy(line -> assertThat(line).doesNotContain("\tat "));
+            assertThat(logs).filteredOn(line -> line.startsWith("Comet organization call failed"))
+                    .containsExactly(("Comet organization call failed, operation 'organization lookup', "
+                            + "workspace '%s', error type 'UnexpectedResponseException', status '500'")
+                            .formatted(workspaceId));
         }
 
         @Test
@@ -303,13 +306,35 @@ class RemoteOrganizationResolverTest {
 
         @Test
         void unknownWorkspaceMeansNoOrganizationAndIsRemembered() {
-            stubApiKey(badRequest());
+            stubApiKey(cometError(400, ReactServiceErrorResponse.NO_SUCH_WORKSPACE));
 
             assertThat(ask()).isNull();
 
             requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isNull();
             assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        @Test
+        void anotherBadRequestIsNotRememberedAsNoOrganization() {
+            stubApiKey(cometError(400, "User name should be provided"));
+
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 2);
+        }
+
+        @Test
+        void aBadRequestWithoutCometsErrorBodyIsNotRememberedAsNoOrganization() {
+            stubApiKey(badRequest());
+
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 2);
         }
 
         @Test
@@ -459,6 +484,19 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
+        void cometErrorOnTheAdminCheckIsLoggedAsOneLineWithItsStatus() {
+            stubApiKey(serverError());
+
+            var logs = LogCaptureUtils.logEventsOf(
+                    () -> StepVerifier.create(resolver.requireOrganizationAdmin()).expectError().verify());
+
+            assertThat(logs).filteredOn(line -> line.startsWith("Comet organization call failed"))
+                    .containsExactly(("Comet organization call failed, operation 'admin check', "
+                            + "workspace '%s', error type 'UnexpectedResponseException', status '500'")
+                            .formatted(workspaceId));
+        }
+
+        @Test
         void callerWithoutCometCredentialsIsRefusedWithoutAskingComet() {
             requestContext = request(null);
 
@@ -540,6 +578,12 @@ class RemoteOrganizationResolverTest {
     private Context job(String jobOrganizationId) {
         var context = Context.of(RequestContext.USER_NAME, "user", RequestContext.WORKSPACE_ID, workspaceId);
         return jobOrganizationId == null ? context : context.put(RequestContext.ORGANIZATION_ID, jobOrganizationId);
+    }
+
+    private static ResponseDefinitionBuilder cometError(int status, String msg) {
+        return aResponse().withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"msg\": \"%s\", \"code\": %d}".formatted(msg, status));
     }
 
     private void stubApiKey(ResponseDefinitionBuilder response) {
