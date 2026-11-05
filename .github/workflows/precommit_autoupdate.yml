@@ -120,15 +120,37 @@ jobs:
             exit 1
           fi
 
+      # Opened as comet-ci-bot (not GITHUB_TOKEN), so the PR's pull_request
+      # workflows — Code Quality included — actually run on it.
+      - name: Mint comet-ci-bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.COMET_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.COMET_CI_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # The bot's noreply commit identity needs its user id; looked up rather
+      # than hardcoded so it follows whichever app the client id points at.
+      - name: Resolve comet-ci-bot identity
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          echo "identity=${APP_SLUG}[bot] <${user_id}+${APP_SLUG}[bot]@users.noreply.github.com>" >> "$GITHUB_OUTPUT"
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          token: ${{ steps.app-token.outputs.token }}
           branch: automation/precommit-autoupdate
           delete-branch: true
           commit-message: "[NA] [INFRA] chore: weekly pre-commit hook autoupdate"
-          author: "GitHub Actions <github-actions@comet.com>"
-          committer: "GitHub Actions <github-actions@comet.com>"
+          author: ${{ steps.bot.outputs.identity }}
+          committer: ${{ steps.bot.outputs.identity }}
           title: "[NA] [INFRA] chore: weekly pre-commit hook autoupdate"
           body-path: ${{ runner.temp }}/bump/pr-body.md
           base: main
