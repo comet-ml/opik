@@ -89,7 +89,10 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
 
     @Override
     public UUID create(@NonNull GuardrailPolicy policy) {
-        var newPolicy = withValidRules(policy).toBuilder().id(idGenerator.generateId()).build();
+        var newPolicy = withValidRules(policy).toBuilder()
+                .id(policy.id() == null ? idGenerator.generateId() : policy.id())
+                .build();
+        IdGenerator.validateVersion(newPolicy.id(), "guardrail policy");
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -121,7 +124,9 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
     public GuardrailPolicyPage find(int page, int size, String name, @NonNull Set<String> names,
             GuardrailExecutionScope executionScope, @NonNull List<SortingField> sortingFields) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        String nameTerm = StringUtils.trimToNull(name);
+        String nameTerm = Optional.ofNullable(StringUtils.trimToNull(name))
+                .map(GuardrailPolicyDAO::escapeLike)
+                .orElse(null);
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         return template.inTransaction(READ_ONLY, handle -> {
