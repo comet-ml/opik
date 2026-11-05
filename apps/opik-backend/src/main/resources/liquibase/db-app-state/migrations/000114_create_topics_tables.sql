@@ -140,8 +140,8 @@ CREATE TABLE topic_nights
   COLLATE = utf8mb4_unicode_ci;
 
 -- One row per project a night looked at, skipped ones included, written when the night decides it. decision is
--- first_build, skip (reason small, deleted, locked or already_saved) or not_reached; run_id is the run the night started,
--- null when none started. A workspace whose count read failed gets one row with decision count_failed and no project.
+-- first_build, skip (reason small, deleted, locked, already_saved or paused) or not_reached; run_id is the run the night
+-- started, null when none started. A workspace whose count read failed gets one row with decision count_failed and no project.
 -- vectors is the project's window count. Rows go with their night.
 CREATE TABLE topic_night_projects
 (

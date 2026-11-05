@@ -27,11 +27,15 @@ public class TopicsMetrics {
     static final String DECISION_FIRST_BUILD = "first_build";
     static final String DECISION_NOT_REACHED = "not_reached";
 
-    /** Why a project was skipped: under {@code minVectors}, deleted, its lock held, or its list already saved. */
+    /**
+     * Why a project was skipped: under {@code minVectors}, deleted, its lock held, its list already saved, or paused
+     * after its last runs failed.
+     */
     static final String REASON_SMALL = "small";
     static final String REASON_DELETED = "deleted";
     static final String REASON_LOCKED = "locked";
     static final String REASON_ALREADY_SAVED = "already_saved";
+    static final String REASON_PAUSED = "paused";
 
     /** The run could not start: its {@code topic_runs} insert, or the read before it, failed. */
     static final String ERROR_START_FAILED = "start_failed";
@@ -71,7 +75,8 @@ public class TopicsMetrics {
         this.projects = meter.counterBuilder("topics.nightly.projects")
                 .setDescription("Projects the nightly job looked at, by decision: skip (by reason: small, under "
                         + "minVectors; deleted; locked, held by a run started by hand; already_saved, a list already "
-                        + "built), first_build, not_reached (the night's budget ran out)")
+                        + "built; paused, its last 3 runs failed within 7 nights), first_build, not_reached (the "
+                        + "night's budget ran out)")
                 .build();
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "

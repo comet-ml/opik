@@ -23,12 +23,14 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -42,7 +44,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * What a night counts and records, with every store mocked: each project's decision with its reason, a failed count
- * read, a run that cannot start, the runs housekeeping finds abandoned, and the night's record. Also the queue order.
+ * read, a run that cannot start, the runs housekeeping finds abandoned, a paused project, and the night's record. Also
+ * the queue order.
  */
 @DisplayName("topics nightly service metrics")
 class TopicsNightlyServiceTest {
@@ -282,6 +285,25 @@ class TopicsNightlyServiceTest {
         var cutoff = LocalDate.ofInstant(before.minus(Duration.ofDays(90)), ZoneOffset.UTC);
         verify(nightDAO).deleteNightsBefore(cutoff);
         verify(nightDAO).deleteProjectsBefore(cutoff);
+    }
+
+    @Test
+    @DisplayName("a project whose last 3 runs failed since 7 nights before the night is skipped as paused, and no run "
+            + "starts")
+    void paused() {
+        when(runDAO.findPausedProjectIds(any(), anyInt(), any())).thenReturn(Set.of(started));
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isZero();
+        assertThat(result.skipped()).isEqualTo(5);
+        verify(rebuildService, never()).startRun(any(), any(), any());
+        assertThat(meter.sum("topics.nightly.projects", "decision", "skip", "reason", "paused", "workspace_id",
+                WORKSPACE_ID)).isEqualTo(1);
+        assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
+                .extracting(TopicNightProject::decision, TopicNightProject::reason)
+                .containsExactly(tuple("skip", "paused"));
+        verify(runDAO).findPausedProjectIds(any(), eq(3), eq(Instant.parse("2026-10-26T00:00:00Z")));
     }
 
     @Test

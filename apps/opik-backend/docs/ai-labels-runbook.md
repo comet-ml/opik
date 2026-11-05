@@ -358,7 +358,7 @@ flowchart TD
     D --> E["Read the eligible workspaces,<br/>count each one's projects in the window"]
     E -->|workspaces read fails| E1["Record ends failed; the night throws"]
     E -->|a workspace count fails| E2["count_failed row;<br/>the workspace runs the next night"]
-    E --> F["Skip rows: small, deleted, already_saved"]
+    E --> F["Skip rows: small, deleted, already_saved, paused"]
     E --> G["Projects to build, stalest first"]
     G --> H{"Next project, budget left?"}
     H -->|budget out| H1["not_reached rows for the rest"]
@@ -393,6 +393,9 @@ Every record write after the start is best-effort: a failed one is logged and th
   `window_until`, and among equals the fewest vectors. Stage 2a builds only projects without a list, so for now the
   smallest go first; a project with a list that a night does not reach has the oldest `window_until`, so it goes first
   the next night.
+- A project whose last 3 runs all failed (`abandoned` included) is skipped as `paused` for 7 nights from the night of
+  the last failure, so it does not take the budget every night; then the night tries it again. A run by hand ignores
+  the pause, and a saved run ends it. A paused project counts as stale (see "What to watch").
 - Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the night never build the
   same project at once.
 - A first build under 1,000 traces is saved with `"provisional": true` in its stats.
@@ -501,7 +504,7 @@ event that creates it: the alerts read the state gauges further down, not these.
 
 | Metric | Meaning |
 |---|---|
-| `topics.nightly.projects` by `decision`, `reason` | Projects the night looked at: `skip` with a `reason` (`small`: under the minimum; `deleted`; `already_saved`: a list already built; `locked`: held by a run started by hand), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
+| `topics.nightly.projects` by `decision`, `reason` | Projects the night looked at: `skip` with a `reason` (`small`: under the minimum; `deleted`; `already_saved`: a list already built; `locked`: held by a run started by hand; `paused`: its last 3 runs failed within 7 nights), `first_build`, `not_reached` (the budget ran out: they run the next night). `not_reached` above zero means the budget is too short. |
 | `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when the next night's housekeeping fails a run left `running`. A run is counted by the write that ends its row: when marking a run failed throws, its row stays `running` and nothing counts it until housekeeping fails it as `abandoned`. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`. |
 | `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
@@ -535,7 +538,7 @@ table. Every pod publishes the same values: read them with `max`, never `sum`. T
 | `topics.nightly.last_night.projects` by workspace, `decision`, `reason` | Projects per decision in the latest ended night, `count_failed` included. |
 | `topics.nightly.last_night.runs` by workspace, `status` | Runs the latest ended night started, by their `topic_runs` status: `saved`, `failed` (a run that could not start counts here), `running` (marking it failed threw). |
 | `topics.nightly.last_night.failed` | 1 when the latest ended night failed (a read failed, or its pod died and the next night's housekeeping failed it), 0 when it finished. |
-| `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`: this covers `not_reached`, failed first builds and start failures. 0 for each workspace without one. |
+| `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`: this covers `not_reached`, failed first builds, start failures and `paused`. 0 for each workspace without one. |
 | `topics.nightly.starved_projects` by workspace | Projects `not_reached` on each of the last 2 ended nights. 0 for each workspace without one. |
 | `topics.workspaces.mismatched` by workspace | 1 for a workspace in `TOGGLE_TOPICS_WORKSPACES` and not enabled in `ai_label_workspaces`: no night runs it. |
 
@@ -554,7 +557,7 @@ gauges only, and every rule groups by `k8s_namespace_name`.
 | Night not started | No night started for 25 hours. Before the first night ever, the age counts from the pod's start, so a first night that never starts fires too. | `max by (k8s_namespace_name) (topics_nightly_last_started_age_seconds) > 25 * 3600` | The latest nights query below. | Read the logs for `Topics night` around the cron time. A night lock left by a dead pod (`topics:nightly:lock`) blocks nights until it expires. Run the night by hand (see "Running by hand"). |
 | Night too long | A night runs longer than budget + project timeout + 30 minutes (2 h 45 m with the defaults). | `max by (k8s_namespace_name) (topics_nightly_running_seconds) > 9900` | The latest nights query below; its `running` row. | A night whose pod died stays `running` until the next night: check for a pod restart. Otherwise find the `running` run in `topic_runs` and its logs. |
 | Last night failed | The latest ended night failed: a read failed, or its pod died and the next night's housekeeping failed it. A night whose reads fail writes no project rows, so no other nightly rule sees it. | `max by (k8s_namespace_name) (topics_nightly_last_night_failed) > 0` | The latest nights query below; its `failed` row. | The ERROR `Topics night failed` (or `started by hand failed`) has the error. No ERROR: the pod died, check for a restart. Clears when the next night finishes. |
-| Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` row with no `run_id`), or `not_reached` (the budget). |
+| Stale projects | A project was expected on each of the last 3 nights and got no saved run. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_stale_projects) > 0` | The stale-project query below. | Find its runs in `topic_runs`: failed (read `error_code`), never started (a `first_build` row with no `run_id`), `not_reached` (the budget), or skipped as `paused` (its last 3 runs failed: fix the cause, then run it by hand). |
 | Starved projects | A project was `not_reached` on each of the last 2 nights. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_starved_projects) > 0` | The starved-project query below. | Raise `TOPICS_NIGHTLY_BUDGET`, or split the night. |
 | Failed share | More than 20% of the latest night's runs failed, with at least 5 runs in the namespace. | See below. | The latest night query below. | Group the failures by `error_code`: `qwen_*` points at opik-inference, `window_read` and `save` at ClickHouse or MySQL. A `first_build` row with no `run_id` could not start: MySQL. |
 | Count read failed | A workspace's window count read failed in the latest night. | `max by (k8s_namespace_name, workspace_id, workspace_name) (topics_nightly_last_night_projects{decision="count_failed"}) > 0` | The latest night query below. | The WARN `Topics night count read failed, workspace '<workspace_id>'` has the ClickHouse error (often a guard trip). The workspace runs the next night. |

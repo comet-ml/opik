@@ -656,6 +656,63 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("a project whose last 3 runs failed is paused for 7 nights from the last failure, and a run by hand "
+            + "ignores the pause")
+    void pauseAfterThreeFailures() {
+        var workspaceId = enabledWorkspace();
+        var today = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var paused = UUID.randomUUID();
+        var lastPausedNight = UUID.randomUUID();
+        var pauseOver = UUID.randomUUID();
+        var twoFailures = UUID.randomUUID();
+        var savedBetween = UUID.randomUUID();
+        for (var projectId : List.of(paused, lastPausedNight, pauseOver, twoFailures, savedBetween)) {
+            seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, today);
+        }
+        insertRun(workspaceId, paused, 3, TopicRun.Status.FAILED, "qwen_error");
+        insertRun(workspaceId, paused, 2, TopicRun.Status.FAILED, "qwen_error");
+        insertRun(workspaceId, paused, 1, TopicRun.Status.FAILED, "abandoned");
+        for (int daysAgo : List.of(9, 8, 7)) {
+            insertRun(workspaceId, lastPausedNight, daysAgo, TopicRun.Status.FAILED, "timeout");
+        }
+        for (int daysAgo : List.of(10, 9, 8)) {
+            insertRun(workspaceId, pauseOver, daysAgo, TopicRun.Status.FAILED, "timeout");
+        }
+        for (int daysAgo : List.of(2, 1)) {
+            insertRun(workspaceId, twoFailures, daysAgo, TopicRun.Status.FAILED, "timeout");
+        }
+        insertRun(workspaceId, savedBetween, 4, TopicRun.Status.FAILED, "timeout");
+        insertRun(workspaceId, savedBetween, 3, TopicRun.Status.SAVED, null);
+        insertRun(workspaceId, savedBetween, 2, TopicRun.Status.FAILED, "timeout");
+        insertRun(workspaceId, savedBetween, 1, TopicRun.Status.FAILED, "timeout");
+        stubAnswer(FIXTURE.answer);
+
+        var result = nightlyService.runNight(today.plus(Duration.ofHours(2)));
+
+        assertThat(result.saved()).isEqualTo(3);
+        template.inTransaction(READ_ONLY, handle -> {
+            assertThat(handle.attach(TopicNightDAO.class).findProjects(LocalDate.ofInstant(today, ZoneOffset.UTC)))
+                    .filteredOn(row -> workspaceId.equals(row.workspaceId()))
+                    .extracting(TopicNightProject::projectId, TopicNightProject::decision, TopicNightProject::reason)
+                    .containsExactlyInAnyOrder(
+                            tuple(paused, "skip", "paused"),
+                            tuple(lastPausedNight, "skip", "paused"),
+                            tuple(pauseOver, "first_build", null),
+                            tuple(twoFailures, "first_build", null),
+                            tuple(savedBetween, "first_build", null));
+            return null;
+        });
+        assertThat(runs(paused)).hasSize(3);
+        assertThat(runs(lastPausedNight)).hasSize(3);
+
+        try (var response = rebuild(workspaceId, paused)) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(runs(paused))
+                .hasSize(4).last().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
+    }
+
+    @Test
     @DisplayName("housekeeping deletes run counts saved before the runs retention, and keeps newer ones")
     void housekeepingDeletesOldRunCounts() {
         var workspaceId = enabledWorkspace();
@@ -703,6 +760,20 @@ class TopicsNightlyJobTest {
         assertThat(state(projectId)).isNull();
         assertThat(counts(projectId)).isEmpty();
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+    }
+
+    /** A finished run of the project, started at 02:00 UTC {@code daysAgo} days before today. */
+    private void insertRun(String workspaceId, UUID projectId, int daysAgo, TopicRun.Status status,
+            String errorCode) {
+        var startedAt = LocalDate.now(ZoneOffset.UTC).minusDays(daysAgo).atStartOfDay(ZoneOffset.UTC).toInstant()
+                .plus(Duration.ofHours(2));
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicRunDAO.class).insert(TopicRun.builder().runId(UUID.randomUUID())
+                    .workspaceId(workspaceId).projectId(projectId).mode(TopicRun.Mode.FIRST_BUILD).status(status)
+                    .startedAt(startedAt).finishedAt(startedAt.plus(Duration.ofMinutes(1))).errorCode(errorCode)
+                    .build());
+            return null;
+        });
     }
 
     private static TopicRunCount otherCount(UUID runId, String workspaceId, UUID projectId, Instant savedAt) {

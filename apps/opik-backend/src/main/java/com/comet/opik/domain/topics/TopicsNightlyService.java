@@ -51,8 +51,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * before the night) holds at least {@code minVectors} traces with a vector. Stage 2a builds only a project without a
  * list; one with a saved run is skipped until the nightly update exists. Projects run stalest first: one without a
  * list, then the oldest {@code window_until}, and among equals the smallest. None starts after {@code budget}, and
- * those left run the next night. Each run gets its own thread and is stopped (interrupted) and failed with
- * {@code timeout} after {@code projectTimeout}.
+ * those left run the next night. A project whose last {@value #PAUSE_FAILURES} runs failed is paused for
+ * {@value #PAUSE_NIGHTS} nights; a run by hand ignores the pause. Each run gets its own thread and is stopped
+ * (interrupted) and failed with {@code timeout} after {@code projectTimeout}.
  *
  * <p>Each night writes its record as it goes: its {@code topic_nights} row when it starts and ends, and one
  * {@code topic_night_projects} row per project as it decides it. The state gauges ({@link TopicsNightlyGauges}) read it.
@@ -76,6 +77,13 @@ public class TopicsNightlyService {
 
     /** ClickHouse {@code max_execution_time} of one window count: a workspace's, or one project's by hand. */
     private static final long COUNT_SECONDS = 60;
+
+    /**
+     * A project whose last {@value #PAUSE_FAILURES} runs failed is skipped for {@value #PAUSE_NIGHTS} nights from the
+     * night of the last failure, so a project that keeps failing does not take the night's budget every night.
+     */
+    static final int PAUSE_FAILURES = 3;
+    static final int PAUSE_NIGHTS = 7;
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -415,8 +423,8 @@ public class TopicsNightlyService {
 
     /**
      * Fills {@code candidates} with the projects to build, in {@link #queueOrder} order, and returns how many were
-     * skipped: under {@code minVectors}, deleted, or with a list. A workspace whose count read fails is left for the next
-     * night. A read that fails otherwise throws, and fails the night.
+     * skipped: under {@code minVectors}, deleted, with a list, or paused. A workspace whose count read fails is left for
+     * the next night. A read that fails otherwise throws, and fails the night.
      */
     private int eligible(LocalDate night, List<Candidate> candidates, NightRecord record) {
         var nightly = config.getNightly();
@@ -451,6 +459,11 @@ public class TopicsNightlyService {
         Set<UUID> built = states.stream().map(TopicProjectState::projectId).collect(Collectors.toSet());
         var windowUntil = new HashMap<UUID, Instant>();
         states.forEach(state -> windowUntil.put(state.projectId(), state.windowUntil()));
+        var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Set<UUID> paused = projectIds.isEmpty()
+                ? Set.of()
+                : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class)
+                        .findPausedProjectIds(projectIds, PAUSE_FAILURES, pausedSince));
         // A deleted project keeps its window vectors until ClickHouse drops them: build only projects that exist.
         Set<UUID> existing = new HashSet<>();
         found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
@@ -462,6 +475,8 @@ public class TopicsNightlyService {
                 skipped.add(new Skipped(candidate, TopicsMetrics.REASON_DELETED));
             } else if (built.contains(candidate.projectId())) {
                 skipped.add(new Skipped(candidate, TopicsMetrics.REASON_ALREADY_SAVED));
+            } else if (paused.contains(candidate.projectId())) {
+                skipped.add(new Skipped(candidate, TopicsMetrics.REASON_PAUSED));
             } else {
                 candidates.add(candidate);
             }
