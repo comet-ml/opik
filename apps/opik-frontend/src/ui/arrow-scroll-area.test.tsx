@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { ArrowScrollArea } from "./arrow-scroll-area";
@@ -52,12 +60,12 @@ const upArrow = () => screen.queryByTestId("scroll-up-arrow");
 const downArrow = () => screen.queryByTestId("scroll-down-arrow");
 
 describe("ArrowScrollArea", () => {
-  let scrollBy: ReturnType<typeof vi.fn>;
+  let scrollBy: Mock<Element["scrollBy"]>;
 
   beforeEach(() => {
     // happy-dom runs a smooth scrollBy on a real timer that fake timers can't
     // advance, so it is replaced by a spy and the hold tests see only the hold.
-    scrollBy = vi.fn();
+    scrollBy = vi.fn<Element["scrollBy"]>();
     vi.spyOn(Element.prototype, "scrollBy").mockImplementation(scrollBy);
   });
 

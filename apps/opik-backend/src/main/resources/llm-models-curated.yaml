@@ -376,6 +376,12 @@ models:
     params:
       tools: {forcedChoice: {accepted: false}}
   gemini:
+  # Google's model list gives Gemini 4 Argon an outputTokenLimit of 32,768 (these rows and the Vertex AI ones below).
+  # LiteLLM, which the sync reads, gives its 1,048,576-token context window instead. AI Studio takes any value without
+  # an error, but Vertex AI answers a value above the model's limit with a 400.
+  - id: gemini-4-argon
+    params:
+      maxOutputTokens: {max: 32768}
   - id: gemini-3.8-flash
     profile: gemini-no-sampling
     params:
@@ -476,6 +482,12 @@ models:
   - {id: gemini-3.8-flash-lite-tts, profile: gemini-no-sampling}
   - {id: gemini-3.8-flash-tts, profile: gemini-no-sampling}
   vertex-ai:
+  - id: gemini-4-argon
+    params:
+      maxOutputTokens: {max: 32768}
+  - id: gemini-4-argon-cyber-permissive
+    params:
+      maxOutputTokens: {max: 32768}
   - id: gemini-3.8-flash
     profile: gemini-no-sampling
     params:
