@@ -54,9 +54,7 @@ jobs:
           uses: actions/checkout@v7
           with:
             ref: ${{inputs.version}}
-            fetch-tags: true
             path: 'src'
-            fetch-depth: 0
 
         - name: Checkout GH Pages branch
           uses: actions/checkout@v7
@@ -64,6 +62,7 @@ jobs:
             path: 'dest'
             ref: 'gh-pages'
             fetch-depth: 0
+            filter: blob:none
 
         - name: Run lint on Helm chart
           shell: bash
