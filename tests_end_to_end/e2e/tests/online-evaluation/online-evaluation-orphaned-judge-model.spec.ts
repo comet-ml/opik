@@ -1,15 +1,16 @@
 import { test, expect } from '@e2e/fixtures';
 import type { JudgeMessageWrite, JudgeOutputSchemaType } from '@e2e/core/backend';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
+import { fetchRegistryModels, pickRegistryListingPair } from '@e2e/core/model-registry';
 
 /**
  * A judge rule whose stored model id the picker no longer lists (opik#8633).
  *
- * The provider-model sync re-pointed `CLAUDE_SONNET_4_5` from `claude-sonnet-4-5`
- * onto the dated `claude-sonnet-4-5-20250929`, and dropped five OpenRouter ids
- * from the picker while leaving their `PROVIDER_MODEL_TYPE` members in place. So
- * a rule saved before the sync can reference an id that is still a legal enum
- * value but appears in no option list — and every model picker in the product is
+ * Every provider-model sync moves `label`s between registry rows, and only a
+ * labelled row reaches a picker — opik#8633 re-pointed "Claude Sonnet 4.5" from
+ * `claude-sonnet-4-5` onto the dated build and dropped five OpenRouter ids. So a
+ * rule saved before a sync can reference an id the registry still serves but no
+ * option list offers — and every model picker in the product is
  * `cross_cutting_fe`, mapped to no area, so no coverage percentage moves for it.
  *
  * `PromptModelSelect` handles this by falling back to the raw stored value:
@@ -40,25 +41,22 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  */
 
 /**
- * `PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5` — still an enum member, no longer an
- * option: opik#8633 moved the "Claude Sonnet 4.5" label onto the dated
- * `claude-sonnet-4-5-20250929` build beside it.
+ * Providers an unlisted id is picked under: a native list and OpenRouter, so a
+ * fallback that only happened to work for one provider fails on the other.
+ *
+ * The ids are picked from this deployment's registry at runtime, never pinned:
+ * later syncs labelled both of opik#8633's ids again, and a pinned id that
+ * regains its label turns this spec into a check of the label.
  */
-const ORPHANED_MODEL = 'claude-sonnet-4-5';
+const UNLISTED_PROVIDERS = ['anthropic', 'openrouter'] as const;
 
-/**
- * One of the five OpenRouter ids opik#8633 removed from `providerModels.ts`
- * while leaving `PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_2_EXP` in
- * `providers.ts`. A different route to the same state as the orphan above —
- * dropped from a list rather than displaced within one — and under a different
- * provider, so a fallback that only happened to work for Anthropic fails here.
- */
-const DROPPED_MODEL = 'deepseek/deepseek-v3.2-exp';
-
-const UNLISTED_MODELS = [
-  { key: 'orphaned', model: ORPHANED_MODEL },
-  { key: 'dropped', model: DROPPED_MODEL },
-] as const;
+async function pickUnlistedModels(): Promise<Array<{ key: string; model: string }>> {
+  const registry = await fetchRegistryModels();
+  return UNLISTED_PROVIDERS.map((provider) => ({
+    key: provider,
+    model: pickRegistryListingPair(registry, provider).unlisted,
+  }));
+}
 
 /** What the trigger reads when nothing is selected — the failure, not the expectation. */
 const EMPTY_PICKER_TEXT = 'Select an LLM model';
@@ -72,11 +70,11 @@ const EMPTY_PICKER_TEXT = 'Select an LLM model';
  * provider, which is not the fact under test. So the id is anchored at the END,
  * which admits either shape while still being exact about the id itself.
  *
- * Anchoring is load-bearing rather than tidiness: `claude-sonnet-4-5` is a
- * PREFIX of `claude-sonnet-4-5-20250929`, the very id opik#8633 re-pointed the
- * label onto. A `toContainText` would be satisfied by a picker that had silently
- * substituted the dated build — which is the exact rewrite this spec exists to
- * catch.
+ * Anchoring is load-bearing rather than tidiness: an unlisted id is often a
+ * PREFIX of a listed one (`claude-sonnet-4-5` of the dated build opik#8633
+ * re-pointed the label onto), so a `toContainText` would be satisfied by a
+ * picker that had silently substituted the longer id — which is the exact
+ * rewrite this spec exists to catch.
  */
 function pickerShows(model: string): RegExp {
   const escaped = model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -117,9 +115,14 @@ test.describe(
       'The editor renders a stored model id that is in no option list, rather than going blank',
       { tag: ['@cap:online-evaluation.edit-rule'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
+        const unlistedModels = await test.step(
+          'Pick an unlisted model id per provider from the registry',
+          pickUnlistedModels,
+        );
+
         const seeded = await test.step('Seed a disabled judge rule per unlisted model id', async () =>
           Promise.all(
-            UNLISTED_MODELS.map(async ({ key, model }) => {
+            unlistedModels.map(async ({ key, model }) => {
               const name = `${testNamespace}-${key}`;
               const id = await backendClient.createLlmJudgeRule({
                 projectId: project.id,
@@ -202,13 +205,18 @@ test.describe(
         // something else instead.
         const ruleName = `${testNamespace}-orphaned-save`;
 
+        const orphanedModel = await test.step(
+          'Pick an unlisted Anthropic model id from the registry',
+          async () => pickRegistryListingPair(await fetchRegistryModels(), 'anthropic').unlisted,
+        );
+
         const ruleId = await test.step('Seed a disabled judge rule on the orphaned model id', async () =>
           backendClient.createLlmJudgeRule({
             projectId: project.id,
             name: ruleName,
             enabled: false,
             samplingRate: 0,
-            model: ORPHANED_MODEL,
+            model: orphanedModel,
             temperature: 0,
             messages: JUDGE_MESSAGES,
             variables: JUDGE_VARIABLES,
@@ -217,7 +225,7 @@ test.describe(
 
         await test.step('The seed really stored the orphaned id', async () => {
           const model = await backendClient.getLlmJudgeModel(ruleId);
-          expect(model.name, 'the rule names the orphaned model').toBe(ORPHANED_MODEL);
+          expect(model.name, 'the rule names the orphaned model').toBe(orphanedModel);
         });
 
         const onlineEval = new OnlineEvaluationPage(page);
@@ -231,7 +239,7 @@ test.describe(
           // submit fired before the model reached the picker would be testing an
           // empty form, and a PATCH carrying the id back would be impossible
           // rather than merely unasserted.
-          await expect(onlineEval.modelPicker).toHaveText(pickerShows(ORPHANED_MODEL));
+          await expect(onlineEval.modelPicker).toHaveText(pickerShows(orphanedModel));
         });
 
         const update = await test.step('Enable the rule and save, leaving the model alone', async () => {
@@ -264,13 +272,13 @@ test.describe(
           const sent = body.code?.model?.name;
           expect(sent, 'the update payload names a model').toBeDefined();
           expect(sent, 'a save that never touched the model must send the stored id back').toBe(
-            ORPHANED_MODEL,
+            orphanedModel,
           );
         });
 
         await test.step('And the rule still names it afterwards', async () => {
           const model = await backendClient.getLlmJudgeModel(ruleId);
-          expect(model.name, 'the save did not change the model').toBe(ORPHANED_MODEL);
+          expect(model.name, 'the save did not change the model').toBe(orphanedModel);
         });
 
         await test.step('The rule is still listed, now enabled and still at 0%', async () => {

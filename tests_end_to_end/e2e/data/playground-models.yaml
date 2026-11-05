@@ -3,6 +3,9 @@
 # `options` is the model-config knob exercised by the test (in addition to the
 # baseline prompt run). Each test sets these options on the variant before
 # clicking Run. Keep values conservative — don't set max_tokens: 1.
+#
+# This matrix is the suite's only real-provider spend (@llm-daily), so exactly one
+# paid model stays enabled; flip another on locally to check that provider by hand.
 providers:
   openai:
     display_name: "OpenAI"
@@ -22,7 +25,7 @@ providers:
     models:
       - name: "Claude Haiku 4.5"
         ui_selector: "Claude Haiku 4.5"
-        enabled: true
+        enabled: false
         options:
           temperature: 0
           max_tokens: 128
@@ -33,7 +36,7 @@ providers:
     models:
       - name: "Gemini 2.5 Flash"
         ui_selector: "Gemini 2.5 Flash"
-        enabled: true
+        enabled: false
         options:
           temperature: 0
   openrouter-custom:
@@ -45,7 +48,7 @@ providers:
     models:
       - name: "openai/gpt-4o-mini"
         ui_selector: "openai/gpt-4o-mini"
-        enabled: true
+        enabled: false
         options:
           temperature: 0
           max_tokens: 128
