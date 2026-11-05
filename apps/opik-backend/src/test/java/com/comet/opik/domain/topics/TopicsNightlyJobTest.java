@@ -16,6 +16,7 @@ import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -43,6 +44,8 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
@@ -134,6 +137,7 @@ class TopicsNightlyJobTest {
 
     private OpikConfiguration opikConfig;
     private TransactionTemplate template;
+    private TransactionTemplateAsync clickHouseTemplate;
     private TopicsNightlyService nightlyService;
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
@@ -144,13 +148,14 @@ class TopicsNightlyJobTest {
 
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
-            GuiceJobManager jobManager,
+            TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager,
             @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.client = client;
         this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.template = template;
+        this.clickHouseTemplate = clickHouseTemplate;
         this.jobManager = jobManager;
         this.nightlyService = nightlyService;
         this.vectorsDAO = vectorsDAO;
@@ -669,6 +674,23 @@ class TopicsNightlyJobTest {
         assertThat(counts(projectId)).extracting(TopicRunCount::runId).containsExactly(recent);
     }
 
+    @Test
+    @DisplayName("the window count runs on 2 threads under the row guard at a background priority; the window read "
+            + "stops after 120 s")
+    void readsCarryTheirGuards() {
+        var workspaceId = enabledWorkspace();
+        seed(workspaceId, UUID.randomUUID(), 0, BUILT);
+        stubAnswer(FIXTURE.answer);
+
+        assertThat(nightlyService.runNight(start()).saved()).isEqualTo(1);
+
+        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
+        assertThat(guards("topics:count_window", workspaceId))
+                .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
+        assertThat(guards("topics:read_window", workspaceId))
+                .containsExactly(List.of("2", maxRowsToRead, "", "120"));
+    }
+
     private void assertFailedWithNothingWritten(String workspaceId, UUID projectId, String errorCode) {
         assertThat(runs(projectId)).singleElement().satisfies(run -> {
             assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
@@ -818,6 +840,30 @@ class TopicsNightlyJobTest {
         var states = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
         return states.isEmpty() ? null : states.getFirst();
+    }
+
+    /**
+     * The distinct {@code max_threads}, {@code max_rows_to_read}, {@code priority} and {@code max_execution_time} the
+     * workspace's finished {@code queryName} queries ran with, an empty string for a setting left at its default.
+     */
+    private List<List<String>> guards(String queryName, String workspaceId) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .thenMany(Flux.from(connection.createStatement("""
+                        SELECT DISTINCT Settings['max_threads'] AS max_threads,
+                            Settings['max_rows_to_read'] AS max_rows_to_read, Settings['priority'] AS priority,
+                            Settings['max_execution_time'] AS max_execution_time
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
+                        """)
+                        .bind("log_comment", queryName + ":" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("max_threads", String.class),
+                        row.get("max_rows_to_read", String.class), row.get("priority", String.class),
+                        row.get("max_execution_time", String.class))))
+                .collectList())
+                .block();
     }
 
     private static JsonNode json(String text) {

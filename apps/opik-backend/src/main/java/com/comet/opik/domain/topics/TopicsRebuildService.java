@@ -78,6 +78,8 @@ public class TopicsRebuildService {
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
     static final double UNIT_TOLERANCE = 1e-3;
+    /** A run's ClickHouse read stops after this, so one slow read does not hold the server for the whole run. */
+    static final long READ_SECONDS = 120;
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -98,6 +100,11 @@ public class TopicsRebuildService {
      */
     static int groups(int unique) {
         return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+    }
+
+    /** ClickHouse {@code max_execution_time} of a run's read: {@value #READ_SECONDS} s, or the run's timeout if shorter. */
+    static long readSeconds(@NonNull TopicsConfig.NightlyConfig nightly) {
+        return Math.min(READ_SECONDS, nightly.getProjectTimeout().toSeconds());
     }
 
     /** The author's texts per group for {@code k} groups. */
@@ -268,7 +275,7 @@ public class TopicsRebuildService {
             List<TopicWindowRow> rows;
             try {
                 rows = windowDAO.readWindow(workspaceId, projectId, from, to, config.getNightly().getMaxVectors(),
-                        Math.max(1, config.getNightly().getProjectTimeout().toSeconds())).collectList().block();
+                        readSeconds(config.getNightly())).collectList().block();
             } catch (RuntimeException exception) {
                 throw new TopicsRunException(Code.WINDOW_READ, "the window read failed", exception);
             }

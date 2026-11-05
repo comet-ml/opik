@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.dropwizard.util.Duration;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,7 +41,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * What a run counts, with every store mocked: each failed run once, Qwen outcomes after the answer is read, and the
- * take-back failure. A run builds the fixture's window, so its steps are the real ones.
+ * take-back failure. A run builds the fixture's window, so its steps are the real ones. Also the window read's time
+ * bound.
  */
 @DisplayName("topics rebuild service metrics")
 class TopicsRebuildServiceTest {
@@ -202,6 +204,16 @@ class TopicsRebuildServiceTest {
             assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
         });
+    }
+
+    @Test
+    @DisplayName("the window read stops after 120 s, or after a shorter run timeout")
+    void readSeconds() {
+        var nightly = new TopicsConfig.NightlyConfig();
+        assertThat(TopicsRebuildService.readSeconds(nightly)).isEqualTo(120);
+
+        nightly.setProjectTimeout(Duration.minutes(1));
+        assertThat(TopicsRebuildService.readSeconds(nightly)).isEqualTo(60);
     }
 
     private void answer(JsonNode output) {

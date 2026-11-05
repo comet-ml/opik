@@ -33,8 +33,8 @@ public class TopicWindowDAO {
             AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
             AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
             GROUP BY project_id
-            SETTINGS max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
-                log_comment = '<log_comment>'
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
+                max_memory_usage = <max_memory_usage>, priority = 100, log_comment = '<log_comment>'
             """;
 
     /**
@@ -72,13 +72,15 @@ public class TopicWindowDAO {
 
     /**
      * Per project of the workspace, or only for {@code projectId} when set, the traces with a vector created in
-     * {@code [from, to)}. Under the window read's memory guard.
+     * {@code [from, to)}. Under the window read's row and memory guards, on 2 threads at a background priority.
      */
     public Flux<ProjectCount> countByProject(@NonNull String workspaceId, UUID projectId, @NonNull Instant from,
             @NonNull Instant to, long maxExecutionSeconds) {
+        var find = config.getVectors().getFind();
         var template = getSTWithLogComment(COUNT_BY_PROJECT, "topics:count_window", workspaceId, null,
                 "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
-                .add("max_memory_usage", config.getVectors().getFind().getMaxMemoryUsage())
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
         if (projectId != null) {
             template.add("project_id", true);
