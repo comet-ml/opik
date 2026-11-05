@@ -15,11 +15,14 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.SplittableRandom;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
+import static org.assertj.core.api.Assertions.withinPercentage;
 
 /** The small rules of the first build: number formats, text order and strip, the answer, apply and assignment. */
 @DisplayName("topics first build: rules")
@@ -385,6 +388,66 @@ class TopicsAlgorithmRulesTest {
             } finally {
                 Thread.interrupted();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("k-means with Elkan's bounds and the Vector API gives plain Lloyd's labels")
+    class KMeansSameLabels {
+
+        @ParameterizedTest(name = "n {0}, {1} dims, {2} clusters, noise {3}, k {4}, seed {5}")
+        @CsvSource({
+                "1500, 384, 40, 0.15, 50, 0",
+                "1500, 384, 40, 0.15, 50, 1",
+                "2000, 13, 10, 0.5, 30, 0"})
+        @DisplayName("same labels, iterations and centres as the plain fit on a fixed synthetic set")
+        void samePlainFit(int n, int dimensions, int clusters, double noise, int k, long seed) {
+            var points = syntheticPoints(n, dimensions, clusters, noise);
+            var random = new SplittableRandom(13);
+            var weights = new double[n];
+            for (int i = 0; i < n; i++) {
+                weights[i] = 1 + random.nextInt(4);
+            }
+
+            var plain = PlainKMeans.fit(points, weights, dimensions, k, seed);
+            var fast = KMeans.fit(points, weights, dimensions, k, seed);
+
+            assertThat(fast.labels()).containsExactly(plain.labels());
+            assertThat(fast.iterations()).isEqualTo(plain.iterations());
+            assertThat(fast.centres()).containsExactly(plain.centres(), within(1e-6f));
+            assertThat(fast.inertia()).isCloseTo(plain.inertia(), withinPercentage(1e-7));
+        }
+
+        /** Unit centres from gaussians, each point a centre plus gaussian noise, normalized; seeded, so fixed. */
+        private static float[] syntheticPoints(int n, int dimensions, int clusters, double noise) {
+            var random = new SplittableRandom(11);
+            var centres = new double[clusters * dimensions];
+            for (int c = 0; c < clusters; c++) {
+                double norm = 0;
+                for (int t = 0; t < dimensions; t++) {
+                    centres[c * dimensions + t] = random.nextGaussian();
+                    norm += centres[c * dimensions + t] * centres[c * dimensions + t];
+                }
+                norm = Math.sqrt(norm);
+                for (int t = 0; t < dimensions; t++) {
+                    centres[c * dimensions + t] /= norm;
+                }
+            }
+            var points = new float[n * dimensions];
+            var row = new double[dimensions];
+            for (int i = 0; i < n; i++) {
+                int c = random.nextInt(clusters);
+                double norm = 0;
+                for (int t = 0; t < dimensions; t++) {
+                    row[t] = centres[c * dimensions + t] + random.nextGaussian() * noise;
+                    norm += row[t] * row[t];
+                }
+                norm = Math.sqrt(norm);
+                for (int t = 0; t < dimensions; t++) {
+                    points[i * dimensions + t] = (float) (row[t] / norm);
+                }
+            }
+            return points;
         }
     }
 }

@@ -1,10 +1,15 @@
 package com.comet.opik.domain.topics;
 
 import com.google.common.base.Preconditions;
+import jdk.incubator.vector.DoubleVector;
+import jdk.incubator.vector.FloatVector;
+import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorSpecies;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
+import java.util.Arrays;
 import java.util.SplittableRandom;
 import java.util.concurrent.CancellationException;
 
@@ -14,6 +19,13 @@ import java.util.concurrent.CancellationException;
  * one seeded {@link SplittableRandom}, the restart with the lowest weighted inertia kept. Centres are L2-normalized after
  * the fit. A cluster left empty by an update takes the point farthest from its centre, so none stays empty.
  *
+ * <p>Lloyd keeps Elkan's bounds (an upper bound on each point's distance to its centre, a lower bound to every other
+ * centre, half the distances between centres), so a point is measured again only against the centres those bounds do
+ * not rule out; the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product
+ * through the Vector API in double: float points widened lane by lane against double centres, with a fixed 128-bit
+ * shape, so the sums run in the same order on every machine. Needs {@code --add-modules jdk.incubator.vector} in the
+ * JVM. The bounds take {@code n * k} doubles.
+ *
  * <p>This is not scikit-learn's k-means (whose ++ step tries several candidates greedily); stage 0 measured that the two
  * differ by about as much as scikit-learn differs from itself with another seed. Deterministic for a given input and
  * seed. Checks the thread's interrupt flag once per iteration, so a run past its time bound stops.
@@ -21,8 +33,18 @@ import java.util.concurrent.CancellationException;
 @UtilityClass
 public class KMeans {
 
-    static final int MAX_ITERATIONS = 300;
+    /**
+     * Measured at 100,000 points, k = 50 on an M-series laptop: real windows converge in at most 101 iterations; a fit
+     * that never converges stops at this ceiling in 18 to 39 s, and 139 s even with no bound ruling anything out, well
+     * under the project timeout.
+     */
+    static final int MAX_ITERATIONS = 150;
     static final int RESTARTS = 3;
+
+    private static final VectorSpecies<Double> DOUBLES = DoubleVector.SPECIES_128;
+    private static final VectorSpecies<Float> FLOATS = FloatVector.SPECIES_64;
+    /** Values one step of the dot product takes: four accumulators of {@code DOUBLES.length()} lanes. */
+    private static final int STEP = 4 * DOUBLES.length();
 
     /**
      * @param points  {@code n * dimensions} values
@@ -38,10 +60,11 @@ public class KMeans {
             Preconditions.checkArgument(Double.isFinite(weight) && weight > 0,
                     "weights must be finite and positive, weight '%s'", weight);
         }
+        var space = new Space(points, n, dimensions, k);
         var random = new SplittableRandom(seed);
         Fit best = null;
         for (int restart = 0; restart < RESTARTS; restart++) {
-            var fit = lloyd(points, weights, n, dimensions, k, plusPlus(points, weights, n, dimensions, k, random));
+            var fit = lloyd(space, weights, plusPlus(space, weights, random));
             if (best == null || fit.inertia() < best.inertia()) {
                 best = fit;
             }
@@ -54,20 +77,24 @@ public class KMeans {
                 .build();
     }
 
-    private static double[] plusPlus(float[] x, double[] w, int n, int d, int k, SplittableRandom random) {
-        var centres = new double[k * d];
+    private static double[] plusPlus(Space space, double[] w, SplittableRandom random) {
+        int n = space.n;
+        int d = space.d;
+        var centres = new double[space.k * d];
         var minDistance = new double[n];
         int first = sample(w, random);
-        copyPoint(x, first, centres, 0, d);
+        copyPoint(space.x, first, centres, 0, d);
+        space.prepare(centres, 0);
         for (int i = 0; i < n; i++) {
-            minDistance[i] = squaredDistance(x, i, centres, 0, d) * w[i];
+            minDistance[i] = space.squaredDistance(i, centres, 0) * w[i];
         }
-        for (int j = 1; j < k; j++) {
+        for (int j = 1; j < space.k; j++) {
             checkInterrupted();
             int pick = sample(minDistance, random);
-            copyPoint(x, pick, centres, j, d);
+            copyPoint(space.x, pick, centres, j, d);
+            space.prepare(centres, j);
             for (int i = 0; i < n; i++) {
-                minDistance[i] = Math.min(minDistance[i], squaredDistance(x, i, centres, j, d) * w[i]);
+                minDistance[i] = Math.min(minDistance[i], space.squaredDistance(i, centres, j) * w[i]);
             }
         }
         return centres;
@@ -90,36 +117,65 @@ public class KMeans {
         return p.length - 1;
     }
 
-    private static Fit lloyd(float[] x, double[] w, int n, int d, int k, double[] centres) {
+    private static Fit lloyd(Space space, double[] w, double[] centres) {
+        int n = space.n;
+        space.prepareAll(centres);
         var labels = new int[n];
         var distance = new double[n];
+        var bounds = new Bounds(n, space.k);
+        var previous = new double[centres.length];
         int iterations = 0;
         for (; iterations < MAX_ITERATIONS; iterations++) {
             checkInterrupted();
-            boolean changed = assign(x, centres, n, d, k, labels, distance);
+            boolean changed = iterations == 0
+                    ? assignFirst(space, centres, labels, bounds)
+                    : assignBounded(space, centres, labels, bounds);
             if (!changed && iterations > 0) {
                 break;
             }
-            update(x, w, n, d, k, labels, distance, centres);
+            System.arraycopy(centres, 0, previous, 0, centres.length);
+            update(space, w, labels, distance, centres);
+            space.prepareAll(centres);
+            bounds.moved(previous, centres, labels, space.d);
         }
         if (iterations == MAX_ITERATIONS) {
             // Stopped by the cap after an update: as scikit-learn, label and score against the centres returned.
-            assign(x, centres, n, d, k, labels, distance);
+            assign(space, centres, labels);
         }
         double inertia = 0;
         for (int i = 0; i < n; i++) {
+            distance[i] = space.squaredDistance(i, centres, labels[i]);
             inertia += w[i] * distance[i];
         }
         return new Fit(labels, centres, inertia, iterations);
     }
 
-    private static boolean assign(float[] x, double[] centres, int n, int d, int k, int[] labels, double[] distance) {
+    /** Every point to its nearest centre, the lowest index on a tie. */
+    private static void assign(Space space, double[] centres, int[] labels) {
+        for (int i = 0; i < space.n; i++) {
+            int bestJ = 0;
+            double bestDistance = Double.MAX_VALUE;
+            for (int j = 0; j < space.k; j++) {
+                double s = space.squaredDistance(i, centres, j);
+                if (s < bestDistance) {
+                    bestDistance = s;
+                    bestJ = j;
+                }
+            }
+            labels[i] = bestJ;
+        }
+    }
+
+    /** {@link #assign} that also sets every bound exactly. True when a label changed. */
+    private static boolean assignFirst(Space space, double[] centres, int[] labels, Bounds bounds) {
+        int k = space.k;
         boolean changed = false;
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < space.n; i++) {
             int bestJ = 0;
             double bestDistance = Double.MAX_VALUE;
             for (int j = 0; j < k; j++) {
-                double s = squaredDistance(x, i, centres, j, d);
+                double s = space.squaredDistance(i, centres, j);
+                bounds.lower[i * k + j] = Math.sqrt(s);
                 if (s < bestDistance) {
                     bestDistance = s;
                     bestJ = j;
@@ -129,17 +185,73 @@ public class KMeans {
                 labels[i] = bestJ;
                 changed = true;
             }
-            distance[i] = bestDistance;
+            bounds.upper[i] = Math.sqrt(bestDistance);
+        }
+        return changed;
+    }
+
+    /**
+     * Elkan's assignment: a point whose upper bound is within half the distance from its centre to the nearest other
+     * centre keeps its label unmeasured; otherwise it is measured only against the centres its bounds do not rule out,
+     * its own centre first. True when a label changed.
+     */
+    private static boolean assignBounded(Space space, double[] centres, int[] labels, Bounds bounds) {
+        int k = space.k;
+        bounds.centreGaps(centres, k, space.d);
+        var upper = bounds.upper;
+        var lower = bounds.lower;
+        var half = bounds.half;
+        boolean changed = false;
+        for (int i = 0; i < space.n; i++) {
+            int a = labels[i];
+            double u = upper[i];
+            if (u <= bounds.nearestHalf[a]) {
+                continue;
+            }
+            boolean tight = false;
+            int row = i * k;
+            for (int j = 0; j < k; j++) {
+                if (j == a) {
+                    continue;
+                }
+                double z = Math.max(lower[row + j], half[a * k + j]);
+                if (u <= z) {
+                    continue;
+                }
+                if (!tight) {
+                    u = Math.sqrt(space.squaredDistance(i, centres, a));
+                    lower[row + a] = u;
+                    tight = true;
+                    if (u <= z) {
+                        continue;
+                    }
+                }
+                double dj = Math.sqrt(space.squaredDistance(i, centres, j));
+                lower[row + j] = dj;
+                if (dj < u) {
+                    a = j;
+                    u = dj;
+                }
+            }
+            upper[i] = u;
+            if (a != labels[i]) {
+                labels[i] = a;
+                changed = true;
+            }
         }
         return changed;
     }
 
     /**
      * Weighted means of the clusters. An empty cluster moves to the point with the largest weighted distance to its own
-     * centre that no other empty cluster took this round; the next assignment then gives it that point.
+     * centre that no other empty cluster took this round; the next assignment then gives it that point. The bounds keep
+     * no exact distance, so with an empty cluster each point's is measured first, to its centre before the update.
      */
-    private static void update(float[] x, double[] w, int n, int d, int k, int[] labels, double[] distance,
-            double[] centres) {
+    private static void update(Space space, double[] w, int[] labels, double[] distance, double[] centres) {
+        int n = space.n;
+        int d = space.d;
+        int k = space.k;
+        var x = space.x;
         var sum = new double[k * d];
         var weightSum = new double[k];
         for (int i = 0; i < n; i++) {
@@ -147,6 +259,15 @@ public class KMeans {
             weightSum[j] += w[i];
             for (int t = 0; t < d; t++) {
                 sum[j * d + t] += w[i] * x[i * d + t];
+            }
+        }
+        boolean anyEmpty = false;
+        for (int j = 0; j < k; j++) {
+            anyEmpty |= weightSum[j] <= 0;
+        }
+        if (anyEmpty) {
+            for (int i = 0; i < n; i++) {
+                distance[i] = space.squaredDistance(i, centres, labels[i]);
             }
         }
         var taken = new boolean[n];
@@ -166,17 +287,6 @@ public class KMeans {
             taken[far] = true;
             copyPoint(x, far, centres, j, d);
         }
-    }
-
-    private static double squaredDistance(float[] x, int i, double[] centres, int j, int d) {
-        double s = 0;
-        int xi = i * d;
-        int cj = j * d;
-        for (int t = 0; t < d; t++) {
-            double v = x[xi + t] - centres[cj + t];
-            s += v * v;
-        }
-        return s;
     }
 
     private static void copyPoint(float[] x, int i, double[] centres, int j, int d) {
@@ -203,6 +313,140 @@ public class KMeans {
     private static void checkInterrupted() {
         if (Thread.currentThread().isInterrupted()) {
             throw new CancellationException("k-means interrupted");
+        }
+    }
+
+    /** The points with their squared norms, and the squared norms of the current centres. */
+    private static final class Space {
+
+        private final float[] x;
+        private final int n;
+        private final int d;
+        private final int k;
+        private final double[] pointNorms;
+        private final double[] centreNorms;
+
+        Space(float[] x, int n, int d, int k) {
+            this.x = x;
+            this.n = n;
+            this.d = d;
+            this.k = k;
+            this.pointNorms = new double[n];
+            this.centreNorms = new double[k];
+            for (int i = 0; i < n; i++) {
+                double s = 0;
+                for (int t = 0; t < d; t++) {
+                    s += (double) x[i * d + t] * x[i * d + t];
+                }
+                pointNorms[i] = s;
+            }
+        }
+
+        void prepareAll(double[] centres) {
+            for (int j = 0; j < k; j++) {
+                prepare(centres, j);
+            }
+        }
+
+        /** Keeps centre {@code j}'s squared norm: called whenever the centre changes. */
+        void prepare(double[] centres, int j) {
+            double s = 0;
+            for (int t = 0; t < d; t++) {
+                s += centres[j * d + t] * centres[j * d + t];
+            }
+            centreNorms[j] = s;
+        }
+
+        /** Never negative: rounding can take |x|² + |c|² - 2 x·c below 0 for a point on its centre. */
+        double squaredDistance(int i, double[] centres, int j) {
+            return Math.max(0, pointNorms[i] + centreNorms[j] - 2 * dot(i, centres, j));
+        }
+
+        private double dot(int i, double[] c, int j) {
+            var a0 = DoubleVector.zero(DOUBLES);
+            var a1 = DoubleVector.zero(DOUBLES);
+            var a2 = DoubleVector.zero(DOUBLES);
+            var a3 = DoubleVector.zero(DOUBLES);
+            int lanes = DOUBLES.length();
+            int xi = i * d;
+            int cj = j * d;
+            int t = 0;
+            for (; t <= d - STEP; t += STEP) {
+                a0 = widened(xi + t).fma(DoubleVector.fromArray(DOUBLES, c, cj + t), a0);
+                a1 = widened(xi + t + lanes).fma(DoubleVector.fromArray(DOUBLES, c, cj + t + lanes), a1);
+                a2 = widened(xi + t + 2 * lanes).fma(DoubleVector.fromArray(DOUBLES, c, cj + t + 2 * lanes), a2);
+                a3 = widened(xi + t + 3 * lanes).fma(DoubleVector.fromArray(DOUBLES, c, cj + t + 3 * lanes), a3);
+            }
+            double s = a0.add(a1).add(a2.add(a3)).reduceLanes(VectorOperators.ADD);
+            for (; t < d; t++) {
+                s += x[xi + t] * c[cj + t];
+            }
+            return s;
+        }
+
+        /** The point's values from {@code offset}, one vector's worth, widened to doubles. */
+        private DoubleVector widened(int offset) {
+            return (DoubleVector) FloatVector.fromArray(FLOATS, x, offset)
+                    .convertShape(VectorOperators.F2D, DOUBLES, 0);
+        }
+    }
+
+    /**
+     * Elkan's bounds, as distances (not squared): {@code upper} per point to its centre, {@code lower} per point and
+     * centre, and per centre pair half the distance between them, with each centre's nearest such half.
+     */
+    private static final class Bounds {
+
+        private final double[] upper;
+        private final double[] lower;
+        private final double[] half;
+        private final double[] nearestHalf;
+        private final double[] shift;
+
+        Bounds(int n, int k) {
+            this.upper = new double[n];
+            this.lower = new double[Math.multiplyExact(n, k)];
+            this.half = new double[k * k];
+            this.nearestHalf = new double[k];
+            this.shift = new double[k];
+        }
+
+        void centreGaps(double[] c, int k, int d) {
+            Arrays.fill(nearestHalf, Double.MAX_VALUE);
+            for (int j = 0; j < k; j++) {
+                for (int j2 = j + 1; j2 < k; j2++) {
+                    double s = 0;
+                    for (int t = 0; t < d; t++) {
+                        double v = c[j * d + t] - c[j2 * d + t];
+                        s += v * v;
+                    }
+                    double h = 0.5 * Math.sqrt(s);
+                    half[j * k + j2] = h;
+                    half[j2 * k + j] = h;
+                    nearestHalf[j] = Math.min(nearestHalf[j], h);
+                    nearestHalf[j2] = Math.min(nearestHalf[j2], h);
+                }
+            }
+        }
+
+        /** Loosens the bounds by how far each centre moved in the update. */
+        void moved(double[] previous, double[] centres, int[] labels, int d) {
+            int k = shift.length;
+            for (int j = 0; j < k; j++) {
+                double s = 0;
+                for (int t = 0; t < d; t++) {
+                    double v = centres[j * d + t] - previous[j * d + t];
+                    s += v * v;
+                }
+                shift[j] = Math.sqrt(s);
+            }
+            for (int i = 0; i < upper.length; i++) {
+                upper[i] += shift[labels[i]];
+                int row = i * k;
+                for (int j = 0; j < k; j++) {
+                    lower[row + j] = Math.max(0, lower[row + j] - shift[j]);
+                }
+            }
         }
     }
 

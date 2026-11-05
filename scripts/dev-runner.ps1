@@ -538,7 +538,7 @@ function Start-Backend {
         }
         
         Write-LogDebug "Starting backend with JAR: $jarFile"
-        Write-LogDebug "Command: java -jar $jarFile server config.yml"
+        Write-LogDebug "Command: java --add-modules jdk.incubator.vector -jar $jarFile server config.yml"
         
         # Set environment variables for backend
         $env:CORS = "true"
@@ -554,7 +554,8 @@ function Start-Backend {
         
         $processParams = @{
             FilePath = "java"
-            ArgumentList = @("-jar", $jarFile, "server", "config.yml")
+            # The Vector API module is for topics' k-means, as in entrypoint.sh.
+            ArgumentList = @("--add-modules", "jdk.incubator.vector", "-jar", $jarFile, "server", "config.yml")
             WorkingDirectory = $script:BACKEND_DIR
             RedirectStandardOutput = $stdoutLog
             RedirectStandardError = $stderrLog
