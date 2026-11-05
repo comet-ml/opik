@@ -1,9 +1,11 @@
 package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
@@ -26,12 +28,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+
 /**
  * Client for the OpenRouter Decisions API ({@code POST /api/alpha/decisions}), which serves decisions models
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
  *
- * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
+ * <p>Error messages keep only a documented OpenRouter error, checked by {@link ProviderErrorMessageValidator} as on
+ * the chat path; any other upstream text is dropped. Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
  * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
  * online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers transient ones.
  * Rate limits and gateway errors are also retried in-process first.
@@ -46,7 +51,6 @@ public class OpenRouterDecisionsClient {
 
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
-    private static final int MAX_ERROR_MESSAGE_LENGTH = 512;
     private static final String CHAT_API_SUFFIX = "/v1";
     private static final String DECISIONS_API_SUFFIX = "/alpha/decisions";
 
@@ -65,6 +69,7 @@ public class OpenRouterDecisionsClient {
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
     private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
+    private final @NonNull ProviderErrorMessageValidator providerErrorMessageValidator;
 
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
@@ -132,22 +137,17 @@ public class OpenRouterDecisionsClient {
 
     private String extractErrorMessage(Response response) {
         if (!response.hasEntity() || !response.bufferEntity()) {
-            return "<no body>";
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
         }
         try {
-            var errorResponse = response.readEntity(DecisionsErrorResponse.class);
-            if (errorResponse != null && errorResponse.error() != null
-                    && StringUtils.isNotBlank(errorResponse.error().message())) {
-                return StringUtils.truncate(errorResponse.error().message(), MAX_ERROR_MESSAGE_LENGTH);
+            var errorResponse = response.readEntity(OpenRouterErrorMessage.class);
+            if (errorResponse != null && errorResponse.error() != null && errorResponse.isDocumented()) {
+                return providerErrorMessageValidator.validate(errorResponse.toErrorMessage()).getMessage();
             }
         } catch (RuntimeException parseErrorResponse) {
-            // Expected when the body is not the structured error shape; fall back to the raw body.
-            log.debug("Failed to parse OpenRouter error response, falling back to raw body", parseErrorResponse);
+            log.debug("Failed to parse OpenRouter error response, error type '{}'",
+                    parseErrorResponse.getClass().getSimpleName());
         }
-        try {
-            return StringUtils.truncate(response.readEntity(String.class), MAX_ERROR_MESSAGE_LENGTH);
-        } catch (RuntimeException unreadable) {
-            return "<unreadable body>";
-        }
+        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
     }
 }

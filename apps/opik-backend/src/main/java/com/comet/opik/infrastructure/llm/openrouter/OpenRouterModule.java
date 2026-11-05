@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
@@ -38,8 +39,9 @@ public class OpenRouterModule extends AbstractModule {
     @Singleton
     public OpenRouterDecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull ProviderBaseUrlGuard providerBaseUrlGuard) {
-        return new OpenRouterDecisionsClient(client, config, providerBaseUrlGuard);
+            @NonNull ProviderBaseUrlGuard providerBaseUrlGuard,
+            @NonNull ProviderErrorMessageValidator providerErrorMessageValidator) {
+        return new OpenRouterDecisionsClient(client, config, providerBaseUrlGuard, providerErrorMessageValidator);
     }
 
     @Provides

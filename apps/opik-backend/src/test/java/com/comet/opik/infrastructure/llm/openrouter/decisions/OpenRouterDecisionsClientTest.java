@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -27,6 +28,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
@@ -69,6 +71,7 @@ class OpenRouterDecisionsClientTest {
         clientConfig.setOpenRouterUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1");
         clientConfig.setMaxAttempts(MAX_ATTEMPTS);
         clientConfig.setDelayMillis(1);
+        clientConfig.setProviderErrorMessageMaxLength(500);
         clientConfig.setConnectTimeout(Duration.seconds(5));
         clientConfig.setReadTimeout(Duration.seconds(5));
         decisionsClient = newDecisionsClient(RELAXED_GUARD);
@@ -134,14 +137,27 @@ class OpenRouterDecisionsClientTest {
     }
 
     @Test
-    void serverErrorCarriesStatus() {
+    void serverErrorCarriesStatusWithoutUpstreamText() {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse().withStatus(500).withBody("boom")));
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
                 .isInstanceOfSatisfying(ServerErrorException.class,
                         error -> assertThat(error.getResponse().getStatus()).isEqualTo(500))
-                .hasMessageContaining("boom");
+                .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .hasMessageNotContaining("boom");
+    }
+
+    @Test
+    void undocumentedErrorCodeDropsUpstreamText() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(400).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"message\":\"internal detail\",\"code\":499}}")));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOf(ClientErrorException.class)
+                .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .hasMessageNotContaining("internal detail");
     }
 
     @Test
@@ -248,7 +264,7 @@ class OpenRouterDecisionsClientTest {
 
     private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard) {
         return new OpenRouterDecisionsClient(new RetriableHttpClient(TestHttpClientUtils.client()), clientConfig,
-                guard);
+                guard, new ProviderErrorMessageValidator(clientConfig));
     }
 
     private DecisionsRequest request() {
