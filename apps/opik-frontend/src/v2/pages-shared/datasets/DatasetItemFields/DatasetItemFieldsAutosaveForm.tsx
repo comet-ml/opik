@@ -24,12 +24,12 @@ const DatasetItemFieldsAutosaveForm: React.FunctionComponent<
     dataToFieldRows(data, columns),
   );
   const [focus, setFocus] = useState<FieldFocus>(null);
-  const lastDataRef = useRef(fieldRowsToData(rows, { dropEmpty: false }));
+  const lastDataRef = useRef(fieldRowsToData(rows));
 
   const handleRowsChange = (next: DatasetFieldRow[]) => {
     setRows(next);
     // Adding a still-unnamed field shouldn't mark the record as edited.
-    const nextData = fieldRowsToData(next, { dropEmpty: false });
+    const nextData = fieldRowsToData(next);
     if (isEqual(nextData, lastDataRef.current)) return;
     lastDataRef.current = nextData;
     onDataChange(nextData);
@@ -39,7 +39,6 @@ const DatasetItemFieldsAutosaveForm: React.FunctionComponent<
     <DatasetFieldsEditor
       rows={rows}
       focus={focus}
-      removeTooltip="Remove field from this record"
       onRowsChange={handleRowsChange}
       onFocusChange={setFocus}
     />
