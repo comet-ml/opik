@@ -155,33 +155,35 @@ const AddDatasetItemForm: React.FC<AddDatasetItemFormProps> = ({
         />
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 border-t px-6 py-4">
-        <span className="comet-body-xs mr-auto text-muted-slate">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-6 py-4">
+        <span className="comet-body-xs min-w-48 flex-1 text-muted-slate">
           {disabledReason ??
             `${filledCount} of ${rows.length} field${
               rows.length === 1 ? "" : "s"
             } filled`}
         </span>
-        <Button variant="outline" size="sm" onClick={requestClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canSubmit}
-          onClick={() => submit(true)}
-        >
-          Save & add another
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          disabled={!canSubmit}
-          onClick={() => submit(false)}
-        >
-          Add record
-          <HotkeyDisplay hotkey={SUBMIT_HOTKEY} size="xs" className="ml-2" />
-        </Button>
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canSubmit}
+            onClick={() => submit(true)}
+          >
+            Save & add another
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={!canSubmit}
+            onClick={() => submit(false)}
+          >
+            Add record
+            <HotkeyDisplay hotkey={SUBMIT_HOTKEY} size="xs" className="ml-2" />
+          </Button>
+        </div>
       </div>
     </div>
   );
