@@ -22,6 +22,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
@@ -187,18 +188,23 @@ class ModelPriceServiceImpl implements ModelPriceService {
     // Spans are never refused for prices: a failed load prices them with built-in prices and stamps them as such.
     // One warning a minute is enough to see it; the counter shows how many lookups it touched, per workspace.
     private Mono<PriceLayers> builtInAfterLoadFailure(Throwable error, ContextView ctx) {
-        LOAD_FAILURES.add(1, Attributes.of(
-                ErrorMetricsResolver.WORKSPACE_ID_KEY,
-                ctx.getOrDefault(RequestContext.WORKSPACE_ID, ErrorMetricsResolver.UNKNOWN),
-                ErrorMetricsResolver.WORKSPACE_NAME_KEY,
-                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ErrorMetricsResolver.UNKNOWN),
-                ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)));
+        LOAD_FAILURES.add(1, loadFailureAttributes(error, ctx));
         long now = System.currentTimeMillis();
         long last = lastLoadFailureLoggedAt.get();
         if (now - last >= LOAD_FAILURE_LOG_INTERVAL.toMillis() && lastLoadFailureLoggedAt.compareAndSet(last, now)) {
             log.warn("Failed to load model prices, pricing with built-in prices", error);
         }
         return Mono.just(PriceLayers.LOAD_FAILED);
+    }
+
+    static Attributes loadFailureAttributes(Throwable error, ContextView ctx) {
+        String workspaceId = StringUtils.defaultIfBlank(ctx.getOrDefault(RequestContext.WORKSPACE_ID, null),
+                ErrorMetricsResolver.UNKNOWN);
+        return Attributes.of(
+                ErrorMetricsResolver.WORKSPACE_ID_KEY, workspaceId,
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY,
+                StringUtils.defaultIfBlank(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null), workspaceId),
+                ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error));
     }
 
     @Override
