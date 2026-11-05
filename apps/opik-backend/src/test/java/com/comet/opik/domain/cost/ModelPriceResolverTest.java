@@ -17,7 +17,9 @@ class ModelPriceResolverTest {
     private static Stream<Arguments> matchedNames() {
         return Stream.of(
                 Arguments.of("gpt-5-mini-2025-08-07", "openai", "gpt-5-mini-2025-08-07", "openai", NameForm.EXACT),
-                Arguments.of("GPT-5-MINI", "openai", "gpt-5-mini", "openai", NameForm.NORMALIZED),
+                Arguments.of("GPT-5-MINI", "openai", "gpt-5-mini", "openai", NameForm.LOWER_CASED),
+                Arguments.of("GPT-5.2", "openai", "gpt-5.2", "openai", NameForm.LOWER_CASED),
+                Arguments.of("claude-sonnet-4.5", "anthropic", "claude-sonnet-4-5", "anthropic", NameForm.NORMALIZED),
                 Arguments.of("gpt-5.2-2025-12-17", "openai", "gpt-5.2", "openai", NameForm.DATE_STRIPPED),
                 Arguments.of("anthropic.claude-opus-4-6-v1:0", "bedrock", "anthropic.claude-opus-4-6-v1",
                         "bedrock_converse", NameForm.VERSION_STRIPPED),

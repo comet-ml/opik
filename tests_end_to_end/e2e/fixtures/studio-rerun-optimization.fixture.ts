@@ -23,18 +23,25 @@ export const RETIRED_MODEL = 'openai/r3c-retired-model';
  * one is proof the saved settings leaked across the swap, which is the bug:
  * OpenRouter's nested `reasoning` makes OpenAI answer 400.
  *
- * All THREE token-cap spellings, because the replacement is whatever this
- * deployment's registry offers first and each provider family reads a different
- * one. `toFormModelConfig` aliases `max_tokens` ↔ `max_completion_tokens` for
- * us, but nothing bridges Gemini's `max_output_tokens` — so pinned to one
- * spelling, the seed would silently stop discriminating the day the first
- * available model became a Gemini one. A run created through the API can hold
- * any parameter set, which is the case the converter's own `pick` exists for.
+ * BOTH token-cap spellings the backend still accepts, because the replacement
+ * is whatever this deployment's registry offers first and each provider family
+ * reads a different one. `toFormModelConfig` aliases `max_tokens` ↔
+ * `max_completion_tokens` for us, so between them the seed discriminates for
+ * every family whose panel reads one of the two.
+ *
+ * Gemini's `max_output_tokens` WAS seeded here for the family nothing bridges,
+ * and is not any more: `StudioModelParameters.ALLOWED` (opik#9245, OPIK-9002)
+ * does not name it, so `POST /v1/private/optimizations` now answers 400
+ * "llm_model.parameters has keys the Studio runner doesn't pass on" and the
+ * seed could not be written at all. Nothing is lost that a run could still
+ * reach: the same refusal means no saved run anywhere can carry that key, so
+ * there is no longer a Gemini-shaped leak for it to discriminate. See
+ * `tests/optimization-studio/studio-model-parameter-allowlist.spec.ts` for the
+ * list itself.
  */
 export const SAVED_MODEL_PARAMETERS = {
   max_tokens: 300,
   max_completion_tokens: 300,
-  max_output_tokens: 300,
   temperature: 0.9,
 } as const;
 
