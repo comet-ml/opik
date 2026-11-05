@@ -90,7 +90,7 @@ jobs:
               if [ "$(jq length "$LAST_PAGE_FILE")" -lt 100 ]; then
                 break
               fi
-              if [ "$EVENT_NAME" = "pull_request" ] \
+              if [ "$EVENT_NAME" = "pull_request_target" ] \
                 && [[ "$(jq -r '.[-1].created_at' "$LAST_PAGE_FILE")" < "$PR_CREATED_AT" ]]; then
                 break
               fi
