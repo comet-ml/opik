@@ -11,7 +11,7 @@ import {
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
-import { Project } from "@/types/projects";
+import { Project, PROJECT_NAME_MAX_LENGTH } from "@/types/projects";
 import { Textarea } from "@/ui/textarea";
 import useProjectUpdateMutation from "@/api/projects/useProjectUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
@@ -91,12 +91,17 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
 
   const submitHandler = useCallback(() => {
     if (isEdit) {
-      updateMutate({
-        project: {
-          id: project!.id,
-          description,
+      updateMutate(
+        {
+          project: {
+            id: project!.id,
+            description,
+          },
         },
-      });
+        {
+          onSuccess: () => setOpen(false),
+        },
+      );
     } else {
       createMutate(
         {
@@ -106,7 +111,10 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
           },
         },
         {
-          onSuccess: onProjectCreated,
+          onSuccess: (projectData) => {
+            setOpen(false);
+            onProjectCreated(projectData);
+          },
         },
       );
     }
@@ -117,6 +125,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
     name,
     onProjectCreated,
     project,
+    setOpen,
     updateMutate,
   ]);
 
@@ -142,6 +151,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
             disabled={isEdit}
             value={name}
             onChange={(event) => setName(event.target.value)}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
           />
         </div>
         <div className="flex flex-col gap-2 pb-4">
@@ -158,11 +168,9 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button type="submit" disabled={!isValid} onClick={submitHandler}>
-              {buttonText}
-            </Button>
-          </DialogClose>
+          <Button type="submit" disabled={!isValid} onClick={submitHandler}>
+            {buttonText}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -6,6 +6,7 @@ import { Label } from "@/ui/label";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
+import { PROJECT_NAME_MAX_LENGTH } from "@/types/projects";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   useAgentOnboarding,
@@ -84,6 +85,7 @@ const AgentNameStep: React.FC = () => {
               setName(e.target.value);
               setError("");
             }}
+            maxLength={PROJECT_NAME_MAX_LENGTH}
           />
         </div>
 
