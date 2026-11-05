@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,10 @@ public class GuardrailsAccess {
     private final @NonNull WorkspaceFeaturesService workspaceFeaturesService;
 
     /**
-     * @throws ForbiddenException if the deployment does not run guardrails or the organization does not have them
+     * @throws ForbiddenException          if the deployment does not run guardrails or the organization does not have
+     *                                     them
+     * @throws ServiceUnavailableException if the platform can't tell whether the organization has them, so an
+     *                                     outage isn't reported as a missing plan
      */
     public void check() {
         featureFlags.checkGuardrailsValidationsEnabled();

@@ -11,7 +11,6 @@ import com.comet.opik.api.sorting.SortingFactoryGuardrailPolicies;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.inference.Question;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -30,8 +29,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -63,14 +60,6 @@ public interface GuardrailPolicyService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
 
-    /**
-     * Each list becomes one choice question over its topics plus "none of these", within the service's option
-     * limit.
-     */
-    static final int MAX_TOPICS = Question.ChoiceQuestion.MAX_OPTIONS - 1;
-    static final int MAX_TOPIC_LENGTH = 256;
-    static final String ALLOWED_TOPICS = "allowed_topics";
-    static final String RESTRICTED_TOPICS = "restricted_topics";
     private static final Set<GuardrailType> SUPPORTED_TYPES = EnumSet.of(GuardrailType.PII, GuardrailType.TOPIC,
             GuardrailType.PROMPT_INJECTION);
     private static final String POLICY_NOT_FOUND = "Guardrail policy not found";
@@ -228,95 +217,20 @@ class GuardrailPolicyServiceImpl implements GuardrailPolicyService {
             throw new BadRequestException(
                     "rules[%d].config.threshold is not accepted: thresholds are set by the server".formatted(index));
         }
+        // The same checks as the validations API, so a policy that can be saved is one the checks accept.
+        var path = "rules[%d].config".formatted(index);
         var normalized = JsonUtils.createObjectNode();
         if (rule.type() == GuardrailType.PII) {
-            var entities = normalizedUniqueStrings(index, config, "entities");
-            entities.stream()
-                    .filter(entity -> !GuardrailQuestions.PII_DESCRIPTIONS.containsKey(entity))
-                    .findFirst()
-                    .ifPresent(entity -> {
-                        throw new BadRequestException("rules[%d].config.entities contains the unsupported class '%s'"
-                                .formatted(index, entity));
-                    });
-            entities.forEach(normalized.putArray("entities")::add);
+            GuardrailQuestions.piiEntities(path, config).forEach(normalized.putArray("entities")::add);
         } else if (rule.type() == GuardrailType.TOPIC) {
-            var allowed = topics(index, config, ALLOWED_TOPICS);
-            var restricted = topics(index, config, RESTRICTED_TOPICS);
-            if (allowed.isEmpty() && restricted.isEmpty()) {
-                throw new BadRequestException("rules[%d].config needs %s or %s"
-                        .formatted(index, ALLOWED_TOPICS, RESTRICTED_TOPICS));
+            var topics = GuardrailQuestions.topicLists(path, config);
+            if (!topics.allowed().isEmpty()) {
+                topics.allowed().forEach(normalized.putArray(GuardrailQuestions.ALLOWED_TOPICS)::add);
             }
-            // Topics are compared ignoring case, as the model reads them.
-            var restrictedKeys = restricted.stream()
-                    .map(GuardrailQuestions::topicKey)
-                    .collect(Collectors.toSet());
-            allowed.stream()
-                    .filter(topic -> restrictedKeys.contains(GuardrailQuestions.topicKey(topic)))
-                    .findFirst()
-                    .ifPresent(topic -> {
-                        throw new BadRequestException("rules[%d].config has '%s' in both %s and %s"
-                                .formatted(index, topic, ALLOWED_TOPICS, RESTRICTED_TOPICS));
-                    });
-            if (!allowed.isEmpty()) {
-                allowed.forEach(normalized.putArray(ALLOWED_TOPICS)::add);
-            }
-            if (!restricted.isEmpty()) {
-                restricted.forEach(normalized.putArray(RESTRICTED_TOPICS)::add);
+            if (!topics.restricted().isEmpty()) {
+                topics.restricted().forEach(normalized.putArray(GuardrailQuestions.RESTRICTED_TOPICS)::add);
             }
         }
         return normalized;
     }
-
-    /** An absent or empty list means the rule does not use it. */
-    private static Set<String> topics(int index, JsonNode config, String field) {
-        var node = config.path(field);
-        if (node.isMissingNode() || node.isNull() || (node.isArray() && node.isEmpty())) {
-            return Set.of();
-        }
-        var topics = normalizedUniqueStrings(index, config, field);
-        if (topics.size() > MAX_TOPICS) {
-            throw new BadRequestException("rules[%d].config.%s has more than %d topics"
-                    .formatted(index, field, MAX_TOPICS));
-        }
-        if (topics.stream().anyMatch(topic -> topic.length() > MAX_TOPIC_LENGTH)) {
-            throw new BadRequestException("rules[%d].config.%s has a topic longer than %d characters"
-                    .formatted(index, field, MAX_TOPIC_LENGTH));
-        }
-        // The check adds this option itself; a topic with the same name would make its answer ambiguous.
-        if (topics.stream().anyMatch(GuardrailQuestions.NONE_OF_THESE::equalsIgnoreCase)) {
-            throw new BadRequestException("rules[%d].config.%s cannot contain '%s'"
-                    .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
-        }
-        // Case variants would be separate options of one choice question and split its probability.
-        var topicKeys = new HashSet<String>();
-        topics.stream()
-                .filter(topic -> !topicKeys.add(GuardrailQuestions.topicKey(topic)))
-                .findFirst()
-                .ifPresent(topic -> {
-                    throw new BadRequestException("rules[%d].config.%s contains '%s' more than once, ignoring case"
-                            .formatted(index, field, topic));
-                });
-        return topics;
-    }
-
-    private static Set<String> normalizedUniqueStrings(int index, JsonNode config, String field) {
-        var node = config.path(field);
-        if (!node.isArray() || node.isEmpty()) {
-            throw new BadRequestException("rules[%d].config.%s must be a non-empty list of strings"
-                    .formatted(index, field));
-        }
-        var values = new LinkedHashSet<String>();
-        for (var item : node) {
-            if (!item.isTextual() || StringUtils.isBlank(item.asText())) {
-                throw new BadRequestException("rules[%d].config.%s must contain only non-blank strings"
-                        .formatted(index, field));
-            }
-            if (!values.add(item.asText().trim())) {
-                throw new BadRequestException("rules[%d].config.%s contains a value more than once"
-                        .formatted(index, field));
-            }
-        }
-        return values;
-    }
-
 }

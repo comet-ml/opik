@@ -248,6 +248,25 @@ class GuardrailsValidationsResourceTest {
     }
 
     @Test
+    @DisplayName("a platform that can't tell whether the organization is enabled gets 503, not the plan message")
+    void validate__whenPlatformCannotTell__thenServiceUnavailable() {
+        var apiKey = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, randomUUID().toString(), USER);
+        wireMock.server().stubFor(post(urlPathEqualTo(FEATURES_PATH))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                .willReturn(aResponse().withStatus(500)));
+        var request = request(descriptor(GuardrailType.PROMPT_INJECTION, "{}"));
+
+        try (var response = guardrailsResourceClient.validate(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_SERVICE_UNAVAILABLE);
+            assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                    .isEqualTo("Could not verify that 'guardrails' is enabled for this workspace, retry later");
+        }
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
+    }
+
+    @Test
     @DisplayName("the platform is asked about the feature only by this endpoint, once per cache period")
     void validate__featureLookupIsOnDemandAndCached() {
         var apiKey = randomUUID().toString();

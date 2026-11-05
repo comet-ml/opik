@@ -76,6 +76,7 @@ public class GuardrailsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request: invalid settings for a check, or checks that need more than 64 questions (each PII class and each topic list is one question)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Missing or unknown credentials", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "Guardrail checks are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "503", description = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content: blank text, text over the decision service's limit, or a validations list outside 1 to 32 entries", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
