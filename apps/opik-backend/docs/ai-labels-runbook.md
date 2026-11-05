@@ -105,23 +105,24 @@ ClickHouse table `topic_vectors`, one row per (trace, task version). It is off b
 
 ### Opting workspaces in and out
 
-Topics have their own opt-in, the `topic_workspaces` table in the state database (MySQL). It works like
-`ai_label_workspaces`, and there is no API. Topics read the ai-labels `trace_summary`, so a workspace runs topics only
-when it is enabled in **both** tables. Opting a workspace in to ai-labels does not turn topics on.
+Topics have their own opt-in, the env var `TOGGLE_TOPICS_WORKSPACES`: a comma-separated list of workspace ids, set
+per environment in comet-helm. There is no API and no table. Topics read the ai-labels `trace_summary`, so a listed
+workspace runs topics only while it is also enabled in `ai_label_workspaces`. Opting a workspace in to ai-labels does
+not turn topics on.
+
+- **Enable a workspace.** Check that it is enabled in `ai_label_workspaces` (see "Opting workspaces in and out" above).
+  Then add its id to `TOGGLE_TOPICS_WORKSPACES` in a comet-helm PR. It runs after the deploy.
+- **Disable a workspace.** Remove its id in a comet-helm PR. After the deploy, the next tick drops it. Stored vectors
+  stay.
+- **Stop one workspace now, without a deploy.** Disable it in `ai_label_workspaces`. The next tick drops it. This also
+  stops its ai-labels summaries.
 
 ```sql
--- MySQL: enable (or re-enable) topics for a workspace. It must also be enabled in ai_label_workspaces.
-INSERT INTO topic_workspaces (workspace_id, enabled, added_by)
-VALUES ('<workspace_id>', TRUE, '<your name>')
-ON DUPLICATE KEY UPDATE enabled = TRUE, added_by = '<your name>';
-
--- MySQL: disable topics for a workspace. The next tick drops it. Stored vectors stay.
-UPDATE topic_workspaces SET enabled = FALSE WHERE workspace_id = '<workspace_id>';
-
--- MySQL: the workspaces topics run for
-SELECT t.workspace_id, t.added_at, t.added_by
-FROM topic_workspaces t JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
-WHERE t.enabled = TRUE AND a.enabled = TRUE ORDER BY t.added_at;
+-- MySQL: of the listed workspaces, the ones topics run for. A listed id missing here does not run.
+SELECT workspace_id, added_at, added_by
+FROM ai_label_workspaces
+WHERE enabled = TRUE AND workspace_id IN ('<workspace_id>', '<workspace_id>')
+ORDER BY workspace_id;
 ```
 
 A workspace opted in after its traces were labeled gets vectors for the last 7 days (the long window). For older
@@ -132,6 +133,7 @@ labels, see "Backfill".
 | Env var | Default | Meaning |
 |---|---|---|
 | `TOPICS_ENABLED` | `false` | Runs the job. The backend refuses to start with it on unless `AI_LABELS_ENABLED=true` and `AI_LABELS_INFERENCE_URL` is set: it uses the same opik-inference URL and credential. |
+| `TOGGLE_TOPICS_WORKSPACES` | empty (none) | Comma-separated workspace ids topics run for, each only while it is also enabled in `ai_label_workspaces`. See "Opting workspaces in and out". |
 | `TOPICS_VECTORS_TICK_INTERVAL` | `1m` | How often the job ticks. At most one tick runs per interval across all pods (see "How ticks run"). |
 | `TOPICS_VECTORS_TICK_BUDGET` | `50s` | Every query and embed call of a tick starts within this. Must be under the tick interval. |
 | `TOPICS_VECTORS_WINDOW` | `24h` | How far back, by `ai_label_status` write time, a normal tick looks. Never before the task's `applies_from`. |
@@ -284,8 +286,7 @@ publishes no series.
   fails or is never reached. Both counters carry the workspace, and the tick runs every minute, so 10 in 15 minutes
   means most ticks missed it; the first increment a new series loses does not matter at that rate. It groups by
   `workspace_id` alone: while a name lookup falls back to the id, the same workspace has two `workspace_name` values,
-  and grouping by both would split the count under the threshold. Find the name on the lag panel or in the opt-in
-  table.
+  and grouping by both would split the count under the threshold. Find the name on the lag panel.
 
 ### Deletes
 

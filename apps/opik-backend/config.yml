@@ -2620,13 +2620,18 @@ aiLabels:
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
 
 # Topics: groups traces by the intent ai-labels summarizes. Step 1 stores a bge-small vector of every trace_summary in
-# ClickHouse topic_vectors, for the workspaces ai-labels is enabled for. Calls aiLabels.inference's deployment with its
-# credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md, section "Topic vectors".
+# ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for. Calls
+# aiLabels.inference's deployment with its credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md,
+# section "Topic vectors".
 topics:
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
   #  never exposed to the UI
   enabled: ${TOPICS_ENABLED:-false}
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
+  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  enabledWorkspaces: ${TOGGLE_TOPICS_WORKSPACES:-""}
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them
