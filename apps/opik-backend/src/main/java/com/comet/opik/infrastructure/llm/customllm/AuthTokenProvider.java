@@ -92,6 +92,7 @@ public class AuthTokenProvider {
     // A reply whose whole body is the token: the characters a bearer token may contain (RFC 6750 b64token), so a
     // compact HTML page or truncated JSON is never cached as one
     private static final Pattern BARE_TOKEN = Pattern.compile("[A-Za-z0-9._~+/-]+=*");
+    private static final Pattern ALL_DIGITS = Pattern.compile("\\d+");
     private static final String REDACTED = "***";
     private static final int ERROR_BODY_SNIPPET_CHARS = 500;
     // Upper bound on any token lifetime (1 year): beyond this a reply is malformed or malicious
@@ -338,7 +339,7 @@ public class AuthTokenProvider {
         if (root.isTextual()) {
             return bareToken(root.asText(), authConfig, status, startNanos, origin);
         }
-        if (root.isNumber()) {
+        if (root.isNumber() && ALL_DIGITS.matcher(body.strip()).matches()) {
             // an all-digit token parses as a JSON number; the raw body keeps it exactly as sent
             return bareToken(body, authConfig, status, startNanos, origin);
         }

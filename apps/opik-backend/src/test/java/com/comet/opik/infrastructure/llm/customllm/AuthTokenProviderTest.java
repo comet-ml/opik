@@ -313,10 +313,11 @@ class AuthTokenProviderTest {
         assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
     }
 
-    @Test
-    @DisplayName("a null reply is not a token")
-    void nullReplyIsRejected() {
-        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("null")));
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"null", "-1", "1.5", "1e5"})
+    @DisplayName("a JSON literal that isn't an all-digit token (null, negative, decimal, exponent) is rejected")
+    void nonTokenJsonLiteralIsRejected(String reply) {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody(reply)));
 
         assertThatThrownBy(() -> provider.testFetch(serviceAccountRecipe().build()))
                 .isExactlyInstanceOf(AuthTokenException.class);
