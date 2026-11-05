@@ -1,5 +1,6 @@
 package com.comet.opik.domain.cost;
 
+import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -87,6 +88,24 @@ class ModelUsageServiceTest {
         assertThatCode(() -> service.save(ORGANIZATION_LAYERS, "ws-a", "team-a", GPT_5_MINI).block())
                 .doesNotThrowAnyException();
         verify(bucket).delete();
+    }
+
+    @Test
+    void aFailedReleaseIsLoggedWithTheClaimsItLeaves() {
+        doReturn(bucket).when(redisClient).getBucket(anyString(), any(Codec.class));
+        when(bucket.setIfAbsent(any(), any(Duration.class))).thenReturn(Mono.just(true));
+        when(bucket.delete()).thenReturn(Mono.error(new IllegalStateException("Redis is down")));
+        when(transactionTemplate.inTransaction(any(TxConfig.class), any()))
+                .thenThrow(new IllegalStateException("MySQL is down"));
+
+        var logs = LogCaptureUtils.logEventsOf(() -> assertThatCode(
+                () -> service.save(ORGANIZATION_LAYERS, "ws-a", "team-a", GPT_5_MINI).block())
+                .doesNotThrowAnyException());
+
+        assertThat(logs).anySatisfy(line -> assertThat(line)
+                .contains("Failed to give back the claims of the models used")
+                .contains("organization 'org-1', workspace 'ws-a', models '[openai/gpt-5-mini]'")
+                .contains("Redis is down"));
     }
 
     @Test

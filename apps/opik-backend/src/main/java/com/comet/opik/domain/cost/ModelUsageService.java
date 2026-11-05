@@ -67,6 +67,7 @@ class ModelUsageServiceImpl implements ModelUsageService {
     private final RedissonReactiveClient redisClient;
     private final ModelPriceService modelPriceService;
     private final AtomicLong lastFailureLoggedAt = new AtomicLong();
+    private final AtomicLong lastReleaseFailureLoggedAt = new AtomicLong();
 
     @Inject
     ModelUsageServiceImpl(@NonNull TransactionTemplate transactionTemplate,
@@ -110,7 +111,10 @@ class ModelUsageServiceImpl implements ModelUsageService {
                     return saved.get()
                             ? Mono.empty()
                             : release(organizationId, today, workspaceId, List.copyOf(claimed))
-                                    .onErrorResume(releaseError -> Mono.empty());
+                                    .onErrorResume(releaseError -> {
+                                        logReleaseFailure(organizationId, workspaceId, claimed, releaseError);
+                                        return Mono.empty();
+                                    });
                 });
     }
 
@@ -169,11 +173,27 @@ class ModelUsageServiceImpl implements ModelUsageService {
     }
 
     private void logFailure(String organizationId, Throwable error) {
-        long now = System.currentTimeMillis();
-        long last = lastFailureLoggedAt.get();
-        if (now - last >= FAILURE_LOG_INTERVAL.toMillis() && lastFailureLoggedAt.compareAndSet(last, now)) {
+        if (dueToLog(lastFailureLoggedAt)) {
             log.warn("Failed to save the models used, organization '{}'", organizationId, error);
         }
+    }
+
+    private void logReleaseFailure(String organizationId, String workspaceId, List<UsedModel> claimed,
+            Throwable error) {
+        if (dueToLog(lastReleaseFailureLoggedAt)) {
+            log.warn("Failed to give back the claims of the models used, so they are saved again only after the "
+                    + "claims expire in '{}', organization '{}', workspace '{}', models '{}'", CLAIM_TTL,
+                    organizationId, workspaceId, claimed.stream()
+                            .map(model -> model.provider() + "/" + model.modelName())
+                            .toList(),
+                    error);
+        }
+    }
+
+    private static boolean dueToLog(AtomicLong lastLoggedAt) {
+        long now = System.currentTimeMillis();
+        long last = lastLoggedAt.get();
+        return now - last >= FAILURE_LOG_INTERVAL.toMillis() && lastLoggedAt.compareAndSet(last, now);
     }
 
     // Each part is length-prefixed: providers and models can contain ':' ('ollama:local'), so plain joining could make
