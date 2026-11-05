@@ -167,11 +167,18 @@ class ReplayManager(threading.Thread):
         """Stop the replay manager."""
         self._stop_running.set()
 
-    def flush(self) -> None:
-        """Force replay of all failed messages to the server."""
+    def flush(self, timeout: Optional[float] = None) -> bool:
+        """Force replay of failed messages to the server, stopping between
+        batches once ``timeout`` seconds have passed. Whatever is left stays
+        parked for the next flush.
+
+        Returns False if messages are still parked because the time ran out."""
         self._check_replay_callback()
-        # ignore MyPy check because already asserted above
-        self._replay_failed_messages()
+        start = time.monotonic()
+        self._replay_failed_messages(timeout)
+        if timeout is None or time.monotonic() - start < timeout:
+            return True
+        return self._db_manager.failed_messages_count() == 0
 
     def _loop(self) -> None:
         sleep_time = self._next_tick_time - time.time()
@@ -201,12 +208,13 @@ class ReplayManager(threading.Thread):
                 "Replay callback must be set before starting the replay manager"
             )
 
-    def _replay_failed_messages(self) -> None:
+    def _replay_failed_messages(self, timeout: Optional[float] = None) -> None:
         self._check_replay_callback()
         try:
             # ignore MyPy check because already asserted above
             replayed = self._db_manager.replay_failed_messages(
-                self._replay_callback  # type: ignore
+                self._replay_callback,  # type: ignore
+                timeout,
             )
 
             if replayed > 0:

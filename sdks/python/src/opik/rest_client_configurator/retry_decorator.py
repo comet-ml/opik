@@ -1,3 +1,7 @@
+import contextlib
+import contextvars
+from typing import Iterator
+
 import tenacity
 import httpx
 
@@ -6,6 +10,22 @@ from opik.rest_api.core import api_error as rest_api_error
 
 
 RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504]
+
+_caller_handles_rate_limits: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "caller_handles_rate_limits", default=False
+)
+
+
+@contextlib.contextmanager
+def rate_limits_handled_by_caller() -> Iterator[None]:
+    """REST calls made inside this block raise a 429 that says when to retry
+    straight away instead of retrying it, for callers that schedule their own
+    retry. A 429 without that still gets the usual backoff."""
+    token = _caller_handles_rate_limits.set(True)
+    try:
+        yield
+    finally:
+        _caller_handles_rate_limits.reset(token)
 
 
 def _allowed_to_retry(exception: Exception) -> bool:
@@ -20,6 +40,13 @@ def _allowed_to_retry(exception: Exception) -> bool:
         return True
 
     if isinstance(exception, rest_api_error.ApiError):
+        if exception.status_code == 429 and _caller_handles_rate_limits.get():
+            headers = exception.headers or {}
+            if (
+                rate_limit.parse_rate_limit(headers) is not None
+                or rate_limit.parse_retry_after(headers) is not None
+            ):
+                return False
         if exception.status_code in RETRYABLE_STATUS_CODES:
             return True
 

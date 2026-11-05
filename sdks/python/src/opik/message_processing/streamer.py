@@ -204,9 +204,12 @@ class Streamer:
         self._fallback_replay_manager.refresh_server_connection(
             None if end_time is None else max(0.0, end_time - time.time())
         )
+        replayed = True
         if self._fallback_replay_manager.has_server_connection:
             # do replay only if we have a connection to the server
-            self._fallback_replay_manager.flush()
+            replayed = self._fallback_replay_manager.flush(
+                None if end_time is None else max(0.0, end_time - time.time())
+            )
 
         synchronization.wait_for_done(
             check_function=lambda: self._all_done(),
@@ -221,7 +224,7 @@ class Streamer:
             sleep_time=upload_sleep_time,
         )
 
-        flushed = upload_flushed and self._all_done()
+        flushed = upload_flushed and self._all_done() and replayed
         LOGGER.debug(f"Streamer flushed completely: {flushed}")
 
         return flushed

@@ -16,6 +16,7 @@ from opik.message_processing import data_loss, messages, permissions
 from opik.message_processing.processors import online_message_processor
 from opik.message_processing.replay import replay_manager
 from opik.rest_api import core as rest_api_core
+from opik.rest_client_configurator import retry_decorator
 
 
 def _spans_batch_message(item_count: int = 2, message_id: int = 1):
@@ -133,6 +134,110 @@ def test_process__429_with_retry_after_only__requeued_with_minimum_delay_not_rec
 
     assert exc_info.value.retry_after == 1.0
     assert _recorded(tracker) == []
+
+
+@pytest.fixture
+def clock(monkeypatch) -> list:
+    now = [1000.0]
+    monkeypatch.setattr(online_message_processor.time, "monotonic", lambda: now[0])
+    return now
+
+
+def _send_rate_limited_with_retry_after(processor, rest_client) -> bool:
+    """Returns whether the message was re-queued."""
+    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
+        status_code=429, headers={"Retry-After": "1"}
+    )
+    try:
+        processor.process(_spans_batch_message())
+    except exceptions.OpikCloudRequestsRateLimited:
+        return True
+    return False
+
+
+def test_process__429_with_retry_after_only_for_60_seconds__dropped_as_client_error(
+    processor, rest_client, tracker, clock
+):
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is True
+    clock[0] += 59
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is True
+    clock[0] += 1
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is False
+
+    failure = _recorded(tracker)[0]
+    assert failure.reason == data_loss.FailureReason.HTTP_CLIENT_ERROR
+    assert failure.status_code == 429
+
+
+def test_process__429_with_retry_after_only_after_giving_up__next_message_dropped_at_once(
+    processor, rest_client, tracker, clock
+):
+    _send_rate_limited_with_retry_after(processor, rest_client)
+    clock[0] += 60
+    _send_rate_limited_with_retry_after(processor, rest_client)
+    clock[0] += 1
+
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is False
+    assert len(_recorded(tracker)) == 2
+
+
+def test_process__429_with_retry_after_only_after_a_successful_send__new_window(
+    processor, rest_client, tracker, clock
+):
+    _send_rate_limited_with_retry_after(processor, rest_client)
+    clock[0] += 50
+    rest_client.spans.create_spans.side_effect = None
+    processor.process(_spans_batch_message())
+    clock[0] += 20
+
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is True
+    assert _recorded(tracker) == []
+
+
+def test_process__429_with_retry_after_only_after_an_attachment__same_window(
+    processor, rest_client, tracker, clock
+):
+    _send_rate_limited_with_retry_after(processor, rest_client)
+    clock[0] += 50
+    attachment = messages.CreateAttachmentMessage(
+        file_path="file.txt",
+        file_name="file.txt",
+        mime_type=None,
+        entity_type="span",
+        entity_id="span-id",
+        project_name="project",
+        encoded_url_override="url",
+    )
+    attachment.message_id = 2
+    # Only hands the file to the upload manager, so it proves nothing about 429s.
+    processor.process(attachment)
+    clock[0] += 10
+
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is False
+
+
+def test_process__429_with_retry_after_only_after_a_long_quiet_gap__new_window(
+    processor, rest_client, tracker, clock
+):
+    _send_rate_limited_with_retry_after(processor, rest_client)
+    clock[0] += 121
+
+    assert _send_rate_limited_with_retry_after(processor, rest_client) is True
+    assert _recorded(tracker) == []
+
+
+def test_process__429__rest_client_retry_not_used(processor, rest_client, tracker):
+    send = mock.Mock(
+        side_effect=rest_api_core.ApiError(
+            status_code=429, headers={"Retry-After": "1"}
+        )
+    )
+    rest_client.spans.create_spans = retry_decorator.opik_rest_retry(send)
+
+    with pytest.raises(exceptions.OpikCloudRequestsRateLimited):
+        processor.process(_spans_batch_message())
+
+    send.assert_called_once()
 
 
 @pytest.mark.parametrize(

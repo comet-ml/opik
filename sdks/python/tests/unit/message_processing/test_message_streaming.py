@@ -120,7 +120,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             use_attachment_extraction=False,
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
-            fallback_replay_manager=mock.Mock(),
+            fallback_replay_manager=mock.Mock(flush=mock.Mock(return_value=True)),
         )
 
         for obj in objects:

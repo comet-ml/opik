@@ -118,6 +118,19 @@ def _park_failed(rm: replay_manager.ReplayManager) -> None:
         )
 
 
+def _park_slow_to_replay(rm: replay_manager.ReplayManager) -> list:
+    """Parks 100 messages that take about 2 s to replay: batches of 10 with a
+    0.2 s pause after each."""
+    rm.database_manager.batch_replay_delay = 0.2
+    trace_ids = sorted(f"trace-{i:03d}" for i in range(100))
+    for i, trace_id in enumerate(trace_ids):
+        rm.database_manager.register_message(
+            _create_trace_message(message_id=i + 1, trace_id=trace_id),
+            status=db_manager.MessageStatus.failed,
+        )
+    return trace_ids
+
+
 def _delivered(processor: mock.Mock) -> list:
     return sorted(call.args[0].trace_id for call in processor.process.call_args_list)
 
@@ -262,6 +275,38 @@ class TestShutdownWhileServerLooksUnreachable:
         refresh.assert_called_once()
         (ping_budget,) = refresh.call_args.args
         assert 0.0 < ping_budget <= 0.5
+
+    def test_flush__timeout__bounds_the_replay_and_the_next_flush_finishes_it(
+        self, build_stack
+    ):
+        st, rm, processor, _ = build_stack(server_is_back=True)
+        trace_ids = _park_slow_to_replay(rm)
+
+        start = time.monotonic()
+        assert st.flush(timeout=0.5) is False
+        assert time.monotonic() - start < 1.0
+        delivered_by_first_flush = len(_delivered(processor))
+        time.sleep(0.5)
+        assert len(_delivered(processor)) == delivered_by_first_flush < 100
+
+        assert st.flush(timeout=None) is True
+        assert _delivered(processor) == trace_ids
+
+    def test_close_flush__after_a_flush_that_ran_out_of_time__everything_delivered(
+        self, build_stack
+    ):
+        st, rm, processor, reporter = build_stack(server_is_back=True)
+        trace_ids = _park_slow_to_replay(rm)
+        st.flush(timeout=0.3)
+        time.sleep(0.5)
+
+        marker = reporter.marker()
+        flushed = st.close(timeout=None, flush=True)
+        result = reporter.build_result(marker, flushed=flushed)
+
+        assert flushed is True
+        assert result.dropped_messages == 0
+        assert _delivered(processor) == trace_ids
 
     def test_close_flush__parked_messages_cannot_be_counted__not_reported_as_flushed(
         self, build_stack

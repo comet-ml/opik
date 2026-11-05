@@ -59,3 +59,45 @@ def test_opik_rest_retry__429_without_usable_short_retry_after__backs_off_expone
 
     assert len(waits) == 2
     assert all(5 <= wait <= 15 for wait in waits)
+
+
+def _waits_inside_caller_handled_block(status_code):
+    @retry_decorator.opik_rest_retry
+    def send():
+        raise ApiError(
+            status_code=status_code, headers={"Retry-After": "2"}, body="error"
+        )
+
+    waits = []
+    with retry_decorator.rate_limits_handled_by_caller():
+        with pytest.raises(ApiError):
+            send.retry_with(sleep=waits.append)()
+    return waits
+
+
+def test_rate_limits_handled_by_caller__429__raised_without_retrying():
+    assert _waits_inside_caller_handled_block(429) == []
+
+
+def test_rate_limits_handled_by_caller__503__still_retried():
+    assert len(_waits_inside_caller_handled_block(503)) == 2
+
+
+def test_rate_limits_handled_by_caller__429_without_a_usable_wait__still_backs_off():
+    @retry_decorator.opik_rest_retry
+    def send():
+        raise ApiError(status_code=429, headers={}, body="Too Many Requests")
+
+    waits = []
+    with retry_decorator.rate_limits_handled_by_caller():
+        with pytest.raises(ApiError):
+            send.retry_with(sleep=waits.append)()
+
+    assert len(waits) == 2
+    assert all(5 <= wait <= 15 for wait in waits)
+
+
+def test_rate_limits_handled_by_caller__block_exited__429_retried_again():
+    _waits_inside_caller_handled_block(429)
+
+    assert _waits_before_giving_up({"Retry-After": "2"}) == [2.0, 2.0]
