@@ -1,14 +1,24 @@
+import { ComponentType } from "react";
 import { createRoute, type AnyRoute } from "@tanstack/react-router";
-import V1CompatRedirect from "@/v2/redirect/V1CompatRedirect";
+import V1CompatRedirect, {
+  V1CompatRedirectProps,
+} from "@/v2/redirect/V1CompatRedirect";
+import ExperimentsCompatRedirect from "@/v2/redirect/ExperimentsCompatRedirect";
 
 type V1RedirectEntry = {
   from: string;
   to: string;
   catchAll?: boolean;
+  redirect?: ComponentType<V1CompatRedirectProps>;
 };
 
 const V1_REDIRECT_PATHS: V1RedirectEntry[] = [
-  { from: "/experiments", to: "/experiments", catchAll: true },
+  {
+    from: "/experiments",
+    to: "/experiments",
+    catchAll: true,
+    redirect: ExperimentsCompatRedirect,
+  },
   { from: "/test-suites", to: "/test-suites", catchAll: true },
   { from: "/datasets", to: "/test-suites", catchAll: true },
   { from: "/prompts", to: "/prompts", catchAll: true },
@@ -20,8 +30,9 @@ const V1_REDIRECT_PATHS: V1RedirectEntry[] = [
 ];
 
 export function createV1RedirectRoutes(parentRoute: AnyRoute) {
-  return V1_REDIRECT_PATHS.map(({ from, to, catchAll }) => {
-    const component = () => <V1CompatRedirect toPath={to} />;
+  return V1_REDIRECT_PATHS.map(({ from, to, catchAll, redirect }) => {
+    const Redirect = redirect ?? V1CompatRedirect;
+    const component = () => <Redirect toPath={to} />;
 
     if (!catchAll) {
       return createRoute({

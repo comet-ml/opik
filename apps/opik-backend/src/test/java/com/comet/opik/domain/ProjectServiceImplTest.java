@@ -2,11 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
+import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.common.eventbus.EventBus;
 import jakarta.inject.Provider;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import reactor.test.StepVerifier;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -56,9 +59,10 @@ class ProjectServiceImplTest {
     private final SortingFactoryProjects sortingFactory = mock(SortingFactoryProjects.class);
     private final SortingQueryBuilder sortingQueryBuilder = mock(SortingQueryBuilder.class);
     private final AnalyticsService analyticsService = mock(AnalyticsService.class);
+    private final EventBus eventBus = mock(EventBus.class);
 
     private final ProjectService projectService = new ProjectServiceImpl(template, ID_GENERATOR, requestContext,
-            traceDAO, sortingFactory, sortingQueryBuilder, analyticsService);
+            traceDAO, sortingFactory, sortingQueryBuilder, analyticsService, eventBus);
 
     /**
      * The bounded demo-project lookup, which replaced fetching every demo project in the installation for the daily
@@ -237,6 +241,34 @@ class ProjectServiceImplTest {
 
             assertThatThrownBy(() -> projectService.getOrCreate(WORKSPACE_ID, PROJECT_NAME, USER))
                     .isInstanceOf(UnableToExecuteStatementException.class);
+        }
+
+        @Test
+        void getOrCreate__whenTheWinnerIsGoneByTheReadBack__thenFailsWithTheConflict() {
+            when(template.inTransaction(eq(READ_ONLY), any())).thenAnswer(invocation -> {
+                TxAction<?> callback = invocation.getArgument(1);
+                return callback.execute(handle);
+            });
+            when(template.inTransaction(eq(WRITE), any())).thenAnswer(invocation -> {
+                TxAction<?> callback = invocation.getArgument(1);
+                return callback.execute(handle);
+            });
+            when(handle.attach(ProjectDAO.class)).thenReturn(projectDAO);
+
+            // The row that caused the duplicate is deleted before the read-back can see it.
+            when(projectDAO.findByNames(WORKSPACE_ID, List.of(PROJECT_NAME))).thenReturn(List.of());
+            doThrow(new UnableToExecuteStatementException("duplicate",
+                    new SQLIntegrityConstraintViolationException("duplicate"), null))
+                    .when(projectDAO).save(eq(WORKSPACE_ID), any(Project.class));
+
+            var project = projectService.getOrCreate(PROJECT_NAME)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER));
+
+            StepVerifier.create(project)
+                    .expectError(EntityAlreadyExistsException.class)
+                    .verify();
         }
     }
 

@@ -254,7 +254,12 @@ export const getLoggedParameters = (
     Partial<Pick<LogQueueParams, "provider">>,
 ): Record<string, unknown> => {
   const { custom_parameters: customParameters, ...requestParameters } =
-    getRequestParameters(run.model, run.configs, run.openAiPipelineMode);
+    getRequestParameters(
+      run.model,
+      run.configs,
+      run.openAiPipelineMode,
+      run.provider,
+    );
   const { parameters, extraBody } = normalizeForProvider(
     parseComposedProviderType(run.provider ?? ""),
     requestParameters,

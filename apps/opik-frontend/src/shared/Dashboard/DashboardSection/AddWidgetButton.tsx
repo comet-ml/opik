@@ -11,11 +11,13 @@ import useAskOllieForWidget from "@/shared/Dashboard/useAskOllieForWidget";
 import { ADD_WIDGET_OPTIONS } from "./addWidgetOptions";
 
 interface AddWidgetButtonProps {
+  sectionId: string;
   onAddWidget: () => void;
   onMenuOpenChange?: (open: boolean) => void;
 }
 
 const AddWidgetButton: React.FC<AddWidgetButtonProps> = ({
+  sectionId,
   onAddWidget,
   onMenuOpenChange,
 }) => {
@@ -59,7 +61,9 @@ const AddWidgetButton: React.FC<AddWidgetButtonProps> = ({
         <MenuOptionItems
           options={ADD_WIDGET_OPTIONS}
           onSelect={(value) =>
-            value === "add" ? onAddWidget() : askOllie("add_widget_menu")
+            value === "add"
+              ? onAddWidget()
+              : askOllie("add_widget_menu", sectionId)
           }
         />
       </DropdownMenuContent>

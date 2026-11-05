@@ -28,6 +28,7 @@
 
 import { PROVIDER_MODELS } from "@/constants/providerModels";
 import { PROVIDER_TYPE, ProviderModelsMap } from "@/types/providers";
+import { ModelParams, ModelParamsByProvider } from "@/types/modelParams";
 
 export type ModelFlags = {
   reasoning: boolean;
@@ -50,8 +51,30 @@ const buildInitialFlags = (): Map<string, ModelFlags> => {
 const INITIAL_SNAPSHOT: ProviderModelsMap = PROVIDER_MODELS;
 const INITIAL_FLAGS: Map<string, ModelFlags> = buildInitialFlags();
 
+export type ModelParamsIndex = Map<string, Map<string, ModelParams>>;
+
 let latestSnapshot: ProviderModelsMap = INITIAL_SNAPSHOT;
 let latestFlags: Map<string, ModelFlags> = INITIAL_FLAGS;
+let latestParams: ModelParamsIndex = new Map();
+let latestProfiles: ModelParamsByProvider = {};
+let paramsVersion = 0;
+const paramsListeners = new Set<() => void>();
+
+// The hook fills the params and profiles in an effect, after the render that received them, so a
+// component reading them while rendering subscribes here to render again once they land.
+export const subscribeToModelParams = (listener: () => void): (() => void) => {
+  paramsListeners.add(listener);
+  return () => {
+    paramsListeners.delete(listener);
+  };
+};
+
+export const getModelParamsVersion = (): number => paramsVersion;
+
+const notifyModelParamsChanged = (): void => {
+  paramsVersion += 1;
+  paramsListeners.forEach((listener) => listener());
+};
 
 export const getLatestProviderModelsSnapshot = (): ProviderModelsMap =>
   latestSnapshot;
@@ -61,6 +84,33 @@ export const getLatestModelFlags = (
 ): ModelFlags | undefined => {
   if (!model) return undefined;
   return latestFlags.get(model);
+};
+
+export const getLatestListedModelParams = (
+  provider: string,
+  model?: string | null,
+): ModelParams | undefined => {
+  if (!model) return undefined;
+  return latestParams.get(provider)?.get(model);
+};
+
+export const hasLatestModelList = (provider: string): boolean =>
+  latestParams.has(provider);
+
+export const getLatestProviderProfile = (
+  provider: string,
+): ModelParams | undefined => latestProfiles[provider];
+
+export const setLatestModelParams = (index: ModelParamsIndex): void => {
+  latestParams = index;
+  notifyModelParamsChanged();
+};
+
+export const setLatestProviderProfiles = (
+  profiles: ModelParamsByProvider,
+): void => {
+  latestProfiles = profiles;
+  notifyModelParamsChanged();
 };
 
 export const setLatestProviderModelsSnapshot = (
@@ -80,6 +130,9 @@ export const setLatestModelFlags = (flags: Map<string, ModelFlags>): void => {
 export const resetModelRegistryStoreForTesting = (): void => {
   latestSnapshot = INITIAL_SNAPSHOT;
   latestFlags = INITIAL_FLAGS;
+  latestParams = new Map();
+  latestProfiles = {};
+  notifyModelParamsChanged();
 };
 
 /**

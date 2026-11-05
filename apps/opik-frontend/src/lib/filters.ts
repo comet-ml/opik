@@ -89,6 +89,30 @@ export const generateVisibilityFilters = (
 };
 
 export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
+  // Playground dataset and test-suite runs log source=experiment, as SDK evaluate() runs do, so
+  // created_from is what keeps SDK runs out. The source filter stays because it is indexed.
+  // Traces only: playground spans keep the provider in created_from, and threads have no metadata.
+  if (source === LOGS_SOURCE.playground) {
+    return [
+      {
+        id: "logs_source_filter",
+        field: "source",
+        type: COLUMN_TYPE.string,
+        operator: "!=",
+        key: "",
+        value: LOGS_SOURCE.sdk,
+      },
+      {
+        id: "logs_created_from_filter",
+        field: "metadata",
+        type: COLUMN_TYPE.dictionary,
+        operator: "=",
+        key: "created_from",
+        value: "playground",
+      },
+    ] as Filter[];
+  }
+
   return [
     {
       id: "logs_source_filter",

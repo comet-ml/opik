@@ -4,6 +4,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
@@ -17,8 +18,8 @@ public class AnthropicModule extends AbstractModule {
     @Singleton
     public AnthropicClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull LlmModelRegistryService registryService) {
-        return new AnthropicClientGenerator(config, registryService);
+            @NonNull LlmModelRegistryService registryService, @NonNull LlmHttpClientBuilders httpClientBuilders) {
+        return new AnthropicClientGenerator(config, registryService, httpClientBuilders);
     }
 
     @Provides

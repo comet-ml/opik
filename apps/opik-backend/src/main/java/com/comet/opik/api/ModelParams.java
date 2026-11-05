@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -25,11 +26,17 @@ public record ModelParams(
         FlagParam stop,
         FlagParam seed,
         EffortParam effort,
+        ToolsParam tools,
         Boolean samplingExclusive,
         Boolean thinksByDefault,
+        // Set when the provider refuses the model on every other route. Requests still follow the key's route,
+        // so a Responses-only model on a Chat Completions key gets the provider's error; the live check reads it.
+        String onlyRoute,
         Map<String, ModelParams> routes) {
 
+    public static final String CHAT_COMPLETIONS_API_ROUTE = "chat_completions_api";
     public static final String RESPONSES_API_ROUTE = "responses_api";
+    public static final List<String> ROUTE_NAMES = List.of(CHAT_COMPLETIONS_API_ROUTE, RESPONSES_API_ROUTE);
 
     public ModelParams {
         if (routes != null) {
@@ -117,6 +124,33 @@ public record ModelParams(
         }
     }
 
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ToolsParam(ChatCompletionsTools chatCompletions, FlagParam forcedChoice) {
+
+        static ToolsParam overlay(ToolsParam base, ToolsParam top) {
+            if (base == null || top == null) {
+                return ObjectUtils.getIfNull(top, base);
+            }
+            return new ToolsParam(
+                    ObjectUtils.getIfNull(top.chatCompletions, base.chatCompletions),
+                    FlagParam.overlay(base.forcedChoice, top.forcedChoice));
+        }
+
+        ToolsParam settled() {
+            return new ToolsParam(chatCompletions, forcedChoice == null ? null : forcedChoice.settled());
+        }
+    }
+
+    /** Only Chat Completions has a say: OpenAI's Responses API takes function tools at any effort. */
+    public enum ChatCompletionsTools {
+        @JsonProperty("effortNoneOnly")
+        EFFORT_NONE_ONLY,
+        @JsonProperty("refused")
+        REFUSED
+    }
+
     /** Lists are replaced whole: a model's three effort levels must not merge with its profile's five. */
     public static ModelParams overlay(ModelParams base, ModelParams top) {
         if (base == null || top == null) {
@@ -132,8 +166,10 @@ public record ModelParams(
                 FlagParam.overlay(base.stop, top.stop),
                 FlagParam.overlay(base.seed, top.seed),
                 EffortParam.overlay(base.effort, top.effort),
+                ToolsParam.overlay(base.tools, top.tools),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
+                ObjectUtils.getIfNull(top.onlyRoute, base.onlyRoute),
                 overlayRoutes(base.routes, top.routes));
     }
 
@@ -165,6 +201,24 @@ public record ModelParams(
         return toBuilder().routes(null).build();
     }
 
+    public Stream<String> unknownOnlyRoutes() {
+        var own = Stream.ofNullable(onlyRoute).filter(route -> !ROUTE_NAMES.contains(route));
+        return routes == null
+                ? own
+                : Stream.concat(own, routes.values().stream().flatMap(ModelParams::unknownOnlyRoutes));
+    }
+
+    public ModelParams withoutUnknownOnlyRoutes() {
+        var knownRoutes = routes == null ? null : new LinkedHashMap<String, ModelParams>();
+        if (routes != null) {
+            routes.forEach((route, params) -> knownRoutes.put(route, params.withoutUnknownOnlyRoutes()));
+        }
+        return toBuilder()
+                .onlyRoute(onlyRoute == null || ROUTE_NAMES.contains(onlyRoute) ? onlyRoute : null)
+                .routes(knownRoutes)
+                .build();
+    }
+
     private ModelParams settledFields() {
         return new ModelParams(
                 temperature == null ? null : temperature.settled(),
@@ -176,8 +230,10 @@ public record ModelParams(
                 stop == null ? null : stop.settled(),
                 seed == null ? null : seed.settled(),
                 effort == null ? null : effort.settled(),
+                tools == null ? null : tools.settled(),
                 samplingExclusive,
                 thinksByDefault,
+                onlyRoute,
                 routes);
     }
 }

@@ -24,9 +24,16 @@ import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import GEMINI_FIXTURE from "@/lib/geminiCatalog.fixture.json";
+import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
+import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import {
   resetModelRegistryStoreForTesting,
+  getLatestProviderModelsSnapshot,
   setLatestModelFlags,
+  setLatestModelParams,
+  setLatestProviderModelsSnapshot,
+  setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 
 const ANTHROPIC_CONFIG = {
@@ -71,7 +78,7 @@ describe("hasVisibleControls", () => {
     ).toBe(true);
   });
 
-  it("is false for an OpenAI reasoning model on a rule", () => {
+  it("is true for an OpenAI reasoning model on a rule, for its effort", () => {
     expect(
       hasVisibleControls(
         PROVIDER_TYPE.OPEN_AI,
@@ -79,7 +86,7 @@ describe("hasVisibleControls", () => {
         RULE_CONFIG,
         RULE_UNSUPPORTED_PARAMS,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("is true for an OpenAI model that takes temperature on a rule", () => {
@@ -348,7 +355,7 @@ describe("the OpenRouter panel on a model with OpenRouter's lists", () => {
     ).toEqual(shown);
   });
 
-  it("hides the effort on a surface that cannot store it", () => {
+  it("hides the effort only on a surface that cannot store it", () => {
     setLatestModelFlags(
       new Map([
         [
@@ -367,9 +374,16 @@ describe("the OpenRouter panel on a model with OpenRouter's lists", () => {
       getOpenRouterVisibleControls({
         model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
         configs: { temperature: 0 },
-        supports: createSupports(RULE_UNSUPPORTED_PARAMS),
+        supports: createSupports(new Set(["reasoningEffort"])),
       }).reasoningEffort,
     ).toBe(false);
+    expect(
+      getOpenRouterVisibleControls({
+        model: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
+        configs: { temperature: 0 },
+        supports: createSupports(RULE_UNSUPPORTED_PARAMS),
+      }).reasoningEffort,
+    ).toBe(true);
   });
 });
 
@@ -569,6 +583,139 @@ describe("Anthropic sampling params while Claude thinks", () => {
     "let a thinking block in custom_parameters decide: %s, thinking: %s",
     (_, thinking, model, configs) => {
       expectAllAgree(model, configs, thinking);
+    },
+  );
+});
+
+describe("hasVisibleControls on the catalog panel", () => {
+  const MODEL = "claude-fixture-1" as PROVIDER_MODEL_TYPE;
+  const REFUSES_ALL = {
+    temperature: { accepted: false },
+    top_p: { accepted: false },
+    max_output_tokens: { accepted: true, min: 1, max: 8000, default: 4000 },
+    effort: { accepted: false },
+    sampling_exclusive: true,
+  };
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("hides the settings button on a rule when the model's params leave nothing to set", () => {
+    setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
+    setLatestProviderProfiles({ [PROVIDER_TYPE.ANTHROPIC]: REFUSES_ALL });
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+
+  it("shows it once the model takes an effort", () => {
+    setLatestProviderModelsSnapshot({
+      ...getLatestProviderModelsSnapshot(),
+      [PROVIDER_TYPE.ANTHROPIC]: [{ value: MODEL, label: MODEL }],
+    });
+    setLatestModelParams(
+      new Map([
+        [
+          PROVIDER_TYPE.ANTHROPIC,
+          new Map([
+            [
+              MODEL,
+              {
+                ...REFUSES_ALL,
+                effort: {
+                  accepted: true,
+                  levels: ["low", "high"],
+                  default: "high",
+                },
+              },
+            ],
+          ]),
+        ],
+      ]),
+    );
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(true);
+  });
+
+  it("offers no effort for a Claude id the registry doesn't list, as the request sends none for it", () => {
+    setLatestModelParams(new Map([[PROVIDER_TYPE.ANTHROPIC, new Map()]]));
+    setLatestProviderProfiles({
+      [PROVIDER_TYPE.ANTHROPIC]: {
+        ...REFUSES_ALL,
+        effort: { accepted: true, levels: ["low", "high"], default: "high" },
+      },
+    });
+
+    expect(
+      hasVisibleControls(
+        PROVIDER_TYPE.ANTHROPIC,
+        MODEL,
+        RULE_CONFIG,
+        RULE_UNSUPPORTED_PARAMS,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("hasVisibleControls on the Gemini and Vertex AI catalog panel", () => {
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  const seedCatalog = () =>
+    setLatestModelParams(
+      buildParamsIndex(GEMINI_FIXTURE.models as unknown as LlmModelsByProvider),
+    );
+
+  it.each([
+    [PROVIDER_TYPE.GEMINI, "gemini-3.5-transcribe"],
+    [PROVIDER_TYPE.VERTEX_AI, "vertex_ai/gemini-robotics-er-2"],
+  ])(
+    "hides the settings button for %s %s on a rule, which takes neither sampling nor a level",
+    (provider, model) => {
+      seedCatalog();
+
+      expect(
+        hasVisibleControls(
+          provider,
+          model as PROVIDER_MODEL_TYPE,
+          RULE_CONFIG,
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH],
+  ])(
+    "shows it for %s %s on a rule, for the thinking level",
+    (provider, model) => {
+      seedCatalog();
+
+      expect(
+        hasVisibleControls(
+          provider,
+          model,
+          RULE_CONFIG,
+          RULE_UNSUPPORTED_PARAMS,
+        ),
+      ).toBe(true);
     },
   );
 });

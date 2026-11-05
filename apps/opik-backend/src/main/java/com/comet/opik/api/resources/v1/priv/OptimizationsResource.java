@@ -11,6 +11,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.OptimizationSearchCriteria;
 import com.comet.opik.domain.OptimizationService;
+import com.comet.opik.domain.StudioModelParameters;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -77,6 +78,9 @@ public class OptimizationsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Upserting optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 optimization.id(), optimization.name(), optimization.datasetName(), workspaceId);
+        if (optimization.studioConfig() != null) {
+            StudioModelParameters.validate(optimization.studioConfig());
+        }
         var id = optimizationService.upsert(optimization)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
@@ -159,6 +163,7 @@ public class OptimizationsResource {
         // For Studio optimizations, inject the API key from the request header
         var optimizationToCreate = optimization;
         if (optimization.studioConfig() != null) {
+            StudioModelParameters.validate(optimization.studioConfig());
             var opikApiKey = requestContext.get().getHeaders().getFirst(RequestContext.OPIK_API_KEY);
             var enrichedConfig = optimization.studioConfig().toBuilder()
                     .opikApiKey(opikApiKey)

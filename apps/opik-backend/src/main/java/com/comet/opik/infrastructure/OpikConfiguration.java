@@ -174,9 +174,6 @@ public class OpikConfiguration extends JobConfiguration {
     private SpanWeeksBackfillConfig spanWeeksBackfill = SpanWeeksBackfillConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
-    private SpanWeeksRegistrationConfig spanWeeksRegistration = SpanWeeksRegistrationConfig.builder().build();
-
-    @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -223,6 +220,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AiLabelsConfig aiLabels = new AiLabelsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AdminServerConfig adminServer;
 
     @JsonIgnore
     @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")

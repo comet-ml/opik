@@ -230,7 +230,15 @@ Step 4: Create and Download the Key
 
 #### Amazon Bedrock
 
-Amazon Bedrock provides access to foundation models from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through AWS. Opik connects to Bedrock using the [OpenAI Chat Completions API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html). Only models that support this API format will work with the Opik Playground. Check the [supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html#inference-chat-completions-supported-models) to verify compatibility before configuring.
+Amazon Bedrock provides access to foundation models from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through AWS. Each Bedrock provider in Opik sends its requests through one of three APIs, chosen with the **API** field:
+
+- **Chat Completions (OpenAI-compatible)**: the [OpenAI Chat Completions API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html), for models such as gpt-oss, Mistral and Qwen. Check the [supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html#inference-chat-completions-supported-models) before configuring.
+- **Anthropic Messages (Claude)**: the [Anthropic Messages API](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-messages-api.html), for Claude models. Bedrock does not serve Claude through Chat Completions, so Claude models need this option.
+- **Converse (Amazon Nova and others)**: the [Converse API](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html), Bedrock's own API for text and chat models. Embedding and image generation models don't support it; each model's card in [Models at a glance](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) lists the APIs it supports. Amazon Nova models need this option.
+
+To use several kinds of models, add one Bedrock provider for each API.
+
+Providers saved before the **API** field existed use Chat Completions. When you create a provider through the REST API, set `configuration.bedrock_api` to `chat_completions`, `anthropic_messages` or `converse`. A missing, empty or unknown value means Chat Completions.
 
 ##### Prerequisites
 
@@ -251,17 +259,24 @@ Before configuring Bedrock in Opik, ensure you have:
 3. Select **"Bedrock"** from the provider dropdown
 4. Fill in the configuration:
    - **Provider name**: A unique identifier for this provider instance (e.g., "Bedrock us-east-1")
-   - **URL**: Your Bedrock endpoint URL (see format below)
+   - **API**: **Chat Completions**, **Anthropic Messages** or **Converse** (see above)
+   - **URL**: Your Bedrock endpoint URL for that API (see format below)
    - **Authentication**: Your AWS Bedrock API key (see [AWS documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html) for setup instructions), or OAuth2 client credentials if your gateway issues short-lived tokens (see [OAuth2 Client Credentials Authentication](#oauth2-client-credentials-authentication) below)
-   - **Models list**: Comma-separated list of models you want to use (e.g., `us.anthropic.claude-sonnet-4-6,us.meta.llama3-2-3b-instruct-v1:0`)
+   - **Models list**: Comma-separated list of models you want to use (e.g., `openai.gpt-oss-20b-1:0,qwen.qwen3-32b-v1:0` for Chat Completions, `eu.anthropic.claude-haiku-5-5,global.anthropic.claude-sonnet-5` for Anthropic Messages, or `eu.amazon.nova-pro-v1:0,eu.amazon.nova-2-lite-v1:0` for Converse)
    - **Custom headers** (optional): Add any additional HTTP headers required by your configuration
 5. Click **Add configuration** to save
 
 ##### Bedrock URL Format by Region
 
-Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
+For **Chat Completions**, Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`
 
-**Examples by Region:**
+For **Anthropic Messages**, use `https://bedrock-runtime.<region>.amazonaws.com/anthropic`, or `https://bedrock-mantle.<region>.api.aws/anthropic` for the bedrock-mantle endpoint. Opik also accepts these URLs ending in `/v1` or `/v1/messages`.
+
+For **Converse**, use the endpoint without a path: `https://bedrock-runtime.<region>.amazonaws.com`. Opik adds `/model/<model>/converse` itself.
+
+Model IDs can carry a cross-Region inference profile prefix, such as `eu.`, `us.` or `global.`. Older Claude models keep their dated IDs, such as `us.anthropic.claude-haiku-4-5-20251001-v1:0`.
+
+**Chat Completions examples by Region:**
 
 - **US East 1**: `https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1`
 - **US West 2**: `https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1`
@@ -320,6 +335,52 @@ Use this option to add any other OpenAI API-compliant provider such as vLLM, etc
   If you're running Opik locally, you would need to use `http://host.docker.internal:<PORT>/v1` for Mac and Windows or `http://172.17.0.1:<PORT>/v1` for Linux, and not `http://localhost`.
 </Tip>
 
+<Tip>
+  **Self-hosted deployments:** The Docker Compose and Helm deployments allow provider URLs on private networks (`LLM_PROVIDER_DESTINATION_GUARD=relaxed`), so local servers such as Ollama or vLLM work out of the box. Other launch paths default to `strict`, which allows only public `http`/`https` provider URLs; set the variable to `relaxed` if your provider runs on a private network, or to `strict` on Compose/Helm to harden them. Note that `relaxed` disables the SSRF protection on provider URLs, so it is only appropriate where provider configuration is restricted to trusted administrators. On Opik Cloud, the provider URL must be publicly reachable.
+</Tip>
+
+| Launch path | Default | How to change it |
+|---|---|---|
+| Docker Compose (`./opik.sh` or `docker compose`) | `relaxed` | Export it before starting, e.g. `LLM_PROVIDER_DESTINATION_GUARD=strict ./opik.sh` |
+| Helm chart | `relaxed` | Set `component.backend.env.LLM_PROVIDER_DESTINATION_GUARD` in your values file (example below) |
+| Backend started any other way | `strict` | Set the `LLM_PROVIDER_DESTINATION_GUARD` environment variable on the backend |
+
+```yaml
+# Helm values: harden a deployment whose providers are all public
+component:
+  backend:
+    env:
+      LLM_PROVIDER_DESTINATION_GUARD: "strict"
+```
+
+Accepted values are `strict` and `relaxed` (case-insensitive). When the variable is unset, the default for your launch path applies. Any other value, including an empty one, stops the backend at startup with a configuration error, so a typo never silently turns the check off. Docker Compose is the one exception for an empty value: it treats it as unset and uses its `relaxed` default.
+
+The check applies to every LLM provider call except Vertex AI, including the built-in providers' default endpoints and the free model. Vertex AI calls go to Google's endpoint for the configured location through the Google client library, which this check doesn't cover. With `strict`, a provider host that your DNS resolves to a private address, for example through a private endpoint or an egress proxy, is refused; use `relaxed` for such networks.
+
+`LLM_PROVIDER_DESTINATION_SCHEME` sets which schemes `strict` mode accepts: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, as self-hosted model servers commonly run without TLS, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check the scheme.
+
+Video URLs without a file extension get a `HEAD` request to detect their type. `LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD` applies the same destination check to that request (default `relaxed` on Docker Compose and Helm, `strict` on every other launch path); a refused URL is still sent to the model, just without the detected type. Set it to `relaxed` to detect the type of videos served from private networks.
+
+Gemini and Vertex AI receive media as inline data, so Opik downloads the image, audio, video and PDF URLs in a message itself; only `gs://` and `data:` URLs are passed through as they are. The same variable applies the destination check to each download. A media URL with another scheme, or one that is refused, redirects, or exceeds `LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT` (default `30s`, at most `2m`), fails the request with a `400`, as do downloads that together exceed `LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE` (default `20MB`, at most `100MB`, the limit for all media in one request). With `relaxed`, these downloads can reach any address the backend can, including your internal network, so use it only when everyone who can send messages or log traces is trusted with that access.
+
+`LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME` sets which schemes `strict` mode accepts for these downloads: `plaintext_or_tls` (the default on every launch path) allows `http` and `https`, and `https_only` allows `https` only. Values are case-insensitive, and any other value stops the backend at startup. `relaxed` mode doesn't check it, but only `http` and `https` media URLs are ever downloaded.
+
+Opik reads at most `LLM_PROVIDER_ERROR_BODY_MAX_SIZE` (default `64KB`, at most `1MiB`) of a custom provider's error response and discards the rest; only a short message parsed from it is returned.
+
+Provider calls are bounded on the backend by the settings below. The stream read timeout applies to every provider except Vertex AI. The thread and request limits apply to the streamed calls of the shared HTTP client, which every provider uses except Vertex AI and the OpenAI Responses API; a call that isn't streamed runs on the thread that made it, outside these limits.
+
+| Variable | Default | Range | What it bounds |
+|---|---|---|---|
+| `LLM_PROVIDER_STREAM_READ_TIMEOUT` | `120s` | `1s` to `10m` | How long a provider's stream may stay silent, before its response headers or between reads of its body: a stream waits for its headers up to the longer of this and `LLM_PROVIDER_CLIENT_READ_TIMEOUT`, as a provider can hold them while the model reasons. A call that isn't streamed waits for its headers up to `LLM_PROVIDER_CLIENT_READ_TIMEOUT` only. A proxy in front of the backend ends a silent stream at its own idle timeout, so a stream may stay silent for the lower of the two: the frontend nginx's `proxy_read_timeout` is `90s` on Docker Compose and nginx's `60s` default on Helm, set with `component.frontend.upstreamConfig`. To allow longer silences, as models that reason before answering can need, raise that timeout and any ingress or load balancer idle timeout too. |
+| `LLM_PROVIDER_CLIENT_MAX_THREADS` | `1024` | `1` to `2048`, at least `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Threads that run the shared client's streamed calls. A streamed call holds one from start to end. |
+| `LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE` | `60s` | `1s` to `5m` | How long an idle thread lives, so the pool shrinks back after a burst. |
+| `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | `1024` | `1` to `2048` | Streamed calls that run at once; further calls wait in order, and their timeouts start once they run. |
+| `LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST` | `1024` | `1` to `2048`, at most `LLM_PROVIDER_CLIENT_MAX_REQUESTS` | Streamed calls that run at once to one host, such as one provider's API. |
+
+A value outside its range, or limits that contradict each other, stops the backend at startup with a configuration error.
+
+Changing a provider's **URL** requires re-entering its API key (or OAuth2 credentials), since stored secrets are only ever sent to the endpoint they were saved for.
+
 ##### Custom Headers
 
 Some custom providers may require additional HTTP headers beyond the API key for authentication or routing purposes. You can configure these headers using the "Custom headers" section:
@@ -329,6 +390,8 @@ Some custom providers may require additional HTTP headers beyond the API key for
 - Enter the header value
 - Add multiple headers as needed
 - Use the trash icon to remove headers
+
+Each header needs a name, and names are compared ignoring case, so two headers can't differ only in case (`X-Team` and `x-team`); saving such headers fails with a `400`.
 
 **Common use cases for custom headers:**
 - **Custom authentication**: Additional authentication tokens or headers required by your infrastructure

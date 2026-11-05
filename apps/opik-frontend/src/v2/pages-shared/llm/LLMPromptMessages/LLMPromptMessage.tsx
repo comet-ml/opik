@@ -94,6 +94,7 @@ interface LLMPromptMessageProps {
   jsonTreeData?: JsonObject | null;
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
   compact?: boolean;
+  shiftEnterInsertsNewline?: boolean;
 }
 
 const LLMPromptMessage = forwardRef<
@@ -119,6 +120,7 @@ const LLMPromptMessage = forwardRef<
       jsonTreeData,
       onJsonPathSelect,
       compact = false,
+      shiftEnterInsertsNewline = false,
     },
     ref,
   ) => {
@@ -315,6 +317,7 @@ const LLMPromptMessage = forwardRef<
                       placeholder={messagePlaceholder}
                       jsonTreeData={jsonTreeData}
                       onJsonPathSelect={onJsonPathSelect}
+                      shiftEnterInsertsNewline={shiftEnterInsertsNewline}
                     />
                   </div>
                   {compact && !isExpanded && localText && (

@@ -11,9 +11,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.apache.commons.collections4.CollectionUtils;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -66,6 +71,11 @@ class LlmModelCatalogTest {
                 temperature: {accepted: false}
                 maxOutputTokens: {accepted: true, min: 16, max: 128000, default: 4000}
                 effort: {accepted: false}
+            """);
+
+    private static final ModelParams ANTHROPIC_PROFILE = params("""
+            temperature: {accepted: false}
+            effort: {accepted: true, levels: [low, medium, high], default: high}
             """);
 
     private static final ModelParams CLAUDE_SONNET_4_6 = params("""
@@ -165,7 +175,42 @@ class LlmModelCatalogTest {
                     () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-profile.yaml", null))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("missing-reasoning")
-                    .hasMessageContaining("missing-row-profile");
+                    .hasMessageContaining("missing-row-profile")
+                    .hasMessageContaining("missing-id-profile");
+        }
+
+        @Test
+        void aCuratedFileNamingAnUnknownOnlyRouteStopsTheLoad() {
+            assertThatThrownBy(
+                    () -> service("llm-models-test.yaml", "llm-models-test-curated-unknown-only-route.yaml", null))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("response_api")
+                    .hasMessageContaining("chat_api");
+        }
+
+        @Test
+        void anIdTakesTheProfileOfTheFirstPatternItMatches() {
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
+
+            assertThat(service.paramsOf("gemini", "gemini-1.5-flash")).isEqualTo(params("""
+                    temperature: {accepted: true}
+                    """));
+            assertThat(service.paramsOf("gemini", "gemini-9-pro")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    topP: {accepted: false}
+                    """));
+            assertThat(service.paramsOf("gemini", "gemma-9-it")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    """));
+        }
+
+        @Test
+        void aRowProfileWinsOverTheProfileItsIdMatches() {
+            var service = service("llm-models-test.yaml", "llm-models-test-curated-id-profiles.yaml", null);
+
+            assertThat(service.curatedParamsOf("gemini", "gemini-1.5-pinned")).isEqualTo(params("""
+                    temperature: {accepted: false}
+                    """));
         }
 
         @Test
@@ -249,6 +294,15 @@ class LlmModelCatalogTest {
         }
 
         @Test
+        void theProfilesAreWhatAnUnlistedIdOfEachProviderGets() {
+            var service = service(null);
+
+            assertThat(service.getProfiles())
+                    .isEqualTo(Map.of("openai", OPENAI_PROFILE, "anthropic", ANTHROPIC_PROFILE));
+            assertThat(service.paramsOf("anthropic", "an-id-no-layer-lists")).isEqualTo(ANTHROPIC_PROFILE);
+        }
+
+        @Test
         void aLocalOverrideWinsOverTheCuratedRowOnlyWhereItSetsAField(@TempDir Path tempDir) throws IOException {
             var override = tempDir.resolve("override.yaml");
             Files.writeString(override, """
@@ -272,6 +326,41 @@ class LlmModelCatalogTest {
                     .structuredOutput(true)
                     .reasoning(true)
                     .params(O3)
+                    .build());
+        }
+
+        @Test
+        void aRowsOnlyRouteReachesEveryRouteTheApiServes(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    openai:
+                      - id: "o3"
+                        params: {onlyRoute: responses_api}
+                    """);
+
+            assertThat(model(service(override.toString()), "openai", "o3").params()).isEqualTo(O3.toBuilder()
+                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                    .routes(Map.of(ModelParams.RESPONSES_API_ROUTE,
+                            O3.routes().get(ModelParams.RESPONSES_API_ROUTE).toBuilder()
+                                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                    .build()))
+                    .build());
+        }
+
+        @Test
+        void aLocalOverrideNamingAnUnknownOnlyRouteLosesOnlyThatValue(@TempDir Path tempDir) throws IOException {
+            var override = tempDir.resolve("override.yaml");
+            Files.writeString(override, """
+                    openai:
+                      - id: "o3"
+                        params: {onlyRoute: response_api, routes: {responses_api: {onlyRoute: responses_api}}}
+                    """);
+
+            assertThat(model(service(override.toString()), "openai", "o3").params()).isEqualTo(O3.toBuilder()
+                    .routes(Map.of(ModelParams.RESPONSES_API_ROUTE,
+                            O3.routes().get(ModelParams.RESPONSES_API_ROUTE).toBuilder()
+                                    .onlyRoute(ModelParams.RESPONSES_API_ROUTE)
+                                    .build()))
                     .build());
         }
     }
@@ -379,6 +468,69 @@ class LlmModelCatalogTest {
                     .as("OpenAI reasoning models without effort levels; give each a curated row with them, or"
                             + " effort: {accepted: false} if it refuses reasoning_effort")
                     .isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource(value = {"gpt-5.2, null", "gpt-5.4, EFFORT_NONE_ONLY", "gpt-6-luna, EFFORT_NONE_ONLY",
+                "gpt-6-astra, REFUSED", "gpt-6.1-sol, REFUSED", "gpt-4o, null"}, nullValues = "null")
+        void theListedOpenAiModelsCarryHowChatCompletionsTakesTheirTools(String id,
+                ModelParams.ChatCompletionsTools expected) {
+            var model = registry.get("openai").stream().filter(listed -> listed.id().equals(id)).findFirst()
+                    .orElseThrow();
+
+            assertThat(model.params().tools() == null ? null : model.params().tools().chatCompletions())
+                    .isEqualTo(expected);
+        }
+
+        // A judge whose key has its own base URL calls tools on these models with reasoning_effort "none".
+        @Test
+        void everyOpenAiModelThatTakesToolsOnlyWithoutReasoningCanTurnReasoningOff() {
+            var cannotTurnItOff = registry.getOrDefault("openai", List.of()).stream()
+                    .filter(model -> model.params().tools() != null && model.params().tools()
+                            .chatCompletions() == ModelParams.ChatCompletionsTools.EFFORT_NONE_ONLY)
+                    .filter(model -> !model.params().effort().levels().contains("none"))
+                    .map(LlmModelDefinition::id)
+                    .toList();
+
+            assertThat(cannotTurnItOff).isEmpty();
+        }
+
+        // Gemini 2.5 Flash and Flash-Lite turn thinking off with a zero budget, which GeminiThinkingParams sends for
+        // OFF. A row without it makes the catalog panel replace a saved Off with the default.
+        @ParameterizedTest(name = "{0}/{1}")
+        @MethodSource("gemini25FlashRows")
+        void gemini25FlashModelOffersThinkingOff(String provider, String id) {
+            assertThat(registry.get(provider))
+                    .filteredOn(model -> model.id().equals(id))
+                    .singleElement()
+                    .extracting(model -> model.params().effort().levels())
+                    .asInstanceOf(InstanceOfAssertFactories.list(String.class))
+                    .contains("auto", "off");
+        }
+
+        static Stream<Arguments> gemini25FlashRows() {
+            return Stream.of(
+                    Arguments.of("gemini", "gemini-2.5-flash"),
+                    Arguments.of("gemini", "gemini-2.5-flash-lite"),
+                    Arguments.of("vertex-ai", "gemini-2.5-flash"),
+                    Arguments.of("vertex-ai", "gemini-2.5-flash-lite-preview-06-17"));
+        }
+
+        @ParameterizedTest(name = "{0}/{1}")
+        @MethodSource("gemini4ArgonRows")
+        void gemini4ArgonCapsOutputAtGooglesLimitNotItsContextWindow(String provider, String id) {
+            assertThat(registry.get(provider))
+                    .filteredOn(model -> model.id().equals(id))
+                    .singleElement()
+                    .extracting(model -> model.params().maxOutputTokens().max().intValueExact())
+                    .isEqualTo(32768);
+        }
+
+        static Stream<Arguments> gemini4ArgonRows() {
+            return Stream.of(
+                    Arguments.of("gemini", "gemini-4-argon"),
+                    Arguments.of("vertex-ai", "gemini-4-argon"),
+                    Arguments.of("vertex-ai", "gemini-4-argon-cyber-permissive"));
         }
 
         private static Stream<ModelParams> allVariants(ModelParams params) {
