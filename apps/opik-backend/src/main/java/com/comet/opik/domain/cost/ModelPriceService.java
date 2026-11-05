@@ -9,7 +9,6 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
@@ -132,8 +131,8 @@ class ModelPriceServiceImpl implements ModelPriceService {
                             .listVersion(row.listVersion())
                             .rowId(UUID.fromString(row.rowId()))
                             .action(row.action())
-                            .before(jsonOrNull(row.beforeRow()))
-                            .after(jsonOrNull(row.afterRow()))
+                            .before(ModelPriceStore.HistorySnapshot.rowOf(row.beforeRow()))
+                            .after(ModelPriceStore.HistorySnapshot.rowOf(row.afterRow()))
                             .createdAt(row.createdAt())
                             .createdBy(row.createdBy())
                             .build())
@@ -157,10 +156,6 @@ class ModelPriceServiceImpl implements ModelPriceService {
     @Override
     public Mono<CustomModelPriceResolution> resolve(@NonNull CustomModelPriceResolveRequest request) {
         return layersFor().map(layers -> ModelPriceExplainer.explain(request, layers));
-    }
-
-    private static JsonNode jsonOrNull(@Nullable String json) {
-        return json == null ? null : JsonUtils.getJsonNodeFromString(json);
     }
 
     private CustomModelPriceValidator.Result validate(ReplaceRequest request) {
