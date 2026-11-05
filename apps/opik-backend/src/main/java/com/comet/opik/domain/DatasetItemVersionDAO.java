@@ -1881,140 +1881,140 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     arp.assertions_array AS assertions_array
                 FROM experiment_items_final AS ei
                 LEFT JOIN (
+                    SELECT
+                        ei2.id AS item_id,
+                        t.duration,
+                        t.visibility_mode,
+                        s.total_estimated_cost,
+                        s.usage,
+                        any(fsa.feedback_scores_array) AS feedback_scores_array,
+                        any(fsa.feedback_scores) AS feedback_scores,
+                        any(co.comments_array_agg) AS comments_array_agg
+                    FROM experiment_items_final ei2
+                    INNER JOIN trace_data AS t ON ei2.trace_id = t.id
+                    LEFT JOIN (
                         SELECT
-                            ei2.id AS item_id,
-                            t.duration,
-                            t.visibility_mode,
-                            s.total_estimated_cost,
-                            s.usage,
-                            any(fsa.feedback_scores_array) AS feedback_scores_array,
-                            any(fsa.feedback_scores) AS feedback_scores,
-                            any(co.comments_array_agg) AS comments_array_agg
-                        FROM experiment_items_final ei2
-                        INNER JOIN trace_data AS t ON ei2.trace_id = t.id
-                        LEFT JOIN (
-                            SELECT
-                                entity_id,
-                                toJSONString(
-                                    groupUniqArray(
-                                        CAST(
-                                            (
-                                                name,
-                                                category_name,
-                                                value,
-                                                reason,
-                                                toString(source),
-                                                concat(replaceOne(toString(created_at), ' ', 'T'), 'Z'),
-                                                concat(replaceOne(toString(last_updated_at), ' ', 'T'), 'Z'),
-                                                created_by,
-                                                last_updated_by,
-                                                mapFromArrays(
-                                                    mapKeys(value_by_author),
-                                                    arrayMap(
-                                                        v -> CAST(
-                                                            (
-                                                                v.1,
-                                                                v.2,
-                                                                v.3,
-                                                                toString(v.4),
-                                                                concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
-                                                                v.6,
-                                                                v.7,
-                                                                v.8,
-                                                                v.9
-                                                            ),
-                                                            'Tuple(
-                                                                value Decimal(18,9),
-                                                                reason String,
-                                                                category_name String,
-                                                                source String,
-                                                                last_updated_at String,
-                                                                span_type String,
-                                                                span_id String,
-                                                                source_queue_id String,
-                                                                author String
-                                                            )'
+                            entity_id,
+                            toJSONString(
+                                groupUniqArray(
+                                    CAST(
+                                        (
+                                            name,
+                                            category_name,
+                                            value,
+                                            reason,
+                                            toString(source),
+                                            concat(replaceOne(toString(created_at), ' ', 'T'), 'Z'),
+                                            concat(replaceOne(toString(last_updated_at), ' ', 'T'), 'Z'),
+                                            created_by,
+                                            last_updated_by,
+                                            mapFromArrays(
+                                                mapKeys(value_by_author),
+                                                arrayMap(
+                                                    v -> CAST(
+                                                        (
+                                                            v.1,
+                                                            v.2,
+                                                            v.3,
+                                                            toString(v.4),
+                                                            concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                            v.6,
+                                                            v.7,
+                                                            v.8,
+                                                            v.9
                                                         ),
-                                                        mapValues(value_by_author)
-                                                    )
+                                                        'Tuple(
+                                                            value Decimal(18,9),
+                                                            reason String,
+                                                            category_name String,
+                                                            source String,
+                                                            last_updated_at String,
+                                                            span_type String,
+                                                            span_id String,
+                                                            source_queue_id String,
+                                                            author String
+                                                        )'
+                                                    ),
+                                                    mapValues(value_by_author)
                                                 )
-                                            ),
-                                            'Tuple(
-                                                name String,
-                                                category_name String,
-                                                value Decimal(18,9),
-                                                reason String,
-                                                source String,
-                                                created_at String,
-                                                last_updated_at String,
-                                                created_by String,
-                                                last_updated_by String,
-                                                value_by_author Map(
-                                                    String,
-                                                    Tuple(
-                                                        value Decimal(18,9),
-                                                        reason String,
-                                                        category_name String,
-                                                        source String,
-                                                        last_updated_at String,
-                                                        span_type String,
-                                                        span_id String,
-                                                        source_queue_id String,
-                                                        author String
-                                                    )
+                                            )
+                                        ),
+                                        'Tuple(
+                                            name String,
+                                            category_name String,
+                                            value Decimal(18,9),
+                                            reason String,
+                                            source String,
+                                            created_at String,
+                                            last_updated_at String,
+                                            created_by String,
+                                            last_updated_by String,
+                                            value_by_author Map(
+                                                String,
+                                                Tuple(
+                                                    value Decimal(18,9),
+                                                    reason String,
+                                                    category_name String,
+                                                    source String,
+                                                    last_updated_at String,
+                                                    span_type String,
+                                                    span_id String,
+                                                    source_queue_id String,
+                                                    author String
                                                 )
-                                            )'
-                                        )
+                                            )
+                                        )'
                                     )
-                                ) AS feedback_scores_array,
-                                mapFromArrays(
-                                    groupArray(name),
-                                    groupArray(value)
-                                ) AS feedback_scores
-                            FROM feedback_scores_final
-                            GROUP BY entity_id
-                        ) AS fsa ON t.id = fsa.entity_id
-                        LEFT JOIN (
-                            SELECT
-                                entity_id,
-                                toJSONString(groupUniqArray(CAST(tuple(
-                                    c.comment_id,
-                                    c.text,
-                                    concat(replaceOne(toString(c.comment_created_at), ' ', 'T'), 'Z'),
-                                    concat(replaceOne(toString(c.comment_last_updated_at), ' ', 'T'), 'Z'),
-                                    c.comment_created_by,
-                                    c.comment_last_updated_by,
-                                    c.entity_id
-                                ), 'Tuple(
-                                    id FixedString(36),
-                                    text String,
-                                    created_at String,
-                                    last_updated_at String,
-                                    created_by String,
-                                    last_updated_by String,
-                                    entity_id FixedString(36)
-                                )'))) AS comments_array_agg
-                            FROM comments_final AS c
-                            GROUP BY entity_id
-                        ) AS co ON t.id = co.entity_id
-                        LEFT JOIN (
-                            SELECT
-                                trace_id,
-                                SUM(total_estimated_cost) AS total_estimated_cost,
-                                sumMap(usage) AS usage
-                            FROM spans final
-                            WHERE workspace_id = :workspace_id
-                            <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                            AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
-                            <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
-                            GROUP BY workspace_id, project_id, trace_id
-                        ) s ON t.id = s.trace_id
-                        GROUP BY
-                            ei2.id,
-                            t.duration,
-                            t.visibility_mode,
-                            s.total_estimated_cost,
-                            s.usage
+                                )
+                            ) AS feedback_scores_array,
+                            mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                            ) AS feedback_scores
+                        FROM feedback_scores_final
+                        GROUP BY entity_id
+                    ) AS fsa ON t.id = fsa.entity_id
+                    LEFT JOIN (
+                        SELECT
+                            entity_id,
+                            toJSONString(groupUniqArray(CAST(tuple(
+                                c.comment_id,
+                                c.text,
+                                concat(replaceOne(toString(c.comment_created_at), ' ', 'T'), 'Z'),
+                                concat(replaceOne(toString(c.comment_last_updated_at), ' ', 'T'), 'Z'),
+                                c.comment_created_by,
+                                c.comment_last_updated_by,
+                                c.entity_id
+                            ), 'Tuple(
+                                id FixedString(36),
+                                text String,
+                                created_at String,
+                                last_updated_at String,
+                                created_by String,
+                                last_updated_by String,
+                                entity_id FixedString(36)
+                            )'))) AS comments_array_agg
+                        FROM comments_final AS c
+                        GROUP BY entity_id
+                    ) AS co ON t.id = co.entity_id
+                    LEFT JOIN (
+                        SELECT
+                            trace_id,
+                            SUM(total_estimated_cost) AS total_estimated_cost,
+                            sumMap(usage) AS usage
+                        FROM spans final
+                        WHERE workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                        <if(span_weeks_bound)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (SELECT id_week FROM span_weeks WHERE workspace_id = :workspace_id <if(has_target_projects)>AND project_id IN :target_project_ids<endif> AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope))<endif>
+                        GROUP BY workspace_id, project_id, trace_id
+                    ) s ON t.id = s.trace_id
+                    GROUP BY
+                        ei2.id,
+                        t.duration,
+                        t.visibility_mode,
+                        s.total_estimated_cost,
+                        s.usage
                 ) AS tfs ON ei.id = tfs.item_id
                 LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
             ), raw_items_light AS (
