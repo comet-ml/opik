@@ -120,9 +120,12 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             case RetryUtils.RetryableHttpException retryable -> retryable.getStatusCode();
             default -> null;
         };
-        if (status != null || error instanceof ProcessingException) {
+        if (status != null) {
             log.warn("Comet organization call failed, operation '{}', workspace '{}', error type '{}', status '{}'",
                     operation, workspaceId, error.getClass().getSimpleName(), status);
+        } else if (error instanceof ProcessingException) {
+            log.warn("Comet organization call failed, operation '{}', workspace '{}', error type '{}'",
+                    operation, workspaceId, error.getClass().getSimpleName());
         } else {
             log.warn("Comet organization call failed, operation '{}', workspace '{}'", operation, workspaceId, error);
         }

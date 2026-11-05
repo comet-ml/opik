@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
@@ -13,6 +12,7 @@ import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
+import com.github.tomakehurst.wiremock.http.Fault;
 import com.google.inject.OutOfScopeException;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.ForbiddenException;
@@ -248,6 +248,29 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
+        void aConnectionFailureIsLoggedWithoutAStatus() {
+            stubApiKey(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER));
+
+            var logs = LogCaptureUtils.logEventsOf(() -> ask());
+
+            assertThat(logs).filteredOn(line -> line.startsWith("Comet organization call failed"))
+                    .containsExactly(("Comet organization call failed, operation 'organization lookup', "
+                            + "workspace '%s', error type 'ProcessingException'").formatted(workspaceId));
+        }
+
+        @Test
+        void aBadRequestWithAnUnreadableBodyLogsWhyItWasUnreadable() {
+            stubApiKey(aResponse().withStatus(400).withHeader("Content-Type", "application/json")
+                    .withBody("not json"));
+
+            var logs = LogCaptureUtils.logEventsOf(() -> ask());
+
+            assertThat(logs).filteredOn(line -> line.startsWith("Comet answered '400' with a body"))
+                    .singleElement()
+                    .satisfies(line -> assertThat(line).contains("ProcessingException"));
+        }
+
+        @Test
         void organizationCometNoLongerReportsIsDroppedInsteadOfTheStaleOne() {
             stubApiKey(organization(organizationId, false));
             ask();
@@ -306,7 +329,7 @@ class RemoteOrganizationResolverTest {
 
         @Test
         void unknownWorkspaceMeansNoOrganizationAndIsRemembered() {
-            stubApiKey(cometError(400, ReactServiceErrorResponse.NO_SUCH_WORKSPACE));
+            stubApiKey(cometError(400, "No such workspace!"));
 
             assertThat(ask()).isNull();
 

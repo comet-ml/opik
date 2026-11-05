@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -109,7 +110,9 @@ class WorkspaceOrganizationClient {
         try {
             var error = response.readEntity(ReactServiceErrorResponse.class);
             return error != null && ReactServiceErrorResponse.NO_SUCH_WORKSPACE.equals(StringUtils.strip(error.msg()));
-        } catch (RuntimeException notCometsErrorBody) {
+        } catch (ProcessingException unreadableBody) {
+            log.warn("Comet answered '{}' with a body that isn't its error response", response.getStatus(),
+                    unreadableBody);
             return false;
         }
     }
