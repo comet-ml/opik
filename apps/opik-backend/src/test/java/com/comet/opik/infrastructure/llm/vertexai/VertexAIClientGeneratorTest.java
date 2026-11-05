@@ -2,21 +2,30 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
+import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
+import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.ClientDisconnectedException;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.http.Fault;
+import com.google.auth.oauth2.ServiceAccountCredentials;
+import com.redis.testcontainers.RedisContainer;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.InvalidRequestException;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -29,6 +38,7 @@ import okhttp3.ConnectionPool;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,7 +53,12 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.StringCodec;
+import org.redisson.config.Config;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
@@ -60,8 +75,10 @@ import java.security.KeyPairGenerator;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -78,7 +95,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -114,6 +130,12 @@ class VertexAIClientGeneratorTest {
 
     private final WireMockUtils.WireMockRuntime wireMock = WireMockUtils.startWireMock();
 
+    private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+
+    private RedissonClient redisson;
+
+    private SharedTokenCache tokenCache;
+
     private final LlmModelRegistryService registry = registryOf(TestConfigUtils.loadConfigTest());
 
     private String serviceAccountJson;
@@ -126,6 +148,19 @@ class VertexAIClientGeneratorTest {
     @BeforeAll
     void generateServiceAccountKey() throws Exception {
         serviceAccountJson = serviceAccountJson(PROJECT_ID);
+    }
+
+    @BeforeAll
+    void startRedis() {
+        redis.start();
+        var redissonConfig = new Config();
+        redissonConfig.useSingleServer().setAddress(redis.getRedisURI());
+        redisson = Redisson.create(redissonConfig);
+        tokenCache = new SharedTokenCache(new StringRedisClient(redisson), LlmTestClients.PASSTHROUGH_LOCK_SERVICE);
+
+        var opikConfiguration = new OpikConfiguration();
+        opikConfiguration.getEncryption().setKey("0123456789abcdef");
+        EncryptionUtils.setConfig(opikConfiguration);
     }
 
     private String serviceAccountJson(String projectId) throws Exception {
@@ -153,10 +188,14 @@ class VertexAIClientGeneratorTest {
     @AfterAll
     void tearDown() {
         wireMock.server().stop();
+        redisson.shutdown();
+        redis.stop();
     }
 
     @BeforeEach
     void setUp() {
+        // every test starts without a shared token, so token requests are counted from zero
+        redisson.getKeys().flushall();
         wireMock.server().resetAll();
         wireMock.server().stubFor(post(urlPathMatching(GENERATE_CONTENT_PATH))
                 .willReturn(aResponse()
@@ -197,7 +236,7 @@ class VertexAIClientGeneratorTest {
 
     private void completeVia(String configuredLocation) {
         completeVia(new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache),
                 configuredLocation);
     }
 
@@ -208,9 +247,8 @@ class VertexAIClientGeneratorTest {
                 .configuration(configuredLocation == null ? Map.of() : Map.of("location", configuredLocation))
                 .build();
 
-        try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-            client.chat(UserMessage.from("hello"));
-        }
+        var client = generator.generate(config, request);
+        client.chat(UserMessage.from("hello"));
     }
 
     /**
@@ -237,7 +275,7 @@ class VertexAIClientGeneratorTest {
                         .withBody(JsonUtils.writeValueAsString(Map.of("error",
                                 Map.of("code", 400, "message", message, "status", status))))));
         var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
         var apiConfig = LlmProviderClientApiConfig.builder()
                 .apiKey(serviceAccountJson)
                 .configuration(Map.of("location", "global"))
@@ -245,10 +283,9 @@ class VertexAIClientGeneratorTest {
         var validator = new ProviderErrorMessageValidator(clientConfig());
 
         var failure = catchThrowable(() -> {
-            try (var client = (CloseableVertexAiChatModel) generator.generate(apiConfig,
-                    ChatCompletionRequest.builder().model(MODEL).build())) {
-                client.chat(UserMessage.from("hello"));
-            }
+            var client = generator.generate(apiConfig,
+                    ChatCompletionRequest.builder().model(MODEL).build());
+            client.chat(UserMessage.from("hello"));
         });
 
         var actualError = new LlmProviderVertexAI(generator, apiConfig).getLlmProviderError(failure)
@@ -270,12 +307,11 @@ class VertexAIClientGeneratorTest {
                 .configuration(Map.of("location", "global"))
                 .build();
 
-        try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+        var client = new VertexAIClientGenerator(clientConfig(), registry,
                 LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                .generate(config, request)) {
-            client.chat(UserMessage.from("hello"));
-        }
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                .generate(config, request);
+        client.chat(UserMessage.from("hello"));
     }
 
     /**
@@ -348,26 +384,50 @@ class VertexAIClientGeneratorTest {
                     .isEqualTo("https://%s-aiplatform.googleapis.com".formatted(location));
         }
 
-        /** The counterpart to the above, pinning the other side of the lookup. */
-        @Test
-        @DisplayName("a multi-region location takes its configured endpoint")
-        void multiRegionLocationsTakeTheConfiguredEndpoint() {
-            assertThat(resolvedEndpoint("global")).isEqualTo("http://" + wireMockHost() + "/");
+        /**
+         * The counterpart to the above, pinning the other side of the lookup: a deployment that sets
+         * {@code LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT}, {@code _EU_} or {@code _US_} keeps calling that endpoint.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"global", "eu", "us"})
+        void multiRegionLocationsTakeTheConfiguredEndpoint(String location) {
+            assertThat(resolvedEndpoint(location)).isEqualTo("http://" + wireMockHost() + "/");
         }
 
         /**
          * The configuration accepted bare hosts before the SDK swap and operators may still have them, so one has to
          * keep reaching the same endpoint rather than landing in the URL's path.
          */
-        @Test
-        @DisplayName("a bare host keeps its scheme defaulted to https")
-        void bareHostsAreGivenAScheme() {
+        @ParameterizedTest
+        @CsvSource({
+                "global,proxy-global.example.com",
+                "eu,proxy-eu.example.com",
+                "us,proxy-us.example.com"})
+        void bareHostsAreGivenAScheme(String location, String bareHost) {
             var config = clientConfig();
             config.setVertexAIClient(config.getVertexAIClient().toBuilder()
-                    .multiRegionApiEndpoints(Map.of("global", "aiplatform.googleapis.com"))
+                    .multiRegionApiEndpoints(Map.of(location, bareHost))
                     .build());
 
-            assertThat(resolvedEndpoint(config, "global")).isEqualTo("https://aiplatform.googleapis.com");
+            assertThat(resolvedEndpoint(config, location)).isEqualTo("https://" + bareHost);
+        }
+
+        /**
+         * The shipped configuration overrides no endpoint, so the multi-regions take the SDK's own, which has to stay
+         * the one the overrides used to default to.
+         */
+        @ParameterizedTest
+        @CsvSource({
+                "global,https://aiplatform.googleapis.com",
+                "eu,https://aiplatform.eu.rep.googleapis.com",
+                "us,https://aiplatform.us.rep.googleapis.com"})
+        void multiRegionsWithoutAnOverrideKeepTheirFormerDefault(String location, String expectedEndpoint) {
+            var config = TestConfigUtils.loadConfigTest().getLlmProviderClient();
+            config.setVertexAIClient(config.getVertexAIClient().toBuilder()
+                    .tokenUris(Set.of(URI.create("http://" + wireMockHost() + TOKEN_PATH)))
+                    .build());
+
+            assertThat(resolvedEndpoint(config, location)).isEqualTo(expectedEndpoint);
         }
 
         /**
@@ -388,16 +448,15 @@ class VertexAIClientGeneratorTest {
 
         private String resolvedEndpoint(LlmProviderClientConfig clientConfig, String location) {
             var generator = new VertexAIClientGenerator(clientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
             var request = ChatCompletionRequest.builder().model(MODEL).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
                     .configuration(location == null ? Map.of() : Map.of("location", location))
                     .build();
 
-            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                return VertexAITestClients.apiEndpointOf(client);
-            }
+            var client = generator.generate(config, request);
+            return VertexAITestClients.apiEndpointOf(client);
         }
     }
 
@@ -428,12 +487,11 @@ class VertexAIClientGeneratorTest {
                     .build();
             var request = ChatCompletionRequest.builder().model(MODEL).build();
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(config, registry,
+            var client = new VertexAIClientGenerator(config, registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                    .generate(apiConfig, request)) {
-                return VertexAITestClients.timeoutOf(client);
-            }
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generate(apiConfig, request);
+            return VertexAITestClients.timeoutOf(client);
         }
     }
 
@@ -441,54 +499,12 @@ class VertexAIClientGeneratorTest {
     @DisplayName("Client ownership")
     class ClientOwnership {
 
-        /**
-         * Closing twice must stay safe: the streaming path closes on the stream terminal and callers close the
-         * wrapper too.
-         */
-        @Test
-        @DisplayName("closing the returned client is idempotent")
-        void closingTheReturnedClientIsIdempotent() {
-            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
-            var request = ChatCompletionRequest.builder().model(MODEL).build();
-            var config = LlmProviderClientApiConfig.builder()
-                    .apiKey(serviceAccountJson)
-                    .configuration(Map.of("location", "global"))
-                    .build();
-
-            var client = (CloseableVertexAiChatModel) generator.generate(config, request);
-
-            assertThatCode(() -> {
-                client.close();
-                client.close();
-            }).doesNotThrowAnyException();
-        }
-
-        @Test
-        @DisplayName("closing the returned streaming client is idempotent")
-        void closingTheReturnedStreamingClientIsIdempotent() {
-            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
-            var request = ChatCompletionRequest.builder().model(MODEL).build();
-            var config = LlmProviderClientApiConfig.builder()
-                    .apiKey(serviceAccountJson)
-                    .configuration(Map.of("location", "global"))
-                    .build();
-
-            var client = generator.newVertexAIStreamingClient(config, request);
-
-            assertThatCode(() -> {
-                client.close();
-                client.close();
-            }).doesNotThrowAnyException();
-        }
-
         /** A client built for an unresolvable model must not outlive the failure. */
         @Test
         @DisplayName("an unsupported model fails without leaving a client behind")
         void unsupportedModelFailsWithoutLeavingAClientBehind() {
             var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
             var request = ChatCompletionRequest.builder().model("vertex_ai/not-a-model").build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -524,16 +540,15 @@ class VertexAIClientGeneratorTest {
             configuration.getLlmModelRegistry().setLocalOverridePath(override.toString());
             var generator = new VertexAIClientGenerator(clientConfig(), registryOf(configuration),
                     LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
             var request = ChatCompletionRequest.builder().model(model).build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
                     .configuration(Map.of("location", "global"))
                     .build();
 
-            try (var client = (CloseableVertexAiChatModel) generator.generate(config, request)) {
-                client.chat(UserMessage.from("hello"));
-            }
+            var client = generator.generate(config, request);
+            client.chat(UserMessage.from("hello"));
 
             wireMock.server().verify(postRequestedFor(urlPathMatching(
                     ".*/publishers/google/models/gemini-9\\.9-flash:generateContent")));
@@ -551,7 +566,7 @@ class VertexAIClientGeneratorTest {
 
             completeVia(new VertexAIClientGenerator(clientConfig(), registryWithoutTheModel,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS), "global");
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache), "global");
 
             wireMock.server().verify(postRequestedFor(urlPathMatching(
                     ".*/publishers/google/models/gemini-2\\.5-flash:generateContent")));
@@ -561,7 +576,7 @@ class VertexAIClientGeneratorTest {
         @DisplayName("a model the registry files under another provider is not sent to Vertex AI")
         void otherProvidersModelIsUnsupported() {
             var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
             var request = ChatCompletionRequest.builder().model("gemini-2.5-flash").build();
             var config = LlmProviderClientApiConfig.builder()
                     .apiKey(serviceAccountJson)
@@ -636,12 +651,11 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                    .generateChat(config, modelParameters)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(config, modelParameters);
+            client.chat(UserMessage.from("hello"));
 
             assertThat(sentGenerationConfig().path("thinkingConfig").path("thinkingBudget").asInt())
                     .isEqualTo(24576);
@@ -701,12 +715,11 @@ class VertexAIClientGeneratorTest {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
                     JsonUtils.getJsonNodeFromString(customParameters));
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                    .generateChat(config, modelParameters)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(config, modelParameters);
+            client.chat(UserMessage.from("hello"));
 
             assertThat(sentGenerationConfig().has("thinkingConfig")).isFalse();
         }
@@ -737,15 +750,14 @@ class VertexAIClientGeneratorTest {
                     .build();
             var question = UserMessage.from("Read trace t1");
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
-                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null))) {
-                var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
-                client.chat(ChatRequest.builder()
-                        .messages(question, call,
-                                ToolExecutionResultMessage.from(call.toolExecutionRequests().getFirst(), "banana"))
-                        .build());
-            }
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null));
+            var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
+            client.chat(ChatRequest.builder()
+                    .messages(question, call,
+                            ToolExecutionResultMessage.from(call.toolExecutionRequests().getFirst(), "banana"))
+                    .build());
 
             var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
             assertThat(requests).hasSize(2);
@@ -753,6 +765,194 @@ class VertexAIClientGeneratorTest {
                     .findParents("functionCall");
             assertThat(sentCalls).hasSize(1);
             assertThat(sentCalls.getFirst().path("thoughtSignature").asText()).isEqualTo(signature);
+        }
+    }
+
+    @Nested
+    @DisplayName("Credentials")
+    class Credentials {
+
+        @Test
+        @DisplayName("calls on the same key fetch one OAuth token between them")
+        void callsOnTheSameKeyShareOneToken() {
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+
+            completeVia(generator, "global");
+            completeVia(generator, "global");
+
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(TOKEN_PATH)));
+            wireMock.server().verify(2, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        }
+
+        /** Each generator stands for a pod: its credentials are its own, the token is the deployment's. */
+        @Test
+        @DisplayName("pods share one OAuth token through Redis")
+        void podsShareOneToken() {
+            completeVia(new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache), "global");
+            completeVia(new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache), "global");
+
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(TOKEN_PATH)));
+            wireMock.server().verify(2, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        }
+
+        @Test
+        @DisplayName("the shared token is stored encrypted, and neither it nor the key is readable in Redis")
+        void sharedTokenIsEncrypted() {
+            completeVia("global");
+
+            var keys = redisson.getKeys().getKeysStream().toList();
+            assertThat(keys).hasSize(1);
+            var rawValue = redisson.<String>getBucket(keys.getFirst(), StringCodec.INSTANCE)
+                    .get();
+            assertThat(rawValue).doesNotContain("test-access-token");
+            assertThat(keys.getFirst() + rawValue).doesNotContain(PROJECT_ID).doesNotContain("PRIVATE KEY");
+        }
+
+        /**
+         * With no refresh fraction the token would be shared until it expires; it has to leave Redis early enough that
+         * a pod refreshing inside the auth library's margin fetches a new one rather than being handed it back.
+         */
+        @Test
+        @DisplayName("a shared token leaves Redis at least 5 minutes before it expires")
+        void sharedTokenLeavesRedisBeforeItExpires() {
+            var config = clientConfig();
+            config.setVertexAIClient(config.getVertexAIClient().toBuilder().tokenCacheRefreshFraction(0).build());
+            completeVia(new VertexAIClientGenerator(config, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache), "global");
+
+            var key = redisson.getKeys().getKeysStream().toList().getFirst();
+            var actualTtlMillis = redisson.getBucket(key).remainTimeToLive();
+            // the stub token lives 60 minutes and config-test.yml sets a 5 minute minimum refresh-ahead
+            assertThat(actualTtlMillis)
+                    .isLessThanOrEqualTo(TimeUnit.MINUTES.toMillis(55))
+                    .isGreaterThan(TimeUnit.MINUTES.toMillis(54));
+        }
+
+        /** Credentials may end up in a log line; the token they hold, and the key naming its Redis bucket, must not. */
+        @Test
+        @DisplayName("refreshed credentials print with the token masked and without the cache key")
+        void refreshedCredentialsPrintWithTheTokenMasked() throws Exception {
+            var cacheKey = "vertex_ai_token:" + RandomStringUtils.secure().nextAlphanumeric(64);
+            var delegate = (ServiceAccountCredentials) ServiceAccountCredentials
+                    .fromStream(
+                            new ByteArrayInputStream(serviceAccountJson(PROJECT_ID).getBytes(StandardCharsets.UTF_8)))
+                    .createScoped(clientConfig().getVertexAIClient().scope());
+            var credentials = new SharedTokenServiceAccountCredentials(delegate, tokenCache, cacheKey,
+                    clientConfig().getVertexAIClient());
+            credentials.refresh();
+            var expected = "SharedTokenServiceAccountCredentials{universeDomain=googleapis.com, "
+                    + "isExplicitUniverseDomain=false, token=****}";
+
+            var actual = credentials.toString();
+
+            assertThat(credentials.getAccessToken().getTokenValue()).isEqualTo("test-access-token");
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        /** No attempt can read the key, and the key-file parser quotes an unrecognised type back. */
+        @Test
+        @DisplayName("a malformed key file is refused without retrying, its content kept out of the error")
+        void malformedKeyFileContentIsKeptOutOfTheError() throws Exception {
+            var secret = RandomStringUtils.secure().nextAlphanumeric(32);
+            var malformedKey = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson(PROJECT_ID)
+                            .replace("\"type\": \"service_account\"", "\"type\": \"%s\"".formatted(secret)))
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+
+            var thrown = catchThrowable(
+                    () -> generator.generate(malformedKey, ChatCompletionRequest.builder().model(MODEL).build()));
+
+            assertThat(thrown).isInstanceOf(ProviderRequestRefusedException.class)
+                    .hasMessage("Vertex AI service account key could not be read: it must be a service account's"
+                            + " JSON key file");
+            assertThat(ExceptionUtils.getThrowableList(thrown))
+                    .noneMatch(cause -> String.valueOf(cause.getMessage()).contains(secret));
+        }
+
+        /** A rejected key never starts working, so it is named, with Google's status, instead of an unexpected error. */
+        @Test
+        @DisplayName("a key the token endpoint rejects is reported as rejected, with the endpoint's status")
+        void rejectedKeyIsReportedWithTheEndpointsStatus() {
+            wireMock.server().stubFor(post(urlPathMatching(TOKEN_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(400)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(
+                                    "{\"error\": \"invalid_grant\", \"error_description\": \"Invalid JWT Signature.\"}")));
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+            var apiConfig = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+            var expected = Optional.of(new ErrorMessage(400, LlmProviderVertexAI.KEY_REJECTED));
+
+            var thrown = catchThrowable(() -> completeVia(generator, "global"));
+            var actual = new LlmProviderVertexAI(generator, apiConfig).getLlmProviderError(thrown);
+
+            assertThat(actual).isEqualTo(expected);
+            wireMock.server().verify(0, postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+        }
+
+        @Test
+        @DisplayName("each key fetches its own OAuth token and calls its own project")
+        void eachKeyFetchesItsOwnToken() throws Exception {
+            var otherProject = "other-" + RandomStringUtils.secure().nextAlphabetic(8).toLowerCase(Locale.ROOT);
+            var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+            var otherKey = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson(otherProject))
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            completeVia(generator, "global");
+            var client = generator.generate(otherKey,
+                    ChatCompletionRequest.builder().model(MODEL).build());
+            client.chat(UserMessage.from("hello"));
+
+            wireMock.server().verify(2, postRequestedFor(urlPathMatching(TOKEN_PATH)));
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(
+                    ".*/projects/" + PROJECT_ID + "/locations/global/.*")));
+            wireMock.server().verify(1, postRequestedFor(urlPathMatching(
+                    ".*/projects/" + otherProject + "/locations/global/.*")));
+        }
+    }
+
+    @Nested
+    @DisplayName("Tool choice")
+    class ToolChoices {
+
+        /** The old Vertex AI module refused any tool choice but AUTO before sending, which failed the evaluation. */
+        @Test
+        @DisplayName("a required tool choice reaches Vertex AI as function-calling mode ANY")
+        void requiredToolChoiceIsSentAsAny() {
+            var tool = ToolSpecification.builder().name("read").description("Reads a trace").build();
+            var config = LlmProviderClientApiConfig.builder()
+                    .apiKey(serviceAccountJson)
+                    .configuration(Map.of("location", "global"))
+                    .build();
+
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(config, new LlmAsJudgeModelParameters(MODEL, null, null, null));
+            client.chat(ChatRequest.builder()
+                    .messages(UserMessage.from("Read trace t1"))
+                    .toolSpecifications(tool)
+                    .toolChoice(ToolChoice.REQUIRED)
+                    .build());
+
+            var requests = wireMock.server().findAll(postRequestedFor(urlPathMatching(GENERATE_CONTENT_PATH)));
+            assertThat(requests).hasSize(1);
+            var actualToolConfig = JsonUtils.getJsonNodeFromString(requests.getFirst().getBodyAsString())
+                    .path("toolConfig");
+            assertThat(actualToolConfig)
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"functionCallingConfig\": {\"mode\": \"ANY\"}}"));
         }
     }
 
@@ -801,12 +1001,11 @@ class VertexAIClientGeneratorTest {
         void judgeSendsTemperatureAndSeed() {
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, 0.2, 7, null);
 
-            try (var client = (CloseableVertexAiChatModel) new VertexAIClientGenerator(clientConfig(), registry,
+            var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                    .generateChat(apiConfig(), modelParameters)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .generateChat(apiConfig(), modelParameters);
+            client.chat(UserMessage.from("hello"));
 
             assertThat(only(sentGenerationConfig(), "temperature", "seed"))
                     .isEqualTo(JsonUtils.getJsonNodeFromString("{\"temperature\": 0.2, \"seed\": 7}"));
@@ -824,7 +1023,7 @@ class VertexAIClientGeneratorTest {
         private LlmProviderVertexAI provider() {
             return new LlmProviderVertexAI(
                     new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                            LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                            LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache),
                     apiConfig());
         }
 
@@ -897,12 +1096,11 @@ class VertexAIClientGeneratorTest {
                 Integer expected) {
             var request = request(MODEL, maxCompletionTokens, maxTokens);
 
-            try (var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
+            var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
                     .newVertexAIClient(apiConfig(),
-                            request)) {
-                client.chat(UserMessage.from("hello"));
-            }
+                            request);
+            client.chat(UserMessage.from("hello"));
 
             assertSentMaxOutputTokens(sentGenerationConfig(), expected);
         }
@@ -915,22 +1113,21 @@ class VertexAIClientGeneratorTest {
             var request = request(MODEL, maxCompletionTokens, maxTokens);
             var completed = new CompletableFuture<ChatResponse>();
 
-            try (var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                    LlmTestClients.VIDEO_MIME_TYPE_UTILS)
-                    .newVertexAIStreamingClient(apiConfig(), request)) {
-                client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
-                    @Override
-                    public void onCompleteResponse(ChatResponse response) {
-                        completed.complete(response);
-                    }
+            var client = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
+                    .newVertexAIStreamingClient(apiConfig(), request);
+            client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
+                @Override
+                public void onCompleteResponse(ChatResponse response) {
+                    completed.complete(response);
+                }
 
-                    @Override
-                    public void onError(Throwable error) {
-                        completed.completeExceptionally(error);
-                    }
-                });
-                completed.get(10, TimeUnit.SECONDS);
-            }
+                @Override
+                public void onError(Throwable error) {
+                    completed.completeExceptionally(error);
+                }
+            });
+            completed.get(10, TimeUnit.SECONDS);
 
             assertSentMaxOutputTokens(sentGenerationConfig(STREAM_GENERATE_CONTENT_PATH), expected);
         }
@@ -1041,7 +1238,7 @@ class VertexAIClientGeneratorTest {
         private LlmProviderVertexAI provider() {
             return new LlmProviderVertexAI(
                     new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                            LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                            LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache),
                     apiConfig());
         }
 
@@ -1124,26 +1321,24 @@ class VertexAIClientGeneratorTest {
             wireMock.server().stubFor(post(urlPathMatching(STREAM_GENERATE_CONTENT_PATH))
                     .willReturn(aResponse().withFault(fault)));
             var generator = new VertexAIClientGenerator(clientConfig(), registry,
-                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS);
-            try (var warmUp = (CloseableVertexAiChatModel) generator.generate(apiConfig(), request())) {
-                warmUp.chat(UserMessage.from("hello"));
-            }
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
+            var warmUp = generator.generate(apiConfig(), request());
+            warmUp.chat(UserMessage.from("hello"));
             var failed = new CompletableFuture<Throwable>();
 
-            try (var client = generator.newVertexAIStreamingClient(apiConfig(), request())) {
-                client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
-                    @Override
-                    public void onCompleteResponse(ChatResponse response) {
-                        failed.complete(null);
-                    }
+            var client = generator.newVertexAIStreamingClient(apiConfig(), request());
+            client.chat(List.of(UserMessage.from("hello")), new StreamingChatResponseHandler() {
+                @Override
+                public void onCompleteResponse(ChatResponse response) {
+                    failed.complete(null);
+                }
 
-                    @Override
-                    public void onError(Throwable error) {
-                        failed.complete(error);
-                    }
-                });
-                assertThat(failed.get(45, TimeUnit.SECONDS)).isNotNull();
-            }
+                @Override
+                public void onError(Throwable error) {
+                    failed.complete(error);
+                }
+            });
+            assertThat(failed.get(45, TimeUnit.SECONDS)).isNotNull();
 
             wireMock.server().verify(EXPECTED_SDK_ATTEMPTS, postRequestedFor(urlPathMatching(
                     STREAM_GENERATE_CONTENT_PATH)));
@@ -1165,9 +1360,8 @@ class VertexAIClientGeneratorTest {
             var generator = generatorBehind(routes);
 
             String actualText;
-            try (var client = (CloseableVertexAiChatModel) generator.generate(apiConfig(), request())) {
-                actualText = client.chat("hello");
-            }
+            var client = generator.generate(apiConfig(), request());
+            actualText = client.chat("hello");
 
             assertThat(actualText).isEqualTo(expectedText);
             assertThat(routes.selections).hasValue(1);
@@ -1191,7 +1385,7 @@ class VertexAIClientGeneratorTest {
             ProxySelector.setDefault(proxySelector);
             try {
                 return new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                        LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                        LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
             } finally {
                 ProxySelector.setDefault(systemDefault);
             }
@@ -1234,22 +1428,21 @@ class VertexAIClientGeneratorTest {
     @DisplayName("Vertex AI calls share one connection pool and dispatcher")
     void callsShareOneTransport() {
         var generator = new VertexAIClientGenerator(clientConfig(), registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(serviceAccountJson)
                 .configuration(Map.of("location", "global"))
                 .build();
         var request = ChatCompletionRequest.builder().model(MODEL).build();
 
-        try (var first = (CloseableVertexAiChatModel) generator.generate(config, request);
-                var second = generator.newVertexAIStreamingClient(config, request)) {
-            var expectedTransport = Transport.of(VertexAITestClients.httpClientOf(first.client()));
+        var first = (VertexAiChatModel) generator.generate(config, request);
+        var second = generator.newVertexAIStreamingClient(config, request);
+        var expectedTransport = Transport.of(VertexAITestClients.httpClientOf(first.client()));
 
-            var actualTransport = Transport.of(VertexAITestClients.httpClientOf(second.client()));
+        var actualTransport = Transport.of(VertexAITestClients.httpClientOf(second.client()));
 
-            assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
-            assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
-        }
+        assertThat(actualTransport.connectionPool()).isSameAs(expectedTransport.connectionPool());
+        assertThat(actualTransport.dispatcher()).isSameAs(expectedTransport.dispatcher());
     }
 
     /** Calls made per kind, chat and streamed, by {@link #callsLeaveNoThreadsBehind}. */
@@ -1281,7 +1474,7 @@ class VertexAIClientGeneratorTest {
                         .withHeader("Content-Type", "text/event-stream")
                         .withBody("data: %s\n\n".formatted(GENERATE_CONTENT_RESPONSE.replace("\n", " ")))));
         var provider = new LlmProviderVertexAI(new VertexAIClientGenerator(clientConfig(), registry,
-                LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache),
                 LlmProviderClientApiConfig.builder()
                         .apiKey(serviceAccountJson)
                         .configuration(Map.of("location", "global"))
@@ -1361,7 +1554,7 @@ class VertexAIClientGeneratorTest {
                     .multiRegionApiEndpoints(Map.of("global", endpoint))
                     .build());
             var provider = new LlmProviderVertexAI(new VertexAIClientGenerator(config, registry,
-                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS),
+                    LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache),
                     LlmProviderClientApiConfig.builder()
                             .apiKey(serviceAccountJson)
                             .configuration(Map.of("location", "global"))

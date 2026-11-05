@@ -130,10 +130,7 @@ class AgenticScoringServiceTest {
      */
     static Stream<Arguments> firstRoundToolChoices() {
         return Stream.of(
-                // langchain4j's ChatRequestValidationUtils.validate throws
-                // UnsupportedFeatureException for any tool choice other than AUTO, and Vertex's
-                // model calls it — a forced choice failed the evaluation instead of scoring it.
-                arguments(LlmProvider.VERTEX_AI, ToolChoice.AUTO),
+                arguments(LlmProvider.VERTEX_AI, ToolChoice.REQUIRED),
                 arguments(LlmProvider.OPEN_AI, ToolChoice.REQUIRED),
                 arguments(LlmProvider.ANTHROPIC, ToolChoice.REQUIRED),
                 arguments(LlmProvider.GEMINI, ToolChoice.REQUIRED),

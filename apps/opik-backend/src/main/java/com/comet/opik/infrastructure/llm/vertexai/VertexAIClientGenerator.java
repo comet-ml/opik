@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
@@ -11,6 +12,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.SharedTokenCache;
 import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.utils.JsonUtils;
@@ -18,6 +20,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.google.genai.Client;
 import com.google.genai.types.ClientOptions;
 import com.google.genai.types.HttpOptions;
@@ -28,7 +35,6 @@ import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
@@ -42,11 +48,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 @Slf4j
-@RequiredArgsConstructor
 public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatModel> {
 
     private static final Pattern LOCATION = Pattern.compile("[a-z0-9-]+");
@@ -68,12 +74,38 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             .writeTimeout(Duration.ZERO)
             .build();
 
+    private static final String TOKEN_CACHE_KEY_FORMAT = "vertex_ai_token:%s";
+
+    /**
+     * Scoped credentials per service-account key, keyed by the SHA-256 of the scope and the key file. They hold the
+     * OAuth token between refreshes, and refresh it through the token cache every pod shares. Two workspaces share an
+     * entry only by holding the same private key, which is what the token stands for anyway.
+     */
+    private final Cache<String, SharedTokenServiceAccountCredentials> scopedCredentialsByKeyHash;
+    private final SharedTokenCache tokenCache;
+
+    public VertexAIClientGenerator(@NonNull LlmProviderClientConfig clientConfig,
+            @NonNull LlmModelRegistryService registryService,
+            @NonNull RemoteMediaInliner remoteMediaInliner,
+            @NonNull VideoMimeTypeUtils videoMimeTypeUtils,
+            @NonNull SharedTokenCache tokenCache) {
+        this.clientConfig = clientConfig;
+        this.registryService = registryService;
+        this.remoteMediaInliner = remoteMediaInliner;
+        this.videoMimeTypeUtils = videoMimeTypeUtils;
+        this.tokenCache = tokenCache;
+        this.scopedCredentialsByKeyHash = CacheBuilder.newBuilder()
+                .expireAfterAccess(
+                        clientConfig.getVertexAIClient().credentialsCacheExpireAfterAccess().toJavaDuration())
+                .build();
+    }
+
     List<ChatMessage> mapMessages(@NonNull ChatCompletionRequest request) {
         return LlmProviderLangChainMapper.INSTANCE.mapMessages(request, videoMimeTypeUtils);
     }
 
-    CloseableVertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request, (client, calls, model) -> {
+    VertexAiChatModel newVertexAIClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request) {
+        return buildPerCallModel(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -88,13 +120,13 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiChatModel(builder.build(), client, remoteMediaInliner);
+            return new VertexAiChatModel(builder.build(), client, remoteMediaInliner);
         });
     }
 
-    CloseableVertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
+    VertexAiStreamingChatModel newVertexAIStreamingClient(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull ChatCompletionRequest request) {
-        return buildOwnedClient(apiKey, request, (client, calls, model) -> {
+        return buildPerCallModel(apiKey, request, (client, calls, model) -> {
             var builder = GoogleGenAiStreamingChatModel.builder()
                     .client(client)
                     .modelName(model);
@@ -109,7 +141,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
 
-            return new CloseableVertexAiStreamingChatModel(builder.build(), client, calls, remoteMediaInliner);
+            return new VertexAiStreamingChatModel(builder.build(), client, calls, remoteMediaInliner);
         });
     }
 
@@ -128,10 +160,10 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         params.wireBudgetFor(model).ifPresent(budget);
     }
 
-    // A Client per call, on the shared transport, so that the call's own calls can be cancelled. Built here rather
-    // than by the model builder, which keeps its client private.
-    private <T> T buildOwnedClient(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
-            OwnedClientFactory<T> factory) {
+    // A model on its own Client per call, on the shared transport, so that the call's own calls can be cancelled. The
+    // Client is built here rather than by the model builder, which keeps its client private.
+    private <T> T buildPerCallModel(LlmProviderClientApiConfig apiKey, ChatCompletionRequest request,
+            PerCallModelFactory<T> factory) {
         // The enum fallback mirrors LlmProviderFactoryImpl's routing, so every model it sends here can be built here.
         var modelId = registryService.findModel(request.model())
                 .filter(result -> result.provider() == LlmProvider.VERTEX_AI)
@@ -144,7 +176,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     @FunctionalInterface
-    private interface OwnedClientFactory<T> {
+    private interface PerCallModelFactory<T> {
         T create(Client client, CancellableCalls calls, String model);
     }
 
@@ -163,13 +195,18 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         return builder.build();
     }
 
+    /**
+     * The cause is carried redacted: the key-file parser can quote the key's own content in its message, such as an
+     * unrecognised {@code type} value, and this exception is logged with its cause.
+     */
     private InternalServerErrorException failWithError(Exception e) {
-        return new InternalServerErrorException("Failed to create GoogleCredentials", e);
+        return new InternalServerErrorException("Failed to create GoogleCredentials", ProviderFailures.redacted(e));
     }
 
     /**
      * The location is free-text in the configuration but reaches both the {@code locations/%s} resource path and the
-     * endpoint lookup, whose keys are constrained to this same lower-case form.
+     * endpoint lookup, both the configured overrides, keyed in this same lower-case form, and the SDK's own, which only
+     * recognises the lower-case {@code eu} and {@code us} as multi-regions.
      */
     private static String canonicalLocation(String location) {
         var canonical = location.strip().toLowerCase(Locale.ROOT);
@@ -181,7 +218,9 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     private Optional<String> apiEndpointFor(String canonicalLocation) {
-        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints().get(canonicalLocation))
+        return Optional.ofNullable(clientConfig.getVertexAIClient().multiRegionApiEndpoints())
+                .map(endpoints -> endpoints.get(canonicalLocation))
+                .filter(StringUtils::isNotBlank)
                 .map(VertexAIClientGenerator::withScheme);
     }
 
@@ -198,40 +237,62 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
                 .filter(StringUtils::isNotBlank)
                 .map(VertexAIClientGenerator::canonicalLocation);
 
+        var credentials = credentialsFor(config.apiKey());
+        var builder = Client.builder()
+                .vertexAI(true)
+                .project(credentials.projectId())
+                .credentials(credentials);
+
+        location.ifPresent(builder::location);
+
+        // Only a location with a configured override is remapped; the rest keep the SDK-derived endpoint.
+        // Must go through httpOptions: Client.Builder#baseUrl is ignored once project/location is set.
+        var httpOptions = HttpOptions.builder();
+        location.flatMap(this::apiEndpointFor).ifPresent(httpOptions::baseUrl);
+
+        // The SDK disables its HTTP client's timeouts, so without this a request can hang indefinitely.
+        // The SDK takes milliseconds as an int, and the configuration is only bounded below, so clamp rather
+        // than let a value over ~24.8 days wrap into a negative timeout.
+        Optional.ofNullable(clientConfig.getCallTimeout())
+                .map(timeout -> (int) Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE))
+                .ifPresent(httpOptions::timeout);
+
+        return builder.httpOptions(httpOptions.build())
+                .clientOptions(ClientOptions.builder().customHttpClient(httpClient).build())
+                .build();
+    }
+
+    private SharedTokenServiceAccountCredentials credentialsFor(String apiKey) {
+        var keyHash = Hashing.sha256()
+                .hashString(clientConfig.getVertexAIClient().scope() + "\n" + apiKey, StandardCharsets.UTF_8)
+                .toString();
         try {
-            var credentials = ServiceAccountCredentials.fromStream(
-                    new ByteArrayInputStream(config.apiKey().getBytes(StandardCharsets.UTF_8)));
-
-            // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
-            if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {
-                throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_TOKEN_URI);
-            }
-
-            var builder = Client.builder()
-                    .vertexAI(true)
-                    .project(credentials.getProjectId())
-                    .credentials(credentials.createScoped(clientConfig.getVertexAIClient().scope()));
-
-            location.ifPresent(builder::location);
-
-            // Only multi-region locations are remapped; single-region ones keep the SDK-derived endpoint.
-            // Must go through httpOptions: Client.Builder#baseUrl is ignored once project/location is set.
-            var httpOptions = HttpOptions.builder();
-            location.flatMap(this::apiEndpointFor).ifPresent(httpOptions::baseUrl);
-
-            // The SDK disables its HTTP client's timeouts, so without this a request can hang indefinitely.
-            // The SDK takes milliseconds as an int, and the configuration is only bounded below, so clamp rather
-            // than let a value over ~24.8 days wrap into a negative timeout.
-            Optional.ofNullable(clientConfig.getCallTimeout())
-                    .map(timeout -> (int) Math.min(timeout.toMilliseconds(), Integer.MAX_VALUE))
-                    .ifPresent(httpOptions::timeout);
-
-            return builder.httpOptions(httpOptions.build())
-                    .clientOptions(ClientOptions.builder().customHttpClient(httpClient).build())
-                    .build();
-        } catch (IOException e) {
-            throw failWithError(e);
+            return scopedCredentialsByKeyHash.get(keyHash, () -> loadCredentials(apiKey, keyHash));
+        } catch (UncheckedExecutionException | ExecutionException e) {
+            Throwables.throwIfUnchecked(e.getCause());
+            throw failWithError((Exception) e.getCause());
         }
+    }
+
+    private SharedTokenServiceAccountCredentials loadCredentials(String apiKey, String keyHash) {
+        ServiceAccountCredentials credentials;
+        try {
+            credentials = ServiceAccountCredentials.fromStream(
+                    new ByteArrayInputStream(apiKey.getBytes(StandardCharsets.UTF_8)));
+        } catch (IOException exception) {
+            // No attempt can read it, and the parser can quote the key file back, so the refusal carries none of it
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_KEY_UNREADABLE);
+        }
+
+        // the credentials refresh by posting to token_uri, which comes from the user-supplied key file
+        if (!clientConfig.getVertexAIClient().tokenUris().contains(credentials.getTokenServerUri())) {
+            throw new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.VERTEX_AI_TOKEN_URI);
+        }
+
+        // createScoped on service-account credentials returns service-account credentials
+        var scoped = (ServiceAccountCredentials) credentials.createScoped(clientConfig.getVertexAIClient().scope());
+        return new SharedTokenServiceAccountCredentials(scoped, tokenCache, TOKEN_CACHE_KEY_FORMAT.formatted(keyHash),
+                clientConfig.getVertexAIClient());
     }
 
     @Override

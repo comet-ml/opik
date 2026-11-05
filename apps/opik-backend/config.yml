@@ -1588,7 +1588,8 @@ llmProviderTokenAuth:
   # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
-  # Description: Lease time for the cross-pod single-flight lock around a token fetch
+  # Description: Lease time for the cross-pod single-flight lock around a token fetch, on top of fetchTimeout:
+  # the lease is lockTimeout + fetchTimeout, so a fetch always ends inside it
   lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
   # Default: 1000000
   # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
@@ -1727,20 +1728,32 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
-    # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the endpoint
-    # from the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
-    # multi-region locations need their endpoint set explicitly. Single-region locations are not listed and keep the SDK
-    # default. Required: these endpoints exist only here, the application defines no fallback for them.
+    # Default: unset, for every location
+    # Description: API endpoint override per location, keyed by lower-case location. Unset, the SDK derives the
+    # endpoint itself: https://aiplatform.googleapis.com for global, https://aiplatform.<eu|us>.rep.googleapis.com for
+    # the eu and us multi-regions, and https://<location>-aiplatform.googleapis.com otherwise.
     # Values may be a bare host or an https:// URL; https:// is assumed when no scheme is given.
     multiRegionApiEndpoints:
-      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
-      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}
-      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-https://aiplatform.us.rep.googleapis.com}
+      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-}
+      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-}
+      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-}
     # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
     # and the key file is user-supplied, so any other value is refused.
     tokenUris:
       - ${LLM_PROVIDER_VERTEXAI_TOKEN_URI:-https://oauth2.googleapis.com/token}
       - https://accounts.google.com/o/oauth2/token
+    # Default: 15m
+    # Description: How long a service-account key's credentials are kept in memory after its last call. Capped at 1d
+    credentialsCacheExpireAfterAccess: ${LLM_PROVIDER_VERTEXAI_CREDENTIALS_CACHE_EXPIRE_AFTER_ACCESS:-15m}
+    # Default: 0.25
+    # Description: Refresh the OAuth token shared by every pod once its remaining lifetime drops below this fraction
+    # of the total lifetime, and at the latest tokenCacheMinRefreshAhead before it expires
+    tokenCacheRefreshFraction: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_REFRESH_FRACTION:-0.25}
+    # Default: 5m
+    # Description: How long before its expiry the shared OAuth token leaves Redis at the latest. It has to leave before
+    # the auth library refreshes it (3m45s before expiry), or a refreshing pod is handed back the same expiring token.
+    # Between 3m45s and 30m
+    tokenCacheMinRefreshAhead: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_MIN_REFRESH_AHEAD:-5m}
 
 # Configuration for cache manager
 cacheManager:

@@ -868,18 +868,32 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: https://www.googleapis.com/auth/cloud-platform
-    # Description: API endpoint per multi-region location, keyed by lower-case location. Single-region locations are
-    # not listed and keep the endpoint the SDK derives from the location itself. Required: these endpoints exist only
-    # here, the application defines no fallback for them. Values may be a bare host or an https:// URL.
+    # Default: unset, for every location
+    # Description: API endpoint override per location, keyed by lower-case location. Unset, the SDK derives the
+    # endpoint itself: https://aiplatform.googleapis.com for global, https://aiplatform.<eu|us>.rep.googleapis.com for
+    # the eu and us multi-regions, and https://<location>-aiplatform.googleapis.com otherwise.
+    # Values may be a bare host or an https:// URL; https:// is assumed when no scheme is given.
     multiRegionApiEndpoints:
-      global: https://aiplatform.googleapis.com
-      eu: https://aiplatform.eu.rep.googleapis.com
-      us: https://aiplatform.us.rep.googleapis.com
+      global:
+      eu:
+      us:
     # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
     # and the key file is user-supplied, so any other value is refused.
     tokenUris:
       - https://oauth2.googleapis.com/token
       - https://accounts.google.com/o/oauth2/token
+    # Default: 15m
+    # Description: How long a service-account key's credentials are kept in memory after its last call. Capped at 1d
+    credentialsCacheExpireAfterAccess: 15m
+    # Default: 0.25
+    # Description: Refresh the OAuth token shared by every pod once its remaining lifetime drops below this fraction
+    # of the total lifetime, and at the latest tokenCacheMinRefreshAhead before it expires
+    tokenCacheRefreshFraction: 0.25
+    # Default: 5m
+    # Description: How long before its expiry the shared OAuth token leaves Redis at the latest. It has to leave before
+    # the auth library refreshes it (3m45s before expiry), or a refreshing pod is handed back the same expiring token.
+    # Between 3m45s and 30m
+    tokenCacheMinRefreshAhead: 5m
 
 # Configuration for cache manager
 cacheManager:

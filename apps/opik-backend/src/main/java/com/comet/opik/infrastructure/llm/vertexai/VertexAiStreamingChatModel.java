@@ -12,15 +12,13 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
-// Streaming counterpart to CloseableVertexAiChatModel; the caller closes it on the stream terminal.
-@Slf4j
+/** Streaming counterpart to {@link VertexAiChatModel}, whose stream can also be cancelled. */
 @RequiredArgsConstructor
 @Accessors(fluent = true)
-class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoCloseable {
+class VertexAiStreamingChatModel implements StreamingChatModel {
 
     private final @NonNull StreamingChatModel delegate;
     @Getter
@@ -54,23 +52,5 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
     @Override
     public Set<Capability> supportedCapabilities() {
         return delegate.supportedCapabilities();
-    }
-
-    /**
-     * Closes the delegate only. The client is left open: closing it would shut the dispatcher and empty the connection
-     * pool that every Vertex AI call shares, see {@link VertexAIClientGenerator}, and it holds nothing else. The
-     * per-request close of OPIK-7847 targeted the old {@code VertexAI} client's GAX executor, which google-genai on the
-     * shared HTTP client doesn't have.
-     */
-    @Override
-    public void close() {
-        // A no-op with today's delegate, but only it can release anything it owns.
-        try {
-            if (delegate instanceof AutoCloseable closeable) {
-                closeable.close();
-            }
-        } catch (Exception e) {
-            log.warn("Failed to close the delegate Vertex AI streaming model", e);
-        }
     }
 }

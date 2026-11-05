@@ -146,7 +146,7 @@ class LlmProviderFactoryTest {
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
                 registryService, LlmTestClients.REMOTE_MEDIA_INLINER,
-                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, mock(SharedTokenCache.class));
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
@@ -597,7 +597,7 @@ class LlmProviderFactoryTest {
         var vertexAIModule = new VertexAIModule();
         vertexAIModule.llmServiceProvider(llmProviderFactory,
                 vertexAIModule.clientGenerator(llmProviderClientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
-                        LlmTestClients.VIDEO_MIME_TYPE_UTILS));
+                        LlmTestClients.VIDEO_MIME_TYPE_UTILS, mock(SharedTokenCache.class)));
 
         assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
     }

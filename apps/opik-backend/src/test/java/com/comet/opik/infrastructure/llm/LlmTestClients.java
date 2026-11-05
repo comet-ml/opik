@@ -6,12 +6,17 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.openai.core.http.HttpClient;
 import jakarta.ws.rs.client.Client;
 import lombok.experimental.UtilityClass;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
 
 /**
  * The provider dependencies the app injects, wired by the production modules from {@code config-test.yml}, for tests
@@ -33,6 +38,70 @@ public class LlmTestClients {
     public static final HttpClient RESPONSES_API_HTTP_CLIENT = new OpenAIModule().responsesApiHttpClient(CONFIG);
 
     public static final LlmHttpClientBuilders LLM_HTTP_CLIENT_BUILDERS = llmHttpClientBuilders();
+
+    /**
+     * Single-flight correctness belongs to {@code RedissonLockService}'s own tests (which is also
+     * package-private); here the lock is a passthrough so the caller's orchestration is what's
+     * under test.
+     */
+    public static final LockService PASSTHROUGH_LOCK_SERVICE = new LockService() {
+        @Override
+        public <T> Mono<T> executeWithLock(Lock lock, Mono<T> action) {
+            return action;
+        }
+
+        @Override
+        public <T> Mono<T> executeWithLockCustomExpire(Lock lock, Mono<T> action, Duration duration) {
+            return action;
+        }
+
+        @Override
+        public <T> Flux<T> executeWithLock(Lock lock, Flux<T> action) {
+            return action;
+        }
+
+        @Override
+        public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
+                Duration actionTimeout, Duration lockTimeout) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
+                Duration actionTimeout, Duration lockTimeout, boolean holdUntilExpiry) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Mono<Void> unlockUsingToken(Lock lock) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Mono<String> tryAcquireSlot(Lock lock, int totalSlots, Duration leaseTime) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Mono<Boolean> refreshSlot(Lock lock, String permitId, Duration leaseTime) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Mono<Boolean> releaseSlot(Lock lock, String permitId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Mono<Void> addSlotPermits(Lock lock, int delta) {
+            throw new UnsupportedOperationException();
+        }
+    };
 
     /**
      * A mock provider on 127.0.0.1 only. A server on every interface can share its port with another local process
