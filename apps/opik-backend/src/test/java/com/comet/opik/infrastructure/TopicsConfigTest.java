@@ -183,7 +183,7 @@ class TopicsConfigTest {
         assertThat(nightly.getProjectTimeout()).isEqualTo(Duration.minutes(15));
         assertThat(nightly.getMinVectors()).isEqualTo(100);
         assertThat(nightly.getWindowDays()).isEqualTo(30);
-        assertThat(nightly.getMaxVectors()).isEqualTo(30_000);
+        assertThat(nightly.getMaxVectors()).isEqualTo(100_000);
         assertThat(nightly.getQwenDeadline()).isEqualTo(Duration.seconds(120));
     }
 

@@ -102,7 +102,7 @@ public class TopicsConfig {
 
         /** A larger window keeps its newest traces. */
         @JsonProperty
-        @Min(100) @Max(100_000) private int maxVectors = 30_000;
+        @Min(100) @Max(100_000) private int maxVectors = 100_000;
 
         /** The deadline of the Qwen call that names the groups. */
         @NotNull @JsonProperty

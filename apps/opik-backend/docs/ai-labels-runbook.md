@@ -307,7 +307,7 @@ Once a night the job builds each project's topic list from its topic vectors. St
 project with a saved list is skipped every night until the nightly update ships. It reads the same workspaces as
 ai-labels, and runs only with `TOPICS_ENABLED=true`.
 
-A first build reads the project's window (the 30 whole UTC days before the night, the newest 30,000 traces at most),
+A first build reads the project's window (the 30 whole UTC days before the night, the newest 100,000 traces at most),
 merges identical intent texts, groups them with k-means (30 to 50 groups, about one per 30 unique texts), asks Qwen
 through opik-inference `/v1/generate` to name up to 10 topics over the groups, and assigns every window trace to its
 nearest topic prototype or to Other. The prompt shows each group's share and 5 to 10 example requests (the most
@@ -333,7 +333,7 @@ or in Other, and a name that is a catch-all as a whole ("Other", "General Reques
 | `TOPICS_NIGHTLY_PROJECT_TIMEOUT` | `15m` | One run is stopped and failed with `timeout` after this. Under the budget. |
 | `TOPICS_NIGHTLY_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. |
 | `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
-| `TOPICS_NIGHTLY_MAX_VECTORS` | `30000` | A larger window keeps its newest traces. |
+| `TOPICS_NIGHTLY_MAX_VECTORS` | `100000` | A larger window keeps its newest traces. |
 | `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the Qwen call. The call uses the `batch` lane, which takes up to 300s. |
 | `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` and `topic_run_counts` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. |
 

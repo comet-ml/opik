@@ -2698,9 +2698,9 @@ topics:
     #  Default: 30
     #  Description: The window: this many whole UTC days before the night
     windowDays: ${TOPICS_NIGHTLY_WINDOW_DAYS:-30}
-    #  Default: 30000
+    #  Default: 100000
     #  Description: A larger window keeps its newest traces
-    maxVectors: ${TOPICS_NIGHTLY_MAX_VECTORS:-30000}
+    maxVectors: ${TOPICS_NIGHTLY_MAX_VECTORS:-100000}
     #  Default: 120s
     #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
     qwenDeadline: ${TOPICS_NIGHTLY_QWEN_DEADLINE:-120s}
