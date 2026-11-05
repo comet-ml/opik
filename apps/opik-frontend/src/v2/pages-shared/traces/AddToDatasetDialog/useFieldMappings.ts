@@ -11,9 +11,9 @@ import {
 } from "react";
 
 import { EnrichmentOptions } from "./useAddToDatasetForm";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 import {
   FIXED_MAPPING_FIELDS,
-  MAX_FIELD_NAME_LENGTH,
   MappingRow,
   QUICK_ADD_CHIPS,
   QuickAddChip,

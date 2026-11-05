@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import useFieldMappings from "./useFieldMappings";
 import { EnrichmentOptions } from "./useAddToDatasetForm";
-import { MAX_FIELD_NAME_LENGTH } from "./fieldMappingTypes";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 
 const ALL_OFF: EnrichmentOptions = {
   includeSpans: false,

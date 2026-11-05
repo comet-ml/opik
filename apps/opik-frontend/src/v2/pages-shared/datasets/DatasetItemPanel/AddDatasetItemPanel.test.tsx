@@ -25,6 +25,24 @@ describe("AddDatasetItemPanel", () => {
     useTestSuiteDraftStore.getState().clearDraft();
   });
 
+  it("waits for the dataset columns before showing fields", () => {
+    render(
+      <TooltipProvider>
+        <AddDatasetItemPanel
+          open
+          onClose={vi.fn()}
+          columns={[]}
+          isColumnsLoading
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.queryByTestId("add-record-starter")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add record/i }),
+    ).not.toBeInTheDocument();
+  });
+
   describe("empty dataset", () => {
     it("offers starter fields and explains why it can't save yet", () => {
       renderPanel([]);

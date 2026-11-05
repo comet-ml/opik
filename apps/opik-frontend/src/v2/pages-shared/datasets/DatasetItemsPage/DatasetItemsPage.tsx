@@ -245,10 +245,11 @@ function DatasetItemsPage(): React.ReactElement {
     ],
   );
 
-  const { data: addItemsMeta } = useDatasetItemsList(
-    { datasetId, page: 1, size: 1 },
-    { enabled: canEditDatasets && !!datasetId },
-  );
+  const { data: addItemsMeta, isLoading: isAddItemColumnsLoading } =
+    useDatasetItemsList(
+      { datasetId, page: 1, size: 1 },
+      { enabled: canEditDatasets && !!datasetId },
+    );
   const addItemColumns = useColumnsWithDraftKeys(
     addItemsMeta?.columns ?? EMPTY_COLUMNS,
   );
@@ -256,7 +257,10 @@ function DatasetItemsPage(): React.ReactElement {
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
   const [openExpansion, setOpenExpansion] = useState(false);
 
-  const handleAddItem = useCallback(() => setOpenCreatePanel(true), []);
+  const handleAddItem = useCallback(() => {
+    if (!dataset) return;
+    setOpenCreatePanel(true);
+  }, [dataset]);
 
   const handleExpand = useCallback(() => setOpenExpansion(true), []);
 
@@ -316,6 +320,7 @@ function DatasetItemsPage(): React.ReactElement {
         open: openCreatePanel,
         onClose: () => setOpenCreatePanel(false),
         columns: addItemColumns,
+        isColumnsLoading: isAddItemColumnsLoading,
       })}
       {renderExpansionDialog({
         open: openExpansion,

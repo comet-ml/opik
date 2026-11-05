@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DYNAMIC_COLUMN_TYPE } from "@/types/shared";
-import { MAX_FIELD_NAME_LENGTH } from "@/v2/pages-shared/traces/AddToDatasetDialog/fieldMappingTypes";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 import {
   countFilledFields,
   createFieldRow,
@@ -112,5 +112,71 @@ describe("isInvalidJsonValue", () => {
 
   it("ignores rows that did not start as JSON", () => {
     expect(isInvalidJsonValue(createFieldRow("f", "{oops"))).toBe(false);
+  });
+});
+
+describe("editing loaded records", () => {
+  const load = (data: Record<string, unknown>) => dataToFieldRows(data, []);
+  const rename = (rows: ReturnType<typeof load>, from: string, to: string) =>
+    rows.map((r) => (r.name === from ? { ...r, name: to } : r));
+  const setValue = (
+    rows: ReturnType<typeof load>,
+    name: string,
+    value: string,
+  ) => rows.map((r) => (r.name === name ? { ...r, value } : r));
+
+  it("saves untouched fields with their original values and types", () => {
+    const data = { a: null, n: 7, b: false, o: { x: 1 }, s: "text" };
+
+    expect(fieldRowsToData(load(data), { dropEmpty: false })).toEqual(data);
+  });
+
+  it("keeps a number or boolean typed after the field is renamed", () => {
+    const rows = rename(
+      rename(load({ n: 7, b: true }), "n", "num"),
+      "b",
+      "flag",
+    );
+
+    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({
+      num: 7,
+      flag: true,
+    });
+  });
+
+  it("re-types an edited scalar when the new text still parses", () => {
+    const rows = setValue(
+      setValue(load({ n: 7, b: true }), "n", "8"),
+      "b",
+      "false",
+    );
+
+    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({
+      n: 8,
+      b: false,
+    });
+  });
+
+  it("falls back to text when an edited scalar no longer parses", () => {
+    const rows = setValue(load({ n: 7 }), "n", "seven");
+
+    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({ n: "seven" });
+  });
+
+  it("only picks schema columns the record actually owns", () => {
+    const rows = dataToFieldRows({ input: "i" }, [
+      column("toString"),
+      column("constructor"),
+      column("input"),
+    ]);
+
+    expect(rows.map((r) => r.name)).toEqual(["input"]);
+  });
+
+  it("rejects the reserved __proto__ name", () => {
+    const row = createFieldRow("__proto__", "x");
+
+    expect(getFieldRowErrors([row])).toEqual({ [row.id]: "reserved" });
+    expect(fieldRowsToData([row], { dropEmpty: true })).toEqual({});
   });
 });

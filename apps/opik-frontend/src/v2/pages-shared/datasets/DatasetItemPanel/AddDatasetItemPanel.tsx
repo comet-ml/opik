@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/ui/button";
+import Loader from "@/shared/Loader/Loader";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import { Tag } from "@/ui/tag";
 import { useToast } from "@/ui/use-toast";
@@ -190,12 +191,14 @@ interface AddDatasetItemPanelProps {
   open: boolean;
   onClose: () => void;
   columns: DatasetItemColumn[];
+  isColumnsLoading?: boolean;
 }
 
 const AddDatasetItemPanel: React.FC<AddDatasetItemPanelProps> = ({
   open,
   onClose,
   columns,
+  isColumnsLoading = false,
 }) => (
   <AddItemPanelWrapper
     panelId="dataset-item-panel"
@@ -204,9 +207,15 @@ const AddDatasetItemPanel: React.FC<AddDatasetItemPanelProps> = ({
     onClose={onClose}
     initialWidth={0.4}
   >
-    {(context) => (
-      <AddDatasetItemForm {...context} columns={columns} onClose={onClose} />
-    )}
+    {(context) =>
+      isColumnsLoading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Loader />
+        </div>
+      ) : (
+        <AddDatasetItemForm {...context} columns={columns} onClose={onClose} />
+      )
+    }
   </AddItemPanelWrapper>
 );
 

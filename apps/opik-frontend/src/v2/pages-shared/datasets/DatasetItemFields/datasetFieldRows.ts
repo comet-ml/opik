@@ -1,21 +1,33 @@
 import uniqueId from "lodash/uniqueId";
 
 import { DatasetItemColumn } from "@/types/datasets";
-import { MAX_FIELD_NAME_LENGTH } from "@/v2/pages-shared/traces/AddToDatasetDialog/fieldMappingTypes";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 
 export type DatasetFieldRow = {
   id: string;
   name: string;
   value: string;
   isJson: boolean;
+  // What the record held when the row was loaded, so untouched fields are
+  // saved as-is (null, numbers, booleans) instead of as the text shown.
+  original?: { value: unknown; text: string };
 };
 
-export type DatasetFieldRowError = "blank" | "duplicate" | "too_long";
+export type DatasetFieldRowError =
+  | "blank"
+  | "duplicate"
+  | "too_long"
+  | "reserved";
+
+// Assigning this key on a plain object sets its prototype instead of a field,
+// so it would vanish from the saved data.
+const RESERVED_FIELD_NAMES = new Set(["__proto__"]);
 
 export const FIELD_ROW_ERROR_TEXT: Record<DatasetFieldRowError, string> = {
   blank: "Field name is required",
   duplicate: "Field name is already used",
   too_long: `Field name must be ${MAX_FIELD_NAME_LENGTH} characters or fewer`,
+  reserved: "This field name is reserved",
 };
 
 export const createFieldRow = (name = "", value = ""): DatasetFieldRow => ({
@@ -26,16 +38,41 @@ export const createFieldRow = (name = "", value = ""): DatasetFieldRow => ({
 });
 
 const toFieldRow = (name: string, rawValue: unknown): DatasetFieldRow => {
-  if (rawValue === null || rawValue === undefined) {
-    return createFieldRow(name);
+  const isJson = typeof rawValue === "object" && rawValue !== null;
+  const text =
+    rawValue === null || rawValue === undefined
+      ? ""
+      : isJson
+        ? JSON.stringify(rawValue, null, 2)
+        : String(rawValue);
+
+  return {
+    ...createFieldRow(name, text),
+    isJson,
+    original: { value: rawValue, text },
+  };
+};
+
+const toRawValue = (row: DatasetFieldRow): unknown => {
+  const { original } = row;
+  if (!original) return row.value;
+  if (row.value === original.text) return original.value;
+
+  const text = row.value.trim();
+  if (
+    typeof original.value === "number" &&
+    text !== "" &&
+    !isNaN(Number(text))
+  ) {
+    return Number(text);
   }
-  if (typeof rawValue === "object") {
-    return {
-      ...createFieldRow(name, JSON.stringify(rawValue, null, 2)),
-      isJson: true,
-    };
+  if (
+    typeof original.value === "boolean" &&
+    (text === "true" || text === "false")
+  ) {
+    return text === "true";
   }
-  return createFieldRow(name, String(rawValue));
+  return row.value;
 };
 
 export const columnsToFieldRows = (
@@ -50,7 +87,7 @@ export const dataToFieldRows = (
 ): DatasetFieldRow[] => {
   const columnNames = columns.map((column) => column.name);
   const keys = [
-    ...columnNames.filter((name) => name in data),
+    ...columnNames.filter((name) => Object.hasOwn(data, name)),
     ...Object.keys(data).filter((key) => !columnNames.includes(key)),
   ];
   return keys.map((key) => toFieldRow(key, data[key]));
@@ -70,6 +107,10 @@ export const getFieldRowErrors = (
     }
     if (name.length > MAX_FIELD_NAME_LENGTH) {
       errors[row.id] = "too_long";
+      return;
+    }
+    if (RESERVED_FIELD_NAMES.has(name)) {
+      errors[row.id] = "reserved";
       return;
     }
     if (taken.has(name)) {
@@ -94,14 +135,14 @@ export const countFilledFields = (
 export const fieldRowsToData = (
   rows: DatasetFieldRow[],
   { dropEmpty }: { dropEmpty: boolean },
-): Record<string, string> => {
+): Record<string, unknown> => {
   const errors = getFieldRowErrors(rows);
-  const data: Record<string, string> = {};
+  const data: Record<string, unknown> = {};
 
   rows.forEach((row) => {
     if (errors[row.id]) return;
     if (dropEmpty && !isFilled(row)) return;
-    data[row.name.trim()] = row.value;
+    data[row.name.trim()] = toRawValue(row);
   });
 
   return data;
