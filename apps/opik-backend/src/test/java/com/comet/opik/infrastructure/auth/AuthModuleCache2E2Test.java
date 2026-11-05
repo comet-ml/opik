@@ -18,6 +18,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -128,7 +129,7 @@ class AuthModuleCache2E2Test {
     @Test
     void testOrganizationResolver__whenAuthIsEnabled__thenAnswerNoOrganizationWithoutCallingComet(
             OrganizationResolver resolver) {
-        assertThat(resolver).isInstanceOf(RemoteOrganizationResolver.class);
+        assertThat(resolver).isExactlyInstanceOf(RemoteOrganizationResolver.class);
         var cometRequestsBefore = wireMock.server().getAllServeEvents().size();
 
         StepVerifier.create(resolver.organizationId()
@@ -136,7 +137,7 @@ class AuthModuleCache2E2Test {
                 .verifyComplete();
         StepVerifier.create(resolver.requireOrganizationAdmin()
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)))
-                .expectError(ForbiddenException.class)
+                .expectErrorSatisfies(error -> assertThat(error).isExactlyInstanceOf(ForbiddenException.class))
                 .verify();
 
         assertThat(wireMock.server().getAllServeEvents()).hasSize(cometRequestsBefore);
@@ -149,14 +150,15 @@ class AuthModuleCache2E2Test {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
         var organizationId = UUID.randomUUID().toString();
+        var organizationName = RandomStringUtils.secure().nextAlphanumeric(10);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
         wireMock.server().stubFor(WireMock.post(WireMock.urlEqualTo(ORGANIZATION_PATH))
                 .withHeader(HttpHeaders.AUTHORIZATION, WireMock.equalTo(apiKey))
                 .withRequestBody(WireMock.matchingJsonPath("$.workspaceName", WireMock.equalTo(workspaceName)))
                 .willReturn(WireMock.okJson("""
                         {"workspaceId": "%s", "workspaceName": "%s", "organizationId": "%s",
-                         "organizationName": "Example", "isOrganizationAdmin": false}
-                        """.formatted(workspaceId, workspaceName, organizationId))));
+                         "organizationName": "%s", "isOrganizationAdmin": false}
+                        """.formatted(workspaceId, workspaceName, organizationId, organizationName))));
 
         for (int i = 0; i < 2; i++) {
             try (var response = callEndpoint(apiKey, workspaceName)) {

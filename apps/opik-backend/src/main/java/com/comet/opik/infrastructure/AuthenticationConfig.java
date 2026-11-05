@@ -10,11 +10,17 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.concurrent.TimeUnit;
 
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class AuthenticationConfig {
 
     public record UrlConfig(@Valid @JsonProperty @NotNull String url) {
@@ -85,11 +91,13 @@ public class AuthenticationConfig {
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+    @Builder.Default
     private Duration organizationCacheTTL = Duration.minutes(10);
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+    @Builder.Default
     private Duration organizationCacheStaleTTL = Duration.hours(24);
 
     /**

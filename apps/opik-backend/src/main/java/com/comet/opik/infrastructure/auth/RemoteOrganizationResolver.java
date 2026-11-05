@@ -26,11 +26,13 @@ class RemoteOrganizationResolver implements OrganizationResolver {
 
     static final String ADMIN_CHECK = "admin check";
     static final String ORGANIZATION_LOOKUP = "organization lookup";
-    static final String UNKNOWN_ORGANIZATION = "The organization of this workspace is unknown, so its organization "
-            + "settings can't be changed";
+    static final String UNKNOWN_ORGANIZATION = """
+            The organization of this workspace is unknown, so its organization settings can't be changed\
+            """;
     static final String NOT_ORGANIZATION_ADMIN = "Only organization admins can change organization settings";
-    static final String ADMIN_CHECK_FAILED = "Could not check whether you are an organization admin, please try "
-            + "again";
+    static final String ADMIN_CHECK_FAILED = """
+            Could not check whether you are an organization admin, please try again\
+            """;
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull WorkspaceOrganizationClient client;

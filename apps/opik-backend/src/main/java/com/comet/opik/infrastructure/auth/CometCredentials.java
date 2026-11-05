@@ -46,6 +46,6 @@ record CometCredentials(@NonNull Kind kind, @NonNull String value) {
 
     @Override
     public String toString() {
-        return "CometCredentials[kind=" + kind + "]";
+        return "CometCredentials[kind=%s]".formatted(kind);
     }
 }

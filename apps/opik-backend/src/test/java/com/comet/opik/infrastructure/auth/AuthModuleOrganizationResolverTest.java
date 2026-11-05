@@ -5,13 +5,20 @@ import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.utils.AsyncUtils;
 import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.test.StepVerifier;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -23,18 +30,24 @@ class AuthModuleOrganizationResolverTest {
     private final RetriableHttpClient retriableHttpClient = mock(RetriableHttpClient.class);
     private final RedissonReactiveClient redissonClient = mock(RedissonReactiveClient.class);
 
-    @Test
-    void organizationResolverWhenAuthenticationDisabledUsesDefaultOrganization() {
-        var config = new AuthenticationConfig();
-        config.setEnabled(false);
-        config.setReactService(null);
+    static Stream<Arguments> authentication() {
+        return Stream.of(
+                arguments("authentication off", AuthenticationConfig.builder().enabled(false).build(),
+                        DefaultOrganizationResolver.class, List.of(PINNED_DEFAULT_ORGANIZATION_ID)),
+                arguments("authentication on", enabledAuthentication(), RemoteOrganizationResolver.class,
+                        List.of()));
+    }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("authentication")
+    void organizationResolverFollowsAuthentication(String name, AuthenticationConfig config,
+            Class<? extends OrganizationResolver> expectedType, List<String> expectedOrganizationIds) {
         var resolver = authModule.organizationResolver(config, toggles(true), RequestContext::new,
                 retriableHttpClient, redissonClient);
 
-        assertThat(resolver).isInstanceOf(DefaultOrganizationResolver.class);
+        assertThat(resolver).isExactlyInstanceOf(expectedType);
         StepVerifier.create(resolver.organizationId())
-                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
+                .expectNextSequence(expectedOrganizationIds)
                 .verifyComplete();
         verifyNoInteractions(retriableHttpClient, redissonClient);
     }
@@ -43,9 +56,9 @@ class AuthModuleOrganizationResolverTest {
     void organizationResolverWhenModelPricesAreOffMakesNoCometOrRedisCall() {
         var credentials = CometCredentials.apiKey(UUID.randomUUID().toString());
         var request = RequestContext.builder()
-                .userName("user")
+                .userName(RandomStringUtils.secure().nextAlphanumeric(10))
                 .workspaceId(UUID.randomUUID().toString())
-                .workspaceName("workspace")
+                .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
                 .cometCredentials(credentials)
                 .organizationLookup(new RequestOrganizationLookup(credentials))
                 .build();
@@ -59,27 +72,15 @@ class AuthModuleOrganizationResolverTest {
         verifyNoInteractions(retriableHttpClient, redissonClient);
     }
 
-    @Test
-    void organizationResolverWhenAuthenticationEnabledUsesRemote() {
-        var config = enabledAuthentication();
-
-        var resolver = authModule.organizationResolver(config, toggles(true), RequestContext::new,
-                retriableHttpClient, redissonClient);
-
-        assertThat(resolver).isInstanceOf(RemoteOrganizationResolver.class);
-        StepVerifier.create(resolver.organizationId())
-                .verifyComplete();
-        verifyNoInteractions(retriableHttpClient, redissonClient);
-    }
-
     private static AuthenticationConfig enabledAuthentication() {
-        var config = new AuthenticationConfig();
-        config.setEnabled(true);
-        config.setReactService(new AuthenticationConfig.UrlConfig("http://comet.example.com"));
-        config.setRequestTimeout(Duration.seconds(3));
-        config.setRequestRetryMinBackoff(Duration.milliseconds(250));
-        config.setRequestRetryMaxBackoff(Duration.seconds(1));
-        return config;
+        return AuthenticationConfig.builder()
+                .enabled(true)
+                .reactService(new AuthenticationConfig.UrlConfig(
+                        "http://%s.example.com".formatted(RandomStringUtils.secure().nextAlphabetic(10))))
+                .requestTimeout(Duration.seconds(3))
+                .requestRetryMinBackoff(Duration.milliseconds(250))
+                .requestRetryMaxBackoff(Duration.seconds(1))
+                .build();
     }
 
     private static ServiceTogglesConfig toggles(boolean modelPricesEnabled) {

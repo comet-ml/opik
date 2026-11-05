@@ -43,7 +43,7 @@ class WorkspaceOrganizationClient {
         private final int status;
 
         UnexpectedResponseException(int status) {
-            super("Unexpected status while resolving the workspace organization: " + status);
+            super("Unexpected status while resolving the workspace organization: %d".formatted(status));
             this.status = status;
         }
     }

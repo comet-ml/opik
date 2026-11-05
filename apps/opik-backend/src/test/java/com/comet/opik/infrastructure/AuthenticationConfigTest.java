@@ -20,16 +20,23 @@ class AuthenticationConfigTest {
     private final Validator validator = Validators.newValidator();
 
     private static AuthenticationConfig organizationCache(Duration fresh, Duration stale) {
-        var config = new AuthenticationConfig();
-        config.setOrganizationCacheTTL(fresh);
-        config.setOrganizationCacheStaleTTL(stale);
-        return config;
+        return AuthenticationConfig.builder()
+                .organizationCacheTTL(fresh)
+                .organizationCacheStaleTTL(stale)
+                .build();
     }
 
-    @Test
-    void organizationCacheDefaultsAreValid() {
-        var config = new AuthenticationConfig();
+    private static Stream<Arguments> configsWithDefaults() {
+        return Stream.of(
+                arguments("no-args constructor, as config.yml binds it", new AuthenticationConfig()),
+                arguments("builder", AuthenticationConfig.builder().build()));
+    }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("configsWithDefaults")
+    void organizationCacheDefaultsAreSetAndValid(String name, AuthenticationConfig config) {
+        assertThat(config.getOrganizationCacheTTL()).isEqualTo(Duration.minutes(10));
+        assertThat(config.getOrganizationCacheStaleTTL()).isEqualTo(Duration.hours(24));
         assertThat(validator.validateProperty(config, "organizationCacheTtlOrderValid")).isEmpty();
         assertThat(validator.validateProperty(config, "organizationCacheTTL")).isEmpty();
         assertThat(validator.validateProperty(config, "organizationCacheStaleTTL")).isEmpty();
