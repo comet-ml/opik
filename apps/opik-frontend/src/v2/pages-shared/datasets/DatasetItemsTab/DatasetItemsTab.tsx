@@ -104,6 +104,7 @@ export interface AddPanelRenderProps {
   open: boolean;
   onClose: () => void;
   columns: DatasetItemColumn[];
+  isColumnsLoading?: boolean;
 }
 
 export interface ExpansionDialogRenderProps {

@@ -18,8 +18,6 @@ export type QuickAddChip = {
   tracesOnly?: boolean;
 };
 
-export const MAX_FIELD_NAME_LENGTH = 150;
-
 export const FIXED_MAPPING_FIELDS: Array<{ key: string; defaultPath: string }> =
   [
     { key: "input", defaultPath: "input" },
