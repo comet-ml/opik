@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 import {
-  countFilledFields,
   createFieldRow,
   dataToFieldRows,
   fieldRowsToData,
@@ -65,31 +64,12 @@ describe("fieldRowsToData", () => {
     createFieldRow(" padded ", "v"),
   ];
 
-  it("skips rows with invalid names and trims names", () => {
-    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({
+  it("skips rows with invalid names, trims names and keeps empty values", () => {
+    expect(fieldRowsToData(rows)).toEqual({
       input: "hello",
       empty: "  ",
       padded: "v",
     });
-  });
-
-  it("drops empty values when asked", () => {
-    expect(fieldRowsToData(rows, { dropEmpty: true })).toEqual({
-      input: "hello",
-      padded: "v",
-    });
-  });
-});
-
-describe("countFilledFields", () => {
-  it("counts only valid rows with a non-blank value", () => {
-    const rows = [
-      createFieldRow("a", "1"),
-      createFieldRow("b", ""),
-      createFieldRow("", "orphan"),
-    ];
-
-    expect(countFilledFields(rows, getFieldRowErrors(rows))).toBe(1);
   });
 });
 
@@ -128,7 +108,7 @@ describe("editing loaded records", () => {
   it("saves untouched fields with their original values and types", () => {
     const data = { a: null, n: 7, b: false, o: { x: 1 }, s: "text" };
 
-    expect(fieldRowsToData(load(data), { dropEmpty: false })).toEqual(data);
+    expect(fieldRowsToData(load(data))).toEqual(data);
   });
 
   it("keeps a number or boolean typed after the field is renamed", () => {
@@ -138,7 +118,7 @@ describe("editing loaded records", () => {
       "flag",
     );
 
-    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({
+    expect(fieldRowsToData(rows)).toEqual({
       num: 7,
       flag: true,
     });
@@ -151,7 +131,7 @@ describe("editing loaded records", () => {
       "false",
     );
 
-    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({
+    expect(fieldRowsToData(rows)).toEqual({
       n: 8,
       b: false,
     });
@@ -160,7 +140,7 @@ describe("editing loaded records", () => {
   it("falls back to text when an edited scalar no longer parses", () => {
     const rows = setValue(load({ n: 7 }), "n", "seven");
 
-    expect(fieldRowsToData(rows, { dropEmpty: false })).toEqual({ n: "seven" });
+    expect(fieldRowsToData(rows)).toEqual({ n: "seven" });
   });
 
   it("only picks schema columns the record actually owns", () => {
@@ -177,6 +157,6 @@ describe("editing loaded records", () => {
     const row = createFieldRow("__proto__", "x");
 
     expect(getFieldRowErrors([row])).toEqual({ [row.id]: "reserved" });
-    expect(fieldRowsToData([row], { dropEmpty: true })).toEqual({});
+    expect(fieldRowsToData([row])).toEqual({});
   });
 });

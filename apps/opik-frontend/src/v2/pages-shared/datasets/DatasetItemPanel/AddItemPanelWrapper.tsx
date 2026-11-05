@@ -10,7 +10,6 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 export interface AddItemPanelContext {
   tags: string[];
   setHasUnsavedChanges: (v: boolean) => void;
-  resetTags: () => void;
   requestClose: () => void;
 }
 
@@ -22,15 +21,17 @@ interface AddItemPanelWrapperProps {
   open: boolean;
   onClose: () => void;
   initialWidth?: number;
+  showAddTagLabel?: boolean;
   children: (context: AddItemPanelContext) => ReactNode;
 }
 
 const AddItemPanelWrapperContent: React.FC<{
   formId?: string;
+  showAddTagLabel?: boolean;
   onClose: () => void;
   onDirtyChange: (dirty: boolean) => void;
   children: (context: AddItemPanelContext) => ReactNode;
-}> = ({ formId, onClose, onDirtyChange, children }) => {
+}> = ({ formId, showAddTagLabel, onClose, onDirtyChange, children }) => {
   const [tags, setTags] = useState<string[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const isDirty = hasUnsavedChanges || tags.length > 0;
@@ -57,7 +58,6 @@ const AddItemPanelWrapperContent: React.FC<{
   const context: AddItemPanelContext = {
     tags,
     setHasUnsavedChanges,
-    resetTags: () => setTags([]),
     requestClose,
   };
 
@@ -73,6 +73,7 @@ const AddItemPanelWrapperContent: React.FC<{
             }
             size="sm"
             align="start"
+            showAddLabelWhenEmpty={showAddTagLabel}
           />
         </div>
 
@@ -118,6 +119,7 @@ const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
   open,
   onClose,
   initialWidth,
+  showAddTagLabel,
   children,
 }) => {
   const [isDirty, setIsDirty] = useState(false);
@@ -141,6 +143,7 @@ const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
         <AddItemPanelWrapperContent
           formId={formId}
           onClose={onClose}
+          showAddTagLabel={showAddTagLabel}
           onDirtyChange={setIsDirty}
         >
           {children}

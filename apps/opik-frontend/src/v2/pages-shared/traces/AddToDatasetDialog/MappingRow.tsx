@@ -1,10 +1,10 @@
 import React from "react";
-import { MessageCircleWarning, MoveRight, X } from "lucide-react";
+import { MessageCircleWarning } from "lucide-react";
 
-import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Tag } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import FieldRowShell from "@/v2/components/FieldRowShell/FieldRowShell";
 import { JsonObject } from "@/types/shared";
 import { cn } from "@/lib/utils";
 import PathSourcePicker from "./PathSourcePicker";
@@ -121,44 +121,31 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   };
 
   return (
-    <div
+    <FieldRowShell
       data-testid={`mapping-row-${row.id}`}
-      className="rounded-md border border-border px-2 py-[5px]"
-    >
-      <div className="flex h-6 items-center gap-2">
-        <div className="w-[calc((100%-40px)/2)] min-w-0 shrink-0">
-          {renderName()}
-        </div>
-        <Button variant="ghost" size="icon-2xs" disabled className="shrink-0">
-          <MoveRight />
-        </Button>
-        <div className="min-w-0 flex-1">{renderSource()}</div>
-        {onRemove && (
-          <Button
-            variant="minimal"
-            size="icon-2xs"
-            className="shrink-0"
-            onClick={onRemove}
-          >
-            <X />
-          </Button>
-        )}
-      </div>
-      {rowError && (
-        <p className="comet-body-xs mt-1 text-destructive">
-          {ROW_ERROR_TEXT[rowError]}
-        </p>
-      )}
-      {!rowError && Boolean(newColumnItemCount) && (
-        <div className="flex items-center gap-1.5 py-2">
-          <MessageCircleWarning className="size-3 shrink-0 text-muted-slate" />
-          <span className="comet-body-xs text-muted-slate">
-            New field — the {newColumnItemCount} items already in this dataset
-            will display this field as empty.
-          </span>
-        </div>
-      )}
-    </div>
+      name={renderName()}
+      value={renderSource()}
+      removeLabel={`Remove ${row.name || "field"}`}
+      onRemove={onRemove}
+      message={
+        <>
+          {rowError && (
+            <p className="comet-body-xs mt-1 text-destructive">
+              {ROW_ERROR_TEXT[rowError]}
+            </p>
+          )}
+          {!rowError && Boolean(newColumnItemCount) && (
+            <div className="flex items-center gap-1.5 py-2">
+              <MessageCircleWarning className="size-3 shrink-0 text-muted-slate" />
+              <span className="comet-body-xs text-muted-slate">
+                New field — the {newColumnItemCount} items already in this
+                dataset will display this field as empty.
+              </span>
+            </div>
+          )}
+        </>
+      }
+    />
   );
 };
 

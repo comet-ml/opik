@@ -49,6 +49,8 @@ export type TagListRendererProps = {
   tagType?: string; // For error messages (e.g., "tag", "version tag")
   readOnly?: boolean;
   tagVariant?: TagProps["variant"];
+  // Label the add button ("+ Add tag") while the list is empty.
+  showAddLabelWhenEmpty?: boolean;
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
@@ -65,6 +67,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   tagType = "tag",
   readOnly = false,
   tagVariant,
+  showAddLabelWhenEmpty = false,
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -129,14 +132,21 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
       {!readOnly && (
         <Popover onOpenChange={setOpen} open={open}>
           <PopoverTrigger asChild>
-            <Button
-              data-testid="add-tag-button"
-              variant="outline"
-              size={tagSizeConfig.addButtonSize}
-              className={cn(tagSizeConfig.addButtonClassName)}
-            >
-              <Plus />
-            </Button>
+            {showAddLabelWhenEmpty && !hasTags ? (
+              <Button data-testid="add-tag-button" variant="outline" size="2xs">
+                <Plus className="mr-1 size-3" />
+                Add tag
+              </Button>
+            ) : (
+              <Button
+                data-testid="add-tag-button"
+                variant="outline"
+                size={tagSizeConfig.addButtonSize}
+                className={cn(tagSizeConfig.addButtonClassName)}
+              >
+                <Plus />
+              </Button>
+            )}
           </PopoverTrigger>
           <PopoverContent className="w-[420px] p-6" align={align}>
             <div className="flex gap-2">

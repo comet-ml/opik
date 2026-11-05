@@ -125,23 +125,16 @@ export const getFieldRowErrors = (
 
 const isFilled = (row: DatasetFieldRow) => row.value.trim() !== "";
 
-export const countFilledFields = (
-  rows: DatasetFieldRow[],
-  errors: Record<string, DatasetFieldRowError>,
-) => rows.filter((row) => !errors[row.id] && isFilled(row)).length;
-
 // Rows with an invalid name are skipped rather than blocking the save, so an
 // autosaving editor keeps persisting the valid fields while one is mid-rename.
 export const fieldRowsToData = (
   rows: DatasetFieldRow[],
-  { dropEmpty }: { dropEmpty: boolean },
 ): Record<string, unknown> => {
   const errors = getFieldRowErrors(rows);
   const data: Record<string, unknown> = {};
 
   rows.forEach((row) => {
     if (errors[row.id]) return;
-    if (dropEmpty && !isFilled(row)) return;
     data[row.name.trim()] = toRawValue(row);
   });
 
