@@ -469,6 +469,16 @@ describe("escapeMustache", () => {
       mustache.render(escaped, {}, {}, { escape: (value: string) => value }),
     ).toBe(text);
   });
+
+  it("switches to two-character delimiters the text doesn't contain", () => {
+    expect(escapeMustache("<% %> {{x}}")).toBe("{{=<$ $>=}}<% %> {{x}}");
+  });
+
+  it("leaves text unchanged when it contains every delimiter", () => {
+    const text = "<% <$ <! <# <@ {{x}}";
+
+    expect(escapeMustache(text)).toBe(text);
+  });
 });
 
 describe("escapePlaygroundMessage", () => {

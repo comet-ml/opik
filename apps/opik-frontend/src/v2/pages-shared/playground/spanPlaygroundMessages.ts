@@ -139,6 +139,14 @@ export const convertLLMMessagesToPlaygroundMessages = (
     .map(toPlaygroundMessage)
     .filter((m): m is PlaygroundChatMessage => m !== null);
 
+const MUSTACHE_ESCAPE_DELIMITERS = [
+  ["<%", "%>"],
+  ["<$", "$>"],
+  ["<!", "!>"],
+  ["<#", "#>"],
+  ["<@", "@>"],
+];
+
 /**
  * Keeps logged text from being read as a Playground template: a message that
  * contains "{{" starts with a delimiter switch, so the rest is plain text. A
@@ -148,11 +156,14 @@ export const convertLLMMessagesToPlaygroundMessages = (
 export const escapeMustache = (text: string): string => {
   if (!text.includes("{{")) return text;
 
-  let pad = "%";
-  while (text.includes(`<${pad}`) || text.includes(`${pad}>`)) pad += "%";
+  // Two characters each: the backend's mustache.java misreads longer delimiters.
+  const delimiters = MUSTACHE_ESCAPE_DELIMITERS.find(
+    ([open, close]) => !text.includes(open) && !text.includes(close),
+  );
+  if (!delimiters) return text;
 
   const spareLineBreak = /^\s*?\n/.test(text) ? "\n" : "";
-  return `{{=<${pad} ${pad}>=}}${spareLineBreak}${text}`;
+  return `{{=${delimiters.join(" ")}=}}${spareLineBreak}${text}`;
 };
 
 export const escapePlaygroundMessage = ({
