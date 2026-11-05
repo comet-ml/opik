@@ -301,9 +301,9 @@ spec:
                 # than by polling for exactly one Ready pod), and it never grants pod-delete.
                 echo ">> restarting operator deployment/${OPERATOR_DEPLOY} so it rebuilds the StatefulSets with the cache volume"
                 # Distinguish "no operator here to bounce" from "the probe itself failed".
-                # ONLY a confirmed NotFound is tolerated: that means an externally-managed
-                # or relocated operator, nothing was attempted, and passive self-heal is the
-                # whole story. A Forbidden, a timeout or any other API error says nothing
+                # ONLY a confirmed NotFound skips the restart: that means an externally-managed
+                # or relocated operator, so the readiness wait below covers the passive
+                # self-heal. A Forbidden, a timeout or any other API error says nothing
                 # about whether the operator exists, so treating those as "absent" would
                 # skip the bounce and report success on a cluster left unrecovered. The
                 # probe is retried within the remaining budget before giving up, so a
@@ -316,8 +316,7 @@ spec:
                 while :; do
                   if probe_out="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name --ignore-not-found 2>&1)"; then
                     if [ -z "$probe_out" ]; then
-                      echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
-                      exit 0
+                      echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; waiting for the cluster to self-heal passively (~7 min/replica)." >&2
                     fi
                     break
                   fi
@@ -328,7 +327,7 @@ spec:
                   echo "   transient error probing deployment/${OPERATOR_DEPLOY} — retrying..." >&2
                   nap 10
                 done
-                if ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
+                if [ -n "$probe_out" ] && ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
                   echo "${restart_err}" >&2
                   die "could not restart deployment/${OPERATOR_DEPLOY} in ${NAMESPACE} — the operator exists but the restart was refused (check the migration ServiceAccount's get/patch permission on this Deployment). Not reporting success: the cluster was left unrecovered."
                 fi

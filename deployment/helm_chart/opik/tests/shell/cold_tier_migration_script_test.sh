@@ -126,19 +126,20 @@ run_bounce() { # $1=MOCK_MODE  $2=seconds of budget  [$3=bounce, default true]
     nap() { n="$1"; r="$(remaining)"; [ "$r" -lt "$n" ] && n="$r"; [ "$n" -gt 0 ] && sleep "$n"; return 0; }
     die() { echo "ERROR: $*" >&2; exit 1; }
     . "$WORK/bounce.sh"
+    echo "REACHED_READINESS_WAIT"
   ) >"$WORK/out" 2>"$WORK/err"
 }
 
 echo "cold-tier migration script"
 
-# A Deployment that genuinely does not exist means nothing was attempted: warn and
-# succeed so the release is not failed for a cluster that self-heals passively.
+# A Deployment that genuinely does not exist: warn and fall through to the readiness
+# wait, which covers the passive self-heal.
 if run_bounce absent 5; then
-  grep -q "not found" "$WORK/err" \
-    && pass "confirmed absence exits 0 with a warning" \
-    || fail "confirmed absence exits 0 with a warning" "no warning on stderr"
+  grep -q "not found" "$WORK/err" && grep -q REACHED_READINESS_WAIT "$WORK/out" \
+    && pass "confirmed absence warns and continues to the readiness wait" \
+    || fail "confirmed absence warns and continues to the readiness wait" "no warning on stderr"
 else
-  fail "confirmed absence exits 0 with a warning" "exited non-zero"
+  fail "confirmed absence warns and continues to the readiness wait" "exited non-zero"
 fi
 
 # A Forbidden says nothing about whether the operator exists. Skipping the bounce
