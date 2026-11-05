@@ -328,7 +328,8 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
       <div className="flex-auto" />
 
-      {playgroundSpan && !isLoading && (
+      {/* The annotation queue hides annotate actions and has no active project to open. */}
+      {playgroundSpan && !isLoading && !hideAnnotateActions && (
         <OpenSpanInPlaygroundButton span={playgroundSpan} />
       )}
       {!hideAnnotateActions && (

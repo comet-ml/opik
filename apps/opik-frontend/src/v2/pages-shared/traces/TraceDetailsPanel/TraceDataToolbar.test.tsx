@@ -174,6 +174,15 @@ describe("TraceDataToolbar open in Playground", () => {
     expect(screen.queryByLabelText("Open in Playground")).toBeNull();
   });
 
+  it("is hidden when annotate actions are hidden", () => {
+    renderToolbar({
+      dataToView: llmSpanWithMessages,
+      hideAnnotateActions: true,
+    });
+
+    expect(screen.queryByLabelText("Open in Playground")).toBeNull();
+  });
+
   it("is hidden without Playground access", () => {
     renderToolbar(
       { dataToView: llmSpanWithMessages },
