@@ -42,6 +42,7 @@ import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
@@ -8929,6 +8930,75 @@ class DatasetsResourceTest {
                         .extracting(ExperimentItem::experimentId)
                         .containsExactlyInAnyOrder(experimentAggregatedId, experimentRawId);
             }
+        }
+
+        @Test
+        @DisplayName("when a raw experiment trace has several versions, then return the latest trace payload")
+        void find__rawExperimentTraceUpdated__thenReturnLatestTracePayload() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var updatedPayload = factory.manufacturePojo(Trace.class);
+            traceResourceClient.updateTrace(trace.id(), TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .input(updatedPayload.input())
+                    .output(updatedPayload.output())
+                    .metadata(updatedPayload.metadata())
+                    .build(), apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentId = experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build(), apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+            var expectedExperimentItems = List.of(experimentItem.toBuilder()
+                    .input(updatedPayload.input())
+                    .output(updatedPayload.output())
+                    .traceMetadata(updatedPayload.metadata())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .description(datasetItem.description())
+                    .build());
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            assertThat(actualPage.content().getFirst().experimentItems())
+                    .usingRecursiveComparison()
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .ignoringFields("feedbackScores", "createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+                            "comments", "projectName")
+                    .isEqualTo(expectedExperimentItems);
         }
 
     }
