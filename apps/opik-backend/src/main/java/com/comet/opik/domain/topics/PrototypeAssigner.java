@@ -17,7 +17,7 @@ import java.util.List;
  */
 public class PrototypeAssigner {
 
-    public static final int OTHER = -1;
+    public static final int OTHER = TopicAlgorithm.OTHER;
     static final double ASSIGN_MIN_COSINE = 0.75;
     static final double OTHER_GATE = 0.95;
 

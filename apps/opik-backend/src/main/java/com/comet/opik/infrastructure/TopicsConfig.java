@@ -31,7 +31,28 @@ public class TopicsConfig {
     private VectorsConfig vectors = new VectorsConfig();
 
     @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival = new ArrivalConfig();
+
+    @Valid @NotNull @JsonProperty
     private NightlyConfig nightly = new NightlyConfig();
+
+    /**
+     * Topic on arrival: after the vectors tick writes a chunk's vectors, each trace of a project with a topic list gets
+     * its nearest prototype's topic in {@code trace_topics}, until the next night writes its own row.
+     */
+    @Data
+    public static class ArrivalConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. Off: the tick reads no topics and writes no rows. */
+        @JsonProperty
+        private boolean enabled = true;
+
+        /** Each arrival step (the topics read and the insert after one vectors insert) ends within this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout = Duration.seconds(5);
+    }
 
     /**
      * The nightly job: builds a project's topic list from its window of vectors. Stage 2a builds a project that has no

@@ -25,7 +25,9 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +38,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -61,6 +64,7 @@ class TopicsRebuildServiceTest {
     private TopicDAO topicDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private InferenceClient client;
+    private Function<TopicAlgorithm, TopicsRebuildService> serviceWith;
     private TopicsRebuildService service;
 
     @BeforeEach
@@ -87,8 +91,9 @@ class TopicsRebuildServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
-        service = new TopicsRebuildService(new TopicsConfig(), template, windowDAO, traceTopicsDAO, client,
-                idGenerator, new TopicsMetrics(meter.meter, names));
+        serviceWith = algorithm -> new TopicsRebuildService(new TopicsConfig(), template, windowDAO, traceTopicsDAO,
+                client, idGenerator, new TopicsMetrics(meter.meter, names), algorithm);
+        service = serviceWith.apply(new KMeansTopicAlgorithm());
     }
 
     @Test
@@ -265,6 +270,105 @@ class TopicsRebuildServiceTest {
         });
         assertThat(meter.points("topics.run.churn_any")).singleElement()
                 .satisfies(point -> assertThat(point.value()).isEqualTo(0.1));
+    }
+
+    @Test
+    @DisplayName("a first build whose algorithm labels a trace with a topic it did not return fails as invariant, "
+            + "and saves nothing")
+    void labelOutOfRangeIsInvariant() {
+        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        var labels = new int[TRACES];
+        labels[0] = 1;
+        var prototype = new float[TopicsFixture.DIMENSIONS];
+        System.arraycopy(FIXTURE.vectors, 0, prototype, 0, TopicsFixture.DIMENSIONS);
+        var algorithm = new TopicAlgorithm() {
+            @Override
+            public FirstBuild firstBuild(NightWindow window, int maxTopics, Context context) {
+                return FirstBuild.builder()
+                        .topics(List
+                                .of(NewTopic.builder().name("Billing").definition("Questions about invoices").build()))
+                        .labels(labels)
+                        .topicPrototypes(List.of(prototype))
+                        .owners(List.of(0))
+                        .otherPrototypes(List.of())
+                        .build();
+            }
+
+            @Override
+            public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Optional<Arrival> arrival(List<Topic> live, List<TopicPrototype> prototypes) {
+                throw new UnsupportedOperationException();
+            }
+        };
+
+        var outcome = serviceWith.apply(algorithm).firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.errorCode()).isEqualTo("invariant");
+        verify(topicDAO, never()).insertTopics(any());
+        verify(traceTopicsDAO, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("a first build saves what its algorithm returns, with the algorithm's stats and phases; the service "
+            + "makes no LLM call of its own")
+    @SuppressWarnings("unchecked")
+    void savesWhatTheAlgorithmReturns() throws Exception {
+        var labels = new int[TRACES];
+        for (int i = 0; i < TRACES; i++) {
+            labels[i] = i % 2 == 0 ? 0 : PrototypeAssigner.OTHER;
+        }
+        var prototype = new float[TopicsFixture.DIMENSIONS];
+        System.arraycopy(FIXTURE.vectors, 0, prototype, 0, TopicsFixture.DIMENSIONS);
+        var algorithm = new TopicAlgorithm() {
+            @Override
+            public FirstBuild firstBuild(NightWindow window, int maxTopics, Context context) {
+                assertThat(window.size()).isEqualTo(TRACES);
+                context.stats().put("algorithm", "stub");
+                return context.timed("stub", () -> FirstBuild.builder()
+                        .topics(List
+                                .of(NewTopic.builder().name("Billing").definition("Questions about invoices").build()))
+                        .labels(labels)
+                        .topicPrototypes(List.of(prototype))
+                        .owners(List.of(0))
+                        .otherPrototypes(List.of())
+                        .build());
+            }
+
+            @Override
+            public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Optional<Arrival> arrival(List<Topic> live, List<TopicPrototype> prototypes) {
+                throw new UnsupportedOperationException();
+            }
+        };
+
+        var outcome = serviceWith.apply(algorithm).firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        verify(client, never()).generate(any(), any());
+        ArgumentCaptor<List<Topic>> topics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(topics.capture());
+        assertThat(topics.getValue()).singleElement().satisfies(topic -> {
+            assertThat(topic.name()).isEqualTo("Billing");
+            assertThat(topic.size()).isEqualTo(TRACES / 2);
+        });
+        ArgumentCaptor<List<TraceTopic>> rows = ArgumentCaptor.forClass(List.class);
+        verify(traceTopicsDAO).insert(rows.capture());
+        assertThat(rows.getValue()).hasSize(TRACES);
+        assertThat(rows.getValue().stream().filter(row -> row.topicId().equals(TraceTopic.OTHER))).hasSize(TRACES / 2);
+        var stats = ArgumentCaptor.forClass(String.class);
+        verify(runDAO).markSaved(eq(runId), any(), stats.capture());
+        var saved = JsonUtils.getMapper().readTree(stats.getValue());
+        assertThat(saved.path("algorithm").asText()).isEqualTo("stub");
+        assertThat(saved.path("seconds").has("stub")).isTrue();
+        assertThat(saved.path("other_share").asDouble()).isEqualTo(0.5);
     }
 
     /** The list, prototypes, state and labels the first build saved, as the nightly update reads them back. */

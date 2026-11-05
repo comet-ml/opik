@@ -227,9 +227,9 @@ class TopicsNightlyJobTest {
             var stats = json(saved.stats());
             assertThat(stats.path("vectors").asInt()).isEqualTo(BUILT);
             assertThat(stats.path("k").asInt())
-                    .isEqualTo(TopicsRebuildService.groups(stats.path("unique_texts").asInt()));
+                    .isEqualTo(KMeansTopicAlgorithm.groups(stats.path("unique_texts").asInt()));
             assertThat(stats.path("author_examples").asInt())
-                    .isEqualTo(TopicsRebuildService.authorExamples(stats.path("k").asInt()));
+                    .isEqualTo(KMeansTopicAlgorithm.authorExamples(stats.path("k").asInt()));
             assertThat(stats.path("seed").asInt()).isZero();
             assertThat(stats.path("provisional").asBoolean()).isTrue();
             assertThat(stats.path("qwen_calls").asInt()).isEqualTo(1);
@@ -316,7 +316,7 @@ class TopicsNightlyJobTest {
             var body = json(request.getBodyAsString());
             assertThat(body.path("org_id").asText()).isEqualTo(workspaceId);
             assertThat(body.path("lane").asText()).isEqualTo("batch");
-            assertThat(body.path("max_tokens").asInt()).isEqualTo(TopicsRebuildService.QWEN_MAX_TOKENS);
+            assertThat(body.path("max_tokens").asInt()).isEqualTo(KMeansTopicAlgorithm.QWEN_MAX_TOKENS);
             assertThat(body.path("schema")).isEqualTo(TopicPrompts.AUTHOR_SCHEMA);
             // The service decodes the keys in schema order: the topics before Other.
             assertThat(request.getBodyAsString())

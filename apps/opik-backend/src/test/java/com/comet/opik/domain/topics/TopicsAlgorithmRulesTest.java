@@ -13,8 +13,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -167,19 +169,19 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("fine groups: one per 30 unique texts, at least 30, at most 50 or the unique texts")
         void groups() {
-            assertThat(TopicsRebuildService.groups(1068)).isEqualTo(35);
-            assertThat(TopicsRebuildService.groups(481)).isEqualTo(30);
-            assertThat(TopicsRebuildService.groups(4622)).isEqualTo(50);
-            assertThat(TopicsRebuildService.groups(20)).isEqualTo(20);
+            assertThat(KMeansTopicAlgorithm.groups(1068)).isEqualTo(35);
+            assertThat(KMeansTopicAlgorithm.groups(481)).isEqualTo(30);
+            assertThat(KMeansTopicAlgorithm.groups(4622)).isEqualTo(50);
+            assertThat(KMeansTopicAlgorithm.groups(20)).isEqualTo(20);
         }
 
         @Test
         @DisplayName("texts per group: round(250 / k), from 5 to 10")
         void budget() {
-            assertThat(TopicsRebuildService.authorExamples(50)).isEqualTo(5);
-            assertThat(TopicsRebuildService.authorExamples(35)).isEqualTo(7);
-            assertThat(TopicsRebuildService.authorExamples(30)).isEqualTo(8);
-            assertThat(TopicsRebuildService.authorExamples(15)).isEqualTo(10);
+            assertThat(KMeansTopicAlgorithm.authorExamples(50)).isEqualTo(5);
+            assertThat(KMeansTopicAlgorithm.authorExamples(35)).isEqualTo(7);
+            assertThat(KMeansTopicAlgorithm.authorExamples(30)).isEqualTo(8);
+            assertThat(KMeansTopicAlgorithm.authorExamples(15)).isEqualTo(10);
         }
 
         @Test
@@ -336,6 +338,108 @@ class TopicsAlgorithmRulesTest {
             assertThat(assigner.gatedOther()).isEqualTo(1);
             assertThat(assigner.prototypeCount()).isEqualTo(2);
             assertThat(assigner.assign(new float[]{0.96f, 0.28f, 0, 1})).containsExactly(0, PrototypeAssigner.OTHER);
+        }
+    }
+
+    @Nested
+    @DisplayName("arrival rule")
+    class ArrivalRule {
+
+        private static final String WORKSPACE_ID = "workspace";
+        private static final UUID PROJECT_ID = UUID.randomUUID();
+        private final KMeansTopicAlgorithm algorithm = new KMeansTopicAlgorithm();
+
+        @Test
+        @DisplayName("uses the live topics' prototypes and the known-Other ones in saved order: a dormant topic's "
+                + "prototype is left out, a known-Other one within 0.95 of a topic is gated, ties go to the lower "
+                + "position, and under 0.75 is Other")
+        void savedList() {
+            var first = topic("Billing");
+            var second = topic("Refunds");
+            var dormant = topic("Shipping");
+            var prototypes = List.of(
+                    prototype(0, first.id(), 1, 0, 0),
+                    prototype(1, dormant.id(), 0, 1, 0),
+                    prototype(2, second.id(), 0, 0, 1),
+                    prototype(3, null, 1, 0.1f, 0),
+                    prototype(4, null, 0, 0.6f, 0.8f),
+                    prototype(5, second.id(), 1, 0, 0));
+
+            var arrival = algorithm.arrival(List.of(first, second), prototypes).orElseThrow();
+
+            assertThat(arrival.dimensions()).isEqualTo(3);
+            assertThat(arrival.label(rows(
+                    unit(1, 0, 0),
+                    unit(0, 1, 0),
+                    unit(0, 0, 1),
+                    unit(1, 0.1f, 0),
+                    unit(0, 0.6f, 0.8f),
+                    unit(1, 1, 0))))
+                    .containsExactly(first.id(), TraceTopic.OTHER, second.id(), first.id(), TraceTopic.OTHER,
+                            TraceTopic.OTHER);
+        }
+
+        @Test
+        @DisplayName("is empty when no live topic has a prototype")
+        void noLivePrototype() {
+            var live = topic("Billing");
+            var gone = topic("Refunds");
+
+            assertThat(algorithm.arrival(List.of(live),
+                    List.of(prototype(0, gone.id(), 1, 0, 0), prototype(1, null, 0, 1, 0)))).isEmpty();
+            assertThat(algorithm.arrival(List.of(), List.of())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("fails on prototypes of more than one length")
+        void mixedLengths() {
+            var live = topic("Billing");
+
+            assertThatThrownBy(() -> algorithm.arrival(List.of(live),
+                    List.of(prototype(0, live.id(), 1, 0, 0), prototype(1, null, 0, 1))))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        private static Topic topic(String name) {
+            return Topic.builder()
+                    .id(UUID.randomUUID())
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(PROJECT_ID)
+                    .name(name)
+                    .definition(name + " questions")
+                    .born(LocalDate.of(2026, 10, 1))
+                    .build();
+        }
+
+        private static TopicPrototype prototype(int position, UUID topicId, float... values) {
+            return TopicPrototype.builder()
+                    .id(UUID.randomUUID())
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(PROJECT_ID)
+                    .position(position)
+                    .topicId(topicId)
+                    .vector(TopicPrototype.encode(unit(values)))
+                    .build();
+        }
+
+        private static float[] unit(float... values) {
+            double norm = 0;
+            for (float value : values) {
+                norm += (double) value * value;
+            }
+            var unit = new float[values.length];
+            for (int i = 0; i < values.length; i++) {
+                unit[i] = (float) (values[i] / Math.sqrt(norm));
+            }
+            return unit;
+        }
+
+        private static float[] rows(float[]... rows) {
+            var out = new float[rows.length * rows[0].length];
+            for (int r = 0; r < rows.length; r++) {
+                System.arraycopy(rows[r], 0, out, r * rows[r].length, rows[r].length);
+            }
+            return out;
         }
     }
 
