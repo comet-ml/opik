@@ -4,6 +4,7 @@ import io.dropwizard.util.Duration;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -131,5 +132,34 @@ class TopicsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    static Stream<Arguments> enabledWorkspaces() {
+        return Stream.of(
+                arguments("unset", null, Set.of()),
+                arguments("empty", "", Set.of()),
+                arguments("blank and commas only", " , ,", Set.of()),
+                arguments("one id", "ws-1", Set.of("ws-1")),
+                arguments("ids with spaces, blanks and a repeat", " ws-1 ,ws-2,, ws-1 ", Set.of("ws-1", "ws-2")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("enabledWorkspaces")
+    void enabledWorkspaceIdsAreSplitStrippedAndBlankFree(String description, String enabledWorkspaces,
+            Set<String> expected) {
+        var config = new TopicsConfig();
+        config.setEnabledWorkspaces(enabledWorkspaces);
+
+        assertThat(config.enabledWorkspaceIds()).isEqualTo(expected);
+    }
+
+    @Test
+    void enabledWorkspaceIdsFollowTheFieldWithoutACache() {
+        var config = new TopicsConfig();
+        assertThat(config.enabledWorkspaceIds()).isEmpty();
+
+        config.setEnabledWorkspaces("ws-1");
+
+        assertThat(config.enabledWorkspaceIds()).containsExactly("ws-1");
     }
 }

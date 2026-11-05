@@ -35,8 +35,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
-import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -173,7 +171,7 @@ class TopicVectorsTickServiceTest {
         private TopicVectorsDAO dao;
         private InferenceClient client;
         private LockService lockService;
-        private TransactionTemplate template;
+        private TopicWorkspaceService workspaces;
         private AiLabelTaskRegistry registry;
         private TestMeter meter;
         private TopicVectorsTickService service;
@@ -187,10 +185,10 @@ class TopicVectorsTickServiceTest {
             dao = mock(TopicVectorsDAO.class);
             client = mock(InferenceClient.class);
             lockService = mock(LockService.class);
-            template = mock(TransactionTemplate.class);
+            workspaces = mock(TopicWorkspaceService.class);
             registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
-            when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of(WORKSPACE_ID));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
             // The long-window pass is not due unless a test says so.
             when(lockService.lockUsingToken(any(), any())).thenReturn(Mono.just(false));
@@ -211,7 +209,7 @@ class TopicVectorsTickServiceTest {
                 inserted.addAll(rows);
                 return Mono.just((long) rows.size());
             });
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
                     registry, names(), meter.meter);
         }
 
@@ -439,7 +437,7 @@ class TopicVectorsTickServiceTest {
         @Test
         @DisplayName("workspaces are read from an offset that moves by one every tick interval")
         void rotation() {
-            when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of("a", "b", "c"));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
             when(dao.findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong()))
                     .thenReturn(Flux.empty());
             var order = new ArrayList<List<String>>();
@@ -469,7 +467,7 @@ class TopicVectorsTickServiceTest {
         void perWorkspaceCapAndBackOff() {
             config.getVectors().setMaxTracesPerTick(3);
             config.getVectors().setEmbedBatchSize(1);
-            when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of("failing", "healthy"));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("failing", "healthy"));
             var failing = IntStream.range(0, 3).mapToObj(i -> candidate("failing", NOW.minusSeconds(10 - i)))
                     .toList();
             var healthy = IntStream.range(0, 3).mapToObj(i -> candidate("healthy", NOW.minusSeconds(10 - i)))
@@ -609,7 +607,7 @@ class TopicVectorsTickServiceTest {
         @Test
         @DisplayName("a failed window read is counted, and the workspace has no gauge value for that tick")
         void findFailure() {
-            when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of("broken", "fine"));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("broken", "fine"));
             var fine = candidate("fine", NOW.minusSeconds(60));
             when(dao.findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong()))
                     .thenAnswer(invocation -> "broken".equals(invocation.getArgument(0))
@@ -702,7 +700,7 @@ class TopicVectorsTickServiceTest {
                 + "the tick resolved, never one looked up at scrape time")
         void workspaceAttributes() {
             var lookups = new java.util.concurrent.atomic.AtomicInteger();
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
                     registry, new TopicsWorkspaceNames(id -> {
                         lookups.incrementAndGet();
                         return "name-" + id;
@@ -724,7 +722,7 @@ class TopicVectorsTickServiceTest {
         @DisplayName("a failed name lookup costs only the name: the workspace is labelled with its id, and the tick "
                 + "writes as usual")
         void nameFallback() {
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
                     registry, new TopicsWorkspaceNames(id -> {
                         throw new IllegalStateException("react service down");
                     }, Clock.systemUTC()), meter.meter);
@@ -748,9 +746,9 @@ class TopicVectorsTickServiceTest {
             }, Clock.systemUTC());
             names.name("b");
             looked.clear();
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), template, dao, client, lockService,
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
                     registry, names, meter.meter);
-            when(template.inTransaction(any(TxConfig.class), any())).thenReturn(List.of("a", "b", "c"));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
             var budget = config.getVectors().getTickBudget().toJavaDuration();
 

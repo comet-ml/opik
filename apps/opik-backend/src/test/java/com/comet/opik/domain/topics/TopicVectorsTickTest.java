@@ -178,14 +178,16 @@ class TopicVectorsTickTest {
     private InferenceClient inferenceClient;
     private LockService lockService;
     private AiLabelTaskRegistry taskRegistry;
+    private TopicWorkspaceService workspaceService;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
             @Jit LockService lockService, GuiceJobManager jobManager, EventBus eventBus,
             @Jit TopicVectorsTickService tickService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO, @Jit InferenceClient inferenceClient,
-            @Jit AiLabelTaskRegistry taskRegistry) {
+            @Jit AiLabelTaskRegistry taskRegistry, @Jit TopicWorkspaceService workspaceService) {
         this.inferenceClient = inferenceClient;
+        this.workspaceService = workspaceService;
         this.lockService = lockService;
         this.taskRegistry = taskRegistry;
         this.opikConfig = opikConfig;
@@ -219,9 +221,9 @@ class TopicVectorsTickTest {
     void setUp() {
         template.inTransaction(WRITE, handle -> {
             handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
-            handle.execute("UPDATE topic_workspaces SET enabled = FALSE");
             return null;
         });
+        opikConfig.getTopics().setEnabledWorkspaces("");
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withTransformers(EmbedStub.NAME)));
         embedStub.reset();
@@ -288,37 +290,53 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a workspace needs both opt-ins: ai-labels alone, topics alone or topics turned off get no vectors")
+    @DisplayName("a workspace needs both opt-ins: the topics list alone or ai-labels alone gets no vectors, and taking "
+            + "it off either one drops it on the next tick")
     void topicsOptIn() {
         var both = enabledWorkspace();
+        var other = enabledWorkspace();
         var aiLabelsOnly = workspaceWith(true, false);
-        var topicsOnly = workspaceWith(false, true);
-        var noTopicsRow = UUID.randomUUID().toString();
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(AiLabelWorkspaceDAO.class).upsert(noTopicsRow, true, "test");
-            return null;
-        });
+        var listedOnly = workspaceWith(false, true);
+        var listedWithoutAiLabelsRow = UUID.randomUUID().toString();
+        setListed(listedWithoutAiLabelsRow, true);
         var labeled = new java.util.LinkedHashMap<String, List<UUID>>();
-        for (var workspaceId : List.of(both, aiLabelsOnly, topicsOnly, noTopicsRow)) {
+        for (var workspaceId : List.of(both, other, aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
             labeled.put(workspaceId, labelTraces(workspaceId, 2, 1));
         }
 
-        assertThat(tickService.tick(Instant.now()).written()).isEqualTo(2);
+        assertThat(workspaceService.eligibleWorkspaceIds())
+                .containsExactlyElementsOf(List.of(both, other).stream().sorted().toList());
+        assertThat(workspaceService.mismatchedWorkspaceIds())
+                .containsExactlyElementsOf(List.of(listedOnly, listedWithoutAiLabelsRow).stream().sorted().toList());
+        assertThat(workspaceService.isEligible(both)).isTrue();
+        for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
+            assertThat(workspaceService.isEligible(workspaceId)).as(workspaceId).isFalse();
+        }
 
-        assertThat(vectors(both, labeled.get(both))).hasSize(2);
-        for (var workspaceId : List.of(aiLabelsOnly, topicsOnly, noTopicsRow)) {
+        assertThat(tickService.tick(Instant.now()).written()).isEqualTo(4);
+
+        for (var workspaceId : List.of(both, other)) {
+            assertThat(vectors(workspaceId, labeled.get(workspaceId))).hasSize(2);
+        }
+        for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
             assertThat(vectors(workspaceId, labeled.get(workspaceId))).isEmpty();
         }
 
-        // Turned off: the next tick drops the workspace; its stored vectors stay.
+        // Taken off the list (a deploy) or off ai-labels (no deploy): the next tick drops it; its vectors stay.
+        setListed(both, false);
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicWorkspaceDAO.class).upsert(both, false, "test");
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(other, false, "test");
             return null;
         });
-        var later = labelTraces(both, 2, 1);
+        var later = Map.of(both, labelTraces(both, 2, 1), other, labelTraces(other, 2, 1));
         assertThat(tickService.tick(Instant.now()).written()).isZero();
-        assertThat(vectors(both, later)).isEmpty();
-        assertThat(vectors(both, labeled.get(both))).hasSize(2);
+        for (var workspaceId : List.of(both, other)) {
+            assertThat(vectors(workspaceId, later.get(workspaceId))).isEmpty();
+            assertThat(vectors(workspaceId, labeled.get(workspaceId))).hasSize(2);
+        }
+        assertThat(workspaceService.isEligible(both)).isFalse();
+        assertThat(workspaceService.isEligible(other)).isFalse();
+        assertThat(workspaceService.mismatchedWorkspaceIds()).contains(other).doesNotContain(both);
     }
 
     @Test
@@ -413,7 +431,7 @@ class TopicVectorsTickTest {
         labelTraces(workspaceId, 4, 1);
         embedStub.delay = Duration.ofSeconds(3);
         var meter = new TopicVectorsTickServiceTest.TestMeter();
-        var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), template,
+        var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
                 vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
                 meter.meter);
 
@@ -439,7 +457,7 @@ class TopicVectorsTickTest {
         var workspaceId = enabledWorkspace();
         labelTraces(workspaceId, 3, 1);
         var meter = new TopicVectorsTickServiceTest.TestMeter();
-        var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), template,
+        var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
                 vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
                 meter.meter);
         var find = config().getFind();
@@ -964,23 +982,32 @@ class TopicVectorsTickTest {
     }
 
     private String enabledWorkspace() {
-        var workspaceId = UUID.randomUUID().toString();
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            return null;
-        });
-        return workspaceId;
+        return workspaceWith(true, true);
     }
 
+    /** Enabled in ai_label_workspaces or not, and listed in topics.enabledWorkspaces or not. */
     private String workspaceWith(boolean aiLabels, boolean topics) {
         var workspaceId = UUID.randomUUID().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, aiLabels, "test");
-            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, topics, "test");
             return null;
         });
+        if (topics) {
+            setListed(workspaceId, true);
+        }
         return workspaceId;
+    }
+
+    /** Adds the workspace to, or removes it from, topics.enabledWorkspaces, as a Helm change would. */
+    private void setListed(String workspaceId, boolean listed) {
+        var topics = opikConfig.getTopics();
+        var ids = new java.util.TreeSet<>(topics.enabledWorkspaceIds());
+        if (listed) {
+            ids.add(workspaceId);
+        } else {
+            ids.remove(workspaceId);
+        }
+        topics.setEnabledWorkspaces(String.join(",", ids));
     }
 
     private List<UUID> labelTraces(String workspaceId, int count, int taskVersion) {
