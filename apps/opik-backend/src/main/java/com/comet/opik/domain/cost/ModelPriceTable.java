@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -35,6 +36,7 @@ public class ModelPriceTable {
     private static final char MODEL_PROVIDER_SEPARATOR = '/';
     private static final Map<String, ModelPrice> modelProviderPrices;
     private static final Set<String> pricedProviders;
+    private static final Map<String, Map<String, List<String>>> prefixedModelNames;
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     /**
@@ -63,6 +65,7 @@ public class ModelPriceTable {
         pricedProviders = modelProviderPrices.keySet().stream()
                 .map(key -> key.substring(key.lastIndexOf(MODEL_PROVIDER_SEPARATOR) + 1))
                 .collect(Collectors.toUnmodifiableSet());
+        prefixedModelNames = indexPrefixedModelNames(modelProviderPrices.keySet());
     }
 
     static ModelPrice get(String modelName, String provider) {
@@ -75,6 +78,33 @@ public class ModelPriceTable {
 
     static Set<String> pricedProviders() {
         return pricedProviders;
+    }
+
+    /**
+     * The model names filed under {@code provider} with a vendor prefix whose name without it is {@code modelName},
+     * such as OpenRouter's {@code openai/gpt-4o-mini} for {@code gpt-4o-mini}, sorted.
+     */
+    static List<String> prefixedModelNames(@NonNull String modelName, @NonNull String provider) {
+        return prefixedModelNames.getOrDefault(provider, Map.of()).getOrDefault(modelName, List.of());
+    }
+
+    private static Map<String, Map<String, List<String>>> indexPrefixedModelNames(Set<String> keys) {
+        Map<String, Map<String, List<String>>> index = new HashMap<>();
+        for (String key : keys) {
+            int providerSeparator = key.lastIndexOf(MODEL_PROVIDER_SEPARATOR);
+            String modelName = key.substring(0, providerSeparator);
+            if (modelName.indexOf(MODEL_PROVIDER_SEPARATOR) <= 0) {
+                continue;
+            }
+            index.computeIfAbsent(key.substring(providerSeparator + 1), unused -> new HashMap<>())
+                    .computeIfAbsent(parseModelName(modelName).trim().toLowerCase(Locale.ROOT),
+                            unused -> new ArrayList<>())
+                    .add(modelName);
+        }
+        index.replaceAll((provider, byName) -> byName.entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
+                        entry -> entry.getValue().stream().sorted().toList())));
+        return Collections.unmodifiableMap(index);
     }
 
     private static Map<String, ModelPrice> parseModelPrices() {

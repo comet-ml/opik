@@ -269,6 +269,10 @@ class CustomModelPriceValidatorTest {
                         + " \"input_price\": 1}", "model", "no_base",
                         "No built-in price for 'team-mini' on 'openai': rates left unset bill nothing, and cached tokens"
                                 + " bill at the input price"),
+                Arguments.of("{\"model\": \"team-mini\", \"provider\": \"openrouter\", \"kind\": \"fixed\","
+                        + " \"input_price\": 1}", "model", "no_base",
+                        "No built-in price for 'team-mini' on 'openrouter': rates left unset bill nothing, and cached"
+                                + " tokens bill at the input price"),
                 Arguments.of(
                         "{\"model\": \"tts-1\", \"provider\": \"openai\", \"kind\": \"fixed\", \"input_price\": 1}",
                         "model", "priced_per_unit",
@@ -282,6 +286,32 @@ class CustomModelPriceValidatorTest {
 
         assertThat(result.isValid()).isTrue();
         assertThat(result.warnings()).containsExactly(new Problem(0, field, code, message));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-4o-mini", "openai/gpt-4o-mini"})
+    void validateFindsAGatewayModelsBuiltInPriceAsSpansDo(String sentModel) {
+        var result = CustomModelPriceValidator.validate(rows("""
+                [{"model": "%s", "provider": "openrouter", "kind": "fixed", "input_price": "0.15",
+                  "output_price": "0.60"}]
+                """.formatted(sentModel)));
+
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.warnings()).extracting(Problem::code).doesNotContain("no_base");
+    }
+
+    @Test
+    void validateComparesAGatewayModelWithTheBuiltInPriceItsSpansGet() {
+        String builtInInput = ModelPriceResolver.resolve("openai/gpt-4o-mini", "openrouter").orElseThrow().price()
+                .inputPrice().movePointRight(6).stripTrailingZeros().toPlainString();
+
+        var result = CustomModelPriceValidator.validate(rows("""
+                [{"model": "gpt-4o-mini", "provider": "openrouter", "kind": "fixed", "input_price": "0.00000015"}]
+                """));
+
+        assertThat(result.warnings()).containsExactly(new Problem(0, "input_price", "price_out_of_range",
+                "0.00000015 per 1M tokens is far from the built-in %s: prices are per 1M tokens, not per token"
+                        .formatted(builtInInput)));
     }
 
     @Test
