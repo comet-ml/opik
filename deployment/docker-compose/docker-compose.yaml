@@ -43,7 +43,7 @@ services:
         chown -R 1000:1000 /config
       "
   clickhouse:
-    image: clickhouse/clickhouse-server:26.3.16.16-alpine
+    image: clickhouse/clickhouse-server:26.3.62.3-alpine
     pull_policy: always
     hostname: clickhouse
     environment:
@@ -151,10 +151,13 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    environment:
+      MC_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
+      MC_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} # betterleaks:allow — local-dev MinIO default
     entrypoint: >
       /bin/sh -c "
       set -e;
-      /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ;
+      /usr/bin/mc alias set s3 http://minio:9000 $$MC_USER $$MC_PASSWORD --api S3v4 ;
       /usr/bin/mc mb --ignore-existing s3/public;
       /usr/bin/mc anonymous set download s3/public/;
       "
@@ -273,7 +276,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} # betterleaks:allow — local-dev MinIO default
       IS_MINIO: true
       S3_URL: http://minio:9000
       PYTHON_EVALUATOR_URL: ${PYTHON_EVALUATOR_URL:-http://python-backend:${PYTHON_BACKEND_PORT:-8000}}

@@ -3,6 +3,7 @@ package com.comet.opik.api.metrics;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 /**
@@ -17,7 +18,8 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record BreakdownConfig(
-        BreakdownField field,
+        @Schema(description = "Field to group by. Tags are overlapping groups: each tag receives the full metric value. "
+                + "For cost, adding tag groups can exceed actual spend; use provider or model for additive span cost totals.") BreakdownField field,
         String metadataKey,
         String subMetric) {
 

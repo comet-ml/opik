@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.135](https://img.shields.io/badge/Version-2.2.135-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.135](https://img.shields.io/badge/AppVersion-2.2.135-informational?style=flat-square)
+![Version: 2.2.138](https://img.shields.io/badge/Version-2.2.138-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.138](https://img.shields.io/badge/AppVersion-2.2.138-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -183,7 +183,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.forceMerge.minAgeSeconds | int | `604800` | A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds). |
 | clickhouse.forceMerge.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge | int | `8` | Below this many free pool slots, the largest merges are throttled so they cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge). |
 | clickhouse.forceMerge.onPartitionOnly | bool | `false` | false: per part. true: only once the whole partition is quiet, so a partition still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only). |
-| clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
+| clickhouse.image | string | `"clickhouse/clickhouse-server:26.3.62.3"` |  |
 | clickhouse.lifecycle | object | `{}` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
@@ -192,6 +192,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.livenessProbe.periodSeconds | int | `30` |  |
 | clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
+| clickhouse.logsMaxCount | int | `3` | Rotated file logs kept (applies to both the server and error log) |
+| clickhouse.logsMaxSize | string | `"100M"` | Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
