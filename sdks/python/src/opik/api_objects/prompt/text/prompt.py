@@ -47,7 +47,9 @@ class Prompt(base_prompt.BasePrompt):
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
-            project_name: Optional project name for the prompt.
+            project_name: Optional project name for the prompt. If omitted, the project
+                from the active project context is used, then the client's configured
+                project. The resolved name is stored on the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
@@ -98,6 +100,7 @@ class Prompt(base_prompt.BasePrompt):
 
             opik_client_ = opik_client.get_global_client()
             prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
+            self._project_name = opik_client_._resolve_project_name(self._project_name)
             prompt_version = prompt_client_.create_prompt(
                 name=self._name,
                 prompt=self._template.text,

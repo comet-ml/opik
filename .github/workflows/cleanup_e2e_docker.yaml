@@ -34,6 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
           MAX_AGE_DAYS: ${{ github.event.inputs.max_age_days || '7' }}
         run: |
           DELETED=0
@@ -52,16 +53,47 @@ jobs:
               || date -u -v-"${MAX_AGE_DAYS}"d +%s)
           fi
 
+          PAGES_DIR=$(mktemp -d)
+          export PAGES_DIR
+
           for IMAGE in ${{ env.IMAGES }}; do
             echo "=== Scanning ${IMAGE} ==="
+            export VERSIONS_URL="/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions?per_page=100"
+            rm -f "${PAGES_DIR}"/*
 
-            if ! VERSIONS=$(gh api \
-              "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions" \
-              --paginate \
-              --jq "$JQ_FILTER" 2>&1); then
-              echo "  Failed to list versions: ${VERSIONS}"
+            # Packages contain ~40k versions (mostly untagged release manifests) and the API
+            # has no tag filter, so sequential paging takes ~12 min per image. Fetch pages in
+            # batches of 10 in parallel. Versions are listed newest first, so stop after the
+            # batch that reaches the end of the list or, on PR close, goes past the PR's
+            # creation (a PR's images can't predate the PR).
+            PAGE=1
+            LIST_OK=true
+            while :; do
+              # shellcheck disable=SC2016 # expanded by the child sh from the exported env
+              if ! seq "$PAGE" $((PAGE + 9)) | xargs -P 10 -I{} sh -c \
+                'gh api "${VERSIONS_URL}&page={}" > "${PAGES_DIR}/{}.json"'; then
+                LIST_OK=false
+                break
+              fi
+              LAST_PAGE_FILE="${PAGES_DIR}/$((PAGE + 9)).json"
+              PAGE=$((PAGE + 10))
+              if [ "$(jq length "$LAST_PAGE_FILE")" -lt 100 ]; then
+                break
+              fi
+              if [ "$EVENT_NAME" = "pull_request" ] \
+                && [[ "$(jq -r '.[-1].created_at' "$LAST_PAGE_FILE")" < "$PR_CREATED_AT" ]]; then
+                break
+              fi
+            done
+
+            if [ "$LIST_OK" != true ]; then
+              echo "  Failed to list versions for ${IMAGE}"
+              FAILED=$((FAILED + 1))
               continue
             fi
+            echo "  Scanned $((PAGE - 1)) pages"
+            # Pages can shift if an image is pushed mid-scan, listing a version twice.
+            VERSIONS=$(cat "${PAGES_DIR}"/*.json | jq -c "$JQ_FILTER" | sort -u)
 
             if [ -z "$VERSIONS" ]; then
               echo "  No matching versions found"
@@ -110,3 +142,4 @@ jobs:
           echo "Deleted: ${DELETED}"
           echo "Skipped: ${SKIPPED}"
           echo "Failed: ${FAILED}"
+          [ "$FAILED" -eq 0 ] || exit 1

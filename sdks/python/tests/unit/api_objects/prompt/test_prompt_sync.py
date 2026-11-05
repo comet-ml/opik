@@ -1,10 +1,14 @@
-"""Tests for Prompt and ChatPrompt resilience when backend sync fails."""
+"""Tests for Prompt and ChatPrompt backend sync."""
 
+import contextlib
+import functools
 from unittest.mock import patch, MagicMock
 
 import httpx
 import pytest
 
+from opik import context_storage
+from opik.api_objects import opik_client
 from opik.rest_api.core import ApiError
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
@@ -178,3 +182,70 @@ class TestChatPromptSyncFailure:
         ):
             with pytest.raises(ValueError, match="bad value"):
                 ChatPrompt(name="test-chat", messages=self.MESSAGES)
+
+
+def _mock_opik_client_with_project(configured_project_name):
+    client = MagicMock()
+    client._project_name = configured_project_name
+    client._resolve_project_name = functools.partial(
+        opik_client.Opik._resolve_project_name, client
+    )
+    return patch(
+        "opik.api_objects.opik_client.get_global_client",
+        return_value=client,
+    )
+
+
+def _create_text_prompt(project_name):
+    return Prompt(
+        name="test-prompt", prompt="Hello {{name}}", project_name=project_name
+    )
+
+
+def _create_chat_prompt(project_name):
+    return ChatPrompt(
+        name="test-chat",
+        messages=[{"role": "user", "content": "Hello {{name}}"}],
+        project_name=project_name,
+    )
+
+
+@pytest.mark.parametrize(
+    "create_prompt",
+    [
+        pytest.param(_create_text_prompt, id="prompt"),
+        pytest.param(_create_chat_prompt, id="chat_prompt"),
+    ],
+)
+@pytest.mark.parametrize(
+    "explicit_project_name, context_project_name, expected_project_name",
+    [
+        pytest.param(
+            "explicit-project", "context-project", "explicit-project", id="explicit"
+        ),
+        pytest.param(None, "context-project", "context-project", id="context"),
+        pytest.param(None, None, "configured-project", id="configured"),
+    ],
+)
+def test_sync_with_backend__project_name_resolved_and_sent_to_backend(
+    create_prompt,
+    explicit_project_name,
+    context_project_name,
+    expected_project_name,
+):
+    with (
+        _mock_opik_client_with_project("configured-project"),
+        patch(
+            "opik.api_objects.prompt.client.PromptClient.create_prompt",
+            return_value=MagicMock(),
+        ) as create_prompt_mock,
+        (
+            context_storage.project_context(context_project_name)
+            if context_project_name
+            else contextlib.nullcontext()
+        ),
+    ):
+        prompt = create_prompt(explicit_project_name)
+
+    assert create_prompt_mock.call_args.kwargs["project_name"] == expected_project_name
+    assert prompt.project_name == expected_project_name

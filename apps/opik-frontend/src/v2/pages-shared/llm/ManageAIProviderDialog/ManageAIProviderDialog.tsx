@@ -274,6 +274,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
       const authFormValues = authConfigToFormValues(providerData?.auth_config);
       form.setValue("authMode", authFormValues.authMode);
+      form.setValue("authType", authFormValues.authType);
       form.setValue("authTokenUrl", authFormValues.authTokenUrl);
       form.setValue("authSendAs", authFormValues.authSendAs);
       form.setValue("authCredentials", authFormValues.authCredentials);
@@ -297,7 +298,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const submitProviderHandler = useCallback(() => {
     const apiKey = form.getValues("apiKey");
-    const url = form.getValues("url");
+    const url = form.getValues("url").trim();
     const location = form.getValues("location");
     const providerName = form.getValues("providerName");
     const headersArray = form.getValues("headers");

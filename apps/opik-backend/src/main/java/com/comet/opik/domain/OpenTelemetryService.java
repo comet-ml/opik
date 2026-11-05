@@ -145,7 +145,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
             if (skippedSpanCount > 0) {
                 log.warn("Ignored '{}' on {} in workspaceId '{}' because the value is longer than {} characters: {}",
                         GeneralMappingRules.OPIK_PROJECT_NAME_ATTR, spans(skippedSpanCount), workspaceId,
-                        OpenTelemetryMapper.MAX_PROJECT_NAME_LENGTH, describeSkippedProjectNames(skippedProjectNames));
+                        Project.NAME_MAX_LENGTH, describeSkippedProjectNames(skippedProjectNames));
             }
 
             return Flux.fromIterable(spansByProjectName.entrySet())

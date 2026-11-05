@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.ServerException;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.FreeFormSqlPostRunCheckConfig;
@@ -9,9 +10,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -180,6 +185,35 @@ class FreeFormSqlQueryServiceTest {
 
         assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, UUID.randomUUID(), QUERY)
                 .join()).cause().satisfies(withheld(503));
+    }
+
+    static Stream<Arguments> limitErrors() {
+        return Stream.of(
+                Arguments.of(158, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(159, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(241, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(396, FreeFormSqlQueryService.LIMIT_MESSAGE),
+                Arguments.of(307, FreeFormSqlQueryService.BYTES_LIMIT_MESSAGE));
+    }
+
+    @ParameterizedTest(name = "code {0}")
+    @MethodSource("limitErrors")
+    @DisplayName("a ClickHouse limit error is a 400 with a constant message, not a 500")
+    void limitErrorIsBadRequest(int code, String message) {
+        givenClickHouseReturnsOneRow();
+        var projectId = UUID.randomUUID();
+        var clickHouseMessage = "DB::Exception: " + RandomStringUtils.randomAlphanumeric(20);
+        when(dao.execute(eq(FreeFormSqlAccount.STANDARD), eq(WORKSPACE), eq(projectId.toString()), eq(QUERY),
+                anyString()))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ServerException(code, clickHouseMessage, 500, UUID.randomUUID().toString())));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, projectId, QUERY)
+                .join()).cause().satisfies(error -> {
+                    assertThat(error).isExactlyInstanceOf(BadRequestException.class);
+                    assertThat(((WebApplicationException) error).getResponse().getEntity())
+                            .isEqualTo(new ErrorMessage(List.of(message)));
+                });
     }
 
     @Test
