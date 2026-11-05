@@ -8,12 +8,16 @@ import lombok.NonNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Qwen's author answer: {@code {topics: [{name, definition, clusters: [int]}], other: [int]}}, both keys required.
- * Unknown keys are ignored; anything else off the schema is {@code qwen_bad_answer}.
+ * Qwen's author answer: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}, both keys required,
+ * {@code topic} the topic's index or -1 for Other. Read as topics with cluster lists: each assignment's cluster goes to
+ * its topic's list, the first mention of a cluster wins, -1 or an index off the list is Other. The {@code other} list
+ * holds the clusters assigned -1; clusters the answer leaves out are not listed (the applier sends unclaimed groups to
+ * Other anyway). Unknown keys are ignored; anything else off the schema is {@code qwen_bad_answer}.
  */
 @Builder
 public record AuthorAnswer(@NonNull List<Topic> topics, @NonNull List<Integer> other) {
@@ -37,33 +41,48 @@ public record AuthorAnswer(@NonNull List<Topic> topics, @NonNull List<Integer> o
             throw bad("the answer is not a JSON object", null);
         }
         var topicsNode = node.get("topics");
-        var otherNode = node.get("other");
-        if (topicsNode == null || !topicsNode.isArray() || otherNode == null || !otherNode.isArray()) {
-            throw bad("the answer needs the arrays 'topics' and 'other'", null);
+        var assignmentNode = node.get("assignment");
+        if (topicsNode == null || !topicsNode.isArray() || assignmentNode == null || !assignmentNode.isArray()) {
+            throw bad("the answer needs the arrays 'topics' and 'assignment'", null);
         }
-        var topics = new ArrayList<Topic>(topicsNode.size());
+        var names = new ArrayList<String>();
+        var definitions = new ArrayList<String>();
         for (var topic : topicsNode) {
             var name = topic.get("name");
             var definition = topic.get("definition");
-            var clusters = topic.get("clusters");
             if (!topic.isObject() || name == null || !name.isTextual() || definition == null
-                    || !definition.isTextual() || clusters == null || !clusters.isArray()) {
-                throw bad("every topic needs a string 'name', a string 'definition' and an array 'clusters'", null);
+                    || !definition.isTextual()) {
+                throw bad("every topic needs a string 'name' and a string 'definition'", null);
             }
-            topics.add(new Topic(name.asText(), definition.asText(), integers(clusters)));
+            names.add(name.asText());
+            definitions.add(definition.asText());
         }
-        return new AuthorAnswer(List.copyOf(topics), integers(otherNode));
-    }
-
-    private static List<Integer> integers(JsonNode array) {
-        var out = new ArrayList<Integer>(array.size());
-        for (var item : array) {
-            if (!item.isIntegralNumber() || !item.canConvertToInt()) {
-                throw bad("cluster ids must be integers", null);
+        var clusters = new ArrayList<List<Integer>>();
+        names.forEach(name -> clusters.add(new ArrayList<>()));
+        var other = new ArrayList<Integer>();
+        var seen = new HashSet<Integer>();
+        for (var entry : assignmentNode) {
+            var cluster = entry.get("cluster");
+            var topic = entry.get("topic");
+            if (!entry.isObject() || cluster == null || !cluster.isIntegralNumber() || !cluster.canConvertToInt()
+                    || topic == null || !topic.isIntegralNumber() || !topic.canConvertToInt()) {
+                throw bad("every assignment needs an integer 'cluster' and an integer 'topic'", null);
             }
-            out.add(item.intValue());
+            if (!seen.add(cluster.intValue())) {
+                continue;
+            }
+            int t = topic.intValue();
+            if (t >= 0 && t < names.size()) {
+                clusters.get(t).add(cluster.intValue());
+            } else {
+                other.add(cluster.intValue());
+            }
         }
-        return List.copyOf(out);
+        var topics = new ArrayList<Topic>(names.size());
+        for (int t = 0; t < names.size(); t++) {
+            topics.add(new Topic(names.get(t), definitions.get(t), List.copyOf(clusters.get(t))));
+        }
+        return new AuthorAnswer(List.copyOf(topics), List.copyOf(other));
     }
 
     private static TopicsRunException bad(String message, Throwable cause) {

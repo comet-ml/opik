@@ -76,7 +76,7 @@ public class TopicsRebuildService {
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
     static final double UNIT_TOLERANCE = 1e-3;
-    /** Stage 2b D5: the revise deadline is {@code topics.nightly.qwenDeadline}. */
+    /** The author call's deadline is {@code topics.nightly.qwenDeadline}; verify and naming have their own. */
     static final Duration VERIFY_DEADLINE = Duration.ofSeconds(60);
     static final Duration NAMING_DEADLINE = Duration.ofSeconds(30);
 
@@ -281,10 +281,10 @@ public class TopicsRebuildService {
             stats.put("churn", churn == null ? null : churn.churn());
             stats.put("churn_any", churn == null ? null : churn.churnAny());
             stats.set("seconds", seconds);
-            log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', review '{}', "
+            log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', "
                     + "unassigned '{}', candidates '{}', big '{}', born '{}', revived '{}', retired '{}', topics '{}', "
                     + "Other share "
-                    + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n, stats.path("review"),
+                    + "'{}', churn '{}', seconds '{}'", runId, projectId, from, to, n,
                     stats.path("unassigned"), stats.path("candidates"), stats.path("big"), born.size(),
                     stats.path("revived").size(), retired,
                     state.liveCount(), TopicText.fixed((double) other / n, 3), churn, seconds);
@@ -632,7 +632,7 @@ public class TopicsRebuildService {
                 throw invariant("'%s' topics, at most '%s'".formatted(topics.size(), MAX_TOPICS));
             }
             for (var topic : topics) {
-                if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAll(topic.name())) {
+                if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAllName(topic.name())) {
                     throw invariant("topic '%s' has a blank or catch-all name".formatted(topics.indexOf(topic)));
                 }
                 if (!topic.born().equals(night)) {

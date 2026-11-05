@@ -43,7 +43,7 @@ public class NightInvariants {
                     throw invariant("new topic '%s' born '%s', not tonight".formatted(topic.getId(),
                             topic.getBorn()));
                 }
-                if (StringUtils.isBlank(topic.getName()) || AuthorApplier.isCatchAll(topic.getName())) {
+                if (StringUtils.isBlank(topic.getName()) || AuthorApplier.isCatchAllName(topic.getName())) {
                     throw invariant("topic '%s' has a blank or catch-all name".formatted(topic.getId()));
                 }
             } else if (!name.equals(topic.getName())) {

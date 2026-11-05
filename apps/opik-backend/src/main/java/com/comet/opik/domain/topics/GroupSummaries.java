@@ -94,6 +94,58 @@ public class GroupSummaries {
         return out;
     }
 
+    /**
+     * The author's examples per group: the {@code frequent} most frequent texts (ties by code point order), then
+     * {@code extra} more, the texts nearest to the centre not already listed (ties by trace order). Empty for an empty
+     * group.
+     */
+    public static List<List<String>> authorExamples(@NonNull String[] texts, @NonNull float[] vectors,
+            @NonNull int[] labels, @NonNull float[] centres, int dimensions, int frequent, int extra) {
+        int n = texts.length;
+        int k = centres.length / dimensions;
+        var members = new ArrayList<List<Integer>>(k);
+        for (int j = 0; j < k; j++) {
+            members.add(new ArrayList<>());
+        }
+        for (int i = 0; i < n; i++) {
+            members.get(labels[i]).add(i);
+        }
+        var out = new ArrayList<List<String>>(k);
+        for (int j = 0; j < k; j++) {
+            var idx = members.get(j);
+            if (idx.isEmpty()) {
+                out.add(List.of());
+                continue;
+            }
+            var examples = new ArrayList<String>(frequent + extra);
+            var counts = new TreeMap<String, Integer>(TopicText.CODE_POINT_ORDER);
+            var sims = new double[n];
+            for (int i : idx) {
+                counts.merge(texts[i], 1, Integer::sum);
+                sims[i] = dot(vectors, i, centres, j, dimensions);
+            }
+            var byCount = new ArrayList<>(counts.entrySet());
+            byCount.sort(Comparator.comparingInt(entry -> -entry.getValue()));
+            for (int e = 0; e < Math.min(frequent, byCount.size()); e++) {
+                examples.add(byCount.get(e).getKey());
+            }
+            var bySim = new ArrayList<>(idx);
+            bySim.sort((a, b) -> sims[a] > sims[b] ? -1 : sims[a] < sims[b] ? 1 : 0);
+            int added = 0;
+            for (int i : bySim) {
+                if (added >= extra) {
+                    break;
+                }
+                if (!examples.contains(texts[i])) {
+                    examples.add(texts[i]);
+                    added++;
+                }
+            }
+            out.add(List.copyOf(examples));
+        }
+        return out;
+    }
+
     static double dot(float[] a, int i, float[] b, int j, int dimensions) {
         double s = 0;
         int ai = i * dimensions;

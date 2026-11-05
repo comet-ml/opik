@@ -211,7 +211,7 @@ class TopicsRebuildServiceTest {
         service.firstBuild(runId, WORKSPACE_ID, projectId, night);
         readBackFirstBuild();
         // Most nights make no Qwen call; any that comes changes nothing.
-        answer(emptyRevise());
+        answer(emptyNaming());
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -392,13 +392,13 @@ class TopicsRebuildServiceTest {
                 .thenReturn(Mono.just(previous));
     }
 
-    /** A revise answer that changes nothing. */
-    private static JsonNode emptyRevise() {
-        var revise = InferenceJson.MAPPER.createObjectNode();
-        revise.putArray("assign");
-        revise.putArray("new");
-        revise.putArray("other");
-        return revise;
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     @Test

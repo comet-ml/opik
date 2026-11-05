@@ -75,19 +75,36 @@ class TopicsAlgorithmRulesTest {
             assertThat(TopicText.pythonStrip(" \t ")).isEmpty();
         }
 
-        @ParameterizedTest(name = "{0} is a catch-all: {1}")
+        @ParameterizedTest(name = "{0} holds a catch-all word: {1}")
         @CsvSource({
                 "Other Requests, true",
                 "Miscellaneous, true",
                 "General Questions, true",
                 "Various Tasks, true",
                 "OTHERS, true",
+                "General Job Search, true",
                 "Generalization Help, false",
                 "Brother Projects, false",
                 "Daily Briefing Reports, false"})
-        @DisplayName("catch-all names")
+        @DisplayName("catch-all words")
         void catchAll(String name, boolean expected) {
             assertThat(AuthorApplier.isCatchAll(name)).isEqualTo(expected);
+        }
+
+        @ParameterizedTest(name = "{0} is a catch-all as a whole: {1}")
+        @CsvSource({
+                "Other, true",
+                "OTHERS, true",
+                "' Miscellaneous Requests ', true",
+                "General Questions, true",
+                "Various Tasks, true",
+                "General Job Search, false",
+                "Other and System Events, false",
+                "Generalization Help, false",
+                "Daily Briefing Reports, false"})
+        @DisplayName("catch-all names: the author's rule drops a name only when it is a catch-all as a whole")
+        void catchAllName(String name, boolean expected) {
+            assertThat(AuthorApplier.isCatchAllName(name)).isEqualTo(expected);
         }
     }
 
@@ -98,8 +115,8 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("a JSON object inside prose parses, from the first brace to the last")
         void prose() {
-            var answer = AuthorAnswer.parse(TextNode.valueOf(
-                    "Sure:\n{\"topics\": [{\"name\": \"A\", \"definition\": \"d\", \"clusters\": [0]}], \"other\": [1]}\nDone"));
+            var answer = AuthorAnswer.parse(TextNode.valueOf("Sure:\n{\"topics\": [{\"name\": \"A\", \"definition\": "
+                    + "\"d\"}], \"assignment\": [{\"cluster\": 0, \"topic\": 0}, {\"cluster\": 1, \"topic\": -1}]}\nDone"));
             assertThat(answer.topics()).singleElement()
                     .satisfies(topic -> assertThat(topic.clusters()).containsExactly(0));
             assertThat(answer.other()).containsExactly(1);
@@ -109,24 +126,97 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("an object parses as is, unknown keys ignored")
         void object() throws IOException {
             var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree(
-                    "{\"topics\": [], \"other\": [], \"note\": 1}"));
+                    "{\"topics\": [], \"assignment\": [], \"note\": 1}"));
             assertThat(answer.topics()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("each cluster goes to the topic of its first mention; -1 and an index off the list are Other")
+        void perCluster() throws IOException {
+            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"A\", "
+                    + "\"definition\": \"a\"}, {\"name\": \"B\", \"definition\": \"b\"}], \"assignment\": ["
+                    + "{\"cluster\": 0, \"topic\": 1}, {\"cluster\": 1, \"topic\": 0}, {\"cluster\": 0, \"topic\": 0}, "
+                    + "{\"cluster\": 2, \"topic\": -1}, {\"cluster\": 3, \"topic\": 7}]}"));
+
+            assertThat(answer.topics()).extracting(AuthorAnswer.Topic::name).containsExactly("A", "B");
+            assertThat(answer.topics().get(0).clusters()).containsExactly(1);
+            assertThat(answer.topics().get(1).clusters()).containsExactly(0);
+            assertThat(answer.other()).containsExactly(2, 3);
         }
 
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {
                 "not json at all",
                 "{\"topics\": []}",
-                "{\"other\": []}",
-                "{\"topics\": [{\"name\": \"A\", \"clusters\": [0]}], \"other\": []}",
-                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\", \"clusters\": [1.5]}], \"other\": []}",
-                "{\"topics\": [{\"name\": 3, \"definition\": \"d\", \"clusters\": [1]}], \"other\": []}",
+                "{\"assignment\": []}",
+                "{\"topics\": [{\"name\": \"A\"}], \"assignment\": []}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1.5, \"topic\": 0}]}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1}]}",
+                "{\"topics\": [{\"name\": 3, \"definition\": \"d\"}], \"assignment\": []}",
                 "[1, 2]"})
         @DisplayName("an answer off the schema is qwen_bad_answer")
         void bad(String text) {
             assertThatThrownBy(() -> AuthorAnswer.parse(TextNode.valueOf(text)))
                     .isInstanceOfSatisfying(TopicsRunException.class,
                             exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
+        }
+    }
+
+    @Nested
+    @DisplayName("the author prompt")
+    class Prompt {
+
+        @Test
+        @DisplayName("fine groups: one per 30 unique texts, at least 30, at most 50 or the unique texts")
+        void groups() {
+            assertThat(KMeansTopicAlgorithm.groups(1068)).isEqualTo(35);
+            assertThat(KMeansTopicAlgorithm.groups(481)).isEqualTo(30);
+            assertThat(KMeansTopicAlgorithm.groups(4622)).isEqualTo(50);
+            assertThat(KMeansTopicAlgorithm.groups(20)).isEqualTo(20);
+        }
+
+        @Test
+        @DisplayName("texts per group: round(250 / k), from 5 to 10")
+        void budget() {
+            assertThat(KMeansTopicAlgorithm.authorExamples(50)).isEqualTo(5);
+            assertThat(KMeansTopicAlgorithm.authorExamples(35)).isEqualTo(7);
+            assertThat(KMeansTopicAlgorithm.authorExamples(30)).isEqualTo(8);
+            assertThat(KMeansTopicAlgorithm.authorExamples(15)).isEqualTo(10);
+        }
+
+        @Test
+        @DisplayName("examples: the most frequent texts, then the ones nearest the centre, no repeats")
+        void examples() {
+            String[] texts = {"a", "a", "a", "b", "c", "d", "e"};
+            float[] vectors = {1, 0, 1, 0, 1, 0, 0.99f, 0.141f, 0.95f, 0.312f, 0.8f, 0.6f, 0.6f, 0.8f};
+            int[] labels = {0, 0, 0, 0, 0, 0, 0};
+            float[] centres = {1, 0, 0, 1};
+
+            var examples = GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 2, 2);
+
+            assertThat(examples).hasSize(2);
+            assertThat(examples.get(0)).containsExactly("a", "b", "c", "d");
+            assertThat(examples.get(1)).isEmpty();
+            assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 5, 0).get(0))
+                    .containsExactly("a", "b", "c", "d", "e");
+        }
+
+        @Test
+        @DisplayName("the prompt lists the groups largest first with a whole-percent share and the given examples")
+        void prompt() {
+            var groups = List.of(
+                    GroupSummary.builder().group(0).size(10).share(0.1).examples(List.of("own")).build(),
+                    GroupSummary.builder().group(1).size(40).share(0.4).examples(List.of()).build(),
+                    GroupSummary.builder().group(2).size(0).examples(List.of()).build());
+
+            var prompt = TopicPrompts.author(groups, 10, List.of(List.of("zero"), List.of("one", "uno"), List.of()));
+
+            assertThat(prompt)
+                    .contains("at most 10 topics")
+                    .contains(
+                            "  cluster 1: 40% of traffic\n    - one\n    - uno\n  cluster 0: 10% of traffic\n    - zero")
+                    .contains("\"assignment\"")
+                    .doesNotContain("cluster 2:", "- own", "tightness", "{clusters}");
         }
     }
 

@@ -95,7 +95,7 @@ public class TopicsMetrics {
                         + "window, state, update, churn, save (nightly update)")
                 .build();
         this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
-                .setDescription("Qwen calls, by kind (author, revise, verify, naming) and outcome: ok, timeout, "
+                .setDescription("Qwen calls, by kind (author, verify, naming) and outcome: ok, timeout, "
                         + "error, bad_answer")
                 .build();
         this.saveRows = meter.counterBuilder("topics.save.rows")
@@ -108,8 +108,7 @@ public class TopicsMetrics {
                 .setDescription("Live topics of a project after each saved run")
                 .build();
         this.retired = meter.counterBuilder("topics.topics.retired")
-                .setDescription("Topics retired by saved nightly updates, by reason: low_share, cap, merged, review, "
-                        + "replaced")
+                .setDescription("Topics retired by saved nightly updates, by reason: low_share, cap, replaced")
                 .build();
         this.born = meter.counterBuilder("topics.topics.born")
                 .setDescription("Topics born by saved runs, by mode: first_build, nightly_update")

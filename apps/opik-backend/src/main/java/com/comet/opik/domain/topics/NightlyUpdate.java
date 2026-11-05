@@ -6,159 +6,135 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * One nightly update of a project's topic list (stage 2b, steps a to l), on a {@link NightState} read before and
- * written after by the caller. Pure apart from the k-means and Qwen calls behind {@link NightClusterer} and
- * {@link NightLlm}; the state is changed in place.
+ * One nightly update of a project's topic list, on a {@link NightState} read before and written after by the caller.
+ * Pure apart from the k-means and Qwen calls behind {@link NightClusterer} and {@link NightLlm}; the state is changed
+ * in place. Topic prototypes are frozen: a topic keeps the group centres it was born with and the ones a night's
+ * decision adds, so its meaning does not drift from its name.
  *
  * <ol type="a">
- * <li>review night ({@code rebuilds > 0} and a multiple of {@value #REVIEW_EVERY}): the known-Other prototypes are
- * dropped;</li>
- * <li>every trace to its nearest prototype, topic or known Other, at cosine 0.75 (no Other gate here);</li>
- * <li>{@link Recentre} of every topic with members, then of the known-Other pool;</li>
- * <li>{@link CandidateGrouper} on the traces no prototype took;</li>
- * <li>big candidates: max(recent share, share) at least {@value #BIG_SHARE}; a big candidate on a full list forces a
- * review; Qwen is called when there is a big candidate or a review;</li>
- * <li>the revise call ({@code revise} or review prompt);</li>
- * <li>{@link ReviseApplier};</li>
- * <li>{@link Verifier};</li>
- * <li>{@link ForcedBirth};</li>
- * <li>the centre of every group mapped to a live topic is appended to its prototypes, Other ones to known Other, in the
- * group map's order;</li>
- * <li>j2. {@link Rebirth}: a topic born tonight on a dormant topic's traces takes its identity;</li>
- * <li>the final assignment, as 2a's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
- * <li>{@link Lifecycle}: retirements, then a reassignment when one happened, then the inactive switch and sizes.</li>
+ * <li>every trace to its nearest prototype at cosine 0.75, with the 0.95 Other gate, as the final assignment: a
+ * topic's, a known-Other one (the memory: the centres of groups earlier nights left in Other), or none;</li>
+ * <li>{@link CandidateGrouper} on the Other traces, held by the memory or unassigned; a group of at least
+ * {@value CandidateGrouper#MIN_CANDIDATE} traces is a candidate;</li>
+ * <li>{@link ForcedBirth}: every candidate goes to one naming call (a loose one stays Other without a call). A group
+ * may join a live topic (through one batched verify), form a new topic with same-kind groups, or stay Other. A new
+ * topic is born only when its groups' share of the window reaches {@value #BIG_SHARE}; on a full list it replaces the
+ * topic with the lowest share of the window, when that is below the new topic's;</li>
+ * <li>decisions become prototypes: the centre of every group given to a live topic is appended to its prototypes. The
+ * memory keeps its prototypes whose held traces mostly stayed in Other, then the centre of every group the naming left
+ * in Other (not a loose one), unless one kept is within {@value #SAME_MEMORY} of it;</li>
+ * <li>{@link Rebirth}: a topic born tonight on a dormant topic's traces is that topic again;</li>
+ * <li>the final assignment, as the first build's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
+ * <li>{@link Lifecycle}: retirements on the share of the whole window, then a reassignment when one happened, then the
+ * inactive switch and sizes.</li>
  * </ol>
  */
 @UtilityClass
 public class NightlyUpdate {
 
-    static final int REVIEW_EVERY = 7;
+    /** A candidate's share of the window that makes it big: a new topic needs it. */
     static final double BIG_SHARE = 0.02;
-    static final int REVISE_TOKENS = 2500;
-    static final String REVISE_TAG = "revise";
-    /** Step b's owner of a known-Other prototype. */
-    static final int KNOWN_OTHER = -2;
+    /** A known-Other prototype this close to one already kept is not kept again. */
+    static final double SAME_MEMORY = 0.95;
+    /** A group mapped to Other in the group map. */
+    public static final int OTHER = -1;
+    /** Step a's owner of the traces held by known-Other prototype {@code m}: {@code HELD - m}. */
+    private static final int HELD = -10;
     static final int PROMPT_EXAMPLES = 4;
 
     public static Result run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
             @NonNull NightClusterer clusterer, @NonNull NightLlm llm) {
         int d = window.dimensions();
-        boolean reviewNight = state.getRebuilds() > 0 && state.getRebuilds() % REVIEW_EVERY == 0;
-        // a. the known-Other memory expires on review nights
-        if (reviewNight) {
-            state.setOtherPrototypes(List.of());
+        int n = window.size();
+        var memory = new ArrayList<>(state.getOtherPrototypes());
+        // a. one assignment: topic index, HELD - m for known-Other prototype m, or OTHER
+        var owners = assign(state, window, memory);
+        var before = new int[n];
+        for (int i = 0; i < n; i++) {
+            before[i] = owners[i] >= 0 ? owners[i] : PrototypeAssigner.OTHER;
         }
-        // b. yesterday's prototypes on tonight's window
-        var before = assignBefore(state, window);
         var recent = window.recent();
-        // c. recentre
-        for (int t : state.live()) {
-            var members = members(before, t);
-            if (members.length > 0) {
-                var topic = state.topic(t);
-                topic.setPrototypes(Recentre.run(window, members, topic.getPrototypes(), topic.getId(), clusterer));
-            }
-        }
-        var otherMembers = members(before, KNOWN_OTHER);
-        if (otherMembers.length > 0) {
-            state.setOtherPrototypes(Recentre.run(window, otherMembers, state.getOtherPrototypes(), null, clusterer));
-        }
-        // d. the unassigned
-        var grouping = CandidateGrouper.group(window, members(before, PrototypeAssigner.OTHER), state.getRebuilds(),
-                clusterer);
-        var candidates = grouping.candidates();
-        // e. trigger
+        // b. the Other groups
+        var grouped = other(owners);
+        var grouping = CandidateGrouper.group(window, grouped, state.getRebuilds(), clusterer);
+        var candidates = grouping.candidates().stream()
+                .sorted(Comparator.comparingInt((GroupSummary group) -> -group.size())
+                        .thenComparingInt(GroupSummary::group))
+                .toList();
         var big = candidates.stream()
-                .filter(group -> Math.max(group.recentShare(), group.share()) >= BIG_SHARE)
+                .filter(group -> group.share() >= BIG_SHARE)
                 .map(GroupSummary::group)
-                .collect(Collectors.toCollection(HashSet::new));
-        boolean review = reviewNight || (!big.isEmpty() && state.liveCount() >= maxTopics);
-        var result = Result.builder()
-                .reviewNight(reviewNight)
-                .review(review)
-                .revived(List.of())
-                .unassigned(grouping.unassigned().length)
-                .candidates(candidates.stream().map(GroupSummary::group).toList())
-                .big(big.stream().sorted().toList());
+                .sorted()
+                .toList();
+        // c. the naming call
         Map<Integer, Integer> map = new LinkedHashMap<>();
-        if (!big.isEmpty() || review) {
-            // f. revise
-            var shown = promptTopics(state, window, before, recent);
-            var answer = llm.generate(REVISE_TAG, TopicPrompts.revise(shown, candidates, review, maxTopics),
-                    TopicPrompts.REVISE_SCHEMA, REVISE_TOKENS);
-            // g. apply
-            var candidateIds = candidates.stream().map(GroupSummary::group).collect(Collectors.toSet());
-            map = ReviseApplier.apply(state, answer, shown, candidateIds, review, maxTopics);
-            result.afterRevise(Map.copyOf(map));
-            // h. verify, on the topics live after the apply
-            var ordered = candidates.stream().sorted(Comparator.comparingInt(group -> -group.size())).toList();
-            var verifyTopics = new LinkedHashMap<Integer, TopicPrompts.PromptTopic>();
-            promptTopics(state, window, before, recent).forEach(topic -> verifyTopics.put(topic.topic(), topic));
-            var verified = Verifier.verify(ordered, verifyTopics, map, llm);
-            result.verified(verified);
-            // i. forced new topics
-            var forced = ForcedBirth.apply(state, ordered, big, verifyTopics, verified, map,
-                    () -> promptTopics(state, window, before, recent), maxTopics, llm);
-            result.forced(forced);
-            // j. decisions become prototypes
-            for (int t : state.live()) {
-                var added = new ArrayList<float[]>();
-                for (var entry : map.entrySet()) {
-                    if (entry.getValue() == t) {
-                        added.add(grouping.centre(entry.getKey(), d));
-                    }
-                }
-                if (!added.isEmpty()) {
-                    var prototypes = new ArrayList<>(state.topic(t).getPrototypes());
-                    prototypes.addAll(added);
-                    state.topic(t).setPrototypes(prototypes);
-                }
-            }
-            var other = new ArrayList<>(state.getOtherPrototypes());
-            map.forEach((group, topic) -> {
-                if (topic == ReviseApplier.OTHER) {
-                    other.add(grouping.centre(group, d));
-                }
-            });
-            state.setOtherPrototypes(other);
-            // j2. a newborn on a dormant topic's traces is that topic again
-            var moves = Rebirth.apply(state, window);
-            if (!moves.isEmpty()) {
-                var remapped = new LinkedHashMap<Integer, Integer>();
-                map.forEach((group, topic) -> remapped.put(group, topic < 0 ? topic : Rebirth.remap(topic, moves)));
-                map = remapped;
-                result.forced(forced.stream()
-                        .map(outcome -> outcome.topic() == null
-                                ? outcome
-                                : outcome.toBuilder().topic(Rebirth.remap(outcome.topic(), moves)).build())
-                        .toList());
-                result.revived(moves.stream().map(move -> Rebirth.remap(move[1], moves)).sorted().toList());
-            }
+        List<ForcedBirth.Outcome> forced = List.of();
+        if (!candidates.isEmpty()) {
+            forced = ForcedBirth.apply(state, candidates, map, () -> promptTopics(state, window, before, recent),
+                    maxTopics, llm);
         }
-        result.groupMap(Map.copyOf(map));
-        // k. final assignment
+        // d. decisions become prototypes
+        var placed = new HashSet<Integer>();
+        map.forEach((group, topic) -> {
+            if (topic >= 0 && state.topic(topic).isLive()) {
+                var prototypes = new ArrayList<>(state.topic(topic).getPrototypes());
+                prototypes.add(grouping.centre(group, d));
+                state.topic(topic).setPrototypes(prototypes);
+                placed.add(group);
+            }
+        });
+        state.setOtherPrototypes(memory(memory, owners, grouped, grouping, placed, forced, d));
+        // e. a newborn on a dormant topic's traces is that topic again
+        List<Integer> revived = List.of();
+        var moves = Rebirth.apply(state, window);
+        if (!moves.isEmpty()) {
+            var remapped = new LinkedHashMap<Integer, Integer>();
+            map.forEach((group, topic) -> remapped.put(group, topic < 0 ? topic : Rebirth.remap(topic, moves)));
+            map = remapped;
+            forced = forced.stream()
+                    .map(outcome -> outcome.topic() == null
+                            ? outcome
+                            : outcome.toBuilder().topic(Rebirth.remap(outcome.topic(), moves)).build())
+                    .toList();
+            revived = moves.stream().map(move -> Rebirth.remap(move[1], moves)).sorted().toList();
+        }
+        // f. final assignment; g. lifecycle
         var labels = assignFinal(state, window);
-        // l. lifecycle
         int liveBefore = state.liveCount();
-        result.lifecycleShares(Lifecycle.retire(state, window, labels, maxTopics));
+        var shares = Lifecycle.retire(state, window, labels, maxTopics);
         if (state.liveCount() < liveBefore) {
             labels = assignFinal(state, window);
         }
         Lifecycle.display(state, window, labels);
-        return result.labels(labels).build();
+        return Result.builder()
+                .labels(labels)
+                .revived(revived)
+                .unassigned(grouped.length)
+                .candidates(candidates.stream().map(GroupSummary::group).sorted().toList())
+                .big(big)
+                .forced(forced)
+                .groupMap(Map.copyOf(map))
+                .lifecycleShares(shares)
+                .build();
     }
 
-    /** Step b: topic index, {@link #KNOWN_OTHER}, or {@link PrototypeAssigner#OTHER} per trace. */
-    static int[] assignBefore(NightState state, NightWindow window) {
+    /**
+     * Step a: per trace its topic index, {@code HELD - m} when known-Other prototype {@code m} takes it, or
+     * {@link PrototypeAssigner#OTHER}. The same assignment as {@link #assignFinal}, the Other gate included.
+     */
+    static int[] assign(NightState state, NightWindow window, List<float[]> memory) {
+        int d = window.dimensions();
         var vectors = new ArrayList<float[]>();
         var owners = new ArrayList<Integer>();
         for (int t : state.live()) {
@@ -167,17 +143,24 @@ public class NightlyUpdate {
                 owners.add(t);
             }
         }
-        for (var prototype : state.getOtherPrototypes()) {
-            vectors.add(prototype);
-            owners.add(KNOWN_OTHER);
+        int topicCount = vectors.size();
+        for (int m = 0; m < memory.size(); m++) {
+            boolean gated = false;
+            for (int p = 0; p < topicCount && !gated; p++) {
+                gated = dot(memory.get(m), vectors.get(p), d) >= PrototypeAssigner.OTHER_GATE;
+            }
+            if (!gated) {
+                vectors.add(memory.get(m));
+                owners.add(HELD - m);
+            }
         }
         if (vectors.isEmpty()) {
             return allOther(window.size());
         }
-        return new PrototypeAssigner(vectors, owners, List.of(), window.dimensions()).assign(window.vectors());
+        return new PrototypeAssigner(vectors, owners, List.of(), d).assign(window.vectors());
     }
 
-    /** Step k: topic index or {@link PrototypeAssigner#OTHER} per trace, with the Other gate. */
+    /** Step f: topic index or {@link PrototypeAssigner#OTHER} per trace, with the Other gate. */
     static int[] assignFinal(NightState state, NightWindow window) {
         var vectors = new ArrayList<float[]>();
         var owners = new ArrayList<Integer>();
@@ -194,9 +177,52 @@ public class NightlyUpdate {
                 .assign(window.vectors());
     }
 
+    /**
+     * Step d's memory: the prototypes most of whose held traces are not in a placed group, then the centre of every
+     * group the naming left in Other (not a loose one; a new topic under {@value #BIG_SHARE} included) that is not
+     * within {@value #SAME_MEMORY} of one kept.
+     */
+    private static List<float[]> memory(List<float[]> memory, int[] owners, int[] grouped,
+            CandidateGrouper.Grouping grouping, Set<Integer> placed, List<ForcedBirth.Outcome> forced, int d) {
+        var held = new int[memory.size()];
+        var placedHeld = new int[memory.size()];
+        for (int r = 0; r < grouped.length; r++) {
+            int owner = owners[grouped[r]];
+            if (owner <= HELD) {
+                held[HELD - owner]++;
+                if (grouping.labels().length > 0 && placed.contains(grouping.labels()[r])) {
+                    placedHeld[HELD - owner]++;
+                }
+            }
+        }
+        var out = new ArrayList<float[]>();
+        for (int m = 0; m < memory.size(); m++) {
+            if (placedHeld[m] * 2 <= held[m]) {
+                out.add(memory.get(m));
+            }
+        }
+        for (var outcome : forced) {
+            if (outcome.result() != ForcedBirth.Result.OTHER_NAME
+                    && outcome.result() != ForcedBirth.Result.OTHER_FULL
+                    && outcome.result() != ForcedBirth.Result.OTHER_SMALL) {
+                continue;
+            }
+            var centre = grouping.centre(outcome.group(), d);
+            if (out.stream().noneMatch(kept -> dot(kept, centre, d) >= SAME_MEMORY)) {
+                out.add(centre);
+            }
+        }
+        return out;
+    }
+
+    /** The window positions of the traces step a left without a topic: held by known Other or unassigned. */
+    private static int[] other(int[] owners) {
+        return IntStream.range(0, owners.length).filter(i -> owners[i] < 0).toArray();
+    }
+
     private static int[] allOther(int n) {
         var out = new int[n];
-        java.util.Arrays.fill(out, PrototypeAssigner.OTHER);
+        Arrays.fill(out, PrototypeAssigner.OTHER);
         return out;
     }
 
@@ -216,9 +242,9 @@ public class NightlyUpdate {
     }
 
     /**
-     * The live topics as the revise and verify prompts show them, from the step b labels: prompt id = position in the
-     * live list, share of the window, share of the last 7 days, the {@value #PROMPT_EXAMPLES} most frequent member texts
-     * (ties by code point order).
+     * The live topics as the naming and verify prompts show them, from the step a labels: prompt id = position in the
+     * live list, share of the window, share of the last 7 days, the {@value #PROMPT_EXAMPLES} most frequent member
+     * texts (ties by code point order).
      */
     static List<TopicPrompts.PromptTopic> promptTopics(NightState state, NightWindow window, int[] before,
             boolean[] recent) {
@@ -256,17 +282,23 @@ public class NightlyUpdate {
         return out;
     }
 
+    private static double dot(float[] a, float[] b, int dimensions) {
+        double s = 0;
+        for (int t = 0; t < dimensions; t++) {
+            s += (double) a[t] * b[t];
+        }
+        return s;
+    }
+
     /**
      * What the night decided, for the save, the run's stats and the tests: the final labels (topic index or
-     * {@link PrototypeAssigner#OTHER} per trace), the review flags, the unassigned count, the candidates and big ones,
-     * the group map after the revise apply and at the end, the verify result, the forced outcomes and the shares the
-     * lifecycle judged.
+     * {@link PrototypeAssigner#OTHER} per trace), the topics revived, the Other count before the night's decisions,
+     * the candidates and the big ones, the naming outcomes, the group map at the end and the shares the lifecycle
+     * judged.
      */
     @Builder
-    public record Result(@NonNull int[] labels, boolean reviewNight, boolean review, @NonNull List<Integer> revived,
-            int unassigned,
-            @NonNull List<Integer> candidates, @NonNull List<Integer> big, Map<Integer, Integer> afterRevise,
-            Verifier.Verified verified, List<ForcedBirth.Outcome> forced, @NonNull Map<Integer, Integer> groupMap,
-            @NonNull Map<Integer, Double> lifecycleShares) {
+    public record Result(@NonNull int[] labels, @NonNull List<Integer> revived, int unassigned,
+            @NonNull List<Integer> candidates, @NonNull List<Integer> big, @NonNull List<ForcedBirth.Outcome> forced,
+            @NonNull Map<Integer, Integer> groupMap, @NonNull Map<Integer, Double> lifecycleShares) {
     }
 }
