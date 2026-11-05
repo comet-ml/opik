@@ -84,10 +84,12 @@ public class AuthenticationConfig {
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.DAYS)
     private Duration organizationCacheTTL = Duration.minutes(10);
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 7, unit = TimeUnit.DAYS)
     private Duration organizationCacheStaleTTL = Duration.hours(24);
 
     /**
@@ -100,5 +102,16 @@ public class AuthenticationConfig {
         return requestRetryMinBackoff == null
                 || requestRetryMaxBackoff == null
                 || requestRetryMinBackoff.toMilliseconds() <= requestRetryMaxBackoff.toMilliseconds();
+    }
+
+    /**
+     * Redis drops a cached organization after the stale TTL, so a stale TTL shorter than the fresh one would drop
+     * entries while they are still fresh: every request would ask Comet, and nothing would be left for Comet outages.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "authentication.organizationCacheStaleTTL must be at least authentication.organizationCacheTTL") public boolean isOrganizationCacheTtlOrderValid() {
+        return organizationCacheTTL == null
+                || organizationCacheStaleTTL == null
+                || organizationCacheTTL.toMilliseconds() <= organizationCacheStaleTTL.toMilliseconds();
     }
 }

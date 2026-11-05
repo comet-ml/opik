@@ -568,11 +568,11 @@ authentication:
   requestRetryMaxBackoff: ${AUTH_REQUEST_RETRY_MAX_BACKOFF:-1s}
   # Default: 10m
   # Description: How long a workspace's organization, as Comet reported it, is reused before Comet is asked again.
-  #   Used for organization settings such as custom model prices.
+  #   Used for organization settings such as custom model prices. Between 1s and 1d.
   organizationCacheTTL: ${AUTH_ORGANIZATION_CACHE_TTL:-10m}
   # Default: 24h
   # Description: How long the last known organization of a workspace is kept, for when Comet can't be reached and
-  #   for background jobs that carry no organization of their own.
+  #   for background jobs that carry no organization of their own. At least organizationCacheTTL, and at most 7d.
   organizationCacheStaleTTL: ${AUTH_ORGANIZATION_CACHE_STALE_TTL:-24h}
 
 # Liveness health check for the shared outbound HTTP client (see shared_http_client under healthChecks)

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +25,8 @@ class WorkspaceOrganizationClient {
     sealed interface Lookup permits Found, NoOrganization, Denied {
     }
 
-    record Found(String organizationId, boolean isOrganizationAdmin) implements Lookup {
+    @Builder(toBuilder = true)
+    record Found(@NonNull String organizationId, boolean isOrganizationAdmin) implements Lookup {
     }
 
     record NoOrganization() implements Lookup {
@@ -39,9 +41,11 @@ class WorkspaceOrganizationClient {
         }
     }
 
-    record OrganizationRequest(String workspaceName) {
+    @Builder(toBuilder = true)
+    record OrganizationRequest(@NonNull String workspaceName) {
     }
 
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record WorkspaceOrganization(String workspaceId, String organizationId, String organizationName,
             @JsonProperty("isOrganizationAdmin") boolean isOrganizationAdmin) {
@@ -62,7 +66,7 @@ class WorkspaceOrganizationClient {
                             .acceptEncoding("identity");
                     credentials.applyTo(builder);
                 })
-                .body(Entity.json(new OrganizationRequest(workspaceName)))
+                .body(Entity.json(OrganizationRequest.builder().workspaceName(workspaceName).build()))
                 .retryPolicy(retryPolicy)
                 .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
                 .responseFunction(WorkspaceOrganizationClient::toLookup)
@@ -74,10 +78,15 @@ class WorkspaceOrganizationClient {
             var organization = response.readEntity(WorkspaceOrganization.class);
             return organization == null || StringUtils.isBlank(organization.organizationId())
                     ? new NoOrganization()
-                    : new Found(organization.organizationId(), organization.isOrganizationAdmin());
+                    : Found.builder()
+                            .organizationId(organization.organizationId())
+                            .isOrganizationAdmin(organization.isOrganizationAdmin())
+                            .build();
         }
-        // A Comet release without the endpoint answers 404 too, and it knows no organization either.
-        if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
+        // A Comet release without the endpoint answers 404 too, and it knows no organization either. Comet answers
+        // 400 for a workspace name it doesn't know, which has no organization either.
+        if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()
+                || response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
             return new NoOrganization();
         }
         if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()

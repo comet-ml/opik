@@ -143,7 +143,7 @@ class AuthModuleCache2E2Test {
     }
 
     @Test
-    void testOrganization__whenRequestsDoNotAskForIt__thenCometIsNotCalledAndAJobFindsWhatALookupCached(
+    void requestsThatDoNotAskMakeNoCometCallAndAJobFindsWhatALookupCached(
             OrganizationResolver resolver) {
         var apiKey = UUID.randomUUID().toString();
         var workspaceName = UUID.randomUUID().toString();

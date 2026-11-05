@@ -5,10 +5,12 @@ import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Denied;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Found;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.Lookup;
 import com.comet.opik.infrastructure.auth.WorkspaceOrganizationClient.NoOrganization;
+import com.comet.opik.utils.RetryUtils;
 import com.google.inject.OutOfScopeException;
 import com.google.inject.ProvisionException;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ForbiddenException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServiceUnavailableException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +69,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             var context = caller.get();
             return client.fetch(context.getCometCredentials(), context.getWorkspaceName())
                     .onErrorMap(error -> {
-                        log.warn("Organization admin check failed, workspace '{}'", context.getWorkspaceId(), error);
+                        warnCometFailed("Organization admin check failed", context.getWorkspaceId(), error);
                         return new ServiceUnavailableException(ADMIN_CHECK_FAILED);
                     })
                     .flatMap(lookup -> remember(context.getWorkspaceId(), lookup).thenReturn(lookup))
@@ -98,13 +100,27 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             Optional<WorkspaceOrganizationCache.Entry> cached) {
         var cachedOrganization = Mono.justOrEmpty(cached.map(WorkspaceOrganizationCache.Entry::organizationId));
         return client.fetch(credentials, workspaceName)
-                .flatMap(lookup -> remember(workspaceId, lookup)
-                        .then(lookup instanceof Found found ? Mono.just(found.organizationId()) : cachedOrganization))
+                .flatMap(lookup -> remember(workspaceId, lookup).then(switch (lookup) {
+                    case Found found -> Mono.just(found.organizationId());
+                    case NoOrganization noOrganization -> Mono.<String>empty();
+                    case Denied denied -> cachedOrganization;
+                }))
                 .onErrorResume(cometFailed -> {
-                    log.warn("Comet could not resolve the organization of workspace '{}', using the cached one",
-                            workspaceId, cometFailed);
+                    warnCometFailed("Comet could not resolve the organization, using the cached one", workspaceId,
+                            cometFailed);
                     return cached.isPresent() ? cache.retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
                 });
+    }
+
+    // Comet being down or answering an error is expected and handled, so its stack trace is only noise.
+    private static void warnCometFailed(String message, String workspaceId, Throwable error) {
+        if (error instanceof WorkspaceOrganizationClient.UnexpectedResponseException
+                || error instanceof RetryUtils.RetryableHttpException
+                || error instanceof ProcessingException) {
+            log.warn("{}, workspace '{}': '{}'", message, workspaceId, error.getMessage());
+        } else {
+            log.warn("{}, workspace '{}'", message, workspaceId, error);
+        }
     }
 
     private Mono<Void> remember(String workspaceId, Lookup lookup) {

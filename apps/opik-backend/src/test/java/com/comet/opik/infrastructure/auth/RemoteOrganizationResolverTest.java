@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -41,13 +42,16 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_USERNAME_HEADER;
+import static com.github.tomakehurst.wiremock.client.WireMock.badRequest;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.forbidden;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.notFound;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
+import static com.github.tomakehurst.wiremock.client.WireMock.unauthorized;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -227,6 +231,85 @@ class RemoteOrganizationResolverTest {
             stubApiKey(serverError());
 
             assertThat(ask()).isNull();
+        }
+
+        @Test
+        void cometErrorIsLoggedWithoutAStackTrace() {
+            stubApiKey(serverError());
+
+            var logs = LogCaptureUtils.logEventsOf(() -> ask());
+
+            assertThat(logs).filteredOn(line -> line.startsWith("Comet could not resolve the organization"))
+                    .isNotEmpty()
+                    .allSatisfy(line -> assertThat(line).doesNotContain("\tat "));
+        }
+
+        @Test
+        void organizationCometNoLongerReportsIsDroppedInsteadOfTheStaleOne() {
+            stubApiKey(organization(organizationId, false));
+            ask();
+            wireMock.server().resetAll();
+            stubApiKey(notFound());
+            clock.advance(FRESH_FOR);
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        @Test
+        void deniedKeepsTheStaleOrganizationAndIsNotRemembered() {
+            stubApiKey(organization(organizationId, false));
+            ask();
+            wireMock.server().resetAll();
+            stubApiKey(forbidden());
+            clock.advance(FRESH_FOR);
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isEqualTo(organizationId);
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isEqualTo(organizationId);
+            assertCometCalls(API_KEY_PATH, 2);
+        }
+
+        @Test
+        void deniedWithNothingCachedLeavesNoOrganizationAndAsksAgain() {
+            stubApiKey(unauthorized());
+
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 2);
+        }
+
+        @Test
+        void blankOrganizationIdMeansNoOrganizationAndIsRemembered() {
+            stubApiKey(okJson("""
+                    {"workspaceId": "%s", "workspaceName": "%s", "organizationId": "",
+                     "organizationName": "Example", "isOrganizationAdmin": false}
+                    """.formatted(workspaceId, workspaceName)));
+
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        @Test
+        void unknownWorkspaceMeansNoOrganizationAndIsRemembered() {
+            stubApiKey(badRequest());
+
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 1);
         }
 
         @Test
