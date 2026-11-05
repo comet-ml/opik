@@ -59,6 +59,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import { useColumnsWithDraftKeys } from "./hooks/useColumnsWithDraftKeys";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   useIsDraftMode,
@@ -70,6 +71,8 @@ import { COLUMN_ID_ID } from "@/types/shared";
 import { DynamicColumn } from "@/types/shared";
 
 const getRowId = (d: DatasetItem) => d.id;
+
+const EMPTY_COLUMNS: DatasetItemColumn[] = [];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
@@ -101,13 +104,6 @@ export interface AddPanelRenderProps {
   open: boolean;
   onClose: () => void;
   columns: DatasetItemColumn[];
-}
-
-export interface AddDialogRenderProps {
-  key: number;
-  datasetId: string;
-  open: boolean;
-  setOpen: (open: boolean) => void;
 }
 
 export interface ExpansionDialogRenderProps {
@@ -239,10 +235,15 @@ function DatasetItemsTab({
 
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
 
+  const columnsWithDraftKeys = useColumnsWithDraftKeys(
+    data?.columns ?? EMPTY_COLUMNS,
+  );
   const datasetColumns = useMemo(
     () =>
-      (data?.columns ?? []).sort((c1, c2) => c1.name.localeCompare(c2.name)),
-    [data?.columns],
+      [...columnsWithDraftKeys].sort((c1, c2) =>
+        c1.name.localeCompare(c2.name),
+      ),
+    [columnsWithDraftKeys],
   );
 
   const { refetch: refetchExportData } = useDatasetItemsList(
