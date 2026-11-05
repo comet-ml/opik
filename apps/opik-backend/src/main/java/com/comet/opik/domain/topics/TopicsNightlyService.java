@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,9 +49,10 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  *
  * <p>A project is built when its workspace is opted in to topics (and ai-labels) and its window (the {@code windowDays} whole UTC days
  * before the night) holds at least {@code minVectors} traces with a vector. Stage 2a builds only a project without a
- * list; one with a saved run is skipped until the nightly update exists. Projects run smallest first, so small ones
- * always finish; none starts after {@code budget}, and those left run the next night. Each run gets its own thread and
- * is stopped (interrupted) and failed with {@code timeout} after {@code projectTimeout}.
+ * list; one with a saved run is skipped until the nightly update exists. Projects run stalest first: one without a
+ * list, then the oldest {@code window_until}, and among equals the smallest. None starts after {@code budget}, and
+ * those left run the next night. Each run gets its own thread and is stopped (interrupted) and failed with
+ * {@code timeout} after {@code projectTimeout}.
  *
  * <p>Each night writes its record as it goes: its {@code topic_nights} row when it starts and ends, and one
  * {@code topic_night_projects} row per project as it decides it. The state gauges ({@link TopicsNightlyGauges}) read it.
@@ -89,7 +91,7 @@ public class TopicsNightlyService {
     public record NightResult(int saved, int failed, int skipped, int notReached) {
     }
 
-    private record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
+    record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
     /** A project the night listed and skipped, with why. */
@@ -412,9 +414,9 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Fills {@code candidates} with the projects to build, smallest first, and returns how many were skipped: under
-     * {@code minVectors}, deleted, or with a list. A workspace whose count read fails is left for the next night. A read
-     * that fails otherwise throws, and fails the night.
+     * Fills {@code candidates} with the projects to build, in {@link #queueOrder} order, and returns how many were
+     * skipped: under {@code minVectors}, deleted, or with a list. A workspace whose count read fails is left for the next
+     * night. A read that fails otherwise throws, and fails the night.
      */
     private int eligible(LocalDate night, List<Candidate> candidates, NightRecord record) {
         var nightly = config.getNightly();
@@ -443,10 +445,12 @@ public class TopicsNightlyService {
             }
         }
         var projectIds = found.stream().map(Candidate::projectId).collect(Collectors.toSet());
-        Set<UUID> built = projectIds.isEmpty()
-                ? Set.of()
-                : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findStates(projectIds))
-                        .stream().map(TopicProjectState::projectId).collect(Collectors.toSet());
+        List<TopicProjectState> states = projectIds.isEmpty()
+                ? List.of()
+                : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findStates(projectIds));
+        Set<UUID> built = states.stream().map(TopicProjectState::projectId).collect(Collectors.toSet());
+        var windowUntil = new HashMap<UUID, Instant>();
+        states.forEach(state -> windowUntil.put(state.projectId(), state.windowUntil()));
         // A deleted project keeps its window vectors until ClickHouse drops them: build only projects that exist.
         Set<UUID> existing = new HashSet<>();
         found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
@@ -462,9 +466,21 @@ public class TopicsNightlyService {
                 candidates.add(candidate);
             }
         }
-        candidates.sort(Comparator.comparingLong(Candidate::vectors).thenComparing(Candidate::projectId));
+        candidates.sort(queueOrder(windowUntil));
         record.skipped(skipped);
         return skipped.size();
+    }
+
+    /**
+     * The night's queue, stalest first: a project without a list ({@code windowUntil} has none, or a null), then the
+     * oldest {@code window_until}, so a project with a list that a night did not reach goes first the next night; among
+     * equals, the fewest vectors first.
+     */
+    static Comparator<Candidate> queueOrder(@NonNull Map<UUID, Instant> windowUntil) {
+        return Comparator.<Candidate, Instant>comparing(candidate -> windowUntil.get(candidate.projectId()),
+                Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparingLong(Candidate::vectors)
+                .thenComparing(Candidate::projectId);
     }
 
     /**

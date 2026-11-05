@@ -359,7 +359,7 @@ flowchart TD
     E -->|workspaces read fails| E1["Record ends failed; the night throws"]
     E -->|a workspace count fails| E2["count_failed row;<br/>the workspace runs the next night"]
     E --> F["Skip rows: small, deleted, already_saved"]
-    E --> G["Projects to build, smallest first"]
+    E --> G["Projects to build, stalest first"]
     G --> H{"Next project, budget left?"}
     H -->|budget out| H1["not_reached rows for the rest"]
     H -->|none left| M["Record ends finished"]
@@ -389,7 +389,10 @@ Every record write after the start is best-effort: a failed one is logged and th
   run counts older than the retention. It does the same for the night records: a night left `running` past the night
   lock's lease is set to `failed`, and records older than the retention are deleted.
 - It counts each enabled workspace's projects in the window, drops those under `TOPICS_NIGHTLY_MIN_VECTORS` and those
-  with a saved list, and runs the rest smallest first, one at a time.
+  with a saved list, and runs the rest one at a time, stalest first: a project without a list, then the oldest
+  `window_until`, and among equals the fewest vectors. Stage 2a builds only projects without a list, so for now the
+  smallest go first; a project with a list that a night does not reach has the oldest `window_until`, so it goes first
+  the next night.
 - Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the night never build the
   same project at once.
 - A first build under 1,000 traces is saved with `"provisional": true` in its stats.

@@ -18,7 +18,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
@@ -40,7 +42,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * What a night counts and records, with every store mocked: each project's decision with its reason, a failed count
- * read, a run that cannot start, the runs housekeeping finds abandoned, and the night's record.
+ * read, a run that cannot start, the runs housekeeping finds abandoned, and the night's record. Also the queue order.
  */
 @DisplayName("topics nightly service metrics")
 class TopicsNightlyServiceTest {
@@ -280,6 +282,26 @@ class TopicsNightlyServiceTest {
         var cutoff = LocalDate.ofInstant(before.minus(Duration.ofDays(90)), ZoneOffset.UTC);
         verify(nightDAO).deleteNightsBefore(cutoff);
         verify(nightDAO).deleteProjectsBefore(cutoff);
+    }
+
+    @Test
+    @DisplayName("the queue runs the stalest first: no list, then the oldest window_until; among equals the fewest "
+            + "vectors")
+    void queueOrder() {
+        var newer = new TopicsNightlyService.Candidate(WORKSPACE_ID, UUID.randomUUID(), 10);
+        var older = new TopicsNightlyService.Candidate(WORKSPACE_ID, UUID.randomUUID(), 500);
+        var nullWindow = new TopicsNightlyService.Candidate(WORKSPACE_ID, UUID.randomUUID(), 300);
+        var noListLarge = new TopicsNightlyService.Candidate(WORKSPACE_ID, UUID.randomUUID(), 900);
+        var noListSmall = new TopicsNightlyService.Candidate(WORKSPACE_ID, UUID.randomUUID(), 100);
+        var windowUntil = new HashMap<UUID, Instant>();
+        windowUntil.put(newer.projectId(), START.minus(Duration.ofDays(1)));
+        windowUntil.put(older.projectId(), START.minus(Duration.ofDays(3)));
+        windowUntil.put(nullWindow.projectId(), null);
+        var queue = new ArrayList<>(List.of(newer, older, nullWindow, noListLarge, noListSmall));
+
+        queue.sort(TopicsNightlyService.queueOrder(windowUntil));
+
+        assertThat(queue).containsExactly(noListSmall, nullWindow, noListLarge, older, newer);
     }
 
     @SuppressWarnings("unchecked")
