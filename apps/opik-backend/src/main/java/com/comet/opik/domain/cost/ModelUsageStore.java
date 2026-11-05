@@ -41,7 +41,7 @@ class ModelUsageStore {
         var dao = handle.attach(ModelUsageDAO.class);
         LocalDate since = today.minusDays(DAYS - 1);
         var models = dao.findModels(organizationId, since, MAX_MODELS + 1);
-        var workspacesByModel = dao.findWorkspaces(organizationId, since).stream()
+        var workspacesByModel = dao.findWorkspaces(organizationId, since, MAX_MODELS).stream()
                 .collect(Collectors.groupingBy(row -> new UsedModel(row.modelName(), row.provider()),
                         Collectors.mapping(row -> CustomModelPricesUsed.Workspace.builder()
                                 .id(row.workspaceId())

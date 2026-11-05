@@ -207,6 +207,24 @@ class ModelsUsedResourceTest {
     }
 
     @Test
+    void updateWithABlankModelAndProviderRecordsTheStoredOnes() {
+        String model = uniqueModel();
+        var span = span(model, "openai").toBuilder().usage(null).build();
+        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+
+        spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                .projectName(span.projectName())
+                .traceId(span.traceId())
+                .parentSpanId(span.parentSpanId())
+                .model(" ")
+                .provider("")
+                .usage(USAGE)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        awaitModelUsed(model, "openai");
+    }
+
+    @Test
     void secondWriteOfTheSameModelTheSameDayDoesNotWriteAgain() {
         String model = uniqueModel();
         spanResourceClient.createSpan(span(model, "openai"), API_KEY, WORKSPACE_NAME);

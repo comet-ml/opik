@@ -12,12 +12,16 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -83,5 +87,33 @@ class ModelUsageServiceTest {
         assertThatCode(() -> service.save(ORGANIZATION_LAYERS, "ws-a", "team-a", GPT_5_MINI).block())
                 .doesNotThrowAnyException();
         verify(bucket).delete();
+    }
+
+    @Test
+    void aFailedClaimGivesBackTheClaimsAlreadyTaken() {
+        RBucketReactive<Object> claimedBucket = mock(RBucketReactive.class);
+        RBucketReactive<Object> failingBucket = mock(RBucketReactive.class);
+        doAnswer(invocation -> invocation.<String>getArgument(0).endsWith("gpt-5-mini")
+                ? claimedBucket
+                : failingBucket).when(redisClient).getBucket(anyString(), any(Codec.class));
+        when(claimedBucket.setIfAbsent(any(), any(Duration.class))).thenReturn(Mono.just(true));
+        when(claimedBucket.delete()).thenReturn(Mono.just(true));
+        when(failingBucket.setIfAbsent(any(), any(Duration.class)))
+                .thenReturn(Mono.error(new IllegalStateException("Redis timed out")));
+
+        service.save(ORGANIZATION_LAYERS, "ws-a", "team-a",
+                List.of(new UsedModel("gpt-5-mini", "openai"), new UsedModel("gpt-4o", "openai"))).block();
+
+        verify(claimedBucket).delete();
+        verifyNoInteractions(transactionTemplate);
+    }
+
+    @Test
+    void modelsWhoseNamesShareColonsGetTheirOwnKeys() {
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+        assertThat(ModelUsageServiceImpl.modelKey("org-1", today, "ws-a", new UsedModel("llama", "ollama:local")))
+                .isNotEqualTo(ModelUsageServiceImpl.modelKey("org-1", today, "ws-a",
+                        new UsedModel("local:llama", "ollama")));
     }
 }

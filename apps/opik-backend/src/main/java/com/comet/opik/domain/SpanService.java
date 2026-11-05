@@ -45,6 +45,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -409,10 +410,9 @@ public class SpanService {
                     .flatMap(priceLayers -> spanDAO.update(id, processedUpdate, existingSpan, priceLayers)
                             .doOnSuccess(__ -> recordModelsUsed(priceLayers, workspaceId,
                                     ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""), projectName,
-                                    processedUpdate.model() != null ? processedUpdate.model() : existingSpan.model(),
-                                    processedUpdate.provider() != null
-                                            ? processedUpdate.provider()
-                                            : existingSpan.provider())))
+                                    StringUtils.defaultIfBlank(processedUpdate.model(), existingSpan.model()),
+                                    StringUtils.defaultIfBlank(processedUpdate.provider(),
+                                            existingSpan.provider()))))
                     .flatMap(updateResult -> {
                         // Step 4: Delete only auto-stripped attachments from the old data
                         // User-uploaded attachments are preserved unless explicitly removed by user

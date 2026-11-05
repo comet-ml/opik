@@ -40,10 +40,18 @@ interface ModelUsageDAO {
     List<UsedModelRow> findModels(@Bind("organizationId") String organizationId, @Bind("since") LocalDate since,
             @Bind("limit") int limit);
 
-    @SqlQuery("SELECT model_name, provider, workspace_id, MAX(workspace_name) AS workspace_name" +
-            " FROM model_prices_used" +
+    // Only the workspaces of the models findModels returns (same order, same limit), each under its latest name.
+    @SqlQuery("SELECT DISTINCT used.model_name, used.provider, used.workspace_id," +
+            " FIRST_VALUE(used.workspace_name) OVER (PARTITION BY used.workspace_id" +
+            " ORDER BY used.used_on DESC, used.workspace_name) AS workspace_name" +
+            " FROM model_prices_used used" +
+            " JOIN (SELECT model_name, provider FROM model_prices_used" +
             " WHERE organization_id = :organizationId AND used_on >= :since" +
-            " GROUP BY model_name, provider, workspace_id")
+            " GROUP BY model_name, provider" +
+            " ORDER BY COUNT(DISTINCT used_on) DESC, MAX(used_on) DESC, model_name, provider" +
+            " LIMIT :limit) top_models" +
+            " ON top_models.model_name = used.model_name AND top_models.provider = used.provider" +
+            " WHERE used.organization_id = :organizationId AND used.used_on >= :since")
     List<UsedModelWorkspaceRow> findWorkspaces(@Bind("organizationId") String organizationId,
-            @Bind("since") LocalDate since);
+            @Bind("since") LocalDate since, @Bind("limit") int limit);
 }

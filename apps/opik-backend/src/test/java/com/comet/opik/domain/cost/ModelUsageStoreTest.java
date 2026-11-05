@@ -132,6 +132,32 @@ class ModelUsageStoreTest {
         assertThat(found.truncated()).isTrue();
     }
 
+    @Test
+    void findWorkspacesReadsOnlyTheModelsFindModelsReturns() {
+        String organizationId = UUID.randomUUID().toString();
+        save(organizationId, TODAY.minusDays(1), "ws-a", "team-a", GPT_5_MINI);
+        save(organizationId, TODAY, "ws-a", "team-a", GPT_5_MINI);
+        save(organizationId, TODAY, "ws-b", "team-b", LLAMA);
+
+        var rows = jdbi.withExtension(ModelUsageDAO.class,
+                dao -> dao.findWorkspaces(organizationId, TODAY.minusDays(ModelUsageStore.DAYS - 1), 1));
+
+        assertThat(rows).containsExactly(new ModelUsageDAO.UsedModelWorkspaceRow(GPT_5_MINI.modelName(),
+                GPT_5_MINI.provider(), "ws-a", "team-a"));
+    }
+
+    @Test
+    void aRenamedWorkspaceIsListedUnderItsLatestName() {
+        String organizationId = UUID.randomUUID().toString();
+        save(organizationId, TODAY.minusDays(2), "ws-a", "zulu", GPT_5_MINI);
+        save(organizationId, TODAY, "ws-a", "alpha", LLAMA);
+
+        var found = find(organizationId);
+
+        assertThat(found.usages()).extracting(ModelUsageStore.Usage::workspaces)
+                .containsOnly(List.of(workspace("ws-a", "alpha")));
+    }
+
     private int rowCount(String organizationId) {
         return jdbi.withHandle(handle -> handle.createQuery(
                 "SELECT COUNT(*) FROM model_prices_used WHERE organization_id = :organizationId")

@@ -23,8 +23,12 @@ import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -86,19 +90,27 @@ class ModelUsageServiceImpl implements ModelUsageService {
         }
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         String name = StringUtils.defaultString(workspaceName);
+        List<UsedModel> claimed = new CopyOnWriteArrayList<>();
+        AtomicBoolean saved = new AtomicBoolean();
         return Flux.fromIterable(new LinkedHashSet<>(models))
-                .filterWhen(model -> claim(modelKey(organizationId, today, workspaceId, model)))
+                .filterWhen(model -> claim(modelKey(organizationId, today, workspaceId, model))
+                        .doOnNext(won -> {
+                            if (won) {
+                                claimed.add(model);
+                            }
+                        }))
                 .collectList()
-                .filter(claimed -> !claimed.isEmpty())
-                .flatMap(claimed -> write(handle -> ModelUsageStore.save(handle, organizationId, today, workspaceId,
-                        name, claimed))
-                        .onErrorResume(error -> release(organizationId, today, workspaceId, claimed)
-                                .then(Mono.error(error))))
+                .filter(toSave -> !toSave.isEmpty())
+                .flatMap(toSave -> write(handle -> ModelUsageStore.save(handle, organizationId, today, workspaceId,
+                        name, toSave)).doOnSuccess(__ -> saved.set(true)))
                 .then(Mono.defer(() -> deleteOldDaysOncePerDay(organizationId, today)))
                 .timeout(SAVE_TIMEOUT)
                 .onErrorResume(error -> {
                     logFailure(organizationId, error);
-                    return Mono.empty();
+                    return saved.get()
+                            ? Mono.empty()
+                            : release(organizationId, today, workspaceId, List.copyOf(claimed))
+                                    .onErrorResume(releaseError -> Mono.empty());
                 });
     }
 
@@ -134,7 +146,8 @@ class ModelUsageServiceImpl implements ModelUsageService {
         return redisClient.getBucket(key, StringCodec.INSTANCE).setIfAbsent("1", CLAIM_TTL);
     }
 
-    // A failed write gives the claims back, so the next span write of the day tries again.
+    // Claims taken before a failure (a later claim, the write or the timeout) are given back, so the next span write
+    // of the day tries again instead of finding them taken until the claim expires.
     private Mono<Void> release(String organizationId, LocalDate today, String workspaceId, List<UsedModel> claimed) {
         return Flux.fromIterable(claimed)
                 .flatMap(model -> redisClient.getBucket(modelKey(organizationId, today, workspaceId, model),
@@ -163,8 +176,11 @@ class ModelUsageServiceImpl implements ModelUsageService {
         }
     }
 
-    private static String modelKey(String organizationId, LocalDate today, String workspaceId, UsedModel model) {
-        return KEY_PREFIX + organizationId + ":" + today + ":" + workspaceId + ":" + model.provider() + ":"
-                + model.modelName();
+    // Each part is length-prefixed: providers and models can contain ':' ('ollama:local'), so plain joining could make
+    // two different models share one key, and the second would never be saved.
+    static String modelKey(String organizationId, LocalDate today, String workspaceId, UsedModel model) {
+        return KEY_PREFIX + today + ":" + Stream.of(organizationId, workspaceId, model.provider(), model.modelName())
+                .map(part -> part.length() + ":" + part)
+                .collect(Collectors.joining(":"));
     }
 }
