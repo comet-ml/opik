@@ -86,6 +86,10 @@ vi.mock("@/api/llm/useLlmModels", () => ({
   }),
 }));
 
+vi.mock("@/api/llm/useLlmModelProfiles", () => ({
+  default: () => ({ data: undefined }),
+}));
+
 vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
   default: () => ({}),
 }));
