@@ -302,6 +302,27 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("an all-digit plain-text reply is the token itself, not a JSON number to look a field up in")
+    void numericPlainTextReplyIsTheToken() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/plain")
+                .withBody("482913\n")));
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("482913");
+        assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
+    }
+
+    @Test
+    @DisplayName("a null reply is not a token")
+    void nullReplyIsRejected() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("null")));
+
+        assertThatThrownBy(() -> provider.testFetch(serviceAccountRecipe().build()))
+                .isExactlyInstanceOf(AuthTokenException.class);
+    }
+
+    @Test
     @DisplayName("a bare-token reply without a fallback lifetime is a clear error")
     void plainTextReplyWithoutFallbackIsRejected() {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("tok-plain")));

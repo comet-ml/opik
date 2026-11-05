@@ -338,6 +338,10 @@ public class AuthTokenProvider {
         if (root.isTextual()) {
             return bareToken(root.asText(), authConfig, status, startNanos, origin);
         }
+        if (root.isNumber()) {
+            // an all-digit token parses as a JSON number; the raw body keeps it exactly as sent
+            return bareToken(body, authConfig, status, startNanos, origin);
+        }
 
         String tokenField = defaultIfBlank(authConfig.tokenField(), DEFAULT_TOKEN_FIELD);
         JsonNode tokenNode = atDotPath(root, tokenField);
