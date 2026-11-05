@@ -207,6 +207,27 @@ class ExperimentsResourceExecuteTest {
     }
 
     @Test
+    void executeAcceptsAProjectNameOfMaxLength() {
+        var workspace = newWorkspace();
+        var upstreamPath = stubUpstream();
+        createProviderApiKey(workspace, customProviderApiKey(upstreamPath));
+        var dataset = createDatasetWithOneItem(workspace);
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH);
+
+        var response = experimentResourceClient.execute(ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(dataset.id())
+                .projectName(projectName)
+                .prompts(List.of(promptVariant(CUSTOM_MODEL)))
+                .build(), workspace.apiKey(), workspace.name());
+
+        assertThat(response.experiments()).hasSize(1);
+        var experiments = experimentResourceClient.findExperiments(1, 10, dataset.id(), null, null, null, false,
+                null, null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK).content();
+        assertThat(experiments).extracting(Experiment::projectName).containsExactly(projectName);
+    }
+
+    @Test
     void executeRejectsATooLongProjectName() {
         var workspace = newWorkspace();
         var dataset = createDatasetWithOneItem(workspace);

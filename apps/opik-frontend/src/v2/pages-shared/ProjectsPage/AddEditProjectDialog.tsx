@@ -37,8 +37,11 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
 
-  const { mutate: createMutate } = useProjectCreateMutation();
-  const { mutate: updateMutate } = useProjectUpdateMutation();
+  const { mutate: createMutate, isPending: isCreating } =
+    useProjectCreateMutation();
+  const { mutate: updateMutate, isPending: isUpdating } =
+    useProjectUpdateMutation();
+  const isSubmitting = isCreating || isUpdating;
   const [name, setName] = useState(project ? project.name : "");
   const [description, setDescription] = useState(
     project ? project.description : "",
@@ -90,6 +93,8 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   );
 
   const submitHandler = useCallback(() => {
+    if (isSubmitting) return;
+
     if (isEdit) {
       updateMutate(
         {
@@ -122,6 +127,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
     createMutate,
     description,
     isEdit,
+    isSubmitting,
     name,
     onProjectCreated,
     project,
@@ -168,7 +174,11 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" disabled={!isValid} onClick={submitHandler}>
+          <Button
+            type="submit"
+            disabled={!isValid || isSubmitting}
+            onClick={submitHandler}
+          >
             {buttonText}
           </Button>
         </DialogFooter>
