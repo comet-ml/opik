@@ -11,14 +11,21 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Getter;
 
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every summary,
- * for the workspaces ai-labels is enabled for; the nightly job builds each project's topic list from them. Off by default, and deliberately not a service toggle. Needs ai-labels on,
- * and calls the same opik-inference deployment with the same credential ({@code aiLabels.inference}); see
+ * for the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for; the nightly job builds each project's
+ * topic list from them. Off by default, and deliberately not a service toggle. Needs ai-labels on, and calls the same
+ * opik-inference deployment with the same credential ({@code aiLabels.inference}); see
  * {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
  */
 @Data
@@ -27,11 +34,36 @@ public class TopicsConfig {
     @JsonProperty
     private boolean enabled = false;
 
+    /**
+     * The workspaces topics run for, comma-separated (Helm's {@code TOGGLE_TOPICS_WORKSPACES}). A workspace in it runs
+     * only while it is also enabled in {@code ai_label_workspaces}: see {@code TopicWorkspaceService}. Empty (the
+     * default): none.
+     *
+     * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind to
+     * a collection. Nullable: null and blank both mean none. No getter, so the raw string cannot be matched against;
+     * read it via {@link #enabledWorkspaceIds()}.
+     */
+    @JsonProperty
+    @Getter(AccessLevel.NONE)
+    private String enabledWorkspaces;
+
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors = new VectorsConfig();
 
     @Valid @NotNull @JsonProperty
     private NightlyConfig nightly = new NightlyConfig();
+
+    /**
+     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
+     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
+     * would keep an empty list for the life of the process.
+     */
+    public Set<String> enabledWorkspaceIds() {
+        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
+                .map(String::strip)
+                .filter(workspaceId -> !workspaceId.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
+    }
 
     /**
      * The nightly job: builds a project's topic list from its window of vectors. Stage 2a builds a project that has no

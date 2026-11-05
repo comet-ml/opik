@@ -27,7 +27,6 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -44,7 +43,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.longKey;
@@ -90,7 +88,7 @@ public class TopicVectorsTickService {
 
     private final TopicsConfig config;
     private final AiLabelsConfig aiLabelsConfig;
-    private final TransactionTemplate template;
+    private final TopicWorkspaceService workspaces;
     private final TopicVectorsDAO dao;
     private final InferenceClient client;
     private final LockService lockService;
@@ -189,20 +187,20 @@ public class TopicVectorsTickService {
 
     @Inject
     public TopicVectorsTickService(@NonNull @Config("topics") TopicsConfig config,
-            @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig, @NonNull TransactionTemplate template,
+            @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig, @NonNull TopicWorkspaceService workspaces,
             @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client, @NonNull LockService lockService,
             @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames) {
-        this(config, aiLabelsConfig, template, dao, client, lockService, registry, workspaceNames,
+        this(config, aiLabelsConfig, workspaces, dao, client, lockService, registry, workspaceNames,
                 GlobalOpenTelemetry.get().getMeter("opik.topics"));
     }
 
     TopicVectorsTickService(@NonNull TopicsConfig config, @NonNull AiLabelsConfig aiLabelsConfig,
-            @NonNull TransactionTemplate template, @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client,
+            @NonNull TopicWorkspaceService workspaces, @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry,
             @NonNull TopicsWorkspaceNames workspaceNames, @NonNull Meter meter) {
         this.config = config;
         this.aiLabelsConfig = aiLabelsConfig;
-        this.template = template;
+        this.workspaces = workspaces;
         this.dao = dao;
         this.client = client;
         this.lockService = lockService;
@@ -346,8 +344,7 @@ public class TopicVectorsTickService {
      */
     private Found find(Instant start, Instant lowerBound, Instant createdAfter, Instant deadline, Tally tally) {
         int limit = config.getVectors().getMaxTracesPerTick();
-        var workspaceIds = rotated(template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).eligibleWorkspaceIds()), tickSequence(start));
+        var workspaceIds = rotated(workspaces.eligibleWorkspaceIds(), tickSequence(start));
         var oldest = new LinkedHashMap<String, Oldest>();
         var found = new ArrayList<TopicVectorCandidate>();
         boolean complete = true;

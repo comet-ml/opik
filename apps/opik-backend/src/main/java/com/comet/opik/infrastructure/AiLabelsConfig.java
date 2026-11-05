@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.net.InetAddresses;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
@@ -14,6 +15,8 @@ import lombok.Data;
 import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -218,6 +221,44 @@ public class AiLabelsConfig {
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration readTimeout = Duration.seconds(30);
+
+        /**
+         * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
+         * largest expected bodies, a full embed call and a page of job results, are a few MiB.
+         */
+        @JsonProperty
+        @Min(1) @Max(1024L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
+
+        /**
+         * The credential and the traces go with every call, so never in clear over a network: https, or http only to
+         * this host ({@code localhost} or a loopback address, for tests and a local runner). Unset passes here:
+         * {@link AiLabelsConfig#isInferenceConfigured()} requires it when ai-labels is on.
+         */
+        @JsonIgnore
+        @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) must be an https URL, or an http URL to localhost")
+        public boolean isUrlSecure() {
+            if (StringUtils.isBlank(url)) {
+                return true;
+            }
+            URI uri;
+            try {
+                uri = new URI(url);
+            } catch (URISyntaxException exception) {
+                return false;
+            }
+            var host = uri.getHost();
+            if (host == null) {
+                return false;
+            }
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    || ("http".equalsIgnoreCase(uri.getScheme()) && isLoopback(host));
+        }
+
+        /** Never resolves the name: only {@code localhost} itself and loopback address literals count. */
+        private static boolean isLoopback(String host) {
+            return "localhost".equalsIgnoreCase(host)
+                    || (InetAddresses.isUriInetAddress(host) && InetAddresses.forUriString(host).isLoopbackAddress());
+        }
     }
 
     @Data

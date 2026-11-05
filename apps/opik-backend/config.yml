@@ -2499,7 +2499,8 @@ aiLabels:
   #  Description: Directory of task YAML to load instead of the bundled tasks
   tasksDir: ${AI_LABELS_TASKS_DIR:-}
   inference:
-    #  Description: opik-inference base URL. Required when enabled.
+    #  Description: opik-inference base URL. Required when enabled. https, or http only to localhost or a loopback
+    #  address; the backend refuses to start with any other URL
     url: ${AI_LABELS_INFERENCE_URL:-}
     #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
     credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
@@ -2510,6 +2511,10 @@ aiLabels:
     #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
     #  sends get past tickBudget, so it lengthens the leader lease
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+    #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+    #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+    #  upstream_error without being read further
+    maxResponseBytes: ${AI_LABELS_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
@@ -2615,13 +2620,18 @@ aiLabels:
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
 
 # Topics: groups traces by the intent ai-labels summarizes. Step 1 stores a bge-small vector of every trace_summary in
-# ClickHouse topic_vectors, for the workspaces ai-labels is enabled for. Calls aiLabels.inference's deployment with its
-# credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md, section "Topic vectors".
+# ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for. Calls
+# aiLabels.inference's deployment with its credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md,
+# section "Topic vectors".
 topics:
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
   #  never exposed to the UI
   enabled: ${TOPICS_ENABLED:-false}
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
+  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  enabledWorkspaces: ${TOGGLE_TOPICS_WORKSPACES:-""}
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them

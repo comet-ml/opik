@@ -50,6 +50,36 @@ class AiLabelsConfigTest {
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
 
+    static Stream<Arguments> inferenceUrls() {
+        return Stream.of(
+                arguments("unset", null, true),
+                arguments("blank", " ", true),
+                arguments("https", URL, true),
+                arguments("https, upper case scheme, with a port and a path", "HTTPS://opik-inference:8443/base", true),
+                arguments("http to localhost", "http://localhost:8080", true),
+                arguments("http to 127.0.0.1", "http://127.0.0.1:8080", true),
+                arguments("http to [::1]", "http://[::1]:8080", true),
+                arguments("http to a cluster service", "http://opik-inference.inference.svc:8000", false),
+                arguments("http to a private address", "http://10.0.0.12:8000", false),
+                arguments("http to a name that starts with localhost", "http://localhost.example.com", false),
+                arguments("another scheme", "ftp://opik-inference.example.com", false),
+                arguments("no host", "https:///v1", false),
+                arguments("not a URL", "https://opik inference", false));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("inferenceUrls")
+    void inferenceUrlIsHttpsOrHttpToLocalhost(String description, String url, boolean valid) {
+        var config = new AiLabelsConfig();
+        config.getInference().setUrl(url);
+
+        var violations = VALIDATOR.validate(config).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).isEqualTo(valid ? List.of() : List.of("inference.urlSecure"));
+    }
+
     @Test
     void enabledRequiresTraceColumnsNonNullable() {
         var config = new OpikConfiguration();
@@ -87,5 +117,31 @@ class AiLabelsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    static Stream<Arguments> maxResponseBytes() {
+        return Stream.of(
+                arguments(32L * 1024 * 1024, List.of()),
+                arguments(1L, List.of()),
+                arguments(0L, List.of("inference.maxResponseBytes")),
+                arguments(1024L * 1024 * 1024 + 1, List.of("inference.maxResponseBytes")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("maxResponseBytes")
+    void maxResponseBytesIsPositiveAndAtMostAGibibyte(long maxResponseBytes, List<String> expectedViolations) {
+        var config = new AiLabelsConfig();
+        config.getInference().setMaxResponseBytes(maxResponseBytes);
+
+        var violations = VALIDATOR.validate(config).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    @Test
+    void maxResponseBytesDefaultsTo32MiB() {
+        assertThat(new AiLabelsConfig().getInference().getMaxResponseBytes()).isEqualTo(32L * 1024 * 1024);
     }
 }

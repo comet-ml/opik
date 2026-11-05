@@ -12,6 +12,7 @@ import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import jakarta.ws.rs.HttpMethod;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +37,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -58,6 +61,10 @@ class InferenceClientTest {
     private static final String EMBED_PATH = "/v1/embed";
     private static final String REALTIME_GENERATE_PATH = "/v1/generate";
     private static final String REALTIME_GENERATE = "POST /v1/generate";
+    private static final String EMBEDDED_BODY = """
+            {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
+             "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
+            """;
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private WireMockServer server;
@@ -273,6 +280,62 @@ class InferenceClientTest {
                 });
         assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH))))
                 .hasSize(InferenceClient.MAX_RETRIES + 1);
+    }
+
+    static Stream<Arguments> redirects() {
+        return Stream.of(arguments(HttpMethod.GET, 302), arguments(HttpMethod.POST, 307));
+    }
+
+    @ParameterizedTest(name = "{0} answered {1}")
+    @MethodSource("redirects")
+    void redirectIsNotFollowed(String method, int status) {
+        var elsewhere = "/elsewhere";
+        var redirect = aResponse().withStatus(status).withHeader("Location", server.baseUrl() + elsewhere);
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(redirect));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(redirect));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(method.equals(HttpMethod.GET) ? jobView() : embedded()));
+
+        assertThatThrownBy(() -> {
+            if (method.equals(HttpMethod.GET)) {
+                client.getJob(JOB_ID, 0, false, later()).block();
+            } else {
+                client.embed(embedRequest(), later()).block();
+            }
+        }).isInstanceOfSatisfying(InferenceException.class, exception -> {
+            assertThat(exception.getCode()).isEqualTo("upstream_error");
+            assertThat(exception.getHttpStatus()).isEqualTo(status);
+        });
+        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
+    }
+
+    @Test
+    void responseBodyOfExactlyTheCapIsRead() {
+        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(EMBEDDED_BODY.length()));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+
+        assertThat(client.embed(embedRequest(), later()).block().result().dimensions()).isEqualTo(2);
+    }
+
+    static Stream<Arguments> bodiesOverTheCap() {
+        return Stream.of(arguments(200, EMBEDDED_BODY),
+                arguments(503, "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}"));
+    }
+
+    @ParameterizedTest(name = "status {0}")
+    @MethodSource("bodiesOverTheCap")
+    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body) {
+        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(body.length() - 1));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody(body)));
+
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    // An error body over the cap is not parsed either: its code would be overloaded.
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(status);
+                    assertThat(exception.getCause()).hasMessageContaining("maxResponseBytes");
+                });
     }
 
     @ParameterizedTest
@@ -671,6 +734,12 @@ class InferenceClientTest {
         return config;
     }
 
+    private AiLabelsConfig maxResponseBytes(long maxResponseBytes) {
+        var config = config(Duration.ofSeconds(5), 1024 * 1024);
+        config.getInference().setMaxResponseBytes(maxResponseBytes);
+        return config;
+    }
+
     private void stubSequence(Supplier<MappingBuilder> request, ResponseDefinitionBuilder... responses) {
         var state = Scenario.STARTED;
         for (int index = 0; index < responses.length; index++) {
@@ -719,10 +788,7 @@ class InferenceClientTest {
     private static ResponseDefinitionBuilder embedded() {
         return aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json")
-                .withBody("""
-                        {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
-                         "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
-                        """);
+                .withBody(EMBEDDED_BODY);
     }
 
     private static ResponseDefinitionBuilder generated() {
