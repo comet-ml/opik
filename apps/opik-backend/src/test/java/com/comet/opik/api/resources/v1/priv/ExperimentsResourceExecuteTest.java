@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -203,6 +204,31 @@ class ExperimentsResourceExecuteTest {
         var experiments = experimentResourceClient.findExperiments(1, 10, datasetId, null, null, null, false, null,
                 null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK);
         assertThat(experiments.content()).isEmpty();
+    }
+
+    @Test
+    void executeRejectsATooLongProjectName() {
+        var workspace = newWorkspace();
+        var dataset = createDatasetWithOneItem(workspace);
+        var request = ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(dataset.id())
+                .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                .prompts(List.of(promptVariant(CUSTOM_MODEL)))
+                .build();
+
+        try (var response = experimentResourceClient.callExecute(request, workspace.apiKey(), workspace.name())) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            var expectedError = new ValidationErrors(List.of("projectName cannot exceed 150 characters"));
+            assertThat(response.readEntity(ValidationErrors.class)).isEqualTo(expectedError);
+        }
+
+        var experiments = experimentResourceClient.findExperiments(1, 10, dataset.id(), null, null, null, false,
+                null, null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK);
+        assertThat(experiments.content()).isEmpty();
+    }
+
+    private record ValidationErrors(List<String> errors) {
     }
 
     private record Workspace(String apiKey, String name) {
