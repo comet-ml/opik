@@ -529,6 +529,20 @@ export class TracePanelPage {
     });
   }
 
+  /**
+   * Opens one attachment's preview dialog by clicking its tile, and returns the
+   * dialog. `AttachmentPreviewDialog` titles itself with the file name, which
+   * is what scopes the returned locator to this attachment's dialog.
+   */
+  async openAttachmentPreview(fileName: string): Promise<Locator> {
+    return test.step(`Open the preview of ${fileName}`, async () => {
+      await this.attachmentTile(fileName).click();
+      const dialog = this.page.getByRole('dialog', { name: fileName });
+      await expect(dialog, `preview dialog for ${fileName}`).toBeVisible();
+      return dialog;
+    });
+  }
+
   /** Opens the Attachments section if it is collapsed. Idempotent. */
   async openAttachments(): Promise<void> {
     return test.step('Open the Attachments section', async () => {
