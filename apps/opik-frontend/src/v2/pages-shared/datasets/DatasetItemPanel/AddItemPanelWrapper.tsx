@@ -10,11 +10,14 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 export interface AddItemPanelContext {
   tags: string[];
   setHasUnsavedChanges: (v: boolean) => void;
+  resetTags: () => void;
+  requestClose: () => void;
 }
 
 interface AddItemPanelWrapperProps {
   panelId: string;
-  formId: string;
+  // Omit to let children render their own footer via `requestClose`.
+  formId?: string;
   title: string;
   open: boolean;
   onClose: () => void;
@@ -23,7 +26,7 @@ interface AddItemPanelWrapperProps {
 }
 
 const AddItemPanelWrapperContent: React.FC<{
-  formId: string;
+  formId?: string;
   onClose: () => void;
   onDirtyChange: (dirty: boolean) => void;
   children: (context: AddItemPanelContext) => ReactNode;
@@ -43,6 +46,21 @@ const AddItemPanelWrapperContent: React.FC<{
     cancel,
   } = useConfirmAction();
 
+  const requestClose = () => {
+    if (isDirty) {
+      requestConfirm(onClose);
+    } else {
+      onClose();
+    }
+  };
+
+  const context: AddItemPanelContext = {
+    tags,
+    setHasUnsavedChanges,
+    resetTags: () => setTags([]),
+    requestClose,
+  };
+
   return (
     <>
       <div className="flex size-full flex-col">
@@ -58,28 +76,24 @@ const AddItemPanelWrapperContent: React.FC<{
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {children({ tags, setHasUnsavedChanges })}
-        </div>
+        {formId ? (
+          <>
+            <div className="flex-1 overflow-y-auto">{children(context)}</div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t px-6 py-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (isDirty) {
-                requestConfirm(onClose);
-              } else {
-                onClose();
-              }
-            }}
-          >
-            Cancel
-          </Button>
-          <Button variant="default" size="sm" type="submit" form={formId}>
-            Save changes
-          </Button>
-        </div>
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t px-6 py-4">
+              <Button variant="outline" size="sm" onClick={requestClose}>
+                Cancel
+              </Button>
+              <Button variant="default" size="sm" type="submit" form={formId}>
+                Save changes
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {children(context)}
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
