@@ -53,6 +53,9 @@ class InferenceClientDecideTest {
     private static final String OVERLOADED_BODY = """
             {"error":{"code":"overloaded","message":"decision pool is busy","retryable":true}}
             """;
+    private static final String DEADLINE_EXCEEDED_BODY = """
+            {"error":{"code":"deadline_exceeded","message":"no answer within 750 ms","retryable":true}}
+            """;
 
     private WireMockUtils.WireMockRuntime wireMock;
     private AiLabelsConfig config;
@@ -170,9 +173,60 @@ class InferenceClientDecideTest {
         wireMock.server().stubFor(post(urlEqualTo("/elsewhere")).willReturn(okJson(SUCCESS_BODY)));
 
         assertThatThrownBy(() -> client.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
-                .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.getHttpStatus()).isEqualTo(307));
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getHttpStatus()).isEqualTo(307);
+                    assertThat(exception.isRetryable()).isFalse();
+                });
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
         wireMock.server().verify(0, postRequestedFor(urlEqualTo("/elsewhere")));
+    }
+
+    @Test
+    void deadlineExceededIsNotRetried() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(504).withHeader("Content-Type", "application/json")
+                        .withBody(DEADLINE_EXCEEDED_BODY)));
+
+        assertThatThrownBy(() -> client.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isDeadlineExceeded()).isTrue());
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void slowServiceFailsAtTheDeadline() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY).withFixedDelay(3_000)));
+        var start = Instant.now();
+
+        assertThatThrownBy(() -> client.decide(request(noulQuestion()), start.plusMillis(500)).block())
+                .isInstanceOf(InferenceException.class);
+        assertThat(java.time.Duration.between(start, Instant.now())).isLessThan(java.time.Duration.ofMillis(1_500));
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void tricklingBodyIsCutOffAtTheDeadline() {
+        // Each chunk arrives well within the read timeout, so only a bound on the whole call stops it.
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(okJson(SUCCESS_BODY).withChunkedDribbleDelay(20, 3_000)));
+        var start = Instant.now();
+
+        assertThatThrownBy(() -> client.decide(request(noulQuestion()), start.plusMillis(500)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isOutOfTime()).isTrue());
+        assertThat(java.time.Duration.between(start, Instant.now())).isLessThan(java.time.Duration.ofMillis(1_500));
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "not json"})
+    void malformedSuccessIsAnUpstreamError(String body) {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json").withBody(body)));
+
+        assertThatThrownBy(() -> client.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
     }
 
     @Test
