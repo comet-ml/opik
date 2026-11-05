@@ -310,3 +310,6 @@ def test_delete__fails_after_earlier_batches_were_deleted__still_invalidates_cou
     assert dataset._dataset_items_count is None, (
         "A failed delete that removed earlier items must clear the cached count"
     )
+    assert dataset.__internal_api__hashes_synced__ is False, (
+        "A failed delete may have applied a batch, so the hash cache must re-sync"
+    )
