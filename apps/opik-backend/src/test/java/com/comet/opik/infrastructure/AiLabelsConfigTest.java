@@ -88,4 +88,30 @@ class AiLabelsConfigTest {
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
+
+    static Stream<Arguments> maxResponseBytes() {
+        return Stream.of(
+                arguments(32L * 1024 * 1024, List.of()),
+                arguments(1L, List.of()),
+                arguments(0L, List.of("inference.maxResponseBytes")),
+                arguments(1024L * 1024 * 1024 + 1, List.of("inference.maxResponseBytes")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("maxResponseBytes")
+    void maxResponseBytesIsPositiveAndAtMostAGibibyte(long maxResponseBytes, List<String> expectedViolations) {
+        var config = new AiLabelsConfig();
+        config.getInference().setMaxResponseBytes(maxResponseBytes);
+
+        var violations = VALIDATOR.validate(config).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    @Test
+    void maxResponseBytesDefaultsTo32MiB() {
+        assertThat(new AiLabelsConfig().getInference().getMaxResponseBytes()).isEqualTo(32L * 1024 * 1024);
+    }
 }

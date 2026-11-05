@@ -222,6 +222,13 @@ public class AiLabelsConfig {
         /** Synchronous decide calls in flight from this instance, on a client of their own. */
         @JsonProperty
         @Min(1) private int maxConcurrentDecides = 256;
+
+        /**
+         * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
+         * largest expected bodies, a full embed call and a page of job results, are a few MiB.
+         */
+        @JsonProperty
+        @Min(1) @Max(1024L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
     }
 
     @Data

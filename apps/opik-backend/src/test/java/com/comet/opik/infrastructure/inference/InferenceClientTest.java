@@ -59,6 +59,10 @@ class InferenceClientTest {
     private static final String JOB_PATH = "/v1/batch/jobs/" + JOB_ID;
     private static final String STATUS_PATH = "/v1/batch/jobs/status";
     private static final String EMBED_PATH = "/v1/embed";
+    private static final String EMBEDDED_BODY = """
+            {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
+             "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
+            """;
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private WireMockServer server;
@@ -300,6 +304,36 @@ class InferenceClientTest {
             assertThat(exception.getHttpStatus()).isEqualTo(status);
         });
         assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
+    }
+
+    @Test
+    void responseBodyOfExactlyTheCapIsRead() {
+        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(EMBEDDED_BODY.length()));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+
+        assertThat(client.embed(embedRequest(), later()).block().result().dimensions()).isEqualTo(2);
+    }
+
+    static Stream<Arguments> bodiesOverTheCap() {
+        return Stream.of(arguments(200, EMBEDDED_BODY),
+                arguments(503, "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}"));
+    }
+
+    @ParameterizedTest(name = "status {0}")
+    @MethodSource("bodiesOverTheCap")
+    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body) {
+        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(body.length() - 1));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody(body)));
+
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    // An error body over the cap is not parsed either: its code would be overloaded.
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(status);
+                    assertThat(exception.getCause()).hasMessageContaining("maxResponseBytes");
+                });
     }
 
     @ParameterizedTest
@@ -564,6 +598,12 @@ class InferenceClientTest {
         return config;
     }
 
+    private AiLabelsConfig maxResponseBytes(long maxResponseBytes) {
+        var config = config(Duration.ofSeconds(5), 1024 * 1024);
+        config.getInference().setMaxResponseBytes(maxResponseBytes);
+        return config;
+    }
+
     private void stubSequence(Supplier<MappingBuilder> request, ResponseDefinitionBuilder... responses) {
         var state = Scenario.STARTED;
         for (int index = 0; index < responses.length; index++) {
@@ -612,10 +652,7 @@ class InferenceClientTest {
     private static ResponseDefinitionBuilder embedded() {
         return aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json")
-                .withBody("""
-                        {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
-                         "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
-                        """);
+                .withBody(EMBEDDED_BODY);
     }
 
     private static EmbedRequest embedRequest() {
