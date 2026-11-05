@@ -15,6 +15,7 @@ import com.comet.opik.api.resources.v1.jobs.TopicsNightlyJob;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -59,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -130,6 +132,7 @@ class TopicsNightlyJobTest {
                 .build());
     }
 
+    private OpikConfiguration opikConfig;
     private TransactionTemplate template;
     private TopicsNightlyService nightlyService;
     private TopicVectorsDAO vectorsDAO;
@@ -140,10 +143,12 @@ class TopicsNightlyJobTest {
     private String baseUrl;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, TransactionTemplate template, GuiceJobManager jobManager,
+    void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
+            GuiceJobManager jobManager,
             @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.client = client;
+        this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.template = template;
         this.jobManager = jobManager;
@@ -163,9 +168,9 @@ class TopicsNightlyJobTest {
         // Each test builds its own workspaces: the earlier ones must not be eligible again.
         template.inTransaction(WRITE, handle -> {
             handle.execute("UPDATE ai_label_workspaces SET enabled = FALSE");
-            handle.execute("UPDATE topic_workspaces SET enabled = FALSE");
             return null;
         });
+        opikConfig.getTopics().setEnabledWorkspaces("");
         wireMock.resetAll();
     }
 
@@ -699,21 +704,22 @@ class TopicsNightlyJobTest {
     }
 
     private String enabledWorkspace() {
-        var workspaceId = UUID.randomUUID().toString();
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            return null;
-        });
+        var workspaceId = aiLabelsOnlyWorkspace();
+        var topics = opikConfig.getTopics();
+        var listed = new TreeSet<>(topics.enabledWorkspaceIds());
+        listed.add(workspaceId);
+        topics.setEnabledWorkspaces(String.join(",", listed));
         return workspaceId;
     }
 
-    /** Opted in to ai-labels only: its vectors exist (written before topics were turned off for it). */
+    /**
+     * Opted in to ai-labels only, not listed in topics.enabledWorkspaces: its vectors exist (written before topics were
+     * turned off for it).
+     */
     private String aiLabelsOnlyWorkspace() {
         var workspaceId = UUID.randomUUID().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, false, "test");
             return null;
         });
         return workspaceId;

@@ -77,6 +77,7 @@ public class TopicsNightlyService {
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
+    private final @NonNull TopicWorkspaceService workspaceService;
     private final @NonNull TopicWindowDAO windowDAO;
     private final @NonNull TopicsRebuildService rebuildService;
     private final @NonNull TopicsMetrics metrics;
@@ -283,11 +284,9 @@ public class TopicsNightlyService {
         if (!config.getNightly().isEnabled()) {
             throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
         }
-        boolean optedIn = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).isEligible(workspaceId));
-        if (!optedIn) {
-            throw new ConflictException(("Workspace '%s' is not opted in to topics: it needs enabled rows in "
-                    + "topic_workspaces and ai_label_workspaces").formatted(workspaceId));
+        if (!workspaceService.isEligible(workspaceId)) {
+            throw new ConflictException(("Workspace '%s' is not opted in to topics: it needs to be in "
+                    + "topics.enabledWorkspaces and enabled in ai_label_workspaces").formatted(workspaceId));
         }
     }
 
@@ -421,8 +420,7 @@ public class TopicsNightlyService {
         var nightly = config.getNightly();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(nightly.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
-        var workspaceIds = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).eligibleWorkspaceIds());
+        var workspaceIds = workspaceService.eligibleWorkspaceIds();
         record.workspaces(workspaceIds.size());
         var skipped = new ArrayList<Skipped>();
         var found = new ArrayList<Candidate>();

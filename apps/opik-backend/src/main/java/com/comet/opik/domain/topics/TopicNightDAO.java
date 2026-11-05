@@ -23,8 +23,8 @@ import java.util.List;
 /**
  * {@code topic_nights} and {@code topic_night_projects}: what each night decided, written as the night goes, and the
  * reads behind the state gauges ({@link TopicsNightlyGauges}). A night's row is {@code running} from its start and
- * {@code finished} or {@code failed} at its end. The gauge reads count a workspace only while it is still eligible
- * (enabled in both {@code topic_workspaces} and {@code ai_label_workspaces}).
+ * {@code finished} or {@code failed} at its end. The gauge reads count a workspace only while it is still enabled in
+ * {@code ai_label_workspaces}; the gauges keep only the workspaces still in {@code topics.enabledWorkspaces}.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(TopicNightDAO.OutcomeMapper.class)
@@ -36,9 +36,8 @@ import java.util.List;
 @RegisterConstructorMapper(TopicNightDAO.WorkspaceCount.class)
 public interface TopicNightDAO {
 
-    /** Keeps the rows of workspaces still opted in to topics and to ai-labels; {@code np} is the night project. */
+    /** Keeps the rows of workspaces still opted in to ai-labels; {@code np} is the night project. */
     String ELIGIBLE = """
-            JOIN topic_workspaces t ON t.workspace_id = np.workspace_id AND t.enabled = TRUE
             JOIN ai_label_workspaces a ON a.workspace_id = np.workspace_id AND a.enabled = TRUE
             """;
 

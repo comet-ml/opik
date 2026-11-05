@@ -57,7 +57,7 @@ class TopicsNightlyServiceTest {
     private final UUID started = UUID.randomUUID();
 
     private TopicsTestMeter meter;
-    private TopicWorkspaceDAO workspaceDAO;
+    private TopicWorkspaceService workspaceService;
     private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
     private TopicNightDAO nightDAO;
@@ -68,12 +68,11 @@ class TopicsNightlyServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         meter = new TopicsTestMeter();
-        workspaceDAO = mock(TopicWorkspaceDAO.class);
+        workspaceService = mock(TopicWorkspaceService.class);
         runDAO = mock(TopicRunDAO.class);
         topicDAO = mock(TopicDAO.class);
         nightDAO = mock(TopicNightDAO.class);
         var handle = mock(Handle.class);
-        when(handle.attach(TopicWorkspaceDAO.class)).thenReturn(workspaceDAO);
         when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         when(handle.attach(TopicNightDAO.class)).thenReturn(nightDAO);
@@ -81,7 +80,7 @@ class TopicsNightlyServiceTest {
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
 
-        when(workspaceDAO.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, BROKEN_WORKSPACE_ID));
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, BROKEN_WORKSPACE_ID));
         when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of());
         when(topicDAO.findStates(any())).thenAnswer(invocation -> invocation.<Collection<UUID>>getArgument(0)
                 .contains(built)
@@ -116,7 +115,7 @@ class TopicsNightlyServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
 
-        service = new TopicsNightlyService(new TopicsConfig(), template, windowDAO, rebuildService,
+        service = new TopicsNightlyService(new TopicsConfig(), template, workspaceService, windowDAO, rebuildService,
                 new TopicsMetrics(meter.meter), lockService, idGenerator);
     }
 
@@ -219,7 +218,7 @@ class TopicsNightlyServiceTest {
     @Test
     @DisplayName("a night with no workspace still writes its record, finished with no project")
     void emptyNight() {
-        when(workspaceDAO.eligibleWorkspaceIds()).thenReturn(List.of());
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of());
 
         service.runNight(START);
 
@@ -235,7 +234,7 @@ class TopicsNightlyServiceTest {
     @Test
     @DisplayName("a night whose read of the workspaces fails ends its record failed, and still throws")
     void failedNight() {
-        when(workspaceDAO.eligibleWorkspaceIds()).thenThrow(new IllegalStateException("MySQL down"));
+        when(workspaceService.eligibleWorkspaceIds()).thenThrow(new IllegalStateException("MySQL down"));
 
         assertThatThrownBy(() -> service.runNight(START)).isInstanceOf(IllegalStateException.class);
 

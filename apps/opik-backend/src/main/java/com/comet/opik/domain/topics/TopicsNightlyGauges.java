@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -87,7 +88,10 @@ public class TopicsNightlyGauges implements Managed {
             @NonNull Map<String, List<Series>> levels) {
     }
 
-    /** The rows one refresh reads, in one transaction; workspace names are resolved after it. */
+    /**
+     * The rows one refresh reads, in one transaction, and the eligible and mismatched workspaces; workspace names are
+     * resolved after it.
+     */
     private record Read(Instant lastStartedAt, Instant runningSince, TopicNight.Outcome lastNightOutcome,
             List<TopicNightDAO.ProjectCount> projects,
             List<TopicNightDAO.RunCount> runs, List<TopicNightDAO.WorkspaceCount> stale,
@@ -96,6 +100,7 @@ public class TopicsNightlyGauges implements Managed {
 
     private final TopicsConfig config;
     private final TransactionTemplate template;
+    private final TopicWorkspaceService workspaceService;
     private final TopicsWorkspaceNames names;
     private final Clock clock;
     private final LongCounter refreshFailures;
@@ -110,14 +115,17 @@ public class TopicsNightlyGauges implements Managed {
 
     @Inject
     public TopicsNightlyGauges(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TopicsWorkspaceNames names) {
-        this(config, template, names, GlobalOpenTelemetry.get().getMeter("opik.topics"), Clock.systemUTC());
+            @NonNull TopicWorkspaceService workspaceService, @NonNull TopicsWorkspaceNames names) {
+        this(config, template, workspaceService, names, GlobalOpenTelemetry.get().getMeter("opik.topics"),
+                Clock.systemUTC());
     }
 
     TopicsNightlyGauges(@NonNull TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TopicsWorkspaceNames names, @NonNull Meter meter, @NonNull Clock clock) {
+            @NonNull TopicWorkspaceService workspaceService, @NonNull TopicsWorkspaceNames names,
+            @NonNull Meter meter, @NonNull Clock clock) {
         this.config = config;
         this.template = template;
+        this.workspaceService = workspaceService;
         this.names = names;
         this.clock = clock;
         this.refreshFailures = meter.counterBuilder(STATE_REFRESH_FAILURES)
@@ -156,8 +164,8 @@ public class TopicsNightlyGauges implements Managed {
                 + "as small, deleted or already_saved) without a saved run since, per eligible workspace; 0 with none");
         level(meter, STARVED_PROJECTS, "Projects not_reached on each of the last 2 ended nights, per eligible "
                 + "workspace; 0 with none");
-        level(meter, MISMATCHED, "1 for a workspace enabled in topic_workspaces and not in ai_label_workspaces: no "
-                + "night runs it");
+        level(meter, MISMATCHED, "1 for a workspace in topics.enabledWorkspaces and not enabled in "
+                + "ai_label_workspaces: no night runs it");
     }
 
     @Override
@@ -191,8 +199,10 @@ public class TopicsNightlyGauges implements Managed {
         }
         Read read;
         try {
-            read = template.inTransaction(READ_ONLY, handle -> read(handle.attach(TopicNightDAO.class),
-                    handle.attach(TopicWorkspaceDAO.class)));
+            var eligible = workspaceService.eligibleWorkspaceIds();
+            var mismatched = workspaceService.mismatchedWorkspaceIds();
+            read = template.inTransaction(READ_ONLY,
+                    handle -> read(handle.attach(TopicNightDAO.class), eligible, mismatched));
         } catch (RuntimeException exception) {
             refreshFailures.add(1);
             log.warn("Topics nightly gauges could not read the night tables; they keep the last values", exception);
@@ -212,7 +222,7 @@ public class TopicsNightlyGauges implements Managed {
     }
 
     /** Null before the first night ever. */
-    private Read read(TopicNightDAO nights, TopicWorkspaceDAO workspaces) {
+    private Read read(TopicNightDAO nights, List<String> eligible, List<String> mismatched) {
         var lastStartedAt = nights.lastStartedAt();
         if (lastStartedAt == null) {
             return null;
@@ -229,8 +239,7 @@ public class TopicsNightlyGauges implements Managed {
                 ended.size() < STARVED_NIGHTS
                         ? List.of()
                         : nights.countStarved(dates(ended, STARVED_NIGHTS), STARVED_NIGHTS),
-                workspaces.eligibleWorkspaceIds(),
-                workspaces.mismatchedWorkspaceIds());
+                eligible, mismatched);
     }
 
     private static List<LocalDate> dates(List<TopicNight> nights, int count) {
@@ -239,7 +248,12 @@ public class TopicsNightlyGauges implements Managed {
 
     private Snapshot snapshot(Read read) {
         var levels = new HashMap<String, List<Series>>();
+        // The night tables' reads keep the workspaces enabled in ai_label_workspaces; this keeps the listed ones.
+        var eligible = Set.copyOf(read.eligible());
         for (var row : read.projects()) {
+            if (!eligible.contains(row.workspaceId())) {
+                continue;
+            }
             var attributes = workspace(row.workspaceId()).put(DECISION, row.decision());
             if (row.reason() != null) {
                 attributes.put(REASON, row.reason());
@@ -247,6 +261,9 @@ public class TopicsNightlyGauges implements Managed {
             add(levels, LAST_NIGHT_PROJECTS, attributes, row.projects());
         }
         for (var row : read.runs()) {
+            if (!eligible.contains(row.workspaceId())) {
+                continue;
+            }
             add(levels, LAST_NIGHT_RUNS, workspace(row.workspaceId()).put(STATUS, row.runStatus()), row.runs());
         }
         perWorkspace(levels, STALE_PROJECTS, read.eligible(), read.stale());

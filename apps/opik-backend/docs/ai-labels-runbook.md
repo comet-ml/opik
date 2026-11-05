@@ -339,9 +339,10 @@ or in Other, and a name that is a catch-all as a whole ("Other", "General Reques
 
 To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay.
 
-To stop it for one workspace without a restart, opt the workspace out (`UPDATE topic_workspaces SET enabled = FALSE
-WHERE workspace_id = '<workspace_id>'`). This also stops its topic vectors. The next night skips it; a night already
-running reads the workspaces once, at its start, so it still runs the workspace's projects.
+To stop it for one workspace, remove the workspace from `TOGGLE_TOPICS_WORKSPACES` (a deploy), or, without a deploy,
+disable it in `ai_label_workspaces`, which also stops its ai-labels summaries (see "Opting workspaces in and out"
+under "Topic vectors"). Either one also stops its topic vectors. The next night skips it; a night already running
+reads the workspaces once, at its start, so it still runs the workspace's projects.
 
 ### How a night runs
 
@@ -528,7 +529,7 @@ table. Every pod publishes the same values: read them with `max`, never `sum`. T
 | `topics.nightly.last_night.failed` | 1 when the latest ended night failed (a read failed, or its pod died and the next night's housekeeping failed it), 0 when it finished. |
 | `topics.nightly.stale_projects` by workspace | Projects expected on each of the last 3 ended nights with no saved run since the first of them (a run by hand counts). Expected is any decision but a skip as `small`, `deleted` or `already_saved`: this covers `not_reached`, failed first builds and start failures. 0 for each workspace without one. |
 | `topics.nightly.starved_projects` by workspace | Projects `not_reached` on each of the last 2 ended nights. 0 for each workspace without one. |
-| `topics.workspaces.mismatched` by workspace | 1 for a workspace enabled in `topic_workspaces` and not in `ai_label_workspaces`: no night runs it. |
+| `topics.workspaces.mismatched` by workspace | 1 for a workspace in `TOGGLE_TOPICS_WORKSPACES` and not enabled in `ai_label_workspaces`: no night runs it. |
 
 The Prometheus names replace the dots with underscores, for example `topics_nightly_stale_projects`; the counters end
 in `_total`.
@@ -605,11 +606,11 @@ WHERE np.decision = 'not_reached'
 GROUP BY np.workspace_id, np.project_id
 HAVING COUNT(DISTINCT np.night) = 2;
 
--- MySQL: workspaces opted in to topics and not to ai-labels
-SELECT t.workspace_id
-FROM topic_workspaces t
-LEFT JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
-WHERE t.enabled = TRUE AND (a.workspace_id IS NULL OR a.enabled = FALSE);
+-- MySQL: of the workspaces in TOGGLE_TOPICS_WORKSPACES, the ones enabled in ai-labels. A listed id missing here is
+-- mismatched: no night runs it.
+SELECT workspace_id
+FROM ai_label_workspaces
+WHERE enabled = TRUE AND workspace_id IN ('<workspace_id>', '<workspace_id>');
 ```
 
 The gauges also leave out workspaces no longer opted in and deleted projects; these queries do not.

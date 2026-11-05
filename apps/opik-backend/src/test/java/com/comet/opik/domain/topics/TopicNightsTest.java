@@ -24,6 +24,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -44,6 +45,7 @@ class TopicNightsTest {
     private static final String WORKSPACE_ID = "ws-1";
     private static final String QUIET_WORKSPACE_ID = "ws-quiet";
     private static final String MISMATCHED_WORKSPACE_ID = "ws-mismatched";
+    private static final String UNLISTED_WORKSPACE_ID = "ws-unlisted";
     private static final LocalDate NIGHT = LocalDate.of(2026, 11, 2);
 
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
@@ -65,8 +67,7 @@ class TopicNightsTest {
     @BeforeEach
     void setUp() throws Exception {
         jdbi.useHandle(handle -> {
-            for (var table : List.of("topic_night_projects", "topic_nights", "topic_runs", "topic_workspaces",
-                    "ai_label_workspaces")) {
+            for (var table : List.of("topic_night_projects", "topic_nights", "topic_runs", "ai_label_workspaces")) {
                 handle.execute("DELETE FROM " + table);
             }
         });
@@ -82,11 +83,12 @@ class TopicNightsTest {
             }
             return jdbi.inTransaction(handle -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         });
-        gauges = new TopicsNightlyGauges(config, template,
+        gauges = new TopicsNightlyGauges(config, template, new TopicWorkspaceService(config, template),
                 new TopicsWorkspaceNames(workspaceId -> "name of " + workspaceId, clock), meter.meter, clock);
         optIn(WORKSPACE_ID, true);
         optIn(QUIET_WORKSPACE_ID, true);
         optIn(MISMATCHED_WORKSPACE_ID, false);
+        aiLabelsOnly(UNLISTED_WORKSPACE_ID);
     }
 
     @Test
@@ -166,7 +168,7 @@ class TopicNightsTest {
 
     @Test
     @DisplayName("the latest ended night's projects by decision and reason, and its runs by status; a run that could "
-            + "not start is failed")
+            + "not start is failed; a workspace off the topics list or off ai-labels is left out")
     void lastNight() {
         ended(NIGHT.minusDays(1), TopicNight.Outcome.FINISHED);
         row(NIGHT.minusDays(1), WORKSPACE_ID, project(WORKSPACE_ID), "skip", "deleted", null);
@@ -180,6 +182,9 @@ class TopicNightsTest {
         row(NIGHT, WORKSPACE_ID, project(WORKSPACE_ID), "skip", "small", null);
         row(NIGHT, QUIET_WORKSPACE_ID, null, TopicNightProject.COUNT_FAILED, null, null);
         row(NIGHT, MISMATCHED_WORKSPACE_ID, project(MISMATCHED_WORKSPACE_ID), "first_build", null, null);
+        var unlisted = project(UNLISTED_WORKSPACE_ID);
+        row(NIGHT, UNLISTED_WORKSPACE_ID, unlisted, "first_build", null,
+                run(UNLISTED_WORKSPACE_ID, unlisted, "saved", NIGHT));
 
         refresh();
 
@@ -414,15 +419,21 @@ class TopicNightsTest {
         return runId;
     }
 
-    /** Enabled in topics; in ai-labels too when {@code aiLabels}. */
+    /** Listed in topics.enabledWorkspaces; enabled in ai-labels too when {@code aiLabels}. */
     private void optIn(String workspaceId, boolean aiLabels) {
-        jdbi.useHandle(handle -> {
-            handle.attach(TopicWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            if (aiLabels) {
-                handle.execute("INSERT INTO ai_label_workspaces (workspace_id, enabled, added_by) VALUES (?, TRUE, ?)",
-                        workspaceId, "test");
-            }
-        });
+        var listed = new TreeSet<>(config.enabledWorkspaceIds());
+        listed.add(workspaceId);
+        config.setEnabledWorkspaces(String.join(",", listed));
+        if (aiLabels) {
+            aiLabelsOnly(workspaceId);
+        }
+    }
+
+    /** Enabled in ai-labels, and not listed in topics.enabledWorkspaces unless {@link #optIn} lists it. */
+    private void aiLabelsOnly(String workspaceId) {
+        jdbi.useHandle(handle -> handle.execute(
+                "INSERT INTO ai_label_workspaces (workspace_id, enabled, added_by) VALUES (?, TRUE, ?)", workspaceId,
+                "test"));
     }
 
     private static final class MutableClock extends Clock {
