@@ -54,16 +54,26 @@ def load_conversation_thread(
         max_results=max_results,
         truncate=False,
     )
-    if len(traces) == max_results:
+    # The backend counts two messages per trace.
+    trace_count = (
+        thread.number_of_messages // 2
+        if thread.number_of_messages is not None
+        else None
+    )
+    if len(traces) == max_results and (
+        trace_count is None or trace_count > len(traces)
+    ):
         # Traces come back newest first, so the ones past the limit are the
         # start of the conversation.
         LOGGER.warning(
-            "Thread '%s' has at least %d traces, the max_traces_per_thread=%d "
+            "Thread '%s' has %s the max_traces_per_thread=%d "
             "limit. Only its %d most recent traces are evaluated, so the start "
             "of the conversation is missing: raise max_traces_per_thread to "
             "evaluate the whole thread.",
             thread.id,
-            len(traces),
+            f"{trace_count} traces, more than"
+            if trace_count is not None
+            else f"at least {len(traces)} traces, reaching",
             max_results,
             len(traces),
         )
