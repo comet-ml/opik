@@ -37,6 +37,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -255,14 +256,46 @@ class ModelPricesResourceTest {
             assertThat(history.content().getFirst()).satisfies(entry -> {
                 assertThat(entry.listVersion()).isEqualTo(version);
                 assertThat(entry.action()).isEqualTo("updated");
-                assertThat(new BigDecimal(entry.before().get("input_price").asText())).isEqualByComparingTo("2");
-                assertThat(new BigDecimal(entry.after().get("input_price").asText())).isEqualByComparingTo("3");
+                assertThat(entry.before().inputPrice()).isEqualTo("2");
+                assertThat(entry.after().inputPrice()).isEqualTo("3");
             });
             assertThat(history.content().get(1)).satisfies(entry -> {
                 assertThat(entry.listVersion()).isEqualTo(version - 1);
                 assertThat(entry.action()).isEqualTo("created");
                 assertThat(entry.before()).isNull();
             });
+        }
+    }
+
+    @Test
+    void historyRowsHaveTheShapeTheListReturns() {
+        replace(List.of());
+        long version = replace(List.of(
+                fixed("gpt-4o", "openai", "0.0000000001", "8.00"),
+                alias("bifrost/gpt-4o", "", "gpt-4o", "openai"))).version();
+        var listed = find().rows();
+
+        try (var response = client.target(URL_TEMPLATE.formatted(baseURI) + "/history")
+                .queryParam("size", 1000)
+                .request()
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            var afterByRowId = new HashMap<String, JsonNode>();
+            for (JsonNode entry : response.readEntity(JsonNode.class).get("content")) {
+                if (entry.get("list_version").asLong() == version && entry.hasNonNull("after")) {
+                    afterByRowId.put(entry.get("row_id").asText(), entry.get("after"));
+                }
+            }
+
+            assertThat(listed).hasSize(2).allSatisfy(row -> {
+                var expected = (ObjectNode) JsonUtils.valueToTree(row);
+                expected.remove(List.of("id", "created_at", "created_by", "last_updated_at", "last_updated_by"));
+                assertThat(afterByRowId.get(row.id().toString())).isEqualTo(expected);
+            });
+            assertThat(afterByRowId.values())
+                    .anySatisfy(after -> assertThat(after.path("input_price").asText()).isEqualTo("0.0000000001"))
+                    .anySatisfy(after -> assertThat(after.path("alias_of").path("provider").asText())
+                            .isEqualTo("openai"));
         }
     }
 
