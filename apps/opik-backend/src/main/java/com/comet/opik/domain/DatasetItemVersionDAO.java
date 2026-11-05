@@ -3594,10 +3594,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                             // Default-sorted page with nothing evaluated on the large payloads: input/output/metadata
                             // are joined once per page instead of being carried through every aggregation state.
-                            if (pushTopLimit && hasAggregated != hasRaw
+                            if (pushTopLimit
                                     && CollectionUtils.isEmpty(criteria.sortingFields())
-                                    && CollectionUtils.isEmpty(criteria.filters())
-                                    && StringUtils.isBlank(criteria.search())) {
+                                    && CollectionUtils.isEmpty(criteria.filters())) {
                                 template.add(hasAggregated ? "late_materialize" : "late_materialize_raw", true);
                             }
 
