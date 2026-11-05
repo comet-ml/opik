@@ -1,3 +1,7 @@
+import asyncio
+import inspect
+import sys
+
 import pytest
 
 import opik
@@ -22,6 +26,7 @@ def _run_test(monkeypatch, nodeid, test_func):
         pytest.xfail.Exception,
         pytest.fail.Exception,
         AssertionError,
+        SystemExit,
     ):
         # These end the test body; pytest catches them, so the test does too.
         return None
@@ -34,6 +39,8 @@ def _run_test(monkeypatch, nodeid, test_func):
         pytest.param(lambda: pytest.xfail("known bug"), id="xfail"),
         pytest.param(lambda: pytest.fail("broken"), id="fail"),
         pytest.param(lambda: _assert_false(), id="assertion"),
+        pytest.param(lambda: sys.exit(1), id="exit"),
+        pytest.param(lambda: _skip_in_tracked_helper(), id="skip-in-tracked-helper"),
     ],
 )
 def test_llm_unit__test_body_stops_early__trace_ends_and_next_test_gets_its_own(
@@ -67,6 +74,11 @@ def test_llm_unit__test_body_stops_early__trace_ends_and_next_test_gets_its_own(
 
 def _assert_false():
     assert False
+
+
+@opik.track
+def _skip_in_tracked_helper():
+    pytest.skip("skipped by a helper")
 
 
 @pytest.mark.parametrize(
@@ -123,6 +135,7 @@ def test_llm_unit__tracing_disabled__test_runs_without_trace_or_experiment(
             lambda: pytest.xfail("known bug"), pytest.xfail.Exception, id="xfail"
         ),
         pytest.param(lambda: pytest.fail("broken"), pytest.fail.Exception, id="fail"),
+        pytest.param(lambda: sys.exit(1), SystemExit, id="exit"),
     ],
 )
 def test_llm_unit__test_body_stops_early__pytest_still_gets_the_outcome(
@@ -178,3 +191,46 @@ def test_llm_unit__opik_fails_around_the_test__test_result_is_its_own(
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_x.py::test_passing (call)")
     assert test_passing() == 42
     assert calls == ["ran"]
+
+
+def test_llm_unit__test_argument_named_stopped_by__passed_to_the_test(
+    fake_backend, monkeypatch
+):
+    @decorator.llm_unit()
+    def test_with_stopped_by(stopped_by):
+        return stopped_by
+
+    monkeypatch.setenv(
+        "PYTEST_CURRENT_TEST", "tests/test_x.py::test_with_stopped_by (call)"
+    )
+    assert test_with_stopped_by(stopped_by="fixture value") == "fixture value"
+
+
+def test_llm_unit__async_test__stays_async_and_is_traced(fake_backend, monkeypatch):
+    @decorator.llm_unit()
+    async def test_async():
+        await asyncio.sleep(0)
+        return 42
+
+    @decorator.llm_unit()
+    async def test_async_skipped():
+        pytest.skip("not today")
+
+    # pytest-asyncio only runs a test that is still a coroutine function.
+    assert inspect.iscoroutinefunction(test_async)
+
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_x.py::test_async (call)")
+    assert asyncio.run(test_async()) == 42
+    monkeypatch.setenv(
+        "PYTEST_CURRENT_TEST", "tests/test_x.py::test_async_skipped (call)"
+    )
+    with pytest.raises(pytest.skip.Exception):
+        asyncio.run(test_async_skipped())
+    opik.flush_tracker()
+
+    assert [trace.name for trace in fake_backend.trace_trees] == [
+        "test_async",
+        "test_async_skipped",
+    ]
+    assert fake_backend.trace_trees[0].output == {"output": 42}
+    assert all(trace.end_time is not None for trace in fake_backend.trace_trees)

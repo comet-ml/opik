@@ -1,10 +1,11 @@
-from typing import Callable, Any, Dict, List, Tuple
+from typing import Callable, Any, Dict, List, Optional, Tuple
 import os
 import functools
 import logging
 import opik
-import pytest
 import opik.opik_context as opik_context
+from opik import context_storage
+from opik.api_objects import span
 from . import test_runs_storage, test_run_content
 from opik.decorator import inspect_helpers
 import opik.config as config
@@ -42,18 +43,48 @@ def llm_unit(
         if not config_.pytest_experiment_enabled:
             return func
 
+        if inspect_helpers.is_async(func):
+
+            @opik.track(name=func.__name__, capture_input=False)
+            async def tracked_async(
+                stopped_by: List[BaseException], /, *args: Any, **kwargs: Any
+            ) -> Any:
+                test_span = opik_context.get_current_span_data()
+                _register_test_run(func, args, kwargs, argnames_mapping)
+                try:
+                    return await func(*args, **kwargs)
+                except Exception:
+                    raise
+                except BaseException as exception:
+                    _hold_until_trace_ends(exception, stopped_by, test_span)
+                    return None
+
+            @functools.wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                if not tracing_runtime_config.is_tracing_active():
+                    return await func(*args, **kwargs)
+
+                stopped_by: List[BaseException] = []
+                result = await tracked_async(stopped_by, *args, **kwargs)
+                if stopped_by:
+                    raise stopped_by[0]
+                return result
+
+            setattr(async_wrapper, "_opik_llm_unit", True)
+            return async_wrapper
+
         @opik.track(name=func.__name__, capture_input=False)
-        def tracked(stopped_by: List[BaseException], *args: Any, **kwargs: Any) -> Any:
+        def tracked(
+            stopped_by: List[BaseException], /, *args: Any, **kwargs: Any
+        ) -> Any:
+            test_span = opik_context.get_current_span_data()
             _register_test_run(func, args, kwargs, argnames_mapping)
             try:
                 return func(*args, **kwargs)
-            except (pytest.skip.Exception, pytest.fail.Exception) as exception:
-                # pytest.skip(), pytest.xfail() and pytest.fail() raise
-                # BaseExceptions that @opik.track doesn't handle, which would
-                # leave the trace open for the next test. Hold the exception
-                # until the trace has ended. pytest.fail.Exception also
-                # covers xfail.
-                stopped_by.append(exception)
+            except Exception:
+                raise
+            except BaseException as exception:
+                _hold_until_trace_ends(exception, stopped_by, test_span)
                 return None
 
         @functools.wraps(func)
@@ -71,6 +102,21 @@ def llm_unit(
         return wrapper
 
     return decorator
+
+
+def _hold_until_trace_ends(
+    exception: BaseException,
+    stopped_by: List[BaseException],
+    test_span: Optional[span.SpanData],
+) -> None:
+    # pytest.skip(), pytest.xfail(), pytest.fail() and sys.exit() raise
+    # BaseExceptions that @opik.track doesn't handle, which would leave the
+    # trace open for the next test. Hold the exception until the trace has
+    # ended. If it came from a tracked helper inside the test, that helper's
+    # span is still on the stack, so trim back to the test's own span first.
+    stopped_by.append(exception)
+    if test_span is not None:
+        context_storage.trim_span_data_stack_to_certain_span(test_span.id)
 
 
 def _register_test_run(
