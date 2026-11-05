@@ -180,11 +180,13 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     }
 
     private static PlatformAnswer answer(Response response, WorkspaceFeature feature) {
-        var family = response.getStatusInfo().getFamily();
-        if (family == Response.Status.Family.CLIENT_ERROR) {
+        // Only these are about the caller's credential. Any other 4xx (a rate limit, a platform without this endpoint
+        // yet, contract drift) means the platform couldn't tell, so it fails below as an outage does.
+        if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()
+                || response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             return PlatformAnswer.REFUSED;
         }
-        if (family != Response.Status.Family.SUCCESSFUL) {
+        if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
             throw new IllegalStateException(
                     "the platform answered the workspace features call with status '%d'"
                             .formatted(response.getStatus()));
