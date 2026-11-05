@@ -124,7 +124,7 @@ class ModelUsageServiceTest {
 
         assertThat(sample).hasSize(ModelUsageServiceImpl.MAX_LOGGED_MODELS);
         assertThat(sample.get(0)).isEqualTo("openai/line?break");
-        assertThat(sample.get(1)).hasSize(100).endsWith("...");
+        assertThat(sample.get(1)).isEqualTo("openai/" + "x".repeat(90) + "...");
         assertThat(sample.get(2)).isEqualTo("openai/model-2");
     }
 

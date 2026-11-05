@@ -60,7 +60,7 @@ class ModelUsageServiceImpl implements ModelUsageService {
     private static final Duration SAVE_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration FAILURE_LOG_INTERVAL = Duration.ofMinutes(1);
     static final int MAX_LOGGED_MODELS = 5;
-    private static final int MAX_LOGGED_NAME_LENGTH = 100;
+    private static final int MAX_LOGGED_MODEL_IDENTIFIER_LENGTH = 100;
     private static final String ORGANIZATION = "organization";
     private static final String BUILT_IN = "built_in";
     private static final String NONE = "none";
@@ -195,7 +195,7 @@ class ModelUsageServiceImpl implements ModelUsageService {
                 .limit(MAX_LOGGED_MODELS)
                 .map(model -> StringUtils.abbreviate(
                         (model.provider() + "/" + model.modelName()).replaceAll("\\p{Cntrl}", "?"),
-                        MAX_LOGGED_NAME_LENGTH))
+                        MAX_LOGGED_MODEL_IDENTIFIER_LENGTH))
                 .toList();
     }
 
