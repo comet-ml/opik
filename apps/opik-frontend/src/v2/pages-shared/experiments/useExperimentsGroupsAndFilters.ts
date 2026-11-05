@@ -15,6 +15,7 @@ import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/Experime
 import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Filters } from "@/types/filters";
+import { SORT_DIRECTION } from "@/types/sorting";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
 export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
@@ -37,7 +38,15 @@ export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
 ];
 
-const DEFAULT_GROUPS: Groups = [];
+export const DEFAULT_GROUPS: Groups = [
+  {
+    id: "default_groups",
+    field: COLUMN_DATASET_ID,
+    type: COLUMN_TYPE.string,
+    direction: SORT_DIRECTION.ASC,
+    key: "",
+  },
+];
 
 export type UseExperimentsGroupsAndFiltersProps = {
   storageKeyPrefix: string;
