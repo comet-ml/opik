@@ -36,6 +36,7 @@ class ModelPriceResolver {
 
     enum NameForm {
         EXACT,
+        LOWER_CASED,
         NORMALIZED,
         DATE_STRIPPED,
         NORMALIZED_DATE_STRIPPED,
@@ -61,9 +62,10 @@ class ModelPriceResolver {
             return Optional.empty();
         }
         Optional<PriceMatch> match = resolve(modelName, ProviderRegistry.resolve(provider, modelName), layers, true);
-        if (match.isEmpty()) {
-            log.debug("No model price found, model '{}', provider '{}'", modelName, provider);
-        }
+        match.ifPresentOrElse(
+                found -> log.debug("Found model price, model '{}', provider '{}', name form '{}'", modelName,
+                        found.provider(), found.nameForm()),
+                () -> log.debug("No model price found, model '{}', provider '{}'", modelName, provider));
         return match;
     }
 
@@ -72,7 +74,14 @@ class ModelPriceResolver {
         List<String> lookupOrder = resolvedProvider.map(ProviderRegistry::priceLookupOrder).orElse(List.of());
         // The price keys are stored without a provider prefix (LiteLLM sends "openai/gpt-4o"), so every spelling is
         // derived from the prefix-free name.
-        Map<String, NameForm> spellings = spellings(ModelPriceTable.parseModelName(modelName));
+        String name = ModelPriceTable.parseModelName(modelName);
+        if (!layers.hasRows() && !lookupOrder.isEmpty()) {
+            Optional<PriceMatch> exact = findExact(name, lookupOrder.getFirst());
+            if (exact.isPresent()) {
+                return exact;
+            }
+        }
+        Map<String, NameForm> spellings = spellings(name);
         Optional<CustomMatch> custom = findCustom(layers, lookupOrder, spellings, followAliases);
         if (custom.isPresent() && custom.get().row().kind() == CustomModelPrice.Kind.ALIAS) {
             CustomMatch alias = custom.get();
@@ -101,6 +110,13 @@ class ModelPriceResolver {
                 .nameForm(fixed.nameForm())
                 .customRow(fixed.row())
                 .build());
+    }
+
+    // With no organization rows, the exact name under the first provider is the first pair findBuiltIn tries, and the
+    // one most spans hit, so trying it alone first skips building the other spellings on every span insert and update.
+    private Optional<PriceMatch> findExact(String name, String provider) {
+        return Optional.ofNullable(ModelPriceTable.get(name, provider))
+                .map(price -> PriceMatch.builder().price(price).provider(provider).nameForm(NameForm.EXACT).build());
     }
 
     private boolean setsAnyRate(CustomModelPrice row) {
@@ -155,17 +171,25 @@ class ModelPriceResolver {
     }
 
     // Duplicates are dropped by exact string, never ignoring case: most price keys are lower case, so a name that
-    // differs from its lower-case spelling only in letter case ("GPT-5-MINI") still needs that lookup.
+    // differs from its lower-case spelling only in letter case ("GPT-5-MINI") still needs that lookup. The normalize and
+    // strip helpers lower-case too, so a spelling that only changed case is labelled LOWER_CASED wherever it first
+    // appears: "GPT-5.2" misses as sent and normalized, then its date strip removes nothing and finds "gpt-5.2". The
+    // label never changes the order spellings are tried in.
     private Map<String, NameForm> spellings(String modelName) {
+        String lowerCased = modelName.toLowerCase(Locale.ROOT);
         String normalized = normalize(modelName);
         Map<String, NameForm> spellings = new LinkedHashMap<>();
         spellings.putIfAbsent(modelName, NameForm.EXACT);
-        spellings.putIfAbsent(normalized, NameForm.NORMALIZED);
-        spellings.putIfAbsent(stripDateSuffix(modelName), NameForm.DATE_STRIPPED);
+        add(spellings, normalized, lowerCased, NameForm.NORMALIZED);
+        add(spellings, stripDateSuffix(modelName), lowerCased, NameForm.DATE_STRIPPED);
         spellings.putIfAbsent(stripDateSuffix(normalized), NameForm.NORMALIZED_DATE_STRIPPED);
-        spellings.putIfAbsent(stripVersionSuffix(modelName), NameForm.VERSION_STRIPPED);
+        add(spellings, stripVersionSuffix(modelName), lowerCased, NameForm.VERSION_STRIPPED);
         spellings.putIfAbsent(stripVersionSuffix(normalized), NameForm.NORMALIZED_VERSION_STRIPPED);
         return spellings;
+    }
+
+    private void add(Map<String, NameForm> spellings, String spelling, String lowerCased, NameForm form) {
+        spellings.putIfAbsent(spelling, spelling.equals(lowerCased) ? NameForm.LOWER_CASED : form);
     }
 
     private Optional<PriceMatch> findUnder(List<String> providers, Map<String, NameForm> spellings) {
