@@ -158,7 +158,7 @@ export class AlertEditorPage {
   toast(text: string | RegExp): Locator {
     return this.page
       .getByRole('region', { name: 'Notifications (F8)' })
-      .getByRole('status')
+      .locator('ol > li')
       .filter({ hasText: text });
   }
 

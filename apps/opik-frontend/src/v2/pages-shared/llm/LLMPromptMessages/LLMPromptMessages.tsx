@@ -187,11 +187,13 @@ const LLMPromptMessages = ({
           {messages.map((message, messageIdx) => (
             <LLMPromptMessage
               key={message.id}
-              ref={(handle) =>
-                handle
-                  ? messageRefsMap.current.set(message.id, handle)
-                  : messageRefsMap.current.delete(message.id)
-              }
+              ref={(handle) => {
+                if (handle) {
+                  messageRefsMap.current.set(message.id, handle);
+                } else {
+                  messageRefsMap.current.delete(message.id);
+                }
+              }}
               possibleTypes={possibleTypes}
               errorText={validationErrors?.[messageIdx]?.content?.message}
               hideRemoveButton={messages?.length === 1}

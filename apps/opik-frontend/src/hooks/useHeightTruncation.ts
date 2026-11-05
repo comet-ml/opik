@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
 interface UseHeightTruncationReturn {
-  ref: React.RefObject<HTMLDivElement>;
+  ref: React.RefObject<HTMLDivElement | null>;
   isTruncated: boolean;
   isExpanded: boolean;
   toggle: () => void;

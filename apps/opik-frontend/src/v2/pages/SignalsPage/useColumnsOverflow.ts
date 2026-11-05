@@ -6,7 +6,7 @@ import { ISSUES_LIST_ATTRIBUTE } from "@/v2/pages/SignalsPage/IssuesTab/IssuesTa
 const STUCK_GAP_PX = 8;
 
 const useColumnsOverflow = (
-  columnsRef: React.RefObject<HTMLDivElement>,
+  columnsRef: React.RefObject<HTMLDivElement | null>,
   issues: AgentInsightsIssuesPage | undefined,
 ) => {
   const [overflows, setOverflows] = useState(false);

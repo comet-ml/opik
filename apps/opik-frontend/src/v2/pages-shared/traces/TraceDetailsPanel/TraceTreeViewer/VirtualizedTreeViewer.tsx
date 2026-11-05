@@ -104,7 +104,7 @@ const TreeConnectors: React.FC<{
 );
 
 type VirtualizedTreeViewerProps = {
-  scrollRef: React.RefObject<HTMLDivElement>;
+  scrollRef: React.RefObject<HTMLDivElement | null>;
   config: TreeNodeConfig;
   rowId: string;
   onRowIdChange: (id: string) => void;

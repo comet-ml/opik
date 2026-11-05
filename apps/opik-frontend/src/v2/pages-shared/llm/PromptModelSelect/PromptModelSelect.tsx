@@ -113,12 +113,19 @@ const PromptModelSelect = ({
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
-      const modelProvider = openProviderMenu
-        ? openProviderMenu
+      // The hovered row names the provider only when the pick came from its side menu: a row
+      // the search filtered away keeps its hover, since unmounting it fires no mouseleave.
+      const hoveredGroup = groupOptions.find(
+        (group) => group.composedProviderType === openProviderMenu,
+      );
+      const modelProvider = hoveredGroup?.options.some(
+        (option) => option.value === value,
+      )
+        ? hoveredGroup.composedProviderType
         : modelProviderMapRef.current[value];
       onChange(value, parseComposedProviderType(modelProvider));
     },
-    [onChange, openProviderMenu, modelProviderMapRef],
+    [onChange, openProviderMenu, groupOptions, modelProviderMapRef],
   );
 
   const handleSelectOpenChange = useCallback((open: boolean) => {
