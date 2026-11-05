@@ -68,7 +68,8 @@ public class GuardrailsResourceTest {
     private static final String USER = randomUUID().toString();
     private static final String WORKSPACE_ID = randomUUID().toString();
     private static final String TEST_WORKSPACE = randomUUID().toString();
-    private static final String TEXT_OVER_LIMIT = "textWithinLimit text must be at most 16384 characters as the decision service counts them";
+    private static final String TEXT_OVER_LIMIT = "text must be at most 16384 characters once JSON-encoded, where a "
+            + "quote, backslash or line break counts as 2 and a non-ASCII character as 6";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -231,7 +232,8 @@ public class GuardrailsResourceTest {
                 Arguments.of("a short text", "some text"),
                 // With its quotes, the JSON encoding is exactly at the decision service's limit.
                 Arguments.of("an ASCII text at the limit", "a".repeat(MAX_TEXT_LENGTH - 2)),
-                Arguments.of("a non-ASCII text at the limit", "я".repeat((MAX_TEXT_LENGTH - 2) / 6)));
+                // Each Cyrillic letter counts 6 and the two ASCII letters 1 each: 16,384 with the quotes.
+                Arguments.of("a non-ASCII text at the limit", "я".repeat((MAX_TEXT_LENGTH - 2) / 6) + "aa"));
     }
 
     @ParameterizedTest(name = "{0}")
