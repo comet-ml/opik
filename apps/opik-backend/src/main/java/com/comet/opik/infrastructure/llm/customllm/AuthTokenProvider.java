@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
@@ -78,11 +79,19 @@ public class AuthTokenProvider {
     record FetchedToken(String token, long ttlSeconds) {
     }
 
+    private record BasicCredentialKeys(String id, String secret) {
+    }
+
     private static final String CACHE_KEY_FORMAT = "llm_auth_token:%s:%s";
     private static final String DEFAULT_TOKEN_FIELD = "access_token";
     private static final String DEFAULT_EXPIRES_FIELD = "expires_in";
-    private static final String CLIENT_ID_KEY = "client_id";
-    private static final String CLIENT_SECRET_KEY = "client_secret";
+    // OAuth2 clients first, then service accounts (e.g. JWT endpoints behind enterprise AI gateways)
+    private static final List<BasicCredentialKeys> BASIC_CREDENTIAL_KEYS = List.of(
+            new BasicCredentialKeys("client_id", "client_secret"),
+            new BasicCredentialKeys("username", "password"));
+    // A reply whose whole body is the token: the characters a bearer token may contain (RFC 6750 b64token), so a
+    // compact HTML page or truncated JSON is never cached as one
+    private static final Pattern BARE_TOKEN = Pattern.compile("[A-Za-z0-9._~+/-]+=*");
     private static final String REDACTED = "***";
     private static final int ERROR_BODY_SNIPPET_CHARS = 500;
     // Upper bound on any token lifetime (1 year): beyond this a reply is malformed or malicious
@@ -324,9 +333,10 @@ public class AuthTokenProvider {
         try {
             root = JsonUtils.getJsonNodeFromString(body);
         } catch (UncheckedIOException exception) {
-            recordFetchMetric(startNanos, "non_json_reply", origin);
-            throw new AuthTokenException("token endpoint at '%s' returned a non-JSON reply (status '%d')"
-                    .formatted(authConfig.tokenUrl(), status));
+            return bareToken(body, authConfig, status, startNanos, origin);
+        }
+        if (root.isTextual()) {
+            return bareToken(root.asText(), authConfig, status, startNanos, origin);
         }
 
         String tokenField = defaultIfBlank(authConfig.tokenField(), DEFAULT_TOKEN_FIELD);
@@ -341,6 +351,28 @@ public class AuthTokenProvider {
         long ttlSeconds = resolveTtlSeconds(root, authConfig, startNanos, origin);
         recordFetchMetric(startNanos, "success", origin);
         return new FetchedToken(tokenNode.asText(), ttlSeconds);
+    }
+
+    /**
+     * A reply whose whole body (or bare JSON string) is the token. It states no lifetime, so the
+     * recipe's fallback lifetime is required.
+     */
+    private FetchedToken bareToken(String reply, ProviderAuthConfig authConfig, int status, long startNanos,
+            String origin) {
+        String token = reply.strip();
+        if (!BARE_TOKEN.matcher(token).matches()) {
+            recordFetchMetric(startNanos, "non_json_reply", origin);
+            throw new AuthTokenException(
+                    "token endpoint at '%s' returned a non-JSON reply that isn't a bare token (status '%d')"
+                            .formatted(authConfig.tokenUrl(), status));
+        }
+        if (authConfig.fallbackTtlSeconds() == null) {
+            recordFetchMetric(startNanos, "lifetime_missing", origin);
+            throw new AuthTokenException(
+                    "token reply is a bare token, which states no lifetime, and no fallback lifetime is configured");
+        }
+        recordFetchMetric(startNanos, "success", origin);
+        return new FetchedToken(token, authConfig.fallbackTtlSeconds());
     }
 
     private Invocation buildRequest(ProviderAuthConfig authConfig) {
@@ -367,21 +399,22 @@ public class AuthTokenProvider {
                     Entity.entity(formEncode(credentials), MediaType.APPLICATION_FORM_URLENCODED_TYPE));
             case JSON -> builder.buildPost(Entity.entity(jsonEncode(credentials), MediaType.APPLICATION_JSON_TYPE));
             case BASIC -> {
-                // OAuth2-standard mixed mode: client id/secret in the Basic header, every
-                // remaining field in the form body
-                String clientId = credentialValue(credentials, CLIENT_ID_KEY);
-                String clientSecret = credentialValue(credentials, CLIENT_SECRET_KEY);
-                if (clientId == null || clientSecret == null) {
-                    throw new AuthTokenException(
-                            "requires '%s' and '%s' credentials".formatted(CLIENT_ID_KEY,
-                                    CLIENT_SECRET_KEY));
-                }
+                // OAuth2-standard mixed mode: id/secret in the Basic header, every remaining
+                // field in the form body
+                BasicCredentialKeys keys = BASIC_CREDENTIAL_KEYS.stream()
+                        .filter(candidate -> credentialValue(credentials, candidate.id()) != null
+                                && credentialValue(credentials, candidate.secret()) != null)
+                        .findFirst()
+                        .orElseThrow(() -> new AuthTokenException(
+                                "requires 'client_id' and 'client_secret' (or 'username' and 'password') credentials"));
                 var bodyCredentials = credentials.stream()
-                        .filter(credential -> !CLIENT_ID_KEY.equals(credential.key())
-                                && !CLIENT_SECRET_KEY.equals(credential.key()))
+                        .filter(credential -> !keys.id().equals(credential.key())
+                                && !keys.secret().equals(credential.key()))
                         .toList();
+                String basicPair = credentialValue(credentials, keys.id()) + ":"
+                        + credentialValue(credentials, keys.secret());
                 yield builder.header(HttpHeaders.AUTHORIZATION, "Basic " + Base64.getEncoder().encodeToString(
-                        (clientId + ":" + clientSecret).getBytes(StandardCharsets.UTF_8)))
+                        basicPair.getBytes(StandardCharsets.UTF_8)))
                         .buildPost(Entity.entity(formEncode(bodyCredentials),
                                 MediaType.APPLICATION_FORM_URLENCODED_TYPE));
             }
