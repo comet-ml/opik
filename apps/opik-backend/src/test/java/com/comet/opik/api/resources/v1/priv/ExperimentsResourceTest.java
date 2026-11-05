@@ -1493,6 +1493,63 @@ class ExperimentsResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource
+        @DisplayName("when filtering by evaluation method, then find, groups and group aggregations return only matching experiments")
+        void findByFilterEvaluationMethod(Operator operator, boolean expectTestSuite) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetExperiment = generateExperiment().toBuilder()
+                    .evaluationMethod(EvaluationMethod.DATASET)
+                    .build();
+            var testSuiteExperiment = generateExperiment().toBuilder()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .build();
+            experimentResourceClient.create(datasetExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(testSuiteExperiment, apiKey, workspaceName);
+
+            var expectedExperiment = expectTestSuite ? testSuiteExperiment : datasetExperiment;
+            var expectedDatasetId = getAndAssert(expectedExperiment.id(), expectedExperiment, workspaceName, apiKey)
+                    .datasetId()
+                    .toString();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.EVALUATION_METHOD)
+                    .operator(operator)
+                    .value(EvaluationMethod.TEST_SUITE.getValue())
+                    .build());
+            var groups = List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build());
+
+            var actualPage = experimentResourceClient.findExperiments(1, 10, null, null, null, null, false, null,
+                    null, filters, apiKey, workspaceName, HttpStatus.SC_OK);
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).extracting(Experiment::id).containsExactly(expectedExperiment.id());
+
+            var actualGroups = experimentResourceClient.findGroups(groups, Set.of(ExperimentType.REGULAR), filters,
+                    null,
+                    apiKey,
+                    workspaceName, HttpStatus.SC_OK);
+            assertThat(actualGroups.content()).containsOnlyKeys(expectedDatasetId);
+
+            var actualAggregations = experimentResourceClient.findGroupsAggregations(groups,
+                    Set.of(ExperimentType.REGULAR),
+                    filters, null,
+                    apiKey, workspaceName, HttpStatus.SC_OK);
+            assertThat(actualAggregations.content()).containsOnlyKeys(expectedDatasetId);
+            assertThat(actualAggregations.content().get(expectedDatasetId).aggregations().experimentCount())
+                    .isEqualTo(1L);
+        }
+
+        private Stream<Arguments> findByFilterEvaluationMethod() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL, true),
+                    Arguments.of(Operator.NOT_EQUAL, false));
+        }
+
+        @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ExperimentsResourceTest#getValidFilters")
         void findByFiltering(Function<Experiment, ExperimentFilter> getFilter) {
             var workspaceName = UUID.randomUUID().toString();
