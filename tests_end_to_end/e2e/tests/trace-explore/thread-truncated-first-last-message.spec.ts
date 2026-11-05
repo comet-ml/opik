@@ -1,5 +1,5 @@
 import { test, expect } from '@e2e/fixtures';
-import type { TruncatedThreadRef } from '@e2e/fixtures/truncated-thread-messages.fixture';
+import type { TruncatedThreadRef } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 
 /**
