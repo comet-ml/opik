@@ -92,6 +92,7 @@ public class AuthTokenProvider {
     // A reply whose whole body is the token: the characters a bearer token may contain (RFC 6750 b64token), so a
     // compact HTML page or truncated JSON is never cached as one
     private static final Pattern BARE_TOKEN = Pattern.compile("[A-Za-z0-9._~+/-]+=*");
+    private static final int MIN_BARE_TOKEN_LENGTH = 16;
     private static final Pattern ALL_DIGITS = Pattern.compile("\\d+");
     private static final String REDACTED = "***";
     private static final int ERROR_BODY_SNIPPET_CHARS = 500;
@@ -365,7 +366,7 @@ public class AuthTokenProvider {
     private FetchedToken bareToken(String reply, ProviderAuthConfig authConfig, int status, long startNanos,
             String origin) {
         String token = reply.strip();
-        if (!BARE_TOKEN.matcher(token).matches()) {
+        if (token.length() < MIN_BARE_TOKEN_LENGTH || !BARE_TOKEN.matcher(token).matches()) {
             recordFetchMetric(startNanos, "non_json_reply", origin);
             throw new AuthTokenException(
                     "token endpoint at '%s' returned a non-JSON reply that isn't a bare token (status '%d')"

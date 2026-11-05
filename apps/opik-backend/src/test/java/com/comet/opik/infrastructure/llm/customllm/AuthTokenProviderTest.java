@@ -295,10 +295,10 @@ class AuthTokenProviderTest {
     @Test
     @DisplayName("a reply that is a bare JSON string is the token itself")
     void jsonStringReplyIsTheToken() {
-        stubToken("\"tok-string\"");
+        stubToken("\"tok-string-0123456789\"");
 
         assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(serviceAccountRecipe().build())))
-                .isEqualTo("tok-string");
+                .isEqualTo("tok-string-0123456789");
     }
 
     @Test
@@ -306,10 +306,10 @@ class AuthTokenProviderTest {
     void numericPlainTextReplyIsTheToken() {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withHeader("Content-Type", "text/plain")
-                .withBody("482913\n")));
+                .withBody("4829130571638204\n")));
         var recipe = serviceAccountRecipe().build();
 
-        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("482913");
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("4829130571638204");
         assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
     }
 
@@ -326,7 +326,7 @@ class AuthTokenProviderTest {
     @Test
     @DisplayName("a bare-token reply without a fallback lifetime is a clear error")
     void plainTextReplyWithoutFallbackIsRejected() {
-        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("tok-plain")));
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("tok-plain-0123456789")));
         var recipe = serviceAccountRecipe().fallbackTtlSeconds(null).build();
 
         assertThatThrownBy(() -> provider.testFetch(recipe))
@@ -634,7 +634,8 @@ class AuthTokenProviderTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @ValueSource(strings = {"<html>gateway login page</html>", "<html>Unauthorized</html>", "{\"error\""})
+    @ValueSource(strings = {"<html>gateway login page</html>", "<html>Unauthorized</html>", "{\"error\"", "OK",
+            "Unauthorized"})
     @DisplayName("a non-JSON reply that isn't a bare token (e.g. a login page or truncated JSON) is a clear error")
     void nonJsonReplyIsRejected(String reply) {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
