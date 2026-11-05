@@ -28,6 +28,7 @@ import {
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
 import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
 import { cn } from "@/lib/utils";
+import { formatExperimentCount } from "@/lib/experiments";
 
 export const ITEM_SOURCE_LABEL = "Item source";
 
@@ -186,7 +187,7 @@ export const createItemSourceGroupCell = <TData,>(
       countAggregationKey && aggregationData
         ? get(aggregationData, countAggregationKey, undefined)
         : undefined;
-    const countText = isNumber(count) ? `(${count})` : "";
+    const countText = isNumber(count) ? formatExperimentCount(count) : "";
 
     const rowHeight = table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
     const textClass = CELL_TEXT_CLASS_MAP[rowHeight];
@@ -244,7 +245,7 @@ export const createItemSourceGroupCell = <TData,>(
               "-"
             )}
           </div>
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center text-light-slate">
             {countText}
             {isDeleted && explainer && (
               <ExplainerIcon {...explainer} className="ml-1" />

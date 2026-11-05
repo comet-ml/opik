@@ -54,7 +54,11 @@ import {
   createItemSourceGroupCell,
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
-import { DATASET_TYPE, Experiment } from "@/types/datasets";
+import {
+  DATASET_TYPE,
+  Experiment,
+  ExperimentsAggregations,
+} from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -170,8 +174,11 @@ export const useExperimentsTableConfig = <
             scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
+            aggregatedCell: FeedbackScoreCell.Aggregation as never,
             accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
             customMeta: {
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                getExperimentScore(id, aggregation)?.value,
               scoreName,
             },
           };
@@ -338,11 +345,11 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
-    // Group rows show only the group label. Without an explicit empty cell,
+    // Columns without a group stat need an explicit empty cell, otherwise
     // TanStack falls back to rendering the summed column value.
     const statColumns = [...regularColumns, ...scoresColumns].map((column) => ({
       ...column,
-      aggregatedCell: () => null,
+      aggregatedCell: column.aggregatedCell ?? (() => null),
     }));
 
     const baseColumns = [...firstColumns, ...groupColumns, ...statColumns];

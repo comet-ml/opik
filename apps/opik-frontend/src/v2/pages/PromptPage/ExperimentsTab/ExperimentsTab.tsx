@@ -235,6 +235,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p50",
+        },
       },
       {
         id: "duration.p90",
@@ -242,6 +246,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
         cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p90",
+        },
       },
       {
         id: "duration.p99",
@@ -249,24 +257,40 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
         cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p99",
+        },
       },
       {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
         cell: TextCell as never,
+        aggregatedCell: TextCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "trace_count",
+        },
       },
       {
         id: "total_estimated_cost",
         label: "Total estimated cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
+        aggregatedCell: CostCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "total_estimated_cost",
+        },
       },
       {
         id: "total_estimated_cost_avg",
         label: "Avg cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
+        aggregatedCell: CostCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "total_estimated_cost_avg",
+        },
       },
       {
         id: "pass_rate",
@@ -275,6 +299,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         iconType: "pass_rate",
         accessorFn: (row) => row.pass_rate,
         cell: PassRateCell as never,
+        aggregatedCell: PassRateCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "pass_rate",
+        },
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
@@ -282,9 +310,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
         cell: FeedbackScoreListCell as never,
+        aggregatedCell: FeedbackScoreListCell.Aggregation as never,
         customMeta: {
           getHoverCardName: (row: GroupedExperiment) => row.name,
           areAggregatedScores: true,
+          aggregationKey: "feedback_scores",
         },
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
