@@ -85,17 +85,23 @@ jobs:
               # Packages contain ~40k versions (mostly untagged release manifests) and the API
               # has no tag filter, so sequential --paginate takes ~12 min per image.
               # Pages are independent, so fetch them concurrently.
-              LINK=$(gh api --include "${VERSIONS_URL}&page=1" 2>/dev/null | grep -i '^link:' || true)
-              LAST_PAGE=$(echo "$LINK" | sed -n 's/.*[?&]page=\([0-9]*\)>; rel="last".*/\1/p')
-              LAST_PAGE=${LAST_PAGE:-1}
-              echo "  Fetching ${LAST_PAGE} pages"
-
-              export VERSIONS_URL
               LIST_OK=true
-              # shellcheck disable=SC2016 # expanded by the child sh from the exported env
-              seq 1 "$LAST_PAGE" | xargs -P 10 -I{} sh -c \
-                'gh api "${VERSIONS_URL}&page={}" --jq "$JQ_FILTER" > "${PAGES_DIR}/{}"' \
-                || LIST_OK=false
+              if PROBE=$(gh api --include "${VERSIONS_URL}&page=1"); then
+                # Fall back to a single page only when the probe succeeded without a Link
+                # header; a failed probe must not silently shrink the scan to 100 versions.
+                LAST_PAGE=$(echo "$PROBE" | grep -i '^link:' \
+                  | sed -n 's/.*[?&]page=\([0-9]*\)>; rel="last".*/\1/p')
+                LAST_PAGE=${LAST_PAGE:-1}
+                echo "  Fetching ${LAST_PAGE} pages"
+
+                export VERSIONS_URL
+                # shellcheck disable=SC2016 # expanded by the child sh from the exported env
+                seq 1 "$LAST_PAGE" | xargs -P 10 -I{} sh -c \
+                  'gh api "${VERSIONS_URL}&page={}" --jq "$JQ_FILTER" > "${PAGES_DIR}/{}"' \
+                  || LIST_OK=false
+              else
+                LIST_OK=false
+              fi
             fi
 
             if [ "$LIST_OK" != true ]; then
