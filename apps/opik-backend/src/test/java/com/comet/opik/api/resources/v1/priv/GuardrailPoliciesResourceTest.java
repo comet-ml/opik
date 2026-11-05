@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -144,6 +145,33 @@ class GuardrailPoliciesResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_IMPLEMENTED);
             assertThat(response.readEntity(ErrorMessage.class).getMessage())
                     .isEqualTo("Guardrail policies are not available yet");
+        }
+    }
+
+    Stream<Arguments> writes() {
+        var id = "/" + randomUUID();
+        return Stream.of(
+                Arguments.of("create", "",
+                        (Function<Invocation.Builder, Response>) builder -> builder.post(Entity.json(policy()))),
+                Arguments.of("update", id,
+                        (Function<Invocation.Builder, Response>) builder -> builder.put(Entity.json(policy()))),
+                Arguments.of("delete", id, (Function<Invocation.Builder, Response>) Invocation.Builder::delete));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("writes")
+    @DisplayName("writing a policy needs the workspace settings permission")
+    void writeWithoutWorkspaceSettingsPermissionIsForbidden(String endpoint, String path,
+            Function<Invocation.Builder, Response> call) {
+        var apiKey = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+
+        try (var response = call.apply(client.target(RESOURCE_PATH.formatted(baseURI) + path).request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
         }
     }
 
