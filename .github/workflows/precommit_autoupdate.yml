@@ -108,15 +108,17 @@ jobs:
 
       # The patch comes from unreviewed hook code, and a branch pushed with this
       # token runs pull_request workflows with secrets — so a patch that touches
-      # workflows/actions is refused rather than applied. No hook in the config
-      # writes under .github/, so a legitimate bump never trips this.
+      # workflows/actions is refused before any PR is opened. No hook in the config
+      # writes under .github/, so a legitimate bump never trips this. The check
+      # asks git about the staged result by pathspec rather than parsing patch
+      # paths, which git quotes (non-ASCII names) or rewrites (renames as `a => b`).
       - name: Apply patch
         run: |
-          if git apply --numstat "$RUNNER_TEMP/bump/bump.patch" | cut -f3 | grep -q '^\.github/'; then
-            echo "::error::Autoupdate patch modifies .github/ — refusing to apply"
+          git apply --index "$RUNNER_TEMP/bump/bump.patch"
+          if ! git diff --cached --quiet -- .github/; then
+            echo "::error::Autoupdate patch modifies .github/ — refusing to open a PR"
             exit 1
           fi
-          git apply --index "$RUNNER_TEMP/bump/bump.patch"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v8
