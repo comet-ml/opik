@@ -61,8 +61,11 @@ public class TopicVectorsDAO {
      * <p>A key is kept only when its latest {@code ai_labels} output row has the status's task version and a summary
      * that isn't blank, and this is checked before the {@code LIMIT}: otherwise unusable rows, which stay in the window
      * until they age out, could fill every tick's batch and hold back newer traces. The output read takes only the
-     * (project, trace) pairs of {@code done}, so it reads the window's traces and not the workspace's history. A tie on
-     * {@code updated_at} takes the higher task version, then the greater output, so the pick doesn't change between runs.
+     * (project, trace) pairs of {@code done}, so it reads the window's traces and not the workspace's history, and only
+     * from the {@code id_at} of {@code done}'s oldest trace id on, so it skips the older partitions and granules.
+     * {@code id_at} is the id's time cut to whole seconds, so the bound is cut the same way: at the id's millisecond time,
+     * the oldest trace's own row would fall under it. A tie on {@code updated_at} takes the higher task version, then the
+     * greater output, so the pick doesn't change between runs.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -88,6 +91,7 @@ public class TopicVectorsDAO {
                     WHERE workspace_id = :workspace_id
                     AND task = :task
                     AND key = 'output'
+                    AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
                     AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
                     ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key

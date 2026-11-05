@@ -724,6 +724,26 @@ class TopicVectorsTickTest {
         }
 
         @Test
+        @DisplayName("the summary read starts at the second of the oldest done trace id: that trace, whose id time has a "
+                + "millisecond part, and a trace of a later week are both found")
+        void idAtBoundOfTheSummaryRead() {
+            var workspaceId = UUID.randomUUID().toString();
+            var projectId = UUID.randomUUID();
+            // id_at cuts the id's time to the second; a bound at 999 ms past it would leave this trace's row out.
+            var oldest = ID_GENERATOR.generateId(Instant.now().minus(10, ChronoUnit.DAYS)
+                    .truncatedTo(ChronoUnit.SECONDS).plusMillis(999));
+            var newest = ID_GENERATOR.generateId();
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, oldest, 1),
+                    outputLabel(workspaceId, projectId, newest, 1))).block();
+            statusDAO.insert(List.of(doneStatus(workspaceId, projectId, oldest, 1),
+                    doneStatus(workspaceId, projectId, newest, 1))).block();
+
+            assertThat(findUnvectored(workspaceId, Instant.now().minus(1, ChronoUnit.HOURS)))
+                    .extracting(TopicVectorCandidate::traceId)
+                    .containsExactlyInAnyOrder(oldest, newest);
+        }
+
+        @Test
         @DisplayName("statuses without a usable summary don't take the LIMIT: an older blank, Unicode-blank, missing "
                 + "or other-version output leaves room for a newer usable one")
         void unusableSummariesBeforeLimit() {
