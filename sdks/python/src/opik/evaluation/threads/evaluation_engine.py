@@ -11,6 +11,7 @@ from opik.rest_api import JsonListStringPublic, TracePublic, TraceThread
 
 from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
+from ..engine import helpers as engine_helpers
 from ..engine import types as engine_types
 from ..metrics import score_result
 from ..suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
@@ -182,4 +183,4 @@ class ThreadsEvaluationEngine:
                     )
                 )
 
-        return score_results
+        return engine_helpers.mark_invalid_score_values_as_failed(score_results)

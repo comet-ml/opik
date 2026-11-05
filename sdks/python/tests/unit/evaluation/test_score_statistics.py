@@ -17,6 +17,7 @@ import re
 from typing import List
 from unittest import mock
 
+import numpy as np
 import pytest
 from opik import _logging
 from opik.evaluation import (
@@ -26,6 +27,7 @@ from opik.evaluation import (
     test_case,
     test_result,
 )
+from opik.evaluation.engine import helpers as engine_helpers
 from opik.evaluation.metrics import score_result
 
 
@@ -281,33 +283,34 @@ def test_the_console_table_shows_the_failed_count(monkeypatch: pytest.MonkeyPatc
     assert cells[-1] == "5"
 
 
-NON_FINITE = [float("nan"), float("inf"), float("-inf")]
-
-
-@pytest.mark.parametrize("non_finite", NON_FINITE)
-def test_the_experiment_results_average_leaves_out_non_finite_values_like_the_statistics(
-    non_finite: float,
-):
+@pytest.mark.parametrize(
+    "value",
+    [np.float32(0.25), np.int64(1)],
+    ids=["np-float32", "np-int64"],
+)
+def test_numpy_scores_are_part_of_the_statistics(value):
     results = [
-        _result("item-0", 1, [_score("m", 1.0)]),
-        _result("item-1", 1, [_score("m", 0.5)]),
-        _result("item-2", 1, [_score("m", non_finite)]),
+        _result("item-0", 1, [_score("m", 0.5)]),
+        _result("item-1", 1, [_score("m", value)]),
     ]
 
-    average_scores, failed_scores = report._compute_average_scores(results)
-
     stats = score_statistics.calculate_aggregated_statistics(results)["m"]
-    assert average_scores == {"m": f"{stats.mean:.4f}"} == {"m": "0.7500"}
-    assert failed_scores == {"m": 0}
+
+    assert stats.values == [0.5, float(value)]
+    assert stats.mean == (0.5 + float(value)) / 2
 
 
-@pytest.mark.parametrize("non_finite", NON_FINITE)
-def test_the_experiment_results_average_is_none_when_every_value_is_non_finite(
-    non_finite: float,
-):
-    results = [_result("item-0", 1, [_score("m", non_finite)])]
+def test_a_nan_score_is_failed_in_every_view(monkeypatch: pytest.MonkeyPatch):
+    # The engine marks the NaN as failed, so the console average, the
+    # statistics and the failed counts all agree.
+    scores = engine_helpers.mark_invalid_score_values_as_failed(
+        [_score("m", 1.0), _score("m", 0.5), _score("m", float("nan"))]
+    )
+    results = [_result(f"item-{i}", 1, [score]) for i, score in enumerate(scores)]
 
     average_scores, failed_scores = report._compute_average_scores(results)
+    stats = score_statistics.calculate_aggregated_statistics(results)["m"]
 
-    assert average_scores == {"m": "None"}
-    assert failed_scores == {"m": 0}
+    assert average_scores == {"m": "0.7500"}
+    assert failed_scores == {"m": 1}
+    assert (stats.mean, stats.failed_count) == (0.75, 1)

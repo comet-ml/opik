@@ -1,13 +1,18 @@
 import contextlib
 import dataclasses
-from typing import Any, Dict, Optional, Iterator
+import logging
+from typing import Any, Dict, List, Optional, Iterator
 
 from opik.api_objects import experiment, opik_client, trace
 from opik.api_objects.experiment import experiment_item
 from opik.decorator import error_info_collector
+from opik.evaluation import score_statistics
+from opik.evaluation.metrics import score_result
 from opik.types import ErrorInfoDict
 
 import opik.context_storage as context_storage
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -92,3 +97,42 @@ def evaluate_llm_task_result_spans_context(
 
         trace_data.init_end_time()
         client.__internal_api__trace__(**trace_data.as_parameters)
+
+
+def mark_invalid_score_values_as_failed(
+    score_results: List[score_result.ScoreResult],
+) -> List[score_result.ScoreResult]:
+    """Turn every score whose value isn't a finite real number into a failed score.
+
+    NaN, infinity, ``None`` or a string can't be averaged, and the backend
+    rejects a whole feedback-score batch that contains NaN or infinity. So such
+    a score is handled like a metric that raised: ``scoring_failed`` is set and
+    the value becomes ``0.0``, so every view counts it as failed and it is not
+    uploaded. The original value is kept in ``metadata``.
+    """
+    return [
+        _invalid_value_as_failed(result)
+        if isinstance(result, score_result.ScoreResult)
+        and not result.scoring_failed
+        and not score_statistics.is_valid_score_value(result.value)
+        else result
+        for result in score_results
+    ]
+
+
+def _invalid_value_as_failed(
+    result: score_result.ScoreResult,
+) -> score_result.ScoreResult:
+    LOGGER.warning(
+        "Metric %s returned a score value that is not a finite number: %r. "
+        "Its score will be marked as failed.",
+        result.name,
+        result.value,
+    )
+    return dataclasses.replace(
+        result,
+        value=0.0,
+        reason=f"Score value is not a finite number: {result.value!r}",
+        metadata={**(result.metadata or {}), "original_value": repr(result.value)},
+        scoring_failed=True,
+    )
