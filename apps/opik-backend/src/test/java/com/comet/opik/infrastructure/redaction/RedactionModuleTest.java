@@ -123,7 +123,7 @@ class RedactionModuleTest {
     void longUnbrokenTokenStaysLinear() {
         // A base64-style run is the realistic trigger: an unanchored local part can start at every offset,
         // which turns a 250 KB attachment into a quadratic scan and a multi-second response.
-        var token = "QWxpY2VIb3BwZXJCYXJjbGF5c1JlY29uY2lsaWF0aW9u".repeat(6000);
+        var token = "QWxpY2VIb3BwZXJCYXJjbGF5c1JlY29uY2lsaWF0aW9u".repeat(6000); // betterleaks:allow — base64 of plain text
         // rules() carries the anchored local part. The unanchored form takes over 100 seconds on this input,
         // because the match can start at every offset in the token; the anchor is what keeps it linear.
         RedactionContext.set(rules());

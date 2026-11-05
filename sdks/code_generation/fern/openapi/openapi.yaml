@@ -3260,13 +3260,25 @@ paths:
         schema:
           minimum: 1
           type: integer
+          description: "Page size. At most 100 when experiment_ids is omitted, since\
+            \ each item then carries a result per experiment"
           format: int32
           default: 10
       - name: experiment_ids
         in: query
-        required: true
         schema:
           type: string
+          description: "JSON array of experiment IDs. Omit to include every regular\
+            \ experiment on the dataset (optimizer trial, mini-batch and mutation\
+            \ experiments are excluded); item filters are then evaluated against the\
+            \ newest version of each item that those experiments reference"
+      - name: dataset_version
+        in: query
+        schema:
+          type: string
+          description: Dataset version hash or tag. Only experiments run against this
+            version are included. Requires experiment_ids to be omitted. Returns 404
+            if the version does not exist
       - name: filters
         in: query
         schema:
@@ -19292,6 +19304,8 @@ components:
           type: boolean
         thinksByDefault:
           type: boolean
+        onlyRoute:
+          type: string
         routes:
           type: object
           additionalProperties:
@@ -21239,6 +21253,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags
@@ -24053,6 +24070,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags

@@ -31,7 +31,7 @@ chartMigration:
   # Enable this for the first upgrade that includes a migration from Bitnami charts and images
   # After successful migration, set this back to false
   enabled: true
-  image: "alpine/kubectl:1.35.0"
+  image: "alpine/kubectl:1.37.2"
   # Service account name (must have permissions to delete StatefulSets and Deployments)
   serviceAccountName: ""
   # Node selector for the migration job pod (falls back to global nodeSelector if not specified)
@@ -128,7 +128,7 @@ component:
       image:
         registry: docker.io
         repository: curlimages/curl
-        tag: 8.12.1
+        tag: 8.23.0
       # Resource requests/limits for the `wait-for-clickhouse-service` init container.
       # Empty ({}) by default — no resources set.
       resources: {}
@@ -140,7 +140,7 @@ component:
       image:
         registry: docker.io
         repository: busybox
-        tag: 1.36
+        tag: 1.38
       # Resource requests/limits for the `wait-for-mysql-service` init container.
       # Empty ({}) by default — no resources set.
       resources: {}
@@ -177,7 +177,7 @@ component:
       ANALYTICS_DB_USERNAME: "opik"
       ANALYTICS_DB_DATABASE_NAME: "opik"
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"
-      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/ # betterleaks:allow — bundled Redis default
       # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
       # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: "relaxed"
@@ -352,7 +352,7 @@ component:
       image:
         registry: docker.io
         repository: busybox
-        tag: "1.36"
+        tag: "1.38"
       # Resource requests/limits for the `wait-for-redis-service` init container.
       # Empty ({}) by default — no resources set.
       resources: {}
@@ -390,7 +390,7 @@ component:
       # Opik SDK URL for optimizer to reach Java backend
       OPIK_URL_OVERRIDE: "http://opik-backend:8080"
       # Redis URL for Optimization Studio log streaming
-      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/ # betterleaks:allow — bundled Redis default
 
       # ============================================================
       # Optimization Studio Configuration (optional)
@@ -744,7 +744,7 @@ minio:
     size: 50Gi
   auth:
     rootUser: "THAAIOSFODNN7EXAMPLE"
-    rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" # betterleaks:allow — bundled MinIO default
   defaultBuckets: "public:download"
   fullnameOverride: opik-minio
 
@@ -758,7 +758,7 @@ redis:
     enabled: false
   auth:
     enabled: true
-    password: "wFSuJX9nDBdCa25sKZG7bh"
+    password: "wFSuJX9nDBdCa25sKZG7bh" # betterleaks:allow — bundled Redis default
   image:
     registry: docker.io
     repository: redis/redis-stack-server
@@ -789,7 +789,7 @@ altinity-clickhouse-operator:
   crdHook:
     image:
       repository: alpine/kubectl
-      tag: "1.35.0"
+      tag: "1.37.2"
   metrics:
     enabled: false
   serviceMonitor:
@@ -844,14 +844,10 @@ databaseAnalyticsDataModel:
   # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
   # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
   spansDistributedWrapEnabled: false
-  # Register each written span's weekly partition in the span_weeks index. Turn true before the span weeks
-  # backfill starts.
-  spanWeeksWriteEnabled: false
-  # Run the span weeks backfill job. Turn true only once spanWeeksWriteEnabled is live on every backend instance.
+  # Run the span weeks backfill job, which indexes the spans written before span_weeks_mv.
   spanWeeksBackfillEnabled: false
-  # Bound span reads by trace id with the span_weeks index. Effective only with spanWeeksWriteEnabled and
-  # spanColumnsNonNullable; turn true
-  # once the span weeks backfill logs that it is complete.
+  # Bound span reads by trace id with the span_weeks index. Effective only with spanColumnsNonNullable; turn true
+  # once the span weeks backfill has no pending chunk.
   spanWeeksReadEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
@@ -950,9 +946,13 @@ clickhouse:
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
   # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
-  image: altinity/clickhouse-server:26.3.16.10001.altinitystable
+  image: clickhouse/clickhouse-server:26.3.62.3
   storage: 50Gi
   logsLevel: information
+  # -- Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk
+  logsMaxSize: 100M
+  # -- Rotated file logs kept (applies to both the server and error log)
+  logsMaxCount: 3
   # Custom health checks with longer timeouts for major version upgrades
   livenessProbe:
     httpGet:
@@ -1156,7 +1156,7 @@ clickhouse:
       # nameOverride or fullnameOverride: the job is namespace-scoped and finds the
       # operator by its default app.kubernetes.io/name, so it could not bounce it.
       enabled: true
-      image: "alpine/kubectl:1.35.0"
+      image: "alpine/kubectl:1.37.2"
       # Total budget for the whole run (all replicas: operator bounce + rebuild +
       # reschedule + wait Ready), shared across migration and readiness.
       pollTimeoutSeconds: 1200
@@ -1224,7 +1224,7 @@ clickhouse:
       # Backups written by the SQL-based CronJob above cannot be restored by it.
       backupName: ""
       # Override with any image that has bash and curl — the job needs nothing else.
-      image: "amazon/aws-cli:2.27.49"
+      image: "amazon/aws-cli:2.39.3"
       # Hard cap on the job runtime (seconds) so a stuck restore whose status
       # never resolves cannot run forever. Default: 24h.
       activeDeadlineSeconds: 86400
@@ -1241,7 +1241,7 @@ clickhouse:
       tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.7.4
+    image: altinity/clickhouse-backup:2.8.3
     port: 7171
     # -- (object) securityContext of the clickhouse-backup sidecar; it inherits the pod's uid 101,
     # so it needs the same explicit allowPrivilegeEscalation as `clickhouse.securityContext`.
@@ -1342,7 +1342,7 @@ zookeeper:
   image:
     registry: docker.io
     repository: zookeeper
-    tag: "3.9.4"
+    tag: "3.9.6"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   podDisruptionBudget:
