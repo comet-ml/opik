@@ -95,6 +95,24 @@ public interface TopicRunDAO {
     @SqlUpdate("DELETE FROM topic_run_counts WHERE saved_at < :before")
     int deleteCountsSavedBefore(@Bind("before") Instant before);
 
+    /**
+     * The counts of the project's two latest saved runs by {@code saved_at} (then the greater run id), newest run
+     * first; in a run, by rank, Other last. A project keeps at most 11 rows per run for the runs retention.
+     */
+    @SqlQuery("""
+            SELECT c.* FROM topic_run_counts c
+            JOIN (
+                SELECT run_id, MAX(saved_at) AS last_saved_at FROM topic_run_counts
+                WHERE workspace_id = :workspaceId AND project_id = :projectId
+                GROUP BY run_id
+                ORDER BY last_saved_at DESC, run_id DESC
+                LIMIT 2
+            ) last_runs ON last_runs.run_id = c.run_id
+            ORDER BY last_runs.last_saved_at DESC, c.run_id DESC, c.`rank` IS NULL, c.`rank`
+            """)
+    List<TopicRunCount> findLastTwoRunCounts(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
+
     /** A project's counts, oldest run first; in a run, by rank, Other last. */
     @SqlQuery("""
             SELECT * FROM topic_run_counts WHERE project_id = :projectId
@@ -107,6 +125,13 @@ public interface TopicRunDAO {
 
     @SqlQuery("SELECT * FROM topic_runs WHERE project_id = :projectId ORDER BY started_at, run_id")
     List<TopicRun> findByProject(@Bind("projectId") UUID projectId);
+
+    /** The project's saved runs: the topics read API counts only their {@code trace_topics} rows and arrival's. */
+    @SqlQuery("""
+            SELECT run_id FROM topic_runs
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND status = 'saved'
+            """)
+    List<UUID> findSavedRunIds(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     class ModeMapper extends AbstractEnumColumnMapper<TopicRun.Mode> {
         public ModeMapper() {

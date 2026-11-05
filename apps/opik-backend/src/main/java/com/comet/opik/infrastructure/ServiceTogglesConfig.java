@@ -89,6 +89,13 @@ public class ServiceTogglesConfig {
     @Getter(AccessLevel.NONE)
     boolean customChartsEnabledForWorkspace;
 
+    // Set per request by the toggles endpoint from topics.enabled, never from config, like
+    // customChartsEnabledForWorkspace. False means the topics read API answers 501.
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @With
+    @Getter(AccessLevel.NONE)
+    boolean topicsEnabled;
+
     @JsonIgnore
     public boolean isAgentInsightsActive() {
         return ollieEnabled && agentInsightsEnabled;

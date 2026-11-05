@@ -88,6 +88,9 @@ class TopicsRebuildServiceTest {
         when(runDAO.markSaved(any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         when(traceTopicsDAO.deleteByRunId(anyString(), any(), any())).thenReturn(Mono.just(0L));
+        // Every trace of the window is one Logs lists.
+        when(traceTopicsDAO.findLogsTraceIds(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
+                .thenReturn(Mono.just(window().stream().map(TopicWindowRow::traceId).collect(Collectors.toSet())));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
@@ -383,7 +386,7 @@ class TopicsRebuildServiceTest {
         ArgumentCaptor<List<TraceTopic>> labels = ArgumentCaptor.forClass(List.class);
         verify(traceTopicsDAO).insert(labels.capture());
         when(topicDAO.findStates(any())).thenReturn(List.of(state.getValue()));
-        when(topicDAO.findLive(projectId)).thenReturn(topics.getValue());
+        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(topics.getValue());
         when(topicDAO.findPrototypes(projectId)).thenReturn(prototypes.getValue());
         when(topicDAO.updateState(any(), eq(runId))).thenReturn(1);
         var previous = labels.getValue().stream()

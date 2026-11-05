@@ -25,6 +25,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,6 +47,7 @@ public class FiltersFactory {
                                     && Arrays.stream(filter.value().split(","))
                                             .map(String::trim)
                                             .anyMatch(StringUtils::isNotEmpty))
+                    .put(FieldType.TOPIC_ID, FiltersFactory::isTopicIds)
                     .put(FieldType.STRING_STATE_DB, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.ENUM, filter ->
                     // No value is required for IS_EMPTY / IS_NOT_EMPTY (e.g. "Untagged" environment filter).
@@ -177,6 +179,23 @@ public class FiltersFactory {
 
     private boolean validateFieldType(Filter filter) {
         return FIELD_TYPE_VALIDATION_MAP.get(filter.field().getType()).apply(filter);
+    }
+
+    /** One topic id, or for in and not_in a comma-separated list of at least one. */
+    private static boolean isTopicIds(Filter filter) {
+        if (StringUtils.isBlank(filter.value())) {
+            return false;
+        }
+        var values = Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())
+                ? Arrays.stream(filter.value().split(",")).map(String::trim).filter(StringUtils::isNotEmpty).toList()
+                : List.of(filter.value());
+        try {
+            values.forEach(UUID::fromString);
+            return !values.isEmpty();
+        } catch (IllegalArgumentException exception) {
+            log.warn("Invalid topic id in '{}'", filter.value(), exception);
+            return false;
+        }
     }
 
     public <T extends Filter> T mapCustom(T filter) {

@@ -13,6 +13,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -34,12 +35,13 @@ public interface TopicDAO {
             """)
     void insertTopics(@BindMethods List<Topic> topics);
 
+    /** The project's live topics, in the saved list's order: born, then id. */
     @SqlQuery("""
             SELECT * FROM topics
-            WHERE project_id = :projectId AND retired_at IS NULL
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND retired_at IS NULL
             ORDER BY born, id
             """)
-    List<Topic> findLive(@Bind("projectId") UUID projectId);
+    List<Topic> findLive(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     /** The topics a nightly update may revive: retired on or after {@code since} by one of {@code reasons}. */
     @SqlQuery("""
@@ -116,6 +118,11 @@ public interface TopicDAO {
     @SqlQuery("SELECT * FROM topic_project_states WHERE project_id IN (<projectIds>)")
     List<TopicProjectState> findStates(
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
+    /** The topics read API's read: empty for a project with no saved run or of another workspace. */
+    @SqlQuery("SELECT * FROM topic_project_states WHERE workspace_id = :workspaceId AND project_id = :projectId")
+    Optional<TopicProjectState> findState(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
 
     /** Holds a shared lock on the project's row until the transaction ends, so a project delete waits for it. */
     @SqlQuery("SELECT COUNT(*) FROM projects WHERE workspace_id = :workspaceId AND id = :projectId FOR SHARE")

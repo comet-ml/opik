@@ -1,8 +1,11 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -17,8 +20,9 @@ import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_T
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The nightly job's metrics. Every metric of one workspace's work carries {@code workspace_id} and
- * {@code workspace_name}; only {@code topics.nightly.budget_used_seconds}, a whole night's, has neither.
+ * The nightly job's and the read API's metrics. Every metric of one workspace's work carries {@code workspace_id} and
+ * {@code workspace_name}; {@code topics.nightly.budget_used_seconds}, a whole night's, has neither, nor has
+ * {@code topics.api.duration_seconds}, where every caller's workspace would add series.
  */
 @Singleton
 public class TopicsMetrics {
@@ -41,6 +45,8 @@ public class TopicsMetrics {
     static final String ERROR_START_FAILED = "start_failed";
     /** Housekeeping failed a run its pod left {@code running}: the code {@code TopicRunDAO.failAbandoned} writes. */
     static final String ERROR_ABANDONED = "abandoned";
+    /** The read API's status of a failed request, beside ready, collecting and disabled. */
+    static final String API_STATUS_ERROR = "error";
 
     private static final AttributeKey<String> DECISION = stringKey("decision");
     private static final AttributeKey<String> REASON = stringKey("reason");
@@ -67,6 +73,8 @@ public class TopicsMetrics {
     private final LongCounter countFailures;
     private final LongCounter takeBackFailures;
     private final DoubleHistogram otherShare;
+    private final DoubleHistogram apiDuration;
+    private final LongCounter apiStale;
 
     @Inject
     public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
@@ -134,6 +142,15 @@ public class TopicsMetrics {
                 .setDescription("Share of a saved run's window traces labelled Other, the stats.other_share of its "
                         + "topic_runs row")
                 .build();
+        this.apiDuration = meter.histogramBuilder("topics.api.duration_seconds").setUnit("s")
+                .setDescription("Duration of a topics read API request after its project check, by status: ready, "
+                        + "collecting, disabled, error")
+                .build();
+        this.apiStale = meter.counterBuilder("topics.api.stale_traces")
+                .setDescription("Traces a topics read API response counted as Other because their topic is no "
+                        + "longer live: an arrival before a night, a trace past the night's maxVectors, or a night "
+                        + "that saved during the request")
+                .build();
     }
 
     /** {@code reason} is null for a decision other than skip. */
@@ -198,5 +215,16 @@ public class TopicsMetrics {
 
     void budgetUsed(@NonNull Duration duration) {
         budgetUsed.record(duration.toNanos() / 1e9);
+    }
+
+    /** {@code status} is null for a request that failed, recorded as {@code error}. */
+    void apiRequest(ProjectTopics.Status status, @NonNull Duration duration) {
+        apiDuration.record(duration.toNanos() / 1e9,
+                Attributes.of(STATUS, status == null ? API_STATUS_ERROR : status.getValue()));
+    }
+
+    /** {@code workspace} holds both workspace attributes, with the name the request came with. */
+    void apiStale(@NonNull AttributesBuilder workspace, long traces) {
+        apiStale.add(traces, workspace.build());
     }
 }

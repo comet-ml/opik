@@ -102,13 +102,9 @@ public class TopicWindowDAO {
     /** The newest {@code limit} traces of the project created in {@code [from, to)}, in no particular order. */
     public Flux<TopicWindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
-        // The guards of the vectors job's window read: validated config numbers, never input.
-        var find = config.getVectors().getFind();
-        var template = getSTWithLogComment(READ_WINDOW, "topics:read_window", workspaceId, null,
-                "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit))
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
-                .add("max_execution_time", maxExecutionSeconds);
+        var template = TopicsQueryGuards.windowRead(getSTWithLogComment(READ_WINDOW, "topics:read_window",
+                workspaceId, null, "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit)),
+                config, maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)

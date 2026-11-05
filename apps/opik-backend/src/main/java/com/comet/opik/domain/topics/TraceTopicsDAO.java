@@ -1,27 +1,42 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.Source;
+import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.domain.TraceSearchCriteria;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -73,6 +88,94 @@ public class TraceTopicsDAO {
             GROUP BY topic_id
             SETTINGS log_comment = '<log_comment>'
             """;
+
+    /**
+     * The ids of the project's traces created in the window that the Logs page lists: its default filters,
+     * {@code source = sdk} (with the {@code unknown} rows from before sources, {@link Source#legacyFallbackDbValue})
+     * and {@code visibility_mode = default}. Topics are built from every labelled trace, but the read API and a saved
+     * run's counts count only these, so a topic's count is the number of traces Logs lists for it. Any version of a
+     * trace that matches keeps it, as in the traces list.
+     */
+    private static final String LOGS_TRACE_IDS = """
+            SELECT id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+            AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND source IN ('%s', '%s')
+            AND visibility_mode = '%s'
+            """.formatted(Source.SDK.getValue(), Source.UNKNOWN_VALUE, VisibilityMode.DEFAULT.getValue());
+
+    /**
+     * Traces per topic and UTC day among the project's traces created in the window that Logs lists
+     * ({@link #LOGS_TRACE_IDS}), each by its latest row. Rows of runs that did not save are skipped before the dedupe,
+     * so their trace counts by its earlier row. The latest row is the greatest (updated_at, run_id), as ORDER BY ...
+     * LIMIT 1 BY picks it; argMax ran 4 times faster on unmerged parts, in a sixth of the memory.
+     */
+    private static final String COUNT_BY_TOPIC_AND_DAY = """
+            SELECT latest_topic AS topic_id, toDate(created_at, 'UTC') AS day, count() AS traces
+            FROM (
+                SELECT argMax(topic_id, (updated_at, run_id)) AS latest_topic, any(trace_created_at) AS created_at
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND (source = 'arrival' <if(saved_run_ids)> OR run_id IN :saved_run_ids <endif>)
+                AND trace_id IN (""" + LOGS_TRACE_IDS + """
+                )
+                GROUP BY trace_id
+            )
+            GROUP BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
+
+    /** {@link #LOGS_TRACE_IDS}, read for a night's counts. */
+    private static final String FIND_LOGS_TRACE_IDS = LOGS_TRACE_IDS + """
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * The ids of the project's traces whose topic matches {@code <topic_filters>}, the TOPICS filter strategy on
+     * {@code topic}: the traces filter by topic. A trace's topic is its latest arrival row or row of a saved run, as in
+     * {@link #COUNT_BY_TOPIC_AND_DAY}, and a topic that is no longer live is Other. A trace with no such row has no
+     * topic, so no operator keeps it, {@code !=} and {@code not_in} included. The search's time window, cursor and
+     * {@code created_at} ranges bound the read to the traces the search can return; they never split a trace's rows,
+     * which all share its id and its {@code trace_created_at}.
+     */
+    private static final String TRACE_IDS_BY_TOPIC = """
+            SELECT trace_id
+            FROM (
+                SELECT trace_id, argMax(topic_id, (updated_at, run_id)) AS latest_topic,
+                    if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :topic_project_id
+                <if(created_at_bounds)> AND <created_at_bounds> <endif>
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                <if(last_received_id)> AND trace_id \\< :last_received_id
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                AND (source = 'arrival' <if(saved_run_ids)> OR run_id IN :topic_saved_run_ids <endif>)
+                GROUP BY trace_id
+            )
+            WHERE <topic_filters>
+            """;
+
+    /** {@link #TRACE_IDS_BY_TOPIC}'s bound per {@code created_at} range operator, on the filter's parameter. */
+    private static final Map<Operator, String> CREATED_AT_BOUNDS = Map.of(
+            Operator.GREATER_THAN, "trace_created_at >= toStartOfSecond(parseDateTime64BestEffort(:filter%d, 9))",
+            Operator.GREATER_THAN_EQUAL, "trace_created_at >= toStartOfSecond(parseDateTime64BestEffort(:filter%d, 9))",
+            Operator.LESS_THAN, "trace_created_at < parseDateTime64BestEffort(:filter%d, 9)",
+            Operator.LESS_THAN_EQUAL, "trace_created_at <= parseDateTime64BestEffort(:filter%d, 9)");
 
     /** The latest topic of each of the project's traces created in the window. */
     private static final String FIND_LABELS = """
@@ -150,6 +253,7 @@ public class TraceTopicsDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
+    private final @NonNull @Config("topics") TopicsConfig config;
 
     public Mono<Long> insert(List<TraceTopic> rows) {
         if (CollectionUtils.isEmpty(rows)) {
@@ -212,6 +316,116 @@ public class TraceTopicsDAO {
                         UUID.fromString(row.get("topic_id", String.class)),
                         ((Number) row.get("traces", Object.class)).longValue())))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    /**
+     * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
+     * created in {@code [from, to)}. A trace counts by its latest arrival row or row of a run in {@code savedRunIds}.
+     * Under the window read's guards.
+     */
+    public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, @NonNull Collection<UUID> savedRunIds,
+            long maxExecutionSeconds) {
+        var template = TopicsQueryGuards.windowRead(getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY,
+                "topics:count_by_topic_and_day", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, saved_runs=%d".formatted(projectId, from, to, savedRunIds.size())),
+                config, maxExecutionSeconds);
+        if (!savedRunIds.isEmpty()) {
+            template.add("saved_run_ids", true);
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId.toString())
+                            .bind("from_micros", toEpochMicros(from))
+                            .bind("to_micros", toEpochMicros(to));
+                    if (!savedRunIds.isEmpty()) {
+                        statement.bind("saved_run_ids",
+                                savedRunIds.stream().map(UUID::toString).toArray(String[]::new));
+                    }
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, metadata) -> TopicDayCount.builder()
+                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
+                        .day(row.get("day", LocalDate.class))
+                        .traces(((Number) row.get("traces", Object.class)).longValue())
+                        .build()));
+    }
+
+    /**
+     * The project's traces created in {@code [from, to)} that the Logs page lists ({@link #LOGS_TRACE_IDS}), for a
+     * saved run's counts. Under the window read's guards.
+     */
+    public Mono<Set<UUID>> findLogsTraceIds(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
+        var template = TopicsQueryGuards.windowRead(getSTWithLogComment(FIND_LOGS_TRACE_IDS,
+                "topics:find_logs_trace_ids", workspaceId, null,
+                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to)), config, maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("from_micros", toEpochMicros(from))
+                        .bind("to_micros", toEpochMicros(to))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(row.get("id", String.class))))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * {@link #TRACE_IDS_BY_TOPIC} for a trace search with a filter by topic, to bind with {@link #bindTraceIdsByTopic}.
+     * The search's {@code topicScope} must be set: the trace service reads it from MySQL before the search.
+     */
+    public static String traceIdsByTopic(@NonNull String topicFilters, @NonNull TraceSearchCriteria criteria) {
+        var scope = scopeOf(criteria);
+        var template = TemplateUtils.newST(TRACE_IDS_BY_TOPIC).add("topic_filters", topicFilters);
+        if (!scope.savedRunIds().isEmpty()) {
+            template.add("saved_run_ids", true);
+        }
+        Optional.ofNullable(criteria.uuidFromTime()).ifPresent(id -> template.add("uuid_from_time", true));
+        Optional.ofNullable(criteria.uuidToTime()).ifPresent(id -> template.add("uuid_to_time", true));
+        Optional.ofNullable(criteria.lastReceivedId()).ifPresent(id -> template.add("last_received_id", true));
+        createdAtBounds(criteria.filters()).ifPresent(bounds -> template.add("created_at_bounds", bounds));
+        return template.render();
+    }
+
+    /**
+     * The search's {@code created_at} range filters as bounds on {@code trace_created_at}, so the minmax index
+     * {@code idx_trace_created_at} skips the rows of traces outside them: with no time window, the subquery would
+     * otherwise read the project's whole history. Each bound reads its filter's own parameter, which the TRACE
+     * strategy binds. A lower bound goes down to the second, as {@code trace_created_at} keeps microseconds and a
+     * filter value can have more: the subquery must keep every trace the list keeps.
+     */
+    private static Optional<String> createdAtBounds(List<? extends Filter> filters) {
+        if (filters == null) {
+            return Optional.empty();
+        }
+        var bounds = IntStream.range(0, filters.size())
+                .filter(i -> filters.get(i).field() == TraceField.CREATED_AT
+                        && CREATED_AT_BOUNDS.containsKey(filters.get(i).operator()))
+                .mapToObj(i -> CREATED_AT_BOUNDS.get(filters.get(i).operator()).formatted(i))
+                .toList();
+        return bounds.isEmpty() ? Optional.empty() : Optional.of(String.join(" AND ", bounds));
+    }
+
+    /**
+     * Binds the values {@link #traceIdsByTopic} adds. The workspace, the time window and the cursor are bound by the
+     * search itself.
+     */
+    public static void bindTraceIdsByTopic(@NonNull Statement statement, @NonNull TraceSearchCriteria criteria) {
+        var scope = scopeOf(criteria);
+        statement.bind("topic_project_id", criteria.projectId().toString())
+                .bind("topic_live_ids", scope.liveIds().toArray(String[]::new));
+        if (!scope.savedRunIds().isEmpty()) {
+            statement.bind("topic_saved_run_ids", scope.savedRunIdStrings().toArray(String[]::new));
+        }
+    }
+
+    private static TopicReadScope scopeOf(TraceSearchCriteria criteria) {
+        Preconditions.checkState(criteria.projectId() != null && criteria.topicScope() != null,
+                "A trace search filtered by topic needs its project and the project's topic scope");
+        return criteria.topicScope();
     }
 
     /**
@@ -336,5 +550,9 @@ public class TraceTopicsDAO {
 
     private static long toEpochMicros(Instant instant) {
         return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
+    }
+
+    @Builder(toBuilder = true)
+    public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
     }
 }

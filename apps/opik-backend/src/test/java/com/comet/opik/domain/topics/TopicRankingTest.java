@@ -43,7 +43,8 @@ class TopicRankingTest {
         var small = topic("00000000-0000-0000-0000-000000000001", BORN, 10, null);
         var large = topic("00000000-0000-0000-0000-000000000002", BORN, 70, null);
 
-        var counts = TopicRanking.runCounts(runId, WORKSPACE_ID, PROJECT_ID, List.of(small, large), 20, savedAt);
+        var counts = TopicRanking.runCounts(runId, WORKSPACE_ID, PROJECT_ID, List.of(small, large), Topic::size, 20,
+                savedAt);
 
         var row = TopicRunCount.builder().runId(runId).workspaceId(WORKSPACE_ID).projectId(PROJECT_ID)
                 .savedAt(savedAt);
@@ -51,6 +52,25 @@ class TopicRankingTest {
                 row.topicId(large.id()).traces(70).rank(1).build(),
                 row.topicId(small.id()).traces(10).rank(2).build(),
                 row.topicId(TraceTopic.OTHER).traces(20).rank(null).build()));
+    }
+
+    @Test
+    @DisplayName("a run's counts rank by the counts given, not by size: the night gives the traces Logs lists")
+    void runCountsByCountsGiven() {
+        var runId = UUID.randomUUID();
+        var savedAt = Instant.parse("2026-11-02T02:10:00Z");
+        var small = topic("00000000-0000-0000-0000-000000000001", BORN, 10, null);
+        var large = topic("00000000-0000-0000-0000-000000000002", BORN, 70, null);
+
+        var counts = TopicRanking.runCounts(runId, WORKSPACE_ID, PROJECT_ID, List.of(small, large),
+                topic -> topic.equals(small) ? 8 : 5, 3, savedAt);
+
+        var row = TopicRunCount.builder().runId(runId).workspaceId(WORKSPACE_ID).projectId(PROJECT_ID)
+                .savedAt(savedAt);
+        assertThat(counts).usingRecursiveComparison().isEqualTo(List.of(
+                row.topicId(small.id()).traces(8).rank(1).build(),
+                row.topicId(large.id()).traces(5).rank(2).build(),
+                row.topicId(TraceTopic.OTHER).traces(3).rank(null).build()));
     }
 
     private static Topic topic(String id, LocalDate born, int size, LocalDate inactiveSince) {

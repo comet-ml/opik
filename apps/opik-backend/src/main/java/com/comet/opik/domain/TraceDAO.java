@@ -1569,6 +1569,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                <if(topic_trace_ids)> AND id IN (<topic_trace_ids>) <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT entity_id
@@ -2109,6 +2110,7 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                     <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                    <if(topic_trace_ids)> AND id IN (<topic_trace_ids>) <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
                         SELECT entity_id
@@ -3012,6 +3014,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                <if(topic_trace_ids)> AND id IN (<topic_trace_ids>) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -3405,6 +3408,7 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                <if(topic_trace_ids)> AND id IN (<topic_trace_ids>) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -5180,6 +5184,7 @@ class TraceDAOImpl implements TraceDAO {
                 || template.getAttribute("span_feedback_scores_filters") != null
                 || template.getAttribute("trace_aggregation_filters") != null
                 || template.getAttribute("experiment_filters") != null
+                || template.getAttribute("topic_trace_ids") != null
                 || template.getAttribute("feedback_scores_empty_filters") != null
                 || template.getAttribute("span_feedback_scores_empty_filters") != null
                 || template.getAttribute("guardrails_filters") != null;
