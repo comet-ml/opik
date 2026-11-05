@@ -88,6 +88,97 @@ export class TracePanelPage {
     return this.root.getByText(new RegExp(`^Spans\\s*\\(${n}\\)$`)).first();
   }
 
+  // --- The detail toolbar's "Open in Playground" action (opik#8725) ---
+
+  /**
+   * The toolbar's always-present "Add to" control.
+   *
+   * The anchor for every ABSENCE assertion about the toolbar. `TraceDetailsToolbar`
+   * renders a `Skeleton` and nothing else while `isLoading`, and only the Play
+   * button is conditional on the selection being an LLM span with messages — so
+   * "the Play button has count 0" is also true of a toolbar that has not
+   * rendered yet. Waiting on this first is what makes the absence a verdict.
+   */
+  get toolbarAddToButton(): Locator {
+    return this.root.getByRole('button', { name: 'Add to' });
+  }
+
+  /**
+   * The Play ("Open in Playground") toolbar action.
+   *
+   * By its `aria-label`, which `OpenSpanInPlaygroundButton` sets explicitly —
+   * the button renders a bare `lucide-play` icon and its "Open in Playground"
+   * text lives in a Radix `TooltipContent`, so the accessible name is the only
+   * stable handle and no `data-testid` is needed.
+   *
+   * Rendered only when the SELECTED entity is an `llm` span whose input
+   * `detectLLMMessages` can read (`canOpenSpanInPlayground`), the viewer can use
+   * the Playground, and the host does not pass `hideAnnotateActions` — so a
+   * caller asserting it is gone wants `toHaveCount(0)` rather than
+   * `toBeHidden()`: the two are different claims and only the first is the one
+   * this component makes.
+   */
+  get openInPlaygroundButton(): Locator {
+    return this.root.getByRole('button', { name: 'Open in Playground' });
+  }
+
+  /**
+   * Wait until the toolbar has finished rendering its actions.
+   *
+   * Resolves on "Add to" rather than on the Play button, so the same wait serves
+   * the cases where Play must be absent. The Play button is additionally
+   * `disabled` while the provider keys and the model catalog are still loading
+   * (`isPendingProviderKeys || isPendingModels`), which is why
+   * {@link clickOpenInPlayground} waits for it to be enabled rather than
+   * clicking whatever is there.
+   */
+  async waitForToolbarReady(): Promise<void> {
+    return test.step('Wait for the trace panel toolbar actions to render', async () => {
+      await expect(
+        this.toolbarAddToButton,
+        'the toolbar rendered its actions — so a missing Play button is a verdict, not a race',
+      ).toHaveCount(1, { timeout: 30_000 });
+    });
+  }
+
+  /**
+   * Press Play, and resolve once the click has been taken.
+   *
+   * Deliberately does NOT wait for a navigation or for the confirm dialog: which
+   * of the two happens is decided by `isPlaygroundEmpty`, and that choice is
+   * exactly what the specs using this assert. A caller states its own
+   * expectation afterwards.
+   *
+   * The enabled wait is not optional. The button is `disabled` until the
+   * provider keys and the model catalog have loaded, and a click on a disabled
+   * button is silently swallowed by Playwright's actionability wait only until
+   * the action timeout — after which the failure names the click rather than the
+   * catalog.
+   */
+  async clickOpenInPlayground(): Promise<void> {
+    return test.step('Press Open in Playground', async () => {
+      const button = this.openInPlaygroundButton;
+      await expect(button, 'exactly one Play action in the toolbar').toHaveCount(1);
+      await expect(
+        button,
+        'the Play action is enabled — it stays disabled until the model catalog has loaded',
+      ).toBeEnabled({ timeout: 30_000 });
+      await button.click();
+    });
+  }
+
+  /**
+   * The "Load span messages" confirmation, by its own title.
+   *
+   * Raised instead of loading when the Playground already holds work
+   * (`isPlaygroundEmpty` false). Scoped by title rather than taken as "the
+   * dialog", so a spec asserting it did NOT appear cannot be satisfied by some
+   * other dialog being absent.
+   */
+  get loadSpanConfirmDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Load span messages' });
+  }
+
   /** A node in the span tree, keyed by the span/trace name. */
   spanTreeNode(name: string): Locator {
     return this.root.getByTestId(`trace-tree-node-${name}`);

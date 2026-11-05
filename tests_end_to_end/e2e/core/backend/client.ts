@@ -2556,6 +2556,58 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       });
     },
 
+    /**
+     * `POST /v1/private/projects` reporting its own status and error envelope
+     * instead of throwing.
+     *
+     * The typed `createProject` above raises on any non-2xx and surfaces
+     * neither the status nor the body, so it cannot express a spec whose
+     * subject IS the refusal. And the refusal's envelope is the contract here:
+     * bean-validation failures answer `{"errors":[…]}` (opik#9308 put a
+     * `@Size` on `Project.name`), while the rest of this API answers
+     * `{"message":…}` — a difference the frontend's own error reader is
+     * sensitive to, so a spec about what the user is told has to be able to see
+     * which one came back.
+     *
+     * Neither `errors` nor `message` is defaulted, and both are `null` when the
+     * body did not carry that key — never `[]` and never `''`. "The response
+     * said nothing" and "the response said this" are different answers, and
+     * collapsing them would let the first satisfy a comparison; which of the two
+     * keys came back is itself the thing a spec about the user's feedback is
+     * asserting, because `useProjectCreateMutation` reads only `message`.
+     */
+    async createProjectRaw(
+      name: string,
+      description?: string,
+    ): Promise<{
+      status: number;
+      /** The `errors` array of a bean-validation refusal, or null. */
+      errors: string[] | null;
+      /** The body's own `message` field, or null when it carried none. */
+      message: string | null;
+      /** The raw response body, for a failure message that names what came back. */
+      body: string;
+      location: string | null;
+    }> {
+      const { status, message, json, location } = await rawFetch(
+        'POST',
+        '/v1/private/projects',
+        { body: { name, ...(description ? { description } : {}) } },
+      );
+      const raw = (json as { errors?: unknown } | null)?.errors;
+      const envelope = (json as { message?: unknown } | null)?.message;
+      return {
+        status,
+        errors:
+          Array.isArray(raw) && raw.every((e) => typeof e === 'string') ? (raw as string[]) : null,
+        message: typeof envelope === 'string' ? envelope : null,
+        // `rawFetch` falls back to the whole body text when there is no
+        // `message` field, which is exactly what a diagnostic wants here.
+        body: message,
+        location: location ?? null,
+      };
+    },
+
     async deleteProject(id: string): Promise<void> {
       try {
         await opik.api.projects.deleteProjectById(id);
@@ -6803,6 +6855,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * filter on `first_message`/`last_message` sends the read down the full-scan
      * copy instead. Both copies carry their own rendering of the search clause,
      * so a spec that only ever read unsorted has exercised one of them.
+     *
+     * `truncate` is a FIFTH branch, and the one the Threads TABLE actually asks
+     * for (`ThreadsTab` passes the workspace's `truncation_on_tables`, default
+     * on). It selects a different pair of columns — `truncated_first_message` /
+     * `truncated_last_message` plus the `*_length >= *_truncation_threshold`
+     * flags — and those flags change the SHAPE of what comes back: a message at
+     * or over the threshold is serialised as a JSON *string* holding the capped
+     * prefix, while a shorter one comes back as the parsed object. Not defaulted
+     * here, so sending nothing stays a distinguishable request from sending
+     * `false`.
      */
     async listThreads(
       args: {
@@ -6812,6 +6874,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         sorting?: BackendSort[];
         page?: number;
         size?: number;
+        truncate?: boolean;
       } & ReadWindow,
     ): Promise<{ total: number; threads: ThreadRowRef[] }> {
       const page = await opik.api.traces.getTraceThreads({
@@ -6821,6 +6884,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
         ...(args.search === undefined ? {} : { search: args.search }),
         ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+        ...(args.truncate === undefined ? {} : { truncate: args.truncate }),
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
         ...(args.toTime ? { toTime: args.toTime } : {}),
       });

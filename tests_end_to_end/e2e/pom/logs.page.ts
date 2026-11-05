@@ -612,6 +612,48 @@ export class LogsPage {
   }
 
   /**
+   * Open the trace panel with one SPAN already selected, by URL.
+   *
+   * Distinct from `openTraceById` plus `TracePanelPage.selectSpan`, which
+   * reaches the same state by clicking through the span tree. Two things need
+   * the URL form:
+   *
+   *  - the span-selected toolbar renders differently from the trace-selected one
+   *    (`dataToView` is the span), and a spec enumerating that difference over
+   *    several spans wants each one reached from a clean document rather than
+   *    from whatever the previous selection left behind;
+   *  - `logsType` decides which table the panel is opened OVER, and it is
+   *    persisted per project — so "the panel behaves the same on the Threads tab
+   *    as on the Traces tab" is only expressible by stating the param.
+   *
+   * `projectId` is taken explicitly rather than from a previous `goto`, because
+   * this is itself the first navigation in the specs that use it.
+   */
+  async openSpanById(
+    projectId: string,
+    traceId: string,
+    spanId: string,
+    opts: { logsType?: 'traces' | 'threads' } = {},
+  ): Promise<TracePanelPage> {
+    return test.step(
+      `Open span ${spanId} of trace ${traceId} over the ${opts.logsType ?? 'traces'} tab`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({
+          logsType: opts.logsType ?? 'traces',
+          trace: traceId,
+          span: spanId,
+        });
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+        return new TracePanelPage(this.page, traceId);
+      },
+    );
+  }
+
+  /**
    * Open a trace by clicking its row, the way a user reaches one.
    *
    * Distinct from {@link openTraceById}, which navigates to the trace's URL and
