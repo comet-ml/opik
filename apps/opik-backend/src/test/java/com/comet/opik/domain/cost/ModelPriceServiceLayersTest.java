@@ -3,9 +3,12 @@ package com.comet.opik.domain.cost;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
@@ -76,5 +79,24 @@ class ModelPriceServiceLayersTest {
                 .thenAwait(ModelPriceServiceImpl.LOAD_TIMEOUT)
                 .expectNext(PriceLayers.LOAD_FAILED)
                 .verifyComplete();
+    }
+
+    @Test
+    void loadFailureWithABlankWorkspaceNameIsLabelledWithTheWorkspaceId() {
+        var attributes = ModelPriceServiceImpl.loadFailureAttributes(new IllegalStateException("down"),
+                Context.of(RequestContext.WORKSPACE_ID, "workspace-1", RequestContext.WORKSPACE_NAME, ""));
+
+        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_ID_KEY)).isEqualTo("workspace-1");
+        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_NAME_KEY)).isEqualTo("workspace-1");
+        assertThat(attributes.get(ErrorMetricsResolver.ERROR_TYPE_KEY)).isEqualTo("IllegalStateException");
+    }
+
+    @Test
+    void loadFailureWithoutAWorkspaceIsLabelledUnknown() {
+        var attributes = ModelPriceServiceImpl.loadFailureAttributes(new IllegalStateException("down"),
+                Context.empty());
+
+        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_ID_KEY)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
+        assertThat(attributes.get(ErrorMetricsResolver.WORKSPACE_NAME_KEY)).isEqualTo(ErrorMetricsResolver.UNKNOWN);
     }
 }

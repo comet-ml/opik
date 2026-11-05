@@ -123,6 +123,7 @@ public class SpanDAO {
     // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
     // total_estimated_cost_version comes from the row the cost comes from: a 0 cost can carry a version now (a free
     // organization row, a failed price load), so picking the two separately could label a cost with another's version.
+    // When both costs are 0 the cost is the same either way, so the version that says how it was priced wins.
     private static final String INSERT = """
             INSERT INTO spans (
                 id,
@@ -214,6 +215,8 @@ public class SpanDAO {
                 ) as total_estimated_cost,
                 multiIf(
                     old_span.total_estimated_cost > 0, old_span.total_estimated_cost_version,
+                    new_span.total_estimated_cost > 0, new_span.total_estimated_cost_version,
+                    notEmpty(old_span.total_estimated_cost_version), old_span.total_estimated_cost_version,
                     new_span.total_estimated_cost_version
                 ) as total_estimated_cost_version,
                 multiIf(
@@ -472,7 +475,8 @@ public class SpanDAO {
                 multiIf(
                     new_span.total_estimated_cost > 0, new_span.total_estimated_cost_version,
                     old_span.total_estimated_cost > 0, old_span.total_estimated_cost_version,
-                    new_span.total_estimated_cost_version
+                    notEmpty(new_span.total_estimated_cost_version), new_span.total_estimated_cost_version,
+                    old_span.total_estimated_cost_version
                 ) as total_estimated_cost_version,
                 multiIf(
                     notEmpty(new_span.tags), new_span.tags,

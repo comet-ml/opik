@@ -221,6 +221,23 @@ class SpanOrganizationPricesTest {
     }
 
     @Test
+    void createWithoutUsageAfterAFreeUpdateKeepsTheOrganizationsVersion() {
+        var span = span("aide-free", "openai", null);
+        spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                .projectName(span.projectName())
+                .traceId(span.traceId())
+                .parentSpanId(span.parentSpanId())
+                .model("aide-free")
+                .provider("openai")
+                .usage(ONE_MILLION_IN_100K_OUT)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+
+        assertCost(storedCost(span.id()), "0", organizationVersion);
+    }
+
+    @Test
     void updateThatAddsUsageIsPricedOnceWithTheOrganizationsRow() {
         var span = span("gpt-5-mini", "openai", null);
         spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
