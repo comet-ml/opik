@@ -59,8 +59,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * workspace permission." Like the exclusion list in
  * {@link com.comet.opik.infrastructure.redaction.RedactionCoverageArchTest}, it is meant to be awkward to
  * extend: <b>adding an entry is a decision that any workspace member may call that endpoint</b>, and it needs
- * a comment saying why. It holds one entry, {@code checkAccess}, where demanding a permission would be
- * circular. All 85 others were reviewed once (see below) and none qualified.</li>
+ * a comment saying why. Of the seeded endpoints, only {@code checkAccess} qualified, where demanding a permission
+ * would be circular. All 85 others were reviewed once (see below).</li>
  * </ul>
  * Note that liveness and version endpoints ({@code /is-alive}, {@code /ping}, {@code /ver}) need neither list:
  * they live in {@code infrastructure.health}, outside this rule's package scope, and are reads besides.
@@ -103,8 +103,7 @@ class RequiredPermissionsCoverageArchTest {
             "AuthenticationResource.checkAccess",
             // Answers 501 until guardrail checks are implemented. It will run checks on the caller's text and write
             // nothing; its gate is not a workspace role but the organization's guardrails enablement, behind a
-            // backend toggle. Any member of an enabled workspace may call it, as any member may log the traces the
-            // checks belong to.
+            // backend toggle, so any member of an enabled workspace may call it.
             "GuardrailsResource.validateGuardrails");
 
     /**
