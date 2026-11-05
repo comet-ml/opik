@@ -18,6 +18,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -218,6 +219,30 @@ class GuardrailPoliciesResourceTest {
                 rule(GuardrailType.TOPIC, "{\"allowed_topics\":[\"billing\",\"shipping\"]}"),
                 rule(GuardrailType.PII, "{\"entities\":[\"EMAIL_ADDRESS\"]}"),
                 rule(GuardrailType.PROMPT_INJECTION, "{}"));
+    }
+
+    Stream<Arguments> writes() {
+        var id = "/" + randomUUID();
+        return Stream.of(
+                Arguments.of("create", "", (Function<Invocation.Builder, Response>) builder -> builder
+                        .post(Entity.json(piiPolicy("support-bot")))),
+                Arguments.of("update", id, (Function<Invocation.Builder, Response>) builder -> builder
+                        .put(Entity.json(piiPolicy("support-bot")))),
+                Arguments.of("delete", id, (Function<Invocation.Builder, Response>) Invocation.Builder::delete));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("writes")
+    @DisplayName("writing a policy needs the workspace settings permission")
+    void writeWithoutWorkspaceSettingsPermissionIsForbidden(String endpoint, String path,
+            Function<Invocation.Builder, Response> call) {
+        var workspace = new Workspace(randomUUID().toString(), randomUUID().toString());
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), workspace.apiKey(), workspace.name(),
+                WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+
+        try (var response = call.apply(request(workspace, path))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
     }
 
     @Test

@@ -22,7 +22,8 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GuardrailPolicy(
         @JsonView({
-                GuardrailPolicy.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+                GuardrailPolicy.View.Public.class,
+                GuardrailPolicy.View.Write.class}) @Schema(description = "Optional on create, generated when missing, as for prompts and datasets. Ignored on update, where the path names the policy") UUID id,
         @JsonView({GuardrailPolicy.View.Public.class,
                 GuardrailPolicy.View.Write.class}) @Schema(description = "The SDK names policies by name, so it is unique in the workspace, ignoring case") @NotBlank @Size(max = 255, message = "name cannot exceed 255 characters") String name,
         @JsonView({GuardrailPolicy.View.Public.class,
