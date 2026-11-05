@@ -7,8 +7,9 @@
   cache volume on its first reconcile pass. The job itself never deletes the
   ClickHouse StatefulSets, pods, or data path — it only restarts the operator —
   so recovery is far faster than the ~7 min/replica passive self-heal (the
-  operator's own rebuild may still briefly restart the wedged pod). No-op when
-  the cluster is already healthy.
+  operator's own rebuild may still briefly restart the wedged pod). Either way
+  it reports success only once every shard x replica StatefulSet exists and all
+  pods are Ready, so the TTL job in the next wave never races a down replica.
 
   Scope: readiness is detected from the cache VCT on the StatefulSet, which
   assumes the chart's default pod template (where the cache VCT and its mount at
@@ -204,6 +205,9 @@ spec:
               value: {{ $cacheVct | quote }}
             - name: CACHE_PATH
               value: {{ $cachePath | quote }}
+            - name: EXPECTED_STS
+              # The operator runs one StatefulSet per shard x replica.
+              value: {{ mul (int .Values.clickhouse.shardsCount) (int .Values.clickhouse.replicasCount) | quote }}
             - name: POLL_TIMEOUT
               # Emit the int-parsed value so a non-integer override can't reach the shell.
               value: {{ $pollTimeout | quote }}
@@ -232,10 +236,11 @@ spec:
               die() { echo "ERROR: $*" >&2; exit 1; }
 
               # Migration state of this CHI's StatefulSets:
-              #   none    -> no CH StatefulSet exists yet (operator hasn't created it)
+              #   none    -> fewer than EXPECTED_STS StatefulSets exist (not created yet,
+              #              or deleted by the operator while it rebuilds one)
               #   missing -> a StatefulSet lacks the cache VCT; in strict mode also
               #              when it has the VCT but not all replicas are Ready
-              #   ok      -> every StatefulSet carries the cache VCT
+              #   ok      -> all EXPECTED_STS StatefulSets carry the cache VCT
               #
               # Detection uses vct-only: this hook fires while the operator is already
               # rolling pods on any routine upgrade, so counting mid-roll as "missing"
@@ -245,7 +250,9 @@ spec:
                 stses=$(kubectl get sts -n "$NAMESPACE" -l "$CH_STS_SELECTOR" -o name) \
                   || die "listing ClickHouse StatefulSets failed"
                 if [ -z "$stses" ]; then echo none; return 0; fi
+                count=0
                 for sts in $stses; do
+                  count=$(( count + 1 ))
                   vcts=$(kubectl get "$sts" -n "$NAMESPACE" \
                     -o jsonpath='{range .spec.volumeClaimTemplates[*]}{.metadata.name}{" "}{end}') \
                     || die "reading volumeClaimTemplates of $sts failed"
@@ -259,6 +266,9 @@ spec:
                   ready=$(kubectl get "$sts" -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}')
                   [ "${ready:-0}" = "${desired:-0}" ] || { echo missing; return 0; }
                 done
+                # Checked after the loop, so a present StatefulSet without the VCT
+                # still triggers the bounce.
+                [ "$count" -ge "$EXPECTED_STS" ] || { echo none; return 0; }
                 echo ok
               }
 
@@ -276,50 +286,52 @@ spec:
                   state=retry
                 fi
                 case "$state" in
-                  ok)      echo "=== No migration needed — all StatefulSets already carry ${CACHE_VCT} ==="; exit 0 ;;
-                  missing) echo ">> a StatefulSet is missing ${CACHE_VCT} — will bounce the operator"; break ;;
-                  none)    echo "   no ClickHouse StatefulSet yet — waiting..." ;;
+                  ok)      echo ">> all StatefulSets already carry ${CACHE_VCT} — no bounce needed"; bounce=false; break ;;
+                  missing) echo ">> a StatefulSet is missing ${CACHE_VCT} — will bounce the operator"; bounce=true; break ;;
+                  none)    echo "   fewer than ${EXPECTED_STS} ClickHouse StatefulSets — waiting..." ;;
                 esac
-                [ "$(remaining)" -eq 0 ] && die "no ClickHouse StatefulSet appeared within ${POLL_TIMEOUT}s"
+                [ "$(remaining)" -eq 0 ] && die "not all ${EXPECTED_STS} ClickHouse StatefulSets appeared within ${POLL_TIMEOUT}s"
                 nap 10
               done
 
-              # Restart the operator Deployment rather than deleting its pod: it needs
-              # only patch on one named object, it is the operator's own rollout path
-              # (so a mid-roll or multi-replica operator is handled by Kubernetes rather
-              # than by polling for exactly one Ready pod), and it never grants pod-delete.
-              echo ">> restarting operator deployment/${OPERATOR_DEPLOY} so it rebuilds the StatefulSets with the cache volume"
-              # Distinguish "no operator here to bounce" from "the probe itself failed".
-              # ONLY a confirmed NotFound is tolerated: that means an externally-managed
-              # or relocated operator, nothing was attempted, and passive self-heal is the
-              # whole story. A Forbidden, a timeout or any other API error says nothing
-              # about whether the operator exists, so treating those as "absent" would
-              # skip the bounce and report success on a cluster left unrecovered. The
-              # probe is retried within the remaining budget before giving up, so a
-              # transient API blip does not fail an otherwise healthy migration.
-              # --ignore-not-found makes kubectl itself authoritative about absence: it
-              # prints nothing and exits 0 when the Deployment does not exist, and still
-              # exits non-zero for Forbidden/timeout/API errors. That avoids matching on
-              # error text, which would misread a wrapped or unrelated message.
-              probe_out=""
-              while :; do
-                if probe_out="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name --ignore-not-found 2>&1)"; then
-                  if [ -z "$probe_out" ]; then
-                    echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
-                    exit 0
+              if [ "$bounce" = true ]; then
+                # Restart the operator Deployment rather than deleting its pod: it needs
+                # only patch on one named object, it is the operator's own rollout path
+                # (so a mid-roll or multi-replica operator is handled by Kubernetes rather
+                # than by polling for exactly one Ready pod), and it never grants pod-delete.
+                echo ">> restarting operator deployment/${OPERATOR_DEPLOY} so it rebuilds the StatefulSets with the cache volume"
+                # Distinguish "no operator here to bounce" from "the probe itself failed".
+                # ONLY a confirmed NotFound is tolerated: that means an externally-managed
+                # or relocated operator, nothing was attempted, and passive self-heal is the
+                # whole story. A Forbidden, a timeout or any other API error says nothing
+                # about whether the operator exists, so treating those as "absent" would
+                # skip the bounce and report success on a cluster left unrecovered. The
+                # probe is retried within the remaining budget before giving up, so a
+                # transient API blip does not fail an otherwise healthy migration.
+                # --ignore-not-found makes kubectl itself authoritative about absence: it
+                # prints nothing and exits 0 when the Deployment does not exist, and still
+                # exits non-zero for Forbidden/timeout/API errors. That avoids matching on
+                # error text, which would misread a wrapped or unrelated message.
+                probe_out=""
+                while :; do
+                  if probe_out="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name --ignore-not-found 2>&1)"; then
+                    if [ -z "$probe_out" ]; then
+                      echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
+                      exit 0
+                    fi
+                    break
                   fi
-                  break
+                  if [ "$(remaining)" -eq 0 ]; then
+                    echo "last probe error: ${probe_out}" >&2
+                    die "could not determine whether deployment/${OPERATOR_DEPLOY} exists in ${NAMESPACE} within ${POLL_TIMEOUT}s — the API kept returning an error (check the migration ServiceAccount's get permission on this Deployment). Not reporting success: the cluster may be left unrecovered."
+                  fi
+                  echo "   transient error probing deployment/${OPERATOR_DEPLOY} — retrying..." >&2
+                  nap 10
+                done
+                if ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
+                  echo "${restart_err}" >&2
+                  die "could not restart deployment/${OPERATOR_DEPLOY} in ${NAMESPACE} — the operator exists but the restart was refused (check the migration ServiceAccount's get/patch permission on this Deployment). Not reporting success: the cluster was left unrecovered."
                 fi
-                if [ "$(remaining)" -eq 0 ]; then
-                  echo "last probe error: ${probe_out}" >&2
-                  die "could not determine whether deployment/${OPERATOR_DEPLOY} exists in ${NAMESPACE} within ${POLL_TIMEOUT}s — the API kept returning an error (check the migration ServiceAccount's get permission on this Deployment). Not reporting success: the cluster may be left unrecovered."
-                fi
-                echo "   transient error probing deployment/${OPERATOR_DEPLOY} — retrying..." >&2
-                nap 10
-              done
-              if ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
-                echo "${restart_err}" >&2
-                die "could not restart deployment/${OPERATOR_DEPLOY} in ${NAMESPACE} — the operator exists but the restart was refused (check the migration ServiceAccount's get/patch permission on this Deployment). Not reporting success: the cluster was left unrecovered."
               fi
 
               # Wait until every CH pod is Ready and no StatefulSet is missing the VCT.
@@ -328,7 +340,7 @@ spec:
               while :; do
                 left="$(remaining)"
                 if [ "$left" -eq 0 ]; then
-                  echo "ERROR: cluster not healthy within ${POLL_TIMEOUT}s after bouncing the operator" >&2
+                  echo "ERROR: cluster not healthy within ${POLL_TIMEOUT}s" >&2
                   [ -n "$last_wait_err" ] && echo "last 'kubectl wait' error: ${last_wait_err}" >&2
                   kubectl get sts,pods -n "$NAMESPACE" -l "$CH_STS_SELECTOR" 2>/dev/null || true
                   exit 1
