@@ -53,7 +53,7 @@ python3 - "$WORK/script.sh" "$WORK/bounce.sh" <<'PY'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
 t = open(src).read()
-start = t.index('echo ">> restarting operator')
+start = t.index('if [ "$bounce" = true ]')
 end = t.index("# Wait until every CH pod is Ready")
 open(dst, "w").write(t[start:end])
 PY
@@ -110,12 +110,13 @@ chmod +x "$WORK/bin/kubectl"
 
 # Run the bounce section with a short budget and the helpers the full script defines
 # above the extracted region.
-run_bounce() { # $1=MOCK_MODE  $2=seconds of budget
+run_bounce() { # $1=MOCK_MODE  $2=seconds of budget  [$3=bounce, default true]
   CALL_LOG="$WORK/calls"; export CALL_LOG
   : > "$CALL_LOG"
   (
     PATH="$WORK/bin:$PATH"
     export PATH
+    bounce="${3:-true}"
     MOCK_MODE="$1"; export MOCK_MODE
     OPERATOR_DEPLOY=opik-altinity-clickhouse-operator; export OPERATOR_DEPLOY
     NAMESPACE=default; export NAMESPACE
@@ -220,6 +221,13 @@ seq=$(cut -d' ' -f1 "$WORK/calls" | tr '\n' ',')
 [ "$seq" = "get,rollout," ] \
   && pass "healthy path calls get then rollout, once each" \
   || fail "healthy path calls get then rollout, once each" "call sequence was '$seq'"
+
+# StatefulSets that already carry the cache volume need no bounce: touch nothing.
+if run_bounce ok 5 false && [ ! -s "$WORK/calls" ]; then
+  pass "no bounce needed makes no operator calls"
+else
+  fail "no bounce needed makes no operator calls" "exited non-zero or called kubectl"
+fi
 
 # The mock rejects a malformed call with rc 64; prove that guard is live, so a
 # future change that drops --ignore-not-found or targets the wrong object fails
