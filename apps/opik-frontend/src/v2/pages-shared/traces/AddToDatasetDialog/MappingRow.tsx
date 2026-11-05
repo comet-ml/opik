@@ -8,10 +8,8 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { JsonObject } from "@/types/shared";
 import { cn } from "@/lib/utils";
 import PathSourcePicker from "./PathSourcePicker";
-import {
-  MAX_FIELD_NAME_LENGTH,
-  MappingRow as MappingRowType,
-} from "./fieldMappingTypes";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
+import { MappingRow as MappingRowType } from "./fieldMappingTypes";
 import { FieldRowError } from "./useFieldMappings";
 import { FieldCoverage } from "./useFieldCoverage";
 

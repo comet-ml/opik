@@ -10,13 +10,15 @@ import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import { processInputData } from "@/lib/images";
 import ImagesListWrapper from "@/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { useDatasetItemEditorAutosaveContext } from "./DatasetItemEditorAutosaveContext";
-import DatasetItemEditorForm from "./DatasetItemEditorForm";
+import DatasetItemFieldsAutosaveForm from "@/v2/pages-shared/datasets/DatasetItemFields/DatasetItemFieldsAutosaveForm";
 import DatasetItemActionsDropdown from "@/v2/pages-shared/datasets/DatasetItemActionsDropdown/DatasetItemActionsDropdown";
 import ViewInExperimentButton from "@/v2/pages-shared/datasets/ViewInExperimentButton/ViewInExperimentButton";
 import { useAddedDatasetItemById } from "@/store/TestSuiteDraftStore";
+import { DatasetItemColumn } from "@/types/datasets";
 
 interface DatasetItemEditorAutosaveLayoutProps {
   datasetItemId: string;
+  columns: DatasetItemColumn[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -28,7 +30,7 @@ const truncateId = (id: string): string => {
 
 const DatasetItemEditorAutosaveLayout: React.FC<
   DatasetItemEditorAutosaveLayoutProps
-> = ({ datasetItemId, isOpen, onClose }) => {
+> = ({ datasetItemId, columns, isOpen, onClose }) => {
   const {
     isPending,
     handleFieldChange,
@@ -36,8 +38,6 @@ const DatasetItemEditorAutosaveLayout: React.FC<
     tags,
     handleAddTag,
     handleDeleteTag,
-    fields,
-    formId,
     horizontalNavigation,
     datasetItem,
   } = useDatasetItemEditorAutosaveContext();
@@ -132,14 +132,16 @@ const DatasetItemEditorAutosaveLayout: React.FC<
               <ImagesListWrapper media={media} />
             </div>
           )}
-          <div className="p-6 pt-4">
-            <DatasetItemEditorForm
-              key={datasetItemId}
-              formId={formId}
-              fields={fields}
-              onFieldChange={handleFieldChange}
-            />
-          </div>
+          {datasetItem && (
+            <div className="p-6 pt-4">
+              <DatasetItemFieldsAutosaveForm
+                key={datasetItemId}
+                data={datasetItem.data as Record<string, unknown>}
+                columns={columns}
+                onDataChange={handleFieldChange}
+              />
+            </div>
+          )}
         </div>
       )}
     </ResizableSidePanel>
