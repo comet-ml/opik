@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Checks an organization's price rows as sent, before any is saved: every problem of every row is reported at once,
@@ -256,10 +257,7 @@ public class CustomModelPriceValidator {
                         "No built-in price is filed under '%s', so only these rows price its spans"
                                 .formatted(price.provider())));
             }
-            Optional<ModelPrice> builtIn = price.provider().isEmpty()
-                    ? Optional.empty()
-                    : ModelPriceResolver.resolve(price.modelName(), price.provider())
-                            .map(ModelPriceResolver.PriceMatch::price);
+            Optional<ModelPrice> builtIn = price.provider().isEmpty() ? Optional.empty() : builtInBase(row);
             if (price.kind() == CustomModelPrice.Kind.ALIAS) {
                 boolean shadows = price.provider().isEmpty()
                         ? pricedUnderSomeProvider(price.modelName(), ModelPriceTable.pricedProviders(),
@@ -278,6 +276,19 @@ public class CustomModelPriceValidator {
             }
         }
         return List.copyOf(warnings);
+    }
+
+    // Saving strips a vendor prefix that spans keep: a span named openai/gpt-4o-mini on OpenRouter finds a built-in
+    // price through it, so the row's base is looked up under each spelling such a span could have.
+    private Optional<ModelPrice> builtInBase(ParsedRow row) {
+        CustomModelPrice price = row.price();
+        return Stream.of(Stream.of(price.modelName()), Stream.ofNullable(row.sentModel()).map(String::trim),
+                ModelPriceTable.prefixedModelNames(price.modelName(), price.provider()).stream())
+                .flatMap(names -> names)
+                .map(name -> ModelPriceResolver.resolve(name, price.provider()))
+                .flatMap(Optional::stream)
+                .map(ModelPriceResolver.PriceMatch::price)
+                .findFirst();
     }
 
     private List<Problem> fixedRowWarnings(int index, CustomModelPrice price, ModelPrice base) {
