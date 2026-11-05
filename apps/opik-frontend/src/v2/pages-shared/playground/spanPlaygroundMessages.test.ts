@@ -190,6 +190,35 @@ describe("getPlaygroundMessagesFromInput", () => {
     });
   });
 
+  describe("Anthropic top-level system prompt", () => {
+    it.each([
+      ["a string", "You are a pirate.", "You are a pirate."],
+      [
+        "text blocks",
+        [
+          { type: "text", text: "You are a pirate." },
+          { type: "text", text: "Be brief.", cache_control: {} },
+        ],
+        "You are a pirate.\n\nBe brief.",
+      ],
+    ])("puts %s first as a system message", (_, system, expected) => {
+      const input = {
+        system,
+        messages: [{ role: "user", content: "Hi" }],
+        tools: [],
+      };
+
+      expect(getPlaygroundMessagesFromInput(input)).toEqual([
+        { role: "system", content: expected },
+        { role: "user", content: "Hi" },
+      ]);
+    });
+
+    it("ignores a system prompt when there are no messages", () => {
+      expect(getPlaygroundMessagesFromInput({ system: "Hi" })).toEqual([]);
+    });
+  });
+
   describe("tool and function messages", () => {
     it("drops tool calls and tool results, keeping the rest in order", () => {
       const input = {

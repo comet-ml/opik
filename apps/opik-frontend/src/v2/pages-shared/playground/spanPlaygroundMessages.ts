@@ -1,3 +1,5 @@
+import isArray from "lodash/isArray";
+import isPlainObject from "lodash/isPlainObject";
 import isString from "lodash/isString";
 
 import {
@@ -202,10 +204,32 @@ const readInputMessages = (input: unknown): LLMMessageDescriptor[] => {
   }
 };
 
+// Anthropic takes the system prompt beside the messages, as a string or text blocks.
+const getTopLevelSystemText = (input: unknown): string => {
+  const system = isPlainObject(input)
+    ? (input as { system?: unknown }).system
+    : undefined;
+  if (isString(system)) return system.trim();
+  if (!isArray(system)) return "";
+
+  return system
+    .map((block) => (isPlainObject(block) ? block.text : undefined))
+    .filter((t): t is string => isString(t) && t.trim() !== "")
+    .join("\n\n");
+};
+
 export const getPlaygroundMessagesFromInput = (
   input: unknown,
-): PlaygroundChatMessage[] =>
-  convertLLMMessagesToPlaygroundMessages(readInputMessages(input));
+): PlaygroundChatMessage[] => {
+  const messages = convertLLMMessagesToPlaygroundMessages(
+    readInputMessages(input),
+  );
+  const systemText = messages.length > 0 ? getTopLevelSystemText(input) : "";
+
+  return systemText
+    ? [{ role: LLM_MESSAGE_ROLE.system, content: systemText }, ...messages]
+    : messages;
+};
 
 export const getSpanPlaygroundMessages = (
   data: Trace | Span,
