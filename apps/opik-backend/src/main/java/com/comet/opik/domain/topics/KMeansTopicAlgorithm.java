@@ -22,11 +22,34 @@ import java.util.stream.Stream;
 @Singleton
 public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
-    static final int MIN_GROUPS = 15;
+    /** The first build's fine groups: one per {@value #TEXTS_PER_GROUP} unique texts, within these bounds. */
+    static final int MIN_GROUPS = 30;
     static final int MAX_GROUPS = 50;
-    static final int TEXTS_PER_GROUP = 60;
+    static final int TEXTS_PER_GROUP = 30;
+    /**
+     * The author sees {@value #AUTHOR_FREQUENT} most frequent texts per group plus the ones nearest its centre, in all
+     * clamp(round({@value #AUTHOR_BUDGET} / k), {@value #AUTHOR_MIN}, {@value #AUTHOR_MAX}) texts, so the prompt stays
+     * about as long as the longest one known to work (5 texts on 50 groups).
+     */
+    static final int AUTHOR_FREQUENT = 5;
+    static final int AUTHOR_BUDGET = 250;
+    static final int AUTHOR_MIN = 5;
+    static final int AUTHOR_MAX = 10;
     static final int QWEN_MAX_TOKENS = 2500;
     static final String AUTHOR_TAG = "author";
+
+    /**
+     * The first build's number of fine groups: min({@value #MAX_GROUPS}, max({@value #MIN_GROUPS}, unique /
+     * {@value #TEXTS_PER_GROUP})), at most the unique texts.
+     */
+    static int groups(int unique) {
+        return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+    }
+
+    /** The author's texts per group for {@code k} groups. */
+    static int authorExamples(int k) {
+        return Math.min(AUTHOR_MAX, Math.max(AUTHOR_MIN, (int) Math.round((double) AUTHOR_BUDGET / k)));
+    }
 
     @Override
     public FirstBuild firstBuild(@NonNull NightWindow window, int maxTopics, @NonNull Context context) {
@@ -35,7 +58,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var stats = context.stats();
         var merged = IntentMerger.merge(window.texts(), window.vectors(), d);
         int unique = merged.size();
-        int k = Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+        int k = groups(unique);
         // The seed is the project's saved nights: 0 for the first build.
         long seed = 0;
         var weights = new double[unique];
@@ -55,7 +78,11 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
         var groups = GroupSummaries.summarize(window.texts(), window.vectors(), groupOf, fit.centres(), window.recent(),
                 d);
-        var prompt = TopicPrompts.author(groups, maxTopics);
+        int perGroup = authorExamples(k);
+        stats.put("author_examples", perGroup);
+        var examples = GroupSummaries.authorExamples(window.texts(), window.vectors(), groupOf, fit.centres(), d,
+                Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
+        var prompt = TopicPrompts.author(groups, maxTopics, examples);
         var answer = context.timed("qwen", () -> context.generate(AUTHOR_TAG, prompt, TopicPrompts.AUTHOR_SCHEMA,
                 QWEN_MAX_TOKENS, AuthorAnswer::parse));
         var applied = AuthorApplier.apply(answer, groups, maxTopics);
@@ -72,20 +99,12 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var result = NightlyUpdate.run(state, window, maxTopics, NightClusterer.KMEANS,
                 (tag, prompt, schema, maxTokens) -> context.generate(tag, prompt, schema, maxTokens, answer -> answer));
         var stats = context.stats();
-        stats.put("review_night", result.reviewNight());
-        stats.put("review", result.review());
         stats.put("unassigned", result.unassigned());
         stats.put("candidates", result.candidates().size());
         stats.put("big", result.big().size());
-        if (result.verified() != null) {
-            stats.put("verify_pairs", result.verified().pairs().size());
-            stats.put("verify_failed", result.verified().failed());
-        }
-        if (result.forced() != null) {
-            var forced = stats.putObject("forced");
-            result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
-                    forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
-        }
+        var forced = stats.putObject("forced");
+        result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
+                forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
         var revived = stats.putArray("revived");
         result.revived().forEach(t -> revived.add(state.topic(t).getName()));
         return Update.builder().labels(result.labels()).build();

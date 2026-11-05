@@ -24,32 +24,25 @@ import java.util.stream.Collectors;
 @UtilityClass
 public class TopicPrompts {
 
-    private static final String AUTHOR = load("author.md");
-    private static final String REVISE = load("revise_v4.md");
-    private static final String REVISE_REVIEW = load("revise_review_v4.md");
+    private static final String AUTHOR = load("author_v2.md");
     private static final String VERIFY = load("verify_batch.md");
     private static final String NAMING_GROUP = load("naming_group.md");
     private static final String NAMING_GROUP_NEW = load("naming_group_new.md");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-z_]+)}");
 
     /**
-     * The revise answer's schema: {@code assign}, {@code new} and {@code other} required; {@code merge},
-     * {@code retire} and {@code redefine} for review nights.
+     * The author answer's schema: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}},
+     * {@code topic} the topic's index or -1 for Other.
      */
-    public static final JsonNode REVISE_SCHEMA = parse("""
+    public static final JsonNode AUTHOR_SCHEMA = parse("""
             {"type": "object", "properties": {
-              "assign": {"type": "array", "items": {"type": "object", "properties": {
-                "cluster": {"type": "integer"}, "topic": {"type": "integer"}}, "required": ["cluster", "topic"]}},
-              "new": {"type": "array", "items": {"type": "object", "properties": {
-                "name": {"type": "string"}, "definition": {"type": "string"},
-                "clusters": {"type": "array", "items": {"type": "integer"}}},
-                "required": ["name", "definition", "clusters"]}},
-              "other": {"type": "array", "items": {"type": "integer"}},
-              "merge": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}}},
-              "retire": {"type": "array", "items": {"type": "integer"}},
-              "redefine": {"type": "array", "items": {"type": "object", "properties": {
-                "id": {"type": "integer"}, "definition": {"type": "string"}}, "required": ["id", "definition"]}}},
-             "required": ["assign", "new", "other"]}
+              "topics": {"type": "array", "items": {"type": "object", "properties": {
+                "name": {"type": "string"}, "definition": {"type": "string"}},
+                "required": ["name", "definition"]}},
+              "assignment": {"type": "array", "items": {"type": "object", "properties": {
+                "cluster": {"type": "integer"}, "topic": {"type": "integer"}},
+                "required": ["cluster", "topic"]}}},
+             "required": ["topics", "assignment"]}
             """);
 
     /** The batched verify answer's schema: {@code {answers: [{pair, same}]}}. */
@@ -87,42 +80,22 @@ public class TopicPrompts {
              "required": ["new", "other"]}
             """);
 
-    /** The author answer's schema: {@code {topics: [{name, definition, clusters: [int]}], other: [int]}}. */
-    public static final JsonNode AUTHOR_SCHEMA = parse("""
-            {"type": "object", "properties": {
-              "topics": {"type": "array", "items": {"type": "object", "properties": {
-                "name": {"type": "string"}, "definition": {"type": "string"},
-                "clusters": {"type": "array", "items": {"type": "integer"}}},
-                "required": ["name", "definition", "clusters"]}},
-              "other": {"type": "array", "items": {"type": "integer"}}},
-             "required": ["topics", "other"]}
-            """);
-
-    /** The groups largest first (ties by group id), empty ones left out. */
-    public static String author(@NonNull List<GroupSummary> groups, int maxTopics) {
+    /**
+     * The author prompt: the groups largest first (ties by group id), empty ones left out, each with its share as a
+     * whole percent and its examples; no last-7-days share or tightness.
+     *
+     * @param examples per group index, {@link GroupSummaries#authorExamples}
+     */
+    public static String author(@NonNull List<GroupSummary> groups, int maxTopics,
+            @NonNull List<List<String>> examples) {
         var body = groups.stream()
                 .filter(group -> group.size() > 0)
                 .sorted(Comparator.comparingInt(group -> -group.size()))
-                .map(TopicPrompts::groupBlock)
+                .map(group -> "  cluster " + group.group() + ": " + Math.round(100 * group.share()) + "% of traffic\n"
+                        + examples.get(group.group()).stream().map(example -> "    - " + example)
+                                .collect(Collectors.joining("\n")))
                 .collect(Collectors.joining("\n"));
         return AUTHOR.replace("{max_topics}", String.valueOf(maxTopics)).replace("{clusters}", body);
-    }
-
-    /**
-     * The stand's {@code revise_prompt} (v4): the topics in list order, the candidates largest first (ties by group
-     * id), {@code "  (none)"} when there are none; {@code revise_review_v4.md} on review nights.
-     */
-    public static String revise(@NonNull List<PromptTopic> topics, @NonNull List<GroupSummary> candidates,
-            boolean review, int maxTopics) {
-        var topicBlock = topics.stream().map(TopicPrompts::topicBlock).collect(Collectors.joining("\n"));
-        var candidateBlock = candidates.stream()
-                .sorted(Comparator.comparingInt(group -> -group.size()))
-                .map(TopicPrompts::groupBlock)
-                .collect(Collectors.joining("\n"));
-        return fill(review ? REVISE_REVIEW : REVISE, Map.of(
-                "max_topics", String.valueOf(maxTopics),
-                "topics", topicBlock,
-                "candidates", candidateBlock.isEmpty() ? "  (none)" : candidateBlock));
     }
 
     /** The stand's {@code verify_batch_prompt}: per pair the topic's first 3 examples and the group's first 5. */
@@ -186,18 +159,19 @@ public class TopicPrompts {
     }
 
     /**
-     * A live topic as the revise and verify prompts show it: {@code id} is its 1-based position in the live list,
-     * {@code topic} its index in the night's topic list; shares and examples from the assignment before recentre.
+     * A live topic as the naming and verify prompts show it: {@code id} is its 1-based position in the live list,
+     * {@code topic} its index in the night's topic list; shares and examples from the night's assignment.
      */
     @Builder
     public record PromptTopic(int id, int topic, @NonNull String name, @NonNull String definition, double share,
             double recentShare, @NonNull List<String> examples) {
     }
 
-    /** One verify pair: a live topic and a candidate group mapped to it. */
+    /** One verify pair: a live topic and a candidate group given to it. */
     public record VerifyPair(@NonNull PromptTopic topic, @NonNull GroupSummary group) {
     }
 
+    /** A group as the naming prompts show it: share, last-7-days share, tightness and its examples. */
     static String groupBlock(GroupSummary group) {
         var examples = group.examples().stream().map(example -> "    - " + example)
                 .collect(Collectors.joining("\n"));

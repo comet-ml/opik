@@ -20,24 +20,26 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Steps h and i of the nightly update after the verify call, as the stand's {@code verify_and_force} and
- * {@code force_grouped} (v7n). For each candidate, largest first, a pair that was not verified is removed from the group
- * map. Every big candidate that ended without a topic (rejected, Other, or not mapped) is forced: below tightness
- * {@value #MIN_TIGHTNESS} it is known Other, else it joins one grouped naming call for the night.
+ * Step c of the nightly update, as the stand's {@code force_grouped} (v7n) with one share, the window's. Every
+ * candidate, largest first, goes to one grouped naming call for the night; a loose one (tightness below
+ * {@value #MIN_TIGHTNESS}) is known Other without a call.
  * <p>
- * The naming call shows the live topics (those born tonight included) and may assign a group to one, put same-kind
- * groups into one new topic, or leave a group in Other. An assign passes one batched verify; a rejected group goes to
- * a second call that offers new and other only. A new topic's groups are de-duplicated; a blank or catch-all name is
- * skipped; a name equal to a live topic's (by {@link AuthorApplier#nameKey}) joins that topic, and equal new names are
- * one topic. New topics are created largest first. On a full list, the topic not born tonight with the lowest 7-day
- * share is retired when that share is below the sum of the new topic's groups' 7-day shares, else its groups are known
- * Other. A forced group the answers leave out is known Other.
+ * The naming call shows the live topics and may assign a group to one, put same-kind groups into one new topic, or
+ * leave a group in Other. An assign passes one batched verify; a rejected group goes to a second call that offers new
+ * and other only. A new topic's groups are de-duplicated; a blank or catch-all name is skipped; a name equal to a live
+ * topic's (by {@link AuthorApplier#nameKey}) joins that topic, and equal new names are one topic. New topics are
+ * created largest first; one whose groups' share of the window is below {@value #MIN_NEW_SHARE} is not born, its groups
+ * are known Other ({@link Result#OTHER_SMALL}). On a full list, the topic not born tonight with the lowest share of the
+ * window is retired when that share is below the new topic's, else its groups are known Other. A group the answers
+ * leave out is known Other.
  */
 @Slf4j
 @UtilityClass
 public class ForcedBirth {
 
     static final double MIN_TIGHTNESS = 0.80;
+    /** A new topic needs this share of the window; below it, its groups stay in Other. */
+    static final double MIN_NEW_SHARE = NightlyUpdate.BIG_SHARE;
     static final String NAMING_TAG = "naming";
     static final String NAMING_NEW_TAG = "naming_new";
     static final String VERIFY_TAG = "verify_naming";
@@ -45,34 +47,18 @@ public class ForcedBirth {
 
     /**
      * @param ordered     the candidates largest first (ties by group id)
-     * @param big         the big candidates' group ids
-     * @param topics      the live topics as the verify prompt showed them, by topic index
+     * @param map         the group map, filled in place: candidate group to topic index or {@link NightlyUpdate#OTHER}
      * @param shownTopics the live topics as a prompt shows them now, read again for each naming call
-     * @param map         the group map, changed in place
      */
     public static List<Outcome> apply(@NonNull NightState state, @NonNull List<GroupSummary> ordered,
-            @NonNull Set<Integer> big, @NonNull Map<Integer, TopicPrompts.PromptTopic> topics,
-            @NonNull Verifier.Verified verified, @NonNull Map<Integer, Integer> map,
-            @NonNull Supplier<List<TopicPrompts.PromptTopic>> shownTopics, int maxTopics, @NonNull NightLlm llm) {
+            @NonNull Map<Integer, Integer> map, @NonNull Supplier<List<TopicPrompts.PromptTopic>> shownTopics,
+            int maxTopics, @NonNull NightLlm llm) {
         var outcomes = new ArrayList<Outcome>();
         var forced = new ArrayList<GroupSummary>();
         for (var candidate : ordered) {
-            int group = candidate.group();
-            var topic = map.get(group);
-            if (topic != null && topic != ReviseApplier.OTHER && topics.containsKey(topic)) {
-                if (verified.verified(group)) {
-                    continue;
-                }
-                map.remove(group);
-            } else if (topic != null && topic != ReviseApplier.OTHER) {
-                continue;
-            }
-            if (!big.contains(group)) {
-                continue;
-            }
             if (candidate.tightness() < MIN_TIGHTNESS) {
-                map.put(group, ReviseApplier.OTHER);
-                outcomes.add(new Outcome(group, Result.OTHER_LOOSE, null));
+                map.put(candidate.group(), NightlyUpdate.OTHER);
+                outcomes.add(new Outcome(candidate.group(), Result.OTHER_LOOSE, null));
                 continue;
             }
             forced.add(candidate);
@@ -108,10 +94,10 @@ public class ForcedBirth {
         var live = new HashMap<String, Integer>();
         state.live().forEach(t -> live.put(AuthorApplier.nameKey(state.topic(t).getName()), t));
         var groups = new LinkedHashMap<String, NewGroup>();
-        for (var entry : ReviseApplier.objects(answer == null ? null : answer.get("new"))) {
+        for (var entry : NightJson.objects(answer == null ? null : answer.get("new"))) {
             var name = text(entry.get("name"));
             var ids = new LinkedHashSet<Integer>();
-            for (var id : ReviseApplier.integers(entry.get("clusters"))) {
+            for (var id : NightJson.integers(entry.get("clusters"))) {
                 if (id != null && byGroup.containsKey(id) && !done.contains(id)) {
                     ids.add(id);
                 }
@@ -140,9 +126,16 @@ public class ForcedBirth {
                 group -> -group.groups().stream().mapToLong(id -> byGroup.get(id).size()).sum()));
         for (var group : largestFirst) {
             // A plain loop in list order, as Python's sum: DoubleStream.sum compensates and can differ in the last bit.
-            double recentShare = 0;
+            double share = 0;
             for (int id : group.groups()) {
-                recentShare += byGroup.get(id).recentShare();
+                share += byGroup.get(id).share();
+            }
+            if (share < MIN_NEW_SHARE) {
+                for (int id : group.groups()) {
+                    map.put(id, NightlyUpdate.OTHER);
+                    outcomes.add(new Outcome(id, Result.OTHER_SMALL, null));
+                }
+                continue;
             }
             if (state.liveCount() >= maxTopics) {
                 Integer lowest = null;
@@ -150,13 +143,13 @@ public class ForcedBirth {
                     if (state.topic(t).getBorn().equals(state.getNight())) {
                         continue;
                     }
-                    if (lowest == null || recentShare(byTopic, t) < recentShare(byTopic, lowest)) {
+                    if (lowest == null || share(byTopic, t) < share(byTopic, lowest)) {
                         lowest = t;
                     }
                 }
-                if (lowest == null || recentShare(byTopic, lowest) >= recentShare) {
+                if (lowest == null || share(byTopic, lowest) >= share) {
                     for (int id : group.groups()) {
-                        map.put(id, ReviseApplier.OTHER);
+                        map.put(id, NightlyUpdate.OTHER);
                         outcomes.add(new Outcome(id, Result.OTHER_FULL, null));
                     }
                     continue;
@@ -174,7 +167,7 @@ public class ForcedBirth {
         }
         for (int id : byGroup.keySet()) {
             if (!map.containsKey(id)) {
-                map.put(id, ReviseApplier.OTHER);
+                map.put(id, NightlyUpdate.OTHER);
                 outcomes.add(new Outcome(id, Result.OTHER_NAME, null));
             }
         }
@@ -187,9 +180,9 @@ public class ForcedBirth {
             List<Outcome> outcomes) {
         var pairs = new ArrayList<int[]>();
         var prompts = new ArrayList<TopicPrompts.VerifyPair>();
-        for (var entry : ReviseApplier.objects(answer == null ? null : answer.get("assign"))) {
-            var group = ReviseApplier.integer(entry.get("cluster"));
-            var promptId = ReviseApplier.integer(entry.get("topic"));
+        for (var entry : NightJson.objects(answer == null ? null : answer.get("assign"))) {
+            var group = NightJson.integer(entry.get("cluster"));
+            var promptId = NightJson.integer(entry.get("topic"));
             var topic = promptId == null ? null : byPromptId.get(promptId);
             if (group != null && byGroup.containsKey(group) && !done.contains(group) && topic != null
                     && state.topic(topic).isLive()) {
@@ -219,9 +212,10 @@ public class ForcedBirth {
         return node != null && node.isTextual() ? TopicText.pythonStrip(node.asText()) : "";
     }
 
-    private static double recentShare(Map<Integer, TopicPrompts.PromptTopic> topics, int topic) {
+    /** A live topic's share of the window, as the prompt showed it. */
+    private static double share(Map<Integer, TopicPrompts.PromptTopic> topics, int topic) {
         var shown = topics.get(topic);
-        return shown == null ? 0 : shown.recentShare();
+        return shown == null ? 0 : shown.share();
     }
 
     private record NewGroup(String name, String definition, List<Integer> groups) {
@@ -233,10 +227,12 @@ public class ForcedBirth {
         SAME_NAME,
         OTHER_LOOSE,
         OTHER_FULL,
+        /** Named new, but under {@link #MIN_NEW_SHARE}. */
+        OTHER_SMALL,
         OTHER_NAME
     }
 
-    /** What happened to one big candidate left without a topic; {@code topic} is the index of the topic it got. */
+    /** What happened to one candidate; {@code topic} is the index of the topic it got. */
     @Builder(toBuilder = true)
     public record Outcome(int group, @NonNull Result result, Integer topic) {
     }

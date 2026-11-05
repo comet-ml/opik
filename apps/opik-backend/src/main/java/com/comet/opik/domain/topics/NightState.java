@@ -13,7 +13,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * A project's topic list during one nightly update: read at the start, changed by steps a to l, written at the end.
+ * A project's topic list during one nightly update: read at the start, changed by steps a to g, written at the end.
  * {@link #topics()} holds the topics live at the start in list order (born, then creation), then the ones born tonight in
  * birth order; a topic retired tonight stays in it, marked. Labels in a night are indices into this list, so a topic
  * keeps its index all night. The live topics in this order are the stand's {@code tax.topics}. Dormant topics (retired
@@ -117,9 +117,9 @@ public class NightState {
         LOW_SHARE,
         /** More than 10 live topics after a night: the smallest goes. */
         CAP,
-        /** Dropped by a review night's merge into another topic. */
+        /** Not produced by the current update; rows written by earlier builds may hold it. */
         MERGED,
-        /** Retired by a review night's answer. */
+        /** Not produced by the current update; rows written by earlier builds may hold it. */
         REVIEW,
         /** Replaced by a forced new topic on a full list. */
         REPLACED;

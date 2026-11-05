@@ -99,8 +99,6 @@ class TopicsNightlyJobTest {
     private static final TopicsNightlyFixture NIGHTLY = TopicsNightlyFixture.load();
     private static final int PLANTED = 60;
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
-    private static final int REVIEW_REBUILDS = 7;
-    private static final JsonNode EMPTY = InferenceJson.MAPPER.createObjectNode();
     private static final JsonNode NAMED = named();
     /** Text only the first naming prompt has. */
     private static final String NAMING_PROMPT = "Decide what topic each one gets.";
@@ -240,7 +238,10 @@ class TopicsNightlyJobTest {
             assertThat(saved.finishedAt()).isNotNull();
             var stats = json(saved.stats());
             assertThat(stats.path("vectors").asInt()).isEqualTo(BUILT);
-            assertThat(stats.path("k").asInt()).isEqualTo(15);
+            assertThat(stats.path("k").asInt())
+                    .isEqualTo(KMeansTopicAlgorithm.groups(stats.path("unique_texts").asInt()));
+            assertThat(stats.path("author_examples").asInt())
+                    .isEqualTo(KMeansTopicAlgorithm.authorExamples(stats.path("k").asInt()));
             assertThat(stats.path("seed").asInt()).isZero();
             assertThat(stats.path("provisional").asBoolean()).isTrue();
             assertThat(stats.path("qwen_calls").asInt()).isEqualTo(1);
@@ -269,7 +270,7 @@ class TopicsNightlyJobTest {
             assertThat(topic.workspaceId()).isEqualTo(workspaceId);
             assertThat(topic.born()).isEqualTo(night());
             assertThat(topic.retiredAt()).isNull();
-            assertThat(AuthorApplier.isCatchAll(topic.name())).isFalse();
+            assertThat(AuthorApplier.isCatchAllName(topic.name())).isFalse();
         });
         var topicIds = topics.stream().map(Topic::id).collect(Collectors.toSet());
 
@@ -337,11 +338,11 @@ class TopicsNightlyJobTest {
             // The service decodes the keys in schema order: the topics before Other.
             assertThat(request.getBodyAsString())
                     .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"topics\":");
-            assertThat(body.path("messages").get(0).path("content").asText()).contains("cluster 14:");
+            assertThat(body.path("messages").get(0).path("content").asText()).contains("cluster 0: ", "% of traffic");
         });
 
-        // The next night: the project has a list, so it gets a nightly update.
-        stubNightly(EMPTY, null, null);
+        // The next night: the project has a list, so it gets a nightly update; the same window has no Other group of
+        // 20 traces, so Qwen is not called.
         var again = nightlyService.runNight(start().plus(Duration.ofDays(1)));
 
         assertThat(again.saved()).isEqualTo(1);
@@ -350,7 +351,7 @@ class TopicsNightlyJobTest {
                     assertThat(update.status()).isEqualTo(TopicRun.Status.SAVED);
                     var stats = json(update.stats());
                     assertThat(stats.path("rebuilds_before").asInt()).isEqualTo(1);
-                    assertThat(stats.path("review_night").asBoolean()).isFalse();
+                    assertThat(stats.path("qwen_calls").asInt()).isZero();
                     // Every trace of tonight's window was labelled last night.
                     assertThat(stats.path("churn_any").isNumber()).isTrue();
                 });
@@ -368,57 +369,34 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("a review night merges two topics, keeps a big topic Qwen retires, births the planted theme, saves every column")
+    @DisplayName("an update births the planted theme through the naming call, keeps the list's topics, saves every column")
     void nightlyUpdate() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
         var before = topics(workspaceId, projectId);
-        forceReview(projectId);
         plant(workspaceId, projectId, PLANTED);
-        var revise = InferenceJson.MAPPER.createObjectNode();
-        // Topic 1 holds far more than 2% of the window: the review keeps it. Topic 2 is merged into it.
-        revise.putArray("retire").add(1);
-        revise.putArray("merge").addArray().add(1).add(2);
-        var clusters = revise.putArray("new").addObject().put("name", "Tire Pressure Checks")
-                .put("definition", "Asks whether the car's tires need air.").putArray("clusters");
-        for (int j = 0; j < 20; j++) {
-            clusters.add(j);
-        }
-        revise.putArray("other");
-        stubNightly(revise, sameAnswers(), null);
+        stubNightly(NAMED, sameAnswers());
 
         var result = nightlyService.runNight(secondStart());
 
         assertThat(result.saved()).isEqualTo(1);
         var update = nightlyRun(projectId);
         var stats = json(update.stats());
-        assertThat(stats.path("review_night").asBoolean()).isTrue();
-        assertThat(stats.path("review").asBoolean()).isTrue();
         assertThat(stats.path("candidates").asInt()).isPositive();
-        assertThat(stats.path("retired").path("review").asInt()).isZero();
-        assertThat(stats.path("retired").path("merged").asInt()).isEqualTo(1);
+        assertThat(stats.path("big").asInt()).isPositive();
+        assertThat(stats.path("forced").path("born").asInt()).isPositive();
         assertThat(items(stats.path("born"))).extracting(JsonNode::asText).contains("Tire Pressure Checks");
         assertThat(stats.path("churn").isNumber()).isTrue();
-        assertThat(stats.path("qwen").findValuesAsText("kind")).startsWith("revise", "verify");
-        // The service decodes the keys in schema order: assign first in revise, answers in verify.
+        assertThat(stats.path("qwen").findValuesAsText("kind")).containsExactly("naming");
+        // The service decodes the keys in schema order: assign first in the naming answer.
         var bodies = wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))).stream()
                 .map(request -> request.getBodyAsString()).toList();
-        assertThat(bodies).anySatisfy(body -> assertThat(body).contains("You maintain the topic list")
+        assertThat(bodies).singleElement().satisfies(body -> assertThat(body).contains(NAMING_PROMPT)
                 .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"assign\":"));
-        assertThat(bodies).anySatisfy(body -> assertThat(body)
-                .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"answers\":"));
-
-        var keptId = before.getFirst().id();
-        var retiredId = before.get(1).id();
-        var retired = allTopics(projectId).stream().filter(topic -> topic.id().equals(retiredId)).findFirst()
-                .orElseThrow();
-        assertThat(retired.retiredAt()).isEqualTo(secondNight());
-        assertThat(retired.retiredReason()).isEqualTo("merged");
-        assertThat(retired.name()).isEqualTo(before.get(1).name());
 
         var live = topics(workspaceId, projectId);
-        assertThat(live).extracting(Topic::id).contains(keptId).doesNotContain(retiredId);
-        assertThat(live).hasSizeLessThanOrEqualTo(TopicsRebuildService.MAX_TOPICS);
+        assertThat(live).extracting(Topic::id).containsAll(before.stream().map(Topic::id).toList());
+        assertThat(live).hasSize(before.size() + 1).hasSizeLessThanOrEqualTo(TopicsRebuildService.MAX_TOPICS);
         assertThat(live).filteredOn(topic -> topic.name().equals("Tire Pressure Checks")).singleElement()
                 .satisfies(topic -> {
                     assertThat(topic.born()).isEqualTo(secondNight());
@@ -439,17 +417,16 @@ class TopicsNightlyJobTest {
                         || liveIds.contains(row.topicId())).isTrue());
         live.forEach(topic -> assertThat(labels.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
-        assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS + 1);
+        assertThat(state(projectId).rebuilds()).isEqualTo(2);
 
-        // The update writes its own counts: the live topics by tonight's size, then Other; none for the merged topic.
+        // The update writes its own counts: the live topics by tonight's size, then Other.
         var labelled = labels.stream().collect(Collectors.groupingBy(TraceTopic::topicId, Collectors.counting()));
         var counts = counts(projectId).stream().filter(count -> count.runId().equals(update.runId())).toList();
         assertThat(counts).hasSize(live.size() + 1).allSatisfy(count -> {
             assertThat(count.savedAt()).isEqualTo(update.finishedAt());
             assertThat(count.traces()).isEqualTo(labelled.getOrDefault(count.topicId(), 0L));
         });
-        assertThat(counts).extracting(TopicRunCount::topicId).doesNotContain(retiredId).contains(TraceTopic.OTHER)
-                .containsAll(liveIds);
+        assertThat(counts).extracting(TopicRunCount::topicId).contains(TraceTopic.OTHER).containsAll(liveIds);
         assertThat(counts.stream().mapToLong(TopicRunCount::traces).sum()).isEqualTo(stats.path("vectors").asLong());
         var ranks = new ArrayList<Integer>(java.util.stream.IntStream.rangeClosed(1, live.size()).boxed().toList());
         ranks.add(null);
@@ -473,7 +450,7 @@ class TopicsNightlyJobTest {
         template.inTransaction(WRITE, handle -> handle.execute(
                 "UPDATE topics SET inactive_since = ?, lo7 = 0, hi7 = 0 WHERE id = ?",
                 secondNight().minusDays(1), largest.topicId().toString()));
-        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+        stubNightly(NAMED, sameAnswers());
 
         assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
 
@@ -494,26 +471,25 @@ class TopicsNightlyJobTest {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
         var topics = topics(workspaceId, projectId);
-        forceReview(projectId);
         plant(workspaceId, projectId, PLANTED);
-        var revise = InferenceJson.MAPPER.createObjectNode();
-        var assign = revise.putArray("assign");
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        var assign = naming.putArray("assign");
         for (int j = 0; j < 20; j++) {
             assign.addObject().put("cluster", j).put("topic", 1);
         }
-        revise.putArray("new");
-        revise.putArray("other");
-        stubNightly(revise, null, NAMED);
+        naming.putArray("new");
+        naming.putArray("other");
+        stubNightly(naming, null);
 
         var result = nightlyService.runNight(secondStart());
 
-        // Read as "no pair verified", a failed verify would turn revise's assigns into forced births.
+        // Read as "no pair verified", a failed verify would turn the naming's assigns into new topics.
         assertThat(result.failed()).isEqualTo(1);
         var update = nightlyRun(projectId);
         assertThat(update.status()).isEqualTo(TopicRun.Status.FAILED);
         assertThat(update.errorCode()).isEqualTo("qwen_error");
         assertThat(topics(workspaceId, projectId)).isEqualTo(topics);
-        assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS);
+        assertThat(state(projectId).rebuilds()).isEqualTo(1);
     }
 
     @Test
@@ -521,7 +497,7 @@ class TopicsNightlyJobTest {
     void nightlyUpdateByHand() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+        stubNightly(NAMED, sameAnswers());
 
         int status;
         try (var response = rebuild(workspaceId, projectId, secondNight().toString())) {
@@ -576,15 +552,7 @@ class TopicsNightlyJobTest {
             return null;
         });
         plant(workspaceId, projectId, PLANTED);
-        var revise = InferenceJson.MAPPER.createObjectNode();
-        revise.putArray("assign");
-        var clusters = revise.putArray("new").addObject().put("name", "Tire Pressure Checks")
-                .put("definition", "Asks whether the car's tires need air.").putArray("clusters");
-        for (int j = 0; j < 20; j++) {
-            clusters.add(j);
-        }
-        revise.putArray("other");
-        stubNightly(revise, sameAnswers(), NAMED);
+        stubNightly(NAMED, sameAnswers());
 
         assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
 
@@ -614,7 +582,7 @@ class TopicsNightlyJobTest {
         stubAnswer(FIXTURE.answer);
         assertThat(nightlyService.runNight(start()).saved()).isEqualTo(1);
         wireMock.resetAll();
-        stubNightly(emptyRevise(), sameAnswers(), NAMED);
+        stubNightly(NAMED, sameAnswers());
 
         assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
         assertThat(nightlyService.runNight(secondStart().plus(Duration.ofDays(1))).saved()).isEqualTo(1);
@@ -630,14 +598,14 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("a failing revise call fails the run and leaves the previous night's list")
-    void reviseFails() {
+    @DisplayName("a failing naming call fails the run and leaves the previous night's list")
+    void namingFails() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
         var topics = topics(workspaceId, projectId);
         var prototypes = prototypes(projectId);
         var labels = traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block();
-        forceReview(projectId);
+        plant(workspaceId, projectId, PLANTED);
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)));
 
         var result = nightlyService.runNight(secondStart());
@@ -649,7 +617,7 @@ class TopicsNightlyJobTest {
         assertThat(topics(workspaceId, projectId)).isEqualTo(topics);
         assertThat(prototypes(projectId)).extracting(TopicPrototype::id)
                 .containsExactlyElementsOf(prototypes.stream().map(TopicPrototype::id).toList());
-        assertThat(state(projectId).rebuilds()).isEqualTo(REVIEW_REBUILDS);
+        assertThat(state(projectId).rebuilds()).isEqualTo(1);
         assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block())
                 .containsExactlyInAnyOrderElementsOf(labels);
     }
@@ -677,18 +645,20 @@ class TopicsNightlyJobTest {
         seed(workspaceId, projectId, 0, BUILT);
         var answer = InferenceJson.MAPPER.createObjectNode();
         var topics = answer.putArray("topics");
+        var assignment = answer.putArray("assignment");
         for (int j = 0; j < 11; j++) {
-            topics.addObject().put("name", "Topic " + j).put("definition", "Requests of kind " + j)
-                    .putArray("clusters").add(j);
+            topics.addObject().put("name", "Topic " + j).put("definition", "Requests of kind " + j);
+            assignment.addObject().put("cluster", j).put("topic", j);
         }
-        answer.putArray("other").add(11).add(12).add(13).add(14);
         stubAnswer(answer);
 
         var result = nightlyService.runNight(start());
 
         assertThat(result.saved()).isEqualTo(1);
         assertThat(topics(workspaceId, projectId)).hasSize(10);
-        assertThat(json(runs(projectId).getFirst().stats()).path("other_groups").asInt()).isEqualTo(5);
+        // The 11th topic's group and every group the answer left out are Other.
+        var stats = json(runs(projectId).getFirst().stats());
+        assertThat(stats.path("other_groups").asInt()).isEqualTo(stats.path("k").asInt() - 10);
     }
 
     @Test
@@ -1003,13 +973,6 @@ class TopicsNightlyJobTest {
         return projectId;
     }
 
-    /** Stage 2b's way to force a review night by hand: {@code rebuilds} a multiple of 7. */
-    private void forceReview(UUID projectId) {
-        template.inTransaction(WRITE, handle -> handle.execute(
-                "UPDATE topic_project_states SET rebuilds = ? WHERE project_id = ?", REVIEW_REBUILDS,
-                projectId.toString()));
-    }
-
     /** {@code count} planted traces of the nightly fixture's tire theme, created the day before the second night. */
     private void plant(String workspaceId, UUID projectId, int count) {
         var rows = new ArrayList<TopicVector>(count);
@@ -1061,33 +1024,17 @@ class TopicsNightlyJobTest {
     }
 
     /**
-     * Stubs the nightly update's calls by prompt: revise (both prompts), verify (a 500 when {@code verify} is null) and
-     * the first naming call (a 500 when {@code naming} is null).
+     * Stubs the nightly update's calls by prompt: the first naming call and the verify (a 500 when {@code verify} is
+     * null).
      */
-    private void stubNightly(JsonNode revise, JsonNode verify, JsonNode naming) {
-        stubAnswer(revise, "You maintain the topic list");
+    private void stubNightly(JsonNode naming, JsonNode verify) {
+        stubAnswer(naming, NAMING_PROMPT);
         if (verify == null) {
             wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).withRequestBody(containing("You check decisions"))
                     .willReturn(aResponse().withStatus(500)));
         } else {
             stubAnswer(verify, "You check decisions");
         }
-        // After the revise stub: the naming prompt also starts like the revise prompt, and the newest stub wins.
-        if (naming == null) {
-            wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).withRequestBody(containing(NAMING_PROMPT))
-                    .willReturn(aResponse().withStatus(500)));
-        } else {
-            stubAnswer(naming, NAMING_PROMPT);
-        }
-    }
-
-    /** A revise answer that changes nothing. */
-    private static JsonNode emptyRevise() {
-        var revise = InferenceJson.MAPPER.createObjectNode();
-        revise.putArray("assign");
-        revise.putArray("new");
-        revise.putArray("other");
-        return revise;
     }
 
     private static JsonNode sameAnswers() {
