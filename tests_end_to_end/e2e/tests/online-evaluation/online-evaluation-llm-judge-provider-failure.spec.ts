@@ -10,14 +10,21 @@ const LLM_CALL_LINE = 'to LLM';
 const SAMPLED_LINE = 'sampled by rule';
 
 /**
- * The provider's own refusal, quoted verbatim into the scorer's error line.
+ * The whole ERROR line a provider failure may produce: the trace, the rule and
+ * the failure's error type, and nothing else.
  *
- * `notFoundProviderBaseUrl` points the provider at a route the backend does not
- * serve, so this is the backend's standard 404 body coming back to it as an LLM
- * response. Asserting on the status is the point: the scorer reports the reason
- * the provider gave, not a generic "something went wrong".
+ * Matched end to end rather than by substring because what must be ABSENT is
+ * half the contract: the scorer drops every message in the failure chain, as a
+ * provider's reply can carry anything (an HTML page, an echoed key), so a line
+ * that quoted the provider's 404 body would be a leak, not a better reason.
  */
-const PROVIDER_REFUSAL = '{"code":404,"message":"HTTP 404 Not Found"}';
+const providerFailureLine = (traceId: string, ruleName: string): RegExp => {
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `^Unexpected error while scoring traceId '${escape(traceId)}' with rule ` +
+      `'${escape(ruleName)}', error type '\\w+'$`,
+  );
+};
 
 /** A collapsed message cell shows only the first line. */
 const firstLine = (message: string) => message.split('\n')[0]!.trim();
@@ -126,12 +133,9 @@ test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-c
         expect(errors, 'the refusal is reported exactly once').toHaveLength(1);
         expect(
           errors[0]!.message,
-          'the error must quote the status the provider answered with, not a generic failure',
-        ).toContain(PROVIDER_REFUSAL);
-        expect(
-          errors[0]!.message,
-          'the error must name the rule that failed, so a workspace of rules is separable',
-        ).toContain(judgeRuleName);
+          'the error names the trace, the rule that failed and the error type — and does not ' +
+            'quote the provider’s reply',
+        ).toMatch(providerFailureLine(trace.id, judgeRuleName));
         return logs;
       },
     );
@@ -176,14 +180,14 @@ test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-c
       expect(rendered[0]?.level, 'the newest line is the ERROR, at the top').toBe('ERROR');
     });
 
-    await test.step('Expanding the error row reveals the provider status', async () => {
+    await test.step('The error row shows the whole line the API reported', async () => {
+      // A single line, so the row renders it in full with no Expand control.
       const errorRow = logsPage.rowsAtLevel('ERROR');
-      await expect(errorRow, 'exactly one ERROR row to expand').toHaveCount(1);
-      await logsPage.expandRow(errorRow);
+      await expect(errorRow, 'exactly one ERROR row').toHaveCount(1);
       await expect(
         errorRow.locator('[data-cell-id$="_message"]'),
-        'the reason a user reads must be the provider status, not an empty tail',
-      ).toContainText(PROVIDER_REFUSAL);
+        'the reason a user reads is the error type, not an empty tail',
+      ).toHaveText(providerFailureLine(trace.id, judgeRuleName));
     });
 
     await test.step('A judge whose provider refused it writes no score', async () => {
