@@ -119,7 +119,7 @@ const ReviewModelPricesDialog: React.FC<ReviewModelPricesDialogProps> = ({
                 </>
               )}
               {warnings.length > 0 && (
-                <div className="flex flex-col gap-1 rounded-md border border-warning/40 bg-warning/5 p-3">
+                <div className="flex flex-col gap-1 rounded-md bg-warning-box-bg p-3 text-warning-box-text">
                   <h3 className="comet-body-s-accented">Check these</h3>
                   <ul className="comet-body-s flex flex-col gap-1">
                     {warnings.map((warning, index) => {

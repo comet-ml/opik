@@ -150,7 +150,9 @@ describe("CostCenterTab", () => {
     expect(
       screen.getByText("Input: Type a plain number, like 2.50"),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Review and save" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Review and save" }),
+    ).toBeDisabled();
   });
 
   it("forgets every change on discard", () => {
@@ -164,22 +166,20 @@ describe("CostCenterTab", () => {
   });
 
   it("previews the change, then saves the whole list at the version it was read", async () => {
-    mutateAsync.mockImplementation(
-      async ({ dryRun }: { dryRun: boolean }) => ({
-        version: dryRun ? 3 : 4,
-        saved: !dryRun,
-        created: [],
-        updated: [
-          {
-            before: LIST.rows[0],
-            after: { ...LIST.rows[0], input_price: "1.9" },
-          },
-        ],
-        deleted: [],
-        unchanged: 1,
-        warnings: [],
-      }),
-    );
+    mutateAsync.mockImplementation(async ({ dryRun }: { dryRun: boolean }) => ({
+      version: dryRun ? 3 : 4,
+      saved: !dryRun,
+      created: [],
+      updated: [
+        {
+          before: LIST.rows[0],
+          after: { ...LIST.rows[0], input_price: "1.9" },
+        },
+      ],
+      deleted: [],
+      unchanged: 1,
+      warnings: [],
+    }));
     refetch.mockResolvedValue({ data: LIST });
     renderTab(ADMIN);
 

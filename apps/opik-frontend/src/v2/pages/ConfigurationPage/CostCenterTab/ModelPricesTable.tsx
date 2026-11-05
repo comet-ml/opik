@@ -193,21 +193,18 @@ const ModelPricesTable: React.FC<ModelPricesTableProps> = ({
 }) => {
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table>
+      <Table className="min-w-[1100px]">
         <TableHeader>
           <TableRow>
             <TableHead className="px-3 py-2">Model</TableHead>
-            <TableHead className="px-3 py-2">Provider</TableHead>
-            <TableHead className="px-3 py-2">Type</TableHead>
+            <TableHead className="w-36 px-3 py-2">Provider</TableHead>
+            <TableHead className="w-20 px-3 py-2">Type</TableHead>
             {PRICE_FIELDS.map((field) => (
-              <TableHead
-                key={field}
-                className="w-32 whitespace-nowrap px-3 py-2 text-right"
-              >
+              <TableHead key={field} className="w-28 px-3 py-2 text-right">
                 {PRICE_LABELS[field]} / 1M
               </TableHead>
             ))}
-            <TableHead className="px-3 py-2">Note</TableHead>
+            <TableHead className="w-60 px-3 py-2">Note</TableHead>
             <TableHead className="w-12 px-3 py-2">
               <span className="sr-only">Actions</span>
             </TableHead>
@@ -291,7 +288,7 @@ const ModelPricesTable: React.FC<ModelPricesTableProps> = ({
                       </TableCell>
                     ))
                   )}
-                  <TableCell className="min-w-48 px-2 py-1.5 align-top">
+                  <TableCell className="px-2 py-1.5 align-top">
                     {isEditable ? (
                       <Input
                         dimension="sm"
@@ -335,7 +332,10 @@ const ModelPricesTable: React.FC<ModelPricesTableProps> = ({
                           </li>
                         ))}
                         {rowWarnings.map((problem, index) => (
-                          <li key={`w-${index}`} className="text-warning">
+                          <li
+                            key={`w-${index}`}
+                            className="text-warning-box-text"
+                          >
                             {describeProblem(problem)}
                           </li>
                         ))}
