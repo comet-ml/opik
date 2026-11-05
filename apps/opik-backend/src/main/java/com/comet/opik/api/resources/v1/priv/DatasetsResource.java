@@ -519,6 +519,7 @@ public class DatasetsResource {
             }), maxItems = 2000))),
             @ApiResponse(responseCode = "404", description = "Dataset or dataset version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public ChunkedOutput<JsonNode> streamDatasetExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExperimentItemStreamRequest.class))) @NotNull @Valid DatasetExperimentItemStreamRequest request) {
         featureFlags.checkDatasetVersioningEnabled();

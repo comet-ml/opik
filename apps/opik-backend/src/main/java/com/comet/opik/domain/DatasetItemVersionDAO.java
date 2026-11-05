@@ -2142,15 +2142,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code top_dataset_items_raw} uses, since ClickHouse re-inlines a CTE at every reference.
      */
     private static final String STREAM_DATASET_EXPERIMENT_ITEMS = """
-            WITH legacy_dataset_item_aliases AS (
-                SELECT id, dataset_item_id
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND id != dataset_item_id
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ), experiment_aggregated_scope_ids AS (
+            WITH experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
                     COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
@@ -2295,6 +2287,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         SELECT groupArray(tuple(id, experiment_id, dataset_item_id, trace_id, aggregated)) FROM page
                     )) AS page_row
                 )
+            ), legacy_dataset_item_aliases AS (
+                SELECT id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND id != dataset_item_id
+                AND id IN (SELECT dataset_item_id FROM page_rows)
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             )<if(has_raw)>
             , raw_items AS (
                 SELECT
@@ -3915,7 +3916,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Flux<ExperimentItem> streamExperimentItems(@NonNull DatasetExperimentItemStreamCriteria criteria) {
-        log.info("Streaming experiment items for dataset '{}', experiments '{}', limit '{}', cursor '{}'/'{}'",
+        log.debug("Streaming experiment items for dataset '{}', experiments '{}', limit '{}', cursor '{}'/'{}'",
                 criteria.datasetId(), criteria.experimentIds().size(), criteria.limit(),
                 criteria.lastRetrievedExperimentId(), criteria.lastRetrievedId());
 

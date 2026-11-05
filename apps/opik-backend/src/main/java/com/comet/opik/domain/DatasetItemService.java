@@ -1404,9 +1404,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Flux<ExperimentItem> streamExperimentItems(@NonNull UUID datasetId,
             @NonNull DatasetExperimentItemStreamRequest request, @NonNull List<DatasetItemFilter> filters,
             @NonNull String workspaceId) {
-        // Both resolve eagerly, so an unknown version fails the request before the stream starts
+        // Resolves the version eagerly, so an unknown version fails the request before the stream starts
         var experimentIdsMono = findDatasetExperimentIds(workspaceId, datasetId, request.datasetVersion());
-        String fallbackVersionId = getFallbackVersionId(datasetId, workspaceId).map(UUID::toString).orElse("");
 
         return experimentIdsMono.flatMapMany(experimentIds -> {
             if (experimentIds.isEmpty()) {
@@ -1415,7 +1414,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return versionDao.streamExperimentItems(DatasetExperimentItemStreamCriteria.builder()
                     .datasetId(datasetId)
                     .experimentIds(experimentIds)
-                    .fallbackVersionId(fallbackVersionId)
+                    .fallbackVersionId(
+                            getFallbackVersionId(datasetId, workspaceId).map(UUID::toString).orElse(""))
                     .filters(filters)
                     .limit(request.limit())
                     .lastRetrievedExperimentId(request.lastRetrievedExperimentId())

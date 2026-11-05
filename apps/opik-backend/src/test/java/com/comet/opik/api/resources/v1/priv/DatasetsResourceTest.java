@@ -9390,7 +9390,11 @@ class DatasetsResourceTest {
                     arguments(valid.toBuilder().datasetId(null).build(),
                             "datasetIdentified exactly one of dataset_id or dataset_name must be set"),
                     arguments(valid.toBuilder().datasetName("dataset").build(),
-                            "datasetIdentified exactly one of dataset_id or dataset_name must be set"));
+                            "datasetIdentified exactly one of dataset_id or dataset_name must be set"),
+                    arguments(valid.toBuilder().datasetId(null).datasetName(" ").build(),
+                            "datasetName must not be blank"),
+                    arguments(valid.toBuilder().projectName("").build(), "projectName must not be blank"),
+                    arguments(valid.toBuilder().datasetVersion(" ").build(), "datasetVersion must not be blank"));
         }
 
         @ParameterizedTest
