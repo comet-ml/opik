@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.redisson.api.RBucketReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -138,17 +140,29 @@ class RemoteWorkspaceFeaturesServiceTest {
         wireMock.server().verify(1 + MAX_RETRIES, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
     }
 
-    @Test
-    void refusedCredentialReadsAsNotEnabledAndIsNotCached() {
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403})
+    void refusedCredentialReadsAsNotEnabledAndIsNotCached(int status) {
         // An MCP OAuth or device token, which the platform doesn't take as an API key.
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
-                .willReturn(aResponse().withStatus(401)));
+                .willReturn(aResponse().withStatus(status)));
         var redis = Mockito.mock(RedissonReactiveClient.class);
         var entry = cacheEntry(redis, "workspaceFeature-workspace-id-1-guardrails", Mono.empty());
 
         assertThat(service(redis, Duration.ofSeconds(5))
                 .isEnabled(caller(), request("Bearer oauth-token", null), WorkspaceFeature.GUARDRAILS)).isFalse();
         verify(entry, never()).set(any(), any(Duration.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {400, 404, 429})
+    void otherClientErrorIsUnavailableNotDisabled(int status) {
+        // A rate limit, a platform without this endpoint yet, or contract drift: the platform couldn't tell.
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
+                .willReturn(aResponse().withStatus(status)));
+
+        assertThatThrownBy(() -> service.isEnabled(caller(), request("key-1", null), WorkspaceFeature.GUARDRAILS))
+                .isInstanceOf(ServiceUnavailableException.class);
     }
 
     @Test
