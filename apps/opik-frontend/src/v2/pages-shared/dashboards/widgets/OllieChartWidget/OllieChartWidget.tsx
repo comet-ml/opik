@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import isArray from "lodash/isArray";
 import { useShallow } from "zustand/react/shallow";
 import { RefreshCw } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -220,7 +221,8 @@ const OllieChartWidget: React.FunctionComponent<
       updateWidget(sectionId, widgetId, { config: { ...config, ...patch } });
     };
     return {
-      sorting: config.sorting,
+      // The dashboards API stores the config as is, so a hand-edited sort may not be a list.
+      sorting: isArray(config.sorting) ? config.sorting : undefined,
       columnsWidth: config.columnsWidth,
       onSortingChange: (sorting: Sorting) => saveConfig({ sorting }),
       onColumnsWidthChange: (columnsWidth: Record<string, number>) =>

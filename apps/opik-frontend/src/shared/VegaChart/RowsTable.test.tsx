@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import RowsTable from "./RowsTable";
 
 const ROWS = [
@@ -19,6 +19,10 @@ const columnValues = (column: number) =>
 const header = (name: string) => screen.getByText(name).closest("th")!;
 
 describe("RowsTable", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("sorts numbers as numbers and keeps empty cells last", () => {
     render(<RowsTable rows={ROWS} columns={["model", "cost"]} />);
     expect(columnValues(0)).toEqual(["gpt-4o", "claude", "llama", "mistral"]);
@@ -126,6 +130,5 @@ describe("RowsTable", () => {
     vi.runAllTimers();
 
     expect(onColumnsWidthChange).not.toHaveBeenCalled();
-    vi.useRealTimers();
   });
 });
