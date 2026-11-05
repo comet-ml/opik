@@ -196,15 +196,16 @@ def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Op
 
 
 def test_chat_prompt__direct_class_instantiation__no_project_name__created_in_default_project(
-    opik_client: opik.Opik,
+    opik_client: opik.Opik, prompt_name: str
 ):
-    prompt_name = f"chat-prompt-direct-{str(uuid.uuid4())[-6:]}"
     messages = [
         {"role": "system", "content": "You are an expert."},
         {"role": "user", "content": "Explain {{concept}}."},
     ]
 
-    ChatPrompt(name=prompt_name, messages=messages)
+    prompt = ChatPrompt(name=prompt_name, messages=messages)
+
+    assert prompt.project_name == PROJECT_NAME
 
     prompts_from_api = opik_client.search_prompts(
         filter_string=f'name = "{prompt_name}"', project_name=PROJECT_NAME

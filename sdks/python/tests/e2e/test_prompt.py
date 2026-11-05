@@ -202,6 +202,8 @@ def test_prompt__initialize_class_instance__no_project_name__created_in_default_
 
     prompt = opik.Prompt(name=prompt_name, prompt=template)
 
+    assert prompt.project_name == opik_client.project_name
+
     prompts_from_api = opik_client.search_prompts(
         filter_string=f'name = "{prompt_name}"',
         project_name=opik_client.project_name,
