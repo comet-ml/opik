@@ -217,7 +217,10 @@ class TopicsNightlyJobTest {
             assertThat(saved.finishedAt()).isNotNull();
             var stats = json(saved.stats());
             assertThat(stats.path("vectors").asInt()).isEqualTo(BUILT);
-            assertThat(stats.path("k").asInt()).isEqualTo(15);
+            assertThat(stats.path("k").asInt())
+                    .isEqualTo(TopicsRebuildService.groups(stats.path("unique_texts").asInt()));
+            assertThat(stats.path("author_examples").asInt())
+                    .isEqualTo(TopicsRebuildService.authorExamples(stats.path("k").asInt()));
             assertThat(stats.path("seed").asInt()).isZero();
             assertThat(stats.path("provisional").asBoolean()).isTrue();
             assertThat(stats.path("qwen_calls").asInt()).isEqualTo(1);
@@ -246,7 +249,7 @@ class TopicsNightlyJobTest {
             assertThat(topic.workspaceId()).isEqualTo(workspaceId);
             assertThat(topic.born()).isEqualTo(night());
             assertThat(topic.retiredAt()).isNull();
-            assertThat(AuthorApplier.isCatchAll(topic.name())).isFalse();
+            assertThat(AuthorApplier.isCatchAllName(topic.name())).isFalse();
         });
         var topicIds = topics.stream().map(Topic::id).collect(Collectors.toSet());
 
@@ -309,7 +312,7 @@ class TopicsNightlyJobTest {
             // The service decodes the keys in schema order: the topics before Other.
             assertThat(request.getBodyAsString())
                     .contains("\"schema\":{\"type\":\"object\",\"properties\":{\"topics\":");
-            assertThat(body.path("messages").get(0).path("content").asText()).contains("cluster 14:");
+            assertThat(body.path("messages").get(0).path("content").asText()).contains("cluster 0: ", "% of traffic");
         });
 
         // The next night: the project has a list, and stage 2a has no nightly update.
@@ -344,18 +347,20 @@ class TopicsNightlyJobTest {
         seed(workspaceId, projectId, 0, BUILT);
         var answer = InferenceJson.MAPPER.createObjectNode();
         var topics = answer.putArray("topics");
+        var assignment = answer.putArray("assignment");
         for (int j = 0; j < 11; j++) {
-            topics.addObject().put("name", "Topic " + j).put("definition", "Requests of kind " + j)
-                    .putArray("clusters").add(j);
+            topics.addObject().put("name", "Topic " + j).put("definition", "Requests of kind " + j);
+            assignment.addObject().put("cluster", j).put("topic", j);
         }
-        answer.putArray("other").add(11).add(12).add(13).add(14);
         stubAnswer(answer);
 
         var result = nightlyService.runNight(start());
 
         assertThat(result.saved()).isEqualTo(1);
         assertThat(topics(projectId)).hasSize(10);
-        assertThat(json(runs(projectId).getFirst().stats()).path("other_groups").asInt()).isEqualTo(5);
+        // The 11th topic's group and every group the answer left out are Other.
+        var stats = json(runs(projectId).getFirst().stats());
+        assertThat(stats.path("other_groups").asInt()).isEqualTo(stats.path("k").asInt() - 10);
     }
 
     @Test

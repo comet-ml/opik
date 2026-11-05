@@ -60,9 +60,19 @@ public class TopicsRebuildService {
 
     static final int DIMENSIONS = TopicVectorsTickService.EMBED_DIMENSIONS;
     static final int MAX_TOPICS = 10;
-    static final int MIN_GROUPS = 15;
+    /** The first build's fine groups: one per {@value #TEXTS_PER_GROUP} unique texts, within these bounds. */
+    static final int MIN_GROUPS = 30;
     static final int MAX_GROUPS = 50;
-    static final int TEXTS_PER_GROUP = 60;
+    static final int TEXTS_PER_GROUP = 30;
+    /**
+     * The author sees {@value #AUTHOR_FREQUENT} most frequent texts per group plus the ones nearest its centre, in all
+     * clamp(round({@value #AUTHOR_BUDGET} / k), {@value #AUTHOR_MIN}, {@value #AUTHOR_MAX}) texts, so the prompt stays
+     * about as long as the longest one known to work (5 texts on 50 groups).
+     */
+    static final int AUTHOR_FREQUENT = 5;
+    static final int AUTHOR_BUDGET = 250;
+    static final int AUTHOR_MIN = 5;
+    static final int AUTHOR_MAX = 10;
     static final int RECENT_DAYS = 7;
     static final int QWEN_MAX_TOKENS = 2500;
     /** A first build over fewer traces is marked provisional in its stats. */
@@ -80,6 +90,19 @@ public class TopicsRebuildService {
     /** How a run ended. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
+    }
+
+    /**
+     * The first build's number of fine groups: min({@value #MAX_GROUPS}, max({@value #MIN_GROUPS}, unique /
+     * {@value #TEXTS_PER_GROUP})), at most the unique texts.
+     */
+    static int groups(int unique) {
+        return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+    }
+
+    /** The author's texts per group for {@code k} groups. */
+    static int authorExamples(int k) {
+        return Math.min(AUTHOR_MAX, Math.max(AUTHOR_MIN, (int) Math.round((double) AUTHOR_BUDGET / k)));
     }
 
     /** Inserts the run as {@code running} and returns its id. */
@@ -181,7 +204,7 @@ public class TopicsRebuildService {
 
             var merged = IntentMerger.merge(texts, vectors, DIMENSIONS);
             int unique = merged.size();
-            int k = Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
+            int k = groups(unique);
             // The seed is the project's saved nights: 0 for the first build.
             long seed = 0;
             var weights = new double[unique];
@@ -202,7 +225,11 @@ public class TopicsRebuildService {
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
             var groups = GroupSummaries.summarize(texts, vectors, groupOf, fit.centres(), recent, DIMENSIONS);
-            var prompt = TopicPrompts.author(groups, MAX_TOPICS);
+            int perGroup = authorExamples(k);
+            stats.put("author_examples", perGroup);
+            var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
+                    Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
+            var prompt = TopicPrompts.author(groups, MAX_TOPICS, examples);
             // The prompt and the answer hold trace-derived text: DEBUG only, never in production logs by default.
             log.debug("Topics run '{}' author prompt, project '{}':\n{}", runId, projectId, prompt);
             var answer = timed("qwen", () -> author(prompt));
@@ -388,7 +415,7 @@ public class TopicsRebuildService {
                 throw invariant("'%s' topics, at most '%s'".formatted(topics.size(), MAX_TOPICS));
             }
             for (var topic : topics) {
-                if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAll(topic.name())) {
+                if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAllName(topic.name())) {
                     throw invariant("topic '%s' has a blank or catch-all name".formatted(topics.indexOf(topic)));
                 }
                 if (!topic.born().equals(night)) {

@@ -49,7 +49,8 @@ class TopicsAlgorithmFixtureTest {
             assertThat(Arrays.copyOfRange(merged.vectors(), u * D, (u + 1) * D))
                     .containsExactly(Arrays.copyOfRange(fixture.vectors, first * D, (first + 1) * D));
         }
-        assertThat(fixture.k()).isEqualTo(Math.min(Math.min(50, Math.max(15, merged.size() / 60)), merged.size()));
+        // The stand grouped this window into 15; the first build now makes finer groups (TopicsRebuildService.groups).
+        assertThat(fixture.k()).isEqualTo(15);
     }
 
     /**
@@ -103,7 +104,7 @@ class TopicsAlgorithmFixtureTest {
     }
 
     @Test
-    @DisplayName("summaries and the author prompt equal the stand's byte for byte, given its cluster labels")
+    @DisplayName("summaries equal the stand's byte for byte, given its cluster labels; the prompt lists every group")
     void summariesAndPrompt() {
         var summaries = summaries();
         var expected = fixture.expected.get("summaries");
@@ -119,36 +120,55 @@ class TopicsAlgorithmFixtureTest {
             assertThat(actual.examples()).containsExactlyElementsOf(TopicsFixture.strings(want.get("examples")));
             assertThat(actual.uniqueTexts()).isEqualTo(want.get("n_unique").asInt());
         }
-        assertThat(TopicPrompts.author(summaries, 10)).isEqualTo(fixture.authorPrompt);
+        var examples = GroupSummaries.authorExamples(fixture.intents, fixture.vectors,
+                fixture.sklearnTraceLabels(merged), fixture.centres, D, 5, 5);
+        var prompt = TopicPrompts.author(summaries, 10, examples);
+        for (var summary : summaries) {
+            assertThat(prompt).contains("  cluster " + summary.group() + ": "
+                    + Math.round(100 * summary.share()) + "% of traffic\n    - "
+                    + examples.get(summary.group()).getFirst());
+        }
     }
 
+    /**
+     * The stand answered the old author prompt, which dropped "General System Access" (group 6) as a catch-all; group
+     * 3 it left out. The per-cluster answer keeps a name unless it is a catch-all as a whole, so the apply is checked
+     * against the stand's answer with that topic kept; the assignment is checked from the stand's topic map.
+     */
     @Test
-    @DisplayName("apply and assignment: the topic map, the prototypes and the final labels equal the stand's")
+    @DisplayName("apply and assignment: the topic map (one topic more than the stand's), the prototypes and the final labels")
     void applyAndAssign() throws IOException {
         var summaries = summaries();
         var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree(fixture.answer.toString()));
         var applied = AuthorApplier.apply(answer, summaries, 10);
 
         var expectedTopics = fixture.expected.get("topics");
-        assertThat(applied.topics()).hasSize(expectedTopics.size());
-        for (int t = 0; t < expectedTopics.size(); t++) {
-            assertThat(applied.topics().get(t).name()).isEqualTo(expectedTopics.get(t).get("name").asText());
-            assertThat(applied.topics().get(t).definition())
-                    .isEqualTo(expectedTopics.get(t).get("definition").asText());
-            assertThat(applied.topics().get(t).groups())
-                    .containsExactly(boxed(TopicsFixture.ints(expectedTopics.get(t).get("clusters"))));
+        assertThat(applied.topics()).hasSize(expectedTopics.size() + 1);
+        var names = new ArrayList<String>();
+        expectedTopics.forEach(topic -> names.add(topic.get("name").asText()));
+        assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsAll(names)
+                .contains("General System Access");
+        for (var topic : applied.topics()) {
+            if (topic.name().equals("General System Access")) {
+                assertThat(topic.groups()).containsExactly(6);
+                continue;
+            }
+            var want = expectedTopics.get(names.indexOf(topic.name()));
+            assertThat(topic.definition()).isEqualTo(want.get("definition").asText());
+            assertThat(topic.groups()).containsExactly(boxed(TopicsFixture.ints(want.get("clusters"))));
         }
-        assertThat(applied.other()).containsExactly(boxed(TopicsFixture.ints(fixture.expected.get("other"))));
+        assertThat(applied.other()).containsExactly(3);
 
         var topicVectors = new ArrayList<float[]>();
         var owners = new ArrayList<Integer>();
-        for (int t = 0; t < applied.topics().size(); t++) {
-            for (int j : applied.topics().get(t).groups()) {
+        for (int t = 0; t < expectedTopics.size(); t++) {
+            for (int j : TopicsFixture.ints(expectedTopics.get(t).get("clusters"))) {
                 topicVectors.add(centre(j));
                 owners.add(t);
             }
         }
-        var otherVectors = applied.other().stream().map(this::centre).toList();
+        var otherVectors = Arrays.stream(TopicsFixture.ints(fixture.expected.get("other"))).mapToObj(this::centre)
+                .toList();
         var assigner = new PrototypeAssigner(topicVectors, owners, otherVectors, D);
         var prototypes = fixture.expected.get("prototypes");
         assertThat(assigner.gatedOther()).isEqualTo(prototypes.get("gated_other").size());

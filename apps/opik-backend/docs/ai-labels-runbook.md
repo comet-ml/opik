@@ -304,9 +304,11 @@ project with a saved list is skipped every night until the nightly update ships.
 ai-labels, and runs only with `TOPICS_ENABLED=true`.
 
 A first build reads the project's window (the 30 whole UTC days before the night, the newest 30,000 traces at most),
-merges identical intent texts, groups them with k-means (15 to 50 groups), asks Qwen through opik-inference
-`/v1/generate` to name up to 10 topics over the groups, and assigns every window trace to its nearest topic prototype
-or to Other. It writes:
+merges identical intent texts, groups them with k-means (30 to 50 groups, about one per 30 unique texts), asks Qwen
+through opik-inference `/v1/generate` to name up to 10 topics over the groups, and assigns every window trace to its
+nearest topic prototype or to Other. The prompt shows each group's share and 5 to 10 example requests (the most
+frequent, then the ones nearest the group's centre); the answer names the topics and places every group in one topic
+or in Other, and a name that is a catch-all as a whole ("Other", "General Requests") is dropped. It writes:
 
 | Table | Database | What |
 |---|---|---|
@@ -395,7 +397,7 @@ A failed run writes nothing but its `topic_runs` row; the project is built again
 | `qwen_error` | The Qwen call failed after its 2 retries, or with a 4xx. `error_message` has the code and HTTP status. |
 | `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema: opik-inference answers `schema_violation` for a cut or off-schema answer, which is not retried. The answer is in the DEBUG logs. |
 | `window_read` | The ClickHouse window read failed, or the window had no usable vector. |
-| `invariant` | A check before the save failed: more than 10 topics, a blank or catch-all name, a prototype not of unit length, a trace not labelled once. |
+| `invariant` | A check before the save failed: more than 10 topics, a blank name or one that is a catch-all as a whole, a prototype not of unit length, a trace not labelled once. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
 | `save` | The ClickHouse insert or the MySQL transaction failed, or another run saved the project meanwhile (`error_message` says so; only if the project's Redis lock was lost). The run deletes the `trace_topics` rows it inserted; if that delete fails too (a WARN names the run), they stay until the next saved run replaces them. |
 | `abandoned` | The pod stopped during the run. |
