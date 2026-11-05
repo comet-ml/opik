@@ -3,7 +3,10 @@ package com.comet.opik.domain;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.RetryUtils;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.AfterAll;
@@ -20,6 +23,7 @@ import org.redisson.client.codec.StringCodec;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -32,6 +36,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -43,6 +48,9 @@ class RemoteWorkspaceFeaturesServiceTest {
 
     private static final String WORKSPACE_NAME = "team-a";
     private static final String ENABLED = "{\"workspaceName\":\"team-a\",\"features\":{\"guardrails\":true}}";
+    // Small versions of the auth hop's 3 s timeout and single retry.
+    private static final Duration REQUEST_TIMEOUT = Duration.ofMillis(300);
+    private static final int MAX_RETRIES = 1;
 
     private WireMockUtils.WireMockRuntime wireMock;
     private AuthenticationConfig.UrlConfig platformUrl;
@@ -53,8 +61,7 @@ class RemoteWorkspaceFeaturesServiceTest {
         wireMock = WireMockUtils.startWireMock();
         platformUrl = new AuthenticationConfig.UrlConfig(wireMock.runtimeInfo().getHttpBaseUrl());
         // No cache: every call reaches the platform, so each credential path is observable.
-        service = new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl,
-                Mockito.mock(RedissonReactiveClient.class), Duration.ZERO);
+        service = service(Mockito.mock(RedissonReactiveClient.class), Duration.ZERO);
     }
 
     @AfterAll
@@ -99,16 +106,49 @@ class RemoteWorkspaceFeaturesServiceTest {
     }
 
     @Test
-    void platformErrorOrUnknownFeatureReadsAsNotEnabled() {
+    void unknownFeatureReadsAsNotEnabled() {
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
-                .withHeader(HttpHeaders.AUTHORIZATION, equalTo("key-500"))
-                .willReturn(aResponse().withStatus(500)));
-        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
-                .withHeader(HttpHeaders.AUTHORIZATION, equalTo("key-old"))
                 .willReturn(okJson("{\"workspaceName\":\"team-a\",\"features\":{}}")));
 
-        assertThat(service.isEnabled(caller(), request("key-500", null), WorkspaceFeature.GUARDRAILS)).isFalse();
         assertThat(service.isEnabled(caller(), request("key-old", null), WorkspaceFeature.GUARDRAILS)).isFalse();
+    }
+
+    @Test
+    void platformFailureIsUnavailableNotDisabledAndIsNotCached() {
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
+                .willReturn(aResponse().withStatus(500)));
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        var entry = cacheEntry(redis, "workspaceFeature-workspace-id-1-guardrails", Mono.empty());
+
+        assertThatThrownBy(() -> service(redis, Duration.ofSeconds(5))
+                .isEnabled(caller(), request("key-1", null), WorkspaceFeature.GUARDRAILS))
+                .isInstanceOf(ServiceUnavailableException.class);
+        verify(entry, never()).set(any(), any(Duration.class));
+    }
+
+    @Test
+    void slowPlatformIsRetriedOnceWithinTheAuthTimeout() {
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
+                .willReturn(okJson(ENABLED).withFixedDelay(5_000)));
+        var start = Instant.now();
+
+        assertThatThrownBy(() -> service.isEnabled(caller(), request("key-1", null), WorkspaceFeature.GUARDRAILS))
+                .isInstanceOf(ServiceUnavailableException.class);
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(2));
+        wireMock.server().verify(1 + MAX_RETRIES, postRequestedFor(urlPathEqualTo("/opik/workspace-features")));
+    }
+
+    @Test
+    void refusedCredentialReadsAsNotEnabledAndIsNotCached() {
+        // An MCP OAuth or device token, which the platform doesn't take as an API key.
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
+                .willReturn(aResponse().withStatus(401)));
+        var redis = Mockito.mock(RedissonReactiveClient.class);
+        var entry = cacheEntry(redis, "workspaceFeature-workspace-id-1-guardrails", Mono.empty());
+
+        assertThat(service(redis, Duration.ofSeconds(5))
+                .isEnabled(caller(), request("Bearer oauth-token", null), WorkspaceFeature.GUARDRAILS)).isFalse();
+        verify(entry, never()).set(any(), any(Duration.class));
     }
 
     @Test
@@ -183,8 +223,13 @@ class RemoteWorkspaceFeaturesServiceTest {
     }
 
     private RemoteWorkspaceFeaturesService cachedService(RedissonReactiveClient redis) {
-        return new RemoteWorkspaceFeaturesService(TestHttpClientUtils.client(), platformUrl, redis,
-                Duration.ofSeconds(5));
+        return service(redis, Duration.ofSeconds(5));
+    }
+
+    private RemoteWorkspaceFeaturesService service(RedissonReactiveClient redis, Duration cacheTtl) {
+        return new RemoteWorkspaceFeaturesService(new RetriableHttpClient(TestHttpClientUtils.client()), platformUrl,
+                redis, cacheTtl, REQUEST_TIMEOUT,
+                RetryUtils.handleHttpErrors(MAX_RETRIES, Duration.ofMillis(10), Duration.ofMillis(10)));
     }
 
     @SuppressWarnings("unchecked")
