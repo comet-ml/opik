@@ -38,6 +38,8 @@ import java.util.function.Function;
  * retry starts that can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without
  * sending anything.
  * <p>
+ * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}.
+ * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
 @Slf4j
@@ -218,6 +220,8 @@ public class InferenceClient {
             var builder = call.target().apply(client.target(inference.getUrl()))
                     .request(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + inference.getCredential())
+                    // A redirect would carry the credential and the request to a destination nobody configured.
+                    .property(ClientProperties.FOLLOW_REDIRECTS, false)
                     .property(ClientProperties.CONNECT_TIMEOUT,
                             timeoutMillis(inference.getConnectTimeout().toJavaDuration(), left))
                     .property(ClientProperties.READ_TIMEOUT, timeoutMillis(call.readTimeout(), left));
