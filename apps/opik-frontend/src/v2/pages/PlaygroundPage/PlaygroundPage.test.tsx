@@ -1,5 +1,5 @@
 import React from "react";
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import {
   focusManager,
   QueryClient,
@@ -311,6 +311,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Unmount before the api spy is restored, or the page's queries reach the network.
+  cleanup();
   focusManager.setFocused(undefined);
   apiGet.mockRestore();
   vi.useRealTimers();
