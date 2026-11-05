@@ -10,5 +10,9 @@ import lombok.NonNull;
  */
 public interface WorkspaceFeaturesService {
 
+    /**
+     * @throws jakarta.ws.rs.ServiceUnavailableException when the platform can't tell, so a request fails with 503
+     *                                                   instead of reading an outage as "not enabled"
+     */
     boolean isEnabled(@NonNull RequestContext caller, @NonNull HttpHeaders request, @NonNull WorkspaceFeature feature);
 }

@@ -1,9 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.client.codec.StringCodec;
+import reactor.util.retry.Retry;
 
 import java.net.URI;
 import java.time.Duration;
@@ -22,15 +24,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Asks the platform's workspace features API on the caller's behalf, with the credential the request carries, and
  * caches each answer per workspace. Enablement belongs to the workspace's organization, not to the caller, and the
  * caller's access to the workspace is already settled by the time an endpoint asks.
  * <p>
- * A lookup that fails reads as not enabled and is not cached, so an outage withholds a feature rather than grants
- * it, and the next request asks again. The cache is best effort: when it cannot answer, or holds a value this
- * service did not write, the platform is asked.
+ * The call goes to the same platform as authentication, on a request's path, so it takes the auth hop's timeout and
+ * retries. When the platform still can't answer, the check fails with 503 and nothing is cached: an outage withholds a
+ * feature without claiming the organization lacks it, and the next request asks again. A credential the platform
+ * refuses reads as not enabled for that request only, since the refusal is about the caller, not the workspace.
+ * The cache is best effort: when it cannot answer, or holds a value this service did not write, the platform is asked.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -47,10 +52,13 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
     /** During a Redis incident every check would fail the same way, so only one warning per interval is logged. */
     private static final Duration CACHE_WARNING_INTERVAL = Duration.ofMinutes(1);
 
-    private final @NonNull Client client;
+    private final @NonNull RetriableHttpClient client;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull Duration cacheTtl;
+    /** Per attempt; zero leaves the shared client's timeout, as for authentication. */
+    private final @NonNull Duration requestTimeout;
+    private final @NonNull Retry retryPolicy;
     private final AtomicLong lastCacheWarningNanos = new AtomicLong(
             System.nanoTime() - CACHE_WARNING_INTERVAL.toNanos());
 
@@ -62,11 +70,22 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         UNAVAILABLE
     }
 
+    /** What the platform said: an answer about the workspace, or a refusal of the caller's credential. */
+    private enum PlatformAnswer {
+        ENABLED,
+        NOT_ENABLED,
+        REFUSED
+    }
+
+    /** The platform path to ask and how to put the caller's credential on the request. */
+    private record CredentialedPath(String path, Consumer<Invocation.Builder> credential) {
+    }
+
     @Override
     public boolean isEnabled(@NonNull RequestContext caller, @NonNull HttpHeaders request,
             @NonNull WorkspaceFeature feature) {
-        var featuresRequest = requestFor(request);
-        if (featuresRequest.isEmpty() || StringUtils.isAnyBlank(caller.getWorkspaceId(), caller.getWorkspaceName())) {
+        var credentialedPath = credentialFor(request);
+        if (credentialedPath.isEmpty() || StringUtils.isAnyBlank(caller.getWorkspaceId(), caller.getWorkspaceName())) {
             return false;
         }
 
@@ -76,15 +95,23 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
             return cached == CacheRead.ENABLED;
         }
 
-        boolean enabled;
+        PlatformAnswer answer;
         try {
-            enabled = lookUp(caller.getWorkspaceName(), featuresRequest.get(), feature);
+            answer = lookUp(caller.getWorkspaceName(), credentialedPath.get(), feature);
         } catch (RuntimeException lookupFailed) {
-            log.warn("Could not resolve feature '{}' for workspaceId '{}', treating it as not enabled",
+            log.warn("Could not resolve a workspace feature, answering 503, feature '{}', workspaceId '{}'",
                     feature.getValue(), caller.getWorkspaceId(), lookupFailed);
+            throw new ServiceUnavailableException(
+                    "Could not verify that '%s' is enabled for this workspace, retry later".formatted(
+                            feature.getValue()));
+        }
+        if (answer == PlatformAnswer.REFUSED) {
+            log.debug("The platform refused the caller's credential, feature '{}', workspaceId '{}'",
+                    feature.getValue(), caller.getWorkspaceId());
             return false;
         }
 
+        boolean enabled = answer == PlatformAnswer.ENABLED;
         // A cache that just failed to answer would fail the write too: skip it, rather than log it twice.
         if (cached == CacheRead.MISS) {
             writeCache(cacheKey, enabled, caller.getWorkspaceId(), feature);
@@ -128,8 +155,8 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         long now = System.nanoTime();
         long last = lastCacheWarningNanos.get();
         if (now - last >= CACHE_WARNING_INTERVAL.toNanos() && lastCacheWarningNanos.compareAndSet(last, now)) {
-            log.warn("Workspace feature cache failed, operation '{}', feature '{}', workspaceId '{}'; the platform "
-                    + "answers instead, and further cache failures in the next minute log at debug",
+            log.warn("Workspace feature cache failed, the platform answers instead and further cache failures in the "
+                    + "next minute log at debug, operation '{}', feature '{}', workspaceId '{}'",
                     operation, feature.getValue(), workspaceId, cacheFailed);
         } else {
             log.debug("Workspace feature cache failed, operation '{}', feature '{}', workspaceId '{}'",
@@ -137,41 +164,52 @@ public class RemoteWorkspaceFeaturesService implements WorkspaceFeaturesService 
         }
     }
 
-    private boolean lookUp(String workspaceName, Invocation.Builder featuresRequest, WorkspaceFeature feature) {
-        var body = Entity.json(new WorkspaceFeaturesRequest(workspaceName, List.of(feature.getValue())));
-        try (var response = featuresRequest.post(body)) {
-            if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
-                throw new IllegalStateException(
-                        "the platform answered the workspace features call with status '%d'"
-                                .formatted(response.getStatus()));
-            }
-            var features = response.readEntity(WorkspaceFeaturesResponse.class).features();
-            return features != null && Boolean.TRUE.equals(features.get(feature.getValue()));
+    private PlatformAnswer lookUp(String workspaceName, CredentialedPath credentialedPath, WorkspaceFeature feature) {
+        return client.executePostWithRetry(RetriableHttpClient.Request.<PlatformAnswer>builder()
+                .requestFunction(jersey -> jersey.target(URI.create(reactServiceUrl.url()))
+                        .path("opik")
+                        .path(credentialedPath.path()))
+                .requestCustomizer(builder -> credentialedPath.credential().accept(
+                        builder.accept(MediaType.APPLICATION_JSON)))
+                .body(Entity.json(new WorkspaceFeaturesRequest(workspaceName, List.of(feature.getValue()))))
+                .retryPolicy(retryPolicy)
+                .readTimeout(requestTimeout.isZero() ? null : requestTimeout)
+                .responseFunction(response -> answer(response, feature))
+                .build())
+                .block();
+    }
+
+    private static PlatformAnswer answer(Response response, WorkspaceFeature feature) {
+        var family = response.getStatusInfo().getFamily();
+        if (family == Response.Status.Family.CLIENT_ERROR) {
+            return PlatformAnswer.REFUSED;
         }
+        if (family != Response.Status.Family.SUCCESSFUL) {
+            throw new IllegalStateException(
+                    "the platform answered the workspace features call with status '%d'"
+                            .formatted(response.getStatus()));
+        }
+        var features = response.readEntity(WorkspaceFeaturesResponse.class).features();
+        return features != null && Boolean.TRUE.equals(features.get(feature.getValue()))
+                ? PlatformAnswer.ENABLED
+                : PlatformAnswer.NOT_ENABLED;
     }
 
     /**
      * Picks the credential the way the platform authenticated the request: the session cookie when there is one,
      * otherwise the API key. Any other credential is refused by the platform, so the feature reads as not enabled.
      */
-    private Optional<Invocation.Builder> requestFor(HttpHeaders request) {
+    private Optional<CredentialedPath> credentialFor(HttpHeaders request) {
         var session = request.getCookies().get(RequestContext.SESSION_COOKIE);
         if (session != null) {
-            return Optional.of(featuresRequest("workspace-features-session")
-                    .cookie(RequestContext.SESSION_COOKIE, session.getValue()));
+            return Optional.of(new CredentialedPath("workspace-features-session",
+                    builder -> builder.cookie(RequestContext.SESSION_COOKIE, session.getValue())));
         }
         var apiKey = request.getHeaderString(HttpHeaders.AUTHORIZATION);
         if (StringUtils.isBlank(apiKey)) {
             return Optional.empty();
         }
-        return Optional.of(featuresRequest("workspace-features").header(HttpHeaders.AUTHORIZATION, apiKey));
-    }
-
-    private Invocation.Builder featuresRequest(String path) {
-        return client.target(URI.create(reactServiceUrl.url()))
-                .path("opik")
-                .path(path)
-                .request()
-                .accept(MediaType.APPLICATION_JSON);
+        return Optional.of(new CredentialedPath("workspace-features",
+                builder -> builder.header(HttpHeaders.AUTHORIZATION, apiKey)));
     }
 }
