@@ -1320,6 +1320,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "relace/relace-search",
     },
     {
+      value: PROVIDER_MODEL_TYPE.RICURSIVEAI_RIPPLE_65B_PREVIEW,
+      label: "ricursiveai/ripple-65b-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_MAX,
       label: "sakana/fugu-max",
     },
@@ -1390,6 +1394,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY4,
+      label: "tencent/hy4",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY4_PREVIEW,

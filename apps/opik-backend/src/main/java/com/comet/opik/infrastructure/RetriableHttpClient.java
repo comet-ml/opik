@@ -68,7 +68,12 @@ public class RetriableHttpClient {
             Consumer<Invocation.Builder> requestCustomizer,
             Duration connectTimeout,
             Duration readTimeout,
-            @NonNull Function<Response, T> responseFunction) {
+            @NonNull Function<Response, T> responseFunction,
+            /**
+             * Builds the message of a retryable 503/504 from the response. Optional: without it, the
+             * message carries the upstream body, truncated.
+             */
+            Function<Response, String> errorMessageFunction) {
     }
 
     /**
@@ -112,8 +117,10 @@ public class RetriableHttpClient {
             int statusCode = response.getStatus();
             if (isRetryableStatusCode(statusCode)) {
                 return Mono.error(new RetryUtils.RetryableHttpException(
-                        "Service temporarily unavailable (HTTP %s): %s"
-                                .formatted(statusCode, diagnosticBody(response)),
+                        "Service temporarily unavailable (HTTP %s): %s".formatted(statusCode,
+                                request.errorMessageFunction() != null
+                                        ? request.errorMessageFunction().apply(response)
+                                        : diagnosticBody(response)),
                         statusCode));
             }
             // justOrEmpty, not just: the previous Mono.fromCallable completed empty when the

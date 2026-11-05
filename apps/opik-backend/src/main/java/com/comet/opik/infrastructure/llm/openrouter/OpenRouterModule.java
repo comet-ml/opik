@@ -8,12 +8,14 @@ import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
+import com.google.inject.multibindings.ProvidesIntoSet;
 import com.openai.core.http.HttpClient;
 import jakarta.inject.Named;
 import lombok.NonNull;
@@ -35,9 +37,9 @@ public class OpenRouterModule extends AbstractModule {
         return new OpenAIClientGenerator(customConfig, responsesApiHttpClient, httpClientBuilders);
     }
 
-    @Provides
+    @ProvidesIntoSet
     @Singleton
-    public OpenRouterDecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
+    public DecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
             @NonNull ProviderBaseUrlGuard providerBaseUrlGuard,
             @NonNull ProviderErrorMessageValidator providerErrorMessageValidator) {

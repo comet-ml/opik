@@ -16,6 +16,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -24,9 +25,11 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -100,6 +103,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private OnlineEvaluationRecorder onlineEvaluationRecorder;
     @Mock
     private OpenRouterDecisionsClient decisionsClient;
+    @Mock
+    private OpenAiDecisionsClient openAiDecisionsClient;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -182,12 +187,18 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
         lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
+        lenient().when(onlineEvaluationRecorder.begin(
+                any(Span.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
+
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(ReadTool.NAME, "{}"),
                 stubTool(GetAttachmentTool.NAME, "{}")));
         agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry,
                 LlmModelRegistryTestUtils.bundledRegistry());
 
+        lenient().when(decisionsClient.provider()).thenReturn(LlmProvider.OPEN_ROUTER);
+        lenient().when(openAiDecisionsClient.provider()).thenReturn(LlmProvider.OPEN_AI);
         scorer = new OnlineScoringSpanLlmAsJudgeScorer(
                 onlineScoringConfig,
                 serviceTogglesConfig,
@@ -200,7 +211,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 agenticScoringService,
                 attachmentService,
                 onlineEvaluationRecorder,
-                new DecisionScoringService(decisionsClient, llmProviderFactory));
+                new DecisionScoringService(Set.of(decisionsClient, openAiDecisionsClient), llmProviderFactory));
     }
 
     @AfterEach
@@ -535,7 +546,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var span = createSpan().toBuilder()
                 .output(JsonUtils.valueToTree(Map.of("reply",
                         RandomStringUtils.secure()
-                                .nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1))))
+                                .nextAlphanumeric(DecisionModels.JEV_MAX_CONTEXT_TOKENS * 4 + 1))))
                 .build();
         when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         // A resolvable key, so the only thing keeping the request from the client is the context check.

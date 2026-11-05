@@ -104,6 +104,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_IMAGE_2_6_FLARE = "gpt-image-2.6-flare",
+  GPT_IMAGE_2_6_SUNBURST = "gpt-image-2.6-sunburst",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -796,6 +798,7 @@ export enum PROVIDER_MODEL_TYPE {
   REKAAI_REKA_FLASH_3 = "rekaai/reka-flash-3",
   RELACE_RELACE_APPLY_3 = "relace/relace-apply-3",
   RELACE_RELACE_SEARCH = "relace/relace-search",
+  RICURSIVEAI_RIPPLE_65B_PREVIEW = "ricursiveai/ripple-65b-preview",
   SAKANA_FUGU_MAX = "sakana/fugu-max",
   SAKANA_FUGU_ULTRA = "sakana/fugu-ultra",
   SAKANA_FUGU_ULTRA_V2 = "sakana/fugu-ultra-v2",
@@ -825,6 +828,7 @@ export enum PROVIDER_MODEL_TYPE {
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
   TENCENT_HY3_FREE = "tencent/hy3:free",
+  TENCENT_HY4 = "tencent/hy4",
   TENCENT_HY4_PREVIEW = "tencent/hy4-preview",
   THEDRUMMER_ANUBIS_70B_V1_1 = "thedrummer/anubis-70b-v1.1",
   THEDRUMMER_CYDONIA_24B_V4_1 = "thedrummer/cydonia-24b-v4.1",

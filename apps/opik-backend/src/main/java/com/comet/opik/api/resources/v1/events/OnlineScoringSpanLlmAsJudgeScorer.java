@@ -22,8 +22,8 @@ import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -127,16 +127,15 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 UserLog.RULE_ID, message.ruleId().toString());
 
         // Monitoring recorder (OPIK-6994): one hidden source=evaluator trace per span evaluation with an
-        // llm span for the scoring call. NOOP when the toggle is off — no extra writes.
-        EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(span, message.ruleId(), message.ruleName(),
-                        message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
-                : EvaluationRecorder.NOOP;
+        // llm span for the scoring call.
+        EvaluationRecorder recorder = onlineEvaluationRecorder.begin(span,
+                message.ruleId(), message.ruleName(), message.llmAsJudgeCode().model().name(),
+                message.workspaceId(), message.userName());
 
-        // Decisions models (Jev) have no chat, tools or structured output: one Decisions API call answers every
-        // score. Rule validation keeps {{span}} out of their prompts.
-        Mono<List<FeedbackScoreBatchItem>> scoresMono = OpenRouterDecisionModel.isDecisionModel(
-                message.llmAsJudgeCode().model().name())
+        // Decisions models have no chat, tools or structured output: one Decisions API call answers every score.
+        // Rule validation keeps {{span}} out of their prompts.
+        Mono<List<FeedbackScoreBatchItem>> scoresMono = DecisionModels.isDecisionsRule(
+                message.llmAsJudgeCode().model())
                         ? evaluateWithDecisionModel(message, mdc, recorder)
                         : evaluateWithChatModel(message, mdc, recorder);
 
@@ -276,11 +275,11 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 int estimatedTokens = DecisionScoringService.estimateTokens(request,
                         onlineScoringConfig.getAgenticToolsCharsPerToken());
                 recorder.recordPreparation(0, estimatedTokens, false);
-                if (DecisionScoringService.exceedsContext(estimatedTokens)) {
+                if (DecisionScoringService.exceedsContext(code.model().name(), estimatedTokens)) {
                     userFacingLogger.warn("Skipped evaluation, the prompt is too large for the decision model,"
                             + " spanId '{}', model '{}', estimated tokens '{}', limit '{}'", span.id(),
                             code.model().name(),
-                            estimatedTokens, DecisionScoringService.MAX_CONTEXT_TOKENS);
+                            estimatedTokens, DecisionScoringService.maxContextTokens(code.model().name()));
                     return null;
                 }
                 userFacingLogger.info("Sending spanId '{}' to decision model '{}' with '{}' questions", span.id(),

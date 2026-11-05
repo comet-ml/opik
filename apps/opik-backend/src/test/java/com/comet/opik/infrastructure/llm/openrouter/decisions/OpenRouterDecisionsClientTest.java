@@ -7,6 +7,8 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.RetryUtils;
@@ -190,7 +192,9 @@ class OpenRouterDecisionsClientTest {
                 .willReturn(aResponse().withStatus(status).withBody("busy")));
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
-                .isInstanceOf(RetryUtils.RetryableHttpException.class);
+                .isInstanceOf(RetryUtils.RetryableHttpException.class)
+                .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .hasMessageNotContaining("busy");
         wireMock.server().verify(MAX_ATTEMPTS + 1, postRequestedFor(urlEqualTo(PATH)));
     }
 

@@ -1,16 +1,21 @@
 package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
@@ -36,7 +41,7 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
  * client for them.
  *
  * <p>Error messages keep only a documented OpenRouter error, checked by {@link ProviderErrorMessageValidator} as on
- * the chat path; any other upstream text is dropped. Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
+ * the chat path; any other upstream text is dropped, also from the 503/504 that {@link RetriableHttpClient} retries. Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
  * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
  * online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers transient ones.
  * Rate limits and gateway errors are also retried in-process first.
@@ -47,7 +52,7 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
  */
 @Slf4j
 @RequiredArgsConstructor
-public class OpenRouterDecisionsClient {
+public class OpenRouterDecisionsClient implements DecisionsClient {
 
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
@@ -71,6 +76,12 @@ public class OpenRouterDecisionsClient {
     private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
     private final @NonNull ProviderErrorMessageValidator providerErrorMessageValidator;
 
+    @Override
+    public LlmProvider provider() {
+        return LlmProvider.OPEN_ROUTER;
+    }
+
+    @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
         var openRouterUrl = StringUtils.isNotBlank(config.baseUrl())
@@ -95,6 +106,7 @@ public class OpenRouterDecisionsClient {
                 .readTimeout(Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
                         .map(io.dropwizard.util.Duration::toJavaDuration).orElse(null))
                 .responseFunction(this::processResponse)
+                .errorMessageFunction(this::extractErrorMessage)
                 .build();
         return client.executePostWithRetry(httpRequest);
     }
@@ -139,14 +151,17 @@ public class OpenRouterDecisionsClient {
         if (!response.hasEntity() || !response.bufferEntity()) {
             return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
         }
+        OpenRouterErrorMessage errorResponse;
         try {
-            var errorResponse = response.readEntity(OpenRouterErrorMessage.class);
-            if (errorResponse != null && errorResponse.error() != null && errorResponse.isDocumented()) {
-                return providerErrorMessageValidator.validate(errorResponse.toErrorMessage()).getMessage();
-            }
-        } catch (RuntimeException parseErrorResponse) {
+            errorResponse = response.readEntity(OpenRouterErrorMessage.class);
+        } catch (ProcessingException | IllegalStateException parseErrorResponse) {
+            // the type only: a parse error can quote the upstream body
             log.debug("Failed to parse OpenRouter error response, error type '{}'",
                     parseErrorResponse.getClass().getSimpleName());
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+        }
+        if (errorResponse != null && errorResponse.error() != null && errorResponse.isDocumented()) {
+            return providerErrorMessageValidator.validate(errorResponse.toErrorMessage()).getMessage();
         }
         return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
     }
