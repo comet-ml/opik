@@ -16,8 +16,10 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -241,6 +243,43 @@ class GuardrailPoliciesResourceTest {
     }
 
     @Test
+    @DisplayName("create keeps an id the client sends, and rejects one that is not a UUID v7")
+    void createWithClientId() {
+        var workspace = newWorkspace();
+        var id = TestIdGeneratorFactory.create().generateId();
+
+        assertThat(create(workspace, piiPolicy("client-id").toBuilder().id(id).build()).id()).isEqualTo(id);
+        try (var response = request(workspace, "").post(Entity.json(
+                piiPolicy("random-id").toBuilder().id(randomUUID()).build()))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
+    }
+
+    Stream<Arguments> writes() {
+        var id = "/" + randomUUID();
+        return Stream.of(
+                Arguments.of("create", "", (Function<Invocation.Builder, Response>) builder -> builder
+                        .post(Entity.json(piiPolicy("support-bot")))),
+                Arguments.of("update", id, (Function<Invocation.Builder, Response>) builder -> builder
+                        .put(Entity.json(piiPolicy("support-bot")))),
+                Arguments.of("delete", id, (Function<Invocation.Builder, Response>) Invocation.Builder::delete));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("writes")
+    @DisplayName("writing a policy needs the workspace settings permission")
+    void writeWithoutWorkspaceSettingsPermissionIsForbidden(String endpoint, String path,
+            Function<Invocation.Builder, Response> call) {
+        var workspace = new Workspace(randomUUID().toString(), randomUUID().toString());
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), workspace.apiKey(), workspace.name(),
+                WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE.getValue());
+
+        try (var response = call.apply(request(workspace, path))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    @Test
     @DisplayName("policy names are unique in a workspace, ignoring case, and only there")
     void nameIsUniquePerWorkspace() {
         var workspace = newWorkspace();
@@ -430,6 +469,10 @@ class GuardrailPoliciesResourceTest {
         assertThat(secondBot.total()).isEqualTo(2);
         assertThat(secondBot.page()).isEqualTo(2);
         assertThat(secondBot.content()).containsExactly(supportBot);
+
+        // LIKE wildcards in the name filter match only themselves.
+        Stream.of("_", "%", "support_bot").forEach(name -> assertThat(find(workspace, name, null, 1, 10).total())
+                .as(name).isZero());
     }
 
     @Test
@@ -450,6 +493,7 @@ class GuardrailPoliciesResourceTest {
         assertThat(getStatus(workspace, deleted.id())).isEqualTo(HttpStatus.SC_NOT_FOUND);
         assertThat(getStatus(workspace, kept.id())).isEqualTo(HttpStatus.SC_OK);
         assertThat(get(otherWorkspace, otherWorkspacePolicy.id())).isEqualTo(otherWorkspacePolicy);
+        assertThat(getStatus(workspace, otherWorkspacePolicy.id())).isEqualTo(HttpStatus.SC_NOT_FOUND);
         // The deleted policy's name is free again.
         create(workspace, piiPolicy("deleted"));
     }

@@ -3,10 +3,10 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.domain.LocalWorkspaceFeaturesService;
 import com.comet.opik.domain.RemoteWorkspaceFeaturesService;
 import com.comet.opik.domain.WorkspaceFeaturesService;
+import com.comet.opik.utils.RetryUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
@@ -26,7 +26,7 @@ public class WorkspaceFeaturesModule extends DropwizardAwareModule<OpikConfigura
     public WorkspaceFeaturesService workspaceFeaturesService(
             @Config("authentication") AuthenticationConfig authentication,
             @Config("workspaceFeatures") WorkspaceFeaturesConfig config,
-            @NonNull Client client,
+            @NonNull RetriableHttpClient retriableHttpClient,
             @NonNull RedissonReactiveClient redissonClient) {
 
         if (!authentication.isEnabled()) {
@@ -39,7 +39,12 @@ public class WorkspaceFeaturesModule extends DropwizardAwareModule<OpikConfigura
         Preconditions.checkArgument(StringUtils.isNotBlank(authentication.getReactService().url()),
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
-        return new RemoteWorkspaceFeaturesService(client, authentication.getReactService(), redissonClient,
-                config.getCacheTtl().toJavaDuration());
+        // The same platform as authentication, on a request's path: the auth hop's timeout and retries apply.
+        return new RemoteWorkspaceFeaturesService(retriableHttpClient, authentication.getReactService(),
+                redissonClient, config.getCacheTtl().toJavaDuration(),
+                authentication.getRequestTimeout().toJavaDuration(),
+                RetryUtils.handleHttpErrors(authentication.getRequestMaxRetries(),
+                        authentication.getRequestRetryMinBackoff().toJavaDuration(),
+                        authentication.getRequestRetryMaxBackoff().toJavaDuration()));
     }
 }

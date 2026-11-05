@@ -74,12 +74,17 @@ public interface GuardrailPolicyDAO {
     @SqlQuery(SELECT_POLICIES + "WHERE p.workspace_id = :workspaceId AND p.id = :id")
     Optional<GuardrailPolicy> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
-    // Exact names and the scope each have an index of their own (see migration 000112).
+    // Exact names and the scope each have an index of their own (see migration 000112). The partial name is escaped
+    // with escapeLike, so its '%' and '_' match only themselves.
     String FILTERS = """
-            <if(name)> AND name LIKE CONCAT('%', :name, '%') <endif>
+            <if(name)> AND name LIKE CONCAT('%', :name, '%') ESCAPE '!' <endif>
             <if(names)> AND name IN (<names>) <endif>
             <if(execution_scope)> AND execution_scope = :executionScope <endif>
             """;
+
+    static String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
 
     @SqlQuery("SELECT COUNT(*) FROM guardrail_policies WHERE workspace_id = :workspaceId " + FILTERS)
     @UseStringTemplateEngine
