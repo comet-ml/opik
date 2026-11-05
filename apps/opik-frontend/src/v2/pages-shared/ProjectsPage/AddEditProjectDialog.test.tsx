@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import AddEditProjectDialog from "./AddEditProjectDialog";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const mockCreateMutate = vi.fn();
 const mockNavigate = vi.fn();
@@ -58,6 +59,11 @@ describe("AddEditProjectDialog", () => {
     onSuccess({ id: "project-id" });
 
     expect(setOpen).toHaveBeenCalledWith(false);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: EXPLAINERS_MAP[EXPLAINER_ID.i_created_a_project_now_what].title,
+      }),
+    );
     expect(mockNavigate).toHaveBeenCalledWith({
       to: "/$workspaceName/projects/$projectId/home",
       params: { projectId: "project-id", workspaceName: "test-workspace" },
@@ -73,6 +79,7 @@ describe("AddEditProjectDialog", () => {
     expect(mockCreateMutate).toHaveBeenCalledTimes(1);
     expect(setOpen).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockToast).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Name")).toHaveValue("rejected-name");
   });
 
