@@ -341,8 +341,9 @@ class TopicsNightlyJobTest {
             assertThat(body.path("messages").get(0).path("content").asText()).contains("cluster 0: ", "% of traffic");
         });
 
-        // The next night: the project has a list, so it gets a nightly update; the same window has no Other group of
-        // 20 traces, so Qwen is not called.
+        // The next night: the project has a list, so it gets a nightly update. The groups the author left out are
+        // Other; the naming sends them back to Other, so the list stays.
+        stubNightly(emptyNaming(), sameAnswers());
         var again = nightlyService.runNight(start().plus(Duration.ofDays(1)));
 
         assertThat(again.saved()).isEqualTo(1);
@@ -351,7 +352,7 @@ class TopicsNightlyJobTest {
                     assertThat(update.status()).isEqualTo(TopicRun.Status.SAVED);
                     var stats = json(update.stats());
                     assertThat(stats.path("rebuilds_before").asInt()).isEqualTo(1);
-                    assertThat(stats.path("qwen_calls").asInt()).isZero();
+                    assertThat(stats.path("born")).isEmpty();
                     // Every trace of tonight's window was labelled last night.
                     assertThat(stats.path("churn_any").isNumber()).isTrue();
                 });
@@ -582,7 +583,7 @@ class TopicsNightlyJobTest {
         stubAnswer(FIXTURE.answer);
         assertThat(nightlyService.runNight(start()).saved()).isEqualTo(1);
         wireMock.resetAll();
-        stubNightly(NAMED, sameAnswers());
+        stubNightly(emptyNaming(), sameAnswers());
 
         assertThat(nightlyService.runNight(secondStart()).saved()).isEqualTo(1);
         assertThat(nightlyService.runNight(secondStart().plus(Duration.ofDays(1))).saved()).isEqualTo(1);
@@ -1035,6 +1036,15 @@ class TopicsNightlyJobTest {
         } else {
             stubAnswer(verify, "You check decisions");
         }
+    }
+
+    /** A naming answer that places nothing: every candidate stays in Other. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     private static JsonNode sameAnswers() {
