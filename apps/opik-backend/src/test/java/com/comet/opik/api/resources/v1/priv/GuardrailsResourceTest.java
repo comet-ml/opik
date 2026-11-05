@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.GuardrailsValidationRequest.MAX_TEXT_LENGTH;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static java.util.UUID.randomUUID;
@@ -67,6 +68,7 @@ public class GuardrailsResourceTest {
     private static final String USER = randomUUID().toString();
     private static final String WORKSPACE_ID = randomUUID().toString();
     private static final String TEST_WORKSPACE = randomUUID().toString();
+    private static final String TEXT_OVER_LIMIT = "textWithinLimit text must be at most 16384 characters as the decision service counts them";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -224,11 +226,20 @@ public class GuardrailsResourceTest {
         assertThat(actualStats.stats()).contains(expected);
     }
 
-    @Test
+    static Stream<Arguments> validTexts() {
+        return Stream.of(
+                Arguments.of("a short text", "some text"),
+                // With its quotes, the JSON encoding is exactly at the decision service's limit.
+                Arguments.of("an ASCII text at the limit", "a".repeat(MAX_TEXT_LENGTH - 2)),
+                Arguments.of("a non-ASCII text at the limit", "я".repeat((MAX_TEXT_LENGTH - 2) / 6)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("validTexts")
     @DisplayName("guardrail validations answer 501 until they are implemented")
-    void validate__whenRequestIsValid__thenNotImplemented() {
+    void validate__whenRequestIsValid__thenNotImplemented(String scenario, String text) {
         var request = GuardrailsValidationRequest.builder()
-                .text("some text")
+                .text(text)
                 .validations(List.of(promptInjection()))
                 .build();
 
@@ -245,6 +256,19 @@ public class GuardrailsResourceTest {
                         .text("  ")
                         .validations(List.of(promptInjection()))
                         .build(), "text must not be blank"),
+                Arguments.of("an ASCII text over the limit", GuardrailsValidationRequest.builder()
+                        .text("a".repeat(MAX_TEXT_LENGTH - 1))
+                        .validations(List.of(promptInjection()))
+                        .build(), TEXT_OVER_LIMIT),
+                // Each line break is escaped to two characters, so a text shorter than the limit can exceed it.
+                Arguments.of("a text over the limit once encoded", GuardrailsValidationRequest.builder()
+                        .text("a\n".repeat(MAX_TEXT_LENGTH / 3))
+                        .validations(List.of(promptInjection()))
+                        .build(), TEXT_OVER_LIMIT),
+                Arguments.of("a non-ASCII text over the limit", GuardrailsValidationRequest.builder()
+                        .text("я".repeat((MAX_TEXT_LENGTH - 2) / 6 + 1))
+                        .validations(List.of(promptInjection()))
+                        .build(), TEXT_OVER_LIMIT),
                 Arguments.of("no checks", GuardrailsValidationRequest.builder()
                         .text("some text")
                         .validations(List.of())
