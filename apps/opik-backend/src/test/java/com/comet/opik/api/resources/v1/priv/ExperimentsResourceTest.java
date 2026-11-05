@@ -1495,7 +1495,7 @@ class ExperimentsResourceTest {
         @ParameterizedTest
         @MethodSource
         @DisplayName("when filtering by evaluation method, then find, groups and group aggregations return only matching experiments")
-        void findByFilterEvaluationMethod(Operator operator, boolean expectTestSuite) {
+        void findByFilterEvaluationMethod(Operator operator, EvaluationMethod expectedMethod) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1511,7 +1511,9 @@ class ExperimentsResourceTest {
             experimentResourceClient.create(datasetExperiment, apiKey, workspaceName);
             experimentResourceClient.create(testSuiteExperiment, apiKey, workspaceName);
 
-            var expectedExperiment = expectTestSuite ? testSuiteExperiment : datasetExperiment;
+            var expectedExperiment = expectedMethod == EvaluationMethod.TEST_SUITE
+                    ? testSuiteExperiment
+                    : datasetExperiment;
             var expectedDatasetId = getAndAssert(expectedExperiment.id(), expectedExperiment, workspaceName, apiKey)
                     .datasetId()
                     .toString();
@@ -1545,8 +1547,8 @@ class ExperimentsResourceTest {
 
         private Stream<Arguments> findByFilterEvaluationMethod() {
             return Stream.of(
-                    Arguments.of(Operator.EQUAL, true),
-                    Arguments.of(Operator.NOT_EQUAL, false));
+                    Arguments.of(Operator.EQUAL, EvaluationMethod.TEST_SUITE),
+                    Arguments.of(Operator.NOT_EQUAL, EvaluationMethod.DATASET));
         }
 
         @ParameterizedTest
