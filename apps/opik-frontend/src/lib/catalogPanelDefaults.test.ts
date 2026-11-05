@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import ANTHROPIC_FIXTURE from "@/lib/anthropicCatalog.fixture.json";
 import OPENAI_FIXTURE from "@/lib/openaiCatalog.fixture.json";
+import GEMINI_FIXTURE from "@/lib/geminiCatalog.fixture.json";
 import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
 import {
   getLatestProviderModelsSnapshot,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/modelRegistryStore";
 import { getModelParams, ParamControl, toParamsRoute } from "@/lib/modelParams";
 import {
+  getGeminiOrVertexListedParams,
+  getThinkingLevelOptions,
   sanitizeConfigForRequest,
   updateProviderConfig,
 } from "@/lib/modelUtils";
@@ -26,10 +29,12 @@ import {
 } from "@/types/providers";
 import {
   ANTHROPIC_PANEL,
+  GEMINI_PANEL,
   GenericPanelPresentation,
   getShownControls,
   getShownValue,
   OPENAI_PANEL,
+  VERTEX_AI_PANEL,
 } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 
 // A request-only comparison misses a panel that shows one value and sends another, as it did when
@@ -67,18 +72,42 @@ const REGISTRY = {
       },
     },
   ],
+  ...GEMINI_FIXTURE.models,
 } as unknown as LlmModelsByProvider;
 
+const GEMINI_PROVIDERS = [PROVIDER_TYPE.GEMINI, PROVIDER_TYPE.VERTEX_AI];
+
+const nested = (
+  request: Record<string, unknown>,
+  block: string,
+  key: string,
+): unknown =>
+  (
+    (request.custom_parameters as Record<string, unknown> | undefined)?.[
+      block
+    ] as Record<string, unknown> | undefined
+  )?.[key];
+
+// A Gemini request without a level leaves thinking to the model: that is Auto where the model offers
+// it, and Off on Gemini 3 and later, which cannot turn thinking off.
 const sentEffort = (
   provider: PROVIDER_TYPE,
+  model: PROVIDER_MODEL_TYPE,
   request: Record<string, unknown>,
-): unknown =>
-  provider === PROVIDER_TYPE.ANTHROPIC
-    ? (
-        (request.custom_parameters as Record<string, unknown> | undefined)
-          ?.output_config as Record<string, unknown> | undefined
-      )?.effort ?? "off"
-    : request.reasoningEffort;
+): unknown => {
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    return nested(request, "output_config", "effort") ?? "off";
+  }
+  if (GEMINI_PROVIDERS.includes(provider)) {
+    return (
+      nested(request, "thinking", "level") ??
+      (getThinkingLevelOptions(model).some((o) => o.value === "auto")
+        ? "auto"
+        : "off")
+    );
+  }
+  return request.reasoningEffort;
+};
 
 type Case = [
   PROVIDER_MODEL_TYPE,
@@ -153,7 +182,49 @@ const CASES: Case[] = [
       { reasoningEffort: "ultra" },
     ],
   ),
+  // A stored 0 is shown as 0 and sends no limit; a stored value above the model's limit is shown and
+  // sent capped; a level the model does not offer is shown and sent as its default.
+  ...GEMINI_PROVIDERS.flatMap((provider) =>
+    REGISTRY[provider].flatMap((m) =>
+      [
+        {},
+        { maxCompletionTokens: 0 },
+        { maxCompletionTokens: 200000 },
+        {
+          thinkingLevel: "off",
+        },
+        { thinkingLevel: "minimal" },
+      ].map(
+        (stored): Case => [
+          (m.qualified_name ?? m.id) as PROVIDER_MODEL_TYPE,
+          provider,
+          provider === PROVIDER_TYPE.GEMINI ? GEMINI_PANEL : VERTEX_AI_PANEL,
+          undefined,
+          stored,
+        ],
+      ),
+    ),
+  ),
+  // A bare id saved under Vertex AI that AI Studio also lists: the panel and the request must both read
+  // the same row, whichever provider the prompt names.
+  [
+    PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    PROVIDER_TYPE.VERTEX_AI,
+    VERTEX_AI_PANEL,
+    undefined,
+    { maxCompletionTokens: 200000, thinkingLevel: "off" },
+  ],
 ];
+
+// The Gemini and Vertex AI panels open for listed models only: an unlisted id keeps the old panel.
+const getPanelParams = (
+  provider: PROVIDER_TYPE,
+  model: PROVIDER_MODEL_TYPE,
+  mode?: OpenAiPipelineMode,
+) =>
+  GEMINI_PROVIDERS.includes(provider)
+    ? getGeminiOrVertexListedParams(model)
+    : getModelParams(provider, model, toParamsRoute(mode));
 
 const showsSampling = (controls: ParamControl[]): boolean =>
   controls.some(
@@ -173,7 +244,7 @@ describe("the catalog panel shows what the request sends", () => {
         Object.entries(REGISTRY).map(([provider, models]) => [
           provider,
           models.map((m) => ({
-            value: m.id as PROVIDER_MODEL_TYPE,
+            value: (m.qualified_name ?? m.id) as PROVIDER_MODEL_TYPE,
             label: m.label ?? m.id,
           })),
         ]),
@@ -183,6 +254,7 @@ describe("the catalog panel shows what the request sends", () => {
     setLatestProviderProfiles({
       ...ANTHROPIC_FIXTURE.profiles,
       ...OPENAI_FIXTURE.profiles,
+      ...GEMINI_FIXTURE.profiles,
     } as unknown as ModelParamsByProvider);
   });
 
@@ -193,7 +265,7 @@ describe("the catalog panel shows what the request sends", () => {
   it.each(CASES)(
     "%s (%s, %s, %s, %o)",
     (model, provider, presentation, mode, stored) => {
-      const params = getModelParams(provider, model, toParamsRoute(mode))!;
+      const params = getPanelParams(provider, model, mode)!;
       const configs = {
         ...(getDefaultConfigByProvider(provider, model) as Record<
           string,
@@ -221,10 +293,14 @@ describe("the catalog panel shows what the request sends", () => {
         );
         const sent =
           control.kind === "effort"
-            ? sentEffort(provider, request)
+            ? sentEffort(provider, model, request)
             : control.kind === "sampling_choice"
               ? { temperature: request.temperature, topP: request.topP }
-              : request[control.configKey];
+              : request[control.configKey] ??
+                (presentation.zeroMeansNoLimit &&
+                control.param === "max_output_tokens"
+                  ? 0
+                  : undefined);
         expect(
           sent,
           control.kind === "number" ? control.param : control.kind,

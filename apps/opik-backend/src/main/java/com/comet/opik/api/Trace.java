@@ -33,7 +33,7 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class, Trace.View.Write.class}) UUID id,
         @JsonView({
-                Trace.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
+                Trace.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "If null, the default project is used") String projectName,
         @JsonView({Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String name,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) @NotNull @InRange Instant startTime,

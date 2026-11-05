@@ -165,6 +165,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
         lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
+        lenient().when(onlineEvaluationRecorder.begin(
+                any(Trace.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
+
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
@@ -1315,7 +1319,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
         void recordsTheFailedEvaluationOnceAndDoesNotFallBackWhenTheSpansCannotBeFetched() {
             var message = suiteMessage(List.of("judge-b"));
             stubJudgeRouting();
-            when(serviceTogglesConfig.isOnlineScoringTracingEnabled()).thenReturn(true);
             var monitored = new MonitoredEvaluation();
             when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), anyString(), any(), any()))
                     .thenReturn(monitored);
@@ -1337,7 +1340,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
         void monitorsEachJudgeAttemptOnItsOwnTrace() {
             var message = suiteMessage(List.of("judge-b"));
             stubJudgeRouting();
-            when(serviceTogglesConfig.isOnlineScoringTracingEnabled()).thenReturn(true);
             var judgeA = new MonitoredEvaluation();
             var judgeB = new MonitoredEvaluation();
             when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), eq("judge-a"), any(), any()))

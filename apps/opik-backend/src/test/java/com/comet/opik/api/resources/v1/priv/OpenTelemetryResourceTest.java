@@ -1536,6 +1536,37 @@ class OpenTelemetryResourceTest {
             topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
         }
 
+        @ParameterizedTest(name = "a later batch with {0} top-level spans of an existing trace stores its spans")
+        @ValueSource(ints = {1, 2})
+        void laterBatchWithTopLevelSpansOfExistingTraceStoresSpans(int laterTopLevelSpans) {
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var projectName = "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
+            var now = System.currentTimeMillis();
+            var firstSpan = topLevelSpan(otelTraceId, now - 1_000);
+            var laterSpans = IntStream.rangeClosed(1, laterTopLevelSpans)
+                    .mapToObj(i -> topLevelSpan(otelTraceId, now - 1_000 + i * 100L))
+                    .toList();
+
+            sendProtobufTraces(List.of(firstSpan), projectName, workspaceName, okApikey, HttpStatus.SC_OK, null);
+            sendProtobufTraces(laterSpans, projectName, workspaceName, okApikey, HttpStatus.SC_OK, null);
+
+            var expectedSpans = Stream.concat(Stream.of(firstSpan), laterSpans.stream()).toList();
+            assertTraceStoredInProject(expectedSpans, projectName, workspaceName);
+        }
+
+        private Span topLevelSpan(ByteString otelTraceId, long startTimeMs) {
+            return Span.newBuilder()
+                    .setName(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .setTraceId(otelTraceId)
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setParentSpanId(otelTraceId)
+                    .setStartTimeUnixNano(startTimeMs * 1_000_000L)
+                    .setEndTimeUnixNano((startTimeMs + 50) * 1_000_000L)
+                    .build();
+        }
+
         Stream<Arguments> sendProtobufTracesOutOfWindowTimestampThrowsException() {
             var now = Instant.now();
             return Stream.of(

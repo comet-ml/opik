@@ -133,7 +133,7 @@ class VertexAIClientGeneratorTest {
         keyPairGenerator.initialize(2048);
         var privateKey = keyPairGenerator.generateKeyPair().getPrivate();
 
-        var pem = "-----BEGIN PRIVATE KEY-----\\n"
+        var pem = "-----BEGIN PRIVATE KEY-----\\n" // betterleaks:allow — PEM framing for a key generated above
                 + Base64.getEncoder().encodeToString(privateKey.getEncoded())
                 + "\\n-----END PRIVATE KEY-----\\n";
 

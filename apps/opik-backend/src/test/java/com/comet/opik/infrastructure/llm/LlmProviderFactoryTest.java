@@ -207,7 +207,10 @@ class LlmProviderFactoryTest {
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
                 RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
-        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
+        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator,
+                new AnthropicClientGenerator(llmProviderClientConfig, registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
 
         // When & Then - Should successfully get the service
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, modelToRequest);
@@ -245,7 +248,10 @@ class LlmProviderFactoryTest {
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
                 RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
-        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
+        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator,
+                new AnthropicClientGenerator(llmProviderClientConfig, registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
 
         // When & Then - Should throw BadRequestException
         assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, modelToRequest))
