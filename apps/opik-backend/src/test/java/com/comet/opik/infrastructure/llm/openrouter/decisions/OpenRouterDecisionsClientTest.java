@@ -11,7 +11,6 @@ import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.dropwizard.util.Duration;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
@@ -220,8 +219,8 @@ class OpenRouterDecisionsClientTest {
                 .build();
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), config).block())
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("must end with '/v1'");
+                .isInstanceOf(DecisionsUrlException.class)
+                .hasMessageContaining("must end with /v1");
         assertThat(wireMock.server().getAllServeEvents()).isEmpty();
     }
 

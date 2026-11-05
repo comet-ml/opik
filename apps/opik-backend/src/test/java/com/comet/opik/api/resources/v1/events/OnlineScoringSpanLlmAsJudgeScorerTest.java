@@ -27,6 +27,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -61,6 +62,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -102,6 +104,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
+    private org.slf4j.Logger userFacingLogger;
     private OnlineScoringSpanLlmAsJudgeScorer scorer;
     private AgenticScoringService agenticScoringService;
 
@@ -151,9 +154,10 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
     @BeforeEach
     void setUp() {
+        userFacingLogger = mock(org.slf4j.Logger.class);
         mockedFactory = mockStatic(UserFacingLoggingFactory.class);
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                .thenReturn(mock(org.slf4j.Logger.class));
+                .thenReturn(userFacingLogger);
 
         OnlineScoringConfig.StreamConfiguration streamConfig = new OnlineScoringConfig.StreamConfiguration();
         streamConfig.setScorer("span_llm_as_judge");
@@ -505,6 +509,23 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         assertThat(score.value()).isEqualByComparingTo("1");
         assertThat(score.reason()).isEqualTo("Probability: 0.97");
         verifyNoInteractions(aiProxyService);
+    }
+
+    @Test
+    void decisionModelBaseUrlErrorIsShownInTheRuleLog() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        var span = createSpan();
+        var clientConfig = LlmProviderClientApiConfig.builder().apiKey("key").build();
+        var urlError = new DecisionsUrlException("Decision models cannot use the OpenRouter base URL");
+
+        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
+        when(decisionsClient.decide(any(), eq(clientConfig))).thenReturn(Mono.error(urlError));
+
+        assertThatThrownBy(() -> scorer.score(buildMessage(span, code)).block()).isSameAs(urlError);
+
+        verify(userFacingLogger).error("Error while scoring spanId '{}' with rule '{}': {}",
+                span.id(), "rule", urlError.getMessage());
     }
 
     @Test

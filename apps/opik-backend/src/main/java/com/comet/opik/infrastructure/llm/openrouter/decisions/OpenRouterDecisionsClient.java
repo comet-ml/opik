@@ -7,7 +7,6 @@ import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
@@ -98,8 +97,8 @@ public class OpenRouterDecisionsClient {
     static String decisionsUrl(@NonNull String openRouterUrl) {
         var url = StringUtils.stripEnd(openRouterUrl.trim(), "/");
         if (!url.endsWith(CHAT_API_SUFFIX)) {
-            throw new BadRequestException(
-                    "OpenRouter base URL '%s' must end with '%s' to use decisions models".formatted(
+            throw new DecisionsUrlException(("Decision models cannot use the OpenRouter base URL '%s'. The base URL"
+                    + " must end with %s, for example https://openrouter.ai/api/v1.").formatted(
                             LoggableUrl.of(openRouterUrl), CHAT_API_SUFFIX));
         }
         return StringUtils.removeEnd(url, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX;
