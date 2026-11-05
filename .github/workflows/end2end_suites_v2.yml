@@ -36,6 +36,12 @@ on:
     paths:
       - 'sdks/code_generation/fern/openapi/openapi.yaml'
       - 'tests_end_to_end/e2e/**'
+      # Dependency and base-image bumps change what's under test without touching a spec.
+      - 'apps/opik-frontend/package.json'
+      - 'apps/opik-frontend/package-lock.json'
+      - 'apps/opik-frontend/Dockerfile'
+      - 'apps/opik-frontend/nginx/**'
+      - 'apps/opik-frontend/patch-nginx.conf.sh'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

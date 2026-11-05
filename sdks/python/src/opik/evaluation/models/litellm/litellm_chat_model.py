@@ -26,6 +26,12 @@ DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
 DEFAULT_READ_TIMEOUT_SECONDS = 60.0
 DEFAULT_NUM_RETRIES = 0
 
+# First LiteLLM release that sends gpt-5.4+ and gpt-6 function tools to the
+# Responses API while the model reasons; older ones send them to Chat
+# Completions, which rejects them unless reasoning_effort is "none".
+# https://github.com/BerriAI/litellm/pull/39631
+LITELLM_TOOLS_RESPONSES_BRIDGE_VERSION = "1.101.0"
+
 
 def _default_timeout() -> "httpx.Timeout":
     import httpx
@@ -48,6 +54,12 @@ def _log_warning(message: str, *args: Any) -> None:
     root_logger = logging.getLogger()
     if root_logger is not LOGGER:
         root_logger.log(logging.WARNING, message, *args)
+
+
+def _raise_if_param_refused(error: Exception, sent_params: Dict[str, Any]) -> None:
+    param = util.refused_param(error, sent_params)
+    if param is not None:
+        raise exceptions.UnsupportedParameterError(str(error), param=param) from error
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
@@ -124,6 +136,16 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         self._ensure_supported_params(supported_params)
 
         return supported_params
+
+    @cached_property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return base_model.ModelFeatures(
+            reasoning_effort=util.takes_reasoning_effort(self.model_name),
+            response_format_with_tools=util.takes_response_format_with_tools(
+                self.model_name
+            ),
+            logprobs={"logprobs", "top_logprobs"} <= self.supported_params,
+        )
 
     def _ensure_supported_params(self, params: Set[str]) -> None:
         """
@@ -251,6 +273,12 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
           who explicitly opt into both (`temperature=1` *and*
           `reasoning_effort=...`) keep extended thinking.
 
+        - OpenAI gpt-5.4+ + function `tools` + reasoning on (any effort
+          but "none", unset included): Chat Completions rejects the tools.
+          LiteLLM >= 1.101 sends the call to the Responses API instead, as
+          OpenAI recommends; older versions can't, and dropping a param
+          won't fix it, so a one-time warning names the upgrade.
+
         Runs on the merged dict — the per-source
         `_remove_unnecessary_not_supported_params` can't catch the
         cross-source case where one half of the conflict lives in
@@ -285,7 +313,40 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                         self.model_name,
                         raw_temperature,
                     )
+        if (
+            resolved.get("tools")
+            and resolved.get("reasoning_effort") != "none"
+            and util.is_openai_gpt_5_4_plus(self.model_name)
+        ):
+            self._warn_if_litellm_cannot_route_tools()
         return resolved
+
+    def _warn_if_litellm_cannot_route_tools(self) -> None:
+        if "tools" in self._unsupported_warned:
+            return
+        self._unsupported_warned.add("tools")
+        try:
+            litellm_version = importlib.metadata.version("litellm")
+            routes_tools = (
+                semantic_version.SemanticVersion.parse(litellm_version)  # type: ignore
+                >= LITELLM_TOOLS_RESPONSES_BRIDGE_VERSION
+            )
+        except (importlib.metadata.PackageNotFoundError, TypeError, ValueError):
+            LOGGER.debug(
+                "Could not read the LiteLLM version, skipping the tool routing check.",
+                exc_info=True,
+            )
+            return
+        if routes_tools:
+            return
+        _log_warning(
+            "LiteLLM %s sends tool calls for %s to Chat Completions, which rejects "
+            "tools while the model reasons. Upgrade to litellm>=%s, which sends "
+            "them to the Responses API.",
+            litellm_version,
+            self.model_name,
+            LITELLM_TOOLS_RESPONSES_BRIDGE_VERSION,
+        )
 
     def _warn_about_unsupported_param(self, param: str, value: Any) -> None:
         if param in {"logprobs", "top_logprobs"}:
@@ -293,10 +354,18 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             # fields. We already drop them gracefully, so skip logging to avoid
             # spamming GEval users with repeated warnings.
             return
-        if param == "temperature":
+        if param == "temperature" and not util.rejects_sampling_params(self.model_name):
             _log_warning(
                 "Model %s only supports temperature=1. Dropping temperature=%s.",
                 self.model_name,
+                value,
+            )
+        elif param in util.SAMPLING_PARAMS:
+            _log_warning(
+                "Model %s does not accept %s. Dropping %s=%s.",
+                self.model_name,
+                param,
+                param,
                 value,
             )
         else:
@@ -408,12 +477,16 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
         )
 
-        return retrying(
-            self._litellm_completion,
-            model=self.model_name,
-            messages=messages,
-            **all_kwargs,
-        )
+        try:
+            return retrying(
+                self._litellm_completion,
+                model=self.model_name,
+                messages=messages,
+                **all_kwargs,
+            )
+        except Exception as error:
+            _raise_if_param_refused(error, all_kwargs)
+            raise
 
     async def agenerate_string(
         self,
@@ -500,11 +573,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
         )
 
-        async for attempt in retrying:
-            with attempt:
-                return await self._litellm_acompletion(
-                    model=self.model_name, messages=messages, **all_kwargs
-                )
+        try:
+            async for attempt in retrying:
+                with attempt:
+                    return await self._litellm_acompletion(
+                        model=self.model_name, messages=messages, **all_kwargs
+                    )
+        except Exception as error:
+            _raise_if_param_refused(error, all_kwargs)
+            raise
 
         raise exceptions.BaseLLMError(
             "Async LLM completion failed without raising an exception"
