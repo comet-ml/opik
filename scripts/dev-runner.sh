@@ -367,7 +367,8 @@ run_db_migrations() {
     export STATE_DB_DATABASE_NAME="opik"
     export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
     log_debug "MySQL connection: localhost:${MYSQL_PORT}"
-    if java -jar "$JAR_FILE" db migrate config.yml; then
+    # The Vector API module is for topics' k-means: every backend command loads its classes at startup.
+    if java --add-modules jdk.incubator.vector -jar "$JAR_FILE" db migrate config.yml; then
         log_success "MySQL migrations completed successfully"
     else
         # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,
@@ -384,7 +385,7 @@ run_db_migrations() {
     export ANALYTICS_DB_DATABASE_NAME="opik"
     # Set the connection URL (using dynamic port, no database suffix to match original behavior)
     export ANALYTICS_DB_MIGRATIONS_URL="jdbc:clickhouse://localhost:${CLICKHOUSE_HTTP_PORT}"
-    if java -jar "$JAR_FILE" dbAnalytics migrate config.yml; then
+    if java --add-modules jdk.incubator.vector -jar "$JAR_FILE" dbAnalytics migrate config.yml; then
         log_success "ClickHouse migrations completed successfully"
     else
         # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,

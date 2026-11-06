@@ -121,10 +121,10 @@ We provide multiple ways to develop the backend. Choose the approach that best f
         3. **Run database migrations:**
            ```bash wordWrap
            # MySQL migrations
-           java -jar target/opik-backend-*.jar db migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target/opik-backend-*.jar db migrate config.yml
 
            # ClickHouse migrations
-           java -jar target/opik-backend-*.jar dbAnalytics migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target/opik-backend-*.jar dbAnalytics migrate config.yml
            ```
 
         4. **Start the backend:**
@@ -147,10 +147,10 @@ We provide multiple ways to develop the backend. Choose the approach that best f
         3. **Run database migrations:**
            ```powershell wordWrap
            # MySQL migrations
-           java -jar target\opik-backend-*.jar db migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target\opik-backend-*.jar db migrate config.yml
 
            # ClickHouse migrations
-           java -jar target\opik-backend-*.jar dbAnalytics migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target\opik-backend-*.jar dbAnalytics migrate config.yml
            ```
 
         4. **Start the backend:**
