@@ -16,9 +16,10 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * Finds the built-in price row for a model name and provider: the provider, then the providers LiteLLM files the same
- * vendor's other models under, each tried with every spelling of the name, and last the provider a model-name prefix
- * names.
+ * Finds the price for a model name and provider. The organization's rows come first: every spelling of the name under
+ * the provider, its siblings, then {@link CustomModelPrice#ANY_PROVIDER}. Then the built-in rows: the provider and the
+ * providers LiteLLM files the same vendor's other models under, each tried with every spelling, and last the provider a
+ * model-name prefix names.
  */
 @Slf4j
 @UtilityClass
@@ -43,45 +44,142 @@ class ModelPriceResolver {
         NORMALIZED_VERSION_STRIPPED
     }
 
-    @Builder
-    record PriceMatch(@NonNull ModelPrice price, @NonNull String provider, @NonNull NameForm nameForm) {
+    /** The price to bill, and the row the span matched: the organization's {@code customRow}, else a built-in one. */
+    @Builder(toBuilder = true)
+    record PriceMatch(@NonNull ModelPrice price, @NonNull String provider, @NonNull NameForm nameForm,
+            @Nullable CustomModelPrice customRow) {
+    }
+
+    private record CustomMatch(CustomModelPrice row, String provider, NameForm nameForm) {
     }
 
     Optional<PriceMatch> resolve(@Nullable String modelName, @Nullable String provider) {
+        return resolve(modelName, provider, PriceLayers.BUILT_IN_ONLY);
+    }
+
+    Optional<PriceMatch> resolve(@Nullable String modelName, @Nullable String provider, @NonNull PriceLayers layers) {
         if (StringUtils.isBlank(modelName)) {
             return Optional.empty();
         }
-        Optional<String> resolvedProvider = ProviderRegistry.resolve(provider, modelName);
-        if (resolvedProvider.isEmpty()) {
+        return resolveForProvider(modelName, ProviderRegistry.resolve(provider, modelName), layers);
+    }
+
+    // CostService needs the resolved provider for usage too, so it resolves it once per span and passes it in here.
+    Optional<PriceMatch> resolveForProvider(@Nullable String modelName, @NonNull Optional<String> resolvedProvider,
+            @NonNull PriceLayers layers) {
+        if (StringUtils.isBlank(modelName)) {
             return Optional.empty();
         }
-        List<String> lookupOrder = ProviderRegistry.priceLookupOrder(resolvedProvider.get());
-        // The price keys are stored without a provider prefix (LiteLLM sends "openai/gpt-4o"), so every spelling is
-        // derived from the prefix-free name.
-        String name = ModelPriceTable.parseModelName(modelName);
-
-        Optional<PriceMatch> match = findExact(name, lookupOrder.getFirst())
-                .or(() -> findAnySpelling(modelName, name, lookupOrder));
+        Optional<PriceMatch> match = resolve(modelName, resolvedProvider, layers, true);
         if (log.isDebugEnabled()) {
             match.ifPresentOrElse(
                     found -> log.debug("Found model price, model '{}', provider '{}', name form '{}'", modelName,
                             found.provider(), found.nameForm()),
-                    () -> log.debug("No model price found, model '{}', provider '{}'", modelName, provider));
+                    () -> log.debug("No model price found, model '{}', provider '{}'", modelName,
+                            resolvedProvider.orElse(null)));
         }
         return match;
     }
 
-    // The exact name under the first provider is the first pair findUnder tries, and the one most spans hit, so
-    // trying it alone first skips building the other spellings on every span insert and update.
+    private Optional<PriceMatch> resolve(String modelName, Optional<String> resolvedProvider, PriceLayers layers,
+            boolean followAliases) {
+        List<String> lookupOrder = resolvedProvider.map(ProviderRegistry::priceLookupOrder).orElse(List.of());
+        // The price keys are stored without a provider prefix (LiteLLM sends "openai/gpt-4o"), so every spelling is
+        // derived from the prefix-free name.
+        String name = ModelPriceTable.parseModelName(modelName);
+        if (!layers.hasRows() && !lookupOrder.isEmpty()) {
+            Optional<PriceMatch> exact = findExact(name, lookupOrder.getFirst());
+            if (exact.isPresent()) {
+                return exact;
+            }
+        }
+        Map<String, NameForm> spellings = spellings(name);
+        Optional<CustomMatch> custom = findCustom(layers, lookupOrder, spellings, followAliases);
+        if (custom.isPresent() && custom.get().row().kind() == CustomModelPrice.Kind.ALIAS) {
+            CustomMatch alias = custom.get();
+            return resolveAliasTarget(alias.row(), resolvedProvider, layers)
+                    .map(target -> target.toBuilder()
+                            .provider(alias.provider())
+                            .nameForm(alias.nameForm())
+                            .customRow(alias.row())
+                            .build())
+                    .or(() -> findBuiltIn(modelName, resolvedProvider, lookupOrder, spellings));
+        }
+        Optional<PriceMatch> builtIn = findBuiltIn(modelName, resolvedProvider, lookupOrder, spellings);
+        if (custom.isEmpty()) {
+            return builtIn;
+        }
+        CustomMatch fixed = custom.get();
+        // A row that sets no rate, over no built-in price, prices nothing: billing it would charge 0 as the
+        // organization's price, and an alias to it would skip the span's own built-in row.
+        if (builtIn.isEmpty() && !setsAnyRate(fixed.row())) {
+            return Optional.empty();
+        }
+        ModelPrice base = builtIn.map(PriceMatch::price).orElseGet(ModelPrice::empty);
+        return Optional.of(PriceMatch.builder()
+                .price(ModelPriceMerger.merge(base, fixed.row()))
+                .provider(fixed.provider())
+                .nameForm(fixed.nameForm())
+                .customRow(fixed.row())
+                .build());
+    }
+
+    // With no organization rows, the exact name under the first provider is the first pair findBuiltIn tries, and the
+    // one most spans hit, so trying it alone first skips building the other spellings on every span insert and update.
     private Optional<PriceMatch> findExact(String name, String provider) {
         return Optional.ofNullable(ModelPriceTable.get(name, provider))
                 .map(price -> PriceMatch.builder().price(price).provider(provider).nameForm(NameForm.EXACT).build());
     }
 
-    private Optional<PriceMatch> findAnySpelling(String modelName, String name, List<String> lookupOrder) {
-        Map<String, NameForm> spellings = spellings(name);
-        return findUnder(lookupOrder, spellings)
-                .or(() -> findUnderModelPrefix(modelName, lookupOrder, spellings));
+    private boolean setsAnyRate(CustomModelPrice row) {
+        return row.inputPerMillion() != null || row.outputPerMillion() != null || row.cacheReadPerMillion() != null
+                || row.cacheWritePerMillion() != null;
+    }
+
+    private Optional<PriceMatch> findBuiltIn(String modelName, Optional<String> resolvedProvider,
+            List<String> lookupOrder, Map<String, NameForm> spellings) {
+        if (resolvedProvider.isEmpty()) {
+            return Optional.empty();
+        }
+        return findUnder(lookupOrder, spellings).or(() -> findUnderModelPrefix(modelName, lookupOrder, spellings));
+    }
+
+    // The target is looked up with alias rows ignored: one hop, so an alias can never reach another alias or itself.
+    private Optional<PriceMatch> resolveAliasTarget(CustomModelPrice alias, Optional<String> spanProvider,
+            PriceLayers layers) {
+        String targetModel = alias.aliasModelName();
+        if (StringUtils.isBlank(targetModel)) {
+            return Optional.empty();
+        }
+        Optional<String> targetProvider = StringUtils.isBlank(alias.aliasProvider())
+                ? spanProvider
+                : ProviderRegistry.resolve(alias.aliasProvider(), targetModel);
+        return resolve(targetModel, targetProvider, layers, false);
+    }
+
+    private Optional<CustomMatch> findCustom(PriceLayers layers, List<String> lookupOrder,
+            Map<String, NameForm> spellings, boolean followAliases) {
+        if (!layers.hasRows()) {
+            return Optional.empty();
+        }
+        for (String candidateProvider : lookupOrder) {
+            Optional<CustomMatch> match = findCustomUnder(layers, candidateProvider, spellings, followAliases);
+            if (match.isPresent()) {
+                return match;
+            }
+        }
+        return findCustomUnder(layers, CustomModelPrice.ANY_PROVIDER, spellings, followAliases);
+    }
+
+    private Optional<CustomMatch> findCustomUnder(PriceLayers layers, String provider,
+            Map<String, NameForm> spellings, boolean followAliases) {
+        for (Map.Entry<String, NameForm> spelling : spellings.entrySet()) {
+            CustomModelPrice row = layers.find(spelling.getKey(), provider);
+            if (row != null && (followAliases || row.kind() == CustomModelPrice.Kind.FIXED)) {
+                return Optional.of(new CustomMatch(row, provider, spelling.getValue()));
+            }
+        }
+        return Optional.empty();
     }
 
     // Duplicates are dropped by exact string, never ignoring case: most price keys are lower case, so a name that

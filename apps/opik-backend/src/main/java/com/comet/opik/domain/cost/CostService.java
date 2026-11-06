@@ -7,6 +7,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.annotation.Nullable;
@@ -25,28 +26,63 @@ public class CostService {
     private static final AttributeKey<String> WARNING_TYPE_KEY = AttributeKey.stringKey("type");
     private static final ModelPrice DEFAULT_COST = ModelPrice.empty();
 
+    public enum CostSource {
+        ORGANIZATION,
+        BUILT_IN,
+        METADATA,
+        NONE
+    }
+
+    public record PricedCost(@NonNull BigDecimal cost, @NonNull CostSource source) {
+    }
+
+    private record Estimate(BigDecimal cost, boolean fromOrganization) {
+    }
+
     /** Prices the usage as its provider's format reads it; the usage itself isn't changed. */
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
-        BigDecimal estimatedCost = estimateCost(modelName, provider, usage);
-        return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+        return price(modelName, provider, usage, metadata, PriceLayers.BUILT_IN_ONLY).cost();
+    }
+
+    /**
+     * Like {@link #calculateCost}, with the organization's prices layered over the built-in ones. A cost the
+     * organization's rows decide for a span with usage is kept even at 0, as 0 is how they make a model free. A span
+     * with no usage gives the rows nothing to price, so it keeps its metadata cost.
+     */
+    public static PricedCost price(@Nullable String modelName, @Nullable String provider,
+            @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata, @NonNull PriceLayers layers) {
+        Estimate estimate = estimateCost(modelName, provider, usage, layers);
+        if (estimate.fromOrganization() && hasUsage(usage)) {
+            return new PricedCost(estimate.cost(), CostSource.ORGANIZATION);
+        }
+        if (estimate.cost().compareTo(BigDecimal.ZERO) > 0) {
+            return new PricedCost(estimate.cost(), CostSource.BUILT_IN);
+        }
+        BigDecimal metadataCost = getCostFromMetadata(metadata);
+        return new PricedCost(metadataCost, metadataCost.signum() == 0 ? CostSource.NONE : CostSource.METADATA);
+    }
+
+    private static boolean hasUsage(@Nullable Map<String, Integer> usage) {
+        return usage != null && usage.values().stream().anyMatch(count -> count != null && count > 0);
     }
 
     // Pricing runs while spans are ingested, so it never fails the caller: an error while pricing gives no estimate.
-    private static BigDecimal estimateCost(@Nullable String modelName, @Nullable String provider,
-            @Nullable Map<String, Integer> usage) {
+    private static Estimate estimateCost(@Nullable String modelName, @Nullable String provider,
+            @Nullable Map<String, Integer> usage, PriceLayers layers) {
         try {
-            ModelPrice modelPrice = ModelPriceResolver.resolve(modelName, provider)
-                    .map(ModelPriceResolver.PriceMatch::price)
-                    .orElse(DEFAULT_COST);
-            SpanUsage spanUsage = SpanUsageFactory.create(ProviderRegistry.resolve(provider, modelName).orElse(null),
-                    usage);
+            Optional<String> resolvedProvider = ProviderRegistry.resolve(provider, modelName);
+            Optional<ModelPriceResolver.PriceMatch> match = ModelPriceResolver.resolveForProvider(modelName,
+                    resolvedProvider, layers);
+            ModelPrice modelPrice = match.map(ModelPriceResolver.PriceMatch::price).orElse(DEFAULT_COST);
+            SpanUsage spanUsage = SpanUsageFactory.create(resolvedProvider.orElse(null), usage);
             spanUsage.warnings().forEach(warning -> USAGE_WARNINGS.add(1,
                     Attributes.of(WARNING_TYPE_KEY, warning.type().name())));
-            return modelPrice.calculator().apply(modelPrice, spanUsage);
+            boolean fromOrganization = match.map(ModelPriceResolver.PriceMatch::customRow).isPresent();
+            return new Estimate(modelPrice.calculator().apply(modelPrice, spanUsage), fromOrganization);
         } catch (RuntimeException exception) {
             log.warn("Failed to estimate the cost of model '{}', provider '{}'", modelName, provider, exception);
-            return BigDecimal.ZERO;
+            return new Estimate(BigDecimal.ZERO, false);
         }
     }
 
