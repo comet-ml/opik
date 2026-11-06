@@ -68,6 +68,7 @@ public interface ProjectService {
     String DEFAULT_PROJECT = "Default Project";
     String DEFAULT_WORKSPACE_NAME = "default";
     String DEFAULT_WORKSPACE_ID = "0190babc-62a0-71d2-832a-0feffa4676eb";
+    String DEFAULT_ORGANIZATION_ID = "01a1a1c9-b569-7b5b-9c5c-1aa254d42e50";
     String DEFAULT_USER = "admin";
 
     Project create(Project project);
