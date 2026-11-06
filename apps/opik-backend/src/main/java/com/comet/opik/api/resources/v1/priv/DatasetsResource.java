@@ -7,6 +7,7 @@ import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
+import com.comet.opik.api.DatasetExperimentItemStreamRequest;
 import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.DatasetIdentifier;
@@ -500,6 +501,51 @@ public class DatasetsResource {
 
             return streamer.getOutputStream(Flux.empty());
         }
+    }
+
+    @POST
+    @Path("/items/experiments/items/stream")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Operation(operationId = "streamDatasetExperimentItems", summary = "Stream a dataset's experiment items", description = """
+            Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+            Optimizer trial, mini-batch and mutation experiments are excluded.
+
+            Rows are ordered by experiment, then dataset item. To read the next page, send the experiment_id and
+            id of the last row received as last_retrieved_experiment_id and last_retrieved_id; a page with fewer
+            rows than the limit is the last one.""", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stream or error during process", content = @Content(array = @ArraySchema(schema = @Schema(anyOf = {
+                    ExperimentItem.class,
+                    ErrorMessage.class
+            }), maxItems = 2000))),
+            @ApiResponse(responseCode = "404", description = "Dataset or dataset version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
+    public ChunkedOutput<JsonNode> streamDatasetExperimentItems(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExperimentItemStreamRequest.class))) @NotNull @Valid DatasetExperimentItemStreamRequest request) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        var ctxSnapshot = requestContext.get();
+        var workspaceId = ctxSnapshot.getWorkspaceId();
+
+        @SuppressWarnings("unchecked")
+        List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
+                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
+
+        // Resolved before the stream starts, so an unknown dataset or version is a 404 rather than an error line
+        var datasetId = request.datasetId() != null
+                ? service.findById(request.datasetId(), workspaceId, ctxSnapshot.getVisibility()).id()
+                : service.resolveDatasetByName(DatasetIdentifier.builder()
+                        .datasetName(request.datasetName())
+                        .projectName(request.projectName())
+                        .build()).id();
+
+        log.info("Streaming experiment items for dataset '{}', version '{}', limit '{}' on workspaceId '{}'",
+                datasetId, request.datasetVersion(), request.limit(), workspaceId);
+
+        var items = itemService.streamExperimentItems(datasetId, request, queryFilters, workspaceId)
+                .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
+
+        return streamer.getOutputStream(items);
     }
 
     /**
