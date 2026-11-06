@@ -115,6 +115,7 @@ export const AGENT_INSIGHTS_JOB_KEY = "agent-insights-job";
 export const OLLIE_CREDITS_KEY = "ollie-credits";
 export const MODEL_PRICES_KEY = "model-prices";
 export const MODEL_PRICE_HISTORY_KEY = "model-price-history";
+export const MODELS_USED_KEY = "models-used";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";
