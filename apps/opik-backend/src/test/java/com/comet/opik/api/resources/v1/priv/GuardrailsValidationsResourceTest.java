@@ -4,6 +4,7 @@ import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidationRequest;
 import com.comet.opik.api.GuardrailsValidationRequest.ValidationDescriptor;
 import com.comet.opik.api.GuardrailsValidationResponse;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,10 +14,15 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
 import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -37,6 +43,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Arrays;
 import java.util.List;
@@ -111,7 +118,10 @@ class GuardrailsValidationsResourceTest {
                 .build());
     }
 
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
     private GuardrailsResourceClient guardrailsResourceClient;
+    private TraceResourceClient traceResourceClient;
     private ClientSupport client;
     private String baseURI;
 
@@ -121,6 +131,7 @@ class GuardrailsValidationsResourceTest {
         this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         this.guardrailsResourceClient = new GuardrailsResourceClient(client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
     }
 
     @BeforeEach
@@ -295,6 +306,32 @@ class GuardrailsValidationsResourceTest {
         wireMock.server().verify(1, postRequestedFor(urlPathEqualTo(FEATURES_PATH))
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey)));
         wireMock.server().verify(2, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
+    }
+
+    @Test
+    @DisplayName("a workspace whose organization is not enabled logs traces and guardrail results as before, without asking the platform")
+    void guardrailsBatch__whenOrganizationNotEnabled__thenLoggedAsBefore() {
+        var apiKey = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, randomUUID().toString(), USER);
+        mockWorkspaceFeatures(apiKey, workspaceName, false);
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(randomUUID().toString())
+                .usage(null)
+                .feedbackScores(null)
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        var guardrails = new GuardrailsGenerator().generateGuardrailsForTrace(traceId, idGenerator.generateId(),
+                trace.projectName());
+
+        guardrailsResourceClient.addBatch(guardrails, apiKey, workspaceName);
+
+        var actual = traceResourceClient.getById(traceId, workspaceName, apiKey);
+        assertThat(actual.guardrailsValidations()).hasSize(1);
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(FEATURES_PATH))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey)));
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo(DECIDE_PATH)));
     }
 
     private void mockWorkspaceFeatures(String apiKey, String workspaceName, boolean guardrails) {
