@@ -1,13 +1,13 @@
 ---
 headline: Rules
-og:description: The three rule types available in Opik guardrails — PII, topic, and prompt
-  injection — what each one checks and what you configure.
+og:description: The five rule types available in Opik guardrails — PII, topic, prompt
+  injection, LLM judge, and custom classifier — what each one checks and what you configure.
 og:site_name: Opik Documentation
 og:title: Rules for LLM Guardrails - Opik
 title: Rules
 ---
 
-A **rule** is one check, configured. This page covers the three rule types Opik offers: what each one detects, what you configure on it, and what it needs in order to run.
+A **rule** is one check, configured. This page covers the five rule types Opik offers: what each one detects, what you configure on it, and what it needs in order to run.
 
 You put PII, Topic, and prompt injection rules into a [policy](/guardrails/policies) in the Opik UI, and your application runs that policy by name. Configuration lives in Opik; your code only calls `validate`.
 
@@ -41,17 +41,18 @@ The call is blocking, since the whole point is to stop your application before i
 </Tip>
 
 <Note>
-  Rules, and the policies that hold them, are checked by Opik itself and are available on the Enterprise plan of
-  Opik Cloud.
+  PII, Topic, and prompt injection rules, and the policies that hold them, are checked by Opik itself and are
+  available on the Enterprise plan of Opik Cloud. The LLM judge rule runs in the SDK, and the custom classifier rule
+  runs on a self-hosted [guardrails server](/guardrails/server).
 </Note>
 
-## The three rule types
+## The five rule types
 
 Providers like OpenAI or Anthropic already block the most universal risks, such as harmful or malicious content. Opik's rules cover the residual risks, which tend to be specific to your product and need configuring in more detail.
 
-Each rule asks a small language model focused questions, which keeps a check fast enough to run inline on every request.
+Each rule picks the method that gives the best balance of accuracy, latency, and cost for its problem — a small language model answering focused questions for personal data, topics, and injection detection, a full LLM for nuanced judgement.
 
-Rules are configured in a policy: switch the rule on and fill in its fields. They can also be [defined in code](#defining-rules-in-code).
+PII, Topic, and prompt injection rules are configured in a policy: switch the rule on and fill in its fields. The LLM judge and custom classifier rules are [defined in code](#defining-rules-in-code).
 
 ### PII
 
@@ -84,13 +85,45 @@ There is nothing to configure: switch the rule on.
 
 _This guardrail relies on a small language model._
 
+### LLM judge
+
+Checks text against a rule you describe in plain language. Because a full LLM does the judging, it catches nuanced issues that heuristics and classifiers miss — giving regulated advice, drifting from your brand voice.
+
+**What you configure**
+
+- **Instructions** — the rule, in your own words. For example: "The text must not provide medical advice, diagnoses, or dosage recommendations."
+- **Model** — which model judges. It must be available through an LLM provider configured under [AI Providers](/administration/workspace-settings/ai_providers).
+
+<Note>
+  The judge runs inline and adds latency to every call it guards, so prefer a fast, small model from your provider's
+  latest generation rather than a large reasoning model. Good choices are the low-latency tiers such as OpenAI
+  `gpt-4o-mini`, a Google Gemini Flash model, or an Anthropic Claude Haiku model.
+</Note>
+
+The SDK runs this rule itself. Its model call is recorded as a nested LLM span under the guardrail span, so you can inspect the exact prompt, response, and token usage in the trace.
+
+_This guardrail relies on a large language model, and is best suited to complex checks where accuracy matters more than latency._
+
+### Custom classifier
+
+Runs a [model you fine-tuned yourself](/guardrails/custom-guardrails) — a check that answers one yes-or-no question specific to your product, such as whether a reply is off-brand. The [guardrails server](/guardrails/server) trains it on your labeled examples and serves it.
+
+**What you configure**
+
+- **Model** — which of your models to run.
+- **Threshold** — the score at or above which the rule fails.
+
+See [Custom models](/guardrails/custom-guardrails) for how to fine-tune one.
+
+_This guardrail relies on a small language model fine-tuned on your own labeled examples._
+
 ## Handling a failure
 
 A failing guardrail raises an exception, and your application code needs to handle it — retry, fall back to a safe default, or return an error, whichever suits the situation.
 
 <Warning>
   Guardrails fail closed. If a check cannot be evaluated (for example Opik is unreachable, the request times out,
-  or guardrails are not available in the workspace),
+  guardrails are not available in the workspace, or an LLM judge provider call fails),
   `validate` raises `opik.exceptions.GuardrailValidationError` rather than letting the text through. This exception subclasses `GuardrailValidationFailed`, so an existing
   `except GuardrailValidationFailed` block also stops the request. Structure your code so the protected path only
   proceeds when `validate` returns successfully.
@@ -126,7 +159,7 @@ To see how often each guardrail is failing over time, open the **Metrics** secti
 
 ## Defining rules in code
 
-Rules can also be listed inline instead of stored in a policy. This is handy for a quick experiment or a check that only one script cares about.
+Rules can also be listed inline instead of stored in a policy. This is handy for a quick experiment or a check that only one script cares about, and it is how the LLM judge and custom classifier rules are used.
 
 <Warning>
   Rules defined this way are invisible to everyone else and can only be changed by editing and redeploying your
@@ -157,6 +190,8 @@ Each rule type has a matching class, taking the same settings the UI exposes:
 | PII | `PII` | `entities` (any of `CREDIT_CARD`, `PHONE_NUMBER`, `EMAIL_ADDRESS`, `IBAN_CODE`, `IP_ADDRESS`, `NRP`, `LOCATION`, `PERSON`, `CRYPTO`, `MEDICAL_LICENSE`, `URL`) |
 | Topic | `Topic` | `restricted_topics`, `allowed_topics` |
 | Prompt injection | `PromptInjection` | none |
+| LLM judge | `LLMJudge` | `name`, `instructions`, `model` |
+| Custom classifier | `CustomGuardrail` | `model_name`, `threshold` |
 
 ### Upgrading from guards
 
@@ -170,11 +205,17 @@ Earlier SDK versions called rules _guards_ and ran PII, Topic, and prompt inject
 | `Topic(restricted_topics=[...], allowed_topics=[...], threshold=...)` | `Topic(restricted_topics=[...], allowed_topics=[...])` |
 | `PromptInjection(threshold=...)` | `PromptInjection()` |
 
-`LLMJudge`, `CustomGuardrail`, and `create_custom_guardrail` are no longer part of the SDK. `Guardrail.from_stored_policies(names=[...])` is unchanged.
+`LLMJudge` and `CustomGuardrail` take the same arguments as before. `Guardrail.from_stored_policies(names=[...])` is unchanged.
 
 ## Manual guardrails
 
-For a check that fits none of the rule types — a one-off heuristic, or a business rule that is genuinely just code — you can run it yourself and log the result to Opik directly. No rule class is involved.
+For a check that fits none of the five rule types — a one-off heuristic, or a business rule that is genuinely just code — you can run it yourself and log the result to Opik directly. No rule class and no guardrails server are involved.
+
+<Tip>
+  This is different from a [custom model](/guardrails/custom-guardrails), which Opik fine-tunes and serves for you.
+  Reach for a manual guardrail for a one-off heuristic; fine-tune a model once that same check needs to run fast and
+  consistently at high volume.
+</Tip>
 
 <AccordionGroup>
   <Accordion title="Example: blocking competitor mentions">
@@ -264,7 +305,7 @@ The guardrail spans appear alongside your traces just like the built-in rules, s
   <Card title="Policies" href="/guardrails/policies" icon="fa-regular fa-list-check">
     Group these rules into a named policy your application references.
   </Card>
-  <Card title="Overview" href="/guardrails/overview" icon="fa-regular fa-shield-check">
-    How guardrails, rules, and policies fit together.
+  <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
+    Fine-tune a model for a check none of the built-in rule types cover.
   </Card>
 </CardGroup>

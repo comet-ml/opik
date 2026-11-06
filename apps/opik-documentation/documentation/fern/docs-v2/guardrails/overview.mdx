@@ -23,7 +23,7 @@ Three words come up throughout these pages, and it helps to separate them up fro
 
 | Term | What it is |
 | --- | --- |
-| **Rule** | One check, configured — for example "block credit card numbers". Each rule has a type: PII, topic, or prompt injection. |
+| **Rule** | One check, configured — for example "block credit card numbers". Each rule has a type: PII, topic, prompt injection, LLM judge, or custom classifier. |
 | **Policy** | A named group of rules, stored in your workspace. Your application references the name, so the checks can change without a code change. |
 | **Guardrail** | What your application actually calls. You build it from one or more policies, rules defined in code, or both, and it runs every rule they hold on each piece of text you give it. |
 
@@ -72,7 +72,10 @@ Use **[online evaluation](/production/online-evaluation/rules)** when you want t
     Define your checks once in the UI and reference them by name from your application.
   </Card>
   <Card title="Rules" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    What each of the three rule types detects, and what you configure on it.
+    What each of the five rule types detects, and what you configure on it.
+  </Card>
+  <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
+    Fine-tune a model on your own labeled examples for a check of your own.
   </Card>
   <Card title="Online evaluation" href="/production/online-evaluation/rules" icon="fa-regular fa-gauge-high">
     Score production traces with automated LLM-as-a-Judge metrics.
