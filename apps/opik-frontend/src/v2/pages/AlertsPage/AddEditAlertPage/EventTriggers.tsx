@@ -41,6 +41,13 @@ import { ScoreSource } from "@/v2/pages-shared/experiments/FeedbackDefinitionsAn
 import WebhookPayloadExample from "./WebhookPayloadExample";
 import { Alert } from "@/types/alerts";
 
+// Only the checks guardrails run today; LLM judge and custom guardrails are left out for now.
+const ALERT_GUARDRAIL_TYPES = [
+  GuardrailTypes.TOPIC,
+  GuardrailTypes.PII,
+  GuardrailTypes.PROMPT_INJECTION,
+];
+
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
   projectId: string;
@@ -225,6 +232,11 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
         name={`triggers.${index}.guardrailTypes` as Path<AlertFormType>}
         render={({ field }) => {
           const selected = (field.value as GuardrailTypes[] | undefined) ?? [];
+          // A type an alert was saved with still filters it, so it stays listed, and can be unticked.
+          const options = [
+            ...ALERT_GUARDRAIL_TYPES,
+            ...selected.filter((type) => !ALERT_GUARDRAIL_TYPES.includes(type)),
+          ];
           const toggle = (type: GuardrailTypes, checked: boolean) => {
             field.onChange(
               checked
@@ -240,7 +252,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                 on any guardrail failure.
               </Description>
               <div className="flex flex-col gap-2 pt-1">
-                {Object.values(GuardrailTypes).map((type) => (
+                {options.map((type) => (
                   <label
                     key={type}
                     className="flex cursor-pointer items-center gap-2"
