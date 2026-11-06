@@ -111,8 +111,15 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                 }))
                 .onErrorResume(cometFailed -> {
                     logCometFailed(ORGANIZATION_LOOKUP, workspaceId, cometFailed);
-                    return cached.isPresent() ? cache.retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
+                    return cached.isPresent() ? retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
                 });
+    }
+
+    private Mono<Void> retryLater(String workspaceId) {
+        return cache.retryLater(workspaceId).onErrorResume(error -> {
+            log.warn("Could not delay the next Comet call, workspace '{}'", workspaceId, error);
+            return Mono.empty();
+        });
     }
 
     /**

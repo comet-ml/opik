@@ -29,6 +29,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.redisson.client.RedisException;
 import org.testcontainers.lifecycle.Startables;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -58,7 +59,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.unauthorized;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -260,6 +263,24 @@ class RemoteOrganizationResolverTest {
 
             assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        @Test
+        void cometErrorStillServesTheStaleOrganizationWhenRedisCannotDelayTheNextCall() {
+            var failingCache = spy(cache);
+            doReturn(Mono.error(new RedisException("Redis is down"))).when(failingCache).retryLater(workspaceId);
+            resolver = new RemoteOrganizationResolver(() -> requestContext, client, failingCache, true);
+            stubApiKey(organization(organizationId, false));
+            ask();
+            wireMock.server().resetAll();
+            stubApiKey(serverError());
+            clock.advance(FRESH_FOR);
+
+            var logs = LogCaptureUtils.logEventsOf(() -> assertThat(ask()).isEqualTo(organizationId));
+
+            assertThat(logs).anySatisfy(line -> assertThat(line)
+                    .startsWith("Could not delay the next Comet call, workspace '%s'".formatted(workspaceId))
+                    .contains("Redis is down"));
         }
 
         static Stream<Arguments> cometFailures() {
