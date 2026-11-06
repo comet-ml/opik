@@ -394,17 +394,17 @@ class TopicsAlgorithmRulesTest {
     @DisplayName("k-means with Elkan's bounds and the Vector API gives plain Lloyd's labels")
     class KMeansSameLabels {
 
-        @ParameterizedTest(name = "n {0}, {1} dims, {2} clusters, noise {3}, k {4}, seed {5}")
+        @ParameterizedTest(name = "n {0}, {1} dims, {2} clusters, noise {3}, k {4}, seed {5}, capped {6}")
         @CsvSource({
-                "1500, 384, 40, 0.15, 50, 0",
-                "1500, 384, 40, 0.15, 50, 1",
-                "2000, 13, 10, 0.5, 30, 0",
+                "1500, 384, 40, 0.15, 50, 0, false",
+                "1500, 384, 40, 0.15, 50, 1, false",
+                "2000, 13, 10, 0.5, 30, 0, false",
                 // 20 distinct points, each repeated: k above that leaves clusters empty, reseeded on a duplicate.
-                "300, 16, 20, 0, 30, 0",
+                "300, 16, 20, 0, 30, 0, false",
                 // Random directions: the fit stops at MAX_ITERATIONS.
-                "30000, 8, 30000, 10, 30, 0"})
+                "30000, 8, 30000, 10, 30, 0, true"})
         @DisplayName("same labels, iterations and centres as the plain fit on a fixed synthetic set")
-        void samePlainFit(int n, int dimensions, int clusters, double noise, int k, long seed) {
+        void samePlainFit(int n, int dimensions, int clusters, double noise, int k, long seed, boolean capped) {
             var points = syntheticPoints(n, dimensions, clusters, noise);
             var random = new SplittableRandom(13);
             var weights = new double[n];
@@ -415,6 +415,8 @@ class TopicsAlgorithmRulesTest {
             var plain = PlainKMeans.fit(points, weights, dimensions, k, seed);
             var fast = KMeans.fit(points, weights, dimensions, k, seed);
 
+            // The capped row covers the stop at MAX_ITERATIONS, the others a converged fit.
+            assertThat(plain.iterations() == KMeans.MAX_ITERATIONS).as("stops at MAX_ITERATIONS").isEqualTo(capped);
             assertThat(fast.labels()).containsExactly(plain.labels());
             assertThat(fast.iterations()).isEqualTo(plain.iterations());
             assertThat(fast.centres()).containsExactly(plain.centres(), within(1e-6f));
