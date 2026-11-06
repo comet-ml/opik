@@ -145,7 +145,7 @@ const withFilters = (filters: object[]) =>
 
 const quickAccessModels = () =>
   within(screen.getByTestId("quick-access"))
-    .getAllByRole("button")
+    .getAllByRole("button", { name: /^Open / })
     .map((card) => card.querySelector(".font-mono")?.textContent);
 
 const ADMIN: ModelPricesAccess = {
@@ -281,6 +281,31 @@ describe("CostCenterTab", () => {
       expect(shownModels()[0]).toBe("team-model");
     });
 
+    it("goes back to the first page when the sort changes", () => {
+      BUILT_INS.push(
+        ...Array.from({ length: 30 }, (_, i) => ({
+          model: `zz-model-${String(i).padStart(2, "0")}`,
+          provider: "openai",
+          mode: "chat",
+          input_price: "1",
+          output_price: "2",
+        })),
+      );
+      try {
+        renderTab(ADMIN);
+        fireEvent.click(
+          document.querySelector(".lucide-chevron-right")!.closest("button")!,
+        );
+        expect(screen.getByText(/^Showing 26-/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /Sort by model/ }));
+
+        expect(screen.getByText(/^Showing 1-25/)).toBeInTheDocument();
+      } finally {
+        BUILT_INS.splice(3);
+      }
+    });
+
     it.each([
       ["the model", "LLAMA", ["acme-llama-70b"]],
       ["the provider", "gateway", ["team-model"]],
@@ -412,7 +437,7 @@ describe("CostCenterTab", () => {
 
       expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
       fireEvent.click(
-        screen.getByRole("button", {
+        within(screen.getByTestId("quick-access")).getByRole("button", {
           name: "Unpin gpt-4o-mini from quick access",
         }),
       );
@@ -421,6 +446,68 @@ describe("CostCenterTab", () => {
   });
 
   describe("editing one model", () => {
+    it("opens a model from the keyboard and keeps it open", () => {
+      renderTab(ADMIN);
+
+      const row = rowOf("gpt-4o");
+      row.focus();
+      const notPrevented = fireEvent.keyDown(row, { key: "Enter" });
+      fireEvent.keyUp(row, { key: "Enter" });
+
+      expect(notPrevented).toBe(false);
+      expect(priceInput("Input")).toBeInTheDocument();
+    });
+
+    it("asks before throwing away unsaved edits", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "1.9" } });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+
+      expect(priceInput("Input")).toHaveValue("1.9");
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      expect(mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("closes at once when nothing was edited", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByText("Discard your changes?")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    });
+
+    it("asks before removing a custom model", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      openRow("acme-llama-70b");
+      fireEvent.click(screen.getByRole("button", { name: /Remove model/ }));
+
+      expect(mutateAsync).not.toHaveBeenCalled();
+      fireEvent.click(
+        within(
+          screen.getByRole("dialog", { name: "Remove acme-llama-70b?" }),
+        ).getByRole("button", { name: "Remove model" }),
+      );
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(sentRows().map((row: { model: string }) => row.model)).toEqual([
+        "gpt-4o",
+        "team-model",
+      ]);
+    });
+
     it("previews, then saves only the fields that differ from the built-in price", async () => {
       mutateAsync.mockImplementation(async ({ dryRun }) =>
         replaceResult(dryRun),
@@ -650,6 +737,42 @@ describe("CostCenterTab", () => {
         input_price: "2",
         output_price: "8",
       });
+    });
+
+    it("saves a new custom price without asking about its provider", async () => {
+      current.modelsUsed = {
+        content: [used("acme-finetune-v3", "research", "none")],
+      };
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun, [
+          {
+            row: 3,
+            field: "provider",
+            code: "provider_unpriced",
+            message: "No built-in prices for this provider",
+          },
+          {
+            row: 3,
+            field: null,
+            code: "no_base",
+            message: "No built-in price to compare with",
+          },
+        ]),
+      );
+      renderTab(ADMIN);
+
+      const banner = screen.getByTestId("no-price-banner");
+      fireEvent.click(within(banner).getByRole("button", { expanded: false }));
+      fireEvent.click(
+        within(banner).getByRole("button", { name: "Add prices" }),
+      );
+      fireEvent.change(priceInput("Input"), { target: { value: "2" } });
+      fireEvent.change(priceInput("Output"), { target: { value: "8" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false);
+      expect(screen.queryByTestId("model-price-warnings")).toBeNull();
     });
 
     it("falls back to the whole organization when this workspace has none", () => {

@@ -1,6 +1,6 @@
 import type { ModelPriceRow, PriceField } from "./types";
 import { PRICE_FIELDS } from "./types";
-import { canonicalPrice } from "./rows";
+import { canonicalPrice, isDecimal } from "./rows";
 
 export const LITELLM_KEYS: Record<PriceField, string> = {
   input_price: "input_cost_per_token",
@@ -28,7 +28,7 @@ const shiftLeft = (digits: string, places: number) => {
 
 export const perMillionToPerToken = (perMillion?: string | null): string => {
   const canonical = canonicalPrice(perMillion);
-  if (!canonical) {
+  if (!canonical || !isDecimal(canonical) || canonical.startsWith("-")) {
     return "";
   }
   return shiftLeft(canonical, 6);

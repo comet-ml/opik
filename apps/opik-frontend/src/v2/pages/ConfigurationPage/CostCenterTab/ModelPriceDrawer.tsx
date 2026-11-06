@@ -13,6 +13,7 @@ import { Label } from "@/ui/label";
 import { Tag } from "@/ui/tag";
 import { Textarea } from "@/ui/textarea";
 import SelectBox from "@/shared/SelectBox/SelectBox";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import {
   BuiltInPrice,
   CATALOG_TYPE_LABELS,
@@ -25,6 +26,7 @@ import {
   PRICE_FIELDS,
   PRICE_LABELS,
   PriceField,
+  blockingWarnings,
   canonicalPrice,
   describePerToken,
   findBuiltIn,
@@ -100,6 +102,8 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   const [note, setNote] = useState(entry?.row?.note ?? "");
   const [problems, setProblems] = useState<ModelPriceProblem[]>([]);
   const [warnings, setWarnings] = useState<ModelPriceProblem[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [confirming, setConfirming] = useState<"discard" | "remove">();
 
   const builtIn = useMemo(
     () =>
@@ -109,6 +113,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   );
   const type: CatalogType = entry?.type ?? (builtIn ? "override" : "custom");
   const keepsBuiltIn = Boolean(builtIn);
+  const isCustomPrice = !keepsBuiltIn && kind === "fixed";
   const readOnly = !canEdit;
 
   const values = useMemo(() => {
@@ -148,6 +153,15 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   const resetFeedback = () => {
     setProblems([]);
     setWarnings([]);
+    setIsDirty(true);
+  };
+
+  const requestClose = () => {
+    if (isDirty && canEdit) {
+      setConfirming("discard");
+      return;
+    }
+    setOpen(false);
   };
 
   const updateLine = (id: number, changes: Partial<Line>) => {
@@ -222,7 +236,12 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
         return;
       }
       const found =
-        index >= 0 ? problemsForRow(preview.result.warnings, index) : [];
+        index >= 0
+          ? blockingWarnings(
+              problemsForRow(preview.result.warnings, index),
+              isCustomPrice,
+            )
+          : [];
       if (found.length) {
         setWarnings(found);
         return;
@@ -247,18 +266,29 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
     if (field.startsWith("alias_of")) return kind === "alias";
     return kind === "fixed" && usedFields.has(field as PriceField);
   };
+  const priceProblems = problems.filter(
+    (problem) => problem.code === "no_price",
+  );
   const generalProblems = problems.filter(
-    (problem) => !isShownByItsField(problem.field),
+    (problem) =>
+      problem.code !== "no_price" && !isShownByItsField(problem.field),
+  );
+  const cachePriced = lines.some(
+    (line) =>
+      line.field === "cache_read_price" && canonicalPrice(line.value) !== "",
   );
 
   const title = entry ? entry.model : "New custom model";
   const helpText = keepsBuiltIn
-    ? "Per-token prices are shown per 1M tokens for readability. A price you leave as built-in follows the built-in list."
+    ? "Per-token prices are shown per 1M tokens for readability. Empty = built-in price."
     : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
   const providerLabel = provider.trim() || "Any provider";
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => (next ? setOpen(true) : requestClose())}
+    >
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[560px]"
@@ -412,6 +442,12 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               <div>
                 <h4 className="comet-body-s-accented">Prices</h4>
                 <p className="comet-body-xs text-muted-slate">{helpText}</p>
+                {isCustomPrice && !cachePriced && (
+                  <p className="comet-body-xs mt-1 text-light-slate">
+                    Cached tokens are billed at the input price unless you add a
+                    cache price.
+                  </p>
+                )}
               </div>
               {lines.map((line) => {
                 const builtInValue = builtIn?.[line.field];
@@ -493,7 +529,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                       )}
                     </div>
                     <div className="comet-body-xs flex gap-2 font-mono text-light-slate">
-                      <span className="flex-1 truncate pl-3">
+                      <span className="flex-1 break-all pl-3">
                         {LITELLM_KEYS[line.field]}
                       </span>
                       <span className="flex-1 truncate pl-3">
@@ -515,6 +551,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                   </div>
                 );
               })}
+              {priceProblems.map((problem, i) => (
+                <p key={i} className="comet-body-xs pl-3 text-destructive">
+                  {problem.message}
+                </p>
+              ))}
               {canEdit && freeFields.length > 0 && (
                 <Button variant="outline" size="sm" onClick={addLine}>
                   <Plus className="mr-1.5 size-3.5" />
@@ -524,26 +565,36 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="model-price-note">Note</Label>
-            <Textarea
-              id="model-price-note"
-              rows={3}
-              className="min-h-[76px]"
-              placeholder="Why was this changed? e.g. negotiated rate, contract #…"
-              value={note}
-              disabled={readOnly}
-              onChange={(event) => {
-                resetFeedback();
-                setNote(event.target.value);
-              }}
-            />
-            {fieldProblems("note").map((problem, i) => (
-              <p key={i} className="comet-body-xs text-destructive">
-                {problem.message}
-              </p>
-            ))}
-          </div>
+          {readOnly ? (
+            note && (
+              <div className="space-y-1.5">
+                <h4 className="comet-body-s-accented">Note</h4>
+                <p className="comet-body-s whitespace-pre-wrap break-words">
+                  {note}
+                </p>
+              </div>
+            )
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="model-price-note">Note</Label>
+              <Textarea
+                id="model-price-note"
+                rows={3}
+                className="min-h-[76px]"
+                placeholder="Why was this changed? e.g. negotiated rate, contract #…"
+                value={note}
+                onChange={(event) => {
+                  resetFeedback();
+                  setNote(event.target.value);
+                }}
+              />
+              {fieldProblems("note").map((problem, i) => (
+                <p key={i} className="comet-body-xs text-destructive">
+                  {problem.message}
+                </p>
+              ))}
+            </div>
+          )}
 
           {generalProblems.length > 0 && (
             <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
@@ -559,9 +610,11 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               data-testid="model-price-warnings"
             >
               <p className="comet-body-s-accented">Check these before saving</p>
-              {warnings.map((warning, i) => (
-                <p key={i}>{warning.message}</p>
-              ))}
+              <ul className="list-disc space-y-1 pl-5">
+                {warnings.map((warning, i) => (
+                  <li key={i}>{warning.message}</li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
@@ -588,11 +641,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                       ? "Add model"
                       : "Save changes"}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setOpen(false)}
-                >
+                <Button size="sm" variant="ghost" onClick={requestClose}>
                   Cancel
                 </Button>
                 {type === "override" && entry?.row && (
@@ -613,7 +662,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                     variant="outline"
                     className="ml-auto"
                     disabled={isSaving}
-                    onClick={() => save(true)}
+                    onClick={() => setConfirming("remove")}
                   >
                     <Trash2 className="mr-1.5 size-3.5" />
                     Remove model
@@ -621,17 +670,32 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                 )}
               </>
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </Button>
+              <p className="comet-body-xs text-muted-slate">
+                Only organization admins can change prices.
+              </p>
             )}
           </div>
         </div>
       </SheetContent>
+      <ConfirmDialog
+        open={confirming === "discard"}
+        setOpen={(next) => !next && setConfirming(undefined)}
+        onConfirm={() => setOpen(false)}
+        title="Discard your changes?"
+        description="The prices and note you changed here aren't saved yet."
+        confirmText="Discard"
+        cancelText="Keep editing"
+        confirmButtonVariant="destructive"
+      />
+      <ConfirmDialog
+        open={confirming === "remove"}
+        setOpen={(next) => !next && setConfirming(undefined)}
+        onConfirm={() => save(true)}
+        title={`Remove ${title}?`}
+        description="Spans saved after this won't have a price for this model. Spans already saved keep their cost."
+        confirmText="Remove model"
+        confirmButtonVariant="destructive"
+      />
     </Sheet>
   );
 };

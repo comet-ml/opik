@@ -44,6 +44,7 @@ const QUICK_ACCESS_DEFAULTS = [
 ];
 
 const PINNED_STORAGE_KEY = "cost-center:pinned-models";
+const IS_LABEL = { "=": "is" } as const;
 const MAX_QUICK_ACCESS = 8;
 
 const identityKey = (model: string, provider: string) =>
@@ -98,9 +99,12 @@ const CostCenterTab: React.FC = () => {
         columnType: COLUMN_TYPE.string,
         operators: ["="],
         defaultOperator: "=",
+        operatorLabels: IS_LABEL,
+        hideOperatorInSummary: true,
         addLabel: "Add provider",
         value: {
           placeholder: "Select a provider…",
+          optionsHeading: "Providers",
           options: chipOptionsValue({
             items: providerOptions,
             isLoading: false,
@@ -115,9 +119,12 @@ const CostCenterTab: React.FC = () => {
         columnType: COLUMN_TYPE.string,
         operators: ["="],
         defaultOperator: "=",
+        operatorLabels: IS_LABEL,
+        hideOperatorInSummary: true,
         addLabel: "Add type",
         value: {
           placeholder: "Select a type…",
+          optionsHeading: "Types",
           options: chipOptionsValue({
             items: CATALOG_TYPES.map((type) => CATALOG_TYPE_LABELS[type]),
             isLoading: false,
@@ -282,10 +289,12 @@ const CostCenterTab: React.FC = () => {
       <QuickAccess
         entries={quickAccess}
         onOpen={(entry) => openDrawer({ entry })}
+        isPinned={isPinned}
+        onTogglePin={togglePin}
       />
 
-      <div className="mb-3 flex items-start gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="mb-3 flex flex-wrap items-start gap-2">
+        <div className="min-w-0 flex-[1_1_520px]">
           <FilterChipBar
             chipsPinned={chips.chipsPinned}
             chipsUnpinned={chips.chipsUnpinned}
@@ -303,7 +312,7 @@ const CostCenterTab: React.FC = () => {
               <SearchInput
                 searchText={search}
                 setSearchText={resetPage(setSearch)}
-                className="w-[200px] shrink-0 xl:w-[280px]"
+                className="w-[260px] shrink-0"
                 placeholder="Search models or providers"
                 dimension="sm"
               />
@@ -333,11 +342,12 @@ const CostCenterTab: React.FC = () => {
           <CatalogTable
             entries={pageEntries}
             sortDirection={sortDirection}
-            onToggleSort={() =>
+            onToggleSort={() => {
               setSortDirection((direction) =>
                 direction === "asc" ? "desc" : "asc",
-              )
-            }
+              );
+              setPage(1);
+            }}
             onOpen={(entry) => openDrawer({ entry })}
             isPinned={isPinned}
             onTogglePin={togglePin}

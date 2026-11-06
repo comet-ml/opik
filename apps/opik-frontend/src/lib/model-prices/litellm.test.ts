@@ -19,6 +19,12 @@ describe("price units", () => {
     expect(perMillionToPerToken("1500000")).toBe("1.5");
     expect(perMillionToPerToken("")).toBe("");
   });
+
+  it("gives no per-token price for input that is not a positive number", () => {
+    expect(perMillionToPerToken("1.2.3")).toBe("");
+    expect(perMillionToPerToken("abc")).toBe("");
+    expect(perMillionToPerToken("-5")).toBe("");
+  });
 });
 
 describe("parseBuiltInPrices", () => {

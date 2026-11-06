@@ -6,6 +6,7 @@ import {
   sortCatalog,
 } from "./catalog";
 import {
+  blockingWarnings,
   describePerToken,
   overrideFields,
   problemsForRow,
@@ -258,6 +259,31 @@ describe("saving one model", () => {
     expect(describePerToken("13.1", "20")).toBe("= 0.0000131 / tok");
     expect(describePerToken("", "2.5")).toBe("= 0.0000025 / tok (built-in)");
     expect(describePerToken("", undefined)).toBe("= no price");
+  });
+
+  it("shows nothing while the typed price is not a number yet", () => {
+    expect(describePerToken("1.2.3", "2.5")).toBe("");
+    expect(describePerToken("-1", "2.5")).toBe("");
+    expect(describePerToken("abc", undefined)).toBe("");
+  });
+
+  it("lets a custom price save without asking about unpriced providers", () => {
+    const warnings = [
+      { row: 0, field: "provider", code: "provider_unpriced", message: "a" },
+      { row: 0, field: null, code: "no_base", message: "b" },
+      {
+        row: 0,
+        field: "input_price",
+        code: "price_out_of_range",
+        message: "c",
+      },
+      { row: 0, field: "model", code: "shadows_builtin", message: "d" },
+    ];
+    expect(blockingWarnings(warnings, true).map((w) => w.code)).toEqual([
+      "price_out_of_range",
+      "shadows_builtin",
+    ]);
+    expect(blockingWarnings(warnings, false)).toHaveLength(4);
   });
 
   it("keeps the problems of the saved row and of the whole list", () => {

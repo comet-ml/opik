@@ -64,13 +64,13 @@ const QueryBuilderChipPopoverContent: React.FC<
   const operatorOptions = useMemo(
     () =>
       definition.operators.map((op) => {
-        const label = getOperatorLabel(op);
+        const label = definition.operatorLabels?.[op] ?? getOperatorLabel(op);
         return {
           label: keyConfig ? label : upperFirst(label),
           value: op,
         };
       }),
-    [definition.operators, keyConfig],
+    [definition.operators, definition.operatorLabels, keyConfig],
   );
 
   const defaultOperator: FilterOperator =
@@ -154,6 +154,7 @@ const QueryBuilderChipPopoverContent: React.FC<
             value={row.key ?? ""}
             placeholder={keyConfig.placeholder ?? "key"}
             options={keyOptions}
+            optionsHeading={keyConfig.optionsHeading}
             itemNoun={definition.label.toLowerCase()}
             autoFocus={focusKey}
             hasError={Boolean(keyError)}
@@ -196,6 +197,7 @@ const QueryBuilderChipPopoverContent: React.FC<
               value={String(row.value ?? "")}
               placeholder={valueConfig.placeholder ?? "value"}
               options={valueOptions}
+              optionsHeading={valueConfig.optionsHeading}
               itemNoun={definition.label.toLowerCase()}
               autoFocus={focusValue}
               onChange={(next) => updateRow(row.id, { value: next })}

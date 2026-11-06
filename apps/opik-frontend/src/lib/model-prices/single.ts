@@ -87,6 +87,7 @@ export const describePerToken = (
 ): string => {
   const own = perMillionToPerToken(value);
   if (own) return `= ${own} / tok`;
+  if (value?.trim()) return "";
   const fallback = perMillionToPerToken(builtInValue);
   return fallback ? `= ${fallback} / tok (built-in)` : "= no price";
 };
@@ -115,3 +116,18 @@ export const problemsForRow = (
       problem.row === null ||
       problem.row === undefined,
   );
+
+const NOT_BLOCKING_FOR_CUSTOM_PRICES = new Set([
+  "provider_unpriced",
+  "no_base",
+]);
+
+export const blockingWarnings = (
+  warnings: ModelPriceProblem[],
+  isCustomPrice: boolean,
+): ModelPriceProblem[] =>
+  isCustomPrice
+    ? warnings.filter(
+        (warning) => !NOT_BLOCKING_FOR_CUSTOM_PRICES.has(warning.code),
+      )
+    : warnings;

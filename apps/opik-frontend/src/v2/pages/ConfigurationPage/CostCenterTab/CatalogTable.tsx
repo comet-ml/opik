@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowDown, ArrowUp, Pin } from "lucide-react";
+import { ArrowDown, ArrowUp, Star } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -69,16 +69,19 @@ const MoreFields: React.FC<{ entry: CatalogEntry }> = ({ entry }) => {
   );
 };
 
+const WIDE_ONLY = "hidden xl:table-cell";
+
 const Cell: React.FC<{
   children: React.ReactNode;
   align?: "left" | "right";
   colSpan?: number;
   className?: string;
-}> = ({ children, align = "left", colSpan, className }) => (
-  <TableCell colSpan={colSpan} className="px-4">
+  cellClassName?: string;
+}> = ({ children, align = "left", colSpan, className, cellClassName }) => (
+  <TableCell colSpan={colSpan} className={cn("px-4", cellClassName)}>
     <div
       className={cn(
-        "flex h-11 min-w-0 items-center whitespace-nowrap",
+        "flex h-11 min-w-0 items-center overflow-hidden whitespace-nowrap",
         align === "right" && "justify-end",
         className,
       )}
@@ -99,13 +102,13 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
   const SortIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table className="min-w-[960px]">
+      <Table>
         <TableHeader>
           <TableRow className="bg-muted/50 hover:bg-muted/50">
             <TableHead className="h-10 w-12 px-0">
               <span className="sr-only">Pinned</span>
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[30%]")}>
+            <TableHead className={HEAD_CLASS}>
               <button
                 type="button"
                 className="inline-flex items-center gap-1 text-foreground"
@@ -118,18 +121,22 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                 <SortIcon className="size-3.5" />
               </button>
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[13%]")}>
+            <TableHead className={cn(HEAD_CLASS, "w-[128px] xl:w-[160px]")}>
               Provider
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[9%]")}>Type</TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[12%] text-right")}>
+            <TableHead className={cn(HEAD_CLASS, "w-[104px]")}>Type</TableHead>
+            <TableHead className={cn(HEAD_CLASS, "w-[128px] text-right")}>
               Input
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[12%] text-right")}>
+            <TableHead className={cn(HEAD_CLASS, "w-[128px] text-right")}>
               Output
             </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[10%]")}>More</TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[14%] text-right")}>
+            <TableHead className={cn(HEAD_CLASS, WIDE_ONLY, "w-[96px]")}>
+              More
+            </TableHead>
+            <TableHead
+              className={cn(HEAD_CLASS, WIDE_ONLY, "w-[120px] text-right")}
+            >
               Last updated
             </TableHead>
           </TableRow>
@@ -142,48 +149,66 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                 key={entry.key}
                 className="group cursor-pointer"
                 onClick={() => onOpen(entry)}
-                onKeyDown={(event) => event.key === "Enter" && onOpen(entry)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onOpen(entry);
+                }}
                 tabIndex={0}
                 data-testid="model-price-row"
               >
                 <TableCell className="w-12 px-0">
-                  <button
-                    type="button"
-                    className={cn(
-                      "mx-auto flex size-7 items-center justify-center rounded text-muted-slate hover:bg-primary-100 hover:text-foreground focus-visible:opacity-100",
-                      pinned
-                        ? "text-foreground"
-                        : "opacity-0 group-hover:opacity-100",
-                    )}
-                    aria-label={
-                      pinned
-                        ? `Unpin ${entry.model} from quick access`
-                        : `Pin ${entry.model} to quick access`
+                  <TooltipWrapper
+                    content={
+                      pinned ? "Unpin from quick access" : "Pin to quick access"
                     }
-                    aria-pressed={pinned}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onTogglePin(entry);
-                    }}
-                    onKeyDown={(event) => event.stopPropagation()}
                   >
-                    <Pin className={cn("size-3.5", pinned && "fill-current")} />
-                  </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "mx-auto flex size-7 items-center justify-center rounded text-muted-slate hover:bg-primary-100 hover:text-foreground focus-visible:opacity-100",
+                        pinned
+                          ? "text-warning-box-text"
+                          : "opacity-0 group-hover:opacity-100",
+                      )}
+                      aria-label={
+                        pinned
+                          ? `Unpin ${entry.model} from quick access`
+                          : `Pin ${entry.model} to quick access`
+                      }
+                      aria-pressed={pinned}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTogglePin(entry);
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <Star
+                        className={cn("size-3.5", pinned && "fill-current")}
+                      />
+                    </button>
+                  </TooltipWrapper>
                 </TableCell>
                 <Cell>
-                  <span className="truncate font-mono text-[15px] leading-5">
+                  <span
+                    className="truncate font-mono text-[15px] leading-5"
+                    title={entry.model}
+                  >
                     {entry.model}
                   </span>
                 </Cell>
                 <Cell className="comet-body-s">
-                  {entry.provider || (
+                  {entry.provider ? (
+                    <span className="truncate" title={entry.provider}>
+                      {entry.provider}
+                    </span>
+                  ) : (
                     <span className="text-light-slate">Any provider</span>
                   )}
                 </Cell>
                 <Cell>
                   <Tag
                     variant={TYPE_TAG_VARIANT[entry.type]}
-                    size="sm"
                     className="shrink-0"
                   >
                     {CATALOG_TYPE_LABELS[entry.type]}
@@ -208,10 +233,14 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                     </Cell>
                   </>
                 )}
-                <Cell>
+                <Cell cellClassName={WIDE_ONLY}>
                   <MoreFields entry={entry} />
                 </Cell>
-                <Cell align="right" className="comet-body-s text-muted-slate">
+                <Cell
+                  align="right"
+                  cellClassName={WIDE_ONLY}
+                  className="comet-body-s text-muted-slate"
+                >
                   {formatDay(entry.lastUpdatedAt) ?? "—"}
                 </Cell>
               </TableRow>

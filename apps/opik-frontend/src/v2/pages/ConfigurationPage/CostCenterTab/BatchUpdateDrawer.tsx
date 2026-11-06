@@ -244,7 +244,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
             <TabsContent value="json" className="mt-4 space-y-3">
               <label
                 className={cn(
-                  "flex h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-center hover:bg-muted/50",
+                  "flex h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-center outline-none focus-within:ring-1 focus-within:ring-ring hover:bg-muted/50",
                   isDragging && "border-primary bg-primary-100",
                 )}
                 onDragOver={(event) => {
@@ -378,7 +378,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
               )}
             </TabsContent>
             <TabsContent value="skill" className="mt-4 space-y-4">
-              <p className="comet-body-s text-muted-slate">
+              <p className="comet-body-xs text-muted-slate">
                 Upload a price sheet in any format—Excel, PDF, or an email
                 table—directly from Claude Code, Codex or Cursor. Review and
                 confirm changes in your agent.
@@ -391,7 +391,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   <CodeLine text={ASK} />
                 </Step>
                 <Step number={3} title="The skill then">
-                  <ul className="comet-body-s list-disc space-y-1 pl-5 text-muted-slate">
+                  <ul className="comet-body-xs list-disc space-y-1 pl-5 text-foreground">
                     {SKILL_STEPS.map((step) => (
                       <li key={step}>{step}</li>
                     ))}
