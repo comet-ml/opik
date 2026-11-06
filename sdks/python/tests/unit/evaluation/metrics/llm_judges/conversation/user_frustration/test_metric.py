@@ -378,3 +378,38 @@ async def test_score__with_all_frustrated_responses__async(mock_model):
     assert result.name == "test_frustration"
     assert result.value == 1.0
     assert "frustration" in result.reason.lower()
+
+
+def _punctuated_frustration_side_effect(*args, **kwargs):
+    """A judge that drifts from the STRICTLY yes/no prompt with punctuation."""
+    response_format = kwargs.get("response_format")
+    if response_format == schema.EvaluateUserFrustrationResponse:
+        return _assistant_message(json.dumps({"verdict": "Yes.", "reason": None}))
+    elif response_format == schema.ScoreReasonResponse:
+        return _assistant_message(json.dumps({"reason": "The user is frustrated."}))
+    return _assistant_message("{}")
+
+
+def test_score__punctuated_yes_verdict__still_counts_as_frustrated(mock_model):
+    """A drifted verdict must not silently flip the score.
+
+    The prompt asks for STRICTLY ``yes``/``no`` but the schema accepts any
+    string, and models drift. Before the shared normalizer, ``"Yes."`` failed
+    the ``== "yes"`` comparison and a fully frustrated thread scored 0.0.
+    """
+    conversation = [
+        {"role": "user", "content": "This is the third time I'm asking!"},
+        {"role": "assistant", "content": "Could you rephrase the question?"},
+        {"role": "user", "content": "I already did. Twice!"},
+    ]
+    mock_model.generate_chat_completion.side_effect = (
+        _punctuated_frustration_side_effect
+    )
+
+    metric = UserFrustrationMetric(model=mock_model, track=False)
+    result = metric.score(conversation=conversation)
+
+    assert result.name == "user_frustration_score"
+    assert result.value == 1.0
+    assert result.reason == "The user is frustrated."
+    assert result.scoring_failed is False
