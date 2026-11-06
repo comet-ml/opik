@@ -940,4 +940,30 @@ class PromptResourceProjectScopedPromptsTest {
             assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
         }
     }
+
+    @Test
+    @DisplayName("Retrieve prompt version without a project is rejected when another project shares the name with Default Project and project-less prompts")
+    void retrievePromptVersionWithoutProjectRejectedWhenNameSharedBeyondProjectlessDuplicates() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var defaultProjectId = projectResourceClient.createProject(DEFAULT_PROJECT, apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+        String sharedName = "prompt-" + UUID.randomUUID();
+        saveProjectlessPrompt(sharedName, workspaceId);
+        saveProjectlessPrompt(sharedName, workspaceId);
+        savePrompt(sharedName, defaultProjectId, workspaceId);
+        savePrompt(sharedName, otherProjectId, workspaceId);
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                "Prompt name exists in several projects, please provide project_name: '%s'".formatted(sharedName));
+
+        var request = PromptVersionRetrieve.builder().name(sharedName).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+        }
+    }
 }

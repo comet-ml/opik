@@ -194,22 +194,44 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " AND (project_id IS NOT NULL OR name NOT IN (<demo_names>)) ORDER BY id LIMIT :limit")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id AND name = :name
+            AND (project_id IS NOT NULL OR name NOT IN (<demo_names>))
+            ORDER BY project_id IS NULL, id
+            LIMIT :limit
+            """)
     List<Dataset> findByNameInAnyProject(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
             @BindList("demo_names") List<String> demoNames, @Bind("limit") int limit);
 
-    @SqlQuery("SELECT EXISTS(SELECT 1 FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " AND (project_id = :project_id OR (project_id IS NULL AND name NOT IN (<demo_names>)))" +
-            " AND id <> :id)")
+    @SqlQuery("""
+            SELECT EXISTS(
+                SELECT 1 FROM datasets
+                WHERE workspace_id = :workspace_id AND name = :name
+                AND (project_id = :project_id OR (project_id IS NULL AND name NOT IN (<demo_names>)))
+                AND id <> :id
+            )
+            """)
     boolean existsInProjectOrProjectless(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
             @Bind("project_id") UUID projectId, @BindList("demo_names") List<String> demoNames,
             @Bind("id") UUID id);
 
-    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " AND (project_id = :project_id OR (project_id IS NULL AND name NOT IN (<demo_names>) AND :project_id = (SELECT id FROM projects WHERE workspace_id = :workspace_id AND name = :default_project_name)))"
-            +
-            " ORDER BY project_id IS NULL LIMIT 1")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id AND name = :name
+            AND (
+                project_id = :project_id
+                OR (
+                    project_id IS NULL
+                    AND name NOT IN (<demo_names>)
+                    AND :project_id = (
+                        SELECT id FROM projects WHERE workspace_id = :workspace_id AND name = :default_project_name
+                    )
+                )
+            )
+            ORDER BY project_id IS NULL
+            LIMIT 1
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,

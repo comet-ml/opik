@@ -195,7 +195,7 @@ class DatasetServiceImpl implements DatasetService {
 
     private UUID getOrCreate(@NonNull String workspaceId, @NonNull String name, @NonNull String userName,
             @NonNull UUID projectId) {
-        var dataset = findInProject(workspaceId, name, projectId);
+        var dataset = findByNameInProjectOrLegacyDefault(workspaceId, name, projectId);
 
         if (dataset.isEmpty()) {
 
@@ -221,7 +221,8 @@ class DatasetServiceImpl implements DatasetService {
                     throw e;
                 }
                 // A concurrent request created it first: use theirs.
-                UUID existingId = findInProject(workspaceId, name, projectId).orElseThrow(() -> e).id();
+                UUID existingId = findByNameInProjectOrLegacyDefault(workspaceId, name, projectId).orElseThrow(() -> e)
+                        .id();
                 log.info("Dataset created concurrently, using id '{}', name '{}', workspaceId '{}'", existingId,
                         name, workspaceId);
                 return existingId;
@@ -235,7 +236,7 @@ class DatasetServiceImpl implements DatasetService {
         return id;
     }
 
-    private Optional<Dataset> findInProject(String workspaceId, String name, UUID projectId) {
+    private Optional<Dataset> findByNameInProjectOrLegacyDefault(String workspaceId, String name, UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetDAO.class)
                 .findByName(workspaceId, name, projectId, ProjectService.DEFAULT_PROJECT, DemoData.DATASETS));
     }
