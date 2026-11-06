@@ -412,7 +412,9 @@ class DBManager:
                 )
                 raise
 
-    def replay_failed_messages(self, replay_callback: ReplayCallback) -> int:
+    def replay_failed_messages(
+        self, replay_callback: ReplayCallback, timeout: Optional[float] = None
+    ) -> int:
         """
         Replays previously failed messages by fetching them in batches, marking them as
         "in progress," and invoking the provided callback for processing.
@@ -435,6 +437,8 @@ class DBManager:
         Args:
             replay_callback: A callback function that processes the
                 replayed messages.
+            timeout: If set, stop between batches once this many seconds have
+                passed. Messages not replayed yet stay marked as failed.
 
         Returns:
             int: The total count of successfully replayed messages.
@@ -456,12 +460,15 @@ class DBManager:
             LOGGER.debug("Replay already in progress - skipping concurrent call")
             return 0
 
+        deadline = None if timeout is None else time.monotonic() + timeout
         try:
-            return self._replay_failed_messages_impl(replay_callback)
+            return self._replay_failed_messages_impl(replay_callback, deadline)
         finally:
             self._replay_mutex.release()
 
-    def _replay_failed_messages_impl(self, replay_callback: ReplayCallback) -> int:
+    def _replay_failed_messages_impl(
+        self, replay_callback: ReplayCallback, deadline: Optional[float]
+    ) -> int:
         # The initial closed check — short critical section, no loop held inside.
         with self.__lock__:
             if self.closed:
@@ -470,6 +477,13 @@ class DBManager:
 
         total_replayed = 0
         for db_messages in self.fetch_failed_messages_batched(self.batch_size):
+            if deadline is not None and time.monotonic() >= deadline:
+                LOGGER.debug(
+                    "Replay time budget spent - stopping after %d replayed",
+                    total_replayed,
+                )
+                break
+
             params = [
                 (int(MessageStatus.registered), message.id) for message in db_messages
             ]
@@ -510,7 +524,13 @@ class DBManager:
             # Applied only after a full batch to avoid unnecessary delays on the
             # last (partial) batch.
             if replayed >= self.batch_size:
-                time.sleep(self.batch_replay_delay)
+                time.sleep(
+                    self.batch_replay_delay
+                    if deadline is None
+                    else min(
+                        self.batch_replay_delay, max(0.0, deadline - time.monotonic())
+                    )
+                )
 
         return total_replayed
 
