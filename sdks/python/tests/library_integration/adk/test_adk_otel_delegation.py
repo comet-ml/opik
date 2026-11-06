@@ -5,7 +5,7 @@ of suppressing spans, and is idempotent across re-patching (deep-copy /
 """
 
 import asyncio
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List, Tuple
 
 import google.adk.telemetry as adk_telemetry
 import pytest
@@ -13,6 +13,7 @@ from google.adk import agents as adk_agents
 from google.adk import runners as adk_runners
 from google.adk.models import base_llm, llm_request, llm_response
 from google.adk.sessions import in_memory_session_service
+from google.adk.tools import agent_tool
 from google.genai import types as genai_types
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -23,13 +24,19 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 
 import opik
-from opik.integrations.adk import OpikTracer
+from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 from opik.integrations.adk.patchers import patchers
 from opik.integrations.adk.patchers.adk_otel_tracer.opik_adk_otel_tracer import (
     OpikADKOtelTracer,
 )
-from . import helpers
-from ...testlib import ANY_BUT_NONE, ANY_STRING, TraceModel, assert_equal
+from . import agent_tools, helpers
+from ...testlib import (
+    ANY_BUT_NONE,
+    ANY_STRING,
+    SpanModel,
+    TraceModel,
+    assert_equal,
+)
 
 
 pytestmark = helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -274,6 +281,206 @@ def test_adk_otel_patching__start_span_skip_listed_name__no_opik_bookkeeping(
     assert fake_backend.trace_trees == []
     exported_names = [s.name for s in otel_exporter.get_finished_spans()]
     assert "invocation" in exported_names
+
+
+def test_adk_otel_patching__start_span_entrypoint_invoke_workflow__no_opik_bookkeeping(
+    opik_tracer_with_otel, otel_exporter, fake_backend
+):
+    """google-adk >= 2.13.0 opens the runner's `invoke_workflow {root}` span in
+    place of `invocation`, without the `gen_ai.workflow.nested` attribute."""
+    span = adk_telemetry.tracer.start_span(
+        "invoke_workflow weather_agent",
+        attributes={"gen_ai.operation.name": "invoke_workflow"},
+    )
+    assert opik.context_storage.get_trace_data() is None
+    span.end()
+    opik_tracer_with_otel.flush()
+
+    assert fake_backend.trace_trees == []
+    exported_names = [s.name for s in otel_exporter.get_finished_spans()]
+    assert "invoke_workflow weather_agent" in exported_names
+
+
+def test_adk_otel_patching__start_span_nested_invoke_workflow__opik_trace_logged(
+    opik_tracer_with_otel, fake_backend
+):
+    span = adk_telemetry.tracer.start_span(
+        "invoke_workflow research_step",
+        attributes={
+            "gen_ai.operation.name": "invoke_workflow",
+            "gen_ai.workflow.nested": True,
+        },
+    )
+    span.end()
+    opik_tracer_with_otel.flush()
+
+    assert [trace_tree.name for trace_tree in fake_backend.trace_trees] == [
+        "invoke_workflow research_step"
+    ]
+
+
+class _WeatherToolModel(base_llm.BaseLlm):
+    """Calls `get_weather`, then answers once the tool has responded."""
+
+    model: str = "fake-gemini"
+
+    async def generate_content_async(
+        self, request: llm_request.LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[llm_response.LlmResponse, None]:
+        if request.contents[-1].parts[0].function_response is None:
+            part = genai_types.Part(
+                function_call=genai_types.FunctionCall(
+                    name="get_weather", args={"city": "New York"}
+                )
+            )
+        else:
+            part = genai_types.Part(text="It is sunny in New York.")
+        yield llm_response.LlmResponse(
+            content=genai_types.Content(role="model", parts=[part])
+        )
+
+
+def test_adk_otel_patching__agent_run__root_agent_is_the_trace(fake_backend):
+    """google-adk >= 2.13.0 wraps the root agent in an `invoke_workflow` span by
+    default. Tracked, it became the trace - in the default project, with no input
+    and no thread - and pushed the agent one level down."""
+    tracer = OpikTracer(project_name="adk-root-agent-trace")
+    agent = adk_agents.LlmAgent(
+        name="weather_agent",
+        model=_WeatherToolModel(),
+        instruction="Answer the weather question.",
+        tools=[agent_tools.get_weather],
+        before_agent_callback=tracer.before_agent_callback,
+        after_agent_callback=tracer.after_agent_callback,
+        before_model_callback=tracer.before_model_callback,
+        after_model_callback=tracer.after_model_callback,
+        before_tool_callback=tracer.before_tool_callback,
+        after_tool_callback=tracer.after_tool_callback,
+    )
+    session_service = in_memory_session_service.InMemorySessionService()
+    runner = adk_runners.Runner(
+        agent=agent, app_name="root-agent-probe", session_service=session_service
+    )
+
+    async def _run() -> None:
+        await session_service.create_session(
+            app_name="root-agent-probe", user_id="u1", session_id="s1"
+        )
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id="s1",
+            new_message=genai_types.Content(
+                role="user", parts=[genai_types.Part(text="weather?")]
+            ),
+        ):
+            pass
+
+    asyncio.run(_run())
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert trace_tree.name == "weather_agent"
+    assert trace_tree.project_name == "adk-root-agent-trace"
+    assert trace_tree.thread_id == "s1"
+    assert trace_tree.input == {"role": "user", "parts": [{"text": "weather?"}]}
+    assert [(span.name, span.type) for span in trace_tree.spans] == [
+        ("fake-gemini", "llm"),
+        ("get_weather", "tool"),
+        ("fake-gemini", "llm"),
+    ]
+
+
+class _CallTranslatorModel(base_llm.BaseLlm):
+    model: str = "fake-root-model"
+
+    async def generate_content_async(
+        self, request: llm_request.LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[llm_response.LlmResponse, None]:
+        if request.contents[-1].parts[0].function_response is None:
+            part = genai_types.Part(
+                function_call=genai_types.FunctionCall(
+                    name="Translator", args={"request": "Hallo Welt"}
+                )
+            )
+        else:
+            part = genai_types.Part(text="Hello world")
+        yield llm_response.LlmResponse(
+            content=genai_types.Content(role="model", parts=[part])
+        )
+
+
+class _TranslateModel(base_llm.BaseLlm):
+    model: str = "fake-translator-model"
+
+    async def generate_content_async(
+        self, request: llm_request.LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[llm_response.LlmResponse, None]:
+        yield llm_response.LlmResponse(
+            content=genai_types.Content(
+                role="model", parts=[genai_types.Part(text="Hello world")]
+            )
+        )
+
+
+def _span_tree(spans: List[SpanModel]) -> List[Tuple[str, str, list]]:
+    return [(span.name, span.type, _span_tree(span.spans)) for span in spans]
+
+
+def test_adk_otel_patching__agent_tool_run__no_span_for_the_nested_runner(
+    fake_backend,
+):
+    """google-adk >= 2.13.0 opens an `invoke_workflow {agent}` span for the
+    runner that AgentTool starts. Inside the outer run it carries
+    `gen_ai.workflow.nested`, but it wraps the sub-agent the same way the
+    top-level runner span wraps the root agent."""
+    tracer = OpikTracer(project_name="adk-agent-tool")
+    translator = adk_agents.LlmAgent(
+        name="Translator",
+        model=_TranslateModel(),
+        description="Translates text to English.",
+        instruction="Translate to English.",
+    )
+    root_agent = adk_agents.LlmAgent(
+        name="TextProcessingAssistant",
+        model=_CallTranslatorModel(),
+        instruction="Call the Translator tool.",
+        tools=[agent_tool.AgentTool(agent=translator)],
+    )
+    track_adk_agent_recursive(root_agent, tracer)
+    session_service = in_memory_session_service.InMemorySessionService()
+    runner = adk_runners.Runner(
+        agent=root_agent, app_name="agent-tool-probe", session_service=session_service
+    )
+
+    async def _run() -> None:
+        await session_service.create_session(
+            app_name="agent-tool-probe", user_id="u1", session_id="s1"
+        )
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id="s1",
+            new_message=genai_types.Content(
+                role="user", parts=[genai_types.Part(text="Hallo Welt")]
+            ),
+        ):
+            pass
+
+    asyncio.run(_run())
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert trace_tree.name == "TextProcessingAssistant"
+    assert _span_tree(trace_tree.spans) == [
+        ("fake-root-model", "llm", []),
+        (
+            "Translator",
+            "tool",
+            [("Translator", "general", [("fake-translator-model", "llm", [])])],
+        ),
+        ("fake-root-model", "llm", []),
+    ]
 
 
 class _FailingModel(base_llm.BaseLlm):

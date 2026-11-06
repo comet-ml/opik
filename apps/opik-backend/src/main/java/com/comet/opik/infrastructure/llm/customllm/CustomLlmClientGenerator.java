@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
+import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
@@ -45,7 +46,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
 
         return openAiClientBuilder
-                .apiKey(config.apiKey())
+                .apiKey(clientApiKey(config))
                 .build();
     }
 
@@ -71,7 +72,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .baseUrl(baseUrl)
                 .httpClientBuilder(newHttpClientBuilder(config))
                 .modelName(actualModelName)
-                .apiKey(config.apiKey())
+                .apiKey(clientApiKey(config))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -84,6 +85,24 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         // Pass custom parameters directly to constructor since builder inheritance
         // doesn't allow us to chain our custom methods cleanly
         return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
+    }
+
+    /**
+     * The key the OpenAI client sends as {@code Authorization: Bearer <key>} whenever it isn't null. A token-auth
+     * provider stores a blank one, and InterceptingHttpClient supplies the fetched token instead, so the client gets
+     * none rather than sending an empty bearer that would then have to be dropped.
+     */
+    private static String clientApiKey(LlmProviderClientApiConfig config) {
+        return config.authConfig() != null ? null : config.apiKey();
+    }
+
+    HttpClient newHttpClient(@NonNull LlmProviderClientApiConfig config) {
+        var builder = newHttpClientBuilder(config);
+        Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
+                .ifPresent(connectTimeout -> builder.connectTimeout(connectTimeout.toJavaDuration()));
+        Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .ifPresent(readTimeout -> builder.readTimeout(readTimeout.toJavaDuration()));
+        return builder.build();
     }
 
     @Override
@@ -103,7 +122,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
      * conditional, applied when the provider needs request mutation (its configuration keys, a {@code {model}}
      * placeholder or token auth).
      */
-    private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
+    HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // innermost, so it sees the URL after InterceptingHttpClient's mutations
         var guardedBuilder = new DestinationGuardHttpClientBuilder(httpClientBuilders.builder(), providerBaseUrlGuard);
 

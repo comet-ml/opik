@@ -14,9 +14,9 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderFactory.ResolvedModelInfo;
 import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
 import com.comet.opik.infrastructure.ResponseFormattingConfig;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -187,6 +187,31 @@ class OnlineEvaluationRecorderTest {
                 "prompt_tokens", 340, "completion_tokens", 40, "total_tokens", 380));
         assertThat(span.input().get("state").asText()).isEqualTo("Question: q\nAnswer: a");
         assertThat(span.output().at("/answers/answer_relevant/noul").asDouble()).isEqualTo(0.99);
+    }
+
+    @Test
+    void recordsOpenAiDecisionCallWithCachedTokensAndNoReportedCost() {
+        stubSpanWrites();
+        var request = DecisionsRequest.builder()
+                .model("gpt-6-luna")
+                .state("Question: q\nAnswer: a")
+                .questions(Map.of("q0", DecisionsQuestion.noul("Does the answer respond?")))
+                .build();
+        var response = DecisionsResponse.builder()
+                .model("gpt-6-luna-2026-09-22")
+                .answers(Map.of("q0", DecisionsResponse.Answer.builder().type("predicate").noul(0.99).build()))
+                .usage(DecisionsResponse.Usage.builder().inputTokens(2_000).outputTokens(0).cachedInputTokens(1_024)
+                        .build())
+                .build();
+
+        recorder().recordDecisionCall(request, Mono.just(response)).block();
+
+        var span = capturedSpan();
+        // OpenAI reports no cost: left empty, the span is priced from the price table when stored.
+        assertThat(span.totalEstimatedCost()).isNull();
+        assertThat(span.usage()).isEqualTo(Map.of(
+                "prompt_tokens", 2_000, "completion_tokens", 0, "total_tokens", 2_000,
+                "cache_read_input_tokens", 1_024));
     }
 
     @Test
