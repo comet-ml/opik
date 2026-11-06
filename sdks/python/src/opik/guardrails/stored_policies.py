@@ -50,10 +50,14 @@ def retrieve_policies(
     named_policies = (
         _list_policies(client, {"names": json.dumps(list(names))}) if names else []
     )
-    # The backend matches names ignoring case.
+    # The backend matches names by its database collation, which also ignores accents and reads "ß" as "ss".
+    # lower() covers the common case; a name it leaves over is looked up on its own, so the backend decides.
     found_names = {policy.name.lower() for policy in named_policies}
     missing_names = sorted(
-        name for name in set(names or []) if name.lower() not in found_names
+        name
+        for name in set(names or [])
+        if name.lower() not in found_names
+        and not _list_policies(client, {"names": json.dumps([name])})
     )
     if missing_names:
         raise exceptions.GuardrailPolicyError(

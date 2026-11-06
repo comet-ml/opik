@@ -155,6 +155,7 @@ To see how often each guardrail is failing over time, open the **Metrics** secti
 
 - A Topic rule takes up to 254 topics in each list, each up to 256 characters.
 - A guardrail checks at most 32 PII, Topic, and prompt injection rules, counting those it takes from policies.
+- Together those rules can ask the model at most 64 questions: one for each PII class, one for each topic list, and one for prompt injection. A guardrail that needs more is rejected before any check runs.
 
 ## Defining rules in code
 

@@ -1,3 +1,4 @@
+import json
 import types
 
 import httpx
@@ -88,15 +89,21 @@ def test_retrieve_policies__no_names_requested__only_global_policies_fetched():
 
 
 def test_retrieve_policies__policy_name_not_found__policy_error_raised():
-    client, calls = _recording_client(
-        lambda params: _page(_policy("known")) if "names" in params else _page()
-    )
+    def respond(params):
+        names = json.loads(params.get("names", "[]"))
+        return _page(*[_policy(name) for name in names if name == "known"])
+
+    client, calls = _recording_client(respond)
 
     with pytest.raises(exceptions.GuardrailPolicyError) as exception_info:
         stored_policies.retrieve_policies(client=client, names=["known", "unknown"])
 
     assert str(exception_info.value) == "Guardrail policies not found: unknown"
-    assert len(calls) == 1
+    # The lookup by names, then "unknown" on its own; no global lookup.
+    assert [call["params"].get("names") for call in calls] == [
+        '["known", "unknown"]',
+        '["unknown"]',
+    ]
 
 
 def test_retrieve_policies__name_in_another_case__found():
@@ -107,6 +114,22 @@ def test_retrieve_policies__name_in_another_case__found():
     policies = stored_policies.retrieve_policies(client=client, names=["no_contact"])
 
     assert [policy.name for policy in policies] == ["No_Contact"]
+
+
+def test_retrieve_policies__name_matched_only_by_the_backend_collation__found():
+    # The backend's collation ignores accents, so "Cafe" finds "Café", which lower() doesn't match.
+    client, calls = _recording_client(
+        lambda params: _page(_policy("Café")) if "names" in params else _page()
+    )
+
+    policies = stored_policies.retrieve_policies(client=client, names=["Cafe"])
+
+    assert [policy.name for policy in policies] == ["Café"]
+    assert [call["params"].get("names") for call in calls] == [
+        '["Cafe"]',
+        '["Cafe"]',
+        None,
+    ]
 
 
 def test_retrieve_policies__named_policy_also_global__returned_once():
