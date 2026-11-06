@@ -19,6 +19,7 @@ def get_dataset_item_id_finder(
     """
     Returns a callable that takes TestRunContent as input and checks
     if there is already a dataset item with such a content (input, expected_output and metadata).
+    Fields that are None are left out of the comparison, as they are when items are created.
     """
     dataset_item_content_to_ids = {
         json.dumps(dataset_item.get_content(), sort_keys=True): dataset_item.id
@@ -26,7 +27,11 @@ def get_dataset_item_id_finder(
     }
 
     def callback(content: test_run_content.TestRunContent) -> str:
-        content_str = json.dumps(content.__dict__, sort_keys=True)
+        # Dataset items are created without None fields, so leave them out
+        # here too, or a test without expected_output or metadata never
+        # matches its existing item.
+        content_dict = dict_utils.remove_none_from_dict(content.__dict__)
+        content_str = json.dumps(content_dict, sort_keys=True)
         result = dataset_item_content_to_ids.get(content_str, None)
         return cast(str, result)
 
