@@ -2,8 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import GenericModelConfigs from "./GenericModelConfigs";
-import { ANTHROPIC_PANEL, GenericPanelPresentation } from "./genericPanels";
+import {
+  ANTHROPIC_PANEL,
+  GEMINI_PANEL,
+  GenericPanelPresentation,
+  VERTEX_AI_PANEL,
+} from "./genericPanels";
 import ANTHROPIC_FIXTURE from "@/lib/anthropicCatalog.fixture.json";
+import GEMINI_FIXTURE from "@/lib/geminiCatalog.fixture.json";
 import { buildParamsIndex } from "@/hooks/useLLMProviderModelsData";
 import {
   resetModelRegistryStoreForTesting,
@@ -11,7 +17,10 @@ import {
   setLatestProviderProfiles,
 } from "@/lib/modelRegistryStore";
 import { getModelParams } from "@/lib/modelParams";
-import { sanitizeConfigForRequest } from "@/lib/modelUtils";
+import {
+  getGeminiOrVertexListedParams,
+  sanitizeConfigForRequest,
+} from "@/lib/modelUtils";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import { ModelParamsByProvider } from "@/types/modelParams";
@@ -111,6 +120,14 @@ const renderPanel = (
   return onChange;
 };
 
+const openMaxOutputTokensTooltip = () => {
+  const label = screen.getByText("Max output tokens");
+  fireEvent.pointerMove(label.parentElement!.querySelector("svg")!, {
+    pointerType: "mouse",
+  });
+  return screen.findByRole("tooltip", {}, { timeout: 2000 });
+};
+
 describe("GenericModelConfigs", () => {
   it("draws the model's controls from its params", () => {
     renderPanel(SAMPLING_MODEL, {
@@ -128,6 +145,14 @@ describe("GenericModelConfigs", () => {
       screen.getByTestId("maxConcurrentRequests-input"),
     ).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveTextContent("LOW");
+  });
+
+  it("names the model's minimum in the max tokens tooltip", async () => {
+    renderPanel(SAMPLING_MODEL, { maxCompletionTokens: 4000 });
+
+    const tooltip = await openMaxOutputTokensTooltip();
+    expect(tooltip).toHaveTextContent("The minimum is 1.");
+    expect(tooltip).not.toHaveTextContent("no limit");
   });
 
   it("offers exactly the model's effort levels", () => {
@@ -317,4 +342,150 @@ describe("the catalog panel for a Claude model that thinks only when asked", () 
       expect(offAgain.temperature).toBe(0);
     },
   );
+});
+
+describe("the catalog panel for Gemini and Vertex AI", () => {
+  beforeEach(() => {
+    resetModelRegistryStoreForTesting();
+    setLatestModelParams(
+      buildParamsIndex(GEMINI_FIXTURE.models as unknown as LlmModelsByProvider),
+    );
+    setLatestProviderProfiles(
+      GEMINI_FIXTURE.profiles as unknown as ModelParamsByProvider,
+    );
+  });
+
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  const renderGeminiPanel = (
+    provider: PROVIDER_TYPE.GEMINI | PROVIDER_TYPE.VERTEX_AI,
+    model: PROVIDER_MODEL_TYPE,
+    configs: Record<string, unknown>,
+    unsupportedParams?: typeof RULE_UNSUPPORTED_PARAMS,
+  ) =>
+    renderPanel(
+      getGeminiOrVertexListedParams(model)!,
+      configs,
+      unsupportedParams,
+      vi.fn(),
+      provider === PROVIDER_TYPE.GEMINI ? GEMINI_PANEL : VERTEX_AI_PANEL,
+      model,
+    );
+
+  const defaults = (provider: PROVIDER_TYPE, model: PROVIDER_MODEL_TYPE) =>
+    getDefaultConfigByProvider(provider, model) as Record<string, unknown>;
+
+  const levelsOffered = () => {
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    return screen.getAllByRole("option").map((option) => option.textContent);
+  };
+
+  const sentLevel = (request: Record<string, unknown>) =>
+    (
+      (request.custom_parameters as Record<string, unknown> | undefined)
+        ?.thinking as Record<string, unknown> | undefined
+    )?.level;
+
+  it.each([
+    [PROVIDER_TYPE.GEMINI, PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH],
+    [PROVIDER_TYPE.VERTEX_AI, PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH],
+  ] as const)(
+    "%s %s: the curated levels, Medium first, and no sampling",
+    (provider, model) => {
+      const configs = defaults(provider, model);
+      renderGeminiPanel(provider, model, configs);
+
+      expect(screen.getByText("Thinking level")).toBeInTheDocument();
+      expect(screen.getByRole("combobox")).toHaveTextContent("Medium");
+      expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+      expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("4000");
+      expect(levelsOffered()).toEqual(["Low", "Medium", "High"]);
+      expect(sentLevel(sanitizeConfigForRequest(model, configs))).toBe(
+        "medium",
+      );
+    },
+  );
+
+  it("Gemini 2.5 Flash: Auto first, Off kept, sampling shown, no level sent", () => {
+    const model = PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH;
+    const configs = defaults(PROVIDER_TYPE.GEMINI, model);
+    renderGeminiPanel(PROVIDER_TYPE.GEMINI, model, configs);
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Auto");
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0");
+    expect(screen.getByTestId("topP-input")).toHaveValue("1");
+    expect(levelsOffered()).toEqual(["Auto", "Off", "Low", "Medium", "High"]);
+    const request = sanitizeConfigForRequest(model, configs);
+    expect(request.custom_parameters).toBeUndefined();
+    expect(request.temperature).toBe(0);
+  });
+
+  it("Vertex AI 3.5 Flash-Lite: the catalog's none is shown as Off and sends nothing", () => {
+    const model = PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH_LITE;
+    const configs = defaults(PROVIDER_TYPE.VERTEX_AI, model);
+    renderGeminiPanel(PROVIDER_TYPE.VERTEX_AI, model, configs);
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Off");
+    expect(levelsOffered()).toEqual([
+      "Off",
+      "Minimal",
+      "Low",
+      "Medium",
+      "High",
+    ]);
+    expect(
+      sanitizeConfigForRequest(model, configs).custom_parameters,
+    ).toBeUndefined();
+  });
+
+  it("explains no limit at 0 in the max tokens tooltip instead of a minimum", async () => {
+    const model = PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH;
+    renderGeminiPanel(
+      PROVIDER_TYPE.GEMINI,
+      model,
+      defaults(PROVIDER_TYPE.GEMINI, model),
+    );
+
+    const tooltip = await openMaxOutputTokensTooltip();
+    expect(tooltip).toHaveTextContent(
+      "The exact limit varies by model. Set to 0 for no limit (the provider's own default applies). (One token",
+    );
+    expect(tooltip).not.toHaveTextContent("The minimum is");
+  });
+
+  it("shows a stored 0 as no limit and leaves it off the request", () => {
+    const model = PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH;
+    const configs = {
+      ...defaults(PROVIDER_TYPE.GEMINI, model),
+      maxCompletionTokens: 0,
+    };
+    renderGeminiPanel(PROVIDER_TYPE.GEMINI, model, configs);
+
+    expect(screen.getByTestId("maxOutputTokens-input")).toHaveValue("0");
+    expect(screen.getByText(/^No limit/)).toBeInTheDocument();
+    expect(
+      sanitizeConfigForRequest(model, configs).maxCompletionTokens,
+    ).toBeUndefined();
+  });
+
+  it("keeps to what an evaluator rule can store", () => {
+    const model = PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO;
+    renderGeminiPanel(
+      PROVIDER_TYPE.GEMINI,
+      model,
+      defaults(PROVIDER_TYPE.GEMINI, model),
+      RULE_UNSUPPORTED_PARAMS,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toHaveTextContent("Auto");
+    expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("maxOutputTokens-input"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("throttling-input")).not.toBeInTheDocument();
+  });
 });

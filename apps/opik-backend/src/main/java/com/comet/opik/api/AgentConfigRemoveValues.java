@@ -24,7 +24,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @ProjectIdentifierValidation
 public record AgentConfigRemoveValues(
         @Nullable @Schema(description = "Project ID. Either project_id or project_name must be provided") UUID projectId,
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Project name. Either project_id or project_name must be provided") String projectName,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "Project name. Either project_id or project_name must be provided") String projectName,
         @NotEmpty @Size(max = 250) Set<@NotBlank String> keys)
         implements
             HasProjectIdentifier {

@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Callable, Dict, List, Optional, Type
 
 import httpx
@@ -10,6 +11,7 @@ from opik.file_upload import base_upload_manager, types as upload_types
 from opik.file_upload.s3_multipart_upload import s3_upload_error
 from opik.rate_limit import rate_limit
 from opik.rest_api import client as rest_api_client, core as rest_api_core
+from opik.rest_client_configurator import retry_decorator
 from opik.rest_api.types import (
     feedback_score_batch_item,
     feedback_score_batch_item_thread,
@@ -28,6 +30,15 @@ LOGGER = logging.getLogger(__name__)
 
 
 MessageProcessingHandler = Callable[[messages.BaseMessage], None]
+
+# Unlike Opik's own RateLimit-Reset, a Retry-After-only 429 may come from a
+# gateway enforcing a quota that lasts hours. Re-queueing forever would keep
+# flush() and end() from ever returning, so messages are dropped once 429s have
+# kept coming for this long.
+_RETRY_AFTER_ONLY_GIVE_UP_SECONDS = 60.0
+# Retries during a rate limit are at most MAX_RETRY_AFTER_SECONDS apart, so a
+# longer gap means nothing was rate limited in between and a new window starts.
+_RETRY_AFTER_ONLY_WINDOW_GAP_SECONDS = 2 * rate_limit.MAX_RETRY_AFTER_SECONDS
 
 
 class OpikMessageProcessor(message_processors.BaseMessageProcessor):
@@ -52,6 +63,8 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._replay_manager = fallback_replay_manager
         self._unauthorized_message_types_registry = unauthorized_message_types_registry
         self._data_loss_tracker = data_loss_tracker
+        self._retry_after_only_since: Optional[float] = None
+        self._last_retry_after_only_429 = 0.0
 
         self._assertion_results_processor = (
             assertion_results_processor.AssertionResultsMessageProcessor(
@@ -129,7 +142,14 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                     # register a message with the replay manager and process it
                     self._replay_manager.register_message(message)
 
-                    handler(message)
+                    # A 429 that says when to retry is re-queued below, so the
+                    # REST client must not also retry it on the consumer thread.
+                    with retry_decorator.rate_limits_handled_by_caller():
+                        handler(message)
+                    # Attachments are only handed to the upload manager here,
+                    # so they say nothing about whether the server accepts requests.
+                    if not isinstance(message, messages.CreateAttachmentMessage):
+                        self._retry_after_only_since = None
                 else:
                     # register a message as failed and skip sending it to the backend
                     self._replay_manager.register_message(
@@ -147,13 +167,49 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                     self._replay_manager.unregister_message(message.message_id)  # type: ignore
                 return
             elif exception.status_code == 429:
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
+                headers = exception.headers or {}
+                rate_limiter = rate_limit.parse_rate_limit(headers)
+                if rate_limiter is not None:
+                    raise exceptions.OpikCloudRequestsRateLimited(
+                        headers=headers,
+                        retry_after=rate_limiter.retry_after(),
+                    )
+
+                retry_after = rate_limit.parse_retry_after(headers)
+                if retry_after is not None:
+                    now = time.monotonic()
+                    since = self._retry_after_only_since
+                    if (
+                        since is None
+                        or now - self._last_retry_after_only_429
+                        > _RETRY_AFTER_ONLY_WINDOW_GAP_SECONDS
+                    ):
+                        since = now
+                        self._retry_after_only_since = since
+                    self._last_retry_after_only_429 = now
+                    if now - since < _RETRY_AFTER_ONLY_GIVE_UP_SECONDS:
                         raise exceptions.OpikCloudRequestsRateLimited(
-                            headers=exception.headers,
-                            retry_after=rate_limiter.retry_after(),
+                            headers=headers,
+                            retry_after=retry_after,
                         )
+                    LOGGER.error(
+                        "Failed to process message: '%s' - rate limited (429) with "
+                        "Retry-After for over %d seconds, the message is dropped.",
+                        message_type.__name__,
+                        _RETRY_AFTER_ONLY_GIVE_UP_SECONDS,
+                    )
+                else:
+                    LOGGER.error(
+                        "Failed to process message: '%s' - rate limited (429) without a "
+                        "usable RateLimit-Reset or Retry-After header, the message is dropped.",
+                        message_type.__name__,
+                    )
+                self._record_data_loss(
+                    message,
+                    data_loss.FailureReason.HTTP_CLIENT_ERROR,
+                    status_code=429,
+                    detail=str(exception),
+                )
             elif exception.status_code == 401:
                 LOGGER.error(
                     "Unauthorized message type '%s' processing request: %s",

@@ -5,7 +5,10 @@ on:
     paths:
       - 'apps/opik-backend/src/main/resources/llm-models-default.yaml'
       - 'apps/opik-backend/src/main/resources/llm-models-curated.yaml'
+      - 'apps/opik-backend/src/main/resources/model_prices_and_context_window.json'
+      - 'apps/opik-backend/src/main/resources/model_prices_openrouter.json'
       - 'scripts/check_new_models.py'
+      - 'scripts/sync_provider_models.py'
       - '.github/workflows/live_model_check.yml'
 
 concurrency:
@@ -88,7 +91,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Install dependencies
         run: uv pip install --system requests pyyaml

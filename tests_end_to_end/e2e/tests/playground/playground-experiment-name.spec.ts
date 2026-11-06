@@ -21,27 +21,29 @@ import { ExperimentsPage } from '@e2e/pom/experiments.page';
  * the name a user typed, and the names that run's experiments end up carrying.
  *
  * Deliberately driven through the UI. The typed name never leaves the frontend
- * as typed — `getExperimentNameForPrompt` composes it per prompt and
- * `createLogPlaygroundProcessor` decides whether to put `name` on the POST at
- * all — and neither is observable from a hand-built request.
+ * as typed — `getExperimentNameForPrompt` composes it per prompt, and the run's
+ * one `/experiments/execute` request carries it as each prompt's
+ * `experiment_name`, or leaves it out — and neither is observable from a
+ * hand-built request.
  *
- * The provider is a `custom-llm` one whose base URL refuses every connection.
- * The model has to be selectable for Run to enable, but its output is not under
- * test: the experiments are named and created when the run starts, so they are
- * posted and persisted regardless of what the provider does with the
- * completion. That is what keeps this deterministic and free of a provider key.
+ * The provider is a `custom-llm` one that fails every call. The model has to be
+ * selectable for Run to enable, but its output is not under test: `execute`
+ * creates the named experiments before any item reaches the provider, so they
+ * persist whatever the provider answers. That is what keeps this deterministic
+ * and free of a provider key.
  */
 test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:playground'] }, () => {
-  interface PostedExperiment {
-    name?: string;
+  interface ExecuteRequest {
     dataset_name?: string;
-    /**
-     * `getExperimentFromRun` stringifies the variant's own rendered prompt into
-     * `metadata.messages`. It is the only field on this POST that says which
-     * variant produced it, and so the only way to assert that a suffix reached
-     * the variant it belongs to rather than merely reaching *some* variant.
-     */
-    metadata?: { messages?: string };
+    prompts?: {
+      experiment_name?: string;
+      /**
+       * The variant's own messages: the only field on the request that says
+       * which variant a prompt entry is, and so the only way to assert that a
+       * suffix reached the variant it belongs to rather than *some* variant.
+       */
+      messages?: unknown[];
+    }[];
   }
 
   /**
@@ -73,23 +75,18 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
   };
 
   /**
-   * Collect every experiment-creation POST the page makes, from before the run
-   * starts. Registered eagerly rather than awaited per-request: the frontend
-   * queues experiment creation independently of the trace batches that paint
-   * the result rows, so the two POSTs can land in either order and well apart.
-   *
-   * Anchored on the end of the path — `/experiments/items` and
-   * `/experiments/execute` share the prefix, and only the bare collection
-   * endpoint is the dataset-mode write path.
+   * Collect every `/experiments/execute` request the page makes, from before
+   * the run starts. A dataset run creates its experiments server-side from
+   * this one request, one per prompt entry, under the names it carries.
    */
-  const collectExperimentPosts = (page: Page): PostedExperiment[] => {
-    const posted: PostedExperiment[] = [];
+  const collectExecuteRequests = (page: Page): ExecuteRequest[] => {
+    const executed: ExecuteRequest[] = [];
     page.on('request', (request) => {
       if (request.method() !== 'POST') return;
-      if (!/\/v1\/private\/experiments\/?$/.test(new URL(request.url()).pathname)) return;
-      posted.push((request.postDataJSON() ?? {}) as PostedExperiment);
+      if (!/\/v1\/private\/experiments\/execute$/.test(new URL(request.url()).pathname)) return;
+      executed.push((request.postDataJSON() ?? {}) as ExecuteRequest);
     });
-    return posted;
+    return executed;
   };
 
   test(
@@ -122,7 +119,7 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
       });
 
       const playground = new PlaygroundPage(page, project.id);
-      const posted = collectExperimentPosts(page);
+      const executed = collectExecuteRequests(page);
 
       await test.step('Open the Playground on the seeded dataset with two variants', async () => {
         await playground.goto();
@@ -133,10 +130,10 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         });
         await playground.duplicateVariant(0);
         // Give B a prompt of its own. Two byte-identical variants post two
-        // indistinguishable bodies, and then the only thing separating them is
-        // arrival order — which races. With a marker the suffix-to-variant
-        // pairing below is assertable, and a build that swapped `_a` and `_b`
-        // between prompt ids fails instead of passing on a set comparison.
+        // indistinguishable prompt entries, and then only their order separates
+        // them. With a marker the suffix-to-variant pairing below is
+        // assertable, and a build that swapped `_a` and `_b` between prompt ids
+        // fails instead of passing on a set comparison.
         await playground.configureVariant(1, { userPrompt: `${variantBMarker} {{input}}` });
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });
@@ -155,22 +152,26 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await expect(playground.experimentNamePreview()).toContainText('+1 more');
       });
 
-      await test.step('Run, and verify each POST carries its own variant\'s suffix', async () => {
+      await test.step('Run, and verify each prompt carries its own variant\'s suffix', async () => {
         await playground.clickReRun();
         await expect
-          .poll(() => posted.length, { timeout: 180_000, intervals: [500, 1000, 2000] })
-          .toBeGreaterThanOrEqual(2);
-        // Keyed by name rather than compared as two sorted lists: the two POSTs
-        // race each other, so their arrival order carries no meaning, but the
-        // pairing does. A build that gave B's variant the `_a` suffix is what
-        // `promptIds.indexOf(promptId)` exists to prevent, and a set comparison
-        // cannot see it — the sorted names match either way. The prompt each
-        // POST carries is what tells them apart.
-        const promptByName = new Map(posted.map((p) => [p.name, p.metadata?.messages ?? '']));
+          .poll(() => executed.length, { timeout: 30_000, intervals: [500, 1000, 2000] })
+          .toBeGreaterThanOrEqual(1);
+        expect(executed).toHaveLength(1);
+        const [request] = executed;
+        expect(request.dataset_name).toBe(dataset.name);
+        expect(request.prompts).toHaveLength(2);
+        // Keyed by name rather than compared as two sorted lists: the pairing
+        // is what matters. A build that gave B's variant the `_a` suffix is
+        // what `promptIds.indexOf(promptId)` exists to prevent, and a set
+        // comparison cannot see it — the sorted names match either way. The
+        // messages each entry carries are what tell them apart.
+        const promptByName = new Map(
+          (request.prompts ?? []).map((p) => [p.experiment_name, JSON.stringify(p.messages ?? [])]),
+        );
         expect([...promptByName.keys()].sort()).toEqual([nameA, nameB].sort());
         expect(promptByName.get(nameB)).toContain(variantBMarker);
         expect(promptByName.get(nameA)).not.toContain(variantBMarker);
-        expect(posted.map((p) => p.dataset_name)).toEqual([dataset.name, dataset.name]);
       });
 
       await test.step('The completion toast names both experiments', async () => {
@@ -251,7 +252,7 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
       });
 
       const playground = new PlaygroundPage(page, project.id);
-      const posted = collectExperimentPosts(page);
+      const executed = collectExecuteRequests(page);
 
       await test.step('Open the Playground on the seeded dataset', async () => {
         await playground.goto();
@@ -275,18 +276,19 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await expect(playground.experimentNamePreview()).toBeHidden();
       });
 
-      await test.step('Run, and verify the POST omits `name` entirely', async () => {
+      await test.step('Run, and verify the request omits the name entirely', async () => {
         await playground.clickReRun();
         await expect
-          .poll(() => posted.length, { timeout: 180_000, intervals: [500, 1000, 2000] })
+          .poll(() => executed.length, { timeout: 30_000, intervals: [500, 1000, 2000] })
           .toBeGreaterThanOrEqual(1);
-        expect(posted).toHaveLength(1);
+        expect(executed).toHaveLength(1);
+        expect(executed[0].prompts).toHaveLength(1);
         // `undefined`, not `''`: the backend rejects a blank name with 422, so
         // a frontend that forwarded an empty string would fail the user's run
         // outright rather than falling back to a generated name. This is the
         // assertion that makes OPIK-3268 additive rather than a behaviour
         // change for everyone who never types a name.
-        expect(posted[0].name).toBeUndefined();
+        expect(executed[0].prompts![0].experiment_name).toBeUndefined();
       });
 
       await test.step('The field stays empty — an unset name has nothing to advance', async () => {

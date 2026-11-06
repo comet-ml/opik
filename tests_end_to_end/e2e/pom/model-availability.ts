@@ -2,6 +2,28 @@ import type { Page } from '@playwright/test';
 import { test } from '@e2e/fixtures';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
 import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
+import { mockAuthSkipReason } from '@e2e/core/mock-auth';
+import type { ProviderKeysFixture } from '@e2e/fixtures/provider-key.fixture';
+
+/**
+ * Provision a working provider on the suite's mock gateway and return the model to select.
+ *
+ * For specs whose subject is what Opik does with a completion (traces, experiments,
+ * prompt links, scores), not what a real model says: the mock answers every chat and
+ * LLM-judge call for free. It runs on the test runner, so a backend that cannot reach
+ * it (any remote deployment) skips the spec. Real-provider coverage is the @llm-daily
+ * canary in playground-providers.spec.ts.
+ */
+export async function ensureMockModelAvailable(
+  providerKeys: ProviderKeysFixture,
+  testNamespace: string,
+): Promise<string> {
+  const reason = await mockAuthSkipReason();
+  test.skip(reason !== null, reason ?? '');
+  const model = `${testNamespace}-mock-model`;
+  await providerKeys.createOauth({ providerName: `${testNamespace}-mock`, modelNames: [model] });
+  return model;
+}
 
 /**
  * Provision an LLM provider for tests that drive the Playground / LLM-judge UI,
