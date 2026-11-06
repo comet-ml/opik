@@ -27,9 +27,9 @@ public interface TopicDAO {
 
     @SqlBatch("""
             INSERT INTO topics (id, workspace_id, project_id, name, definition, born, retired_at, retired_reason,
-                inactive_since, low_nights, lo7, hi7, size)
+                low_nights, size)
             VALUES (:id, :workspaceId, :projectId, :name, :definition, :born, :retiredAt, :retiredReason,
-                :inactiveSince, :lowNights, :lo7, :hi7, :size)
+                :lowNights, :size)
             """)
     void insertTopics(@BindMethods List<Topic> topics);
 

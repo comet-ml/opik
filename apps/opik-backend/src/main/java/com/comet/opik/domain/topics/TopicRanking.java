@@ -11,17 +11,15 @@ import java.util.UUID;
 import java.util.function.ToLongFunction;
 
 /**
- * The one rank rule of a project's live topics, for a saved run's counts and for the topics API: active topics
- * ({@code inactive_since} null) first, then by traces, most first, then the earlier born, then the id as text (the
- * order of {@code topics.id} in MySQL).
+ * The one rank rule of a project's live topics, for a saved run's counts and for the topics API: by traces, most first,
+ * then the earlier born, then the id as text (the order of {@code topics.id} in MySQL).
  */
 @UtilityClass
 public class TopicRanking {
 
     /** The rank order when {@code traces} gives each topic's count. */
     public static Comparator<Topic> order(@NonNull ToLongFunction<Topic> traces) {
-        return Comparator.<Topic, Boolean>comparing(topic -> topic.inactiveSince() != null)
-                .thenComparing(Comparator.comparingLong(traces).reversed())
+        return Comparator.comparingLong(traces).reversed()
                 .thenComparing(Topic::born)
                 .thenComparing(topic -> topic.id().toString());
     }

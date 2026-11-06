@@ -3,9 +3,8 @@
 --comment: Create topics, topic_prototypes, topic_project_states, topic_runs, topic_run_counts, topic_nights and topic_night_projects: a project's topic list, the nightly runs that build it, each saved run's counts, and what each night decided (OPIK-8987)
 
 -- One row per topic a project's nightly run created. An id is never reused: a renamed or merged topic keeps its id, a
--- retired one keeps its row with retired_at set. inactive_since, low_nights, lo7 and hi7 are the lifecycle streaks of
--- the nightly update (stage 2b); the first build writes them as null and 0. size is the topic's count in the last
--- saved night's window.
+-- retired one keeps its row with retired_at set. low_nights is the lifecycle streak of the nightly update (stage 2b);
+-- the first build writes it as 0. size is the topic's count in the last saved night's window.
 CREATE TABLE topics
 (
     id             CHAR(36)      NOT NULL,
@@ -16,10 +15,7 @@ CREATE TABLE topics
     born           DATE          NOT NULL,
     retired_at     DATE          NULL,
     retired_reason VARCHAR(64)   NULL,
-    inactive_since DATE          NULL,
     low_nights     INT           NOT NULL DEFAULT 0,
-    lo7            INT           NOT NULL DEFAULT 0,
-    hi7            INT           NOT NULL DEFAULT 0,
     size           INT           NOT NULL DEFAULT 0,
     created_at     TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     updated_at     TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
