@@ -40,6 +40,25 @@ const messageOf = (body: unknown): string | undefined => {
   return undefined;
 };
 
+const MAX_MESSAGE_LENGTH = 200;
+
+const isControl = (char: string) => {
+  const code = char.charCodeAt(0);
+  return code < 32 || (code >= 127 && code < 160);
+};
+
+const cleanMessage = (message: string | undefined) => {
+  if (message === undefined) return undefined;
+  const printable = Array.from(message, (char) =>
+    isControl(char) ? " " : char,
+  ).join("");
+  const collapsed = printable.replace(/\s+/g, " ").trim();
+  if (!collapsed) return undefined;
+  return collapsed.length > MAX_MESSAGE_LENGTH
+    ? `${collapsed.slice(0, MAX_MESSAGE_LENGTH - 1)}…`
+    : collapsed;
+};
+
 export const classifySaveError = (
   status: number | undefined,
   body: unknown,
@@ -51,7 +70,7 @@ export const classifySaveError = (
     const problems = problemsOf(body);
     if (problems) return { kind: "invalid", problems };
   }
-  return { kind: "unknown", message: messageOf(body) };
+  return { kind: "unknown", message: cleanMessage(messageOf(body)) };
 };
 
 export const SAVE_ERROR_MESSAGES = {

@@ -4,7 +4,7 @@ import type {
   ModelPriceReplace,
   ModelPriceRow,
 } from "./types";
-import { isSameRow, toEditableRow } from "./rows";
+import { changedFields, isSameRow, toEditableRow } from "./rows";
 
 export type DraftRowStatus = "unchanged" | "edited" | "new" | "deleted";
 
@@ -209,12 +209,13 @@ export const modelPricesReducer = (
           if (draftRow.key !== action.key || draftRow.deleted) {
             return draftRow;
           }
-          const changes = { ...draftRow.changes, ...action.changes };
-          return {
-            ...draftRow,
-            changes,
-            row: { ...draftRow.row, ...action.changes },
-          };
+          const row = { ...draftRow.row, ...action.changes };
+          // The price dialog sends the whole row. Keeping only what differs from the saved row lets a rebase after a
+          // 409 keep another user's change to a field this user never touched.
+          const changes = draftRow.saved
+            ? changedFields(draftRow.saved, row)
+            : { ...draftRow.changes, ...action.changes };
+          return { ...draftRow, changes, row };
         }),
       };
 

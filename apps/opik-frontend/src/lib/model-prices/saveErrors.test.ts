@@ -41,4 +41,20 @@ describe("classifySaveError", () => {
       message: undefined,
     });
   });
+
+  it("cleans a server message before it reaches the toast", () => {
+    const stack = `boom\n\tat Foo.bar(Foo.java:1)\u0000${"x".repeat(400)}`;
+
+    const { message } = classifySaveError(500, { message: stack }) as {
+      message: string;
+    };
+
+    expect(message.startsWith("boom at Foo.bar(Foo.java:1) xxx")).toBe(true);
+    expect(message).toHaveLength(200);
+    expect(message.endsWith("…")).toBe(true);
+    expect(classifySaveError(500, { message: "\n\t " })).toEqual({
+      kind: "unknown",
+      message: undefined,
+    });
+  });
 });

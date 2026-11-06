@@ -261,6 +261,27 @@ describe("modelPricesReducer", () => {
       expect(draft.changedElsewhere).toEqual(["row-1"]);
     });
 
+    it("keeps their change to a field I left alone when I edited the row in the dialog", () => {
+      const draft = run(
+        { type: "loaded", list: LIST },
+        {
+          type: "edited",
+          key: "row-1",
+          changes: { ...GPT_4O, note: "Renewed in 2026" },
+        },
+        { type: "loaded", list: theirs },
+      );
+
+      expect(rowByKey(draft, "row-1")!.changes).toEqual({
+        note: "Renewed in 2026",
+      });
+      expect(rowByKey(draft, "row-1")!.row).toMatchObject({
+        input_price: "1.9",
+        output_price: "8",
+        note: "Renewed in 2026",
+      });
+    });
+
     it("keeps my new rows and my deletions", () => {
       const draft = run(
         { type: "loaded", list: LIST },

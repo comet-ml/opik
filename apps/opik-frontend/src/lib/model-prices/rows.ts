@@ -46,6 +46,38 @@ export const toEditableRow = (row: ModelPriceRow): ModelPriceRow => {
   return editable;
 };
 
+const EDITABLE_FIELDS: (keyof ModelPriceRow)[] = [
+  "model",
+  "provider",
+  "kind",
+  ...PRICE_FIELDS,
+  "alias_of",
+  "note",
+];
+
+const comparable = (row: ModelPriceRow, field: keyof ModelPriceRow) => {
+  if (field === "alias_of") {
+    return `${text(row.alias_of?.model)}|${text(row.alias_of?.provider)}`;
+  }
+  const value = row[field] as string | null | undefined;
+  return (PRICE_FIELDS as string[]).includes(field)
+    ? canonicalPrice(value)
+    : text(value);
+};
+
+export const changedFields = (
+  saved: ModelPriceRow,
+  row: ModelPriceRow,
+): Partial<ModelPriceRow> => {
+  const changes: Partial<ModelPriceRow> = {};
+  EDITABLE_FIELDS.forEach((field) => {
+    if (comparable(saved, field) !== comparable(row, field)) {
+      Object.assign(changes, { [field]: row[field] });
+    }
+  });
+  return changes;
+};
+
 export const isSameRow = (left: ModelPriceRow, right: ModelPriceRow) =>
   JSON.stringify(toEditableRow(left)) === JSON.stringify(toEditableRow(right));
 
