@@ -294,16 +294,13 @@ export class PlaygroundPage {
   /**
    * The "Run complete" toast raised at the end of a run.
    *
-   * Scoped to the toast list in the viewport because Radix also renders a
-   * visually-hidden `role="status"` announcer carrying the same text, and an
-   * unscoped lookup matches both. The toast itself carries no role. Radix dismisses it on its own 5s default, so assert on it
+   * Matched by test id because Radix also renders a visually-hidden
+   * `role="status"` announcer carrying the same text, and a text lookup matches
+   * both. Radix dismisses it on its own 5s default, so assert on it
    * immediately after `waitForRunSettled` and before any backend polling.
    */
   completionToast(): Locator {
-    return this.page
-      .getByRole('region', { name: 'Notifications (F8)' })
-      .locator('ol > li')
-      .filter({ hasText: 'Run complete' });
+    return this.page.getByTestId('toast').filter({ hasText: 'Run complete' });
   }
 
   /**

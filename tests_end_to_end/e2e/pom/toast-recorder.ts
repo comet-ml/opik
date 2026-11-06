@@ -31,10 +31,8 @@ const TOAST_RECORD_KEY = '__opikRecordedToasts';
  * only. A spec needing history to survive a reload has to hold the array
  * test-side, through an exposed binding the init script appends to.
  *
- * Scoped to the toast list inside the notification region: Radix also portals a
- * visually-hidden `role="status"` announcer carrying the same text outside the
- * region, and recording both would double every toast. Matched as the list item
- * rather than by role, since the toast element itself carries no role.
+ * Matched by test id: Radix also portals a visually-hidden `role="status"`
+ * announcer carrying the same text, and recording both would double every toast.
  */
 export async function startRecordingToasts(page: Page): Promise<void> {
   return test.step('start recording toasts', async () => {
@@ -42,7 +40,7 @@ export async function startRecordingToasts(page: Page): Promise<void> {
       const recorded: Element[] = [];
       (window as unknown as Record<string, unknown>)[key] = recorded;
 
-      const TOAST = '[role="region"] ol > li';
+      const TOAST = '[data-testid="toast"]';
       const isToast = (el: Element): boolean => el.matches(TOAST);
 
       new MutationObserver((mutations) => {
