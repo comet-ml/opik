@@ -338,8 +338,8 @@ class OptimizationsTaggedCostWeekBoundTest {
         // own. Two runs weeks apart is what tells the two apart: a floor taken from the latest would drop the earlier
         // run's traces from the list while getById, which sees that run alone, still found them - and the list and
         // the run page would report different totals for it.
-        var dataset = createDataset();
         var project = createProject();
+        var dataset = createDataset(project);
 
         var earlierRun = seedOptimization(dataset, project, weekInstant(-6));
         var laterRun = seedOptimization(dataset, project, weekInstant(0));
@@ -404,9 +404,9 @@ class OptimizationsTaggedCostWeekBoundTest {
      * stamps, so nothing here depends on which those are.
      */
     private Run seedRun() {
-        var dataset = createDataset();
         var optimizerProject = createProject();
         var otherProject = createProject();
+        var dataset = createDataset(optimizerProject);
 
         var optimizationId = seedOptimization(dataset, optimizerProject, weekInstant(0));
 
@@ -427,9 +427,10 @@ class OptimizationsTaggedCostWeekBoundTest {
                 .build();
     }
 
-    private Dataset createDataset() {
+    private Dataset createDataset(Project project) {
         var dataset = Dataset.builder()
                 .name("dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32)))
+                .projectName(project.name())
                 .build();
         return dataset.toBuilder()
                 .id(datasetResourceClient.createDataset(dataset, API_KEY, WORKSPACE_NAME))
