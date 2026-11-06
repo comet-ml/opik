@@ -6,6 +6,7 @@ import weakref
 from typing import (
     Any,
     AsyncGenerator,
+    Awaitable,
     Callable,
     Generator,
     List,
@@ -49,7 +50,7 @@ class FinishGeneratorCallback(Protocol):
 class BaseTrackedGenerator(Generic[YieldType]):
     def __init__(
         self,
-        start_span_arguments: arguments_helpers.StartSpanParameters,
+        start_span_arguments: Optional[arguments_helpers.StartSpanParameters],
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
@@ -74,6 +75,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
         if self._created_span_data is not None:
             return
 
+        assert self._start_span_arguments is not None
         result = span_creation_handler.create_span_respecting_context(
             self._start_span_arguments, self._opik_distributed_trace_headers
         )
@@ -153,7 +155,7 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
         generator: Generator[YieldType, None, None],
-        start_span_arguments: arguments_helpers.StartSpanParameters,
+        start_span_arguments: Optional[arguments_helpers.StartSpanParameters],
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
@@ -170,6 +172,15 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         return self
 
     def __next__(self) -> YieldType:
+        return self._advance(lambda: next(self._generator))
+
+    def send(self, value: Any) -> YieldType:
+        return self._advance(lambda: self._generator.send(value))
+
+    def throw(self, *args: Any) -> YieldType:
+        return self._advance(lambda: self._generator.throw(*args))
+
+    def _advance(self, step: Callable[[], YieldType]) -> YieldType:
         try:
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
@@ -177,7 +188,7 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             with context_storage.temporary_context(
                 self._created_span_data, self._created_trace_data
             ):
-                value = next(self._generator)
+                value = step()
                 self._accumulated_values.append(value)
                 return value
         except StopIteration:
@@ -222,7 +233,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
         generator: AsyncGenerator[YieldType, None],
-        start_span_arguments: arguments_helpers.StartSpanParameters,
+        start_span_arguments: Optional[arguments_helpers.StartSpanParameters],
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
@@ -240,6 +251,15 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         return self
 
     async def __anext__(self) -> YieldType:
+        return await self._advance(lambda: self._generator.__anext__())
+
+    async def asend(self, value: Any) -> YieldType:
+        return await self._advance(lambda: self._generator.asend(value))
+
+    async def athrow(self, *args: Any) -> YieldType:
+        return await self._advance(lambda: self._generator.athrow(*args))
+
+    async def _advance(self, step: Callable[[], Awaitable[YieldType]]) -> YieldType:
         try:
             self._ensure_span_and_trace_created()
             assert self._created_span_data is not None
@@ -249,7 +269,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             with context_storage.temporary_context(
                 self._created_span_data, self._created_trace_data
             ):
-                value = await self._generator.__anext__()
+                value = await step()
                 self._accumulated_values.append(value)
                 return value
         except StopAsyncIteration:
@@ -296,6 +316,61 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             self._finalize_if_unfinished()
         except Exception:
             LOGGER.debug("Failed to close dropped tracked generator", exc_info=True)
+
+
+class StartedSpanSyncTrackedGenerator(SyncTrackedGenerator[YieldType]):
+    """Tracks a generator returned by a tracked function, adopting the span
+    started for that call instead of creating one on first iteration."""
+
+    def __init__(
+        self,
+        generator: Generator[YieldType, None, None],
+        span_data: span.SpanData,
+        trace_data: Optional[trace.TraceData],
+        track_options: arguments_helpers.TrackOptions,
+        finally_callback: FinishGeneratorCallback,
+    ) -> None:
+        super().__init__(
+            generator,
+            start_span_arguments=None,
+            opik_distributed_trace_headers=None,
+            track_options=track_options,
+            finally_callback=finally_callback,
+        )
+        _adopt_started_span(self, span_data, trace_data)
+
+
+class StartedSpanAsyncTrackedGenerator(AsyncTrackedGenerator[YieldType]):
+    """Async counterpart of `StartedSpanSyncTrackedGenerator`."""
+
+    def __init__(
+        self,
+        generator: AsyncGenerator[YieldType, None],
+        span_data: span.SpanData,
+        trace_data: Optional[trace.TraceData],
+        track_options: arguments_helpers.TrackOptions,
+        finally_callback: FinishGeneratorCallback,
+    ) -> None:
+        super().__init__(
+            generator,
+            start_span_arguments=None,
+            opik_distributed_trace_headers=None,
+            track_options=track_options,
+            finally_callback=finally_callback,
+        )
+        _adopt_started_span(self, span_data, trace_data)
+
+
+def _adopt_started_span(
+    tracked_generator: BaseTrackedGenerator,
+    span_data: span.SpanData,
+    trace_data: Optional[trace.TraceData],
+) -> None:
+    # Registered at once: the span is already open, so it must end even if never iterated.
+    tracked_generator._created_span_data = span_data
+    tracked_generator._created_trace_data = trace_data
+    _register_exit_hook()
+    _UNFINISHED_GENERATORS.add(tracked_generator)
 
 
 def _register_exit_hook() -> None:

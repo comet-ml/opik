@@ -179,6 +179,12 @@ class BaseTrackDecorator(abc.ABC):
         finished when the stream chunks are exhausted. Span is NOT kept inside the opik context.
         So these spans can't be parents for other spans. This is usually the case LLM API calls
         with `stream=True`.
+
+            * Other sync and async functions that return a generator or async generator
+        (e.g. a generator function behind a `functools.wraps` decorator): span is started
+        when the function is called and handed to the generator, which ends it when it
+        finishes yielding values. As with generators, the span is kept in the opik
+        context only while __next__ or __anext__ is working.
         """
         # Idempotency: skip re-decoration if already tracked
         if hasattr(func, "opik_tracked") and func.opik_tracked:  # type: ignore
@@ -366,6 +372,13 @@ class BaseTrackDecorator(abc.ABC):
             if stream_or_stream_manager is not None:
                 return stream_or_stream_manager
 
+            if func_exception is None and should_process_span_data:
+                tracked_generator = self._track_returned_generator(
+                    result, track_options
+                )
+                if tracked_generator is not None:
+                    return tracked_generator
+
             self._after_call(
                 output=result,
                 error_info=error_info,
@@ -420,6 +433,13 @@ class BaseTrackDecorator(abc.ABC):
             if stream_or_stream_manager is not None:
                 return stream_or_stream_manager
 
+            if func_exception is None and should_process_span_data:
+                tracked_generator = self._track_returned_generator(
+                    result, track_options
+                )
+                if tracked_generator is not None:
+                    return tracked_generator
+
             self._after_call(
                 output=result,
                 error_info=error_info,
@@ -433,6 +453,36 @@ class BaseTrackDecorator(abc.ABC):
 
         wrapper.opik_tracked = True  # type: ignore
         return wrapper
+
+    def _track_returned_generator(
+        self,
+        result: Any,
+        track_options: arguments_helpers.TrackOptions,
+    ) -> Optional[generator_wrappers.BaseTrackedGenerator]:
+        """
+        Hands the span started for the call to a generator the function returned,
+        so the span ends when the generator does. Logging the raw generator as the
+        output would instead consume it while serializing, taking items from the caller.
+        """
+        if not inspect.isgenerator(result) and not inspect.isasyncgen(result):
+            return None
+
+        span_data, trace_data = pop_end_candidates()
+        tracking_arguments: Dict[str, Any] = dict(
+            span_data=span_data,
+            trace_data=trace_data,
+            track_options=track_options,
+            finally_callback=functools.partial(
+                self._after_call, flush=track_options.flush
+            ),
+        )
+        if inspect.isgenerator(result):
+            return generator_wrappers.StartedSpanSyncTrackedGenerator(
+                result, **tracking_arguments
+            )
+        return generator_wrappers.StartedSpanAsyncTrackedGenerator(
+            result, **tracking_arguments
+        )
 
     def _before_call(
         self,
