@@ -1,6 +1,12 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Info, Lock, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Info, Lock, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/ui/sheet";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
@@ -20,10 +26,10 @@ import {
   PRICE_LABELS,
   PriceField,
   canonicalPrice,
+  describePerToken,
   findBuiltIn,
   identityOf,
   overrideFields,
-  perMillionToPerToken,
   problemsForRow,
   replaceOne,
   validateRow,
@@ -169,10 +175,6 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
     setLines((current) => current.filter((line) => line.id !== id));
   };
 
-  const overriddenFields = new Set(
-    PRICE_FIELDS.filter((field) => canonicalPrice(entry?.row?.[field])),
-  );
-
   const duplicate =
     isNew &&
     list.rows.some(
@@ -252,39 +254,52 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
   const title = entry ? entry.model : "New custom model";
   const helpText = keepsBuiltIn
     ? "Per-token prices are shown per 1M tokens for readability. A price you leave as built-in follows the built-in list."
-    : "Per-token prices are shown per 1M tokens for readability. Empty = no price for that part.";
+    : "Per-token prices are shown per 1M tokens for readability. Empty = no price (not $0).";
+  const providerLabel = provider.trim() || "Any provider";
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[560px]"
-        header={<SheetTopBar variant="form" />}
+        header={null}
         blockOverlayClose
       >
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
-          <div className="flex flex-col gap-2">
-            <h3 className="comet-title-xs break-all font-mono">{title}</h3>
-            <div className="flex flex-wrap gap-1.5">
-              <Tag variant={TYPE_TAG_VARIANT[type]} size="md">
-                {CATALOG_TYPE_LABELS[type]}
-              </Tag>
-              <Tag variant="default" size="md">
-                {provider.trim() || (isNew ? "No provider" : "Any provider")}
-              </Tag>
-              {entry?.mode && (
-                <Tag variant="gray" size="md">
-                  {MODE_LABELS[entry.mode] ?? entry.mode}
-                </Tag>
-              )}
-              {entry?.lastUpdatedAt && (
-                <Tag variant="default" size="md">
-                  Updated {formatDay(entry.lastUpdatedAt)}
-                </Tag>
-              )}
-            </div>
+        <div className="flex shrink-0 flex-col gap-2 px-6 pb-2 pt-6">
+          <div className="flex items-start justify-between gap-3">
+            <SheetTitle className="comet-title-m break-all text-left font-mono">
+              {title}
+            </SheetTitle>
+            <SheetClose asChild>
+              <Button variant="outline" size="icon-2xs" className="shrink-0">
+                <X />
+                <span className="sr-only">Close</span>
+              </Button>
+            </SheetClose>
           </div>
-
+          <SheetDescription className="sr-only">
+            {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
+          </SheetDescription>
+          <div className="flex flex-wrap gap-1.5">
+            <Tag variant={TYPE_TAG_VARIANT[type]} size="sm">
+              {CATALOG_TYPE_LABELS[type]}
+            </Tag>
+            <Tag variant="default" size="sm">
+              {providerLabel}
+            </Tag>
+            {entry?.mode && (
+              <Tag variant="gray" size="sm">
+                {MODE_LABELS[entry.mode] ?? entry.mode}
+              </Tag>
+            )}
+            {entry?.lastUpdatedAt && (
+              <Tag variant="default" size="sm">
+                Updated {formatDay(entry.lastUpdatedAt)}
+              </Tag>
+            )}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
           {isNew && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -395,11 +410,10 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
           ) : (
             <div className="space-y-3">
               <div>
-                <h4 className="comet-body-accented">Prices</h4>
-                <p className="comet-body-s text-muted-slate">{helpText}</p>
+                <h4 className="comet-body-s-accented">Prices</h4>
+                <p className="comet-body-xs text-muted-slate">{helpText}</p>
               </div>
               {lines.map((line) => {
-                const perToken = perMillionToPerToken(line.value);
                 const builtInValue = builtIn?.[line.field];
                 const canReset =
                   type === "override" &&
@@ -478,14 +492,17 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                         <span className="w-8" />
                       )}
                     </div>
-                    <div className="comet-body-xs flex justify-between gap-2 pl-3 pr-10 font-mono text-light-slate">
-                      <span>{LITELLM_KEYS[line.field]}</span>
-                      <span>
-                        {perToken ? `= ${perToken} / tok` : "= no price"}
-                        {type === "override" &&
-                          overriddenFields.has(line.field) &&
-                          " · overridden"}
+                    <div className="comet-body-xs flex gap-2 font-mono text-light-slate">
+                      <span className="flex-1 truncate pl-3">
+                        {LITELLM_KEYS[line.field]}
                       </span>
+                      <span className="flex-1 truncate pl-3">
+                        {describePerToken(
+                          line.value,
+                          keepsBuiltIn ? builtInValue : undefined,
+                        )}
+                      </span>
+                      <span className="w-8 shrink-0" />
                     </div>
                     {fieldProblems(line.field).map((problem, i) => (
                       <p
@@ -511,6 +528,8 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             <Label htmlFor="model-price-note">Note</Label>
             <Textarea
               id="model-price-note"
+              rows={3}
+              className="min-h-[76px]"
               placeholder="Why was this changed? e.g. negotiated rate, contract #…"
               value={note}
               disabled={readOnly}
@@ -548,11 +567,13 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
         </div>
 
         <div className="space-y-3 border-t px-6 py-4">
-          <div className="comet-body-s flex items-center gap-2 rounded-md bg-[var(--tag-blue-bg)] px-3 py-2 text-[var(--tag-blue-text)]">
-            <Info className="size-4 shrink-0" />
-            New prices apply to new spans only. Existing spans keep their
-            estimated cost.
-          </div>
+          {canEdit && (
+            <div className="comet-body-xs flex items-center gap-2 rounded-md bg-[var(--tag-blue-bg)] px-3 py-2 text-[var(--tag-blue-text)]">
+              <Info className="size-3.5 shrink-0" />
+              New prices apply to new spans only. Existing spans keep their
+              estimated cost.
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {canEdit ? (
               <>
@@ -569,7 +590,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => setOpen(false)}
                 >
                   Cancel

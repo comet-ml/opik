@@ -99,7 +99,7 @@ export const validateRow = (row: ModelPriceRow): ModelPriceProblem[] => {
   const provider = (row.provider ?? "").trim();
 
   if (!model) {
-    add(problem("model", "missing_model", "Every row needs a model"));
+    add(problem("model", "missing_model", "Enter a model name"));
   }
   add(validateName("model", model));
   add(validateName("provider", provider));

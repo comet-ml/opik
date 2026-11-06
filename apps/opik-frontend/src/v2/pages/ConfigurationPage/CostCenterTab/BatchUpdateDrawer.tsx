@@ -1,11 +1,25 @@
-import React, { useState } from "react";
-import { FileJson, Sparkles } from "lucide-react";
-import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import React, { useEffect, useState } from "react";
+import copy from "clipboard-copy";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  FileJson,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/ui/sheet";
 import { Button } from "@/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
-import UploadField from "@/shared/UploadField/UploadField";
-import CopyButton from "@/shared/CopyButton/CopyButton";
+import { cn } from "@/lib/utils";
 import {
   ModelPriceList,
   ModelPriceProblem,
@@ -13,6 +27,7 @@ import {
   ModelPriceReplaceResult,
   describeReplaceResult,
   parseLiteLlmUpload,
+  problemsForRows,
   upsertMany,
 } from "@/lib/model-prices";
 import useSaveModelPrices from "./useSaveModelPrices";
@@ -52,13 +67,76 @@ const SKILL_STEPS = [
 type Preview = {
   request: ModelPriceReplace;
   result: ModelPriceReplaceResult;
+  warnings: ModelPriceProblem[];
+};
+
+const CopyTextButton: React.FC<{ text: string }> = ({ text }) => {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <Button
+      variant="outline"
+      size="2xs"
+      className="shrink-0 bg-background"
+      onClick={() => copy(text).then(() => setCopied(true))}
+    >
+      {copied ? (
+        <Check className="mr-1 size-3" />
+      ) : (
+        <Copy className="mr-1 size-3" />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </Button>
+  );
 };
 
 const CodeLine: React.FC<{ text: string }> = ({ text }) => (
-  <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2">
-    <code className="comet-code min-w-0 flex-1 break-words">{text}</code>
-    <CopyButton text={text} variant="outline" />
+  <div className="flex items-center gap-2 rounded-md bg-muted py-1.5 pl-3 pr-1.5">
+    <code className="comet-code min-w-0 flex-1 truncate" title={text}>
+      {text}
+    </code>
+    <CopyTextButton text={text} />
   </div>
+);
+
+const Disclosure: React.FC<{
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+}> = ({ label, open, onToggle }) => (
+  <button
+    type="button"
+    className="comet-body-xs inline-flex items-center gap-1 text-muted-slate hover:text-foreground"
+    aria-expanded={open}
+    onClick={onToggle}
+  >
+    <ChevronRight
+      className={cn("size-3.5 transition-transform", open && "rotate-90")}
+    />
+    {label}
+  </button>
+);
+
+const Step: React.FC<{
+  number: number;
+  title: string;
+  children: React.ReactNode;
+}> = ({ number, title, children }) => (
+  <li className="space-y-2">
+    <p className="comet-body-s-accented flex items-center gap-2">
+      <span className="comet-body-xs-accented flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+        {number}
+      </span>
+      {title}
+    </p>
+    <div className="pl-7">{children}</div>
+  </li>
 );
 
 const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
@@ -71,6 +149,9 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [serverErrors, setServerErrors] = useState<ModelPriceProblem[]>([]);
   const [preview, setPreview] = useState<Preview>();
+  const [isDragging, setIsDragging] = useState(false);
+  const [isFormatOpen, setIsFormatOpen] = useState(false);
+  const [isSkillOpen, setIsSkillOpen] = useState(false);
 
   const changeText = (value: string) => {
     setText(value);
@@ -92,10 +173,14 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
       setParseErrors(upload.errors);
       return;
     }
-    const request = upsertMany(list, upload.rows);
+    const { request, positions } = upsertMany(list, upload.rows);
     const outcome = await send(request, true);
     if (outcome.kind === "previewed") {
-      setPreview({ request, result: outcome.result });
+      setPreview({
+        request,
+        result: outcome.result,
+        warnings: problemsForRows(outcome.result.warnings, positions),
+      });
     } else if (outcome.kind === "invalid") {
       setServerErrors(outcome.errors);
     }
@@ -124,19 +209,29 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
-        header={<SheetTopBar variant="form" />}
+        header={null}
         blockOverlayClose
       >
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
-          <div>
-            <h3 className="comet-title-xs">Batch update prices</h3>
-            <p className="comet-body-s text-muted-slate">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-6 pb-2 pt-6">
+          <div className="flex flex-col gap-1">
+            <SheetTitle className="comet-title-m text-left">
+              Batch update prices
+            </SheetTitle>
+            <SheetDescription className="comet-body-s text-muted-slate">
               Update many models at once. Models not in the update keep their
               current prices.
-            </p>
+            </SheetDescription>
           </div>
+          <SheetClose asChild>
+            <Button variant="outline" size="icon-2xs" className="shrink-0">
+              <X />
+              <span className="sr-only">Close</span>
+            </Button>
+          </SheetClose>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2">
           <Tabs defaultValue="json">
-            <TabsList variant="segmented">
+            <TabsList variant="segmented" className="w-fit">
               <TabsTrigger value="json" variant="segmented">
                 <FileJson className="mr-1.5 size-3.5" />
                 Upload or paste JSON
@@ -146,78 +241,59 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 Use the Opik skill
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="json" className="space-y-3">
-              <UploadField
-                accept=".json,application/json"
-                description="Drop a .json file or click to choose. The file is read once in your browser and not stored."
-                onFileSelect={onFile}
-              />
-              <p className="comet-body-xs text-center text-light-slate">
+            <TabsContent value="json" className="mt-4 space-y-3">
+              <label
+                className={cn(
+                  "flex h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-center hover:bg-muted/50",
+                  isDragging && "border-primary bg-primary-100",
+                )}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                  onFile(event.dataTransfer.files[0]);
+                }}
+                data-testid="batch-dropzone"
+              >
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="sr-only"
+                  onChange={(event) => {
+                    onFile(event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+                <Upload className="mb-1 size-4 text-muted-slate" />
+                <span className="comet-body-s-accented">
+                  Drop a .json file or click to choose
+                </span>
+                <span className="comet-body-xs text-muted-slate">
+                  The file is read once in your browser and not stored.
+                </span>
+              </label>
+              <div className="comet-body-xs flex items-center gap-3 text-muted-slate">
+                <span className="h-px flex-1 bg-border" />
                 or paste
-              </p>
+                <span className="h-px flex-1 bg-border" />
+              </div>
               <Textarea
-                className="min-h-[200px] font-mono"
+                className="min-h-[200px] font-mono placeholder:text-light-slate"
                 placeholder={EXAMPLE}
+                spellCheck={false}
                 value={text}
                 onChange={(event) => changeText(event.target.value)}
               />
-              <details className="comet-body-s rounded-md border p-3">
-                <summary className="cursor-pointer">File format</summary>
-                <p className="mt-2 text-muted-slate">
-                  An object keyed by model name, in LiteLLM&apos;s format.
-                  Prices are dollars per token:{" "}
-                  <code>input_cost_per_token</code>,{" "}
-                  <code>output_cost_per_token</code>,{" "}
-                  <code>cache_read_input_token_cost</code> and{" "}
-                  <code>cache_creation_input_token_cost</code>. Add{" "}
-                  <code>litellm_provider</code> for the provider (leave it out
-                  for any provider) and an optional <code>note</code>. A model
-                  that already has an organization price is updated; others are
-                  added.
-                </p>
-              </details>
-              {parseErrors.length > 0 && (
-                <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
-                  {parseErrors.map((error, i) => (
-                    <li key={i}>{error}</li>
-                  ))}
-                </ul>
-              )}
-              {serverErrors.length > 0 && (
-                <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
-                  {serverErrors.map((problem, i) => (
-                    <li key={i}>{problem.message}</li>
-                  ))}
-                </ul>
-              )}
-              {described && (
-                <div
-                  className="comet-body-s space-y-2 rounded-md border p-3"
-                  data-testid="batch-preview"
-                >
-                  <p className="comet-body-s-accented">
-                    {changeCount
-                      ? `${described.created.length} added, ${described.updated.length} changed`
-                      : "Nothing changes"}
-                  </p>
-                  <ul className="list-disc pl-5 text-muted-slate">
-                    {described.created.map((line, i) => (
-                      <li key={`c${i}`}>Added {line}</li>
-                    ))}
-                    {described.updated.map((line, i) => (
-                      <li key={`u${i}`}>Changed {line}</li>
-                    ))}
-                  </ul>
-                  {preview!.result.warnings.length > 0 && (
-                    <div className="rounded-md bg-warning-box-bg p-2">
-                      {preview!.result.warnings.map((warning, i) => (
-                        <p key={i}>{warning.message}</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
+              <div className="flex items-start justify-between gap-3">
+                <Disclosure
+                  label="File format"
+                  open={isFormatOpen}
+                  onToggle={() => setIsFormatOpen((value) => !value)}
+                />
                 {preview ? (
                   <Button
                     size="sm"
@@ -237,35 +313,107 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   </Button>
                 )}
               </div>
+              {isFormatOpen && (
+                <p className="comet-body-xs text-muted-slate">
+                  An object keyed by model name, in LiteLLM&apos;s format.
+                  Prices are dollars per token:{" "}
+                  <code>input_cost_per_token</code>,{" "}
+                  <code>output_cost_per_token</code>,{" "}
+                  <code>cache_read_input_token_cost</code> and{" "}
+                  <code>cache_creation_input_token_cost</code>. Add{" "}
+                  <code>litellm_provider</code> for the provider (leave it out
+                  for any provider) and an optional <code>note</code>. A model
+                  that already has an organization price is updated; others are
+                  added.
+                </p>
+              )}
+              {parseErrors.length > 0 && (
+                <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
+                  {parseErrors.map((error, i) => (
+                    <li key={i}>{error}</li>
+                  ))}
+                </ul>
+              )}
+              {serverErrors.length > 0 && (
+                <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
+                  {serverErrors.map((problem, i) => (
+                    <li key={i}>{problem.message}</li>
+                  ))}
+                </ul>
+              )}
+              {described && preview && (
+                <div
+                  className="comet-body-s space-y-2 rounded-md border p-3"
+                  data-testid="batch-preview"
+                >
+                  <p className="comet-body-s-accented">
+                    {changeCount
+                      ? `${described.created.length} added, ${described.updated.length} changed`
+                      : "Nothing changes"}
+                  </p>
+                  <ul className="list-disc pl-5 text-muted-slate">
+                    {described.created.map((line, i) => (
+                      <li key={`c${i}`}>Added {line}</li>
+                    ))}
+                    {described.updated.map((line, i) => (
+                      <li key={`u${i}`}>Changed {line}</li>
+                    ))}
+                  </ul>
+                  {preview.warnings.length > 0 && (
+                    <div
+                      className="rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
+                      data-testid="batch-preview-warnings"
+                    >
+                      <p className="comet-body-s-accented">
+                        Check these before saving
+                      </p>
+                      <ul className="list-disc pl-5">
+                        {preview.warnings.map((warning, i) => (
+                          <li key={i}>{warning.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
-            <TabsContent value="skill" className="space-y-4">
+            <TabsContent value="skill" className="mt-4 space-y-4">
               <p className="comet-body-s text-muted-slate">
                 Upload a price sheet in any format—Excel, PDF, or an email
                 table—directly from Claude Code, Codex or Cursor. Review and
                 confirm changes in your agent.
               </p>
               <ol className="space-y-4">
-                <li className="space-y-2">
-                  <p className="comet-body-s-accented">
-                    1. Install the Opik skills once
-                  </p>
+                <Step number={1} title="Install the Opik skills once">
                   <CodeLine text={INSTALL} />
-                </li>
-                <li className="space-y-2">
-                  <p className="comet-body-s-accented">
-                    2. Ask Claude Code, Codex or Cursor
-                  </p>
+                </Step>
+                <Step number={2} title="Ask Claude Code, Codex or Cursor">
                   <CodeLine text={ASK} />
-                </li>
-                <li className="space-y-2">
-                  <p className="comet-body-s-accented">3. The skill then</p>
+                </Step>
+                <Step number={3} title="The skill then">
                   <ul className="comet-body-s list-disc space-y-1 pl-5 text-muted-slate">
                     {SKILL_STEPS.map((step) => (
                       <li key={step}>{step}</li>
                     ))}
                   </ul>
-                </li>
+                </Step>
               </ol>
+              <div className="space-y-2">
+                <Disclosure
+                  label="Skill instructions"
+                  open={isSkillOpen}
+                  onToggle={() => setIsSkillOpen((value) => !value)}
+                />
+                {isSkillOpen && (
+                  <p className="comet-body-xs pl-5 text-muted-slate">
+                    The skill uses the same organization price list as this
+                    page. It reads the list and its version, sends your changes
+                    as a dry run to show what would change, and saves with that
+                    version only after you confirm. If someone saved in between,
+                    the save is refused and the skill reads the list again.
+                  </p>
+                )}
+              </div>
             </TabsContent>
           </Tabs>
         </div>
