@@ -25,15 +25,15 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * The deletes {@code ai_labels} and {@code ai_label_status} share. Both are keyed by {@code trace_id} and partitioned
- * by the trace's week exactly as {@code traces_local_v2} is, so their rows are deleted with their traces: by
- * retention, with the trace sweep's own workspaces, id range, week predicate and experiment exclusion, and by the
- * trace-delete cascade.
+ * The deletes {@code ai_labels}, {@code ai_label_status} and {@code topic_vectors} share. All three are keyed by
+ * {@code trace_id} and partitioned by the trace's week exactly as {@code traces_local_v2} is, so their rows are deleted
+ * with their traces: by retention, with the trace sweep's own workspaces, id range, week predicate and experiment
+ * exclusion, and by the trace-delete cascade.
  */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class AiLabelTableDeletes {
+public class AiLabelTableDeletes {
 
     /**
      * Mirrors {@code TraceDAO.DELETE_FOR_RETENTION}, on {@code trace_id} instead of {@code id}. The week bounds are
@@ -103,7 +103,8 @@ class AiLabelTableDeletes {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    Mono<Long> deleteForRetention(String table, @NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+    public Mono<Long> deleteForRetention(@NonNull String table, @NonNull List<String> workspaceIds,
+            @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(workspaceIds),
                 "Argument 'workspaceIds' must not be empty");
@@ -124,7 +125,7 @@ class AiLabelTableDeletes {
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
 
-    Mono<Long> deleteForRetentionBounded(String table, @NonNull Map<String, UUID> workspaceMinIds,
+    public Mono<Long> deleteForRetentionBounded(@NonNull String table, @NonNull Map<String, UUID> workspaceMinIds,
             @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
         Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
         log.info("Retention delete ai-labels table (bounded), table '{}', workspaces '{}', cutoffId '{}'",
@@ -156,7 +157,7 @@ class AiLabelTableDeletes {
      * One statement per batch and weekly partition, or a single unscoped statement per batch when a trace id's
      * partition cannot be derived exactly (see {@link WeeklyPartitions#groupByPartition}).
      */
-    Mono<Void> deleteByTraceIds(String table, @NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
+    public Mono<Void> deleteByTraceIds(@NonNull String table, @NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
         }

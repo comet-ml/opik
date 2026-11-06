@@ -1004,6 +1004,71 @@ aiLabels:
     maxConcurrentDecides: 256
     decideKeepAlive: 30s
     decideTimeToLive: 5m
+    #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+    #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+    #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+    #  flight can hold this much heap
+    maxResponseBytes: 33554432
+
+topics:
+  #  Default: false
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
+  #  never exposed to the UI
+  enabled: false
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
+  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  enabledWorkspaces: ""
+  vectors:
+    #  Default: 1m
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. At most
+    #  1h
+    tickInterval: 1m
+    #  Default: 50s
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
+    tickBudget: 50s
+    #  Default: 24h
+    #  Description: How far back, by ai_label_status write time, each tick looks for done traces without a vector. Never
+    #  before the task's applies_from
+    window: 24h
+    #  Default: 7d
+    #  Description: The window of the long-window pass, for rows the short window missed. At least window
+    longWindow: 7d
+    #  Default: 1d
+    #  Description: How often the long-window pass starts (a cluster-wide Redis lock). The pass stays on, tick after
+    #  tick, until one of its ticks drains it (every workspace read, each under maxTracesPerTick, nothing left for want
+    #  of time, a read, a back-off or an insert); the interval runs from that tick. At most 7d
+    longWindowInterval: 1d
+    #  Default: 0 (off)
+    #  Description: When above zero, the long-window pass uses this window instead of longWindow, to catch up after a
+    #  late start or a re-enabled workspace. The window read's cost grows with it. 0 or at least window; at most 365d
+    backfillWindow: 0s
+    #  Default: 5000
+    #  Description: The most traces one tick embeds per workspace, oldest first; the tick budget bounds the total
+    maxTracesPerTick: 5000
+    #  Default: 256 (the most /v1/embed takes)
+    #  Description: Texts per embed call
+    embedBatchSize: 256
+    #  Default: 10s
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
+    #  tickBudget, at most 60s
+    embedTimeout: 10s
+    find:
+      #  Default: 30000000
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  1000000000
+      maxRowsToRead: 30000000
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  8589934592 (8 GiB)
+      maxMemoryUsage: 1073741824
+      #  Default: 30s
+      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
+      maxExecutionTime: 30s
+      #  Default: 1d
+      #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
+      #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
+      createdAtSlack: 1d
 
 # Python evaluator configuration
 pythonEvaluator:

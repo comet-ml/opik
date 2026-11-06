@@ -35,12 +35,6 @@ public class TopicWorkspaceService {
         return aiLabelsEnabled().stream().filter(listed::contains).toList();
     }
 
-    public boolean isEligible(@NonNull String workspaceId) {
-        return config.enabledWorkspaceIds().contains(workspaceId)
-                && template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(AiLabelWorkspaceDAO.class).isEnabled(workspaceId));
-    }
-
     private List<String> aiLabelsEnabled() {
         return template.inTransaction(READ_ONLY,
                 handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds());

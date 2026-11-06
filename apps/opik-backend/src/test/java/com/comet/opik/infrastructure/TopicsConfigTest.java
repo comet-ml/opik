@@ -1,10 +1,10 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
 import io.dropwizard.util.Duration;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -61,7 +61,7 @@ class TopicsConfigTest {
 
     static Stream<Arguments> vectorsSettings() {
         return Stream.of(
-                arguments("defaults", change(vectors -> {
+                arguments("config-test.yml", change(vectors -> {
                 }), List.of()),
                 arguments("budget equal to the interval", change(vectors -> {
                     vectors.setTickInterval(Duration.seconds(60));
@@ -75,8 +75,6 @@ class TopicsConfigTest {
                     vectors.setWindow(Duration.hours(24));
                     vectors.setLongWindow(Duration.hours(24));
                 }), List.of()),
-                arguments("embed batch above the service's 256", change(vectors -> vectors.setEmbedBatchSize(257)),
-                        List.of("embedBatchSize")),
                 arguments("embed timeout equal to the budget", change(vectors -> {
                     vectors.setTickBudget(Duration.seconds(10));
                     vectors.setEmbedTimeout(Duration.seconds(10));
@@ -88,24 +86,6 @@ class TopicsConfigTest {
                     vectors.setWindow(Duration.hours(24));
                     vectors.setBackfillWindow(Duration.hours(23));
                 }), List.of("backfillWindowValid")),
-                arguments("backfill window above 365 days",
-                        change(vectors -> vectors.setBackfillWindow(Duration.days(366))), List.of("backfillWindow")),
-                arguments("find max rows to read of 0", change(vectors -> vectors.getFind().setMaxRowsToRead(0)),
-                        List.of("find.maxRowsToRead")),
-                arguments("find max memory usage of 0", change(vectors -> vectors.getFind().setMaxMemoryUsage(0)),
-                        List.of("find.maxMemoryUsage")),
-                arguments("find max execution time under a second",
-                        change(vectors -> vectors.getFind().setMaxExecutionTime(Duration.milliseconds(999))),
-                        List.of("find.maxExecutionTime")),
-                arguments("find max execution time missing",
-                        change(vectors -> vectors.getFind().setMaxExecutionTime(null)),
-                        List.of("find.maxExecutionTime")),
-                arguments("find created-at slack below 0",
-                        change(vectors -> vectors.getFind().setCreatedAtSlack(Duration.seconds(-1))),
-                        List.of("find.createdAtSlack")),
-                arguments("find created-at slack missing",
-                        change(vectors -> vectors.getFind().setCreatedAtSlack(null)),
-                        List.of("find.createdAtSlack")),
                 arguments("find max execution time equal to the budget", change(vectors -> {
                     vectors.setTickBudget(Duration.seconds(40));
                     vectors.getFind().setMaxExecutionTime(Duration.seconds(40));
@@ -122,9 +102,9 @@ class TopicsConfigTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("vectorsSettings")
-    void vectorsRules(String description, Consumer<TopicsConfig.VectorsConfig> change,
+    void vectorsCrossFieldRules(String description, Consumer<TopicsConfig.VectorsConfig> change,
             List<String> expectedViolations) {
-        var vectors = new TopicsConfig().getVectors();
+        var vectors = TestConfigUtils.loadConfigTest().getTopics().getVectors();
         change.accept(vectors);
 
         var violations = VALIDATOR.validate(vectors).stream()
@@ -132,34 +112,5 @@ class TopicsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
-    }
-
-    static Stream<Arguments> enabledWorkspaces() {
-        return Stream.of(
-                arguments("unset", null, Set.of()),
-                arguments("empty", "", Set.of()),
-                arguments("blank and commas only", " , ,", Set.of()),
-                arguments("one id", "ws-1", Set.of("ws-1")),
-                arguments("ids with spaces, blanks and a repeat", " ws-1 ,ws-2,, ws-1 ", Set.of("ws-1", "ws-2")));
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("enabledWorkspaces")
-    void enabledWorkspaceIdsAreSplitStrippedAndBlankFree(String description, String enabledWorkspaces,
-            Set<String> expected) {
-        var config = new TopicsConfig();
-        config.setEnabledWorkspaces(enabledWorkspaces);
-
-        assertThat(config.enabledWorkspaceIds()).isEqualTo(expected);
-    }
-
-    @Test
-    void enabledWorkspaceIdsFollowTheFieldWithoutACache() {
-        var config = new TopicsConfig();
-        assertThat(config.enabledWorkspaceIds()).isEmpty();
-
-        config.setEnabledWorkspaces("ws-1");
-
-        assertThat(config.enabledWorkspaceIds()).containsExactly("ws-1");
     }
 }

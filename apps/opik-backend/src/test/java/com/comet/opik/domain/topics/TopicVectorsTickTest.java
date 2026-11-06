@@ -38,6 +38,8 @@ import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
 import io.opentelemetry.api.common.Attributes;
+import io.r2dbc.spi.Row;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -65,21 +67,25 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -93,12 +99,9 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.tuple;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * The topic vectors tick against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/embed} stubbed in
@@ -116,6 +119,11 @@ class TopicVectorsTickTest {
     private static final String TASK = TopicVectorsTickService.TASK;
     // Short, so a test can wait for the daily pass instead of a day.
     private static final Duration LONG_WINDOW_INTERVAL = Duration.ofSeconds(5);
+    // Vectors are compared whole. ClickHouse parses the JSON text of a Float32 to within one ulp, so a read-back vector
+    // may differ in the last bit: its floats are compared to within 1e-6.
+    private static final RecursiveComparisonConfiguration VECTORS = RecursiveComparisonConfiguration.builder()
+            .withComparatorForFields(TopicVectorsTickTest::compareVectors, "vector")
+            .build();
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     // Not reused: the opt-in read spans the whole table, and the traces cutover is destructive.
@@ -259,26 +267,19 @@ class TopicVectorsTickTest {
     @DisplayName("vectors appear only for enabled workspaces, as the stub's unit-length vectors of the stored text")
     void onlyEnabledWorkspaces() {
         var enabled = List.of(enabledWorkspace(), enabledWorkspace());
-        var disabled = UUID.randomUUID().toString();
+        var disabled = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
         var labeled = new java.util.LinkedHashMap<String, List<UUID>>();
         for (var workspaceId : List.of(enabled.getFirst(), enabled.getLast(), disabled)) {
-            labeled.put(workspaceId, labelTraces(workspaceId, 3, 1));
+            labeled.put(workspaceId, labelTraces(workspaceId, projectId, 3, 1));
         }
 
         var result = tickService.tick(Instant.now());
 
         assertThat(result.written()).isEqualTo(6);
         for (var workspaceId : enabled) {
-            var vectors = vectors(workspaceId, labeled.get(workspaceId));
-            assertThat(vectors).extracting(TopicVector::traceId)
-                    .containsExactlyInAnyOrderElementsOf(labeled.get(workspaceId));
-            assertThat(vectors).allSatisfy(vector -> {
-                assertThat(vector.text()).isEqualTo(summaryOf(vector.traceId()));
-                assertVectorClose(vector.vector(), expectedVector(vector.text()));
-                assertThat(vector.embedModel()).isEqualTo("bge-small-en-v1.5");
-                assertThat(vector.embedDimensions()).isEqualTo(384);
-                assertThat(vector.taskVersion()).isEqualTo(1);
-            });
+            assertVectors(vectors(workspaceId, labeled.get(workspaceId)),
+                    expectedVectors(workspaceId, projectId, labeled.get(workspaceId), 1));
         }
         assertThat(vectors(disabled, labeled.get(disabled))).isEmpty();
         var sent = wireMock.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
@@ -297,24 +298,22 @@ class TopicVectorsTickTest {
         var other = enabledWorkspace();
         var aiLabelsOnly = workspaceWith(true, false);
         var listedOnly = workspaceWith(false, true);
-        var listedWithoutAiLabelsRow = UUID.randomUUID().toString();
+        var listedWithoutAiLabelsRow = ID_GENERATOR.generateId().toString();
         setListed(listedWithoutAiLabelsRow, true);
+        var projectId = ID_GENERATOR.generateId();
         var labeled = new java.util.LinkedHashMap<String, List<UUID>>();
         for (var workspaceId : List.of(both, other, aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
-            labeled.put(workspaceId, labelTraces(workspaceId, 2, 1));
+            labeled.put(workspaceId, labelTraces(workspaceId, projectId, 2, 1));
         }
 
         assertThat(workspaceService.eligibleWorkspaceIds())
                 .containsExactlyElementsOf(List.of(both, other).stream().sorted().toList());
-        assertThat(workspaceService.isEligible(both)).isTrue();
-        for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
-            assertThat(workspaceService.isEligible(workspaceId)).as(workspaceId).isFalse();
-        }
 
         assertThat(tickService.tick(Instant.now()).written()).isEqualTo(4);
 
         for (var workspaceId : List.of(both, other)) {
-            assertThat(vectors(workspaceId, labeled.get(workspaceId))).hasSize(2);
+            assertVectors(vectors(workspaceId, labeled.get(workspaceId)),
+                    expectedVectors(workspaceId, projectId, labeled.get(workspaceId), 1));
         }
         for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
             assertThat(vectors(workspaceId, labeled.get(workspaceId))).isEmpty();
@@ -326,40 +325,38 @@ class TopicVectorsTickTest {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(other, false, "test");
             return null;
         });
-        var later = Map.of(both, labelTraces(both, 2, 1), other, labelTraces(other, 2, 1));
+        var later = Map.of(both, labelTraces(both, projectId, 2, 1), other, labelTraces(other, projectId, 2, 1));
         assertThat(tickService.tick(Instant.now()).written()).isZero();
         for (var workspaceId : List.of(both, other)) {
             assertThat(vectors(workspaceId, later.get(workspaceId))).isEmpty();
-            assertThat(vectors(workspaceId, labeled.get(workspaceId))).hasSize(2);
+            assertVectors(vectors(workspaceId, labeled.get(workspaceId)),
+                    expectedVectors(workspaceId, projectId, labeled.get(workspaceId), 1));
         }
-        assertThat(workspaceService.isEligible(both)).isFalse();
-        assertThat(workspaceService.isEligible(other)).isFalse();
+        assertThat(workspaceService.eligibleWorkspaceIds()).isEmpty();
     }
 
     @Test
     @DisplayName("a trace id reused in two projects gets each project's own summary")
     void traceIdReusedInTwoProjects() {
         var workspaceId = enabledWorkspace();
-        var first = UUID.randomUUID();
-        var second = UUID.randomUUID();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
         var traceId = labelTraces(workspaceId, first, 1, 1).getFirst();
         // The same trace id in another project, with another summary (the text depends on the task version).
         label(workspaceId, second, List.of(traceId), 2);
 
         assertThat(tickService.tick(Instant.now()).written()).isEqualTo(2);
 
-        assertThat(vectors(workspaceId, List.of(traceId)))
-                .extracting(TopicVector::projectId, TopicVector::taskVersion, TopicVector::text)
-                .containsExactlyInAnyOrder(
-                        org.assertj.core.groups.Tuple.tuple(first, 1, summaryOf(traceId, 1)),
-                        org.assertj.core.groups.Tuple.tuple(second, 2, summaryOf(traceId, 2)));
+        assertVectors(vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, first, traceId, 1), vector(workspaceId, second, traceId, 2)));
     }
 
     @Test
     @DisplayName("a second tick writes nothing new")
     void idempotent() {
         var workspaceId = enabledWorkspace();
-        var traceIds = labelTraces(workspaceId, 5, 1);
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 5, 1);
         assertThat(tickService.tick(Instant.now()).written()).isEqualTo(5);
         int calls = embedStub.calls.get();
 
@@ -368,7 +365,7 @@ class TopicVectorsTickTest {
         assertThat(second.written()).isZero();
         assertThat(embedStub.calls.get()).isEqualTo(calls);
         assertThat(countRows(workspaceId)).isEqualTo(5);
-        assertThat(vectors(workspaceId, traceIds)).hasSize(5);
+        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
@@ -380,7 +377,7 @@ class TopicVectorsTickTest {
                 .until(() -> tickService.tick(Instant.now()).longWindowPass());
         var workspaceId = enabledWorkspace();
         var traceId = ID_GENERATOR.generateId();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
         insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(2, ChronoUnit.DAYS));
 
@@ -396,7 +393,7 @@ class TopicVectorsTickTest {
                     assertThat(result.longWindowPass()).isTrue();
                     assertThat(result.written()).isOne();
                 });
-        assertThat(vectors(workspaceId, List.of(traceId))).extracting(TopicVector::traceId).containsExactly(traceId);
+        assertVectors(vectors(workspaceId, List.of(traceId)), List.of(vector(workspaceId, projectId, traceId, 1)));
     }
 
     @Test
@@ -404,7 +401,8 @@ class TopicVectorsTickTest {
     void throttledSecondChunk() {
         config().setEmbedBatchSize(10);
         var workspaceId = enabledWorkspace();
-        var traceIds = labelTraces(workspaceId, 15, 1);
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 15, 1);
         embedStub.throttleCall = 2;
 
         var first = tickService.tick(Instant.now());
@@ -416,8 +414,7 @@ class TopicVectorsTickTest {
         var second = tickService.tick(Instant.now());
 
         assertThat(second.written()).isEqualTo(5);
-        assertThat(vectors(workspaceId, traceIds)).extracting(TopicVector::traceId)
-                .containsExactlyInAnyOrderElementsOf(traceIds);
+        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
@@ -430,7 +427,7 @@ class TopicVectorsTickTest {
         var meter = new TopicVectorsTickServiceTest.TestMeter();
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
                 vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
-                meter.meter);
+                meter.meter, Clock.systemUTC());
 
         var result = metered.tick(Instant.now());
 
@@ -444,7 +441,7 @@ class TopicVectorsTickTest {
         verify(meter.counter("topics.vectors.skipped"))
                 .add(4, TopicVectorsTickServiceTest.workspace(workspaceId)
                         .put(stringKey("reason"), TopicVectorsTickService.EMBED_FAILED).build());
-        verify(meter.counter("topics.vectors.written"), never()).add(anyLong(), any());
+        verifyNoInteractions(meter.counter("topics.vectors.written"));
     }
 
     @Test
@@ -456,7 +453,7 @@ class TopicVectorsTickTest {
         var meter = new TopicVectorsTickServiceTest.TestMeter();
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
                 vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
-                meter.meter);
+                meter.meter, Clock.systemUTC());
         var find = config().getFind();
         var maxRowsToRead = find.getMaxRowsToRead();
         find.setMaxRowsToRead(1);
@@ -489,7 +486,7 @@ class TopicVectorsTickTest {
             + "written")
     void unusableSummaries() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         var withoutOutput = ID_GENERATOR.generateId();
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, withoutOutput, 1))).block();
         var blank = ID_GENERATOR.generateId();
@@ -502,14 +499,14 @@ class TopicVectorsTickTest {
         assertThat(result.written()).isEqualTo(2);
         assertThat(result.skipped()).isEmpty();
         assertThat(vectors(workspaceId, List.of(withoutOutput, blank))).isEmpty();
-        assertThat(vectors(workspaceId, traceIds)).hasSize(2);
+        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
     @DisplayName("two task versions of one trace give two rows, both kept")
     void twoTaskVersions() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         var traceId = ID_GENERATOR.generateId();
         labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 1))).block();
@@ -520,11 +517,8 @@ class TopicVectorsTickTest {
         statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 2))).block();
         assertThat(tickService.tick(Instant.now()).written()).isOne();
 
-        assertThat(vectors(workspaceId, List.of(traceId)))
-                .extracting(TopicVector::taskVersion, TopicVector::text)
-                .containsExactlyInAnyOrder(
-                        org.assertj.core.groups.Tuple.tuple(1, summaryOf(traceId, 1)),
-                        org.assertj.core.groups.Tuple.tuple(2, summaryOf(traceId, 2)));
+        assertVectors(vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, projectId, traceId, 1), vector(workspaceId, projectId, traceId, 2)));
     }
 
     @Test
@@ -532,7 +526,7 @@ class TopicVectorsTickTest {
             + "write all")
     void cap() {
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         // Four batches of 5,000, labeled in this order. Each batch's ids are generated after the next one's, so trace id
         // order is the reverse of status order: the ticks can only follow status order if they sort by updated_at.
         var batches = new ArrayList<List<UUID>>();
@@ -543,11 +537,12 @@ class TopicVectorsTickTest {
             label(workspaceId, projectId, batch, 1);
         }
 
+        // Trace ids, not whole vectors: a read of 20,000 trace ids would pass ClickHouse's max_query_size.
+        var written = new HashSet<UUID>();
         for (var batch : batches) {
-            var before = Set.copyOf(writtenTraceIds(workspaceId));
             assertThat(tickService.tick(Instant.now()).written()).isEqualTo(5_000);
-            var now = Set.copyOf(writtenTraceIds(workspaceId));
-            assertThat(now).hasSize(before.size() + 5_000).containsAll(batch);
+            written.addAll(batch);
+            assertThat(Set.copyOf(writtenTraceIds(workspaceId))).isEqualTo(written);
         }
 
         assertThat(countRows(workspaceId)).isEqualTo(20_000);
@@ -561,8 +556,9 @@ class TopicVectorsTickTest {
         config().setEmbedBatchSize(2);
         var throttled = enabledWorkspace();
         var healthy = enabledWorkspace();
-        var throttledTraces = labelTraces(throttled, 6, 1);
-        var healthyTraces = labelTraces(healthy, 6, 1);
+        var projectId = ID_GENERATOR.generateId();
+        var throttledTraces = labelTraces(throttled, projectId, 6, 1);
+        var healthyTraces = labelTraces(healthy, projectId, 6, 1);
         embedStub.fail(throttled, 429, "{\"error\":{\"code\":\"rate_limited\",\"message\":\"m\"}}");
 
         var result = tickService.tick(Instant.now());
@@ -570,13 +566,15 @@ class TopicVectorsTickTest {
         assertThat(embedStub.callsFor(throttled)).isOne();
         assertThat(result.written()).isEqualTo(4);
         assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 4));
-        assertThat(vectors(healthy, healthyTraces)).hasSize(4);
+        assertVectors(vectors(healthy, healthyTraces),
+                expectedVectors(healthy, projectId, oldestFour(healthyTraces), 1));
         assertThat(vectors(throttled, throttledTraces)).isEmpty();
 
         embedStub.reset();
         assertThat(tickService.tick(Instant.now()).written()).isEqualTo(6);
-        assertThat(vectors(throttled, throttledTraces)).hasSize(4);
-        assertThat(vectors(healthy, healthyTraces)).hasSize(6);
+        assertVectors(vectors(throttled, throttledTraces),
+                expectedVectors(throttled, projectId, oldestFour(throttledTraces), 1));
+        assertVectors(vectors(healthy, healthyTraces), expectedVectors(healthy, projectId, healthyTraces, 1));
     }
 
     @Test
@@ -603,7 +601,7 @@ class TopicVectorsTickTest {
                 .until(() -> tickService.tick(Instant.now()).longWindowPass());
         config().setMaxTracesPerTick(2);
         var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
+        var projectId = ID_GENERATOR.generateId();
         var traceIds = IntStream.range(0, 5).mapToObj(i -> ID_GENERATOR.generateId()).toList();
         labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, 1)).toList())
                 .block();
@@ -630,11 +628,12 @@ class TopicVectorsTickTest {
         // Drained: not due again for longWindowInterval.
         ticks.add(tickService.tick(Instant.now()));
 
-        assertThat(ticks)
-                .extracting(TopicVectorsTickService.TickResult::longWindowPass,
-                        TopicVectorsTickService.TickResult::written)
-                .containsExactly(tuple(true, 2), tuple(true, 2), tuple(true, 1), tuple(false, 0));
-        assertThat(vectors(workspaceId, traceIds)).hasSize(5);
+        assertThat(ticks).containsExactly(
+                new TopicVectorsTickService.TickResult(2, Map.of(), true),
+                new TopicVectorsTickService.TickResult(2, Map.of(), true),
+                new TopicVectorsTickService.TickResult(1, Map.of(), true),
+                new TopicVectorsTickService.TickResult(0, Map.of(), false));
+        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
@@ -645,7 +644,8 @@ class TopicVectorsTickTest {
         config().setTickBudget(io.dropwizard.util.Duration.seconds(2));
         config().setEmbedTimeout(io.dropwizard.util.Duration.milliseconds(500));
         var workspaceId = enabledWorkspace();
-        var traceIds = labelTraces(workspaceId, 100, 1);
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 100, 1);
         embedStub.delay = Duration.ofMillis(300);
 
         var first = tickService.tick(Instant.now());
@@ -659,7 +659,35 @@ class TopicVectorsTickTest {
         var second = tickService.tick(Instant.now());
 
         assertThat(first.written() + second.written()).isEqualTo(100);
-        assertThat(vectors(workspaceId, traceIds)).hasSize(100);
+        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    @Test
+    @DisplayName("a trace deleted while its summary is embedded keeps no vector: the cascade's delete has run before "
+            + "the insert, so the tick deletes what it wrote and counts it as trace_deleted")
+    void traceDeletedDuringEmbed() {
+        // Room for the whole cascade inside the embed call.
+        config().setEmbedTimeout(io.dropwizard.util.Duration.seconds(20));
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 2, 1);
+        var deleted = traceIds.getFirst();
+        var kept = traceIds.getLast();
+        // Another version's vector of the trace: once it is gone, the cascade's vector delete has run.
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, deleted, 2))).block();
+        // After the summary read, before the insert: the trace is deleted and its cascade runs to the end.
+        embedStub.beforeAnswer = () -> {
+            eventBus.post(new TracesDeleted(Set.of(deleted), projectId, workspaceId, "user"));
+            Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                    .until(() -> statusRows(workspaceId, deleted) == 0
+                            && vectors(workspaceId, List.of(deleted)).isEmpty());
+        };
+
+        var result = tickService.tick(Instant.now());
+
+        assertThat(result.written()).isOne();
+        assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.TRACE_DELETED, 1));
+        assertVectors(vectors(workspaceId, traceIds), List.of(vector(workspaceId, projectId, kept, 1)));
     }
 
     @Nested
@@ -670,14 +698,13 @@ class TopicVectorsTickTest {
         @Test
         @DisplayName("the window read finds a done status without a vector, and nothing once the vector is written")
         void windowReadAndAntiJoin() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             var traceId = ID_GENERATOR.generateId();
             var failedTraceId = ID_GENERATOR.generateId();
-            var status = doneStatus(workspaceId, projectId, traceId, 3);
             labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 3),
                     outputLabel(workspaceId, projectId, failedTraceId, 3))).block();
-            statusDAO.insert(List.of(status)).block();
+            statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 3))).block();
             // Done, then failed: its latest row is not done.
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, failedTraceId, 3))).block();
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, failedTraceId, 3).toBuilder()
@@ -686,12 +713,7 @@ class TopicVectorsTickTest {
 
             var found = findUnvectored(workspaceId, lower);
 
-            assertThat(found).singleElement().satisfies(candidate -> {
-                assertThat(candidate.traceId()).isEqualTo(traceId);
-                assertThat(candidate.projectId()).isEqualTo(projectId);
-                assertThat(candidate.taskVersion()).isEqualTo(3);
-                assertThat(candidate.traceCreatedAt()).isEqualTo(status.traceCreatedAt());
-            });
+            assertCandidates(found, candidate(workspaceId, projectId, traceId, 3));
 
             vectorsDAO.insert(List.of(vector(workspaceId, projectId, traceId, 3))).block();
 
@@ -699,34 +721,36 @@ class TopicVectorsTickTest {
             // Another version of the same trace still needs its own vector.
             labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 4))).block();
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 4))).block();
-            assertThat(findUnvectored(workspaceId, lower)).extracting(TopicVectorCandidate::taskVersion)
-                    .containsExactly(4);
+            assertCandidates(findUnvectored(workspaceId, lower), candidate(workspaceId, projectId, traceId, 4));
         }
 
         @Test
         @DisplayName("the trace_created_at bound drops older traces from both sides alike, so the anti-join stays exact")
         void createdAtBound() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
             var createdAfter = now.minus(9, ChronoUnit.DAYS);
             var inside = ID_GENERATOR.generateId();
             var insideCreatedAt = createdAfter.plus(1, ChronoUnit.HOURS);
             var outside = ID_GENERATOR.generateId();
+            var outsideCreatedAt = createdAfter.minus(1, ChronoUnit.HOURS);
             labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, inside, 1),
                     outputLabel(workspaceId, projectId, outside, 1))).block();
             statusDAO.insert(List.of(
                     doneStatus(workspaceId, projectId, inside, 1).toBuilder().traceCreatedAt(insideCreatedAt).build(),
-                    doneStatus(workspaceId, projectId, outside, 1).toBuilder()
-                            .traceCreatedAt(createdAfter.minus(1, ChronoUnit.HOURS)).build()))
+                    doneStatus(workspaceId, projectId, outside, 1).toBuilder().traceCreatedAt(outsideCreatedAt)
+                            .build()))
                     .block();
             var lower = now.minus(1, ChronoUnit.HOURS);
+            var insideCandidate = candidate(workspaceId, projectId, inside, 1).toBuilder()
+                    .traceCreatedAt(insideCreatedAt).build();
+            var outsideCandidate = candidate(workspaceId, projectId, outside, 1).toBuilder()
+                    .traceCreatedAt(outsideCreatedAt).build();
 
-            assertThat(findUnvectored(workspaceId, lower, createdAfter)).extracting(TopicVectorCandidate::traceId)
-                    .containsExactly(inside);
+            assertCandidates(findUnvectored(workspaceId, lower, createdAfter), insideCandidate);
             // Without the bound both are found: the bound is what leaves the older one out.
-            assertThat(findUnvectored(workspaceId, lower, Instant.EPOCH)).extracting(TopicVectorCandidate::traceId)
-                    .containsExactlyInAnyOrder(inside, outside);
+            assertCandidates(findUnvectored(workspaceId, lower, Instant.EPOCH), insideCandidate, outsideCandidate);
 
             vectorsDAO.insert(List.of(vector(workspaceId, projectId, inside, 1).toBuilder()
                     .traceCreatedAt(insideCreatedAt).build())).block();
@@ -742,8 +766,8 @@ class TopicVectorsTickTest {
         @DisplayName("the summary read starts at the second of the oldest done trace id: that trace, whose id time has a "
                 + "millisecond part, and a trace of a later week are both found")
         void idAtBoundOfTheSummaryRead() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             // id_at cuts the id's time to the second; a bound at 999 ms past it would leave this trace's row out.
             var oldest = ID_GENERATOR.generateId(Instant.now().minus(10, ChronoUnit.DAYS)
                     .truncatedTo(ChronoUnit.SECONDS).plusMillis(999));
@@ -753,17 +777,16 @@ class TopicVectorsTickTest {
             statusDAO.insert(List.of(doneStatus(workspaceId, projectId, oldest, 1),
                     doneStatus(workspaceId, projectId, newest, 1))).block();
 
-            assertThat(findUnvectored(workspaceId, Instant.now().minus(1, ChronoUnit.HOURS)))
-                    .extracting(TopicVectorCandidate::traceId)
-                    .containsExactlyInAnyOrder(oldest, newest);
+            assertCandidates(findUnvectored(workspaceId, Instant.now().minus(1, ChronoUnit.HOURS)),
+                    candidate(workspaceId, projectId, oldest, 1), candidate(workspaceId, projectId, newest, 1));
         }
 
         @Test
         @DisplayName("statuses without a usable summary don't take the LIMIT: an older blank, Unicode-blank, missing "
                 + "or other-version output leaves room for a newer usable one")
         void unusableSummariesBeforeLimit() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             var blank = ID_GENERATOR.generateId();
             var missing = ID_GENERATOR.generateId();
             var otherVersion = ID_GENERATOR.generateId();
@@ -783,14 +806,16 @@ class TopicVectorsTickTest {
             var found = vectorsDAO.findUnvectored(workspaceId, TASK, Instant.now().minus(1, ChronoUnit.HOURS),
                     Instant.now(), Instant.EPOCH, 1, 10).collectList().block();
 
-            assertThat(found).extracting(TopicVectorCandidate::traceId).containsExactly(usable);
+            // Written by insertStatusAt, so its updated_at is known too.
+            assertThat(found).containsExactly(candidate(workspaceId, projectId, usable, 1).toBuilder()
+                    .statusUpdatedAt(oldest.plusSeconds(4).truncatedTo(ChronoUnit.MICROS)).build());
         }
 
         @Test
         @DisplayName("vectors read back as written, and id_at and the partition equal ai_label_status's")
         void roundTripAndPartition() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             var monday = Instant.parse("2025-03-03T00:00:00Z");
             var traceIds = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId(monday),
                     ID_GENERATOR.generateId(monday.minusMillis(1)));
@@ -799,11 +824,7 @@ class TopicVectorsTickTest {
             statusDAO.insert(traceIds.stream().map(traceId -> doneStatus(workspaceId, projectId, traceId, 1))
                     .toList()).block();
 
-            var read = vectors(workspaceId, traceIds);
-            assertThat(read).usingRecursiveFieldByFieldElementComparatorIgnoringFields("vector")
-                    .containsExactlyInAnyOrderElementsOf(rows);
-            var expectedByTrace = rows.stream().collect(Collectors.toMap(TopicVector::traceId, TopicVector::vector));
-            read.forEach(vector -> assertVectorClose(vector.vector(), expectedByTrace.get(vector.traceId())));
+            assertVectors(vectors(workspaceId, traceIds), rows);
             assertThat(idAtAndPartition(TopicVectorsDAO.TABLE, workspaceId))
                     .isEqualTo(idAtAndPartition("ai_label_status", workspaceId));
         }
@@ -811,10 +832,10 @@ class TopicVectorsTickTest {
         @Test
         @DisplayName("the trace-delete event deletes the traces' vectors and leaves other traces, projects and workspaces")
         void traceDeleteCascade() {
-            var workspaceId = UUID.randomUUID().toString();
-            var otherWorkspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
-            var otherProjectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var otherWorkspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
+            var otherProjectId = ID_GENERATOR.generateId();
             var deleted = ID_GENERATOR.generateId();
             var kept = ID_GENERATOR.generateId();
             vectorsDAO.insert(List.of(vector(workspaceId, projectId, deleted, 1),
@@ -826,18 +847,19 @@ class TopicVectorsTickTest {
 
             // The same trace id under another project of the workspace keeps its vector.
             Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
-                    .untilAsserted(() -> assertThat(vectors(workspaceId, Set.of(deleted, kept)))
-                            .extracting(TopicVector::projectId, TopicVector::traceId)
-                            .containsExactlyInAnyOrder(tuple(projectId, kept), tuple(otherProjectId, deleted)));
-            assertThat(vectors(otherWorkspaceId, List.of(deleted))).hasSize(1);
+                    .untilAsserted(() -> assertVectors(vectors(workspaceId, Set.of(deleted, kept)),
+                            List.of(vector(workspaceId, projectId, kept, 1),
+                                    vector(workspaceId, otherProjectId, deleted, 1))));
+            assertVectors(vectors(otherWorkspaceId, List.of(deleted)),
+                    List.of(vector(otherWorkspaceId, projectId, deleted, 1)));
         }
 
         @Test
         @DisplayName("retention deletes vectors in range, and keeps experiment-linked, newer and other workspaces' traces")
         void retention() {
-            var workspaceId = UUID.randomUUID().toString();
-            var otherWorkspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var otherWorkspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             var now = Instant.now();
             var old = ID_GENERATOR.generateId(now.minus(20, ChronoUnit.DAYS));
             var oldInExperiment = ID_GENERATOR.generateId(now.minus(20, ChronoUnit.DAYS));
@@ -852,16 +874,17 @@ class TopicVectorsTickTest {
                     ID_GENERATOR.generateId(now.minus(10, ChronoUnit.DAYS)),
                     ID_GENERATOR.generateId(now.minus(30, ChronoUnit.DAYS))).block();
 
-            assertThat(vectors(workspaceId, List.of(old, oldInExperiment, recent)))
-                    .extracting(TopicVector::traceId).containsExactlyInAnyOrder(oldInExperiment, recent);
-            assertThat(vectors(otherWorkspaceId, List.of(old))).hasSize(1);
+            assertVectors(vectors(workspaceId, List.of(old, oldInExperiment, recent)),
+                    expectedVectors(workspaceId, projectId, List.of(oldInExperiment, recent), 1));
+            assertVectors(vectors(otherWorkspaceId, List.of(old)),
+                    List.of(vector(otherWorkspaceId, projectId, old, 1)));
         }
 
         @Test
         @DisplayName("bounded retention deletes from each workspace's own floor up to the cutoff")
         void boundedRetention() {
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId = UUID.randomUUID();
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
             var now = Instant.now();
             var belowFloor = ID_GENERATOR.generateId(now.minus(20, ChronoUnit.DAYS));
             var aboveFloor = ID_GENERATOR.generateId(now.minus(12, ChronoUnit.DAYS));
@@ -875,8 +898,29 @@ class TopicVectorsTickTest {
                     ID_GENERATOR.generateId(now.minus(10, ChronoUnit.DAYS)),
                     ID_GENERATOR.generateId(now.minus(30, ChronoUnit.DAYS))).block();
 
-            assertThat(vectors(workspaceId, List.of(belowFloor, aboveFloor, afterCutoff)))
-                    .extracting(TopicVector::traceId).containsExactlyInAnyOrder(belowFloor, afterCutoff);
+            assertVectors(vectors(workspaceId, List.of(belowFloor, aboveFloor, afterCutoff)),
+                    expectedVectors(workspaceId, projectId, List.of(belowFloor, afterCutoff), 1));
+        }
+
+        /**
+         * Whole candidates, in any order, but {@code statusUpdatedAt}: ClickHouse stamps {@code updated_at} when
+         * {@link AiLabelStatusDAO#insert} writes the status.
+         */
+        private void assertCandidates(List<TopicVectorCandidate> actual, TopicVectorCandidate... expected) {
+            assertThat(actual).usingRecursiveFieldByFieldElementComparatorIgnoringFields("statusUpdatedAt")
+                    .containsExactlyInAnyOrder(expected);
+        }
+
+        /** The candidate of a status {@link #doneStatus} built; {@code statusUpdatedAt} is not known. */
+        private TopicVectorCandidate candidate(String workspaceId, UUID projectId, UUID traceId, int taskVersion) {
+            return TopicVectorCandidate.builder()
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .traceId(traceId)
+                    .traceCreatedAt(traceCreatedAt(traceId))
+                    .taskVersion(taskVersion)
+                    .statusUpdatedAt(Instant.EPOCH)
+                    .build();
         }
 
         private List<TopicVectorCandidate> findUnvectored(String workspaceId, Instant lower) {
@@ -889,7 +933,10 @@ class TopicVectorsTickTest {
         }
     }
 
-    /** Answers {@code /v1/embed} with {@link #rawVector} of each input; can throttle one call or delay every call. */
+    /**
+     * Answers {@code /v1/embed} with {@link #rawVector} of each input; can throttle one call, delay every call, or run
+     * a hook before it answers.
+     */
     static final class EmbedStub implements ResponseTransformerV2 {
 
         static final String NAME = "embed-stub";
@@ -898,6 +945,8 @@ class TopicVectorsTickTest {
         private final Map<String, AtomicInteger> callsByOrg = new java.util.concurrent.ConcurrentHashMap<>();
         volatile int throttleCall;
         volatile Duration delay = Duration.ZERO;
+        // Runs before every answer, on WireMock's thread, while the tick waits for the call.
+        volatile Runnable beforeAnswer;
         private volatile String failOrg;
         private volatile int failStatus;
         private volatile String failBody;
@@ -907,6 +956,7 @@ class TopicVectorsTickTest {
             callsByOrg.clear();
             throttleCall = 0;
             delay = Duration.ZERO;
+            beforeAnswer = null;
             failOrg = null;
         }
 
@@ -929,6 +979,10 @@ class TopicVectorsTickTest {
             callsByOrg.computeIfAbsent(orgId, key -> new AtomicInteger()).incrementAndGet();
             if (!delay.isZero()) {
                 Mono.delay(delay).block();
+            }
+            var hook = beforeAnswer;
+            if (hook != null) {
+                hook.run();
             }
             var json = new HttpHeaders(new HttpHeader("Content-Type", "application/json"));
             if (call == throttleCall) {
@@ -984,7 +1038,7 @@ class TopicVectorsTickTest {
 
     /** Enabled in ai_label_workspaces or not, and listed in topics.enabledWorkspaces or not. */
     private String workspaceWith(boolean aiLabels, boolean topics) {
-        var workspaceId = UUID.randomUUID().toString();
+        var workspaceId = ID_GENERATOR.generateId().toString();
         template.inTransaction(WRITE, handle -> {
             handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, aiLabels, "test");
             return null;
@@ -1008,7 +1062,7 @@ class TopicVectorsTickTest {
     }
 
     private List<UUID> labelTraces(String workspaceId, int count, int taskVersion) {
-        return labelTraces(workspaceId, UUID.randomUUID(), count, taskVersion);
+        return labelTraces(workspaceId, ID_GENERATOR.generateId(), count, taskVersion);
     }
 
     /** {@code count} traces labeled as ai-labels writes them: the output rows, then the done statuses. */
@@ -1031,7 +1085,7 @@ class TopicVectorsTickTest {
                 .projectId(projectId)
                 .task(TASK)
                 .traceId(traceId)
-                .traceCreatedAt(Instant.now().minus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MICROS))
+                .traceCreatedAt(traceCreatedAt(traceId))
                 .taskVersion(taskVersion)
                 .rendererVersion(1)
                 .status(AiLabelStatus.Status.DONE)
@@ -1064,27 +1118,45 @@ class TopicVectorsTickTest {
                 .build();
     }
 
-    private static String summaryOf(UUID traceId) {
-        return summaryOf(traceId, 1);
-    }
-
     private static String summaryOf(UUID traceId, int taskVersion) {
         return "Intent of trace %s, version %d".formatted(traceId, taskVersion);
     }
 
+    /**
+     * The trace's created_at in its statuses: an hour before its id's time, so it is neither the id's time nor the
+     * status's write time, and the same on every row of the trace.
+     */
+    private static Instant traceCreatedAt(UUID traceId) {
+        return Instant.ofEpochMilli(traceId.getMostSignificantBits() >>> 16).minus(1, ChronoUnit.HOURS);
+    }
+
+    /** The row the tick writes for a trace labeled by {@link #label}: its summary, embedded and scaled to length 1. */
     private static TopicVector vector(String workspaceId, UUID projectId, UUID traceId, int taskVersion) {
         var text = summaryOf(traceId, taskVersion);
         return TopicVector.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
                 .traceId(traceId)
-                .traceCreatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                .traceCreatedAt(traceCreatedAt(traceId))
                 .taskVersion(taskVersion)
-                .embedModel(TopicVectorsTickService.EMBED_MODEL)
-                .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
+                .embedModel("bge-small-en-v1.5")
+                .embedDimensions(384)
                 .text(text)
                 .vector(expectedVector(text))
                 .build();
+    }
+
+    private static List<TopicVector> expectedVectors(String workspaceId, UUID projectId, List<UUID> traceIds,
+            int taskVersion) {
+        return traceIds.stream().map(traceId -> vector(workspaceId, projectId, traceId, taskVersion)).toList();
+    }
+
+    /**
+     * The four of one {@link #labelTraces} call's traces a cap of 4 takes: its statuses are one insert, so they share
+     * {@code updated_at}, and the window read's tie-break is the trace id.
+     */
+    private static List<UUID> oldestFour(List<UUID> traceIds) {
+        return traceIds.stream().sorted(Comparator.comparing(UUID::toString)).limit(4).toList();
     }
 
     /** A deterministic, non-unit vector of 384 numbers per text. */
@@ -1095,20 +1167,83 @@ class TopicVectorsTickTest {
                 .toList();
     }
 
-    // ClickHouse parses the JSON text of a Float32 to within one ulp, so the read-back vector may differ in the last bit.
-    private static void assertVectorClose(List<Float> actual, List<Float> expected) {
-        assertThat(actual).hasSameSizeAs(expected);
-        for (int i = 0; i < expected.size(); i++) {
-            assertThat(actual.get(i)).isCloseTo(expected.get(i), org.assertj.core.data.Offset.offset(1e-6f));
+    /** Whole vectors, in any order; the floats of {@code vector} as {@link #VECTORS} compares them. */
+    private static void assertVectors(List<TopicVector> actual, List<TopicVector> expected) {
+        assertThat(actual).usingRecursiveFieldByFieldElementComparator(VECTORS)
+                .containsExactlyInAnyOrderElementsOf(expected);
+    }
+
+    /** 0 when both vectors have the same length and their floats agree to within 1e-6, else 1. */
+    @SuppressWarnings("unchecked")
+    private static int compareVectors(Object actual, Object expected) {
+        var left = (List<Float>) actual;
+        var right = (List<Float>) expected;
+        if (left.size() != right.size()) {
+            return 1;
         }
+        for (int i = 0; i < right.size(); i++) {
+            if (Math.abs(left.get(i) - right.get(i)) > 1e-6f) {
+                return 1;
+            }
+        }
+        return 0;
     }
 
     private static List<Float> expectedVector(String text) {
         return TopicVectorsTickService.normalize(rawVector(text)).orElseThrow();
     }
 
-    private List<TopicVector> vectors(String workspaceId, java.util.Collection<UUID> traceIds) {
-        return vectorsDAO.findByTraceIds(workspaceId, Set.copyOf(traceIds)).collectList().block();
+    /** The workspace's vectors of {@code traceIds}: the latest row of each (project, trace, task version). */
+    private List<TopicVector> vectors(String workspaceId, Collection<UUID> traceIds) {
+        return templateAsync.nonTransaction(connection -> reactor.core.publisher.Flux
+                .from(connection.createStatement("""
+                        SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, embed_model,
+                            embed_dimensions, text, vector
+                        FROM topic_vectors
+                        WHERE workspace_id = :workspace_id
+                        AND trace_id IN :trace_ids
+                        ORDER BY workspace_id, project_id, trace_id, task_version, updated_at DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id, task_version
+                        """)
+                        .bind("workspace_id", workspaceId)
+                        .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> toVector(row)))
+                .collectList())
+                .block();
+    }
+
+    private static TopicVector toVector(Row row) {
+        // The driver's Java array type for Array(Float32) isn't part of its contract, so read the elements as numbers.
+        var array = row.get("vector", Object.class);
+        var vector = new ArrayList<Float>(Array.getLength(array));
+        for (int i = 0; i < Array.getLength(array); i++) {
+            vector.add(((Number) Array.get(array, i)).floatValue());
+        }
+        return TopicVector.builder()
+                .workspaceId(row.get("workspace_id", String.class))
+                .projectId(UUID.fromString(row.get("project_id", String.class)))
+                .traceId(UUID.fromString(row.get("trace_id", String.class)))
+                .traceCreatedAt(row.get("trace_created_at", Instant.class))
+                .taskVersion(row.get("task_version", Long.class).intValue())
+                .embedModel(row.get("embed_model", String.class))
+                .embedDimensions(row.get("embed_dimensions", Integer.class))
+                .text(row.get("text", String.class))
+                .vector(vector)
+                .build();
+    }
+
+    private long statusRows(String workspaceId, UUID traceId) {
+        return templateAsync.nonTransaction(connection -> Mono
+                .from(connection.createStatement("""
+                        SELECT count() AS cnt FROM ai_label_status
+                        WHERE workspace_id = :workspace_id AND trace_id = :trace_id
+                        """)
+                        .bind("workspace_id", workspaceId)
+                        .bind("trace_id", traceId.toString())
+                        .execute())
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
+                .block();
     }
 
     private void insertStatusAt(String workspaceId, UUID projectId, UUID traceId, int taskVersion,
@@ -1116,10 +1251,11 @@ class TopicVectorsTickTest {
         execute("""
                 INSERT INTO ai_label_status (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
                     renderer_version, status, retryable, attempt, updated_at)
-                VALUES (:workspace_id, :project_id, :task, :trace_id, now64(6), :task_version, 1, 'done', false, 1,
-                    fromUnixTimestamp64Micro(:updated_at))
+                VALUES (:workspace_id, :project_id, :task, :trace_id, fromUnixTimestamp64Micro(:trace_created_at),
+                    :task_version, 1, 'done', false, 1, fromUnixTimestamp64Micro(:updated_at))
                 """, Map.of("workspace_id", workspaceId, "project_id", projectId.toString(), "task", TASK,
                 "trace_id", traceId.toString(), "task_version", taskVersion,
+                "trace_created_at", ChronoUnit.MICROS.between(Instant.EPOCH, traceCreatedAt(traceId)),
                 "updated_at", ChronoUnit.MICROS.between(Instant.EPOCH, updatedAt)));
     }
 

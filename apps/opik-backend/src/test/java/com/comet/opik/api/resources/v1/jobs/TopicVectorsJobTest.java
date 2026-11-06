@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.topics.TopicVectorsTickService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -19,26 +20,28 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @DisplayName("topic vectors job")
 class TopicVectorsJobTest {
 
-    private final TopicsConfig config = new TopicsConfig();
+    private static final Duration LEASE = Duration.ofSeconds(95);
+
+    private final TopicsConfig config = TestConfigUtils.loadConfigTest().getTopics();
     private final TopicVectorsTickService tickService = mock(TopicVectorsTickService.class);
     private final LockService lockService = mock(LockService.class);
     private final LongCounter ticks = mock(LongCounter.class);
@@ -49,24 +52,26 @@ class TopicVectorsJobTest {
     @BeforeEach
     void setUp() {
         config.setEnabled(true);
-        when(tickService.leaderLease()).thenReturn(Duration.ofSeconds(95));
+        when(tickService.leaderLease()).thenReturn(LEASE);
         job = new TopicVectorsJob(config, tickService, lockService, meterOf(ticks));
         // Only the firings' own counts matter below; the start values have their own test.
         clearInvocations(ticks);
         appender.start();
         logger.addAppender(appender);
+        logger.setLevel(Level.DEBUG);
     }
 
     @AfterEach
     void tearDown() {
         logger.detachAppender(appender);
+        logger.setLevel(null);
     }
 
     @Test
     @DisplayName("an interrupt that lands while the tick is being subscribed still disposes it")
     void interruptDuringSubscribe() {
         var cancelled = new AtomicBoolean();
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any())).thenReturn(Mono.defer(() -> {
+        when(leaderLock()).thenReturn(Mono.defer(() -> {
             // The interrupt arrives after subscribe() started and before doJob() stored the subscription.
             interrupt();
             return Mono.never();
@@ -81,8 +86,7 @@ class TopicVectorsJobTest {
     @DisplayName("an interrupt after the subscription is stored disposes it")
     void interruptAfterSubscribe() {
         var cancelled = new AtomicBoolean();
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
-                .thenReturn(Mono.never().doOnCancel(() -> cancelled.set(true)));
+        when(leaderLock()).thenReturn(Mono.never().doOnCancel(() -> cancelled.set(true)));
 
         job.doJob(null);
         assertThat(cancelled).isFalse();
@@ -95,41 +99,47 @@ class TopicVectorsJobTest {
     @DisplayName("the leader ticks only when the tick lock is free, held for one interval less the jitter margin")
     void tickLock() {
         var action = new AtomicReference<Mono<?>>();
-        when(lockService.bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), any(), any(), eq(Duration.ofSeconds(95)),
-                eq(Duration.ZERO))).thenAnswer(invocation -> {
-                    action.set(invocation.getArgument(1));
-                    return invocation.getArgument(1);
-                });
+        when(leaderLock()).thenAnswer(invocation -> {
+            action.set(invocation.getArgument(1));
+            return invocation.getArgument(1);
+        });
         when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
                 .thenReturn(Mono.just(true), Mono.just(false));
+        var start = Instant.parse("2026-11-20T12:00:00Z");
 
-        job.doJob(null);
-        verify(tickService).tick(any());
+        job.tickIfDue(start);
+        verify(tickService).tick(start);
         verify(ticks).add(1, outcome(TopicVectorsJob.RAN));
 
-        job.doJob(null);
-        verify(tickService).tick(any());
+        job.tickIfDue(start.plusSeconds(30));
+        verify(tickService).tick(start);
+        verifyNoMoreInteractions(tickService);
         verify(ticks).add(1, outcome(TopicVectorsJob.NOT_DUE));
-        verify(ticks, times(2)).add(anyLong(), any());
+        verifyNoMoreInteractions(ticks);
         assertThat(appender.list).anySatisfy(event -> {
-            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getLevel()).isEqualTo(Level.DEBUG);
             assertThat(event.getFormattedMessage()).contains("lock 'topics:vectors:tick'");
         });
+
+        // doJob takes the leader lock for the tick's lease, then runs the same check.
+        job.doJob(null);
+        verify(lockService).bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), eq(action.get()), any(Mono.class),
+                eq(LEASE), eq(Duration.ZERO));
     }
 
     @Test
-    @DisplayName("a pod that can't take the leader lock skips, logged at INFO with the lock's name")
+    @DisplayName("a pod that can't take the leader lock skips, logged at DEBUG with the lock's name")
     void leaderHeld() {
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
-                .thenAnswer(invocation -> invocation.getArgument(2));
+        when(leaderLock()).thenAnswer(invocation -> invocation.getArgument(2));
 
         job.doJob(null);
 
-        verify(tickService, never()).tick(any());
+        verify(tickService).leaderLease();
+        verifyNoMoreInteractions(tickService);
         verify(ticks).add(1, outcome(TopicVectorsJob.LOCK_HELD));
-        verify(ticks, times(1)).add(anyLong(), any());
+        verifyNoMoreInteractions(ticks);
         assertThat(appender.list).anySatisfy(event -> {
-            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getLevel()).isEqualTo(Level.DEBUG);
             assertThat(event.getFormattedMessage()).contains("lock 'topics:vectors:leader'");
         });
     }
@@ -145,7 +155,7 @@ class TopicVectorsJobTest {
         assertThat(TopicVectorsJob.OUTCOMES).containsExactly("ran", "not_due", "lock_held", "failed");
 
         var disabledTicks = mock(LongCounter.class);
-        var disabled = new TopicsConfig();
+        var disabled = TestConfigUtils.loadConfigTest().getTopics();
         disabled.setEnabled(false);
         new TopicVectorsJob(disabled, tickService, lockService, meterOf(disabledTicks));
         verifyNoInteractions(disabledTicks);
@@ -155,7 +165,7 @@ class TopicVectorsJobTest {
     @DisplayName("a tick that throws is counted once as failed and logged at ERROR; the lock fallback does not run")
     void tickFails() {
         var fallbackRan = new AtomicBoolean();
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+        when(leaderLock()).thenAnswer(invocation -> {
             Mono<Object> action = invocation.getArgument(1);
             Mono<Void> fallback = invocation.getArgument(2);
             // The lock service runs the fallback when the action fails with a Redis error.
@@ -163,12 +173,14 @@ class TopicVectorsJobTest {
         });
         when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
                 .thenReturn(Mono.just(true));
-        when(tickService.tick(any())).thenThrow(new IllegalStateException("ai-labels has no task 'trace_summary'"));
+        // The tick's start is the job's own clock reading, so only its type is known here.
+        when(tickService.tick(any(Instant.class)))
+                .thenThrow(new IllegalStateException("ai-labels has no task 'trace_summary'"));
 
         job.doJob(null);
 
         verify(ticks).add(1, outcome(TopicVectorsJob.FAILED));
-        verify(ticks, times(1)).add(anyLong(), any());
+        verifyNoMoreInteractions(ticks);
         assertThat(fallbackRan).isFalse();
         assertThat(appender.list).anySatisfy(event -> {
             assertThat(event.getLevel()).isEqualTo(Level.ERROR);
@@ -179,23 +191,32 @@ class TopicVectorsJobTest {
     @Test
     @DisplayName("a tick lock that can't be read, or a lock service error, is counted as failed")
     void lockErrorsFail() {
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
-                .thenAnswer(invocation -> invocation.getArgument(1));
+        when(leaderLock()).thenAnswer(invocation -> invocation.getArgument(1));
         when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
                 .thenReturn(Mono.error(new IllegalStateException("redis down")));
 
         job.doJob(null);
 
-        verify(tickService, never()).tick(any());
+        verify(tickService).leaderLease();
+        verifyNoMoreInteractions(tickService);
         verify(ticks).add(1, outcome(TopicVectorsJob.FAILED));
 
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
-                .thenReturn(Mono.error(new IllegalStateException("lock service broke")));
+        when(leaderLock()).thenReturn(Mono.error(new IllegalStateException("lock service broke")));
 
         job.doJob(null);
 
         verify(ticks, times(2)).add(1, outcome(TopicVectorsJob.FAILED));
-        verify(ticks, times(2)).add(anyLong(), any());
+        verifyNoMoreInteractions(ticks);
+    }
+
+    /**
+     * The leader lock call as the job makes it: the lock, the tick's lease and no wait are exact; the action and the
+     * fallback are the job's own Monos, so only their type is known here.
+     */
+    @SuppressWarnings("unchecked")
+    private Mono<Object> leaderLock() {
+        return lockService.bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), any(Mono.class), any(Mono.class),
+                eq(LEASE), eq(Duration.ZERO));
     }
 
     private static Attributes outcome(String outcome) {
