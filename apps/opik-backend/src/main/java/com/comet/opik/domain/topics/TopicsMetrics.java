@@ -25,9 +25,13 @@ public class TopicsMetrics {
 
     static final String DECISION_SKIP = "skip";
     static final String DECISION_FIRST_BUILD = "first_build";
+    static final String DECISION_NIGHTLY_UPDATE = "nightly_update";
     static final String DECISION_NOT_REACHED = "not_reached";
 
-    /** Why a project was skipped: under {@code minVectors}, deleted, its lock held, or its list already saved. */
+    /**
+     * Why a project was skipped: under {@code minVectors}, deleted, its lock held, or its last saved run already covers
+     * the night.
+     */
     static final String REASON_SMALL = "small";
     static final String REASON_DELETED = "deleted";
     static final String REASON_LOCKED = "locked";
@@ -43,8 +47,10 @@ public class TopicsMetrics {
     private static final AttributeKey<String> STATUS = stringKey("status");
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
     private static final AttributeKey<String> PHASE = stringKey("phase");
+    private static final AttributeKey<String> KIND = stringKey("kind");
     private static final AttributeKey<String> OUTCOME = stringKey("outcome");
     private static final AttributeKey<String> TABLE = stringKey("table");
+    private static final AttributeKey<String> MODE = stringKey("mode");
 
     private final TopicsWorkspaceNames names;
     private final LongCounter projects;
@@ -53,6 +59,11 @@ public class TopicsMetrics {
     private final LongCounter qwenCalls;
     private final LongCounter saveRows;
     private final DoubleHistogram budgetUsed;
+    private final DoubleHistogram liveTopics;
+    private final LongCounter retired;
+    private final LongCounter born;
+    private final DoubleHistogram churn;
+    private final DoubleHistogram churnAny;
     private final LongCounter countFailures;
     private final LongCounter takeBackFailures;
     private final DoubleHistogram otherShare;
@@ -71,24 +82,44 @@ public class TopicsMetrics {
         this.names = names;
         this.projects = meter.counterBuilder("topics.nightly.projects")
                 .setDescription("Projects the nightly job looked at, by decision: skip (by reason: small, under "
-                        + "minVectors; deleted; locked, held by a run started by hand; already_saved, a list already "
-                        + "built), first_build, not_reached (the night's budget ran out)")
+                        + "minVectors; deleted; locked, held by a run started by hand; already_saved, its last saved "
+                        + "run already covers the night), first_build, nightly_update, not_reached (the night's budget "
+                        + "ran out)")
                 .build();
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
                         + "could not start, abandoned when housekeeping failed a run its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
-                .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save")
+                .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save (first build); "
+                        + "window, state, update, churn, save (nightly update)")
                 .build();
         this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
-                .setDescription("Qwen calls, by outcome: ok, timeout, error, bad_answer")
+                .setDescription("Qwen calls, by kind (author, verify, naming) and outcome: ok, timeout, "
+                        + "error, bad_answer")
                 .build();
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
         this.budgetUsed = meter.histogramBuilder("topics.nightly.budget_used_seconds").setUnit("s")
                 .setDescription("Wall time of the night, from its start to its last run's end")
+                .build();
+        this.liveTopics = meter.histogramBuilder("topics.topics.live")
+                .setDescription("Live topics of a project after each saved run")
+                .build();
+        this.retired = meter.counterBuilder("topics.topics.retired")
+                .setDescription("Topics retired by saved nightly updates, by reason: low_share, cap, replaced")
+                .build();
+        this.born = meter.counterBuilder("topics.topics.born")
+                .setDescription("Topics born by saved runs, by mode: first_build, nightly_update")
+                .build();
+        this.churn = meter.histogramBuilder("topics.run.churn")
+                .setDescription("Of the window traces in a topic on both the last and this saved night, the share "
+                        + "whose topic changed")
+                .build();
+        this.churnAny = meter.histogramBuilder("topics.run.churn_any")
+                .setDescription("Of the window traces labelled on both the last and this saved night, the share "
+                        + "whose label changed, Other included")
                 .build();
         this.countFailures = meter.counterBuilder("topics.nightly.count_failures")
                 .setDescription("Workspaces whose window count read failed, by error_type: the night skips all "
@@ -126,8 +157,25 @@ public class TopicsMetrics {
         runDuration.record(duration.toNanos() / 1e9, names.builder(workspaceId).put(PHASE, phase).build());
     }
 
-    void qwen(@NonNull String workspaceId, @NonNull String outcome) {
-        qwenCalls.add(1, names.builder(workspaceId).put(OUTCOME, outcome).build());
+    void qwen(@NonNull String workspaceId, @NonNull String kind, @NonNull String outcome) {
+        qwenCalls.add(1, names.builder(workspaceId).put(KIND, kind).put(OUTCOME, outcome).build());
+    }
+
+    void topics(@NonNull String workspaceId, @NonNull TopicRun.Mode mode, int live, int bornTonight) {
+        liveTopics.record(live, names.of(workspaceId));
+        if (bornTonight > 0) {
+            born.add(bornTonight, names.builder(workspaceId).put(MODE, mode.getValue()).build());
+        }
+    }
+
+    void retired(@NonNull String workspaceId, @NonNull String reason) {
+        retired.add(1, names.builder(workspaceId).put(REASON, reason).build());
+    }
+
+    void churn(@NonNull String workspaceId, @NonNull TopicChurn.Churn value) {
+        var attributes = names.of(workspaceId);
+        churn.record(value.churn(), attributes);
+        churnAny.record(value.churnAny(), attributes);
     }
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {

@@ -68,6 +68,13 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(90) private int windowDays = 30;
 
+        /**
+         * A topic retired for its traffic keeps its prototypes this many days, and comes back when its traffic does;
+         * 0 turns revival off.
+         */
+        @JsonProperty
+        @Min(0) @Max(90) private int reviveDays = 30;
+
         /** A larger window keeps its newest traces. */
         @JsonProperty
         @Min(100) @Max(100_000) private int maxVectors = 30_000;

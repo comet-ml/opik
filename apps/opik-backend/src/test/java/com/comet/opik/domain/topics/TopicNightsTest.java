@@ -90,12 +90,13 @@ class TopicNightsTest {
     }
 
     @Test
-    @DisplayName("stale: expected on each of the last 3 nights, no saved run since; quiet, deleted and listed projects "
-            + "are left out")
+    @DisplayName("stale: expected on each of the last 3 nights, no saved run since; a failing nightly update counts, "
+            + "quiet, deleted and already saved projects are left out")
     void stale() {
         var stale = project(WORKSPACE_ID);
+        var failingUpdate = project(WORKSPACE_ID);
         var small = project(WORKSPACE_ID);
-        var listed = project(WORKSPACE_ID);
+        var alreadySaved = project(WORKSPACE_ID);
         var savedByHand = project(WORKSPACE_ID);
         var twoNights = project(WORKSPACE_ID);
         var deleted = project(WORKSPACE_ID);
@@ -105,8 +106,10 @@ class TopicNightsTest {
             var night = NIGHT.minusDays(i);
             ended(night, TopicNight.Outcome.FINISHED);
             row(night, WORKSPACE_ID, stale, "first_build", null, run(WORKSPACE_ID, stale, "failed", night));
+            row(night, WORKSPACE_ID, failingUpdate, "nightly_update", null,
+                    nightlyUpdate(WORKSPACE_ID, failingUpdate, "failed", night, null));
             row(night, WORKSPACE_ID, small, "skip", "small", null);
-            row(night, WORKSPACE_ID, listed, "skip", "already_saved", null);
+            row(night, WORKSPACE_ID, alreadySaved, "skip", "already_saved", null);
             row(night, WORKSPACE_ID, savedByHand, "first_build", null, null);
             row(night, WORKSPACE_ID, deleted, "first_build", null, null);
             row(night, WORKSPACE_ID, notReached, "not_reached", null, null);
@@ -121,8 +124,55 @@ class TopicNightsTest {
         refresh();
 
         assertThat(levels(TopicsNightlyGauges.STALE_PROJECTS)).containsExactlyInAnyOrder(
-                tuple(WORKSPACE_ID, "name of " + WORKSPACE_ID, 2.0),
+                tuple(WORKSPACE_ID, "name of " + WORKSPACE_ID, 3.0),
                 tuple(QUIET_WORKSPACE_ID, "name of " + QUIET_WORKSPACE_ID, 0.0));
+    }
+
+    @Test
+    @DisplayName("churn max: the highest churn of the latest ended night's saved nightly updates, per workspace; "
+            + "failed runs, first builds, null churn and older nights are left out")
+    void churnMax() {
+        ended(NIGHT.minusDays(1), TopicNight.Outcome.FINISHED);
+        var yesterday = project(WORKSPACE_ID);
+        row(NIGHT.minusDays(1), WORKSPACE_ID, yesterday, "nightly_update", null,
+                nightlyUpdate(WORKSPACE_ID, yesterday, "saved", NIGHT.minusDays(1), 0.9));
+        ended(NIGHT, TopicNight.Outcome.FINISHED);
+        for (var churn : List.of(0.02, 0.07)) {
+            var project = project(WORKSPACE_ID);
+            row(NIGHT, WORKSPACE_ID, project, "nightly_update", null,
+                    nightlyUpdate(WORKSPACE_ID, project, "saved", NIGHT, churn));
+        }
+        var failed = project(WORKSPACE_ID);
+        row(NIGHT, WORKSPACE_ID, failed, "nightly_update", null,
+                nightlyUpdate(WORKSPACE_ID, failed, "failed", NIGHT, 0.5));
+        var firstBuild = project(WORKSPACE_ID);
+        row(NIGHT, WORKSPACE_ID, firstBuild, "first_build", null,
+                runWithStats(WORKSPACE_ID, firstBuild, "first_build", "saved", NIGHT, "{\"churn\": 0.6}"));
+        var noChurn = project(QUIET_WORKSPACE_ID);
+        row(NIGHT, QUIET_WORKSPACE_ID, noChurn, "nightly_update", null,
+                nightlyUpdate(QUIET_WORKSPACE_ID, noChurn, "saved", NIGHT, null));
+        var notEligible = project(MISMATCHED_WORKSPACE_ID);
+        row(NIGHT, MISMATCHED_WORKSPACE_ID, notEligible, "nightly_update", null,
+                nightlyUpdate(MISMATCHED_WORKSPACE_ID, notEligible, "saved", NIGHT, 0.3));
+
+        refresh();
+
+        assertThat(levels(TopicsNightlyGauges.LAST_NIGHT_CHURN_MAX)).containsExactly(
+                tuple(WORKSPACE_ID, "name of " + WORKSPACE_ID, 0.07));
+    }
+
+    @Test
+    @DisplayName("churn max is not published before a night with a saved nightly update")
+    void churnMaxBeforeANightlyUpdate() {
+        ended(NIGHT, TopicNight.Outcome.FINISHED);
+        var project = project(WORKSPACE_ID);
+        row(NIGHT, WORKSPACE_ID, project, "first_build", null, run(WORKSPACE_ID, project, "saved", NIGHT));
+
+        refresh();
+
+        assertThat(meter.hasGauge(TopicsNightlyGauges.LAST_NIGHT_CHURN_MAX)).isTrue();
+        assertThat(meter.observe(TopicsNightlyGauges.LAST_NIGHT_CHURN_MAX)).isEmpty();
+        assertThat(levels(TopicsNightlyGauges.LAST_NIGHT_RUNS)).isNotEmpty();
     }
 
     @Test
@@ -236,8 +286,8 @@ class TopicNightsTest {
         for (var name : List.of(TopicsNightlyGauges.STATE_AGE, TopicsNightlyGauges.LAST_STARTED_AGE,
                 TopicsNightlyGauges.RUNNING, TopicsNightlyGauges.LAST_NIGHT_PROJECTS,
                 TopicsNightlyGauges.LAST_NIGHT_RUNS, TopicsNightlyGauges.LAST_NIGHT_FAILED,
-                TopicsNightlyGauges.STALE_PROJECTS, TopicsNightlyGauges.STARVED_PROJECTS,
-                TopicsNightlyGauges.MISMATCHED)) {
+                TopicsNightlyGauges.LAST_NIGHT_CHURN_MAX, TopicsNightlyGauges.STALE_PROJECTS,
+                TopicsNightlyGauges.STARVED_PROJECTS, TopicsNightlyGauges.MISMATCHED)) {
             assertThat(meter.hasGauge(name)).as(name).isTrue();
             assertThat(meter.observe(name)).as(name).isEmpty();
         }
@@ -256,7 +306,8 @@ class TopicNightsTest {
                 .satisfies(point -> assertThat(point.value()).isZero());
         for (var name : List.of(TopicsNightlyGauges.RUNNING,
                 TopicsNightlyGauges.LAST_NIGHT_PROJECTS, TopicsNightlyGauges.LAST_NIGHT_FAILED,
-                TopicsNightlyGauges.STALE_PROJECTS, TopicsNightlyGauges.MISMATCHED)) {
+                TopicsNightlyGauges.LAST_NIGHT_CHURN_MAX, TopicsNightlyGauges.STALE_PROJECTS,
+                TopicsNightlyGauges.MISMATCHED)) {
             assertThat(meter.observe(name)).as(name).isEmpty();
         }
     }
@@ -411,6 +462,21 @@ class TopicNightsTest {
         jdbi.useHandle(handle -> handle.execute("INSERT INTO topic_runs (run_id, workspace_id, project_id, mode, "
                 + "status, started_at) VALUES (?, ?, ?, 'first_build', ?, ?)", runId.toString(), workspaceId,
                 projectId.toString(), status, startedAt.truncatedTo(ChronoUnit.MICROS)));
+        return runId;
+    }
+
+    /** A nightly update started during {@code night}, its {@code stats.churn} null when {@code churn} is. */
+    private UUID nightlyUpdate(String workspaceId, UUID projectId, String status, LocalDate night, Double churn) {
+        return runWithStats(workspaceId, projectId, "nightly_update", status, night,
+                "{\"mode\": \"nightly_update\", \"churn\": %s}".formatted(churn));
+    }
+
+    private UUID runWithStats(String workspaceId, UUID projectId, String mode, String status, LocalDate night,
+            String stats) {
+        var runId = UUID.randomUUID();
+        jdbi.useHandle(handle -> handle.execute("INSERT INTO topic_runs (run_id, workspace_id, project_id, mode, "
+                + "status, started_at, stats) VALUES (?, ?, ?, ?, ?, ?, ?)", runId.toString(), workspaceId,
+                projectId.toString(), mode, status, night.atTime(2, 5).toInstant(ZoneOffset.UTC), stats));
         return runId;
     }
 

@@ -26,6 +26,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +56,7 @@ class TopicsRebuildServiceTest {
     private final LocalDate night = LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
 
     private TopicsTestMeter meter;
+    private TopicsWorkspaceNames names;
     private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
     private TraceTopicsDAO traceTopicsDAO;
@@ -84,7 +86,7 @@ class TopicsRebuildServiceTest {
         when(traceTopicsDAO.deleteByRunId(anyString(), any(), any())).thenReturn(Mono.just(0L));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
-        var names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
+        names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
         service = new TopicsRebuildService(new TopicsConfig(), template, windowDAO, traceTopicsDAO, client,
                 idGenerator, new TopicsMetrics(meter.meter, names));
     }
@@ -185,6 +187,114 @@ class TopicsRebuildServiceTest {
         });
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
                 .isEqualTo(TRACES);
+        var topics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(topics.capture());
+        assertThat(meter.points("topics.topics.live")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(topics.getValue().size());
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
+        assertThat(meter.sum("topics.topics.born", "mode", "first_build", "workspace_id", WORKSPACE_ID,
+                "workspace_name", WORKSPACE_NAME)).isEqualTo(topics.getValue().size());
+    }
+
+    @Test
+    @DisplayName("a saved nightly update records the Other share it saved in its stats, and its live topics and churn, "
+            + "with its workspace")
+    void nightlyUpdateIsCounted() throws Exception {
+        answer(FIXTURE.answer);
+        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        readBackFirstBuild();
+        // Most nights make no Qwen call; any that comes changes nothing.
+        answer(emptyNaming());
+        var updateRunId = UUID.randomUUID();
+
+        var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        var stats = ArgumentCaptor.forClass(String.class);
+        verify(runDAO).markSaved(eq(updateRunId), any(), stats.capture());
+        var saved = JsonUtils.getMapper().readTree(stats.getValue());
+        assertThat(saved.path("mode").asText()).isEqualTo("nightly_update");
+        // The first build's point, then the nightly update's: the value it saved, not computed again.
+        assertThat(meter.points("topics.run.other_share")).hasSize(2).last().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(saved.get("other_share").asDouble());
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
+        assertThat(meter.points("topics.topics.live")).hasSize(2).last().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(saved.get("topics").asDouble());
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+        });
+        for (var name : List.of("topics.run.churn", "topics.run.churn_any")) {
+            assertThat(meter.points(name)).as(name).singleElement().satisfies(point -> {
+                assertThat(point.value()).isEqualTo(saved.get(name.substring("topics.run.".length())).asDouble());
+                assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+                assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+            });
+        }
+        assertThat(meter.sum("topics.runs", "status", "saved", "workspace_id", WORKSPACE_ID)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
+    void lifecycleMetricsHaveTheWorkspace() {
+        var metrics = new TopicsMetrics(meter.meter, names);
+
+        metrics.topics(WORKSPACE_ID, TopicRun.Mode.NIGHTLY_UPDATE, 7, 2);
+        metrics.topics(WORKSPACE_ID, TopicRun.Mode.NIGHTLY_UPDATE, 7, 0);
+        metrics.retired(WORKSPACE_ID, "cap");
+        metrics.churn(WORKSPACE_ID, new TopicChurn.Churn(0.04, 0.1));
+
+        assertThat(meter.points("topics.topics.born")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(2);
+            assertThat(point.get("mode")).isEqualTo("nightly_update");
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
+        assertThat(meter.points("topics.topics.live")).hasSize(2)
+                .allSatisfy(point -> assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME));
+        assertThat(meter.points("topics.topics.retired")).singleElement().satisfies(point -> {
+            assertThat(point.get("reason")).isEqualTo("cap");
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
+        assertThat(meter.points("topics.run.churn")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(0.04);
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+        });
+        assertThat(meter.points("topics.run.churn_any")).singleElement()
+                .satisfies(point -> assertThat(point.value()).isEqualTo(0.1));
+    }
+
+    /** The list, prototypes, state and labels the first build saved, as the nightly update reads them back. */
+    @SuppressWarnings("unchecked")
+    private void readBackFirstBuild() {
+        ArgumentCaptor<List<Topic>> topics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(topics.capture());
+        ArgumentCaptor<List<TopicPrototype>> prototypes = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertPrototypes(prototypes.capture());
+        var state = ArgumentCaptor.forClass(TopicProjectState.class);
+        verify(topicDAO).insertState(state.capture());
+        ArgumentCaptor<List<TraceTopic>> labels = ArgumentCaptor.forClass(List.class);
+        verify(traceTopicsDAO).insert(labels.capture());
+        when(topicDAO.findStates(any())).thenReturn(List.of(state.getValue()));
+        when(topicDAO.findLive(projectId)).thenReturn(topics.getValue());
+        when(topicDAO.findPrototypes(projectId)).thenReturn(prototypes.getValue());
+        when(topicDAO.updateState(any(), eq(runId))).thenReturn(1);
+        var previous = labels.getValue().stream()
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        when(traceTopicsDAO.findLabels(eq(WORKSPACE_ID), eq(projectId), any(), any(), eq(runId)))
+                .thenReturn(Mono.just(previous));
+    }
+
+    /** A naming answer that changes nothing. */
+    private static JsonNode emptyNaming() {
+        var naming = InferenceJson.MAPPER.createObjectNode();
+        naming.putArray("assign");
+        naming.putArray("new");
+        naming.putArray("other");
+        return naming;
     }
 
     @Test

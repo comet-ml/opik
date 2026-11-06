@@ -47,7 +47,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * counts in {@code state_refresh_failures}.
  *
  * <p>A gauge is one name, a description, and a list of series built at refresh: one more is a query and a
- * {@link #level} call.
+ * {@link #level} (a count) or {@link #doubleLevel} (a share) call.
  */
 @Slf4j
 @Singleton
@@ -67,6 +67,7 @@ public class TopicsNightlyGauges implements Managed {
     static final String LAST_NIGHT_PROJECTS = "topics.nightly.last_night.projects";
     static final String LAST_NIGHT_RUNS = "topics.nightly.last_night.runs";
     static final String LAST_NIGHT_FAILED = "topics.nightly.last_night.failed";
+    static final String LAST_NIGHT_CHURN_MAX = "topics.nightly.last_night.churn_max";
     static final String STALE_PROJECTS = "topics.nightly.stale_projects";
     static final String STARVED_PROJECTS = "topics.nightly.starved_projects";
     static final String MISMATCHED = "topics.workspaces.mismatched";
@@ -75,8 +76,11 @@ public class TopicsNightlyGauges implements Managed {
     private static final AttributeKey<String> REASON = stringKey("reason");
     private static final AttributeKey<String> STATUS = stringKey("status");
 
-    /** One series of a level gauge: its attributes, with the workspace name resolved at refresh. */
-    record Series(@NonNull Attributes attributes, long value) {
+    /**
+     * One series of a level gauge: its attributes, with the workspace name resolved at refresh. The value is a count,
+     * or a share for a double level.
+     */
+    record Series(@NonNull Attributes attributes, @NonNull Number value) {
     }
 
     /**
@@ -90,8 +94,9 @@ public class TopicsNightlyGauges implements Managed {
     /** The rows one refresh reads, in one transaction; workspace names are resolved after it. */
     private record Read(Instant lastStartedAt, Instant runningSince, TopicNight.Outcome lastNightOutcome,
             List<TopicNightDAO.ProjectCount> projects,
-            List<TopicNightDAO.RunCount> runs, List<TopicNightDAO.WorkspaceCount> stale,
-            List<TopicNightDAO.WorkspaceCount> starved, List<String> eligible, List<String> mismatched) {
+            List<TopicNightDAO.RunCount> runs, List<TopicNightDAO.WorkspaceChurn> churn,
+            List<TopicNightDAO.WorkspaceCount> stale, List<TopicNightDAO.WorkspaceCount> starved, List<String> eligible,
+            List<String> mismatched) {
     }
 
     private final TopicsConfig config;
@@ -152,6 +157,8 @@ public class TopicsNightlyGauges implements Managed {
                         .ifPresent(outcome -> measurement.record(outcome == TopicNight.Outcome.FAILED ? 1 : 0)));
         level(meter, LAST_NIGHT_RUNS, "Runs the latest ended night started, by workspace and status (saved, failed, "
                 + "running when marking it failed threw); a run that could not start is failed");
+        doubleLevel(meter, LAST_NIGHT_CHURN_MAX, "The highest churn (stats.churn) of the latest ended night's saved "
+                + "nightly updates, per workspace; no series for a workspace without one");
         level(meter, STALE_PROJECTS, "Projects expected on each of the last 3 ended nights (any decision but a skip "
                 + "as small, deleted or already_saved) without a saved run since, per eligible workspace; 0 with none");
         level(meter, STARVED_PROJECTS, "Projects not_reached on each of the last 2 ended nights, per eligible "
@@ -222,6 +229,7 @@ public class TopicsNightlyGauges implements Managed {
         return new Read(lastStartedAt, nights.runningSince(), ended.isEmpty() ? null : ended.getFirst().outcome(),
                 latest == null ? List.of() : nights.countProjects(latest),
                 latest == null ? List.of() : nights.countRuns(latest),
+                latest == null ? List.of() : nights.maxChurn(latest),
                 ended.size() < STALE_NIGHTS
                         ? List.of()
                         : nights.countStale(dates(ended, STALE_NIGHTS), STALE_NIGHTS,
@@ -249,6 +257,9 @@ public class TopicsNightlyGauges implements Managed {
         for (var row : read.runs()) {
             add(levels, LAST_NIGHT_RUNS, workspace(row.workspaceId()).put(STATUS, row.runStatus()), row.runs());
         }
+        for (var row : read.churn()) {
+            add(levels, LAST_NIGHT_CHURN_MAX, workspace(row.workspaceId()), row.churn());
+        }
         perWorkspace(levels, STALE_PROJECTS, read.eligible(), read.stale());
         perWorkspace(levels, STARVED_PROJECTS, read.eligible(), read.starved());
         read.mismatched().forEach(workspaceId -> add(levels, MISMATCHED, workspace(workspaceId), 1));
@@ -268,15 +279,26 @@ public class TopicsNightlyGauges implements Managed {
         return TopicsWorkspaceNames.builder(workspaceId, names.name(workspaceId));
     }
 
-    private static void add(Map<String, List<Series>> levels, String name, AttributesBuilder attributes, long value) {
+    private static void add(Map<String, List<Series>> levels, String name, AttributesBuilder attributes,
+            Number value) {
         levels.computeIfAbsent(name, key -> new ArrayList<>()).add(new Series(attributes.build(), value));
     }
 
     private void level(Meter meter, String name, String description) {
         meter.gaugeBuilder(name).ofLongs().setDescription(description)
-                .buildWithCallback(measurement -> current().ifPresent(state -> state.levels()
-                        .getOrDefault(name, List.of())
-                        .forEach(series -> measurement.record(series.value(), series.attributes()))));
+                .buildWithCallback(measurement -> series(name)
+                        .forEach(series -> measurement.record(series.value().longValue(), series.attributes())));
+    }
+
+    private void doubleLevel(Meter meter, String name, String description) {
+        meter.gaugeBuilder(name).setDescription(description)
+                .buildWithCallback(measurement -> series(name)
+                        .forEach(series -> measurement.record(series.value().doubleValue(), series.attributes())));
+    }
+
+    /** The gauge's series a scrape publishes now; none when off or before the first night. */
+    private List<Series> series(String name) {
+        return current().map(state -> state.levels().getOrDefault(name, List.<Series>of())).orElse(List.of());
     }
 
     private double secondsSince(Instant from) {

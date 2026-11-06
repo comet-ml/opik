@@ -1,0 +1,3359 @@
+{
+ "dimensions": 384,
+ "traces": [
+  {
+   "id": "01a092f3-d62c-74b6-b7ef-76936301ea69",
+   "created_at": "2026-09-12T00:10:48.743297Z",
+   "intent": "Search for spans in the Hermes project from the last 24 hours",
+   "planted": false
+  },
+  {
+   "id": "01a09345-ac68-7597-a578-bfbf7ef41e5e",
+   "created_at": "2026-09-12T01:40:12.008218Z",
+   "intent": "Generate a daily briefing report for project autoweave",
+   "planted": false
+  },
+  {
+   "id": "01a09345-c2cb-7397-af3e-b587da4defc2",
+   "created_at": "2026-09-12T01:40:17.739974Z",
+   "intent": "Retrieve project details for Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a09347-0980-7288-a6ec-9817597cef8c",
+   "created_at": "2026-09-12T01:41:41.376565Z",
+   "intent": "Generate a bar chart of latency percentiles",
+   "planted": false
+  },
+  {
+   "id": "01a09347-20e2-7a25-97ae-51c339be62e5",
+   "created_at": "2026-09-12T01:41:47.360690Z",
+   "intent": "List automation rule evaluators",
+   "planted": false
+  },
+  {
+   "id": "01a09405-f36f-74d3-bde7-b5b346426d19",
+   "created_at": "2026-09-12T05:10:13.103553Z",
+   "intent": "Generate a daily briefing report for project harness-plugin",
+   "planted": false
+  },
+  {
+   "id": "01a09405-f677-77c5-b82e-334eb44ab0a3",
+   "created_at": "2026-09-12T05:10:13.879561Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring",
+   "planted": false
+  },
+  {
+   "id": "01a09406-0c09-714e-9d58-fa7be00b2565",
+   "created_at": "2026-09-12T05:10:19.401366Z",
+   "intent": "Generate a daily briefing report for project Learn-Opik.",
+   "planted": false
+  },
+  {
+   "id": "01a09406-43d0-7acc-8ea1-0fef27d7ca5c",
+   "created_at": "2026-09-12T05:10:33.680580Z",
+   "intent": "Retrieve project statistics for internal-ollie-assist-monitoring",
+   "planted": false
+  },
+  {
+   "id": "01a09408-1a55-76dc-b5e2-f2c3b30abe50",
+   "created_at": "2026-09-12T05:12:34.133087Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring.",
+   "planted": false
+  },
+  {
+   "id": "01a0943c-f122-786f-9829-200fb7230c25",
+   "created_at": "2026-09-12T06:10:16.994204Z",
+   "intent": "Retrieve project details for northwind-governance-demo",
+   "planted": false
+  },
+  {
+   "id": "01a0943c-f251-79ba-99d9-585c3928c286",
+   "created_at": "2026-09-12T06:10:17.297829Z",
+   "intent": "List CRM Agent projects",
+   "planted": false
+  },
+  {
+   "id": "01a0943d-2e53-786d-b878-1d322564dcac",
+   "created_at": "2026-09-12T06:10:32.659890Z",
+   "intent": "Generate a daily briefing report for the northwind-governance-demo project.",
+   "planted": false
+  },
+  {
+   "id": "01a0943d-534d-7962-84cc-84dcd0fd0bbd",
+   "created_at": "2026-09-12T06:10:42.122954Z",
+   "intent": "Gather span data for the daily briefing of project CRM Agent.",
+   "planted": false
+  },
+  {
+   "id": "01a0943e-6b45-73b8-80c3-c18345dbd2bb",
+   "created_at": "2026-09-12T06:11:53.797490Z",
+   "intent": "Generate a daily briefing report for project CRM Agent demo",
+   "planted": false
+  },
+  {
+   "id": "01a0954f-7933-7826-b4fb-12ad949e61cc",
+   "created_at": "2026-09-12T11:10:08.691508Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a09552-030f-778c-91ac-c85cf97e545e",
+   "created_at": "2026-09-12T11:12:55.055352Z",
+   "intent": "Test newly added AI provider",
+   "planted": false
+  },
+  {
+   "id": "01a095e5-20f8-7d4b-a7d0-ecca2212316e",
+   "created_at": "2026-09-12T13:53:36.505011Z",
+   "intent": "Study C# for an exam",
+   "planted": false
+  },
+  {
+   "id": "01a095f4-c2f5-7d1e-907c-503a298a9320",
+   "created_at": "2026-09-12T14:10:41.013535Z",
+   "intent": "Analyze the project release-pulse-ai for a daily briefing report.",
+   "planted": false
+  },
+  {
+   "id": "01a09837-43a2-7ece-b44f-bdf1558b800c",
+   "created_at": "2026-09-13T00:42:33.762707Z",
+   "intent": "Compare costs between two experiments in a bar chart.",
+   "planted": false
+  },
+  {
+   "id": "01a0986d-2cd3-72ba-ae8f-1c435c836046",
+   "created_at": "2026-09-13T01:41:26.867495Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a098b2-77aa-786c-9f70-bb05066364f0",
+   "created_at": "2026-09-13T02:57:08.010301Z",
+   "intent": "Connect Ollie to the local environment",
+   "planted": false
+  },
+  {
+   "id": "01a098f7-be71-708f-a8f2-ea380e46ddd4",
+   "created_at": "2026-09-13T04:12:48.111185Z",
+   "intent": "Investigate error patterns and recent activity in the job-scout project traces.",
+   "planted": false
+  },
+  {
+   "id": "01a098f8-f4fe-7b8b-894f-d7f9cc402bde",
+   "created_at": "2026-09-13T04:14:07.612958Z",
+   "intent": "List prompts matching job",
+   "planted": false
+  },
+  {
+   "id": "01a098f8-f65d-706d-81c3-e22ca5364c38",
+   "created_at": "2026-09-13T04:14:07.965119Z",
+   "intent": "Generate a daily briefing report for project job-scout",
+   "planted": false
+  },
+  {
+   "id": "01a09963-3378-7c82-b64c-d979d6680826",
+   "created_at": "2026-09-13T06:10:10.424553Z",
+   "intent": "Generate a daily briefing report for project CRM Agent",
+   "planted": false
+  },
+  {
+   "id": "01a09963-951f-7ffd-b9c7-29a941c64b14",
+   "created_at": "2026-09-13T06:10:35.419354Z",
+   "intent": "Collect spans from the last 24 hours for the CRM Agent project and produce a structured summary.",
+   "planted": false
+  },
+  {
+   "id": "01a09963-f514-7a06-9203-b4f77cb4f849",
+   "created_at": "2026-09-13T06:10:59.988244Z",
+   "intent": "Generate a daily briefing report for the project northwind-governance-demo.",
+   "planted": false
+  },
+  {
+   "id": "01a09a40-5d7c-70b8-b56c-362abfd9b8c5",
+   "created_at": "2026-09-13T10:11:44.634767Z",
+   "intent": "List datasets",
+   "planted": false
+  },
+  {
+   "id": "01a09a40-6a08-701b-82ad-e484a10e2e45",
+   "created_at": "2026-09-13T10:11:47.848182Z",
+   "intent": "Generate a daily briefing report for project qap.",
+   "planted": false
+  },
+  {
+   "id": "01a09a75-d45d-7e34-b20c-78a657a93b29",
+   "created_at": "2026-09-13T11:10:08.478017Z",
+   "intent": "Generate a daily briefing report for project Elliot",
+   "planted": false
+  },
+  {
+   "id": "01a09a75-e1e7-740a-86f3-2b7980d368b7",
+   "created_at": "2026-09-13T11:10:11.943986Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a09aac-c47f-7014-b0a7-1b0c18faf421",
+   "created_at": "2026-09-13T12:10:08.895777Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a09aac-d611-74b7-b675-e7b5205fe92b",
+   "created_at": "2026-09-13T12:10:13.393503Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a09aae-6c0b-736a-bca1-da147189f2d5",
+   "created_at": "2026-09-13T12:11:57.323771Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a09b08-6927-7cc6-b664-0fd94b4917eb",
+   "created_at": "2026-09-13T13:50:14.823302Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a09b86-6fb5-7dcf-b609-565f008b51b1",
+   "created_at": "2026-09-13T16:07:54.037385Z",
+   "intent": "Debug errors in the Opik Demo Agent Observability project",
+   "planted": false
+  },
+  {
+   "id": "01a09bab-9b81-754b-beb5-5d8396094b47",
+   "created_at": "2026-09-13T16:48:30.081334Z",
+   "intent": "Generate a daily briefing report for the Opik Demo Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a09d5b-6f61-7ac6-bcd2-93fb9eb34685",
+   "created_at": "2026-09-14T00:40:10.337905Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a09d94-e477-7a6c-91c8-bd848c43fe47",
+   "created_at": "2026-09-14T01:42:55.863065Z",
+   "intent": "Read the Customer support regression suite dataset",
+   "planted": false
+  },
+  {
+   "id": "01a09d95-30f3-77a5-bfa5-ffcfa61079f0",
+   "created_at": "2026-09-14T01:43:15.443039Z",
+   "intent": "Generate a daily briefing report for project charusat.",
+   "planted": false
+  },
+  {
+   "id": "01a09ddc-e442-7294-8f72-1e8336613bcc",
+   "created_at": "2026-09-14T03:01:34.402245Z",
+   "intent": "Analyze a model rate limit error trace",
+   "planted": false
+  },
+  {
+   "id": "01a09de1-ab23-73c8-b854-851f8680fe12",
+   "created_at": "2026-09-14T03:06:47.459604Z",
+   "intent": "Connect Ollie to the local environment",
+   "planted": false
+  },
+  {
+   "id": "01a09e52-b2fc-72af-970f-1e220101e8a1",
+   "created_at": "2026-09-14T05:10:15.036724Z",
+   "intent": "Generate a daily briefing report for project Mark jack.",
+   "planted": false
+  },
+  {
+   "id": "01a09e52-bc56-7426-a15a-1d7b107e1342",
+   "created_at": "2026-09-14T05:10:17.431000Z",
+   "intent": "Read project details for test",
+   "planted": false
+  },
+  {
+   "id": "01a09e55-254d-7b8f-b02d-a52a9418d3e5",
+   "created_at": "2026-09-14T05:12:55.371793Z",
+   "intent": "Retrieve project statistics including error count, trace count, and duration metrics.",
+   "planted": false
+  },
+  {
+   "id": "01a09e89-9a86-7f3f-9c37-e245579eaa2a",
+   "created_at": "2026-09-14T06:10:13.254248Z",
+   "intent": "List CRM Agent projects",
+   "planted": false
+  },
+  {
+   "id": "01a09f9c-8f34-79b0-b9c5-d699042c136c",
+   "created_at": "2026-09-14T11:10:32.753963Z",
+   "intent": "Gather thread data from the project CRM Agent Observability for the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a09fd3-1c4d-7812-8536-3993c6d51c3f",
+   "created_at": "2026-09-14T12:10:07.821967Z",
+   "intent": "Generate a daily briefing report for project resume-bot",
+   "planted": false
+  },
+  {
+   "id": "01a0a04c-782f-7f9b-908f-9d8a3229326f",
+   "created_at": "2026-09-14T14:22:41.199691Z",
+   "intent": "Analyze project traces for errors, latency, and patterns",
+   "planted": false
+  },
+  {
+   "id": "01a0a181-dadb-7fb5-b117-09f53cf75b57",
+   "created_at": "2026-09-14T20:00:37.083189Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0a1ad-7440-712a-8eb5-a06766cd505d",
+   "created_at": "2026-09-14T20:48:14.400312Z",
+   "intent": "Count tool spans with specific text in the last 60 days and break down by span name.",
+   "planted": false
+  },
+  {
+   "id": "01a0a29d-bf7b-7e77-b704-dc7d95a624ea",
+   "created_at": "2026-09-15T01:10:42.299729Z",
+   "intent": "Generate a daily briefing report for project Medicore.",
+   "planted": false
+  },
+  {
+   "id": "01a0a2ed-4597-7140-8368-385b8dfbceee",
+   "created_at": "2026-09-15T02:37:33.976026Z",
+   "intent": "Debug rate limit error on LLM provider request",
+   "planted": false
+  },
+  {
+   "id": "01a0a36b-3b00-78c4-a4ee-a885b3ae4abf",
+   "created_at": "2026-09-15T04:55:08.800899Z",
+   "intent": "View explicit content",
+   "planted": false
+  },
+  {
+   "id": "01a0a379-60bc-7437-8529-4e2b61a08fee",
+   "created_at": "2026-09-15T05:10:35.959788Z",
+   "intent": "Analyze LLM spans and error spans for the project internal-ollie-assist-monitoring from the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0a379-7156-7d8a-b1a8-776f5d3f8376",
+   "created_at": "2026-09-15T05:10:40.214855Z",
+   "intent": "Generate a daily briefing report for project Mark jack.",
+   "planted": false
+  },
+  {
+   "id": "01a0a37b-4238-76d4-8b89-da37ba13e044",
+   "created_at": "2026-09-15T05:12:39.224158Z",
+   "intent": "List automation rule evaluators",
+   "planted": false
+  },
+  {
+   "id": "01a0a37b-4e18-7ff8-bd84-b9272786b234",
+   "created_at": "2026-09-15T05:12:42.264928Z",
+   "intent": "Generate a daily briefing report for the project internal-ollie-assist-monitoring.",
+   "planted": false
+  },
+  {
+   "id": "01a0a381-b9d5-7f3f-bba6-da36562e0ce5",
+   "created_at": "2026-09-15T05:19:43.061833Z",
+   "intent": "Analyze project traces for errors, latency, and patterns",
+   "planted": false
+  },
+  {
+   "id": "01a0a384-d718-7a4a-81ac-d9f82dad220d",
+   "created_at": "2026-09-15T05:23:07.160443Z",
+   "intent": "Explain the total trace duration and lack of span breakdown to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a0a3af-f238-754e-bb17-4b257aebf609",
+   "created_at": "2026-09-15T06:10:12.152686Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0a483-3692-712f-a58f-c9c33ead5bba",
+   "created_at": "2026-09-15T10:00:57.746563Z",
+   "intent": "Analyze traces in the project to identify errors, latency issues, and key patterns.",
+   "planted": false
+  },
+  {
+   "id": "01a0a48d-fbb4-7eee-89ea-056901f7ab9c",
+   "created_at": "2026-09-15T10:12:43.572991Z",
+   "intent": "Generate a bar chart showing trace latency percentiles",
+   "planted": false
+  },
+  {
+   "id": "01a0a49a-9134-74f9-ad4b-2591c0ca75af",
+   "created_at": "2026-09-15T10:26:28.276043Z",
+   "intent": "Analyze failed agent traces and suggest code fixes",
+   "planted": false
+  },
+  {
+   "id": "01a0a4a3-51b6-7ce6-84a2-7633bc32e072",
+   "created_at": "2026-09-15T10:36:01.846078Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0a4f9-798d-7b8b-b218-efacb1d84f91",
+   "created_at": "2026-09-15T12:10:08.141984Z",
+   "intent": "Generate a daily briefing report for project resume-bot",
+   "planted": false
+  },
+  {
+   "id": "01a0a4f9-b65f-7fbf-9723-c326f0d9f804",
+   "created_at": "2026-09-15T12:10:23.711229Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a4fa-7f2f-7737-9691-45152467e066",
+   "created_at": "2026-09-15T12:11:15.119762Z",
+   "intent": "Generate a daily briefing report for the resume-bot project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a555-0313-7e6c-a4cf-cf038d1bf5da",
+   "created_at": "2026-09-15T13:50:07.123092Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day",
+   "planted": false
+  },
+  {
+   "id": "01a0a567-a256-7438-a6c2-75cf069c39da",
+   "created_at": "2026-09-15T14:10:27.542291Z",
+   "intent": "Gather data for a daily briefing report for the project release-pulse-ai.",
+   "planted": false
+  },
+  {
+   "id": "01a0a59d-eef3-7a78-b5e2-6c936463a4b8",
+   "created_at": "2026-09-15T15:09:46.099865Z",
+   "intent": "Explain the trace's total estimated cost breakdown to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a0a638-fb54-747e-bdce-68f47ecb1bf2",
+   "created_at": "2026-09-15T17:59:07.348255Z",
+   "intent": "Debug the 60-day search horizon issue in the tripick-agent project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a652-b063-7b82-99d4-15633beaf5bd",
+   "created_at": "2026-09-15T18:27:12.099681Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0a6c3-f5de-7127-9d47-a59e6c7ca5c2",
+   "created_at": "2026-09-15T20:30:55.454926Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0a71a-c47c-7d1b-9fa4-800450fb701e",
+   "created_at": "2026-09-15T22:05:44.444984Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0a78c-ba19-77ff-b74b-f19327f94b11",
+   "created_at": "2026-09-16T00:10:12.889468Z",
+   "intent": "Generate a daily briefing report for project Hermes.",
+   "planted": false
+  },
+  {
+   "id": "01a0a7c3-a12b-7882-b842-042f6a919737",
+   "created_at": "2026-09-16T01:10:10.987360Z",
+   "intent": "Read project details for Medicore",
+   "planted": false
+  },
+  {
+   "id": "01a0a7c3-a427-7cea-b481-6d71a8be3dab",
+   "created_at": "2026-09-16T01:10:11.751477Z",
+   "intent": "Generate a daily briefing report for project Medicore.",
+   "planted": false
+  },
+  {
+   "id": "01a0a7df-17a0-73dc-9829-6c4c15e09285",
+   "created_at": "2026-09-16T01:40:10.784502Z",
+   "intent": "Read project details for charusat",
+   "planted": false
+  },
+  {
+   "id": "01a0a80f-fb8f-7dea-ac9c-9827ac473727",
+   "created_at": "2026-09-16T02:33:34.863722Z",
+   "intent": "Add Opik tracing to the agent's codebase.",
+   "planted": false
+  },
+  {
+   "id": "01a0a813-896c-7c33-84c1-1260992acd99",
+   "created_at": "2026-09-16T02:37:27.788291Z",
+   "intent": "Explain what a trace is in Opik",
+   "planted": false
+  },
+  {
+   "id": "01a0a868-6f4c-7b3c-b0c2-50e53a64e603",
+   "created_at": "2026-09-16T04:10:11.660912Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a869-4655-7696-bfb1-ba2b3462085e",
+   "created_at": "2026-09-16T04:11:06.709247Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a8d6-3d15-7c7f-9745-eea2e7de235a",
+   "created_at": "2026-09-16T06:10:07.765227Z",
+   "intent": "Generate a daily briefing report for project Rastro",
+   "planted": false
+  },
+  {
+   "id": "01a0a8d6-4551-7262-a057-118cb5f98be7",
+   "created_at": "2026-09-16T06:10:09.873769Z",
+   "intent": "Generate a daily briefing report for the northwind-voice-demo project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a8d6-971b-79bb-9bec-0d3b44c2153c",
+   "created_at": "2026-09-16T06:10:30.811820Z",
+   "intent": "Generate a daily briefing report on the Opik Demo Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a0a8d6-b840-70ab-afba-20740f3c03b4",
+   "created_at": "2026-09-16T06:10:39.294568Z",
+   "intent": "Analyze recent activity and error patterns in the CRM Agent project",
+   "planted": false
+  },
+  {
+   "id": "01a0a8d9-5841-7f33-96f2-a0721b227637",
+   "created_at": "2026-09-16T06:13:31.329046Z",
+   "intent": "Generate a daily briefing report for project CRM Agent demo",
+   "planted": false
+  },
+  {
+   "id": "01a0a8f9-8c0d-7f9b-8bd9-439932416487",
+   "created_at": "2026-09-16T06:48:41.741984Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0aa20-05d9-7146-8c9a-6fae4d85abfd",
+   "created_at": "2026-09-16T12:10:20.505931Z",
+   "intent": "Generate a daily briefing report for the CRM Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a0aa20-1dc9-7a36-8a90-e051175a0568",
+   "created_at": "2026-09-16T12:10:26.633495Z",
+   "intent": "Generate a daily briefing report for the CRM Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a0aa22-3179-7785-bc12-910febe0daf1",
+   "created_at": "2026-09-16T12:12:42.745755Z",
+   "intent": "Read the configuration and execution logs of the retrieval precision automation rule.",
+   "planted": false
+  },
+  {
+   "id": "01a0aa22-3185-7306-b675-e15f40676c75",
+   "created_at": "2026-09-16T12:12:42.749390Z",
+   "intent": "Read experiment details for the CRM Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a0abd7-b4b1-7e74-838a-8bc984b74e7f",
+   "created_at": "2026-09-16T20:10:35.569167Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0acea-b1f4-7afb-9d3f-7881ffe1ee59",
+   "created_at": "2026-09-17T01:10:57.268639Z",
+   "intent": "Generate a daily briefing report for project Medicore.",
+   "planted": false
+  },
+  {
+   "id": "01a0ad05-996c-7830-8c77-b2ee0dc1ae0a",
+   "created_at": "2026-09-17T01:40:20.460662Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0adfd-afd4-7f98-ad23-f0fae99c1cca",
+   "created_at": "2026-09-17T06:11:19.124753Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0adfd-bf10-7881-a743-da1fc8775b55",
+   "created_at": "2026-09-17T06:11:23.024732Z",
+   "intent": "Get project statistics including trace count, error count, and cost.",
+   "planted": false
+  },
+  {
+   "id": "01a0ae48-03c5-7486-8f50-aa9b592195ee",
+   "created_at": "2026-09-17T07:32:30.277086Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0af73-9c29-7146-9c9e-3fe5703100f7",
+   "created_at": "2026-09-17T12:59:44.553380Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0afd2-4cfd-76a5-8c9d-18d320238375",
+   "created_at": "2026-09-17T14:43:10.205665Z",
+   "intent": "List the top 5 best football players in the world",
+   "planted": false
+  },
+  {
+   "id": "01a0afdd-9b78-7bd7-9cd4-efc83bfaed2d",
+   "created_at": "2026-09-17T14:55:31.192183Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0aff1-81e4-7fbc-abcd-20f12e58cc70",
+   "created_at": "2026-09-17T15:17:15.364686Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0b106-4d31-7f9f-90da-6dfc187ae8f0",
+   "created_at": "2026-09-17T20:19:35.345886Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0b123-8c85-77e4-a225-c245575f629f",
+   "created_at": "2026-09-17T20:51:32.101555Z",
+   "intent": "Create a PDF book report card with student details and favorite section",
+   "planted": false
+  },
+  {
+   "id": "01a0b1a5-83fd-7034-83c6-22c208d7a09c",
+   "created_at": "2026-09-17T23:13:29.597810Z",
+   "intent": "Analyze project traces for errors, latency issues, and patterns",
+   "planted": false
+  },
+  {
+   "id": "01a0b2ec-2cd9-7af5-bd2a-fbd0ddf7f9b0",
+   "created_at": "2026-09-18T05:10:17.561318Z",
+   "intent": "Generate a daily briefing report for project Stue sofa gruppe",
+   "planted": false
+  },
+  {
+   "id": "01a0b2ec-47f1-7a49-b027-338a59525bd8",
+   "created_at": "2026-09-18T05:10:24.497992Z",
+   "intent": "Search for traces in the project Stue sofa gruppe from the last 24 hours and without time filter.",
+   "planted": false
+  },
+  {
+   "id": "01a0b323-4bf9-7623-bba2-6f6eccd0d9c3",
+   "created_at": "2026-09-18T06:10:30.009522Z",
+   "intent": "Generate a structured summary of project traces, errors, and spans for the daily briefing report.",
+   "planted": false
+  },
+  {
+   "id": "01a0b37f-1a3b-7769-9345-87fdab34eff5",
+   "created_at": "2026-09-18T07:50:46.587407Z",
+   "intent": "Check if experiment results can be added to annotation queues",
+   "planted": false
+  },
+  {
+   "id": "01a0b3ac-b79d-7d99-9ceb-f06dfee3b61e",
+   "created_at": "2026-09-18T08:40:35.997718Z",
+   "intent": "Generate a daily briefing report on the Customer-Support-AI project's trace statistics and error patterns.",
+   "planted": false
+  },
+  {
+   "id": "01a0b3ff-6500-7656-82b9-7fed47b235d8",
+   "created_at": "2026-09-18T10:10:54.333785Z",
+   "intent": "Gather all threads from the project for the last 24 hours using the Opik SDK.",
+   "planted": false
+  },
+  {
+   "id": "01a0b435-ac9a-75a4-a9f3-50d3072c706b",
+   "created_at": "2026-09-18T11:10:11.610702Z",
+   "intent": "Retrieve project details for CRM Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0b46c-d07d-7680-b1ca-30e2a463cb51",
+   "created_at": "2026-09-18T12:10:25.277658Z",
+   "intent": "Search for traces in the Default Project from the last 24 hours and report metrics.",
+   "planted": false
+  },
+  {
+   "id": "01a0b519-69d2-7e03-8a98-4a387439d16d",
+   "created_at": "2026-09-18T15:18:56.722444Z",
+   "intent": "Explain capabilities for two projects in theoretical physics and software engineering.",
+   "planted": false
+  },
+  {
+   "id": "01a0b607-fd73-7f1f-9883-8c73218445ee",
+   "created_at": "2026-09-18T19:39:32.083941Z",
+   "intent": "Set up the Opik MCP server for Claude Code",
+   "planted": false
+  },
+  {
+   "id": "01a0b692-1e32-764c-8f02-5ca17db4b48f",
+   "created_at": "2026-09-18T22:10:24.434511Z",
+   "intent": "Generate a daily briefing report for project Customer-Support-AI",
+   "planted": false
+  },
+  {
+   "id": "01a0b692-6052-7745-bfd5-7097d37a6302",
+   "created_at": "2026-09-18T22:10:41.362479Z",
+   "intent": "Generate a daily briefing report on the Customer-Support-AI project traces.",
+   "planted": false
+  },
+  {
+   "id": "01a0b736-a756-760e-b9a0-773ca7c13132",
+   "created_at": "2026-09-19T01:10:07.446451Z",
+   "intent": "Generate a daily briefing report for project Medicore",
+   "planted": false
+  },
+  {
+   "id": "01a0b752-28a9-7ba4-855f-8288ef619744",
+   "created_at": "2026-09-19T01:40:10.025219Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0b752-38cb-7551-b97a-18228bfa15f5",
+   "created_at": "2026-09-19T01:40:14.155461Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a0b753-cf91-7fbf-9e93-34b337dea431",
+   "created_at": "2026-09-19T01:41:58.289702Z",
+   "intent": "Generate a bar chart of trace duration percentiles",
+   "planted": false
+  },
+  {
+   "id": "01a0b7db-734c-7897-adf7-5a6c2daed921",
+   "created_at": "2026-09-19T04:10:07.564498Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0b920-eb6e-79e8-b41f-5f0e4d0f1046",
+   "created_at": "2026-09-19T10:05:37.518881Z",
+   "intent": "List capabilities",
+   "planted": false
+  },
+  {
+   "id": "01a0b925-08ff-7af2-b06e-8b30b64c5db4",
+   "created_at": "2026-09-19T10:10:07.231267Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0bae8-b177-7833-8a67-0e3e73492fb2",
+   "created_at": "2026-09-19T18:23:27.096003Z",
+   "intent": "Distinguish job sources between jsearch and remotive in the trace",
+   "planted": false
+  },
+  {
+   "id": "01a0bc5d-829d-7285-978d-ef497fa33e98",
+   "created_at": "2026-09-20T01:10:40.029377Z",
+   "intent": "Search for traces in the Medicore project from the last 24 hours and analyze their metrics.",
+   "planted": false
+  },
+  {
+   "id": "01a0bc78-7b22-75bb-896c-181d410a95ff",
+   "created_at": "2026-09-20T01:40:07.587026Z",
+   "intent": "Generate a daily briefing report for project Hey",
+   "planted": false
+  },
+  {
+   "id": "01a0bc78-89b1-7bbd-b4fc-27e286952085",
+   "created_at": "2026-09-20T01:40:11.313699Z",
+   "intent": "Generate a daily briefing report for project Hey.",
+   "planted": false
+  },
+  {
+   "id": "01a0bc78-9086-72ab-b7ba-11df80561fcd",
+   "created_at": "2026-09-20T01:40:13.062704Z",
+   "intent": "Read project details for charusat",
+   "planted": false
+  },
+  {
+   "id": "01a0bcac-d427-7ca6-a4d3-85b756adda17",
+   "created_at": "2026-09-20T02:37:18.247268Z",
+   "intent": "Explain the total estimated cost of an AI agent trace.",
+   "planted": false
+  },
+  {
+   "id": "01a0bcad-172a-7f2e-b2be-a8d1c81b8a9c",
+   "created_at": "2026-09-20T02:37:35.402942Z",
+   "intent": "Explain the trace's total duration to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a0bd38-bd30-7328-a861-aad80164c10b",
+   "created_at": "2026-09-20T05:10:07.408426Z",
+   "intent": "Generate a daily briefing report for project Mark jack",
+   "planted": false
+  },
+  {
+   "id": "01a0bd38-f556-704e-9e19-ae4e5170230e",
+   "created_at": "2026-09-20T05:10:21.782567Z",
+   "intent": "Search for traces, spans, and threads in the project Mark jack from the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0bd6f-c534-7e00-bc8d-f100a9647c88",
+   "created_at": "2026-09-20T06:10:13.940351Z",
+   "intent": "Generate a daily briefing report for project CRM Agent demo",
+   "planted": false
+  },
+  {
+   "id": "01a0bd6f-cdd2-7508-a11f-493acdd8fd34",
+   "created_at": "2026-09-20T06:10:16.146992Z",
+   "intent": "Generate a daily briefing report for the CRM Agent project.",
+   "planted": false
+  },
+  {
+   "id": "01a0bdb0-b2b8-70a5-9581-75fd197a826a",
+   "created_at": "2026-09-20T07:21:09.048099Z",
+   "intent": "Apply for high paying jobs on LinkedIn in Delhi NCR",
+   "planted": false
+  },
+  {
+   "id": "01a0bde9-614f-7cbd-979d-4f00d35a59d2",
+   "created_at": "2026-09-20T08:23:03.759565Z",
+   "intent": "Generate a daily briefing report for project aicube-robot.",
+   "planted": false
+  },
+  {
+   "id": "01a0bde9-8e60-7d11-9ae4-5c8b09981477",
+   "created_at": "2026-09-20T08:23:15.294650Z",
+   "intent": "Retrieve experiment details for the Support agent prod candidate",
+   "planted": false
+  },
+  {
+   "id": "01a0bde9-b131-7459-add7-023a9cd602ae",
+   "created_at": "2026-09-20T08:23:24.209289Z",
+   "intent": "Generate a bar chart showing latency percentiles with labeled y-axis.",
+   "planted": false
+  },
+  {
+   "id": "01a0be85-0014-7135-b8d7-908201bc00fa",
+   "created_at": "2026-09-20T11:13:02.482573Z",
+   "intent": "List CRM experiments",
+   "planted": false
+  },
+  {
+   "id": "01a0be85-4145-7f4e-a5c2-bce507e2aaed",
+   "created_at": "2026-09-20T11:13:19.173811Z",
+   "intent": "Generate a horizontal bar chart of all-time average feedback scores.",
+   "planted": false
+  },
+  {
+   "id": "01a0c115-a186-79f3-9d97-28693c9063a4",
+   "created_at": "2026-09-20T23:10:15.430813Z",
+   "intent": "Generate a daily briefing report for the aicube-robot project.",
+   "planted": false
+  },
+  {
+   "id": "01a0c14c-87cd-7593-ae61-0b5d6c950860",
+   "created_at": "2026-09-21T00:10:13.325594Z",
+   "intent": "Read project details",
+   "planted": false
+  },
+  {
+   "id": "01a0c183-70b1-7002-836b-2a28aac94ac4",
+   "created_at": "2026-09-21T01:10:11.889571Z",
+   "intent": "Read project details for Medicore",
+   "planted": false
+  },
+  {
+   "id": "01a0c184-68a9-7983-938f-1f0299df2a19",
+   "created_at": "2026-09-21T01:11:15.369369Z",
+   "intent": "Generate a daily briefing report for project Medicore.",
+   "planted": false
+  },
+  {
+   "id": "01a0c19e-f015-7ec5-8d4e-f5fc0a1511fc",
+   "created_at": "2026-09-21T01:40:13.973784Z",
+   "intent": "Generate a daily briefing report for project Hey.",
+   "planted": false
+  },
+  {
+   "id": "01a0c1d5-5aa1-78d3-8518-a73b61a6b2fe",
+   "created_at": "2026-09-21T02:39:40.193697Z",
+   "intent": "Connect Ollie to the local environment",
+   "planted": false
+  },
+  {
+   "id": "01a0c1d8-9d93-74b1-96be-42948df35f03",
+   "created_at": "2026-09-21T02:43:13.939364Z",
+   "intent": "Debug API key permission error for Claude model access",
+   "planted": false
+  },
+  {
+   "id": "01a0c1d8-e39f-7a39-b86a-d755dd7a022c",
+   "created_at": "2026-09-21T02:43:31.871355Z",
+   "intent": "Explain why no estimated cost was recorded for the trace.",
+   "planted": false
+  },
+  {
+   "id": "01a0c25f-1b2f-76bc-9906-7c204e57c82f",
+   "created_at": "2026-09-21T05:10:07.919229Z",
+   "intent": "Generate a daily briefing report for project Mark jack.",
+   "planted": false
+  },
+  {
+   "id": "01a0c25f-bba2-7ba1-9c32-49e66782b5de",
+   "created_at": "2026-09-21T05:10:48.994749Z",
+   "intent": "Generate a daily briefing report for project Mark jack.",
+   "planted": false
+  },
+  {
+   "id": "01a0c296-194e-7667-8a60-25837d04ad4c",
+   "created_at": "2026-09-21T06:10:11.918870Z",
+   "intent": "Generate a daily briefing report for project northwind-governance-demo",
+   "planted": false
+  },
+  {
+   "id": "01a0c2e0-95d0-7621-9619-793b97bfdac6",
+   "created_at": "2026-09-21T07:31:33.456134Z",
+   "intent": "Add a new prompt to Opik and determine whether to use a text or chat prompt.",
+   "planted": false
+  },
+  {
+   "id": "01a0c3a8-b090-77e6-9a22-49c7aad30dbc",
+   "created_at": "2026-09-21T11:10:07.504428Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0c3df-b3e5-79e4-8cbc-43418e0c1952",
+   "created_at": "2026-09-21T12:10:12.837872Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a0c3df-b4a0-7bf7-8088-d7fd121ac0a1",
+   "created_at": "2026-09-21T12:10:13.024252Z",
+   "intent": "Read project resume-bot details",
+   "planted": false
+  },
+  {
+   "id": "01a0c3e0-98b9-7300-bdc5-df6ab349ae2c",
+   "created_at": "2026-09-21T12:11:11.417109Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0c476-380e-7ffd-b72d-a4d02f69ca52",
+   "created_at": "2026-09-21T14:54:36.759000Z",
+   "intent": "Evaluate LLM outputs using Opik",
+   "planted": false
+  },
+  {
+   "id": "01a0c476-3ae2-7ffd-b72e-d9e4fbe79d93",
+   "created_at": "2026-09-21T14:54:37.501000Z",
+   "intent": "Check if Opik can integrate with LangChain",
+   "planted": false
+  },
+  {
+   "id": "01a0c476-3c8b-7ffd-b72f-52579c62ac36",
+   "created_at": "2026-09-21T14:54:37.792000Z",
+   "intent": "View traces in the Opik UI",
+   "planted": false
+  },
+  {
+   "id": "01a0c476-3ded-7ffd-b72f-cd349f450225",
+   "created_at": "2026-09-21T14:54:38.097000Z",
+   "intent": "Learn how to add feedback scores to traces in Opik",
+   "planted": false
+  },
+  {
+   "id": "01a0c476-420c-7ffd-b730-d2ee95652105",
+   "created_at": "2026-09-21T14:54:39.168000Z",
+   "intent": "Find out who won the 2022 World Cup",
+   "planted": false
+  },
+  {
+   "id": "01a0c63b-ed91-7ae5-a7e3-58a8f6ab8192",
+   "created_at": "2026-09-21T23:10:11.345476Z",
+   "intent": "Read project details for Opik Code",
+   "planted": false
+  },
+  {
+   "id": "01a0c63c-2b6d-7a3c-9872-5fde66e9d450",
+   "created_at": "2026-09-21T23:10:27.179272Z",
+   "intent": "List experiments in the Customer support regression suite",
+   "planted": false
+  },
+  {
+   "id": "01a0c66e-3f3f-76f2-83c3-f55b6ce12120",
+   "created_at": "2026-09-22T00:05:09.055394Z",
+   "intent": "Debug the private-markets-mcp-demo project",
+   "planted": false
+  },
+  {
+   "id": "01a0c68e-80da-769e-ae33-6f1e4917bc15",
+   "created_at": "2026-09-22T00:40:23.002965Z",
+   "intent": "Debug API billing error",
+   "planted": false
+  },
+  {
+   "id": "01a0c6a9-e820-73f6-b4a3-764438a09ffa",
+   "created_at": "2026-09-22T01:10:18.912669Z",
+   "intent": "Search for traces, spans, and threads in the Medicore project from the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0c6c5-491d-7f74-a352-2bd71f990522",
+   "created_at": "2026-09-22T01:40:13.213842Z",
+   "intent": "Retrieve project details for assign",
+   "planted": false
+  },
+  {
+   "id": "01a0c785-88dd-77da-8d9c-52a506983312",
+   "created_at": "2026-09-22T05:10:12.445866Z",
+   "intent": "Generate a daily briefing report for project Mark jack.",
+   "planted": false
+  },
+  {
+   "id": "01a0c785-9b24-72b4-abee-048881683855",
+   "created_at": "2026-09-22T05:10:17.124246Z",
+   "intent": "Read project details for adriangelity-core",
+   "planted": false
+  },
+  {
+   "id": "01a0c785-c15d-7273-87e5-638cc1a295e7",
+   "created_at": "2026-09-22T05:10:26.909101Z",
+   "intent": "Generate a daily briefing report for project 'Stue sofa gruppe'.",
+   "planted": false
+  },
+  {
+   "id": "01a0c8cf-0c04-7691-97e5-9499bf4c0d98",
+   "created_at": "2026-09-22T11:10:07.364449Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0c8cf-607f-7abc-8dbc-7b91d4d172c9",
+   "created_at": "2026-09-22T11:10:28.991369Z",
+   "intent": "Analyze traces from the last 24 hours for the project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a0c8f3-dfd5-771f-96f7-7d9c47d0c784",
+   "created_at": "2026-09-22T11:50:20.885211Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0c906-3435-7a05-8dfc-82c1a9ba0617",
+   "created_at": "2026-09-22T12:10:22.133045Z",
+   "intent": "Retrieve project details for resume-bot",
+   "planted": false
+  },
+  {
+   "id": "01a0c932-9f53-77a2-8105-54b7f51cd658",
+   "created_at": "2026-09-22T12:58:53.139275Z",
+   "intent": "Debug Unity C# script for game map controller",
+   "planted": false
+  },
+  {
+   "id": "01a0c9a7-cc5c-7cc7-a2ab-02d13387011b",
+   "created_at": "2026-09-22T15:06:52.380372Z",
+   "intent": "Analyze agent trace errors and suggest code fixes",
+   "planted": false
+  },
+  {
+   "id": "01a0cb10-38ba-78bb-862a-9e1f056da056",
+   "created_at": "2026-09-22T21:40:33.082524Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0cbeb-a484-7349-941f-a5b9def9814b",
+   "created_at": "2026-09-23T01:40:13.060751Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN",
+   "planted": false
+  },
+  {
+   "id": "01a0cbeb-b02d-712e-a0ba-0d8d04666ac3",
+   "created_at": "2026-09-23T01:40:16.045678Z",
+   "intent": "Generate a daily briefing report for project 'jo'.",
+   "planted": false
+  },
+  {
+   "id": "01a0cbec-3c0c-7ddc-9532-4dfc5d3e35cd",
+   "created_at": "2026-09-23T01:40:51.852085Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN.",
+   "planted": false
+  },
+  {
+   "id": "01a0cc20-7541-7014-ad83-276e4885d0b1",
+   "created_at": "2026-09-23T02:37:54.369890Z",
+   "intent": "Add Opik tracing to the agent's codebase.",
+   "planted": false
+  },
+  {
+   "id": "01a0cc23-5e1d-7001-8682-fe8efc0934ec",
+   "created_at": "2026-09-23T02:41:05.053508Z",
+   "intent": "Explain the total estimated cost of an AI agent trace.",
+   "planted": false
+  },
+  {
+   "id": "01a0cc5c-ff46-7011-b48e-15269d40fe82",
+   "created_at": "2026-09-23T03:44:01.852328Z",
+   "intent": "Read experiment details for a specific experiment ID",
+   "planted": false
+  },
+  {
+   "id": "01a0cce3-1674-7478-bff8-9d18fb929d81",
+   "created_at": "2026-09-23T06:10:29.616475Z",
+   "intent": "Generate a detailed summary of all spans from the last 24 hours for the northwind-voice-demo project.",
+   "planted": false
+  },
+  {
+   "id": "01a0cce3-16dd-7b1d-a337-5582615d9e6a",
+   "created_at": "2026-09-23T06:10:29.723482Z",
+   "intent": "Fetch threads from the CRM Agent project for the last 24 hours",
+   "planted": false
+  },
+  {
+   "id": "01a0cce3-aa24-703b-b256-66b17530d7c1",
+   "created_at": "2026-09-23T06:11:07.428089Z",
+   "intent": "Generate a daily briefing report for project northwind-governance-demo.",
+   "planted": false
+  },
+  {
+   "id": "01a0cce7-7f10-77ca-9f88-1f7846835b02",
+   "created_at": "2026-09-23T06:15:18.544890Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0cdb8-eba4-7484-be2f-9da0a54e5627",
+   "created_at": "2026-09-23T10:04:03.364584Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0cdbe-18dd-7ba0-b870-a0dcdcc94625",
+   "created_at": "2026-09-23T10:09:42.621620Z",
+   "intent": "Analyze the project trace for errors and performance patterns",
+   "planted": false
+  },
+  {
+   "id": "01a0ce6e-844c-76fe-b05c-9a26d2e178df",
+   "created_at": "2026-09-23T13:22:24.460940Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0ce79-a88f-7a14-ab78-622ce65d896f",
+   "created_at": "2026-09-23T13:34:34.639260Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0ce87-fee5-7fc8-8a22-1c5eb1c96907",
+   "created_at": "2026-09-23T13:50:14.245063Z",
+   "intent": "Generate a daily briefing report for project Default Project with a fun fact of the day at the end.",
+   "planted": false
+  },
+  {
+   "id": "01a0ced3-2c1a-7095-85a2-26f8fab5ed9c",
+   "created_at": "2026-09-23T15:12:21.018876Z",
+   "intent": "Count spans and add workspace column to output table",
+   "planted": false
+  },
+  {
+   "id": "01a0d088-a186-7c80-9fad-debd2b760cf9",
+   "created_at": "2026-09-23T23:10:10.310973Z",
+   "intent": "Generate a daily briefing report for project aicube-robot",
+   "planted": false
+  },
+  {
+   "id": "01a0d088-b12b-7284-8528-a6dd262b8fae",
+   "created_at": "2026-09-23T23:10:14.315388Z",
+   "intent": "Read project details for aicube-robot",
+   "planted": false
+  },
+  {
+   "id": "01a0d088-d394-7cb4-8758-6c618b2d5d52",
+   "created_at": "2026-09-23T23:10:23.124671Z",
+   "intent": "Gather trace data for a daily briefing report on the Opik Code project.",
+   "planted": false
+  },
+  {
+   "id": "01a0d08a-6c23-79d6-9aa0-208cbac11760",
+   "created_at": "2026-09-23T23:12:07.715210Z",
+   "intent": "List experiments in the Customer support regression suite.",
+   "planted": false
+  },
+  {
+   "id": "01a0d111-efa1-7906-9b59-5a9388bb2699",
+   "created_at": "2026-09-24T01:40:08.737331Z",
+   "intent": "Generate a daily briefing report for project charusat",
+   "planted": false
+  },
+  {
+   "id": "01a0d111-ffd8-707b-a510-c915c5ed4424",
+   "created_at": "2026-09-24T01:40:12.888578Z",
+   "intent": "Read project details for charusat",
+   "planted": false
+  },
+  {
+   "id": "01a0d23c-2496-71e6-8c83-ddc1a2343350",
+   "created_at": "2026-09-24T07:05:52.022453Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0d2ba-8257-7528-9bbb-748a2ae6f8f2",
+   "created_at": "2026-09-24T09:23:53.559951Z",
+   "intent": "Compare Comet and Opik capabilities",
+   "planted": false
+  },
+  {
+   "id": "01a0d31b-69d9-718d-a171-3ebfce9db7b5",
+   "created_at": "2026-09-24T11:09:44.281219Z",
+   "intent": "Find a free model that displays chain of thought in AI",
+   "planted": false
+  },
+  {
+   "id": "01a0d3c1-4d2c-71b2-8b22-78c76e7527cc",
+   "created_at": "2026-09-24T14:10:55.916220Z",
+   "intent": "Generate a daily briefing report for the release-pulse-ai project.",
+   "planted": false
+  },
+  {
+   "id": "01a0d3c7-75f8-735c-bf52-92bd8269ceea",
+   "created_at": "2026-09-24T14:17:39.576860Z",
+   "intent": "Install Opik",
+   "planted": false
+  },
+  {
+   "id": "01a0d3fe-e4bf-74ca-8590-1c5b9226fe8e",
+   "created_at": "2026-09-24T15:18:12.415809Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0d40b-aece-7171-9ccb-4fff12845ad1",
+   "created_at": "2026-09-24T15:32:10.574642Z",
+   "intent": "Debug the AI agent's trace output",
+   "planted": false
+  },
+  {
+   "id": "01a0d437-99f3-7ebf-83b4-8934f730ab8b",
+   "created_at": "2026-09-24T16:20:08.819058Z",
+   "intent": "Debug the AI agent's execution trace",
+   "planted": false
+  },
+  {
+   "id": "01a0d465-61be-7c55-9597-3a087a5654ca",
+   "created_at": "2026-09-24T17:10:09.087028Z",
+   "intent": "Debug billing error",
+   "planted": false
+  },
+  {
+   "id": "01a0d4b9-5f53-7d84-9b5c-b45011a49eba",
+   "created_at": "2026-09-24T18:41:53.491731Z",
+   "intent": "Investigate why the answer completeness score dropped in the finance-multi-agent-chat project.",
+   "planted": false
+  },
+  {
+   "id": "01a0d4ea-b537-7f69-a13e-d6f487e17afa",
+   "created_at": "2026-09-24T19:35:46.743200Z",
+   "intent": "Open a specific trace in the browser to review an issue",
+   "planted": false
+  },
+  {
+   "id": "01a0d53c-e86a-7655-a7c2-894d99d5630f",
+   "created_at": "2026-09-24T21:05:33.802244Z",
+   "intent": "Check image-related features in Opik",
+   "planted": false
+  },
+  {
+   "id": "01a0d53d-bbf4-76d1-9cfb-d7565b7747d7",
+   "created_at": "2026-09-24T21:06:27.956857Z",
+   "intent": "Speak in Italian",
+   "planted": false
+  },
+  {
+   "id": "01a0d5e1-57d7-7367-aff9-bced80f11cd5",
+   "created_at": "2026-09-25T00:05:10.231720Z",
+   "intent": "Debug the openclaw project",
+   "planted": false
+  },
+  {
+   "id": "01a0d5e5-ed2f-77a8-a6b2-fb566533c5f6",
+   "created_at": "2026-09-25T00:10:10.607612Z",
+   "intent": "Read project details for Гтр",
+   "planted": false
+  },
+  {
+   "id": "01a0d638-5763-7c5b-b892-44aa33f5f0d2",
+   "created_at": "2026-09-25T01:40:11.747883Z",
+   "intent": "Read project details for Hey",
+   "planted": false
+  },
+  {
+   "id": "01a0d638-5c35-74f7-9833-13de57bfac72",
+   "created_at": "2026-09-25T01:40:12.981195Z",
+   "intent": "Read project details for jo",
+   "planted": false
+  },
+  {
+   "id": "01a0d638-7d9d-7b49-8d62-2a04f279acc3",
+   "created_at": "2026-09-25T01:40:21.533557Z",
+   "intent": "Generate a read-only daily briefing for the charusat project",
+   "planted": false
+  },
+  {
+   "id": "01a0d653-1afb-73c0-9d5b-acb69342e337",
+   "created_at": "2026-09-25T02:09:25.755499Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0d698-e31b-75a2-a2f4-e1932bbb00e4",
+   "created_at": "2026-09-25T03:25:38.971229Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0d6a7-4dc7-78a8-a46b-d6bd08a8bce5",
+   "created_at": "2026-09-25T03:41:23.783550Z",
+   "intent": "Generate a daily briefing report for project ai-business-research.",
+   "planted": false
+  },
+  {
+   "id": "01a0d6c1-9b0d-7059-904e-a406decf89e2",
+   "created_at": "2026-09-25T04:10:07.501990Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0d6f8-9ebd-7a15-9ca4-729ab62dd276",
+   "created_at": "2026-09-25T05:10:12.925616Z",
+   "intent": "Generate a daily briefing report for project adriangelity-core",
+   "planted": false
+  },
+  {
+   "id": "01a0d6fa-c545-7a2f-bf52-f999dc6c4eac",
+   "created_at": "2026-09-25T05:12:33.862007Z",
+   "intent": "List automation_rule_evaluators in the workspace",
+   "planted": false
+  },
+  {
+   "id": "01a0d6fa-c59e-771f-b733-19de5007bc4c",
+   "created_at": "2026-09-25T05:12:33.950277Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring.",
+   "planted": false
+  },
+  {
+   "id": "01a0d6fa-cc91-7acb-a3e4-4a7ddca5620f",
+   "created_at": "2026-09-25T05:12:35.729861Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring.",
+   "planted": false
+  },
+  {
+   "id": "01a0d799-122d-7f01-82d9-9dbdd73aebb2",
+   "created_at": "2026-09-25T08:05:28.237136Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0d80b-48bc-7039-bf2d-53d8c4e9da3b",
+   "created_at": "2026-09-25T10:10:13.308442Z",
+   "intent": "Generate a daily briefing report for the Opik Demo Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a0d844-78e8-79f5-a9ad-994a353627c2",
+   "created_at": "2026-09-25T11:12:41.192896Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a0d844-8d16-7d63-8bba-e47ea5bb8d1e",
+   "created_at": "2026-09-25T11:12:46.358721Z",
+   "intent": "Read the annotation queue details for the specified ID.",
+   "planted": false
+  },
+  {
+   "id": "01a0d8e7-01b4-77c0-98ee-cc33461cde09",
+   "created_at": "2026-09-25T14:10:13.044154Z",
+   "intent": "Retrieve project details for release-pulse-ai",
+   "planted": false
+  },
+  {
+   "id": "01a0d8ff-a68a-76be-bcb8-b04987d9636c",
+   "created_at": "2026-09-25T14:37:08.106438Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0d9dd-d287-7394-aeb1-0ff16fa61435",
+   "created_at": "2026-09-25T18:39:48.359898Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0da88-c8f7-7fc7-86b2-de45c4b06eb1",
+   "created_at": "2026-09-25T21:46:32.567965Z",
+   "intent": "Analyze project traces to identify errors, latency issues, and patterns",
+   "planted": false
+  },
+  {
+   "id": "01a0db0c-4d25-7600-aa1a-8c5c473dd405",
+   "created_at": "2026-09-26T00:10:11.621486Z",
+   "intent": "List projects matching the name Гтр",
+   "planted": false
+  },
+  {
+   "id": "01a0db5e-b471-74c8-acd3-6b5e0fbae7f9",
+   "created_at": "2026-09-26T01:40:12.017167Z",
+   "intent": "Read project details for ID jo",
+   "planted": false
+  },
+  {
+   "id": "01a0db5e-b99e-74d8-a425-305779c9b07b",
+   "created_at": "2026-09-26T01:40:13.342535Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN",
+   "planted": false
+  },
+  {
+   "id": "01a0dc55-d818-7f9a-939f-e33689b41407",
+   "created_at": "2026-09-26T06:10:08.536974Z",
+   "intent": "Generate a daily briefing report for project northwind-voice-demo",
+   "planted": false
+  },
+  {
+   "id": "01a0dc55-e8e2-7b05-90d4-46ff91b5826c",
+   "created_at": "2026-09-26T06:10:12.834545Z",
+   "intent": "Generate a daily briefing report for project CRM Agent",
+   "planted": false
+  },
+  {
+   "id": "01a0dce9-80e6-7cef-bcff-8a452df0141d",
+   "created_at": "2026-09-26T08:51:25.542374Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0dd31-9ae7-7c5f-b378-ce0fabdba606",
+   "created_at": "2026-09-26T10:10:10.791188Z",
+   "intent": "Get project details for Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0dd9f-c85e-7946-8f7d-aa37311f643e",
+   "created_at": "2026-09-26T12:10:31.385694Z",
+   "intent": "Search for spans in the Default Project from the last 24 hours using the Opik SDK.",
+   "planted": false
+  },
+  {
+   "id": "01a0de5a-9982-760b-8f55-715baf080302",
+   "created_at": "2026-09-26T15:34:34.626359Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0df0f-08cb-7b36-ac07-60c990eeefb9",
+   "created_at": "2026-09-26T18:51:39.595903Z",
+   "intent": "Write an academic research paper on tourism marketing and smart algorithms.",
+   "planted": false
+  },
+  {
+   "id": "01a0dffb-b871-732c-90da-eab1a114182d",
+   "created_at": "2026-09-26T23:10:11.057829Z",
+   "intent": "Generate a daily briefing report for project Opik Code.",
+   "planted": false
+  },
+  {
+   "id": "01a0e085-251d-7e6f-8d2a-931ca3c881d9",
+   "created_at": "2026-09-27T01:40:17.309584Z",
+   "intent": "Retrieve project details for ARAVINTHAN",
+   "planted": false
+  },
+  {
+   "id": "01a0e145-6803-70a5-8f46-a158891b0cc0",
+   "created_at": "2026-09-27T05:10:17.347125Z",
+   "intent": "Read project details for adriangelity-core",
+   "planted": false
+  },
+  {
+   "id": "01a0e145-f801-7435-bb16-754a33c9317a",
+   "created_at": "2026-09-27T05:10:54.209923Z",
+   "intent": "Generate a daily briefing report for the Marketing project.",
+   "planted": false
+  },
+  {
+   "id": "01a0e149-284c-74e0-898c-bdd1ac09143b",
+   "created_at": "2026-09-27T05:14:23.176563Z",
+   "intent": "List annotation queues",
+   "planted": false
+  },
+  {
+   "id": "01a0e17c-52f3-7d8e-8d22-bc990b4b8625",
+   "created_at": "2026-09-27T06:10:16.435235Z",
+   "intent": "Read project details for CRM Agent",
+   "planted": false
+  },
+  {
+   "id": "01a0e321-614f-7cd7-97b1-12fcf81ad3de",
+   "created_at": "2026-09-27T13:50:10.768002Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0e333-f8ce-7554-8852-4658175720f5",
+   "created_at": "2026-09-27T14:10:29.198305Z",
+   "intent": "Collect traces and activity data from the release-pulse-ai project for the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0e333-f8d1-7eea-9feb-5e1c5edec98e",
+   "created_at": "2026-09-27T14:10:29.198896Z",
+   "intent": "Analyze historical traces for the release-pulse-ai project including error patterns and LLM usage.",
+   "planted": false
+  },
+  {
+   "id": "01a0e436-c2f6-7f77-9c69-6f3bb923cb5c",
+   "created_at": "2026-09-27T18:53:09.238261Z",
+   "intent": "Generate a daily briefing report for project Neander-Benchmark.",
+   "planted": false
+  },
+  {
+   "id": "01a0e4ec-1eb4-7cde-a6f4-2701aee1cc2e",
+   "created_at": "2026-09-27T22:11:14.740064Z",
+   "intent": "Generate a daily briefing report for project git.",
+   "planted": false
+  },
+  {
+   "id": "01a0e559-808b-7d93-805a-f24381971e25",
+   "created_at": "2026-09-28T00:10:43.211062Z",
+   "intent": "Generate a daily briefing report for project Гтр.",
+   "planted": false
+  },
+  {
+   "id": "01a0e5ab-6c76-74b3-a58a-6249eb1ca554",
+   "created_at": "2026-09-28T01:40:12.022947Z",
+   "intent": "Generate a daily briefing report for project ARAVINTHAN",
+   "planted": false
+  },
+  {
+   "id": "01a0e66b-b1a3-7b42-abc5-5a8e002ee6ba",
+   "created_at": "2026-09-28T05:10:12.643110Z",
+   "intent": "Generate a daily briefing report for project Marketing",
+   "planted": false
+  },
+  {
+   "id": "01a0e66b-ee49-7efc-b637-9a81daaf9d49",
+   "created_at": "2026-09-28T05:10:28.169985Z",
+   "intent": "Generate a daily briefing for the internal-ollie-assist-monitoring project with trace summaries and metrics.",
+   "planted": false
+  },
+  {
+   "id": "01a0e6a3-8db1-7576-a2c1-1d6c2b682b73",
+   "created_at": "2026-09-28T06:11:13.457557Z",
+   "intent": "Generate a daily briefing report for the northwind-governance-demo project.",
+   "planted": false
+  },
+  {
+   "id": "01a0e6a3-cf8c-7b44-af1d-2427504f7e95",
+   "created_at": "2026-09-28T06:11:30.316043Z",
+   "intent": "Generate a daily briefing report for the CRM Agent project.",
+   "planted": false
+  },
+  {
+   "id": "01a0e72f-991d-72d6-9882-1371e26b42d4",
+   "created_at": "2026-09-28T08:44:11.421828Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0e76a-d453-7095-8496-a16e06bb460b",
+   "created_at": "2026-09-28T09:48:53.198061Z",
+   "intent": "Analyze spans from the project Opik Demo Agent Observability over the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0e785-aaf5-703f-9e3d-6ef0d71016aa",
+   "created_at": "2026-09-28T10:18:12.085132Z",
+   "intent": "Clarify the meaning of Mountain view",
+   "planted": false
+  },
+  {
+   "id": "01a0e7ac-0ff4-7f82-bef9-0709ee4c7558",
+   "created_at": "2026-09-28T11:00:08.308361Z",
+   "intent": "Debug the production project",
+   "planted": false
+  },
+  {
+   "id": "01a0e7f1-af65-7bb7-9676-546cf93513d7",
+   "created_at": "2026-09-28T12:16:10.966000Z",
+   "intent": "Check current weather conditions and rain status at user's location",
+   "planted": false
+  },
+  {
+   "id": "01a0e928-24b1-7273-b6a8-0cd1f21c2a62",
+   "created_at": "2026-09-28T17:55:17.297059Z",
+   "intent": "Translate the message to Hungarian",
+   "planted": false
+  },
+  {
+   "id": "01a0e9df-1998-792f-8ae8-19fc576f826f",
+   "created_at": "2026-09-28T21:15:07.544806Z",
+   "intent": "Analyze the openclaw project's recent activity and list related entities.",
+   "planted": false
+  },
+  {
+   "id": "01a0ea11-b4c2-731f-8781-fee1305fe3d4",
+   "created_at": "2026-09-28T22:10:24.066461Z",
+   "intent": "Generate a daily briefing report for the git project with trace analysis.",
+   "planted": false
+  },
+  {
+   "id": "01a0ead2-2f3e-757c-a99b-864eaad10a0e",
+   "created_at": "2026-09-29T01:40:38.334117Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0ead2-7117-7b47-a109-17bbd99f901c",
+   "created_at": "2026-09-29T01:40:55.191471Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a0eb0b-013b-7edf-8879-a0fd4362770c",
+   "created_at": "2026-09-29T02:42:42.107271Z",
+   "intent": "Analyze trace, identify errors, and suggest improvements",
+   "planted": false
+  },
+  {
+   "id": "01a0eb14-072b-772f-9c11-f6a1c5ece5ec",
+   "created_at": "2026-09-29T02:52:33.451891Z",
+   "intent": "Analyze trace, identify errors, and suggest improvements for the agent.",
+   "planted": false
+  },
+  {
+   "id": "01a0ebc8-ef80-7e16-a975-7bc20e174e15",
+   "created_at": "2026-09-29T06:10:09.408055Z",
+   "intent": "Generate a daily briefing report for the CRM Agent demo project.",
+   "planted": false
+  },
+  {
+   "id": "01a0ebc9-0b95-7724-8221-c5437b87bfdd",
+   "created_at": "2026-09-29T06:10:16.597804Z",
+   "intent": "Generate a daily briefing report for project CRM Agent",
+   "planted": false
+  },
+  {
+   "id": "01a0ec0e-3602-7c90-919b-3eef45f7cab9",
+   "created_at": "2026-09-29T07:25:49.442603Z",
+   "intent": "Check for race conditions when multiple coworkers write prompts in parallel.",
+   "planted": false
+  },
+  {
+   "id": "01a0ec2b-ecc3-7087-be45-60036b4ea60c",
+   "created_at": "2026-09-29T07:58:16.771172Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0ec3b-cbf0-7f5a-8a5e-2c7a77fa9d74",
+   "created_at": "2026-09-29T08:15:36.945042Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0ecdb-a866-76b1-8cc3-a7ea351c6a9f",
+   "created_at": "2026-09-29T11:10:13.606505Z",
+   "intent": "Generate a daily briefing report for project CRM Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a0eda5-8aee-77db-80cc-1e22c7d0000d",
+   "created_at": "2026-09-29T14:50:44.334838Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0ee0a-24aa-7ef3-b57e-440eb20d1124",
+   "created_at": "2026-09-29T16:40:37.290164Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0ee1c-2969-7dc4-ab24-2bc93d3836fb",
+   "created_at": "2026-09-29T17:00:18.153162Z",
+   "intent": "Debug credentialing-poc project",
+   "planted": false
+  },
+  {
+   "id": "01a0ee89-863d-75cd-9134-8b96ce2efd2e",
+   "created_at": "2026-09-29T18:59:45.341765Z",
+   "intent": "Explain how to create online evaluation rules programmatically from code",
+   "planted": false
+  },
+  {
+   "id": "01a0ef24-faa2-76f6-96c3-a91e78b0ece6",
+   "created_at": "2026-09-29T21:49:33.218476Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0ef54-bfde-7ff9-9812-6a898e8c9ec8",
+   "created_at": "2026-09-29T22:41:43.902595Z",
+   "intent": "Explore Opik Demo Agent Observability project",
+   "planted": false
+  },
+  {
+   "id": "01a0efe1-01ad-763f-80f8-bd295f46e718",
+   "created_at": "2026-09-30T01:14:55.789144Z",
+   "intent": "Find which dashboard contains the specified widgets",
+   "planted": false
+  },
+  {
+   "id": "01a0eff8-19b7-702b-adcb-fbe66625eb90",
+   "created_at": "2026-09-30T01:40:09.271801Z",
+   "intent": "Generate a daily briefing report for project jo",
+   "planted": false
+  },
+  {
+   "id": "01a0f0ba-1f4c-7d77-a5a5-3a4d5045d1f5",
+   "created_at": "2026-09-30T05:12:04.684695Z",
+   "intent": "Investigate error traces and summarize observability infrastructure for a project.",
+   "planted": false
+  },
+  {
+   "id": "01a0f0ba-cb7e-7556-92a1-055074ccbf82",
+   "created_at": "2026-09-30T05:12:48.764709Z",
+   "intent": "Read the details of the automation rule evaluator named Health-check.",
+   "planted": false
+  },
+  {
+   "id": "01a0f0f0-8232-745c-94ee-0f9a0a6b409c",
+   "created_at": "2026-09-30T06:11:28.946609Z",
+   "intent": "Generate a daily briefing report for the CRM Agent project.",
+   "planted": false
+  },
+  {
+   "id": "01a0f1d0-0067-77ce-801a-69cf900ad5aa",
+   "created_at": "2026-09-30T10:15:35.783776Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0f1d1-61a5-7c1f-a4c0-2857cd857b92",
+   "created_at": "2026-09-30T10:17:06.213315Z",
+   "intent": "Ask for next steps after reviewing traces",
+   "planted": false
+  },
+  {
+   "id": "01a0f1dd-7b18-78d3-80e8-6b6a5e51292d",
+   "created_at": "2026-09-30T10:30:19.160765Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0f202-4b1b-7dd8-99eb-87e9d51c19c7",
+   "created_at": "2026-09-30T11:10:31.705481Z",
+   "intent": "Analyze threads from the last 24 hours for project openclaw",
+   "planted": false
+  },
+  {
+   "id": "01a0f294-7c3f-7f1b-b9e7-71b707c651a4",
+   "created_at": "2026-09-30T13:50:12.543468Z",
+   "intent": "Generate a daily briefing report for the Default Project with a fun fact of the day.",
+   "planted": false
+  },
+  {
+   "id": "01a0f2e7-1f62-79d2-9575-d8fc3a64ff57",
+   "created_at": "2026-09-30T15:20:28.258993Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0f355-3ba2-72c1-9893-8cd5a9570ccc",
+   "created_at": "2026-09-30T17:20:44.450717Z",
+   "intent": "Retry creating a multi-project dashboard plan with error rate summary",
+   "planted": false
+  },
+  {
+   "id": "01a0f3ab-c512-7cdf-919b-c5e4118fa23a",
+   "created_at": "2026-09-30T18:55:15.731017Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0f4cc-183f-77d8-94ac-28361a16ac97",
+   "created_at": "2026-10-01T00:10:11.391171Z",
+   "intent": "Read project details for Гтр",
+   "planted": false
+  },
+  {
+   "id": "01a0f4cc-2148-73d9-b66d-910342e74afb",
+   "created_at": "2026-10-01T00:10:13.704725Z",
+   "intent": "Read project details for TestFlowise",
+   "planted": false
+  },
+  {
+   "id": "01a0f51e-70aa-7b60-be29-325cea75da2f",
+   "created_at": "2026-10-01T01:40:07.979035Z",
+   "intent": "Generate a daily briefing report for project jo",
+   "planted": false
+  },
+  {
+   "id": "01a0f5de-bbcd-77a9-9c0f-82fe43a5c13d",
+   "created_at": "2026-10-01T05:10:10.125180Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a0f5df-5bb2-7ae5-993e-217ea738d40b",
+   "created_at": "2026-10-01T05:10:51.058452Z",
+   "intent": "Generate a daily briefing report for the Marketing project.",
+   "planted": false
+  },
+  {
+   "id": "01a0f5fb-408c-7499-9919-9d2c7ab0a7c9",
+   "created_at": "2026-10-01T05:41:19.116872Z",
+   "intent": "Generate a daily briefing report for project 'Opik Demo Agent Observability'.",
+   "planted": false
+  },
+  {
+   "id": "01a0f615-ad99-7302-975f-95a69a2026d6",
+   "created_at": "2026-10-01T06:10:10.969127Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde",
+   "planted": false
+  },
+  {
+   "id": "01a0f615-b7c5-7aee-a9bd-78d69e1b434b",
+   "created_at": "2026-10-01T06:10:13.573220Z",
+   "intent": "List CRM Agent projects",
+   "planted": false
+  },
+  {
+   "id": "01a0f680-1509-7d0d-96de-377850a91d86",
+   "created_at": "2026-10-01T08:06:24.265768Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a0f680-58ad-7cbc-8ca2-b4be99155541",
+   "created_at": "2026-10-01T08:06:41.581272Z",
+   "intent": "Generate a structured daily briefing summary for the Opik Demo Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a0f780-14d1-712b-8d97-0f5c0b013ab6",
+   "created_at": "2026-10-01T12:46:01.425177Z",
+   "intent": "Configure the Opik agent with API key and workspace settings",
+   "planted": false
+  },
+  {
+   "id": "01a0f787-e282-7467-8f3f-d317e8c4cab7",
+   "created_at": "2026-10-01T12:54:32.834983Z",
+   "intent": "Walk through setting up each step adequately",
+   "planted": false
+  },
+  {
+   "id": "01a0f78e-0ee5-7d67-9215-2ce1a88e6da0",
+   "created_at": "2026-10-01T13:01:17.413210Z",
+   "intent": "Explain a single span's duration to an engineer",
+   "planted": false
+  },
+  {
+   "id": "01a0f7c4-f76b-748a-841c-2b305c39c435",
+   "created_at": "2026-10-01T14:01:15.884019Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0f7cd-7717-789b-b8bd-f5d122ed6fa5",
+   "created_at": "2026-10-01T14:10:32.853229Z",
+   "intent": "Collect and analyze spans from the project release-pulse-ai for the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0f7ec-46f8-7afe-b2aa-b62ead9f64df",
+   "created_at": "2026-10-01T14:44:12.152323Z",
+   "intent": "Analyze the usage limit error in the LLM trace",
+   "planted": false
+  },
+  {
+   "id": "01a0f878-e2d4-7881-980a-d5b115324b20",
+   "created_at": "2026-10-01T17:17:47.092258Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0f97c-7fbb-7860-809e-168f9be28ef3",
+   "created_at": "2026-10-01T22:01:21.083359Z",
+   "intent": "Retry the previous response attempt",
+   "planted": false
+  },
+  {
+   "id": "01a0f997-c90b-7582-8603-25ce994d7de5",
+   "created_at": "2026-10-01T22:31:09.321300Z",
+   "intent": "Generate a daily briefing report on project traces from the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a0f997-c90e-7af8-b62f-ad7358297737",
+   "created_at": "2026-10-01T22:31:09.321883Z",
+   "intent": "Generate a comprehensive daily briefing report on the local-fourel-replay project's span data and anomalies.",
+   "planted": false
+  },
+  {
+   "id": "01a0f9f2-65d3-767b-b303-05506b0b1cff",
+   "created_at": "2026-10-02T00:10:07.699605Z",
+   "intent": "Generate a daily briefing report for project Гтр",
+   "planted": false
+  },
+  {
+   "id": "01a0f9f2-af78-7046-ab65-09d44d794487",
+   "created_at": "2026-10-02T00:10:26.552233Z",
+   "intent": "Generate a detailed data gathering report for the TestFlowise project.",
+   "planted": false
+  },
+  {
+   "id": "01a0fa80-f2ba-7190-adda-729a84967581",
+   "created_at": "2026-10-02T02:45:49.882575Z",
+   "intent": "Explain the total estimated cost of a trace to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a0fb05-21aa-7e14-88bc-c06e4824662b",
+   "created_at": "2026-10-02T05:10:12.650994Z",
+   "intent": "Read project details for excel bot",
+   "planted": false
+  },
+  {
+   "id": "01a0fc7d-d44a-7749-b3b6-4cbc0e81499c",
+   "created_at": "2026-10-02T12:01:39.914317Z",
+   "intent": "Check if the agent playground can be used from the app to run queries without database access",
+   "planted": false
+  },
+  {
+   "id": "01a0fd3e-fa5a-783a-826c-41644021e916",
+   "created_at": "2026-10-02T15:32:38.106758Z",
+   "intent": "Generate a daily briefing report for project Travelling",
+   "planted": false
+  },
+  {
+   "id": "01a0fd89-3bb0-7b7c-9e04-cf43f935e0c3",
+   "created_at": "2026-10-02T16:53:44.496145Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a0feaa-f159-7692-a59e-9a1328097ec6",
+   "created_at": "2026-10-02T22:10:10.905585Z",
+   "intent": "Read project details for git",
+   "planted": false
+  },
+  {
+   "id": "01a0ffa3-b630-710e-aba8-4dc8d5e19de4",
+   "created_at": "2026-10-03T02:41:54.224409Z",
+   "intent": "Analyze project traces for errors, latency issues, and patterns",
+   "planted": false
+  },
+  {
+   "id": "01a1002d-131c-7086-a003-05cfd8cca542",
+   "created_at": "2026-10-03T05:11:56.444605Z",
+   "intent": "Generate a daily briefing report for project local-fourel-replay.",
+   "planted": false
+  },
+  {
+   "id": "01a103c9-5930-7a0b-82c4-da774a05156d",
+   "created_at": "2026-10-03T22:01:29.648391Z",
+   "intent": "Switch to Portuguese",
+   "planted": false
+  },
+  {
+   "id": "01a104f2-b21d-7855-874e-f2f1c00dbbf8",
+   "created_at": "2026-10-04T03:26:16.605985Z",
+   "intent": "Explain the trace duration and lack of span breakdown to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a10553-60ff-7f40-b39e-cc9cdca68255",
+   "created_at": "2026-10-04T05:11:52.831697Z",
+   "intent": "Generate a horizontal bar chart showing token breakdown by category.",
+   "planted": false
+  },
+  {
+   "id": "01a10588-b4c1-7844-881b-2c8a0feccade",
+   "created_at": "2026-10-04T06:10:07.681855Z",
+   "intent": "Generate a daily briefing report for project Elwin Ghent",
+   "planted": false
+  },
+  {
+   "id": "01a10588-d2fc-7ded-a94f-789054f6b841",
+   "created_at": "2026-10-04T06:10:15.420410Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde.",
+   "planted": false
+  },
+  {
+   "id": "01a1081c-f054-7d18-8fd9-824ddc682f97",
+   "created_at": "2026-10-04T18:11:16.692518Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a108c0-ac92-7d95-ae62-83d31bb81f78",
+   "created_at": "2026-10-04T21:10:07.251043Z",
+   "intent": "Generate a daily briefing report for project salescadet",
+   "planted": false
+  },
+  {
+   "id": "01a108c1-178e-7395-a4cb-75108ee0c7b7",
+   "created_at": "2026-10-04T21:10:34.638460Z",
+   "intent": "Analyze traces from the last 24 hours for project salescadet and return a structured summary.",
+   "planted": false
+  },
+  {
+   "id": "01a108c2-d116-757d-b926-da93d0ff9906",
+   "created_at": "2026-10-04T21:12:27.670535Z",
+   "intent": "Generate a daily briefing report for project salescadet.",
+   "planted": false
+  },
+  {
+   "id": "01a1092e-8d17-7d82-89fc-5f70e6809205",
+   "created_at": "2026-10-04T23:10:08.151262Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a109b7-e470-700c-a7c1-e96a8859100c",
+   "created_at": "2026-10-05T01:40:08.944915Z",
+   "intent": "Generate a daily briefing report for project jo.",
+   "planted": false
+  },
+  {
+   "id": "01a109f8-89af-70fe-bc3a-ab767ceec2df",
+   "created_at": "2026-10-05T02:50:45.551629Z",
+   "intent": "Add Opik tracing to the agent's codebase.",
+   "planted": false
+  },
+  {
+   "id": "01a109f9-cfdc-7a59-9c29-d216af881406",
+   "created_at": "2026-10-05T02:52:09.052645Z",
+   "intent": "Explain the trace duration and missing sub-span breakdown to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a10a25-e788-7a1a-aeb2-5c0122b3250b",
+   "created_at": "2026-10-05T03:40:18.696879Z",
+   "intent": "Generate a daily briefing report for project 'الهه'",
+   "planted": false
+  },
+  {
+   "id": "01a10a25-ef40-79df-b92b-78d64195f0ad",
+   "created_at": "2026-10-05T03:40:20.672864Z",
+   "intent": "Read project details for the specified project ID",
+   "planted": false
+  },
+  {
+   "id": "01a10a78-8adf-7e55-9412-255573b17aa6",
+   "created_at": "2026-10-05T05:10:34.458970Z",
+   "intent": "Debug API billing error",
+   "planted": false
+  },
+  {
+   "id": "01a10a9a-6dfe-7244-83ea-2ba224b16e17",
+   "created_at": "2026-10-05T05:47:35.294776Z",
+   "intent": "Analyze agent trace errors and suggest code fixes for the format_response function.",
+   "planted": false
+  },
+  {
+   "id": "01a10aaf-2443-7a13-b97a-afbe2d58d5d6",
+   "created_at": "2026-10-05T06:10:12.675285Z",
+   "intent": "Generate a daily briefing report for project Elwin Ghent",
+   "planted": false
+  },
+  {
+   "id": "01a10f1b-3cf2-7674-ace3-3daceb7f0562",
+   "created_at": "2026-10-06T02:46:45.746374Z",
+   "intent": "Add Opik tracing to the agent's codebase.",
+   "planted": false
+  },
+  {
+   "id": "01a10f1f-dd9e-785b-90d2-d2f8bd2439be",
+   "created_at": "2026-10-06T02:51:49.022502Z",
+   "intent": "Analyze trace, identify errors, and suggest improvements",
+   "planted": false
+  },
+  {
+   "id": "01a10f9e-8608-7b4f-8981-aa8c79bda0f6",
+   "created_at": "2026-10-06T05:10:09.672076Z",
+   "intent": "Generate a daily briefing report for project excel bot",
+   "planted": false
+  },
+  {
+   "id": "01a10f9e-99c0-7dad-a9ea-8501eda8cc86",
+   "created_at": "2026-10-06T05:10:14.720989Z",
+   "intent": "Generate a daily briefing report for project Marketing",
+   "planted": false
+  },
+  {
+   "id": "01a10fa0-8c48-725f-b559-fec4e1a1c194",
+   "created_at": "2026-10-06T05:12:22.344449Z",
+   "intent": "Generate a pie chart showing token usage breakdown by category",
+   "planted": false
+  },
+  {
+   "id": "01a10fa1-2454-7c82-bf28-3b23afb0a0d1",
+   "created_at": "2026-10-06T05:13:01.268358Z",
+   "intent": "Check the status of the Health-check automation rule",
+   "planted": false
+  },
+  {
+   "id": "01a10fa1-26ca-76aa-bd53-ee9741c3d16a",
+   "created_at": "2026-10-06T05:13:01.898289Z",
+   "intent": "Generate a daily briefing report for project internal-ollie-assist-monitoring.",
+   "planted": false
+  },
+  {
+   "id": "01a10fd5-81bd-7dc6-8ef6-ac0fc193e8b1",
+   "created_at": "2026-10-06T06:10:13.053029Z",
+   "intent": "Generate a daily briefing report for project CRM Agent",
+   "planted": false
+  },
+  {
+   "id": "01a10fd5-8e79-78b2-bc77-046c525bd7bd",
+   "created_at": "2026-10-06T06:10:16.313293Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde.",
+   "planted": false
+  },
+  {
+   "id": "01a10fd6-31f4-7a32-854c-fb4bbe699a19",
+   "created_at": "2026-10-06T06:10:58.164791Z",
+   "intent": "Generate a daily briefing report for project MoviSaúde.",
+   "planted": false
+  },
+  {
+   "id": "01a11081-db93-70de-a1bc-fa99e3543fcb",
+   "created_at": "2026-10-06T09:18:28.243637Z",
+   "intent": "Compare experiment metrics across datasets and models in the ollie-charts-test project",
+   "planted": false
+  },
+  {
+   "id": "01a111c3-cd59-7dc2-863d-26d6251611af",
+   "created_at": "2026-10-06T15:10:07.193456Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a1130d-7731-7a52-9d92-fcef0289827d",
+   "created_at": "2026-10-06T21:10:12.017798Z",
+   "intent": "Generate a daily briefing report for project salescadet",
+   "planted": false
+  },
+  {
+   "id": "01a113b2-3791-7eb6-bf4c-4d425212034f",
+   "created_at": "2026-10-07T00:10:09.170027Z",
+   "intent": "Generate a daily briefing report for project TestFlowise",
+   "planted": false
+  },
+  {
+   "id": "01a11404-b570-7117-907b-6cd9a4cce2c2",
+   "created_at": "2026-10-07T01:40:15.344943Z",
+   "intent": "Generate a daily briefing report for project 'jo'.",
+   "planted": false
+  },
+  {
+   "id": "01a11404-e7e1-7a0a-a726-ce9e497f6ed1",
+   "created_at": "2026-10-07T01:40:28.257710Z",
+   "intent": "Generate a daily briefing report on the Travelling project activity and trace statistics.",
+   "planted": false
+  },
+  {
+   "id": "01a11449-156e-7cb1-a9f3-2e1630f9ef24",
+   "created_at": "2026-10-07T02:54:56.366343Z",
+   "intent": "Explain the trace duration and lack of span breakdown to an engineer.",
+   "planted": false
+  },
+  {
+   "id": "01a11472-ab90-741b-a6ca-32d54b2396ab",
+   "created_at": "2026-10-07T03:40:21.776836Z",
+   "intent": "Generate a daily briefing report for the Opik Demo Agent Observability project.",
+   "planted": false
+  },
+  {
+   "id": "01a1149f-1e11-7686-b95b-61d3f8725e15",
+   "created_at": "2026-10-07T04:28:54.673635Z",
+   "intent": "Retry the previous response",
+   "planted": false
+  },
+  {
+   "id": "01a114c5-332e-79f9-8b8d-a46e1d81fb8e",
+   "created_at": "2026-10-07T05:10:30.439432Z",
+   "intent": "Generate a comprehensive daily briefing report on project spans and monitoring metrics.",
+   "planted": false
+  },
+  {
+   "id": "01a114c7-3fc6-7a18-bafd-ab9dd88fa267",
+   "created_at": "2026-10-07T05:12:44.742948Z",
+   "intent": "List automation_rule_evaluators in the workspace",
+   "planted": false
+  },
+  {
+   "id": "01a115e9-cfb2-71f3-860f-c065011a6e04",
+   "created_at": "2026-10-07T10:30:07.026832Z",
+   "intent": "Debug the AI agent's trace output",
+   "planted": false
+  },
+  {
+   "id": "01a1160e-b072-7e21-a3f9-c475daa4d32a",
+   "created_at": "2026-10-07T11:10:23.856545Z",
+   "intent": "Generate a daily briefing report for the Default Project with trace statistics.",
+   "planted": false
+  },
+  {
+   "id": "01a116b3-4dee-7a9f-b186-d3e0f0b6af83",
+   "created_at": "2026-10-07T14:10:12.078543Z",
+   "intent": "Retrieve project details for release-pulse-ai",
+   "planted": false
+  },
+  {
+   "id": "01a116ef-ea26-7f06-9cec-43598341ed9f",
+   "created_at": "2026-10-07T15:16:24.230195Z",
+   "intent": "Fix upstream provider failures by adding retry with jitter and fallback provider",
+   "planted": false
+  },
+  {
+   "id": "01a1176f-e6bf-701e-93aa-4a19377a75c1",
+   "created_at": "2026-10-07T17:36:11.967170Z",
+   "intent": "Debug why the agent failed to use the retrieved landing zone ID in subsequent tool calls.",
+   "planted": false
+  },
+  {
+   "id": "01a118a1-a45b-71c9-af08-4a8b19f7ecd2",
+   "created_at": "2026-10-07T23:10:08.987517Z",
+   "intent": "Generate a daily briefing report for project Default Project",
+   "planted": false
+  },
+  {
+   "id": "01a11999-354c-7120-a22e-e49face4b8ef",
+   "created_at": "2026-10-08T03:40:33.484132Z",
+   "intent": "Search for recent traces and threads in the project \"الهه\".",
+   "planted": false
+  },
+  {
+   "id": "01a119eb-44ee-74b3-a0e8-74e8654edfa2",
+   "created_at": "2026-10-08T05:10:11.438575Z",
+   "intent": "Generate a daily briefing report for project FinCompetition",
+   "planted": false
+  },
+  {
+   "id": "01a119eb-4f09-7017-a20f-36ff476d1e54",
+   "created_at": "2026-10-08T05:10:14.025783Z",
+   "intent": "Generate a daily briefing report for project excel bot.",
+   "planted": false
+  },
+  {
+   "id": "01a119eb-6510-7e33-9727-7e39c742a01e",
+   "created_at": "2026-10-08T05:10:19.664918Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Optimizer.",
+   "planted": false
+  },
+  {
+   "id": "01a119eb-b0e6-70b5-bfc0-1ff45b7d0c3b",
+   "created_at": "2026-10-08T05:10:39.076581Z",
+   "intent": "Search for threads in the project \"Opik Demo Optimizer\" from the last 24 hours.",
+   "planted": false
+  },
+  {
+   "id": "01a11a22-d68d-7a78-8769-85fe9db537a9",
+   "created_at": "2026-10-08T06:10:53.197132Z",
+   "intent": "List projects with a size limit of 25",
+   "planted": false
+  },
+  {
+   "id": "01a11a22-e5f8-734e-b9a2-f5cfe3076159",
+   "created_at": "2026-10-08T06:10:57.144244Z",
+   "intent": "Generate a daily briefing report for project Elwin Ghent.",
+   "planted": false
+  },
+  {
+   "id": "01a11ac8-f561-7595-adb6-50291c1c24e7",
+   "created_at": "2026-10-08T09:12:20.065311Z",
+   "intent": "Debug the AI agent's trace output",
+   "planted": false
+  },
+  {
+   "id": "01a11cb5-8c96-75a7-8311-fd32fd68eb7a",
+   "created_at": "2026-10-08T18:10:22.485060Z",
+   "intent": "Generate a read-only daily briefing report for project Default Project with trace analysis.",
+   "planted": false
+  },
+  {
+   "id": "01a11dc8-3094-713b-93ba-13610da7e3c3",
+   "created_at": "2026-10-08T23:10:21.332105Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a11ebf-55a9-7ec3-bc13-38bb36633b64",
+   "created_at": "2026-10-09T03:40:18.217310Z",
+   "intent": "Generate a daily briefing report for project Default Project",
+   "planted": false
+  },
+  {
+   "id": "01a11ec3-719b-7694-a024-11ddc4e50895",
+   "created_at": "2026-10-09T03:44:47.515288Z",
+   "intent": "Explain how to identify different scoring sources for multiple dimensions in a trace.",
+   "planted": false
+  },
+  {
+   "id": "01a11f14-ada5-7482-a1ba-e0bf6705138b",
+   "created_at": "2026-10-09T05:13:31.301046Z",
+   "intent": "Generate a daily briefing report for project tam-prep.",
+   "planted": false
+  },
+  {
+   "id": "01a11f15-e00f-797d-9cb8-6054883024e8",
+   "created_at": "2026-10-09T05:14:49.741116Z",
+   "intent": "List feedback definitions",
+   "planted": false
+  },
+  {
+   "id": "01a11f15-e132-7ee3-86a8-22aee743cf11",
+   "created_at": "2026-10-09T05:14:50.034658Z",
+   "intent": "Generate a daily briefing report for project tam-prep.",
+   "planted": false
+  },
+  {
+   "id": "01a11f6e-5ae4-7ca0-a723-fca6e2e962e3",
+   "created_at": "2026-10-09T06:51:28.357043Z",
+   "intent": "Debug the error where the messages parameter was a string instead of an array of objects.",
+   "planted": false
+  },
+  {
+   "id": "01a123bb-c605-77c7-ad6b-718ce1295e9a",
+   "created_at": "2026-10-10T02:54:30.917531Z",
+   "intent": "Analyze a model rate limit error trace",
+   "planted": false
+  },
+  {
+   "id": "01a123e5-ab3f-7f1a-9777-9a8fa7dc75eb",
+   "created_at": "2026-10-10T03:40:16.575150Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a123e5-b39a-7741-86e1-bae9d5441d56",
+   "created_at": "2026-10-10T03:40:18.714892Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a123e5-be04-773f-8946-59bbabc1b4e6",
+   "created_at": "2026-10-10T03:40:21.380220Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a123e5-bf52-7a3b-b99d-91575d93c9ba",
+   "created_at": "2026-10-10T03:40:21.714310Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a123e5-c10f-7b61-bfa9-67e4867c29e4",
+   "created_at": "2026-10-10T03:40:22.159845Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a123e5-c6ff-735b-903c-1ac327361584",
+   "created_at": "2026-10-10T03:40:23.679164Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a12581-9b39-7962-be61-eef109841f58",
+   "created_at": "2026-10-10T11:10:13.305110Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a128e5-8ee2-71ac-ac9a-a64d6650344d",
+   "created_at": "2026-10-11T02:58:15.394734Z",
+   "intent": "Connect Ollie to the local environment",
+   "planted": false
+  },
+  {
+   "id": "01a1290c-0ba2-7ef5-acc8-4a68ed2aa126",
+   "created_at": "2026-10-11T03:40:17.698845Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a1290c-2613-7ecd-b44e-86a8e9659298",
+   "created_at": "2026-10-11T03:40:24.467286Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a1290c-286e-7141-9c8f-4683d640ffc6",
+   "created_at": "2026-10-11T03:40:25.070904Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a1290c-39b6-711c-99f1-84e0f3bc4f37",
+   "created_at": "2026-10-11T03:40:29.494428Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a1295e-5c87-72ac-9da9-d1aa64cdcf44",
+   "created_at": "2026-10-11T05:10:12.359702Z",
+   "intent": "Read project details for excel bot",
+   "planted": false
+  },
+  {
+   "id": "01a12ade-edf2-703c-b62f-f140797e168c",
+   "created_at": "2026-10-11T12:10:15.410991Z",
+   "intent": "Generate a daily briefing report for project aiDemo.",
+   "planted": false
+  },
+  {
+   "id": "01a12b0b-fffc-72c9-bdd6-62153cbffe0a",
+   "created_at": "2026-10-11T12:59:29.148986Z",
+   "intent": "Explain how to run tests in the repo and view results in Opik",
+   "planted": false
+  },
+  {
+   "id": "01a12bc2-5ccd-753c-9e7f-d5c6fbd91b79",
+   "created_at": "2026-10-11T16:18:40.461949Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a12bd5-cccb-7f2f-b80f-dbba3a0254c4",
+   "created_at": "2026-10-11T16:39:54.315641Z",
+   "intent": "Generate a daily briefing report for project playground.",
+   "planted": false
+  },
+  {
+   "id": "01a12c1c-326a-77ea-9492-8acbc926ede5",
+   "created_at": "2026-10-11T17:56:47.850781Z",
+   "intent": "Debug why scores are not coming from the experiment.",
+   "planted": false
+  },
+  {
+   "id": "01a12e00-77f5-7d93-a113-b152af2a711d",
+   "created_at": "2026-10-12T02:45:45.077177Z",
+   "intent": "Check MCP connection capability",
+   "planted": false
+  },
+  {
+   "id": "01a12e32-7016-7726-a215-49c0541dbdde",
+   "created_at": "2026-10-12T03:40:19.862181Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a12e32-7382-7ee4-99b2-79fa2e40b892",
+   "created_at": "2026-10-12T03:40:20.738934Z",
+   "intent": "Generate a daily briefing report for project Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a12e84-ebb0-7a24-a8c4-7550acb6a064",
+   "created_at": "2026-10-12T05:10:25.456467Z",
+   "intent": "List all available optimizations",
+   "planted": false
+  },
+  {
+   "id": "01a12ff8-98a8-7bd0-be54-71164aceaade",
+   "created_at": "2026-10-12T11:56:23.592630Z",
+   "intent": "Analyze project traces for errors, latency issues, and key patterns.",
+   "planted": false
+  },
+  {
+   "id": "planted-000",
+   "created_at": "2026-10-12T12:00:00.000000Z",
+   "intent": "do i need to inflate my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-001",
+   "created_at": "2026-10-12T12:00:01.000000Z",
+   "intent": "are my tires requiring a fill-up",
+   "planted": true
+  },
+  {
+   "id": "planted-002",
+   "created_at": "2026-10-12T12:00:02.000000Z",
+   "intent": "do i need more air in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-003",
+   "created_at": "2026-10-12T12:00:03.000000Z",
+   "intent": "i need to know how low are my tires on air",
+   "planted": true
+  },
+  {
+   "id": "planted-004",
+   "created_at": "2026-10-12T12:00:04.000000Z",
+   "intent": "do my tires seem too low on air",
+   "planted": true
+  },
+  {
+   "id": "planted-005",
+   "created_at": "2026-10-12T12:00:05.000000Z",
+   "intent": "tire pressure please",
+   "planted": true
+  },
+  {
+   "id": "planted-006",
+   "created_at": "2026-10-12T12:00:06.000000Z",
+   "intent": "what is the tire pressure of the car",
+   "planted": true
+  },
+  {
+   "id": "planted-007",
+   "created_at": "2026-10-12T12:00:07.000000Z",
+   "intent": "can you tell me the tire pressure in my car",
+   "planted": true
+  },
+  {
+   "id": "planted-008",
+   "created_at": "2026-10-12T12:00:08.000000Z",
+   "intent": "what's the current tire pressure of my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-009",
+   "created_at": "2026-10-12T12:00:09.000000Z",
+   "intent": "how much air pressure is in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-010",
+   "created_at": "2026-10-12T12:00:10.000000Z",
+   "intent": "do my tires need air",
+   "planted": true
+  },
+  {
+   "id": "planted-011",
+   "created_at": "2026-10-12T12:00:11.000000Z",
+   "intent": "are my tires low",
+   "planted": true
+  },
+  {
+   "id": "planted-012",
+   "created_at": "2026-10-12T12:00:12.000000Z",
+   "intent": "how is the tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-013",
+   "created_at": "2026-10-12T12:00:13.000000Z",
+   "intent": "i gotta know how low are my tires on air",
+   "planted": true
+  },
+  {
+   "id": "planted-014",
+   "created_at": "2026-10-12T12:00:14.000000Z",
+   "intent": "are my tire's air pressure good enough to drive on",
+   "planted": true
+  },
+  {
+   "id": "planted-015",
+   "created_at": "2026-10-12T12:00:15.000000Z",
+   "intent": "are my tires low on air",
+   "planted": true
+  },
+  {
+   "id": "planted-016",
+   "created_at": "2026-10-12T12:00:16.000000Z",
+   "intent": "what is the pressure of my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-017",
+   "created_at": "2026-10-12T12:00:17.000000Z",
+   "intent": "please measure my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-018",
+   "created_at": "2026-10-12T12:00:18.000000Z",
+   "intent": "are my tires full or low",
+   "planted": true
+  },
+  {
+   "id": "planted-019",
+   "created_at": "2026-10-12T12:00:19.000000Z",
+   "intent": "please check and report on my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-020",
+   "created_at": "2026-10-12T12:00:20.000000Z",
+   "intent": "are my tires properly inflated with air",
+   "planted": true
+  },
+  {
+   "id": "planted-021",
+   "created_at": "2026-10-12T12:00:21.000000Z",
+   "intent": "what is the air pressure in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-022",
+   "created_at": "2026-10-12T12:00:22.000000Z",
+   "intent": "how do i find out my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-023",
+   "created_at": "2026-10-12T12:00:23.000000Z",
+   "intent": "my tires need how much more air in them",
+   "planted": true
+  },
+  {
+   "id": "planted-024",
+   "created_at": "2026-10-12T12:00:24.000000Z",
+   "intent": "how much air remains in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-025",
+   "created_at": "2026-10-12T12:00:25.000000Z",
+   "intent": "what's my tires current air pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-026",
+   "created_at": "2026-10-12T12:00:26.000000Z",
+   "intent": "i wanna know how low are my tires on air",
+   "planted": true
+  },
+  {
+   "id": "planted-027",
+   "created_at": "2026-10-12T12:00:27.000000Z",
+   "intent": "can you tell me what's the car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-028",
+   "created_at": "2026-10-12T12:00:28.000000Z",
+   "intent": "i wanna know my car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-029",
+   "created_at": "2026-10-12T12:00:29.000000Z",
+   "intent": "should i be concerned about the air in my tires",
+   "planted": true
+  },
+  {
+   "id": "01a13005-40e8-7c81-a3e7-5a3a31612829",
+   "created_at": "2026-10-12T12:10:13.096737Z",
+   "intent": "Generate a daily briefing report for project aiDemo.",
+   "planted": false
+  },
+  {
+   "id": "01a1304d-82be-7143-86fc-1fc891ac5f24",
+   "created_at": "2026-10-12T13:29:08.542901Z",
+   "intent": "Generate a graph for the Opik Demo Agent Observability project",
+   "planted": false
+  },
+  {
+   "id": "01a13073-0a52-72dd-8d65-ef12062bb6eb",
+   "created_at": "2026-10-12T14:10:08.082828Z",
+   "intent": "Generate a daily briefing report for project release-pulse-ai",
+   "planted": false
+  },
+  {
+   "id": "01a13083-d350-75f2-8456-a97fd864402d",
+   "created_at": "2026-10-12T14:28:28.112072Z",
+   "intent": "Confirm saving the chat prompt with specified details",
+   "planted": false
+  },
+  {
+   "id": "01a1314e-d0f7-7af6-bf84-a437622af357",
+   "created_at": "2026-10-12T18:10:11.319080Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a13298-680a-7511-b234-a3d14b356657",
+   "created_at": "2026-10-13T00:10:11.338167Z",
+   "intent": "Generate a daily briefing report for project Гтр.",
+   "planted": false
+  },
+  {
+   "id": "01a13337-202c-707b-acd4-26d330c2b517",
+   "created_at": "2026-10-13T03:03:33.164880Z",
+   "intent": "Explain what a trace is in Opik",
+   "planted": false
+  },
+  {
+   "id": "01a13358-cc5d-7b37-afd1-cf66a2e8b3dd",
+   "created_at": "2026-10-13T03:40:19.933858Z",
+   "intent": "Retrieve project details for الهه",
+   "planted": false
+  },
+  {
+   "id": "01a133c9-4a2c-7f9c-9098-24c77b2be36d",
+   "created_at": "2026-10-13T05:43:12.173016Z",
+   "intent": "Explain how to earn money",
+   "planted": false
+  },
+  {
+   "id": "01a133e1-f43f-7999-9be4-903a1d77e831",
+   "created_at": "2026-10-13T06:10:08.575404Z",
+   "intent": "Generate a daily briefing report for project Elwin Ghent.",
+   "planted": false
+  },
+  {
+   "id": "01a133e2-01e4-7ea8-8046-f38f96562af5",
+   "created_at": "2026-10-13T06:10:12.068718Z",
+   "intent": "Read project details for Elwin Ghent",
+   "planted": false
+  },
+  {
+   "id": "planted-030",
+   "created_at": "2026-10-13T12:00:00.000000Z",
+   "intent": "what is my current tire pressure for each tire",
+   "planted": true
+  },
+  {
+   "id": "planted-031",
+   "created_at": "2026-10-13T12:00:01.000000Z",
+   "intent": "is the pressure in my tires optimal",
+   "planted": true
+  },
+  {
+   "id": "planted-032",
+   "created_at": "2026-10-13T12:00:02.000000Z",
+   "intent": "can you check and tell me if my tires have enough air",
+   "planted": true
+  },
+  {
+   "id": "planted-033",
+   "created_at": "2026-10-13T12:00:03.000000Z",
+   "intent": "i would like to know my car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-034",
+   "created_at": "2026-10-13T12:00:04.000000Z",
+   "intent": "my tires are filled enough or no",
+   "planted": true
+  },
+  {
+   "id": "planted-035",
+   "created_at": "2026-10-13T12:00:05.000000Z",
+   "intent": "how much pressure is in my car's tire",
+   "planted": true
+  },
+  {
+   "id": "planted-036",
+   "created_at": "2026-10-13T12:00:06.000000Z",
+   "intent": "are my tires good on air",
+   "planted": true
+  },
+  {
+   "id": "planted-037",
+   "created_at": "2026-10-13T12:00:07.000000Z",
+   "intent": "what's my current tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-038",
+   "created_at": "2026-10-13T12:00:08.000000Z",
+   "intent": "how is the car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-039",
+   "created_at": "2026-10-13T12:00:09.000000Z",
+   "intent": "are my tires under-inflated",
+   "planted": true
+  },
+  {
+   "id": "planted-040",
+   "created_at": "2026-10-13T12:00:10.000000Z",
+   "intent": "how much air is in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-041",
+   "created_at": "2026-10-13T12:00:11.000000Z",
+   "intent": "is there air in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-042",
+   "created_at": "2026-10-13T12:00:12.000000Z",
+   "intent": "do my tires have enough air in them",
+   "planted": true
+  },
+  {
+   "id": "planted-043",
+   "created_at": "2026-10-13T12:00:13.000000Z",
+   "intent": "can you give me a reading of my car's tire pressure please",
+   "planted": true
+  },
+  {
+   "id": "planted-044",
+   "created_at": "2026-10-13T12:00:14.000000Z",
+   "intent": "how much psi is in my car tires",
+   "planted": true
+  },
+  {
+   "id": "planted-045",
+   "created_at": "2026-10-13T12:00:15.000000Z",
+   "intent": "tell me my car's tires' air pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-046",
+   "created_at": "2026-10-13T12:00:16.000000Z",
+   "intent": "can you check the air in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-047",
+   "created_at": "2026-10-13T12:00:17.000000Z",
+   "intent": "what exactly is the tire pressure for the car",
+   "planted": true
+  },
+  {
+   "id": "planted-048",
+   "created_at": "2026-10-13T12:00:18.000000Z",
+   "intent": "check my tires' air levels please",
+   "planted": true
+  },
+  {
+   "id": "planted-049",
+   "created_at": "2026-10-13T12:00:19.000000Z",
+   "intent": "tell me my tires' air pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-050",
+   "created_at": "2026-10-13T12:00:20.000000Z",
+   "intent": "what is my car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-051",
+   "created_at": "2026-10-13T12:00:21.000000Z",
+   "intent": "do the tires need air",
+   "planted": true
+  },
+  {
+   "id": "planted-052",
+   "created_at": "2026-10-13T12:00:22.000000Z",
+   "intent": "check my car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-053",
+   "created_at": "2026-10-13T12:00:23.000000Z",
+   "intent": "hows the air in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-054",
+   "created_at": "2026-10-13T12:00:24.000000Z",
+   "intent": "how much pressure are currently in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-055",
+   "created_at": "2026-10-13T12:00:25.000000Z",
+   "intent": "the car feels wobbly so check my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-056",
+   "created_at": "2026-10-13T12:00:26.000000Z",
+   "intent": "what's my air pressure right now",
+   "planted": true
+  },
+  {
+   "id": "planted-057",
+   "created_at": "2026-10-13T12:00:27.000000Z",
+   "intent": "is my tire pressure okay on my car",
+   "planted": true
+  },
+  {
+   "id": "planted-058",
+   "created_at": "2026-10-13T12:00:28.000000Z",
+   "intent": "my tires are how low on air",
+   "planted": true
+  },
+  {
+   "id": "planted-059",
+   "created_at": "2026-10-13T12:00:29.000000Z",
+   "intent": "go ahead and give me the tire pressure of my vehicle",
+   "planted": true
+  },
+  {
+   "id": "01a13572-a8aa-7318-901f-27e12320e218",
+   "created_at": "2026-10-13T13:27:49.162703Z",
+   "intent": "Import project names from an Excel sheet into an internal tool line by line.",
+   "planted": false
+  },
+  {
+   "id": "01a13675-2d26-7fcf-b95d-9a7f19c85d29",
+   "created_at": "2026-10-13T18:10:11.366613Z",
+   "intent": "Read the details of the Default Project.",
+   "planted": false
+  },
+  {
+   "id": "01a136da-6ed6-776d-9003-60ac1f13d111",
+   "created_at": "2026-10-13T20:00:47.318500Z",
+   "intent": "Create a feedback dashboard for the competitor-intel project mapping no_false_absence scores over time.",
+   "planted": false
+  },
+  {
+   "id": "01a136de-edac-7538-90f9-1168a2922208",
+   "created_at": "2026-10-13T20:05:41.932476Z",
+   "intent": "Create a new widget showing latency",
+   "planted": false
+  },
+  {
+   "id": "01a13787-c9d2-7076-9e1b-06e5f89a2917",
+   "created_at": "2026-10-13T23:10:08.338072Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability.",
+   "planted": false
+  },
+  {
+   "id": "01a137be-c38d-7fa7-adcd-b087ecae8270",
+   "created_at": "2026-10-14T00:10:11.213889Z",
+   "intent": "Read project details for Гтр",
+   "planted": false
+  },
+  {
+   "id": "01a1384f-50a4-7749-b120-db92d28c86ee",
+   "created_at": "2026-10-14T02:48:04.516207Z",
+   "intent": "Explain what a trace is in Opik",
+   "planted": false
+  },
+  {
+   "id": "01a1387f-2c8e-7b30-942a-6fc28fea7bc4",
+   "created_at": "2026-10-14T03:40:21.007010Z",
+   "intent": "Generate a daily briefing report for project Opik Demo Agent Observability",
+   "planted": false
+  },
+  {
+   "id": "01a138db-fd04-773b-96ae-b05d20902ece",
+   "created_at": "2026-10-14T05:21:43.684570Z",
+   "intent": "Analyze project traces for errors, latency, and patterns",
+   "planted": false
+  },
+  {
+   "id": "01a13908-8a75-72ba-974a-cdfd31507e79",
+   "created_at": "2026-10-14T06:10:23.477915Z",
+   "intent": "Debug TTS safety rule evaluation errors",
+   "planted": false
+  },
+  {
+   "id": "01a13908-b6b1-7bdf-99a4-969c096badb1",
+   "created_at": "2026-10-14T06:10:34.801740Z",
+   "intent": "Generate a daily briefing report for the northwind-voice-cloud-demo project.",
+   "planted": false
+  },
+  {
+   "id": "planted-060",
+   "created_at": "2026-10-14T12:00:00.000000Z",
+   "intent": "let me know how low the air in my tires are",
+   "planted": true
+  },
+  {
+   "id": "planted-061",
+   "created_at": "2026-10-14T12:00:01.000000Z",
+   "intent": "what's my car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-062",
+   "created_at": "2026-10-14T12:00:02.000000Z",
+   "intent": "what is the level of air pressure of my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-063",
+   "created_at": "2026-10-14T12:00:03.000000Z",
+   "intent": "how is my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-064",
+   "created_at": "2026-10-14T12:00:04.000000Z",
+   "intent": "what does my tire pressure look like",
+   "planted": true
+  },
+  {
+   "id": "planted-065",
+   "created_at": "2026-10-14T12:00:05.000000Z",
+   "intent": "is my tire pressure good",
+   "planted": true
+  },
+  {
+   "id": "planted-066",
+   "created_at": "2026-10-14T12:00:06.000000Z",
+   "intent": "is the air pressure in my tires low",
+   "planted": true
+  },
+  {
+   "id": "planted-067",
+   "created_at": "2026-10-14T12:00:07.000000Z",
+   "intent": "do my tires have enough pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-068",
+   "created_at": "2026-10-14T12:00:08.000000Z",
+   "intent": "do i need to fill my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-069",
+   "created_at": "2026-10-14T12:00:09.000000Z",
+   "intent": "tell me what my tire pressure is",
+   "planted": true
+  },
+  {
+   "id": "planted-070",
+   "created_at": "2026-10-14T12:00:10.000000Z",
+   "intent": "how's my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-071",
+   "created_at": "2026-10-14T12:00:11.000000Z",
+   "intent": "how are my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-072",
+   "created_at": "2026-10-14T12:00:12.000000Z",
+   "intent": "are my tires in need of air",
+   "planted": true
+  },
+  {
+   "id": "planted-073",
+   "created_at": "2026-10-14T12:00:13.000000Z",
+   "intent": "can you tell me the tire pressure for the car",
+   "planted": true
+  },
+  {
+   "id": "planted-074",
+   "created_at": "2026-10-14T12:00:14.000000Z",
+   "intent": "can you check my tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-075",
+   "created_at": "2026-10-14T12:00:15.000000Z",
+   "intent": "is my tire pressure in the correct range",
+   "planted": true
+  },
+  {
+   "id": "planted-076",
+   "created_at": "2026-10-14T12:00:16.000000Z",
+   "intent": "gauge the tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-077",
+   "created_at": "2026-10-14T12:00:17.000000Z",
+   "intent": "please tell me my car's tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-078",
+   "created_at": "2026-10-14T12:00:18.000000Z",
+   "intent": "what's the amount of air in my tires right now",
+   "planted": true
+  },
+  {
+   "id": "planted-079",
+   "created_at": "2026-10-14T12:00:19.000000Z",
+   "intent": "how is the air level in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-080",
+   "created_at": "2026-10-14T12:00:20.000000Z",
+   "intent": "is there enough air in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-081",
+   "created_at": "2026-10-14T12:00:21.000000Z",
+   "intent": "tell me how low the air in my tires are",
+   "planted": true
+  },
+  {
+   "id": "planted-082",
+   "created_at": "2026-10-14T12:00:22.000000Z",
+   "intent": "how is the car tire pressure doing",
+   "planted": true
+  },
+  {
+   "id": "planted-083",
+   "created_at": "2026-10-14T12:00:23.000000Z",
+   "intent": "measure tire pressure",
+   "planted": true
+  },
+  {
+   "id": "planted-084",
+   "created_at": "2026-10-14T12:00:24.000000Z",
+   "intent": "how much air are in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-085",
+   "created_at": "2026-10-14T12:00:25.000000Z",
+   "intent": "give me the pressure for the tires on my car",
+   "planted": true
+  },
+  {
+   "id": "planted-086",
+   "created_at": "2026-10-14T12:00:26.000000Z",
+   "intent": "check how much air is in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-087",
+   "created_at": "2026-10-14T12:00:27.000000Z",
+   "intent": "i shall know how low are my tires on air",
+   "planted": true
+  },
+  {
+   "id": "planted-088",
+   "created_at": "2026-10-14T12:00:28.000000Z",
+   "intent": "would it be smart to put air in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted-089",
+   "created_at": "2026-10-14T12:00:29.000000Z",
+   "intent": "what's the air level in my tires",
+   "planted": true
+  },
+  {
+   "id": "planted2-000",
+   "created_at": "2026-10-14T13:00:00.000000Z",
+   "intent": "i need a vegi lasagna recipe",
+   "planted": true
+  },
+  {
+   "id": "planted2-001",
+   "created_at": "2026-10-14T13:00:01.000000Z",
+   "intent": "where is a beef recipe",
+   "planted": true
+  },
+  {
+   "id": "planted2-002",
+   "created_at": "2026-10-14T13:00:02.000000Z",
+   "intent": "do you know what are the ingredients to make apple pie",
+   "planted": true
+  },
+  {
+   "id": "planted2-003",
+   "created_at": "2026-10-14T13:00:03.000000Z",
+   "intent": "how do you prepare taco",
+   "planted": true
+  },
+  {
+   "id": "planted2-004",
+   "created_at": "2026-10-14T13:00:04.000000Z",
+   "intent": "what's the best way to make a broccoli salad",
+   "planted": true
+  },
+  {
+   "id": "planted2-005",
+   "created_at": "2026-10-14T13:00:05.000000Z",
+   "intent": "how do i make that scottish dish with all the blood and sausage",
+   "planted": true
+  },
+  {
+   "id": "planted2-006",
+   "created_at": "2026-10-14T13:00:06.000000Z",
+   "intent": "what is a good recipe for steak",
+   "planted": true
+  },
+  {
+   "id": "planted2-007",
+   "created_at": "2026-10-14T13:00:07.000000Z",
+   "intent": "i want a good recipe that shows me how to bake chocolate chip cookies from scratch",
+   "planted": true
+  },
+  {
+   "id": "planted2-008",
+   "created_at": "2026-10-14T13:00:08.000000Z",
+   "intent": "can you find a recipe on how to make chow mein",
+   "planted": true
+  },
+  {
+   "id": "planted2-009",
+   "created_at": "2026-10-14T13:00:09.000000Z",
+   "intent": "recipe for traditional roast beef and gravy",
+   "planted": true
+  },
+  {
+   "id": "planted2-010",
+   "created_at": "2026-10-14T13:00:10.000000Z",
+   "intent": "can you find me a recipe for carrot cake",
+   "planted": true
+  },
+  {
+   "id": "planted2-011",
+   "created_at": "2026-10-14T13:00:11.000000Z",
+   "intent": "do you have a cookbook that could teach me to make sushi",
+   "planted": true
+  },
+  {
+   "id": "planted2-012",
+   "created_at": "2026-10-14T13:00:12.000000Z",
+   "intent": "what do you need to do to make sushi",
+   "planted": true
+  },
+  {
+   "id": "planted2-013",
+   "created_at": "2026-10-14T13:00:13.000000Z",
+   "intent": "search for chili recipes",
+   "planted": true
+  },
+  {
+   "id": "planted2-014",
+   "created_at": "2026-10-14T13:00:14.000000Z",
+   "intent": "how do i fry pork chops",
+   "planted": true
+  },
+  {
+   "id": "planted2-015",
+   "created_at": "2026-10-14T13:00:15.000000Z",
+   "intent": "how do you create pork chili",
+   "planted": true
+  },
+  {
+   "id": "planted2-016",
+   "created_at": "2026-10-14T13:00:16.000000Z",
+   "intent": "i need a pasta recipe",
+   "planted": true
+  },
+  {
+   "id": "planted2-017",
+   "created_at": "2026-10-14T13:00:17.000000Z",
+   "intent": "can you find me a recipe for pasta",
+   "planted": true
+  },
+  {
+   "id": "planted2-018",
+   "created_at": "2026-10-14T13:00:18.000000Z",
+   "intent": "can you get me a recipe for mashed potatoes",
+   "planted": true
+  },
+  {
+   "id": "planted2-019",
+   "created_at": "2026-10-14T13:00:19.000000Z",
+   "intent": "i need to know how to make philly cheesesteaks",
+   "planted": true
+  },
+  {
+   "id": "planted2-020",
+   "created_at": "2026-10-14T13:00:20.000000Z",
+   "intent": "i need a recipe for chicken pot pie",
+   "planted": true
+  },
+  {
+   "id": "planted2-021",
+   "created_at": "2026-10-14T13:00:21.000000Z",
+   "intent": "i need a recipe on how to make beef stew",
+   "planted": true
+  },
+  {
+   "id": "planted2-022",
+   "created_at": "2026-10-14T13:00:22.000000Z",
+   "intent": "can you get me recipes for eggs please",
+   "planted": true
+  },
+  {
+   "id": "planted2-023",
+   "created_at": "2026-10-14T13:00:23.000000Z",
+   "intent": "can you find me a rice recipe",
+   "planted": true
+  },
+  {
+   "id": "planted2-024",
+   "created_at": "2026-10-14T13:00:24.000000Z",
+   "intent": "how do i make lassagna",
+   "planted": true
+  },
+  {
+   "id": "planted2-025",
+   "created_at": "2026-10-14T13:00:25.000000Z",
+   "intent": "how do i make pie crust",
+   "planted": true
+  },
+  {
+   "id": "planted2-026",
+   "created_at": "2026-10-14T13:00:26.000000Z",
+   "intent": "find me a recipe for chili",
+   "planted": true
+  },
+  {
+   "id": "planted2-027",
+   "created_at": "2026-10-14T13:00:27.000000Z",
+   "intent": "how do i make a taco that's worth eating",
+   "planted": true
+  },
+  {
+   "id": "planted2-028",
+   "created_at": "2026-10-14T13:00:28.000000Z",
+   "intent": "search for a chili recipe for me",
+   "planted": true
+  },
+  {
+   "id": "planted2-029",
+   "created_at": "2026-10-14T13:00:29.000000Z",
+   "intent": "do you know recipe for making apple pie",
+   "planted": true
+  },
+  {
+   "id": "01a13b33-3f03-788f-93e8-18dc03302e7e",
+   "created_at": "2026-10-14T16:16:16.643405Z",
+   "intent": "Read project details for RIT by KARM",
+   "planted": false
+  },
+  {
+   "id": "01a13b76-a5a2-7ead-a3ab-0e61f378016d",
+   "created_at": "2026-10-14T17:29:53.826265Z",
+   "intent": "Connect to the AI agent and start building the app",
+   "planted": false
+  }
+ ]
+}

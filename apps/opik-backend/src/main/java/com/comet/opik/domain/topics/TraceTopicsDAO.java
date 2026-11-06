@@ -74,6 +74,20 @@ public class TraceTopicsDAO {
             SETTINGS log_comment = '<log_comment>'
             """;
 
+    /** The latest topic of each of the project's traces created in the window. */
+    private static final String FIND_LABELS = """
+            SELECT trace_id, topic_id
+            FROM trace_topics
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+            AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            AND run_id = :run_id
+            ORDER BY workspace_id, project_id, trace_id, updated_at DESC
+            LIMIT 1 BY workspace_id, project_id, trace_id
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM trace_topics
             WHERE workspace_id IN :workspace_ids
@@ -197,6 +211,28 @@ public class TraceTopicsDAO {
                 .flatMap(result -> result.map((row, metadata) -> Map.entry(
                         UUID.fromString(row.get("topic_id", String.class)),
                         ((Number) row.get("traces", Object.class)).longValue())))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    /**
+     * Per trace created in {@code [from, to)}, its topic id in run {@code runId} ({@link TraceTopic#OTHER} for Other).
+     * Only that run's rows: a later row of another run (one that failed after its insert) must not count.
+     */
+    public Mono<Map<UUID, UUID>> findLabels(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, @NonNull UUID runId) {
+        var template = getSTWithLogComment(FIND_LABELS, "topics:find_labels", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, run_id=%s".formatted(projectId, from, to, runId));
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("from_micros", toEpochMicros(from))
+                        .bind("to_micros", toEpochMicros(to))
+                        .bind("run_id", runId.toString())
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("trace_id", String.class)),
+                        UUID.fromString(row.get("topic_id", String.class)))))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
