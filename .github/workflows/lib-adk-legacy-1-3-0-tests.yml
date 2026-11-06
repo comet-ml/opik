@@ -58,7 +58,7 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.3
 
       - name: Install opik
-        run: uv pip install --system .
+        run: uv pip install --system '.[litellm]'
 
       - name: Install test tools
         run: |

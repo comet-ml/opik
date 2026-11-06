@@ -70,8 +70,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         track: bool = True,
         **completion_kwargs: Any,
     ) -> None:
-        import litellm
-
         """
         Initializes the base model with a given model name.
         You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input.
@@ -88,6 +86,16 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 Defaults to True.
             completion_kwargs: key-value arguments to always pass additionally into `litellm.completion` function.
         """
+        try:
+            import litellm
+        except ModuleNotFoundError as error:
+            if error.name != "litellm":
+                raise
+            raise ImportError(
+                "LiteLLM support requires the optional dependency. "
+                "Install it with `pip install 'opik[litellm]'`."
+            ) from error
+
         super().__init__(model_name=model_name)
 
         self._check_model_name()

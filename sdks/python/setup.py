@@ -61,34 +61,6 @@ setup(
         "httpx<=0.28.1",
         "rapidfuzz>=3.0.0,<4.0.0",
         "rapidfuzz<=3.14.6",
-        # LiteLLM dependency comments:
-        # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
-        # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
-        #   See: https://docs.litellm.ai/blog/security-update-march-2026
-        # - Exclude 1.81.*, 1.82.*, 1.83.0-1.83.6: CVE-2026-42208 (SQL injection in proxy auth path,
-        #   affects 1.81.16-1.83.6, fixed in 1.83.7).
-        #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
-        # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
-        #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
-        #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
-        # - Cap at <1.106: completion() with tools imports litellm.proxy MCP modules that need the
-        #   `mcp` package (a proxy-only extra), so any tool call fails with "No module named 'mcp'".
-        #   Still broken in 1.107.0rc1. Lift once https://github.com/BerriAI/litellm/issues/46045 is fixed.
-        # - Cap Python 3.10 at <1.97: litellm declares requires-python >=3.10 but ships 3.11+
-        #   typing, and every recent break has been 3.10-only with a distinct root cause:
-        #     1.97.*     Message model unconstructible -- the nested forward reference
-        #                ChatCompletionReasoningSummaryTextBlock never resolves, so every
-        #                completion() raises PydanticUserError.
-        #                https://github.com/BerriAI/litellm/issues/36384
-        #     1.98.0rc1  ImportError: cannot import name 'NotRequired' from 'typing'
-        #                typing.NotRequired does not exist on 3.10 (added in 3.11);
-        #                litellm should import it from typing_extensions.
-        #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
-        #   The cap is the standing guard; 3.11+ deliberately doesn't get it. Lift it once
-        #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
-        "litellm<=1.106.6",
         "openai",
         "openai<=3.42.1",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
@@ -155,6 +127,36 @@ setup(
         "tree-sitter-typescript<=0.23.2; platform_machine != 'aarch64' or sys_platform != 'linux'",
     ],
     extras_require={
+        "litellm": [
+            # LiteLLM dependency comments:
+            # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
+            # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
+            #   See: https://docs.litellm.ai/blog/security-update-march-2026
+            # - Exclude 1.81.*, 1.82.*, 1.83.0-1.83.6: CVE-2026-42208 (SQL injection in proxy auth path,
+            #   affects 1.81.16-1.83.6, fixed in 1.83.7).
+            #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
+            # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
+            #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
+            #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
+            # - Cap at <1.106: completion() with tools imports litellm.proxy MCP modules that need the
+            #   `mcp` package (a proxy-only extra), so any tool call fails with "No module named 'mcp'".
+            #   Still broken in 1.107.0rc1. Lift once https://github.com/BerriAI/litellm/issues/46045 is fixed.
+            # - Cap Python 3.10 at <1.97: litellm declares requires-python >=3.10 but ships 3.11+
+            #   typing, and every recent break has been 3.10-only with a distinct root cause:
+            #     1.97.*     Message model unconstructible -- the nested forward reference
+            #                ChatCompletionReasoningSummaryTextBlock never resolves, so every
+            #                completion() raises PydanticUserError.
+            #                https://github.com/BerriAI/litellm/issues/36384
+            #     1.98.0rc1  ImportError: cannot import name 'NotRequired' from 'typing'
+            #                typing.NotRequired does not exist on 3.10 (added in 3.11);
+            #                litellm should import it from typing_extensions.
+            #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
+            #   The cap is the standing guard; 3.11+ deliberately doesn't get it. Lift it once
+            #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
+            "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
+            "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
+            "litellm<=1.106.6",
+        ],
         "proxy": [
             "fastapi>=0.100.0",
             "uvicorn>=0.23.0",
