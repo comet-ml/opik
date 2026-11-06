@@ -41,7 +41,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         self._unsupported_warned: set[str] = set()
         self._reasoning_effort = completion_kwargs.pop("reasoning_effort", None)
         self._completion_kwargs = message_adapter.filter_unsupported_params(
-            completion_kwargs, self._unsupported_warned
+            completion_kwargs, self._unsupported_warned, self._api_model_name
         )
         if "tool_choice" in self._completion_kwargs:
             self._completion_kwargs["tool_choice"] = (
@@ -236,7 +236,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
 
         reasoning_effort = extra_kwargs.pop("reasoning_effort", self._reasoning_effort)
         filtered_extra = message_adapter.filter_unsupported_params(
-            extra_kwargs, self._unsupported_warned
+            extra_kwargs, self._unsupported_warned, self._api_model_name
         )
         # OpenAI-style `tool_choice` ("auto" / "none" / "required" /
         # `{"type": "function", ...}`) needs to be translated to the
