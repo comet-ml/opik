@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import logging
+import reprlib
 from typing import Any, Dict, List, Optional, Iterator
 
 from opik.api_objects import experiment, opik_client, trace
@@ -108,7 +109,9 @@ def mark_invalid_score_values_as_failed(
     rejects a whole feedback-score batch that contains NaN or infinity. So such
     a score is handled like a metric that raised: ``scoring_failed`` is set and
     the value becomes ``0.0``, so every view counts it as failed and it is not
-    uploaded. The original value is kept in ``metadata``.
+    uploaded. ``metadata`` keeps ``repr()`` of the original value under
+    ``original_value`` (a string, since NaN and infinity aren't valid JSON) and
+    the metric's own reason, if it gave one, under ``original_reason``.
     """
     return [
         _invalid_value_as_failed(result)
@@ -123,16 +126,21 @@ def mark_invalid_score_values_as_failed(
 def _invalid_value_as_failed(
     result: score_result.ScoreResult,
 ) -> score_result.ScoreResult:
+    # A metric can return any object, so the log and the reason get a shortened repr.
+    short_value = reprlib.repr(result.value)
     LOGGER.warning(
-        "Metric %s returned a score value that is not a finite number: %r. "
+        "Metric %s returned a score value that is not a finite number: %s. "
         "Its score will be marked as failed.",
         result.name,
-        result.value,
+        short_value,
     )
+    metadata = {**(result.metadata or {}), "original_value": repr(result.value)}
+    if result.reason is not None:
+        metadata["original_reason"] = result.reason
     return dataclasses.replace(
         result,
         value=0.0,
-        reason=f"Score value is not a finite number: {result.value!r}",
-        metadata={**(result.metadata or {}), "original_value": repr(result.value)},
+        reason=f"Score value is not a finite number: {short_value}",
+        metadata=metadata,
         scoring_failed=True,
     )

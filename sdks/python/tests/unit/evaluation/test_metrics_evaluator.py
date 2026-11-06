@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -298,18 +299,48 @@ def test_compute_metric_scores__value_not_a_finite_number__marked_as_failed(
     assert broken.name == "broken"
     assert broken.scoring_failed is True
     assert broken.value == 0.0
-    assert broken.metadata == {"original_value": repr(invalid_value)}
+    assert broken.metadata == {
+        "original_value": repr(invalid_value),
+        "original_reason": "ok",
+    }
     assert "not a finite number" in broken.reason
 
 
 def test_compute_metric_scores__list_result__only_the_non_finite_element_fails():
     results = _compute([_FixedValueMetric("m", [1.0, float("nan"), 0.5])])
 
-    assert [(r.value, r.scoring_failed) for r in results] == [
-        (1.0, False),
-        (0.0, True),
-        (0.5, False),
+    assert results == [
+        score_result.ScoreResult(name="m", value=1.0),
+        score_result.ScoreResult(
+            name="m",
+            value=0.0,
+            reason="Score value is not a finite number: nan",
+            metadata={"original_value": "nan"},
+            scoring_failed=True,
+        ),
+        score_result.ScoreResult(name="m", value=0.5),
     ]
+
+
+def test_compute_metric_scores__value_not_a_finite_number__keeps_the_metric_reason():
+    (result,) = _compute([_FixedValueMetric("m", float("nan"))])
+
+    assert result.scoring_failed is True
+    assert result.metadata == {"original_value": "nan", "original_reason": "ok"}
+
+
+def test_compute_metric_scores__long_invalid_value__shortened_in_reason_and_log(
+    caplog,
+):
+    long_value = "x" * 10_000
+
+    with caplog.at_level(logging.WARNING):
+        (result,) = _compute([_FixedValueMetric("m", long_value)])
+
+    assert result.scoring_failed is True
+    assert result.metadata["original_value"] == repr(long_value)
+    assert len(result.reason) < 200
+    assert all(len(record.getMessage()) < 300 for record in caplog.records)
 
 
 @pytest.mark.parametrize(
