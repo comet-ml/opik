@@ -254,6 +254,29 @@ class OpenTelemetryResourceTest {
     }
 
     @Nested
+    @DisplayName("Malformed requests:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class MalformedRequests {
+
+        private final String okApikey = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("answer 400, not 500, when the protobuf body cannot be parsed")
+        void testOtelRequestWithInvalidProtobuf() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            // A zero byte where a field tag is expected: the parse failure seen from exporters in production.
+            var payload = Entity.entity(new byte[]{0}, "application/x-protobuf");
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "Invalid Protobuf message, error: 'Protocol message contained an invalid tag (zero).'");
+
+            otelResourceClient.exportTraces(payload, "application/x-protobuf", projectName, workspaceName,
+                    okApikey, expectedError);
+        }
+    }
+
+    @Nested
     @DisplayName("Api Key Authentication:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ApiKey {
