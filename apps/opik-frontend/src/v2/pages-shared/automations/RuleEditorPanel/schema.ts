@@ -32,7 +32,7 @@ import {
   getThinkingLevelOptions,
   knowsAnthropicEffortLevels,
   leavesThinkingToModel,
-  resolveSamplingParams,
+  takesTemperatureAtSomeEffort,
   updateProviderConfig,
   withoutThinkingAmount,
   withThinkingEffort,
@@ -920,17 +920,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 
   // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the form
   // keeps a temperature the user set on another model, and the providers that take none reject it at
-  // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
-  // a rule that never had a temperature does not gain the resolver's default.
-  // Asked as if the model did not reason: the judge leaves the temperature out for as long as Claude
-  // thinks or an OpenAI model runs above effort none, and keeping it in the rule brings it back when
-  // the effort goes back to Off or none. A model with no none level never takes one.
-  const { temperature: resolvedTemperature } = resolveSamplingParams(
-    data.model as PROVIDER_MODEL_TYPE,
-    { temperature, reasoningEffort: "none" },
-  );
-
-  if (temperature != null && resolvedTemperature != null) {
+  // scoring time. The value stays the user's, so a rule that never had a temperature does not gain the
+  // resolver's default. The judge leaves it out for as long as Claude thinks or an OpenAI model runs
+  // above effort none.
+  if (
+    temperature != null &&
+    takesTemperatureAtSomeEffort(data.model as PROVIDER_MODEL_TYPE)
+  ) {
     model.temperature = temperature;
   }
 

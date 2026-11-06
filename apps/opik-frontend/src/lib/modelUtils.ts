@@ -1329,6 +1329,16 @@ export const supportsPenaltyParams = (
   );
 };
 
+// Whether a judge rule should keep its temperature: the model takes one at the effort that allows it,
+// none for an OpenAI reasoning model that offers that level. The rule sends it only while the model
+// runs there, so it comes back when the effort goes back to none. A model with no none level never
+// takes one.
+export const takesTemperatureAtSomeEffort = (
+  model: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  resolveSamplingParams(model, { temperature: 0, reasoningEffort: "none" })
+    .temperature !== undefined;
+
 export type EffortParams = {
   reasoningEffort?: OpenAIReasoningEffort;
   thinkingEffort?: AnthropicThinkingEffort;

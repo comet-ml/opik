@@ -17,6 +17,7 @@ import {
   resolveEffort,
   resolveSamplingParams,
   resolveThinkingLevel,
+  takesTemperatureAtSomeEffort,
   SamplingParams,
   sanitizeConfigForRequest,
   supportsAnthropicThinkingEffort,
@@ -4013,5 +4014,18 @@ describe("writeAnthropicRequest", () => {
       temperature: 0.4,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
     });
+  });
+});
+
+describe("takesTemperatureAtSomeEffort", () => {
+  it.each<[PROVIDER_MODEL_TYPE, boolean]>([
+    [PROVIDER_MODEL_TYPE.GPT_5_4, true],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, true],
+    [PROVIDER_MODEL_TYPE.GPT_5, false],
+    [PROVIDER_MODEL_TYPE.GPT_4O, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA, false],
+  ])("answers %s: %s", (model, expected) => {
+    expect(takesTemperatureAtSomeEffort(model)).toBe(expected);
   });
 });
