@@ -369,23 +369,21 @@ function DatasetItemsTab({
 
   const handleRowSelectionChange: typeof setRowSelection = useCallback(
     (updaterOrValue) => {
-      setRowSelection((prev) => {
-        const next =
-          typeof updaterOrValue === "function"
-            ? updaterOrValue(prev)
-            : updaterOrValue;
+      const next =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(rowSelection)
+          : updaterOrValue;
 
-        if (
-          isAllItemsSelected &&
-          Object.keys(next).length < Object.keys(prev).length
-        ) {
-          setIsAllItemsSelected(false);
-        }
+      if (
+        isAllItemsSelected &&
+        Object.keys(next).length < Object.keys(rowSelection).length
+      ) {
+        setIsAllItemsSelected(false);
+      }
 
-        return next;
-      });
+      setRowSelection(next);
     },
-    [isAllItemsSelected, setIsAllItemsSelected],
+    [rowSelection, isAllItemsSelected, setIsAllItemsSelected],
   );
 
   const effectiveIsAllItemsSelected = useMemo(

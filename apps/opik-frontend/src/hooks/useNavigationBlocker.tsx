@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type JSX } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import isFunction from "lodash/isFunction";
 import {

@@ -71,6 +71,7 @@ const PromptModelSelect = ({
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] =
     useState<COMPOSED_PROVIDER_TYPE | null>(null);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
   const { providerModels: registryProviderModels } = useLLMProviderModelsData();
   const providerModels = useMemo<ProviderModelsMap>(
     () => mergeProviderModels(registryProviderModels, extraProviderModels),
@@ -113,18 +114,26 @@ const PromptModelSelect = ({
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
-      const modelProvider = openProviderMenu
-        ? openProviderMenu
+      // The hovered row names the provider only when the pick came from its side menu: a row
+      // the search filtered away keeps its hover, since unmounting it fires no mouseleave.
+      const hoveredGroup = groupOptions.find(
+        (group) => group.composedProviderType === openProviderMenu,
+      );
+      const modelProvider = hoveredGroup?.options.some(
+        (option) => option.value === value,
+      )
+        ? hoveredGroup.composedProviderType
         : modelProviderMapRef.current[value];
       onChange(value, parseComposedProviderType(modelProvider));
     },
-    [onChange, openProviderMenu, modelProviderMapRef],
+    [onChange, openProviderMenu, groupOptions, modelProviderMapRef],
   );
 
   const handleSelectOpenChange = useCallback((open: boolean) => {
+    setIsSelectOpen(open);
+    setOpenProviderMenu(null);
     if (!open) {
       setFilterValue("");
-      setOpenProviderMenu(null);
     }
   }, []);
 
@@ -248,7 +257,10 @@ const PromptModelSelect = ({
         {groupOptions.map((group) => (
           <Popover
             key={group.label}
-            open={group.composedProviderType === openProviderMenu}
+            // The closed list still animates out under the pointer and can re-hover a row.
+            open={
+              isSelectOpen && group.composedProviderType === openProviderMenu
+            }
           >
             <PopoverTrigger asChild>
               <div

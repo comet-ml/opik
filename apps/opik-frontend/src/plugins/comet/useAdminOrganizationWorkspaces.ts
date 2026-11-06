@@ -22,7 +22,7 @@ const getAllUserWorkspaces = async (
 // the workspaces of all organizations where a user is admin
 // we can't take all organizations because it throws 403 error
 export default function useAdminOrganizationWorkspaces(
-  options?: QueryConfig<Workspace[]>,
+  options?: QueryConfig<Workspace[]> & { enabled?: boolean },
 ) {
   const { data: organizations } = useOrganizations({
     enabled: options?.enabled,
