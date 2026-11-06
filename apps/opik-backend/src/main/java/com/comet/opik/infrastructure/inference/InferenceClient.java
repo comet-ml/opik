@@ -15,7 +15,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
@@ -23,10 +22,15 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
@@ -38,14 +42,16 @@ import java.util.function.Function;
  * <p>
  * Every call takes a deadline: each attempt's connect and read timeouts are cut to the time left, no retry starts that
  * can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without sending anything.
- * Those timeouts bound each socket wait, not a whole attempt, so {@link #decide}, which a request waits on, is also cut
- * off at its deadline.
+ * <p>
+ * {@link #decide}, which a request waits on, has a client of its own: on the shared one it would queue behind batch
+ * calls for a pooled connection, and a call cut off at its deadline would still hold a thread and the connection until
+ * the body ended, because closing an Apache response reads the rest of it. Cancelling a call on its own client drops
+ * the connection, and at most {@code maxConcurrentDecides} calls are in flight.
  * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class InferenceClient {
 
     static final int MAX_RETRIES = 2;
@@ -66,7 +72,22 @@ public class InferenceClient {
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
 
     private final @NonNull Client client;
-    private final @NonNull @Config("aiLabels") AiLabelsConfig config;
+    private final @NonNull AiLabelsConfig config;
+    private final @NonNull HttpClient decideClient;
+    private final @NonNull Semaphore decidePermits;
+
+    @Inject
+    public InferenceClient(@NonNull Client client, @NonNull @Config("aiLabels") AiLabelsConfig config) {
+        this.client = client;
+        this.config = config;
+        this.decideClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                // opik-inference never redirects, and following one would send the credential where it points.
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .connectTimeout(config.getInference().getConnectTimeout().toJavaDuration())
+                .build();
+        this.decidePermits = new Semaphore(config.getInference().getMaxConcurrentDecides());
+    }
 
     public Mono<BatchSubmitResponse> submitDecide(@NonNull BatchDecideRequest request, @NonNull Instant deadline) {
         return Mono.defer(() -> {
@@ -147,8 +168,10 @@ public class InferenceClient {
                     .deadline(deadline)
                     .type(DecideResponse.class)
                     .failFastOnDeadlineExceeded(true)
+                    .realtime(true)
                     .build())
-                    // The wait for a pooled connection, or a body that trickles in, escapes the socket timeouts.
+                    // The realtime client has no read timeout: this bounds the whole call, and its cancel drops the
+                    // connection.
                     .timeout(left.isNegative() ? Duration.ZERO : left)
                     .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime());
         });
@@ -212,6 +235,10 @@ public class InferenceClient {
                 "aiLabels.inference.url must be set to call opik-inference");
         Preconditions.checkState(StringUtils.isNotBlank(inference.getCredential()),
                 "aiLabels.inference.credential must be set to call opik-inference");
+        if (call.realtime()) {
+            return sendRealtime(call, inference.getCredential(),
+                    call.target().apply(client.target(inference.getUrl())).getUri());
+        }
         return Mono.<Response>create(sink -> {
             var builder = call.target().apply(client.target(inference.getUrl()))
                     .request(MediaType.APPLICATION_JSON_TYPE)
@@ -244,9 +271,32 @@ public class InferenceClient {
                 .map(response -> read(call, response));
     }
 
+    private <T> Mono<T> sendRealtime(Call<T> call, String credential, URI uri) {
+        return Mono.defer(() -> {
+            if (!decidePermits.tryAcquire()) {
+                return Mono.<T>error(InferenceException.clientBusy());
+            }
+            var request = HttpRequest.newBuilder(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + credential)
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON)
+                    .method(call.method(), call.body() != null
+                            ? HttpRequest.BodyPublishers.ofByteArray(call.body())
+                            : HttpRequest.BodyPublishers.noBody())
+                    .build();
+            // Not suppressing the cancel: cancelling the future aborts the exchange and closes its connection.
+            return Mono.fromFuture(() -> decideClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()),
+                    false)
+                    .onErrorMap(exception -> !(exception instanceof InferenceException),
+                            InferenceException::transport)
+                    .map(response -> parse(call, response.statusCode(),
+                            response.headers().firstValue(HttpHeaders.RETRY_AFTER).orElse(null), response.body()))
+                    .doFinally(signal -> decidePermits.release());
+        });
+    }
+
     private <T> T read(Call<T> call, Response response) {
         try (response) {
-            var status = response.getStatus();
             byte[] body;
             try {
                 body = response.hasEntity() ? response.readEntity(byte[].class) : new byte[0];
@@ -254,26 +304,30 @@ public class InferenceClient {
                 // A connection reset or truncated body after the headers: as retryable as one before them.
                 throw InferenceException.transport(exception);
             }
-            if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
-                // Redirects are not followed, and the same request would only be redirected again.
-                throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
-                        null);
-            }
-            if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
-                throw InferenceException.fromResponse(status, response.getHeaderString(HttpHeaders.RETRY_AFTER),
-                        body);
-            }
-            T value;
-            try {
-                value = InferenceJson.MAPPER.readValue(body, call.type());
-            } catch (IOException | RuntimeException exception) {
-                throw InferenceException.upstreamError(status, null, exception);
-            }
-            if (value == null) {
-                throw InferenceException.upstreamError(status, null, null);
-            }
-            return value;
+            return parse(call, response.getStatus(), response.getHeaderString(HttpHeaders.RETRY_AFTER), body);
         }
+    }
+
+    private <T> T parse(Call<T> call, int status, String retryAfter, byte[] body) {
+        var family = Response.Status.Family.familyOf(status);
+        if (family == Response.Status.Family.REDIRECTION) {
+            // Redirects are not followed, and the same request would only be redirected again.
+            throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
+                    null);
+        }
+        if (family != Response.Status.Family.SUCCESSFUL) {
+            throw InferenceException.fromResponse(status, retryAfter, body);
+        }
+        T value;
+        try {
+            value = InferenceJson.MAPPER.readValue(body, call.type());
+        } catch (IOException | RuntimeException exception) {
+            throw InferenceException.upstreamError(status, null, exception);
+        }
+        if (value == null) {
+            throw InferenceException.upstreamError(status, null, null);
+        }
+        return value;
     }
 
     /** The timeout cut to the time left, and at least 1 ms: Jersey reads 0 as no timeout at all. */
@@ -295,6 +349,7 @@ public class InferenceClient {
             @NonNull Instant deadline,
             @NonNull Class<T> type,
             boolean failFastOnQuotaExceeded,
-            boolean failFastOnDeadlineExceeded) {
+            boolean failFastOnDeadlineExceeded,
+            boolean realtime) {
     }
 }

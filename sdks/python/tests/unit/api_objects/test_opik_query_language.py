@@ -326,6 +326,15 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
             "error_info is_not_empty",
             [{"field": "error_info", "operator": "is_not_empty", "value": ""}],
         ),
+        # comments operators
+        (
+            "comments is_empty",
+            [{"field": "comments", "operator": "is_empty", "value": ""}],
+        ),
+        (
+            "comments is_not_empty",
+            [{"field": "comments", "operator": "is_not_empty", "value": ""}],
+        ),
         # tags with list operators
         (
             "tags is_empty",
@@ -372,6 +381,14 @@ def test_trace_oql__valid_filters(filter_string, expected):
         (
             'error_info = "something"',
             r"Operator = is not supported for field error_info.*",
+        ),
+        (
+            'comments = "something"',
+            r"Operator = is not supported for field comments.*",
+        ),
+        (
+            'comments contains "something"',
+            r"Operator contains is not supported for field comments.*",
         ),
         # Incomplete filters must raise ValueError (not IndexError)
         ("duration >", r"Incomplete filter string.*"),
@@ -646,6 +663,11 @@ def test_span_oql__valid_filters(filter_string, expected):
             r"Operator contains is not supported for field type.*",
         ),
         (
+            # comments is not a span field, so the emptiness operators are rejected
+            "comments is_empty",
+            r"Operator is_empty is not supported.*",
+        ),
+        (
             # span_feedback_scores is not a dictionary field in SpanOQLConfig
             "span_feedback_scores.accuracy > 0.5",
             r"Field span_feedback_scores\.accuracy is not supported.*",
@@ -758,6 +780,15 @@ def test_span_oql__empty_filter(filter_string):
                 }
             ],
         ),
+        # comments operators
+        (
+            "comments is_empty",
+            [{"field": "comments", "operator": "is_empty", "value": ""}],
+        ),
+        (
+            "comments is_not_empty",
+            [{"field": "comments", "operator": "is_not_empty", "value": ""}],
+        ),
         # AND combinations
         (
             "number_of_messages > 3 AND duration > 500",
@@ -798,6 +829,10 @@ def test_trace_thread_oql__valid_filters(filter_string, expected):
         (
             'status contains "active"',
             r"Operator contains is not supported for field status.*",
+        ),
+        (
+            'comments = "something"',
+            r"Operator = is not supported for field comments.*",
         ),
         (
             'id = "test" OR id = "other"',

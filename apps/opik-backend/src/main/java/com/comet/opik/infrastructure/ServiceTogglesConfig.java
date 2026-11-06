@@ -75,8 +75,6 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
-    @NotNull boolean onlineScoringTracingEnabled;
-    @JsonProperty
     @NotNull boolean annotationQueueAutomationEnabled;
     @JsonProperty
     @NotNull boolean eventBridgeAlertsEnabled;

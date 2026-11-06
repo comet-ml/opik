@@ -19,6 +19,11 @@ public class InferenceException extends RuntimeException {
     static final Duration MAX_RETRY_AFTER = Duration.ofSeconds(30);
     /** A local code, not the service's: the call's deadline passed before an attempt could start. */
     public static final String OUT_OF_TIME = "out_of_time";
+    /**
+     * A local code, not the service's: this instance already has {@code maxConcurrentDecides} decide calls in flight.
+     * Retryable, so the call tries again after a backoff.
+     */
+    public static final String CLIENT_BUSY = "client_busy";
 
     private final @NonNull String code;
     private final boolean retryable;
@@ -78,6 +83,10 @@ public class InferenceException extends RuntimeException {
 
     static InferenceException outOfTime() {
         return new InferenceException(OUT_OF_TIME, false, 0, null, null, null);
+    }
+
+    static InferenceException clientBusy() {
+        return new InferenceException(CLIENT_BUSY, true, 0, null, null, null);
     }
 
     static InferenceException transport(@NonNull Throwable cause) {
