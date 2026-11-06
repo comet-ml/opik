@@ -57,6 +57,20 @@ class ModelPriceResolverTest {
         assertThat(ModelPriceResolver.resolve(modelName, provider)).isEmpty();
     }
 
+    private static Stream<Arguments> namesAndProviders() {
+        return Stream.concat(matchedNames(), unmatchedNames())
+                .map(arguments -> Arguments.of(arguments.get()[0], arguments.get()[1]));
+    }
+
+    @ParameterizedTest(name = "{0} on {1}")
+    @MethodSource("namesAndProviders")
+    void resolveForProviderMatchesResolveOnTheSameProvider(String modelName, String provider) {
+        var layers = layers(fixed("gpt-5-mini", "openai", "1.00"));
+
+        assertThat(ModelPriceResolver.resolveForProvider(modelName, ProviderRegistry.resolve(provider, modelName),
+                layers)).isEqualTo(ModelPriceResolver.resolve(modelName, provider, layers));
+    }
+
     private static final String GATEWAY_HOST = "llm-gateway.example.com";
 
     private static CustomModelPrice fixed(String modelName, String provider, String inputPerMillion) {

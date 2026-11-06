@@ -61,12 +61,22 @@ class ModelPriceResolver {
         if (StringUtils.isBlank(modelName)) {
             return Optional.empty();
         }
-        Optional<PriceMatch> match = resolve(modelName, ProviderRegistry.resolve(provider, modelName), layers, true);
+        return resolveForProvider(modelName, ProviderRegistry.resolve(provider, modelName), layers);
+    }
+
+    // CostService needs the resolved provider for usage too, so it resolves it once per span and passes it in here.
+    Optional<PriceMatch> resolveForProvider(@Nullable String modelName, @NonNull Optional<String> resolvedProvider,
+            @NonNull PriceLayers layers) {
+        if (StringUtils.isBlank(modelName)) {
+            return Optional.empty();
+        }
+        Optional<PriceMatch> match = resolve(modelName, resolvedProvider, layers, true);
         if (log.isDebugEnabled()) {
             match.ifPresentOrElse(
                     found -> log.debug("Found model price, model '{}', provider '{}', name form '{}'", modelName,
                             found.provider(), found.nameForm()),
-                    () -> log.debug("No model price found, model '{}', provider '{}'", modelName, provider));
+                    () -> log.debug("No model price found, model '{}', provider '{}'", modelName,
+                            resolvedProvider.orElse(null)));
         }
         return match;
     }
