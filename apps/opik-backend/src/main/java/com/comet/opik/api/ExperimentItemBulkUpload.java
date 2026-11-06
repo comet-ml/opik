@@ -39,7 +39,7 @@ public record ExperimentItemBulkUpload(
                 "provided or experiment with that ID doesn't exist, a new experiment will be created with the given " +
                 "experimentName") UUID experimentId,
         @JsonView({
-                View.ExperimentItemBulkWriteView.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Project for traces auto-created "
+                View.ExperimentItemBulkWriteView.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "Project for traces auto-created "
                         +
                         "from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default "
                         +

@@ -155,6 +155,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService versionService;
+    private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -1294,6 +1295,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return Mono.deferContextual(ctx -> {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
+                if (datasetItemSearchCriteria.allDatasetExperiments()) {
+                    return getItemsWithAllDatasetExperimentItems(datasetItemSearchCriteria, page, size,
+                            workspaceId);
+                }
+
                 // If experimentIds are present, fetch items using experiment-specific versions
                 if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds())) {
                     log.info(
@@ -1372,6 +1378,30 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .switchIfEmpty(Mono.just(ProjectStats.empty()))
                 .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'",
                         datasetId, stats.stats().size()));
+    }
+
+    private Mono<DatasetItemPage> getItemsWithAllDatasetExperimentItems(DatasetItemSearchCriteria criteria,
+            int page, int size, String workspaceId) {
+        UUID versionId = null;
+        boolean includeUnversioned = false;
+        if (StringUtils.isNotBlank(criteria.experimentsVersionHashOrTag())) {
+            versionId = versionService.resolveVersionId(workspaceId, criteria.datasetId(),
+                    criteria.experimentsVersionHashOrTag());
+            includeUnversioned = versionId.equals(
+                    versionService.getLatestVersionId(criteria.datasetId(), workspaceId).orElse(null));
+        }
+
+        log.info("Finding dataset items with all experiment items for dataset '{}', version '{}', page '{}', size '{}'",
+                criteria.datasetId(), versionId, page, size);
+
+        return experimentDAO.findIdsByDatasetId(criteria.datasetId(), versionId, includeUnversioned)
+                .flatMap(experimentIds -> {
+                    if (experimentIds.isEmpty()) {
+                        return Mono.just(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                    }
+                    return getItemsWithExperimentItems(criteria.toBuilder().experimentIds(experimentIds).build(),
+                            page, size, workspaceId);
+                });
     }
 
     private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,
@@ -1477,19 +1507,24 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return Mono.error(new BadRequestException(
                             "addedItems, editedItems, and deletedIds must be empty when baseVersion is null."));
                 }
-                UUID newVersionId = idGenerator.generateId();
-                return Mono.fromCallable(() -> {
-                    DatasetVersion version = versionService.createVersionFromDelta(
-                            datasetId, newVersionId, 0, null,
-                            changes.tags(), changes.changeDescription(),
-                            changes.evaluators(), changes.executionPolicy(),
-                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
-                            // First version (baseVersionId == null): no prior 'latest' to CAS against.
-                            null, false, workspaceId, userName);
-                    log.info("Created first version '{}' for dataset '{}' with hash '{}'",
-                            version.id(), datasetId, version.versionHash());
-                    return version;
-                });
+                // Goes through the canonical helper for its deadlock retry: the first version's 'latest' flip
+                // deletes and inserts a tag row that doesn't exist yet, so concurrent first versions of
+                // adjacent datasets contend on the same index gap.
+                return createVersionFromDelta(
+                        datasetId,
+                        idGenerator.generateId(),
+                        0,
+                        null,
+                        changes.tags(),
+                        changes.changeDescription(),
+                        changes.evaluators(),
+                        changes.executionPolicy(),
+                        Boolean.TRUE.equals(changes.clearExecutionPolicy()),
+                        null,
+                        // First version (baseVersionId == null): no prior 'latest' to CAS against.
+                        false,
+                        workspaceId,
+                        userName);
             }
 
             // Verify the base version exists (throws NotFoundException otherwise).

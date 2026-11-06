@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import {
   authConfigToFormValues,
+  authTypeOf,
   builtInProviderHeadersForAPI,
   configStringToQueryParamsArray,
   convertHeadersForAPI,
+  credentialRowsForType,
   formValuesToAuthConfig,
-  oauth2CredentialRows,
   queryParamsArrayToConfigString,
 } from "./customProviderConfig";
 import { PROVIDER_TYPE, ProviderAuthConfig } from "@/types/providers";
@@ -218,6 +219,7 @@ describe("customProviderConfig", () => {
     it("hides the injected client_credentials grant row but keeps a custom one visible", () => {
       const values = authConfigToFormValues({
         token_url: "https://auth.example.com/token",
+        send_as: "basic",
         credentials: [
           { key: "grant_type", value: "client_credentials", secret: false },
           { key: "client_id", value: "opik", secret: false },
@@ -236,6 +238,32 @@ describe("customProviderConfig", () => {
       ]);
     });
 
+    it("keeps a client_credentials grant visible on a recipe that opens as Custom", () => {
+      const values = authConfigToFormValues({
+        token_url: "https://auth.example.com/token",
+        send_as: "form",
+        credentials: [
+          { key: "grant_type", value: "client_credentials", secret: false },
+          { key: "client_id", value: "opik", secret: false },
+        ],
+      });
+
+      expect(values.authType).toBe("custom");
+      expect(values.authSendAs).toBe("form");
+      expect(values.authCredentials.map((row) => row.key)).toEqual([
+        "grant_type",
+        "client_id",
+      ]);
+    });
+
+    it("defaults an absent send_as to form, the backend's default", () => {
+      const values = authConfigToFormValues({
+        token_url: "https://auth.example.com/token",
+        credentials: [{ key: "api_key", value: "k", secret: true }],
+      });
+      expect(values.authSendAs).toBe("form");
+    });
+
     it("stringifies a zero fallback (fetch-per-call) rather than dropping it", () => {
       const values = authConfigToFormValues({
         token_url: "https://auth.example.com/token",
@@ -249,6 +277,7 @@ describe("customProviderConfig", () => {
   describe("formValuesToAuthConfig", () => {
     const tokenValues = {
       authMode: "token" as const,
+      authType: "custom" as const,
       authTokenUrl: " https://auth.example.com/token ",
       authSendAs: "form" as const,
       authCredentials: [
@@ -271,7 +300,6 @@ describe("customProviderConfig", () => {
         token_url: "https://auth.example.com/token",
         send_as: "form",
         credentials: [
-          { key: "grant_type", value: "client_credentials", secret: false },
           { key: "username", value: "svc", secret: false },
           { key: "password", value: "p", secret: true },
         ],
@@ -280,10 +308,65 @@ describe("customProviderConfig", () => {
       });
     });
 
+    it("injects grant_type and sends Basic for the OAuth2 type, whatever send_as the form holds", () => {
+      const config = formValuesToAuthConfig(
+        { ...tokenValues, authType: "oauth2" },
+        { isEditing: false, hadAuthConfig: false },
+      );
+
+      expect(config).toMatchObject({
+        send_as: "basic",
+        credentials: [
+          { key: "grant_type", value: "client_credentials", secret: false },
+          { key: "username", value: "svc", secret: false },
+          { key: "password", value: "p", secret: true },
+        ],
+      });
+    });
+
+    it("sends a service account as Basic with only its username and password", () => {
+      const config = formValuesToAuthConfig(
+        {
+          ...tokenValues,
+          authType: "service_account",
+          authCredentials: [
+            {
+              key: "username",
+              value: "svc",
+              secret: false,
+              saved: false,
+              id: "1",
+            },
+            {
+              key: "password",
+              value: "p",
+              secret: true,
+              saved: false,
+              id: "2",
+            },
+          ],
+          authTokenField: "",
+          authFallbackTtl: "86400",
+        },
+        { isEditing: false, hadAuthConfig: false },
+      );
+
+      expect(config).toEqual({
+        token_url: "https://auth.example.com/token",
+        send_as: "basic",
+        credentials: [
+          { key: "username", value: "svc", secret: false },
+          { key: "password", value: "p", secret: true },
+        ],
+        fallback_ttl_seconds: 86400,
+      });
+    });
+
     it("does not inject grant_type when the user provided their own", () => {
       const config = formValuesToAuthConfig(
         {
           ...tokenValues,
+          authType: "oauth2",
           authCredentials: [
             {
               key: "grant_type",
@@ -352,20 +435,167 @@ describe("customProviderConfig", () => {
 
       expect(roundTripped).toEqual(stored);
     });
+
+    it.each<[string, ProviderAuthConfig]>([
+      [
+        "service account",
+        {
+          token_url: "https://auth.example.com/token",
+          send_as: "basic",
+          credentials: [
+            { key: "username", value: "svc", secret: false },
+            { key: "password", value: "__SECRET__", secret: true },
+          ],
+          fallback_ttl_seconds: 86400,
+        },
+      ],
+      [
+        "custom",
+        {
+          token_url: "https://auth.example.com/token",
+          send_as: "json",
+          credentials: [
+            { key: "grant_type", value: "client_credentials", secret: false },
+            { key: "api_key", value: "__SECRET__", secret: true },
+          ],
+          token_field: "result.jwt",
+        },
+      ],
+    ])("round-trips a %s recipe unchanged", (_, stored) => {
+      const roundTripped = formValuesToAuthConfig(
+        authConfigToFormValues(stored),
+        { isEditing: true, hadAuthConfig: true },
+      );
+
+      expect(roundTripped).toEqual(stored);
+    });
   });
 
-  describe("oauth2CredentialRows", () => {
-    it("seeds only the user-owned rows, locking the secret; grant_type is injected on save", () => {
+  describe("authTypeOf", () => {
+    const recipe = (
+      overrides: Partial<ProviderAuthConfig>,
+    ): ProviderAuthConfig => ({
+      token_url: "https://auth.example.com/token",
+      send_as: "basic",
+      credentials: [],
+      ...overrides,
+    });
+
+    it.each<[string, ProviderAuthConfig, string]>([
+      [
+        "Basic with the client_credentials grant",
+        recipe({
+          credentials: [
+            { key: "grant_type", value: "client_credentials", secret: false },
+            { key: "client_id", value: "id", secret: false },
+            { key: "client_secret", value: "s", secret: true },
+          ],
+        }),
+        "oauth2",
+      ],
+      [
+        "Basic with exactly username and password",
+        recipe({
+          credentials: [
+            { key: "password", value: "p", secret: true },
+            { key: "username", value: "u", secret: false },
+          ],
+        }),
+        "service_account",
+      ],
+      [
+        "Basic with a client pair but no grant (e.g. made through the API)",
+        recipe({
+          credentials: [
+            { key: "client_id", value: "id", secret: false },
+            { key: "client_secret", value: "s", secret: true },
+          ],
+        }),
+        "custom",
+      ],
+      [
+        "a service account with an extra row",
+        recipe({
+          credentials: [
+            { key: "username", value: "u", secret: false },
+            { key: "password", value: "p", secret: true },
+            { key: "scope", value: "x", secret: false },
+          ],
+        }),
+        "custom",
+      ],
+      [
+        "the client_credentials grant sent as a form body",
+        recipe({
+          send_as: "form",
+          credentials: [
+            { key: "grant_type", value: "client_credentials", secret: false },
+          ],
+        }),
+        "custom",
+      ],
+      [
+        "no send_as (the backend's form default)",
+        recipe({
+          send_as: undefined,
+          credentials: [
+            { key: "username", value: "u", secret: false },
+            { key: "password", value: "p", secret: true },
+          ],
+        }),
+        "custom",
+      ],
+    ])("maps %s to %s", (_, config, expected) => {
+      expect(authTypeOf(config)).toBe(expected);
+    });
+  });
+
+  describe("credentialRowsForType", () => {
+    const savedRow = {
+      key: "client_id",
+      value: "opik",
+      secret: false,
+      saved: true,
+      id: "1",
+    };
+
+    it("seeds a service account's username and locked password", () => {
       expect(
-        oauth2CredentialRows().map((row) => [row.key, row.secret]),
+        credentialRowsForType("service_account", "oauth2", [savedRow]).map(
+          (row) => [row.key, row.secret, row.saved],
+        ),
       ).toEqual([
-        ["client_id", false],
-        ["client_secret", true],
+        ["username", false, false],
+        ["password", true, false],
       ]);
     });
 
-    it("marks seeded rows as unsaved so their locks stay toggleable", () => {
-      expect(oauth2CredentialRows().every((row) => !row.saved)).toBe(true);
+    it("seeds OAuth2's user-owned rows with a locked secret; grant_type is injected on save", () => {
+      expect(
+        credentialRowsForType("oauth2", "service_account", []).map((row) => [
+          row.key,
+          row.secret,
+          row.saved,
+        ]),
+      ).toEqual([
+        ["client_id", false, false],
+        ["client_secret", true, false],
+      ]);
+    });
+
+    it("keeps the rows when switching to Custom, surfacing the grant OAuth2 injected", () => {
+      expect(
+        credentialRowsForType("custom", "oauth2", [savedRow]).map((row) => [
+          row.key,
+          row.value,
+        ]),
+      ).toEqual([
+        ["grant_type", "client_credentials"],
+        ["client_id", "opik"],
+      ]);
+      expect(
+        credentialRowsForType("custom", "service_account", [savedRow]),
+      ).toEqual([savedRow]);
     });
   });
 });

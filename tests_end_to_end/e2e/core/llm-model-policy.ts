@@ -35,13 +35,6 @@ export const ALLOWED_MODEL_DISPLAY_NAMES = [
   'Gemini 2.5 Flash',
 ] as const;
 
-/** Fully-qualified ids passed to the SDK/LiteLLM rather than picked in the UI. */
-export const ALLOWED_MODEL_IDS = [
-  'anthropic/claude-haiku-4-5',
-  'openai/gpt-4o-mini',
-  'openai/gpt-5-mini',
-] as const;
-
 /** Substrings that must never appear in a model this suite selects. */
 const FORBIDDEN = [
   'astra', // the current default-and-most-expensive OpenAI entry
@@ -84,8 +77,7 @@ export function isUnbilledModel(name: string): boolean {
 function reject(kind: string, value: string, reason: string): never {
   throw new Error(
     `[llm-model-policy] refusing to select ${kind} "${value}": ${reason}. ` +
-      `Allowed display names: ${ALLOWED_MODEL_DISPLAY_NAMES.join(', ')}. ` +
-      `Allowed ids: ${ALLOWED_MODEL_IDS.join(', ')}.`,
+      `Allowed display names: ${ALLOWED_MODEL_DISPLAY_NAMES.join(', ')}.`,
   );
 }
 
@@ -125,9 +117,4 @@ export function assertAllowedModelDisplayName(displayName: string): void {
     ALLOWED_MODEL_DISPLAY_NAMES,
     'empty selection would leave the picker on its default',
   );
-}
-
-/** The id variant, for models handed to the SDK instead of picked in the UI. */
-export function assertAllowedModelId(modelId: string): void {
-  assertAllowed('model id', modelId, ALLOWED_MODEL_IDS, 'empty');
 }

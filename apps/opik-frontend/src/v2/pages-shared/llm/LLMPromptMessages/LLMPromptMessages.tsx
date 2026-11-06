@@ -68,6 +68,24 @@ const LLMPromptMessages = ({
   const idsBeforeAddRef = useRef<Set<string> | null>(null);
   const didAutoFocusRef = useRef(false);
 
+  // Two editors can fire before the parent re-renders with the first change, so each
+  // change builds on the last array emitted. Re-sync only when the parent passes a new
+  // array: a render still carrying the old one must not roll the pending change back.
+  const propMessagesRef = useRef(messages);
+  const latestMessagesRef = useRef(messages);
+  if (propMessagesRef.current !== messages) {
+    propMessagesRef.current = messages;
+    latestMessagesRef.current = messages;
+  }
+
+  const emitChange = useCallback(
+    (newMessages: LLMMessage[]) => {
+      latestMessagesRef.current = newMessages;
+      onChange(newMessages);
+    },
+    [onChange],
+  );
+
   useEffect(() => {
     const idsBeforeAdd = idsBeforeAddRef.current;
     if (!idsBeforeAdd) return;
@@ -97,11 +115,11 @@ const LLMPromptMessages = ({
   const handleDuplicateMessage = useCallback(
     (message: Partial<LLMMessage> = {}, position: number) => {
       const newMessage = generateDefaultLLMPromptMessage(message);
-      const newMessages = [...messages];
+      const newMessages = [...latestMessagesRef.current];
 
       newMessages.splice(position, 0, newMessage);
 
-      onChange(newMessages);
+      emitChange(newMessages);
       requestAnimationFrame(() => {
         listRef.current?.children[position]?.scrollIntoView({
           behavior: "smooth",
@@ -109,31 +127,34 @@ const LLMPromptMessages = ({
         });
       });
     },
-    [onChange, messages],
+    [emitChange],
   );
 
   const handleRemoveMessage = useCallback(
     (messageId: string) => {
-      onChange(messages.filter((m) => m.id !== messageId));
+      emitChange(latestMessagesRef.current.filter((m) => m.id !== messageId));
     },
-    [onChange, messages],
+    [emitChange],
   );
 
   const handleChangeMessage = useCallback(
     (messageId: string, changes: Partial<LLMMessage>) => {
-      onChange(
-        messages.map((m) => (m.id !== messageId ? m : { ...m, ...changes })),
+      emitChange(
+        latestMessagesRef.current.map((m) =>
+          m.id !== messageId ? m : { ...m, ...changes },
+        ),
       );
     },
-    [onChange, messages],
+    [emitChange],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
+      const current = latestMessagesRef.current;
 
-      const messageMap = keyBy(messages, "id");
-      const localOrder = messages.map((m) => m.id);
+      const messageMap = keyBy(current, "id");
+      const localOrder = current.map((m) => m.id);
 
       if (over && active.id !== over.id) {
         const oldIndex = localOrder.indexOf(active.id as string);
@@ -144,10 +165,10 @@ const LLMPromptMessages = ({
           (messageId) => messageMap[messageId],
         );
 
-        onChange(newMessageOrder);
+        emitChange(newMessageOrder);
       }
     },
-    [onChange, messages],
+    [emitChange],
   );
 
   const handleMessageFocus = useCallback((messageId: string) => {

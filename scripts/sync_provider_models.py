@@ -37,6 +37,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
@@ -606,11 +607,10 @@ def fetch_gemini_models(api_key: str) -> list[tuple[str, str]]:
     return sorted(set(results))
 
 
-def load_model_prices() -> dict:
+def load_model_prices(read_text: Callable[[Path], str] | None = None) -> dict:
     prices = {}
     for path in (MODEL_PRICES_JSON, OPENROUTER_MODEL_PRICES_JSON):
-        with open(REPO_ROOT / path, encoding="utf-8") as f:
-            prices.update(json.load(f))
+        prices.update(json.loads(read_text(path) if read_text else (REPO_ROOT / path).read_text(encoding="utf-8")))
     return prices
 
 
@@ -1107,7 +1107,7 @@ CURATED_YAML = Path("apps/opik-backend/src/main/resources/llm-models-curated.yam
 # The field order of ModelParams.java, so a model's line reads the same way in every sync.
 PARAM_FIELDS = (
     "temperature", "topP", "topK", "frequencyPenalty", "presencePenalty",
-    "maxOutputTokens", "stop", "effort", "samplingExclusive", "thinksByDefault", "routes",
+    "maxOutputTokens", "stop", "effort", "samplingExclusive", "thinksByDefault", "onlyRoute", "routes",
 )
 EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 SAMPLING_FIELDS = ("temperature", "topP", "topK")
@@ -1184,6 +1184,17 @@ def litellm_params(provider_key: str, model_id: str, info: dict, default_max_out
         # Chat Completions sends max as high, so max is a level of the Responses route only.
         if info.get("supports_max_reasoning_effort"):
             params["routes"] = {"responses_api": {"effort": {"levels": levels + ["max"]}}}
+
+    # OpenAI answers a model that takes only /v1/responses (the codex, pro, deep-research and computer-use models)
+    # with a 404 on /v1/chat/completions.
+    endpoints = info.get("supported_endpoints")
+    if (
+        provider_key == "openai"
+        and isinstance(endpoints, list)
+        and "/v1/responses" in endpoints
+        and "/v1/chat/completions" not in endpoints
+    ):
+        params["onlyRoute"] = "responses_api"
 
     # Claude's effort is output_config.effort; LiteLLM's supports_reasoning there means extended thinking, which
     # older Claude models have without any effort levels.
