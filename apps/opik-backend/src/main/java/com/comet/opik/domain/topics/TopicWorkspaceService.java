@@ -10,7 +10,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
-import java.util.Set;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -40,16 +39,6 @@ public class TopicWorkspaceService {
         return config.enabledWorkspaceIds().contains(workspaceId)
                 && template.inTransaction(READ_ONLY,
                         handle -> handle.attach(AiLabelWorkspaceDAO.class).isEnabled(workspaceId));
-    }
-
-    /** The listed workspaces that do not run because they are not enabled in {@code ai_label_workspaces}, by id. */
-    public List<String> mismatchedWorkspaceIds() {
-        var listed = config.enabledWorkspaceIds();
-        if (listed.isEmpty()) {
-            return List.of();
-        }
-        var enabled = Set.copyOf(aiLabelsEnabled());
-        return listed.stream().filter(workspaceId -> !enabled.contains(workspaceId)).sorted().toList();
     }
 
     private List<String> aiLabelsEnabled() {

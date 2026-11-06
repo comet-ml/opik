@@ -306,8 +306,6 @@ class TopicVectorsTickTest {
 
         assertThat(workspaceService.eligibleWorkspaceIds())
                 .containsExactlyElementsOf(List.of(both, other).stream().sorted().toList());
-        assertThat(workspaceService.mismatchedWorkspaceIds())
-                .containsExactlyElementsOf(List.of(listedOnly, listedWithoutAiLabelsRow).stream().sorted().toList());
         assertThat(workspaceService.isEligible(both)).isTrue();
         for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
             assertThat(workspaceService.isEligible(workspaceId)).as(workspaceId).isFalse();
@@ -336,7 +334,6 @@ class TopicVectorsTickTest {
         }
         assertThat(workspaceService.isEligible(both)).isFalse();
         assertThat(workspaceService.isEligible(other)).isFalse();
-        assertThat(workspaceService.mismatchedWorkspaceIds()).contains(other).doesNotContain(both);
     }
 
     @Test
