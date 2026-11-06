@@ -1,3 +1,5 @@
+import pytest
+
 from opik.evaluation.metrics.arguments_helpers import create_scoring_inputs
 from ...testlib.assert_helpers import assert_dicts_equal
 
@@ -97,21 +99,27 @@ def test_create_scoring_inputs_empty_mapping():
     assert_dicts_equal(result, expected)
 
 
-def test_create_scoring_inputs_mapping_target_is_source_of_another_mapping():
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        pytest.param({"output": "answer", "reference": "output"}, id="target-first"),
+        pytest.param({"reference": "output", "output": "answer"}, id="source-first"),
+        pytest.param(
+            {"output": "answer", "reference": lambda inputs: inputs["output"]},
+            id="callable",
+        ),
+    ],
+)
+def test_create_scoring_inputs_mapping_target_is_source_of_another_mapping(mapping):
     """A mapping target must not change the value read by a later mapping"""
     dataset_item = {"question": "Capital of France?", "output": "Paris"}
     task_output = {"answer": "London"}
 
-    for mapping in (
-        {"output": "answer", "reference": "output"},
-        {"reference": "output", "output": "answer"},
-        {"output": "answer", "reference": lambda inputs: inputs["output"]},
-    ):
-        result = create_scoring_inputs(
-            dataset_item=dataset_item,
-            task_output=task_output,
-            scoring_key_mapping=mapping,
-        )
+    result = create_scoring_inputs(
+        dataset_item=dataset_item,
+        task_output=task_output,
+        scoring_key_mapping=mapping,
+    )
 
-        assert result["output"] == "London"
-        assert result["reference"] == "Paris"
+    assert result["output"] == "London"
+    assert result["reference"] == "Paris"
