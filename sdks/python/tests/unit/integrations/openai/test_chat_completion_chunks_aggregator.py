@@ -544,3 +544,115 @@ def test_aggregate__call_id_arrives_after_its_arguments__still_reported() -> Non
             "type": "function",
         }
     ]
+
+
+def test_aggregate__stream_with_two_choices__keeps_each_choice_apart() -> None:
+    """With `n=2` each chunk carries one choice's delta, named by its index."""
+    stream = [
+        _chunk([(0, None, _delta(role="assistant", content=""))]),
+        _chunk([(1, None, _delta(role="assistant", content=""))]),
+        _chunk([(0, None, _delta(content="Hello"))]),
+        _chunk([(1, None, _delta(content="Hi"))]),
+        _chunk([(0, None, _delta(content=" world"))]),
+        _chunk([(1, None, _delta(content=" there"))]),
+        _chunk([(0, "stop", _delta())]),
+        _chunk([(1, "length", _delta())]),
+        _chunk(
+            [],
+            usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+        ),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert aggregated.model_dump()["choices"] == [
+        {
+            "index": 0,
+            "message": {"role": "assistant", "content": "Hello world"},
+            "finish_reason": "stop",
+        },
+        {
+            "index": 1,
+            "message": {"role": "assistant", "content": "Hi there"},
+            "finish_reason": "length",
+        },
+    ]
+
+
+def test_aggregate__two_choices_with_tool_calls__each_keeps_its_own_call() -> None:
+    """Tool call index 0 of choice 1 is a different call from index 0 of choice 0."""
+    stream = [
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        role="assistant",
+                        tool_calls=[
+                            _tool_call(
+                                0,
+                                call_id="call_c0",
+                                call_type="function",
+                                name="get_weather",
+                                arguments=WEATHER_ARGS_PART_1,
+                            )
+                        ],
+                    ),
+                )
+            ]
+        ),
+        _chunk(
+            [
+                (
+                    1,
+                    None,
+                    _delta(
+                        role="assistant",
+                        tool_calls=[
+                            _tool_call(
+                                0,
+                                call_id="call_c1",
+                                call_type="function",
+                                name="get_weather",
+                                arguments=CITY_ARGS,
+                            )
+                        ],
+                    ),
+                )
+            ]
+        ),
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(tool_calls=[_tool_call(0, arguments=WEATHER_ARGS_PART_2)]),
+                )
+            ]
+        ),
+        _chunk([(0, "tool_calls", _delta())]),
+        _chunk([(1, "tool_calls", _delta())]),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    choices = aggregated.model_dump()["choices"]
+    assert [choice["message"]["tool_calls"] for choice in choices] == [
+        [
+            {
+                "id": "call_c0",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": WEATHER_ARGS},
+            }
+        ],
+        [
+            {
+                "id": "call_c1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": CITY_ARGS},
+            }
+        ],
+    ]
