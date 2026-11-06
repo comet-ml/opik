@@ -107,7 +107,7 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
      * {@code Optional.map(fn)} already returns empty when {@code fn} yields null, so no explicit
      * filter is needed.
      */
-    private static ErrorMessage toErrorMessage(OpenAIServiceException ex) {
+    static ErrorMessage toErrorMessage(OpenAIServiceException ex) {
         Integer status = ex.code()
                 .map(OpenAiCompatStatusCodes::fromCode)
                 .or(() -> ex.type().map(OpenAiCompatStatusCodes::fromCode))

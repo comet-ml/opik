@@ -4,12 +4,6 @@ import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBod
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/v2/pages/LogsPage/LogsTab";
 import Loader from "@/shared/Loader/Loader";
-import { Button } from "@/ui/button";
-import { Construction } from "lucide-react";
-import { useState } from "react";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
 import {
   resolveProjectDateRangeConfig,
@@ -27,12 +21,6 @@ const LogsPageContent: React.FunctionComponent<LogsPageContentProps> = ({
   projectName,
   dateRangeConfig,
 }) => {
-  const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
-    useState<boolean>(false);
-  const isGuardrailsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.GUARDRAILS_ENABLED,
-  );
-
   // Every consumer of the shared date-range key is inside this component, so they all receive the
   // same already-settled config.
   const { logsType, needsDefaultResolution, setLogsType } = useLogsType({
@@ -40,49 +28,26 @@ const LogsPageContent: React.FunctionComponent<LogsPageContentProps> = ({
     dateRangeConfig,
   });
 
-  const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
-
   return (
-    <>
-      <PageBodyScrollContainer>
-        <PageBodyStickyContainer
-          className="mb-3 mt-6 flex items-center justify-between"
-          direction="horizontal"
-        >
-          <h1 className="comet-body-accented truncate break-words">Logs</h1>
-          {isGuardrailsEnabled && (
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openGuardrailsDialog}
-              >
-                <Construction className="mr-1.5 size-3.5" />
-                Set a guardrail
-              </Button>
-            </div>
-          )}
-        </PageBodyStickyContainer>
-        {needsDefaultResolution ? (
-          <Loader />
-        ) : (
-          <LogsTab
-            projectId={projectId}
-            projectName={projectName}
-            dateRangeConfig={dateRangeConfig}
-            logsType={logsType}
-            onLogsTypeChange={setLogsType}
-          />
-        )}
-      </PageBodyScrollContainer>
-      {isGuardrailsEnabled && (
-        <SetGuardrailDialog
-          open={isGuardrailsDialogOpened}
-          setOpen={setIsGuardrailsDialogOpened}
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="mb-3 mt-6 flex items-center justify-between"
+        direction="horizontal"
+      >
+        <h1 className="comet-body-accented truncate break-words">Logs</h1>
+      </PageBodyStickyContainer>
+      {needsDefaultResolution ? (
+        <Loader />
+      ) : (
+        <LogsTab
+          projectId={projectId}
           projectName={projectName}
+          dateRangeConfig={dateRangeConfig}
+          logsType={logsType}
+          onLogsTypeChange={setLogsType}
         />
       )}
-    </>
+    </PageBodyScrollContainer>
   );
 };
 

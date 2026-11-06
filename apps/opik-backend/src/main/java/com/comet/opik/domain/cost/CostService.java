@@ -71,10 +71,11 @@ public class CostService {
     private static Estimate estimateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, PriceLayers layers) {
         try {
-            Optional<ModelPriceResolver.PriceMatch> match = ModelPriceResolver.resolve(modelName, provider, layers);
+            Optional<String> resolvedProvider = ProviderRegistry.resolve(provider, modelName);
+            Optional<ModelPriceResolver.PriceMatch> match = ModelPriceResolver.resolveForProvider(modelName,
+                    resolvedProvider, layers);
             ModelPrice modelPrice = match.map(ModelPriceResolver.PriceMatch::price).orElse(DEFAULT_COST);
-            SpanUsage spanUsage = SpanUsageFactory.create(ProviderRegistry.resolve(provider, modelName).orElse(null),
-                    usage);
+            SpanUsage spanUsage = SpanUsageFactory.create(resolvedProvider.orElse(null), usage);
             spanUsage.warnings().forEach(warning -> USAGE_WARNINGS.add(1,
                     Attributes.of(WARNING_TYPE_KEY, warning.type().name())));
             boolean fromOrganization = match.map(ModelPriceResolver.PriceMatch::customRow).isPresent();
