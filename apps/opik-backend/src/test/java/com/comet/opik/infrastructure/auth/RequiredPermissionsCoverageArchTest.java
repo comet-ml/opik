@@ -101,9 +101,10 @@ class RequiredPermissionsCoverageArchTest {
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
             "AuthenticationResource.checkAccess",
-            // Answers 501 until guardrail checks are implemented. It will run checks on the caller's text and write
-            // nothing; its gate is not a workspace role but the organization's guardrails enablement, behind a
-            // backend toggle, so any member of an enabled workspace may call it.
+            // Runs guardrail checks on the caller's text and writes nothing. The gate is not a workspace role but
+            // GuardrailsAccess: the serviceToggles.guardrailsValidationsEnabled toggle and the organization's
+            // guardrails enablement (403 "Guardrails is available on the Enterprise plan"), so any member of an
+            // enabled workspace may call it.
             "GuardrailsResource.validateGuardrails");
 
     /**

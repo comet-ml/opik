@@ -24,6 +24,7 @@ import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,6 +44,8 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -125,6 +128,20 @@ class GuardrailPoliciesToggleOffResourceTest {
                 Arguments.of("delete",
                         (Function<GuardrailPoliciesToggleOffResourceTest, Response>) test -> test.request(id)
                                 .delete()));
+    }
+
+    @Test
+    @DisplayName("while the toggle is off, no guardrail policy endpoint asks the platform about the organization")
+    void noEndpointAsksThePlatformWhileTheToggleIsOff() {
+        endpoints().forEach(arguments -> {
+            @SuppressWarnings("unchecked")
+            var call = (Function<GuardrailPoliciesToggleOffResourceTest, Response>) arguments.get()[1];
+            try (var response = call.apply(this)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        });
+
+        wireMock.server().verify(0, postRequestedFor(urlPathMatching("/opik/workspace-features.*")));
     }
 
     @ParameterizedTest(name = "{0}")

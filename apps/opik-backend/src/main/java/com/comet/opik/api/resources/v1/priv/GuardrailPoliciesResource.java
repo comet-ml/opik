@@ -8,7 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryGuardrailPolicies;
 import com.comet.opik.domain.GuardrailPolicyService;
-import com.comet.opik.infrastructure.FeatureFlags;
+import com.comet.opik.domain.GuardrailsAccess;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -57,7 +57,7 @@ public class GuardrailPoliciesResource {
 
     private final @NonNull GuardrailPolicyService service;
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull GuardrailsAccess guardrailsAccess;
     private final @NonNull SortingFactoryGuardrailPolicies sortingFactory;
 
     @POST
@@ -66,14 +66,16 @@ public class GuardrailPoliciesResource {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/guardrails/policies/{id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "The caller lacks the workspace settings permission, or guardrails are not enabled for this deployment or the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "503", description = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "A policy with this name already exists", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response createGuardrailPolicy(
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailPolicy.class))) @JsonView(GuardrailPolicy.View.Write.class) @NotNull @Valid GuardrailPolicy policy,
             @Context UriInfo uriInfo) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         log.info("Creating guardrail policy with name '{}' in workspace '{}'", policy.name(),
                 requestContext.get().getWorkspaceId());
@@ -87,10 +89,11 @@ public class GuardrailPoliciesResource {
     @Operation(operationId = "getGuardrailPolicyById", summary = "Get guardrail policy by id", description = "Get guardrail policy by id", responses = {
             @ApiResponse(responseCode = "200", description = "Guardrail policy", content = @Content(schema = @Schema(implementation = GuardrailPolicy.class))),
             @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "503", description = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Guardrail policy not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)
     public Response getGuardrailPolicyById(@PathParam("id") UUID id) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         return Response.ok(service.findById(id)).build();
     }
@@ -99,7 +102,8 @@ public class GuardrailPoliciesResource {
     @Operation(operationId = "findGuardrailPolicies", summary = "Find guardrail policies", description = "Find guardrail policies in a workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Guardrail policy page", content = @Content(schema = @Schema(implementation = GuardrailPolicyPage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request: names is not a JSON array of strings", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "403", description = "Guardrails are not enabled for this deployment, or not enabled for the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "503", description = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
     @JsonView(GuardrailPolicy.View.Public.class)
     public Response findGuardrailPolicies(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -108,7 +112,7 @@ public class GuardrailPoliciesResource {
             @QueryParam("names") @Schema(description = "Filter policies by exact names, ignoring case, as a JSON array of names") String names,
             @QueryParam("execution_scope") @Schema(description = "Filter policies by execution scope") GuardrailExecutionScope executionScope,
             @QueryParam("sorting") String sorting) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         var sortingFields = sortingFactory.newSorting(sorting);
         var exactNames = ParamsValidator.get(names, String.class, "names");
@@ -121,14 +125,16 @@ public class GuardrailPoliciesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "403", description = "The caller lacks the workspace settings permission, or guardrails are not enabled for this deployment or the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "503", description = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Guardrail policy not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "A policy with this name already exists", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response updateGuardrailPolicy(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = GuardrailPolicy.class))) @JsonView(GuardrailPolicy.View.Write.class) @NotNull @Valid GuardrailPolicy policy) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         log.info("Updating guardrail policy with id '{}' in workspace '{}'", id, requestContext.get().getWorkspaceId());
         service.update(id, policy);
@@ -139,10 +145,11 @@ public class GuardrailPoliciesResource {
     @Path("/{id}")
     @Operation(operationId = "deleteGuardrailPolicy", summary = "Delete guardrail policy", description = "Delete a guardrail policy and its rules", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
-            @ApiResponse(responseCode = "403", description = "The caller lacks the workspace settings permission, or guardrails are not enabled for this deployment or the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "403", description = "The caller lacks the workspace settings permission, or guardrails are not enabled for this deployment or the workspace's organization", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "503", description = "Could not verify with the platform that guardrails are enabled for the workspace's organization; retry later", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
     @RequiredPermissions(WorkspaceUserPermission.WORKSPACE_SETTINGS_CONFIGURE)
     public Response deleteGuardrailPolicy(@PathParam("id") UUID id) {
-        featureFlags.checkGuardrailsValidationsEnabled();
+        guardrailsAccess.check();
 
         log.info("Deleting guardrail policy with id '{}' in workspace '{}'", id, requestContext.get().getWorkspaceId());
         service.delete(id);

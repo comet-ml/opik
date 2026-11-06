@@ -53,7 +53,13 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -89,7 +95,12 @@ class GuardrailPoliciesResourceTest {
                 .redisUrl(REDIS.getRedisURI())
                 .customConfigs(List.of(
                         new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsValidationsEnabled",
-                                "true")))
+                                "true"),
+                        // Required with the toggle on; the policy endpoints never call opik-inference.
+                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
+                                wireMock.runtimeInfo().getHttpBaseUrl()),
+                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",
+                                randomUUID().toString())))
                 .build());
     }
 
@@ -112,9 +123,18 @@ class GuardrailPoliciesResourceTest {
     }
 
     private Workspace newWorkspace() {
+        return newWorkspace(true);
+    }
+
+    private Workspace newWorkspace(boolean guardrailsEnabled) {
         var workspace = new Workspace(randomUUID().toString(), randomUUID().toString());
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), workspace.apiKey(), workspace.name(),
                 randomUUID().toString(), USER);
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features"))
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(workspace.apiKey()))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspace.name())))
+                .willReturn(okJson("{\"workspaceName\":\"%s\",\"features\":{\"guardrails\":%s}}"
+                        .formatted(workspace.name(), guardrailsEnabled))));
         return workspace;
     }
 
@@ -284,7 +304,7 @@ class GuardrailPoliciesResourceTest {
                 Arguments.of(List.of(rule(GuardrailType.PROMPT_INJECTION, "{\"threshold\":0.5}")),
                         "rules[0].config.threshold is not accepted: thresholds are set by the server"),
                 Arguments.of(List.of(rule(GuardrailType.PII, "{\"entities\":[]}")),
-                        "rules[0].config.entities must be a non-empty list of strings"),
+                        "rules[0].config.entities must be a list of 1 to 11 strings"),
                 Arguments.of(List.of(rule(GuardrailType.PII, "{\"entities\":[\"PERSON\",\" \"]}")),
                         "rules[0].config.entities must contain only non-blank strings"),
                 Arguments.of(List.of(rule(GuardrailType.PII, "{\"entities\":[\"PERSON\",\"PERSON \"]}")),
@@ -305,7 +325,7 @@ class GuardrailPoliciesResourceTest {
                         "{\"restricted_topics\":[\"" + "a".repeat(257) + "\"]}")),
                         "rules[0].config.restricted_topics has a topic longer than 256 characters"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":" + tooManyTopics + "}")),
-                        "rules[0].config.allowed_topics has more than 254 topics"),
+                        "rules[0].config.allowed_topics must be a list of 1 to 254 strings"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"allowed_topics\":[\"Billing\",\"billing\"]}")),
                         "rules[0].config.allowed_topics contains 'billing' more than once, ignoring case"),
                 Arguments.of(List.of(rule(GuardrailType.TOPIC, "{\"restricted_topics\":[\"Işık\",\"IŞIK\"]}")),
@@ -324,6 +344,55 @@ class GuardrailPoliciesResourceTest {
             assertThat(response.readEntity(ErrorMessage.class).getMessage()).isEqualTo(message);
         }
         assertThat(find(workspace, null, null, 1, 10).total()).isZero();
+    }
+
+    @Test
+    @DisplayName("a workspace whose organization does not have guardrails gets 403 on every endpoint")
+    void organizationWithoutGuardrailsIsForbidden() {
+        var workspace = newWorkspace(false);
+
+        try (var response = request(workspace, "").post(Entity.json(piiPolicy("policy")))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            assertThat(response.readEntity(ErrorMessage.class).getMessage())
+                    .isEqualTo("Guardrails is available on the Enterprise plan");
+        }
+        try (var response = request(workspace, "").get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).put(Entity.json(piiPolicy("policy")))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        try (var response = request(workspace, "/" + randomUUID()).delete()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    @Test
+    @DisplayName("a browser session is checked with its own session cookie")
+    void sessionCallerIsCheckedWithItsSessionCookie() {
+        var sessionToken = randomUUID().toString();
+        var workspaceName = randomUUID().toString();
+        // AuthTestUtils' session stub answers without a workspace name, which the platform does return.
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth-session"))
+                .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, randomUUID().toString(),
+                        workspaceName, null))));
+        wireMock.server().stubFor(post(urlPathEqualTo("/opik/workspace-features-session"))
+                .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                .willReturn(okJson("{\"workspaceName\":\"%s\",\"features\":{\"guardrails\":true}}"
+                        .formatted(workspaceName))));
+
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .cookie(SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        }
     }
 
     @Test
