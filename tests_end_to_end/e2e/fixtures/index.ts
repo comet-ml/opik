@@ -1,4 +1,4 @@
-export { test, expect } from './environment-split-thread.fixture';
+export { test, expect } from './settled-compare-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -640,3 +640,70 @@ export type {
   EnvironmentSplitThreadRef,
   EnvironmentSplitThreadFixtures,
 } from './environment-split-thread.fixture';
+export type {
+  CostBreakdownGroup,
+  CostBreakdownSpansRef,
+  CostBreakdownSpansFixtures,
+} from './cost-breakdown-spans.fixture';
+export type {
+  OpenRouterRemovedRowSeed,
+  OpenRouterRemovedRowSpansRef,
+  OpenRouterRemovedRowSpansFixtures,
+} from './openrouter-removed-row-spans.fixture';
+export { OPENROUTER_CATALOG_PROVIDER } from './openrouter-removed-row-spans.fixture';
+export type {
+  CommentedOn,
+  CommentedTraceRef,
+  CommentedEntitiesRef,
+  CommentedEntitiesFixtures,
+} from './commented-entities.fixture';
+export type {
+  ThreadSearchTurnRef,
+  ThreadSearchTermRef,
+  ThreadSearchTurnsRef,
+  ThreadSearchTurnsFixtures,
+} from './thread-search-turns.fixture';
+export type {
+  MixedCaseModelCostSeed,
+  MixedCaseModelCostSpansRef,
+  MixedCaseModelCostSpansFixtures,
+} from './mixed-case-model-cost-spans.fixture';
+export type {
+  DatasetExperimentRef,
+  AllDatasetExperimentsRef,
+  AllDatasetExperimentsFixtures,
+} from './all-dataset-experiments.fixture';
+export type {
+  TruncatedThreadTurnRef,
+  TruncatedThreadRef,
+  TruncatedThreadMessagesRef,
+  TruncatedThreadMessagesFixtures,
+} from './truncated-thread-messages.fixture';
+export { THREAD_TRUNCATION_THRESHOLD } from './truncated-thread-messages.fixture';
+export type {
+  PlaygroundSpanSeedRef,
+  PlaygroundSpanLoadsRef,
+  PlaygroundSpanLoadsFixtures,
+} from './playground-span-loads.fixture';
+export { LOGGED_GOOGLE_AI, LOGGED_GOOGLE_VERTEXAI } from './playground-span-loads.fixture';
+export type {
+  EvaluationMethodExperimentRef,
+  EvaluationMethodExperimentsRef,
+  EvaluationMethodExperimentsFixtures,
+} from './evaluation-method-experiments.fixture';
+export type {
+  EvaluatorSourceTraceRef,
+  EvaluatorSourceTracesRef,
+  EvaluatorSourceTracesFixtures,
+} from './evaluator-source-traces.fixture';
+export type {
+  MultiAnnotatorTraceRef,
+  MultiAnnotatorQueueRef,
+  MultiAnnotatorQueueFixtures,
+} from './multi-annotator-queue.fixture';
+export type {
+  SettledCompareExperimentRef,
+  SettledCompareExperimentsRef,
+  SettledCompareExperimentsFixtures,
+} from './settled-compare-experiments.fixture';
+export { SETTLED_ITEM_COUNT, compareMarker } from './settled-compare-experiments.fixture';

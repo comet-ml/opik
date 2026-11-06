@@ -1883,6 +1883,76 @@ export class PlaygroundPage {
     });
   }
 
+  // --- The Gemini / Vertex AI "Thinking level" control -------------------
+  //
+  // A THIRD control over the same single combobox, and deliberately its own
+  // three methods rather than a reuse of the two sets above. The Gemini family
+  // panel is a different presentation (`GEMINI_PANEL` in `genericPanels.ts`):
+  // its label is "Thinking level", its levels are Google's
+  // `auto/off/minimal/low/medium/high` rather than Anthropic's
+  // `off/low/…/max`, and the request builder nests the pick under
+  // `custom_parameters.thinking.level` instead of sending a flat
+  // `reasoning_effort` or `thinking` block. Naming them for the Anthropic
+  // control would make a Gemini spec read as if it were asserting the
+  // Anthropic one, which is exactly the confusion these panels have already
+  // caused once.
+
+  /**
+   * The Thinking level control's trigger inside the open model-parameters
+   * panel — the same single combobox as the two readers above, since a panel
+   * serves one provider at a time.
+   *
+   * Addressed by role for the reason {@link reasoningEffortTrigger} gives: the
+   * `SelectBox` renders a Radix `SelectTrigger` that does not carry the
+   * `id="thinkingLevel"` its `<Label htmlFor>` points at, so `getByLabel`
+   * resolves nothing. The LABEL is read separately, through
+   * {@link modelParameterLabel}, because which of the two titles the panel
+   * chose ("Thinking level" vs "Reasoning effort") is itself part of what a
+   * Gemini spec asserts.
+   */
+  thinkingLevelTrigger(): Locator {
+    return this.effortSelectTrigger();
+  }
+
+  /**
+   * The thinking level the panel currently DISPLAYS.
+   *
+   * Which is not always what the config holds: `resolveThinkingLevel` falls
+   * back to the model's own documented default for a stored level this model
+   * does not offer, so an untouched Gemini 2.5 Flash panel reads `Auto` with
+   * nothing stored at all. That displayed value is what the request builder
+   * then sends, which is why it is worth asserting in its own right.
+   */
+  async readThinkingLevel(): Promise<string> {
+    return test.step('read the displayed thinking level', async () => this.readEffortValue());
+  }
+
+  /**
+   * Every thinking level the control OFFERS, in the order the panel lists them.
+   *
+   * The whole list is the assertion rather than a membership check: since
+   * opik#9198 the levels come from the curated catalog row
+   * (`getCatalogThinkingLevels`) rather than from a hardcoded table, so "Off is
+   * offered" and "the set behind it is unchanged" are separate claims — and a
+   * catalog that served a level the frontend has no label for would render an
+   * option with no text, which only a full-list comparison can see.
+   */
+  async thinkingLevelOptions(): Promise<string[]> {
+    return test.step('read the offered thinking levels', async () => this.readEffortOptions());
+  }
+
+  /** Pick a Gemini/Vertex thinking level by its rendered label, e.g. `Off`. */
+  async selectThinkingLevel(label: string): Promise<void> {
+    return test.step(`select thinking level "${label}"`, async () => {
+      await this.pickEffort(label);
+      // The trigger, not the config, for the reason `selectThinkingEffort`
+      // gives — and it matters more here: `Low` and `Off` both leave the
+      // request's `custom_parameters` present, so a swallowed click would send
+      // a well-formed body naming the previous level.
+      await expect(this.thinkingLevelTrigger()).toHaveText(label);
+    });
+  }
+
   /**
    * The note that replaces the sampling controls while Claude can think.
    *

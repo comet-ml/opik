@@ -155,8 +155,22 @@ export class ProjectsPage {
    * response is returned so a caller can compare what the server said against
    * what the toast shows — the whole subject of opik#9187 is which of the two
    * the user is given.
+   *
+   * BOTH error shapes this endpoint uses are reported, and neither is defaulted.
+   * A conflict or a service failure answers `{"message":…}`, while a
+   * bean-validation refusal answers `{"errors":[…]}` — opik#9308 put a `@Size`
+   * on `Project.name`, so an over-long name now takes the second shape. The
+   * frontend's `useProjectCreateMutation` reads only `message`, so WHICH key
+   * came back is the difference between a user being told why and being shown a
+   * transport status, and a caller asserting on the toast has to be able to see
+   * it. `null` for an absent key rather than `''` or `[]`, so "the response said
+   * nothing" cannot satisfy a comparison.
    */
-  async submitNewProject(name: string): Promise<{ status: number; message: string | null }> {
+  async submitNewProject(name: string): Promise<{
+    status: number;
+    message: string | null;
+    errors: string[] | null;
+  }> {
     return test.step(`Submit a new project named "${name}"`, async () => {
       const dialog = this.createProjectDialog;
       await dialog.getByLabel('Name', { exact: true }).fill(name);
@@ -171,14 +185,20 @@ export class ProjectsPage {
       await dialog.getByRole('button', { name: 'Create project', exact: true }).click();
       const response = await posted;
       let message: string | null = null;
+      let errors: string[] | null = null;
       try {
-        const body = (await response.json()) as { message?: unknown } | null;
+        const body = (await response.json()) as
+          | { message?: unknown; errors?: unknown }
+          | null;
         if (typeof body?.message === 'string') message = body.message;
+        if (Array.isArray(body?.errors) && body.errors.every((e) => typeof e === 'string')) {
+          errors = body.errors as string[];
+        }
       } catch {
         // A 201 answers with an empty body and a Location header; only a
         // failure carries a message, and the caller asserts the status.
       }
-      return { status: response.status(), message };
+      return { status: response.status(), message, errors };
     });
   }
 }
