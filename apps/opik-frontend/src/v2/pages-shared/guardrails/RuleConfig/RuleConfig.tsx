@@ -122,8 +122,8 @@ const TopicsList: React.FC<TopicsListProps> = ({
       .slice(0, -1)
       .map((topic) => topic.trim())
       .filter(Boolean);
-    const rest = parts[parts.length - 1];
-    update([...topics, ...typed], parts.length > 1 ? rest.trimStart() : rest);
+    // Spaces inside a topic are kept; one before it, typed after the comma, is not.
+    update([...topics, ...typed], parts[parts.length - 1].trimStart());
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {

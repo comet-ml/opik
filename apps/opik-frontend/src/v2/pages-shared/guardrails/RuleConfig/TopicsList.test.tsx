@@ -39,6 +39,24 @@ describe("TopicsList", () => {
     expect(formValue()).toEqual(["finance", "weapons", "mus"]);
   });
 
+  it("keeps the spaces inside a topic, typed one key at a time", () => {
+    render(<ControlledTopicsList initial={[]} />);
+
+    let typed = "";
+    for (const key of "sports betting,  credit card fraud , online gam") {
+      typed = input().value + key;
+      fireEvent.change(input(), { target: { value: typed } });
+    }
+
+    expect(boxes()).toEqual(["sports betting", "credit card fraud"]);
+    expect(input().value).toBe("online gam");
+    expect(formValue()).toEqual([
+      "sports betting",
+      "credit card fraud",
+      "online gam",
+    ]);
+  });
+
   it("shows stored topics as boxes", () => {
     render(<ControlledTopicsList initial={["finance", "weapons"]} />);
 
