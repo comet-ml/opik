@@ -134,7 +134,7 @@ jobs:
 
         - name: Publish package distributions to PyPI
           if: inputs.is_release
-          uses: pypa/gh-action-pypi-publish@v1.14.2
+          uses: pypa/gh-action-pypi-publish@v1.14.3
           with:
             packages-dir: sdks/python/dist
             # Releases call this as a reusable workflow, and PyPI rejects the

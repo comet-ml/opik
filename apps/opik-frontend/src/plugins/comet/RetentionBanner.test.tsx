@@ -176,6 +176,18 @@ describe("RetentionBanner", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("shows the 80% warning to a Free organization above 80% of its spans", () => {
+    givenQuotas(SPAN_LIMIT * 0.9);
+
+    renderBanner();
+
+    expect(
+      screen.getByText(
+        `You're at 80% of your ${SPAN_LIMIT} free spans. Upgrade to ensure uninterrupted monitoring`,
+      ),
+    ).toBeVisible();
+  });
+
   it("lets a Free organization dismiss the 80% warning", () => {
     givenQuotas(SPAN_LIMIT * 0.9);
 
