@@ -1375,6 +1375,18 @@ areas:
       # the manual-add and config round-trip specs, and neither says anything
       # about automation: a queue that stopped filling itself would leave both
       # green. Folding these under them would retire the question permanently.
+      # New for 2.2.143, from the release pass's own exploration of opik#9474.
+      #
+      # Its own key, and deliberately NOT folded under `sme-flow` or
+      # `score-queue-item`. Those two name the SME route rendering a queue and a
+      # reviewer's score reaching the trace, and both were already green — a
+      # queue that marked every item Completed after one review would leave them
+      # green, because the score really did land and the route really did
+      # render. What has no key is the ITEM's state: the Pending / In review /
+      # Reviewed / Completed label, and the `annotators_per_item` ceiling it is
+      # computed against. The gap was invisible in the denominator, and
+      # `annotators_per_item` appears nowhere else in the estate.
+      multi-annotator-item-state: { covered: false, note: "A queue's `annotators_per_item` ceiling versus `getDistinctAnnotatorCount` (opik#9474). One reviewer who both scores through the SME flow and comments leaves a two-annotator item reading 'Reviewed' and the queue reporting '1 remaining', because the composite `<author>_<queueId>` score key and the bare-username comment are one person — and so does a reviewer holding TWO `value_by_author` keys for one name (a queue-scoped score plus a plain one on the same trace). Both halves assert the keys and their `author`s server-side as well as the sidebar label, since the defect lives in the gap between how a write keys a score and how the read counts one. NOT covered: the second annotator actually flipping an item to Completed (the score's author comes from the session, so a single-identity run cannot reach it), the `In review` lock state, the completion view after the last item, and the queue-detail admin route's own rendering of these states." }
       automated-queue-fill:    { covered: false, note: "A feedback score matching the queue's condition routes its trace in with source 'automated', and a non-matching score keeps its trace out" }
       automation-max-items:    { covered: false, note: "max_items_in_queue caps automated adds (deterministically, lowest ids first) while a manual add still bypasses the ceiling; the list's Automation cell reads 'Cap reached'" }
       # New for 2.2.120, from the release pass's own exploration of opik#9079.
