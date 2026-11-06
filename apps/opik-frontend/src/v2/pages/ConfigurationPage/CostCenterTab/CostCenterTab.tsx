@@ -1,71 +1,55 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Layers, Plus } from "lucide-react";
+import useModelPrices from "@/api/model-prices/useModelPrices";
 import useModelPriceHistory from "@/api/model-prices/useModelPriceHistory";
+import useModelsUsed from "@/api/model-prices/useModelsUsed";
 import { useModelPricesAccess } from "@/contexts/ModelPricesAccessContext";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import { Button } from "@/ui/button";
 import {
-  DraftRow,
-  ModelPriceProblem,
-  ModelPriceRow,
+  CATALOG_TYPES,
+  CATALOG_TYPE_LABELS,
+  CatalogEntry,
+  CatalogType,
+  ModelUsed,
+  buildCatalog,
+  filterCatalog,
   groupHistory,
   identityOf,
+  providersOf,
+  sortCatalog,
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
-import ModelPriceDialog from "./ModelPriceDialog";
-import ModelPricesTable from "./ModelPricesTable";
-import ReviewModelPricesDialog from "./ReviewModelPricesDialog";
-import useModelPricesEditor from "./useModelPricesEditor";
+import CatalogTable from "./CatalogTable";
+import CheckboxFilter from "./CheckboxFilter";
+import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
+import BatchUpdateDrawer from "./BatchUpdateDrawer";
+import NoPriceBanner from "./NoPriceBanner";
+import QuickAccess from "./QuickAccess";
+import useBuiltInPrices from "./useBuiltInPrices";
 
 const HISTORY_PAGE = { page: 1, size: 100 };
+const PAGE_SIZES = [25, 50, 100];
+const QUICK_ACCESS_DEFAULTS = [
+  { model: "gpt-5", provider: "openai" },
+  { model: "gpt-5-mini", provider: "openai" },
+  { model: "claude-sonnet-4-5", provider: "anthropic" },
+  { model: "claude-haiku-4-5", provider: "anthropic" },
+];
 
-const mergeProblems = (
-  ...sources: Record<string, ModelPriceProblem[]>[]
-): Record<string, ModelPriceProblem[]> => {
-  const merged: Record<string, ModelPriceProblem[]> = {};
-  sources.forEach((source) =>
-    Object.entries(source).forEach(([key, problems]) => {
-      merged[key] = [...(merged[key] ?? []), ...problems];
-    }),
-  );
-  return merged;
-};
-
-const matchesSearch = (row: ModelPriceRow, search: string) =>
-  [row.model, row.provider, row.alias_of?.model, row.note].some(
-    (value) => value?.toLowerCase().includes(search),
-  );
-
-const describeCounts = (counts: {
-  created: number;
-  updated: number;
-  deleted: number;
-}) =>
-  [
-    counts.created && `${counts.created} added`,
-    counts.updated && `${counts.updated} edited`,
-    counts.deleted && `${counts.deleted} removed`,
-  ]
-    .filter(Boolean)
-    .join(", ");
+const identityKey = (model: string, provider: string) =>
+  identityOf({ model, provider, kind: "fixed" });
 
 const CostCenterTab: React.FC = () => {
   const access = useModelPricesAccess();
   const canEdit = access.canEdit && !access.isPending;
-  const {
-    draft,
-    dispatch,
-    clientErrors,
-    counts,
-    isDirty,
-    hasClientErrors,
-    isPending,
-    isError,
-    preview,
-    save,
-  } = useModelPricesEditor();
+  const workspaceName = useActiveWorkspaceName();
+  const { data: list, isPending, isError } = useModelPrices();
+  const { data: builtIns, isPending: isBuiltInPending } = useBuiltInPrices();
+  const { data: modelsUsed } = useModelsUsed();
   const { data: historyPage } = useModelPriceHistory(HISTORY_PAGE);
   const history = useMemo(
     () => groupHistory(historyPage?.content ?? []),
@@ -73,60 +57,97 @@ const CostCenterTab: React.FC = () => {
   );
 
   const [search, setSearch] = useState("");
+  const [providers, setProviders] = useState<string[]>([]);
+  const [types, setTypes] = useState<CatalogType[]>([]);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(PAGE_SIZES[0]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [editedRow, setEditedRow] = useState<DraftRow>();
-  const [isPriceDialogOpen, setIsPriceDialogOpen] = useState(false);
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const dialogKeyRef = useRef(0);
+  const [drawerTarget, setDrawerTarget] = useState<DrawerTarget>();
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const drawerKey = useRef(0);
 
-  const errors = useMemo(
-    () => mergeProblems(clientErrors, draft.errors),
-    [clientErrors, draft.errors],
+  const catalog = useMemo(
+    () => buildCatalog(builtIns ?? [], list?.rows ?? []),
+    [builtIns, list],
   );
+  const byIdentity = useMemo(() => {
+    const map = new Map<string, CatalogEntry>();
+    catalog.forEach((entry) =>
+      map.set(identityKey(entry.model, entry.provider), entry),
+    );
+    return map;
+  }, [catalog]);
 
-  const visibleRows = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return needle
-      ? draft.rows.filter((draftRow) => matchesSearch(draftRow.row, needle))
-      : draft.rows;
-  }, [draft.rows, search]);
-
-  const takenIdentities = useMemo(
+  const visible = useMemo(
     () =>
-      new Set(
-        draft.rows
-          .filter(
-            (draftRow) => !draftRow.deleted && draftRow.key !== editedRow?.key,
-          )
-          .map((draftRow) => identityOf(draftRow.row)),
+      sortCatalog(
+        filterCatalog(catalog, { search, providers, types }),
+        sortDirection,
       ),
-    [draft.rows, editedRow],
+    [catalog, search, providers, types, sortDirection],
+  );
+  const pageEntries = useMemo(
+    () => visible.slice((page - 1) * size, page * size),
+    [visible, page, size],
+  );
+  const providerOptions = useMemo(
+    () => providersOf(catalog).map((value) => ({ value, label: value })),
+    [catalog],
   );
 
-  const openPriceDialog = (draftRow?: DraftRow) => {
-    dialogKeyRef.current += 1;
-    setEditedRow(draftRow);
-    setIsPriceDialogOpen(true);
+  const unpriced = useMemo(() => {
+    const all = (modelsUsed?.content ?? []).filter(
+      (model) => model.price_source === "none",
+    );
+    const inWorkspace = all.filter((model) =>
+      model.workspaces.some((workspace) => workspace.name === workspaceName),
+    );
+    return inWorkspace.length
+      ? { models: inWorkspace, scope: "workspace" as const }
+      : { models: all, scope: "organization" as const };
+  }, [modelsUsed, workspaceName]);
+
+  const quickAccess = useMemo(() => {
+    const used = (modelsUsed?.content ?? [])
+      .filter((model) => model.price_source !== "none")
+      .map((model) => byIdentity.get(identityKey(model.model, model.provider)))
+      .filter((entry): entry is CatalogEntry => Boolean(entry));
+    const defaults = QUICK_ACCESS_DEFAULTS.map((item) =>
+      byIdentity.get(identityKey(item.model, item.provider)),
+    ).filter((entry): entry is CatalogEntry => Boolean(entry));
+    const seen = new Set<string>();
+    return [...used, ...defaults]
+      .filter((entry) => !seen.has(entry.key) && seen.add(entry.key))
+      .slice(0, 4);
+  }, [modelsUsed, byIdentity]);
+
+  const openDrawer = (target: DrawerTarget) => {
+    drawerKey.current += 1;
+    setDrawerTarget(target);
   };
 
-  const submitPrice = (row: ModelPriceRow) => {
-    if (editedRow) {
-      dispatch({ type: "edited", key: editedRow.key, changes: row });
-    } else {
-      dispatch({ type: "added", row });
-    }
+  const openUnpriced = (model: ModelUsed) => {
+    const existing = byIdentity.get(identityKey(model.model, model.provider));
+    openDrawer(
+      existing
+        ? { entry: existing }
+        : { prefill: { model: model.model, provider: model.provider } },
+    );
   };
 
-  const openReview = () => {
-    dialogKeyRef.current += 1;
-    setIsReviewOpen(true);
-  };
+  const resetPage =
+    <T,>(setter: (value: T) => void) =>
+    (value: T) => {
+      setter(value);
+      setPage(1);
+    };
 
-  if (isPending) {
+  if (isPending || isBuiltInPending) {
     return <Loader />;
   }
 
-  if (isError) {
+  if (isError || !list) {
     return (
       <p className="comet-body-s py-8 text-center text-muted-slate">
         The prices couldn&apos;t be loaded. Refresh the page to try again.
@@ -135,9 +156,9 @@ const CostCenterTab: React.FC = () => {
   }
 
   return (
-    <div data-testid="cost-center-tabpanel" className="pb-24">
+    <div data-testid="cost-center-tabpanel" className="pb-12">
       <CostCenterHeader
-        version={draft.version}
+        version={list.version}
         organizationName={access.organizationName}
         canEdit={canEdit}
         isAccessPending={access.isPending}
@@ -147,106 +168,104 @@ const CostCenterTab: React.FC = () => {
         onToggleHistory={() => setIsHistoryOpen((open) => !open)}
       />
 
-      <div className="mb-4 flex w-full items-center justify-between gap-3">
-        <SearchInput
-          searchText={search}
-          setSearchText={setSearch}
-          className="w-[320px]"
-          placeholder="Search models"
-          dimension="sm"
-        />
+      <NoPriceBanner
+        models={unpriced.models}
+        scope={unpriced.scope}
+        canEdit={canEdit}
+        onAddPrices={openUnpriced}
+      />
+
+      <QuickAccess
+        entries={quickAccess}
+        onOpen={(entry) => openDrawer({ entry })}
+      />
+
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            searchText={search}
+            setSearchText={resetPage(setSearch)}
+            className="w-[280px]"
+            placeholder="Search models or providers"
+            dimension="sm"
+          />
+          <CheckboxFilter
+            label="Provider"
+            options={providerOptions}
+            selected={providers}
+            onChange={resetPage(setProviders)}
+            searchable
+          />
+          <CheckboxFilter
+            label="Type"
+            options={CATALOG_TYPES.map((value) => ({
+              value,
+              label: CATALOG_TYPE_LABELS[value],
+            }))}
+            selected={types}
+            onChange={resetPage(setTypes)}
+          />
+        </div>
         {canEdit && (
-          <Button size="sm" onClick={() => openPriceDialog()}>
-            <Plus className="mr-1.5 size-3.5" />
-            Add price
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => openDrawer({})}>
+              <Plus className="mr-1.5 size-3.5" />
+              Add model
+            </Button>
+            <Button size="sm" onClick={() => setIsBatchOpen(true)}>
+              <Layers className="mr-1.5 size-3.5" />
+              Batch update
+            </Button>
+          </div>
         )}
       </div>
 
-      {draft.listErrors.length > 0 && (
-        <ul className="comet-body-s mb-4 rounded-md border border-destructive/40 p-3 text-destructive">
-          {draft.listErrors.map((problem, index) => (
-            <li key={index}>{problem.message}</li>
-          ))}
-        </ul>
-      )}
-
-      {draft.rows.length === 0 ? (
-        <div className="rounded-md border py-10">
-          <DataTableEmptyContent
-            title="No organization prices yet"
-            description="Spans are priced with the built-in list. Add a price to replace it for a model, for example a contract rate or a self-hosted model."
-          >
-            {canEdit && (
-              <Button size="sm" onClick={() => openPriceDialog()}>
-                Add price
-              </Button>
-            )}
-          </DataTableEmptyContent>
-        </div>
-      ) : visibleRows.length === 0 ? (
-        <p className="comet-body-s py-8 text-center text-muted-slate">
-          No prices match &quot;{search}&quot;.
+      {visible.length === 0 ? (
+        <p className="comet-body-s rounded-md border py-8 text-center text-muted-slate">
+          No prices match these filters.
         </p>
       ) : (
-        <ModelPricesTable
-          rows={visibleRows}
-          canEdit={canEdit}
-          errors={errors}
-          warnings={draft.warnings}
-          changedElsewhere={draft.changedElsewhere}
-          dispatch={dispatch}
-          onEdit={openPriceDialog}
-        />
-      )}
-
-      {canEdit && isDirty && (
-        <div
-          data-testid="model-prices-save-bar"
-          className="sticky bottom-4 z-10 mt-4 flex items-center justify-between gap-3 rounded-md border bg-background p-3 shadow-md"
-        >
-          <span className="comet-body-s">
-            Unsaved changes: {describeCounts(counts)}.
-            {hasClientErrors && (
-              <span className="text-destructive">
-                {" "}
-                Fix the rows marked in red first.
-              </span>
-            )}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => dispatch({ type: "discarded" })}
-            >
-              Discard
-            </Button>
-            <Button size="sm" onClick={openReview} disabled={hasClientErrors}>
-              Review and save
-            </Button>
+        <>
+          <CatalogTable
+            entries={pageEntries}
+            sortDirection={sortDirection}
+            onToggleSort={() =>
+              setSortDirection((direction) =>
+                direction === "asc" ? "desc" : "asc",
+              )
+            }
+            onOpen={(entry) => openDrawer({ entry })}
+          />
+          <div className="pt-4">
+            <DataTablePagination
+              page={page}
+              pageChange={setPage}
+              size={size}
+              sizeChange={resetPage(setSize)}
+              total={visible.length}
+              itemsPerPage={PAGE_SIZES}
+            />
           </div>
-        </div>
+        </>
       )}
 
-      {isPriceDialogOpen && (
-        <ModelPriceDialog
-          key={`price-${dialogKeyRef.current}`}
-          open={isPriceDialogOpen}
-          setOpen={setIsPriceDialogOpen}
-          row={editedRow?.row}
-          takenIdentities={takenIdentities}
-          onSubmit={submitPrice}
+      {drawerTarget && (
+        <ModelPriceDrawer
+          key={`drawer-${drawerKey.current}`}
+          open={Boolean(drawerTarget)}
+          setOpen={(open) => !open && setDrawerTarget(undefined)}
+          target={drawerTarget}
+          list={list}
+          builtIns={builtIns ?? []}
+          canEdit={canEdit}
         />
       )}
 
-      {isReviewOpen && (
-        <ReviewModelPricesDialog
-          key={`review-${dialogKeyRef.current}`}
-          open={isReviewOpen}
-          setOpen={setIsReviewOpen}
-          preview={preview}
-          save={save}
+      {isBatchOpen && (
+        <BatchUpdateDrawer
+          open={isBatchOpen}
+          setOpen={setIsBatchOpen}
+          list={list}
         />
       )}
     </div>

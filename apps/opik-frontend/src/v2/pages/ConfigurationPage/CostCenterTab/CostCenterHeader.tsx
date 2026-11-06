@@ -1,5 +1,4 @@
 import React from "react";
-import { Building2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
 import { getTimeFromNow } from "@/lib/date";
@@ -45,41 +44,33 @@ const CostCenterHeader: React.FC<CostCenterHeaderProps> = ({
   isHistoryOpen,
   onToggleHistory,
 }) => (
-  <div className="mb-4 flex flex-col gap-3">
-    <div className="flex items-start gap-3 rounded-md border bg-primary-foreground p-4">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary">
-        <Building2 className="size-4" />
-      </div>
-      <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="comet-body-accented">
-          {organizationName
-            ? `${organizationName} · organization price list`
-            : "Organization price list"}
-        </h2>
-        <p className="comet-body-s text-muted-slate">
-          {describeAccess(organizationName, canEdit, isAccessPending)} Prices
-          are in USD per 1M tokens and apply to spans saved after a change. A
-          cost sent by the SDK always wins.
-        </p>
-        <div className="comet-body-s flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-slate">
-          {!canEdit && !isAccessPending && (
-            <Tag variant="yellow" size="md">
-              View only · ask an organization admin
-            </Tag>
-          )}
-          <span>
-            {version > 0 ? `Version ${version}` : "No prices saved yet"}
-            {latest &&
-              ` · saved by ${latest.createdBy} · ${getTimeFromNow(
-                latest.createdAt,
-              )}`}
-          </span>
-          {history.length > 0 && (
-            <Button variant="link" size="3xs" onClick={onToggleHistory}>
-              {isHistoryOpen ? "Hide history" : "History"}
-            </Button>
-          )}
-        </div>
+  <div className="mb-6 flex flex-col gap-3">
+    <div className="flex flex-col gap-1">
+      <h2 className="comet-title-s">Cost center</h2>
+      <p className="comet-body-s text-muted-slate">
+        Model prices used to estimate cost. Changes apply to spans logged after
+        you save. {describeAccess(organizationName, canEdit, isAccessPending)}
+      </p>
+      <div className="comet-body-s flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-slate">
+        {!canEdit && !isAccessPending && (
+          <Tag variant="yellow" size="md">
+            View only · ask an organization admin
+          </Tag>
+        )}
+        <span>
+          {version > 0
+            ? `Organization prices: version ${version}`
+            : "No organization prices saved yet"}
+          {latest &&
+            ` · saved by ${latest.createdBy} · ${getTimeFromNow(
+              latest.createdAt,
+            )}`}
+        </span>
+        {history.length > 0 && (
+          <Button variant="link" size="3xs" onClick={onToggleHistory}>
+            {isHistoryOpen ? "Hide history" : "History"}
+          </Button>
+        )}
       </div>
     </div>
 

@@ -1,0 +1,618 @@
+import React, { useMemo, useRef, useState } from "react";
+import { Info, Lock, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
+import { Label } from "@/ui/label";
+import { Tag } from "@/ui/tag";
+import { Textarea } from "@/ui/textarea";
+import SelectBox from "@/shared/SelectBox/SelectBox";
+import {
+  BuiltInPrice,
+  CATALOG_TYPE_LABELS,
+  CatalogEntry,
+  CatalogType,
+  LITELLM_KEYS,
+  ModelPriceList,
+  ModelPriceProblem,
+  ModelPriceRow,
+  PRICE_FIELDS,
+  PRICE_LABELS,
+  PriceField,
+  canonicalPrice,
+  findBuiltIn,
+  identityOf,
+  overrideFields,
+  perMillionToPerToken,
+  problemsForRow,
+  replaceOne,
+  validateRow,
+} from "@/lib/model-prices";
+import { MODE_LABELS, TYPE_TAG_VARIANT, formatDay } from "./format";
+import useSaveModelPrices from "./useSaveModelPrices";
+
+export type DrawerTarget = {
+  entry?: CatalogEntry;
+  prefill?: { model: string; provider: string };
+};
+
+type Line = { id: number; field: PriceField; value: string; locked: boolean };
+
+type ModelPriceDrawerProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  target: DrawerTarget;
+  list: ModelPriceList;
+  builtIns: BuiltInPrice[];
+  canEdit: boolean;
+};
+
+const initialLines = (entry?: CatalogEntry): Line[] => {
+  if (!entry) {
+    return [
+      { id: 1, field: "input_price", value: "", locked: false },
+      { id: 2, field: "output_price", value: "", locked: false },
+    ];
+  }
+  return PRICE_FIELDS.filter((field) => entry.prices[field]).map(
+    (field, index) => ({
+      id: index + 1,
+      field,
+      value: entry.prices[field] ?? "",
+      locked: true,
+    }),
+  );
+};
+
+const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
+  open,
+  setOpen,
+  target,
+  list,
+  builtIns,
+  canEdit,
+}) => {
+  const { entry, prefill } = target;
+  const isNew = !entry;
+  const { send, isSaving } = useSaveModelPrices();
+  const nextId = useRef(10);
+
+  const [model, setModel] = useState(prefill?.model ?? entry?.model ?? "");
+  const [provider, setProvider] = useState(
+    prefill?.provider ?? entry?.provider ?? "",
+  );
+  const [kind, setKind] = useState<ModelPriceRow["kind"]>(
+    entry?.row?.kind ?? "fixed",
+  );
+  const [aliasModel, setAliasModel] = useState(
+    entry?.row?.alias_of?.model ?? "",
+  );
+  const [aliasProvider, setAliasProvider] = useState(
+    entry?.row?.alias_of?.provider ?? "",
+  );
+  const [lines, setLines] = useState<Line[]>(() => initialLines(entry));
+  const [note, setNote] = useState(entry?.row?.note ?? "");
+  const [problems, setProblems] = useState<ModelPriceProblem[]>([]);
+  const [warnings, setWarnings] = useState<ModelPriceProblem[]>([]);
+
+  const builtIn = useMemo(
+    () =>
+      entry?.builtIn ??
+      (kind === "fixed" ? findBuiltIn(builtIns, model, provider) : undefined),
+    [entry, builtIns, model, provider, kind],
+  );
+  const type: CatalogType = entry?.type ?? (builtIn ? "override" : "custom");
+  const keepsBuiltIn = Boolean(builtIn);
+  const readOnly = !canEdit;
+
+  const values = useMemo(() => {
+    const result: Partial<Record<PriceField, string>> = {};
+    lines.forEach((line) => {
+      result[line.field] = line.value;
+    });
+    return result;
+  }, [lines]);
+
+  const buildRow = (): ModelPriceRow => {
+    const base: ModelPriceRow = {
+      model: model.trim(),
+      provider: provider.trim(),
+      kind,
+      note: note.trim() || undefined,
+    };
+    if (kind === "alias") {
+      return {
+        ...base,
+        alias_of: { model: aliasModel.trim(), provider: aliasProvider.trim() },
+      };
+    }
+    if (keepsBuiltIn) {
+      return { ...base, ...overrideFields(builtIn, values) };
+    }
+    const prices: Partial<Record<PriceField, string>> = {};
+    lines.forEach((line) => {
+      const value = canonicalPrice(line.value);
+      if (value) {
+        prices[line.field] = value;
+      }
+    });
+    return { ...base, ...prices };
+  };
+
+  const resetFeedback = () => {
+    setProblems([]);
+    setWarnings([]);
+  };
+
+  const updateLine = (id: number, changes: Partial<Line>) => {
+    resetFeedback();
+    setLines((current) =>
+      current.map((line) => (line.id === id ? { ...line, ...changes } : line)),
+    );
+  };
+
+  const usedFields = new Set(lines.map((line) => line.field));
+  const freeFields = PRICE_FIELDS.filter((field) => !usedFields.has(field));
+
+  const addLine = () => {
+    if (!freeFields.length) return;
+    resetFeedback();
+    nextId.current += 1;
+    setLines((current) => [
+      ...current,
+      { id: nextId.current, field: freeFields[0], value: "", locked: false },
+    ]);
+  };
+
+  const removeLine = (id: number) => {
+    resetFeedback();
+    setLines((current) => current.filter((line) => line.id !== id));
+  };
+
+  const overriddenFields = new Set(
+    PRICE_FIELDS.filter((field) => canonicalPrice(entry?.row?.[field])),
+  );
+
+  const duplicate =
+    isNew &&
+    list.rows.some(
+      (row) =>
+        identityOf(row) === identityOf({ model, provider, kind: "fixed" }),
+    );
+
+  const save = async (remove: boolean) => {
+    const next = remove ? undefined : buildRow();
+    const hasOverride =
+      next && keepsBuiltIn && kind === "fixed"
+        ? PRICE_FIELDS.some((field) => next[field])
+        : true;
+    const rowToSave = next && !hasOverride && !next.note ? undefined : next;
+    if (rowToSave) {
+      const found = validateRow(rowToSave).filter(
+        (problem) => !(keepsBuiltIn && problem.code === "no_price"),
+      );
+      if (duplicate) {
+        found.push({
+          row: null,
+          field: "model",
+          code: "duplicate",
+          message:
+            "This model already has an organization price. Open it from the table to change it.",
+        });
+      }
+      if (found.length) {
+        setProblems(found);
+        return;
+      }
+    }
+    if (!rowToSave && !entry?.row) {
+      setOpen(false);
+      return;
+    }
+    const { request, index } = replaceOne(list, entry?.row, rowToSave);
+    if (!warnings.length) {
+      const preview = await send(request, true);
+      if (preview.kind === "invalid") {
+        setProblems(problemsForRow(preview.errors, index));
+        return;
+      }
+      if (preview.kind !== "previewed") {
+        return;
+      }
+      const found =
+        index >= 0 ? problemsForRow(preview.result.warnings, index) : [];
+      if (found.length) {
+        setWarnings(found);
+        return;
+      }
+    }
+    const outcome = await send(request, false);
+    if (outcome.kind === "saved") {
+      setOpen(false);
+    } else if (outcome.kind === "invalid") {
+      setProblems(problemsForRow(outcome.errors, index));
+    } else {
+      setWarnings([]);
+    }
+  };
+
+  const fieldProblems = (field: string) =>
+    problems.filter((problem) => problem.field === field);
+  const isShownByItsField = (field?: string | null) => {
+    if (!field) return false;
+    if (field === "note") return true;
+    if (field === "model") return isNew;
+    if (field.startsWith("alias_of")) return kind === "alias";
+    return kind === "fixed" && usedFields.has(field as PriceField);
+  };
+  const generalProblems = problems.filter(
+    (problem) => !isShownByItsField(problem.field),
+  );
+
+  const title = entry ? entry.model : "New custom model";
+  const helpText = keepsBuiltIn
+    ? "Per-token prices are shown per 1M tokens for readability. A price you leave as built-in follows the built-in list."
+    : "Per-token prices are shown per 1M tokens for readability. Empty = no price for that part.";
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent
+        side="right"
+        className="flex w-full max-w-none flex-col p-0 sm:max-w-[560px]"
+        header={<SheetTopBar variant="form" />}
+        blockOverlayClose
+      >
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+          <div className="flex flex-col gap-2">
+            <h3 className="comet-title-xs break-all font-mono">{title}</h3>
+            <div className="flex flex-wrap gap-1.5">
+              <Tag variant={TYPE_TAG_VARIANT[type]} size="md">
+                {CATALOG_TYPE_LABELS[type]}
+              </Tag>
+              <Tag variant="default" size="md">
+                {provider.trim() || (isNew ? "No provider" : "Any provider")}
+              </Tag>
+              {entry?.mode && (
+                <Tag variant="gray" size="md">
+                  {MODE_LABELS[entry.mode] ?? entry.mode}
+                </Tag>
+              )}
+              {entry?.lastUpdatedAt && (
+                <Tag variant="default" size="md">
+                  Updated {formatDay(entry.lastUpdatedAt)}
+                </Tag>
+              )}
+            </div>
+          </div>
+
+          {isNew && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="model-price-model">Model name</Label>
+                <Input
+                  id="model-price-model"
+                  dimension="sm"
+                  className="font-mono"
+                  placeholder="e.g. acme-finetune-v3"
+                  value={model}
+                  onChange={(event) => {
+                    resetFeedback();
+                    setModel(event.target.value);
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="model-price-provider">Provider</Label>
+                <Input
+                  id="model-price-provider"
+                  dimension="sm"
+                  placeholder="Any provider"
+                  value={provider}
+                  onChange={(event) => {
+                    resetFeedback();
+                    setProvider(event.target.value);
+                  }}
+                />
+              </div>
+              {fieldProblems("model").map((problem, i) => (
+                <p
+                  key={i}
+                  className="comet-body-xs col-span-2 text-destructive"
+                >
+                  {problem.message}
+                </p>
+              ))}
+              {builtIn && (
+                <p className="comet-body-xs col-span-2 text-muted-slate">
+                  This model has a built-in price. Saving creates an override
+                  for the fields you change.
+                </p>
+              )}
+            </div>
+          )}
+
+          {(isNew || type === "custom") && (
+            <div className="flex gap-1 rounded-md border p-1" role="group">
+              {(["fixed", "alias"] as const).map((option) => (
+                <Button
+                  key={option}
+                  size="xs"
+                  variant={kind === option ? "secondary" : "ghost"}
+                  disabled={readOnly}
+                  onClick={() => {
+                    resetFeedback();
+                    setKind(option);
+                  }}
+                >
+                  {option === "fixed" ? "Own price" : "Same as another model"}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {kind === "alias" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="model-price-alias-model">Priced like</Label>
+                <Input
+                  id="model-price-alias-model"
+                  dimension="sm"
+                  className="font-mono"
+                  placeholder="e.g. gpt-4o"
+                  value={aliasModel}
+                  disabled={readOnly}
+                  onChange={(event) => {
+                    resetFeedback();
+                    setAliasModel(event.target.value);
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="model-price-alias-provider">On provider</Label>
+                <Input
+                  id="model-price-alias-provider"
+                  dimension="sm"
+                  placeholder="The span's own provider"
+                  value={aliasProvider}
+                  disabled={readOnly}
+                  onChange={(event) => {
+                    resetFeedback();
+                    setAliasProvider(event.target.value);
+                  }}
+                />
+              </div>
+              {problems
+                .filter((problem) => problem.field?.startsWith("alias_of"))
+                .map((problem, i) => (
+                  <p
+                    key={i}
+                    className="comet-body-xs col-span-2 text-destructive"
+                  >
+                    {problem.message}
+                  </p>
+                ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <h4 className="comet-body-accented">Prices</h4>
+                <p className="comet-body-s text-muted-slate">{helpText}</p>
+              </div>
+              {lines.map((line) => {
+                const perToken = perMillionToPerToken(line.value);
+                const builtInValue = builtIn?.[line.field];
+                const canReset =
+                  type === "override" &&
+                  canEdit &&
+                  builtInValue &&
+                  canonicalPrice(line.value) !== builtInValue;
+                return (
+                  <div key={line.id} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {line.locked ? (
+                        <div className="comet-body-s flex h-8 flex-1 items-center gap-2 rounded-md bg-muted px-3">
+                          <Lock className="size-3.5 text-light-slate" />
+                          {PRICE_LABELS[line.field]}
+                        </div>
+                      ) : (
+                        <SelectBox
+                          className="h-8 flex-1"
+                          value={line.field}
+                          disabled={readOnly}
+                          onChange={(field: PriceField) =>
+                            updateLine(line.id, { field })
+                          }
+                          options={PRICE_FIELDS.filter(
+                            (field) =>
+                              field === line.field || !usedFields.has(field),
+                          ).map((field) => ({
+                            value: field,
+                            label: PRICE_LABELS[field],
+                          }))}
+                        />
+                      )}
+                      <div className="relative flex-1">
+                        <span className="comet-body-s absolute left-3 top-1/2 -translate-y-1/2 text-light-slate">
+                          $
+                        </span>
+                        <Input
+                          dimension="sm"
+                          className="pl-6 pr-16 font-mono"
+                          aria-label={`${
+                            PRICE_LABELS[line.field]
+                          } price per 1M tokens`}
+                          placeholder={builtInValue ?? "No price"}
+                          value={line.value}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            updateLine(line.id, { value: event.target.value })
+                          }
+                        />
+                        <span className="comet-body-xs absolute right-3 top-1/2 -translate-y-1/2 font-mono text-light-slate">
+                          / 1M tok
+                        </span>
+                      </div>
+                      {canReset ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Reset ${
+                            PRICE_LABELS[line.field]
+                          } to the built-in price`}
+                          onClick={() =>
+                            updateLine(line.id, { value: builtInValue ?? "" })
+                          }
+                        >
+                          <RotateCcw className="size-3.5" />
+                        </Button>
+                      ) : !line.locked && canEdit ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Remove ${PRICE_LABELS[line.field]}`}
+                          onClick={() => removeLine(line.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      ) : (
+                        <span className="w-8" />
+                      )}
+                    </div>
+                    <div className="comet-body-xs flex justify-between gap-2 pl-3 pr-10 font-mono text-light-slate">
+                      <span>{LITELLM_KEYS[line.field]}</span>
+                      <span>
+                        {perToken ? `= ${perToken} / tok` : "= no price"}
+                        {type === "override" &&
+                          overriddenFields.has(line.field) &&
+                          " · overridden"}
+                      </span>
+                    </div>
+                    {fieldProblems(line.field).map((problem, i) => (
+                      <p
+                        key={i}
+                        className="comet-body-xs pl-3 text-destructive"
+                      >
+                        {problem.message}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })}
+              {canEdit && freeFields.length > 0 && (
+                <Button variant="outline" size="sm" onClick={addLine}>
+                  <Plus className="mr-1.5 size-3.5" />
+                  Add price
+                </Button>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="model-price-note">Note</Label>
+            <Textarea
+              id="model-price-note"
+              placeholder="Why was this changed? e.g. negotiated rate, contract #…"
+              value={note}
+              disabled={readOnly}
+              onChange={(event) => {
+                resetFeedback();
+                setNote(event.target.value);
+              }}
+            />
+            {fieldProblems("note").map((problem, i) => (
+              <p key={i} className="comet-body-xs text-destructive">
+                {problem.message}
+              </p>
+            ))}
+          </div>
+
+          {generalProblems.length > 0 && (
+            <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
+              {generalProblems.map((problem, i) => (
+                <li key={i}>{problem.message}</li>
+              ))}
+            </ul>
+          )}
+
+          {warnings.length > 0 && (
+            <div
+              className="comet-body-s space-y-1 rounded-md border border-warning-box-text/40 bg-warning-box-bg p-3"
+              data-testid="model-price-warnings"
+            >
+              <p className="comet-body-s-accented">Check these before saving</p>
+              {warnings.map((warning, i) => (
+                <p key={i}>{warning.message}</p>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3 border-t px-6 py-4">
+          <div className="comet-body-s flex items-center gap-2 rounded-md bg-[var(--tag-blue-bg)] px-3 py-2 text-[var(--tag-blue-text)]">
+            <Info className="size-4 shrink-0" />
+            New prices apply to new spans only. Existing spans keep their
+            estimated cost.
+          </div>
+          <div className="flex items-center gap-2">
+            {canEdit ? (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => save(false)}
+                  disabled={isSaving}
+                >
+                  {warnings.length
+                    ? "Save anyway"
+                    : isNew
+                      ? "Add model"
+                      : "Save changes"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </Button>
+                {type === "override" && entry?.row && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={isSaving}
+                    onClick={() => save(true)}
+                  >
+                    <RotateCcw className="mr-1.5 size-3.5" />
+                    Restore all defaults
+                  </Button>
+                )}
+                {type === "custom" && entry?.row && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={isSaving}
+                    onClick={() => save(true)}
+                  >
+                    <Trash2 className="mr-1.5 size-3.5" />
+                    Remove model
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Close
+              </Button>
+            )}
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+export default ModelPriceDrawer;

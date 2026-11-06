@@ -1,20 +1,25 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import {
   ModelPricesAccess,
   ModelPricesAccessProvider,
 } from "@/contexts/ModelPricesAccessContext";
 
-const { LIST, HISTORY, mutateAsync, refetch } = vi.hoisted(() => {
+const { LIST, HISTORY, BUILT_INS, mutateAsync, refetch } = vi.hoisted(() => {
   const gpt4o = {
     id: "row-1",
     model: "gpt-4o",
     provider: "openai",
     kind: "fixed" as const,
     input_price: "2",
-    output_price: "8",
     note: "Contract rate",
   };
   return {
@@ -24,10 +29,18 @@ const { LIST, HISTORY, mutateAsync, refetch } = vi.hoisted(() => {
         gpt4o,
         {
           id: "row-2",
-          model: "bifrost/gpt-4o",
+          model: "acme-llama-70b",
           provider: "",
+          kind: "fixed" as const,
+          input_price: "0.6",
+          output_price: "0.6",
+        },
+        {
+          id: "row-3",
+          model: "team-model",
+          provider: "gateway",
           kind: "alias" as const,
-          alias_of: { model: "gpt-4o", provider: "openai" },
+          alias_of: { model: "claude-sonnet-4-5", provider: "anthropic" },
         },
       ],
     },
@@ -46,45 +59,78 @@ const { LIST, HISTORY, mutateAsync, refetch } = vi.hoisted(() => {
         },
       ],
     },
+    BUILT_INS: [
+      {
+        model: "gpt-4o",
+        provider: "openai",
+        mode: "chat",
+        input_price: "2.5",
+        output_price: "10",
+        cache_read_price: "1.25",
+      },
+      {
+        model: "gpt-4o-mini",
+        provider: "openai",
+        mode: "chat",
+        input_price: "0.15",
+        output_price: "0.6",
+      },
+      {
+        model: "claude-sonnet-4-5",
+        provider: "anthropic",
+        mode: "chat",
+        input_price: "3",
+        output_price: "15",
+      },
+    ],
     mutateAsync: vi.fn(),
     refetch: vi.fn(),
   };
 });
 
-const current = vi.hoisted(() => ({ list: undefined as unknown }));
+const current = vi.hoisted(() => ({
+  modelsUsed: undefined as unknown,
+}));
 
 vi.mock("@/api/model-prices/useModelPrices", () => ({
-  default: () => ({
-    data: current.list ?? LIST,
-    isPending: false,
-    isError: false,
-    refetch,
-  }),
+  default: () => ({ data: LIST, isPending: false, isError: false, refetch }),
 }));
 
 vi.mock("@/api/model-prices/useModelPriceHistory", () => ({
   default: () => ({ data: HISTORY }),
 }));
 
+vi.mock("@/api/model-prices/useModelsUsed", () => ({
+  default: () => ({ data: current.modelsUsed }),
+}));
+
 vi.mock("@/api/model-prices/useModelPricesReplaceMutation", () => ({
   default: () => ({ mutateAsync, isPending: false }),
 }));
 
+vi.mock("./useBuiltInPrices", () => ({
+  default: () => ({ data: BUILT_INS, isPending: false }),
+}));
+
+vi.mock("@/store/AppStore", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/store/AppStore")>()),
+  useActiveWorkspaceName: () => "research",
+}));
+
 import CostCenterTab from "./CostCenterTab";
 
-const tab = (access?: ModelPricesAccess) => (
-  <TooltipProvider>
-    {access ? (
-      <ModelPricesAccessProvider value={access}>
+const renderTab = (access?: ModelPricesAccess) =>
+  render(
+    <TooltipProvider>
+      {access ? (
+        <ModelPricesAccessProvider value={access}>
+          <CostCenterTab />
+        </ModelPricesAccessProvider>
+      ) : (
         <CostCenterTab />
-      </ModelPricesAccessProvider>
-    ) : (
-      <CostCenterTab />
-    )}
-  </TooltipProvider>
-);
-
-const renderTab = (access?: ModelPricesAccess) => render(tab(access));
+      )}
+    </TooltipProvider>,
+  );
 
 const ADMIN: ModelPricesAccess = {
   canEdit: true,
@@ -92,304 +138,480 @@ const ADMIN: ModelPricesAccess = {
   organizationName: "Acme",
 };
 
-const inputPrice = () =>
-  screen.getByRole("textbox", { name: "Input price for gpt-4o" });
+const shownModels = () =>
+  screen
+    .queryAllByTestId("model-price-row")
+    .map((row) => row.querySelector(".comet-code, .font-mono")?.textContent);
+
+const rowOf = (model: string) =>
+  screen
+    .getAllByTestId("model-price-row")
+    .find((row) => within(row).queryByText(model, { exact: true }))!;
+
+const openRow = (model: string) => fireEvent.click(rowOf(model));
+
+const priceInput = (label: string) =>
+  screen.getByRole("textbox", { name: `${label} price per 1M tokens` });
+
+const replaceResult = (dryRun: boolean, warnings: unknown[] = []) => ({
+  version: dryRun ? 3 : 4,
+  saved: !dryRun,
+  created: [],
+  updated: [],
+  deleted: [],
+  unchanged: 2,
+  warnings,
+});
+
+const sentRows = () => mutateAsync.mock.lastCall![0].request.rows;
 
 describe("CostCenterTab", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     refetch.mockReset();
-    current.list = undefined;
+    current.modelsUsed = undefined;
   });
 
-  it("shows the list read-only to an organization member", () => {
-    renderTab({ canEdit: false, isPending: false, organizationName: "Acme" });
+  describe("access", () => {
+    it("shows the catalog read-only to an organization member", () => {
+      renderTab({ canEdit: false, isPending: false, organizationName: "Acme" });
 
-    expect(screen.getByText("Acme · organization price list")).toBeVisible();
-    expect(
-      screen.getByText("View only · ask an organization admin"),
-    ).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Add price/ })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: /price for/ })).toBeNull();
-    expect(screen.getByText("gpt-4o on openai")).toBeVisible();
-  });
+      expect(
+        screen.getByText("View only · ask an organization admin"),
+      ).toBeVisible();
+      expect(screen.queryByRole("button", { name: /Add model/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Batch update/ })).toBeNull();
 
-  it("stays read-only while the role is loading, without the view-only badge", () => {
-    renderTab({ canEdit: true, isPending: true, organizationName: "Acme" });
+      openRow("gpt-4o");
 
-    expect(screen.queryByRole("button", { name: /Add price/ })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: /price for/ })).toBeNull();
-    expect(
-      screen.queryByText("View only · ask an organization admin"),
-    ).toBeNull();
-  });
+      expect(priceInput("Input")).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Add price/ })).toBeNull();
+    });
 
-  it("lets everyone edit on open source, where there is no organization", () => {
-    renderTab();
+    it("stays read-only while the role is loading, without the view-only badge", () => {
+      renderTab({ canEdit: true, isPending: true, organizationName: "Acme" });
 
-    expect(screen.getByText("Organization price list")).toBeVisible();
-    expect(
-      screen.getByText(/One list for every workspace on this installation/),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: /Add price/ })).toBeVisible();
-  });
+      expect(screen.queryByRole("button", { name: /Add model/ })).toBeNull();
+      expect(
+        screen.queryByText("View only · ask an organization admin"),
+      ).toBeNull();
+    });
 
-  it("doesn't claim who may edit while the access is still loading", () => {
-    renderTab({ canEdit: true, isPending: true });
+    it("lets everyone edit on open source, where there is no organization", () => {
+      renderTab();
 
-    expect(
-      screen.getByText(/Checking who can edit these prices\./),
-    ).toBeVisible();
-    expect(
-      screen.queryByText(/One list for every workspace on this installation/),
-    ).toBeNull();
+      expect(
+        screen.getByText(/One list for every workspace on this installation/),
+      ).toBeVisible();
+      expect(screen.getByRole("button", { name: /Add model/ })).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: /Batch update/ }),
+      ).toBeVisible();
+    });
+
+    it("doesn't claim who may edit while the access is still loading", () => {
+      renderTab({ canEdit: true, isPending: true });
+
+      expect(
+        screen.getByText(/Checking who can edit these prices\./),
+      ).toBeVisible();
+    });
   });
 
   it("shows the version and who saved it last", () => {
     renderTab(ADMIN);
 
-    expect(screen.getByText(/Version 3 · saved by maria/)).toBeVisible();
-  });
-
-  it("counts an edit in the save bar and marks the row", () => {
-    renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
-
-    expect(screen.getByTestId("model-prices-save-bar")).toHaveTextContent(
-      "Unsaved changes: 1 edited.",
-    );
-    expect(screen.getByText("Edited")).toBeVisible();
-  });
-
-  it("blocks saving while a row is invalid", () => {
-    renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "abc" } });
-
     expect(
-      screen.getByText("Input: Type a plain number, like 2.50"),
+      screen.getByText(/Organization prices: version 3 · saved by maria/),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Review and save" }),
-    ).toBeDisabled();
   });
 
-  it("forgets every change on discard", () => {
-    renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-
-    expect(inputPrice()).toHaveValue("2");
-    expect(screen.queryByTestId("model-prices-save-bar")).toBeNull();
-  });
-
-  it("previews the change, then saves the whole list at the version it was read", async () => {
-    mutateAsync.mockImplementation(async ({ dryRun }: { dryRun: boolean }) => ({
-      version: dryRun ? 3 : 4,
-      saved: !dryRun,
-      created: [],
-      updated: [
-        {
-          before: LIST.rows[0],
-          after: { ...LIST.rows[0], input_price: "1.9" },
-        },
-      ],
-      deleted: [],
-      unchanged: 1,
-      warnings: [],
-    }));
-    refetch.mockResolvedValue({ isSuccess: true, data: LIST });
-    renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Review and save" }));
-
-    expect(
-      await screen.findByText("gpt-4o on openai: input 2 → 1.9"),
-    ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
-    expect(mutateAsync).toHaveBeenLastCalledWith({
-      dryRun: false,
-      request: {
-        expected_version: 3,
-        rows: [
-          {
-            model: "gpt-4o",
-            provider: "openai",
-            kind: "fixed",
-            input_price: "1.9",
-            output_price: "8",
-            note: "Contract rate",
-          },
-          {
-            model: "bifrost/gpt-4o",
-            provider: "",
-            kind: "alias",
-            alias_of: { model: "gpt-4o", provider: "openai" },
-          },
-        ],
-      },
-    });
-    await waitFor(() =>
-      expect(screen.queryByTestId("model-prices-save-bar")).toBeNull(),
-    );
-  });
-
-  it("puts the backend's 422 problems on the row they belong to", async () => {
-    mutateAsync.mockRejectedValue({
-      response: {
-        status: 422,
-        data: {
-          errors: [
-            {
-              row: 0,
-              field: "output_price",
-              code: "price_too_high",
-              message: "output_price is over 100000 per 1M tokens",
-            },
-          ],
-          warnings: [],
-        },
-      },
-    });
-    renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Review and save" }));
-
-    const problem = await screen.findByText(
-      "Output: output_price is over 100000 per 1M tokens",
-    );
-    const rowAbove = problem.closest("tr")?.previousElementSibling;
-    expect(rowAbove).toHaveTextContent("gpt-4o");
-    expect(rowAbove).not.toHaveTextContent("bifrost");
-  });
-
-  const previewThenSave = (savedVersion: number) =>
-    mutateAsync.mockImplementation(async ({ dryRun }: { dryRun: boolean }) => ({
-      version: dryRun ? 3 : savedVersion,
-      saved: !dryRun,
-      created: [],
-      updated: [
-        {
-          before: LIST.rows[0],
-          after: { ...LIST.rows[0], input_price: "1.9" },
-        },
-      ],
-      deleted: [],
-      unchanged: 1,
-      warnings: [],
-    }));
-
-  it("saves the list that was reviewed, even if a newer one loads during the review", async () => {
-    previewThenSave(4);
-    refetch.mockResolvedValue({ isSuccess: true, data: LIST });
-    const view = renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Review and save" }));
-    await screen.findByText("gpt-4o on openai: input 2 → 1.9");
-
-    current.list = {
-      version: 4,
-      rows: [{ ...LIST.rows[0], output_price: "7.5" }, LIST.rows[1]],
-    };
-    view.rerender(tab(ADMIN));
-    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
-    const sent = mutateAsync.mock.lastCall![0].request;
-    expect(sent.expected_version).toBe(3);
-    expect(sent.rows[0]).toMatchObject({
-      input_price: "1.9",
-      output_price: "8",
-    });
-  });
-
-  it("keeps the saved prices when reloading the list after a save fails", async () => {
-    previewThenSave(4);
-    refetch.mockResolvedValue({ isSuccess: false, isError: true, data: LIST });
-    renderTab(ADMIN);
-
-    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Review and save" }));
-    await screen.findByText("gpt-4o on openai: input 2 → 1.9");
-    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
-
-    await waitFor(() =>
-      expect(screen.queryByTestId("model-prices-save-bar")).toBeNull(),
-    );
-    expect(inputPrice()).toHaveValue("1.9");
-  });
-
-  describe("search", () => {
-    const SEARCHABLE = {
-      version: 5,
-      rows: [
-        {
-          id: "s-1",
-          model: "acme-llama-70b",
-          provider: "vllm",
-          kind: "fixed" as const,
-          input_price: "0.6",
-          note: "GPU cost",
-        },
-        {
-          id: "s-2",
-          model: "team-model",
-          provider: "gateway",
-          kind: "alias" as const,
-          alias_of: { model: "claude-sonnet-5", provider: "anthropic" },
-        },
-        {
-          id: "s-3",
-          model: "gpt-4o",
-          provider: "openai",
-          kind: "fixed" as const,
-          input_price: "2",
-          note: "Contract rate",
-        },
-      ],
-    };
-
-    const shownModels = () =>
-      screen
-        .queryAllByTestId("model-price-row")
-        .map((row) =>
-          SEARCHABLE.rows.find((r) => row.textContent?.includes(r.model)),
-        )
-        .map((r) => r?.model);
-
-    it.each([
-      ["the model", "ACME", ["acme-llama-70b"]],
-      ["the provider", "gateway", ["team-model"]],
-      ["the model an alias points to", "sonnet", ["team-model"]],
-      ["the note", "contract", ["gpt-4o"]],
-    ])("finds rows by %s", async (_, needle, expected) => {
-      current.list = SEARCHABLE;
+  describe("catalog", () => {
+    it("merges built-in prices with the organization's rows", () => {
       renderTab(ADMIN);
 
-      fireEvent.change(screen.getByPlaceholderText("Search models"), {
-        target: { value: needle },
-      });
+      expect(shownModels()).toEqual([
+        "acme-llama-70b",
+        "claude-sonnet-4-5",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "team-model",
+      ]);
+      expect(within(rowOf("gpt-4o")).getByText("Override")).toBeVisible();
+      expect(within(rowOf("gpt-4o")).getByText("$2.00")).toBeVisible();
+      expect(within(rowOf("gpt-4o")).getByText("$10.00")).toBeVisible();
+      expect(within(rowOf("gpt-4o")).getByText("+1 field")).toBeVisible();
+      expect(within(rowOf("gpt-4o-mini")).getByText("Default")).toBeVisible();
+      expect(within(rowOf("acme-llama-70b")).getByText("Custom")).toBeVisible();
+      expect(
+        within(rowOf("acme-llama-70b")).getByText("Any provider"),
+      ).toBeVisible();
+      expect(rowOf("team-model")).toHaveTextContent(
+        "Priced like claude-sonnet-4-5",
+      );
+    });
+
+    it("sorts by model in both directions", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Sort by model/ }));
+
+      expect(shownModels()[0]).toBe("team-model");
+    });
+
+    it.each([
+      ["the model", "LLAMA", ["acme-llama-70b"]],
+      ["the provider", "gateway", ["team-model"]],
+      [
+        "the model an alias points to",
+        "sonnet",
+        ["claude-sonnet-4-5", "team-model"],
+      ],
+    ])("finds rows by %s", async (_, needle, expected) => {
+      renderTab(ADMIN);
+
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        { target: { value: needle } },
+      );
 
       await waitFor(() => expect(shownModels()).toEqual(expected));
     });
 
     it("says when nothing matches", async () => {
-      current.list = SEARCHABLE;
       renderTab(ADMIN);
 
-      fireEvent.change(screen.getByPlaceholderText("Search models"), {
-        target: { value: "zzz" },
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        { target: { value: "zzz" } },
+      );
+
+      expect(
+        await screen.findByText("No prices match these filters."),
+      ).toBeVisible();
+    });
+
+    it("filters by type", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /^Type/ }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Custom" }));
+
+      expect(shownModels()).toEqual(["acme-llama-70b", "team-model"]);
+      expect(screen.getByRole("button", { name: /^Type · 1/ })).toBeVisible();
+    });
+  });
+
+  describe("editing one model", () => {
+    it("previews, then saves only the fields that differ from the built-in price", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "1.9" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(mutateAsync.mock.calls[0][0].dryRun).toBe(true);
+      expect(mutateAsync).toHaveBeenLastCalledWith({
+        dryRun: false,
+        request: {
+          expected_version: 3,
+          rows: [
+            {
+              model: "gpt-4o",
+              provider: "openai",
+              kind: "fixed",
+              input_price: "1.9",
+              note: "Contract rate",
+            },
+            {
+              model: "acme-llama-70b",
+              provider: "",
+              kind: "fixed",
+              input_price: "0.6",
+              output_price: "0.6",
+            },
+            {
+              model: "team-model",
+              provider: "gateway",
+              kind: "alias",
+              alias_of: { model: "claude-sonnet-4-5", provider: "anthropic" },
+            },
+          ],
+        },
+      });
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Save changes" }),
+        ).toBeNull(),
+      );
+    });
+
+    it("removes the organization row when all defaults are restored", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.click(
+        screen.getByRole("button", { name: /Restore all defaults/ }),
+      );
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(sentRows().map((row: { model: string }) => row.model)).toEqual([
+        "acme-llama-70b",
+        "team-model",
+      ]);
+    });
+
+    it("closes without saving when a built-in model is left unchanged", () => {
+      renderTab(ADMIN);
+
+      openRow("gpt-4o-mini");
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      expect(mutateAsync).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    });
+
+    it("asks before saving a model with warnings, then saves without another preview", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun, [
+          {
+            row: 0,
+            field: "input_price",
+            code: "big_change",
+            message: "Input changes by more than 50%",
+          },
+          {
+            row: 2,
+            field: "provider",
+            code: "no_built_in",
+            message: "No built-in price is filed under 'gateway'",
+          },
+        ]),
+      );
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "0.5" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      const warnings = await screen.findByTestId("model-price-warnings");
+      expect(warnings).toHaveTextContent("Input changes by more than 50%");
+      expect(warnings).not.toHaveTextContent("gateway");
+      expect(mutateAsync).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "Save anyway" }));
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false);
+    });
+
+    it("shows the backend's 422 problems for this model under its field", async () => {
+      mutateAsync.mockRejectedValue({
+        response: {
+          status: 422,
+          data: {
+            errors: [
+              {
+                row: 0,
+                field: "input_price",
+                code: "price_too_high",
+                message: "input_price is over 100000 per 1M tokens",
+              },
+              {
+                row: 1,
+                field: "output_price",
+                code: "price_too_high",
+                message: "someone else's row",
+              },
+            ],
+            warnings: [],
+          },
+        },
+      });
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "1.9" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      expect(
+        await screen.findByText("input_price is over 100000 per 1M tokens"),
+      ).toBeVisible();
+      expect(screen.queryByText("someone else's row")).toBeNull();
+    });
+
+    it("reloads the list and keeps the edit when someone else saved first", async () => {
+      mutateAsync.mockRejectedValue({ response: { status: 409 } });
+      refetch.mockResolvedValue({ isSuccess: true, data: LIST });
+      renderTab(ADMIN);
+
+      openRow("gpt-4o");
+      fireEvent.change(priceInput("Input"), { target: { value: "1.9" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      expect(priceInput("Input")).toHaveValue("1.9");
+      expect(
+        screen.getByRole("button", { name: "Save changes" }),
+      ).toBeVisible();
+    });
+
+    it("won't add a second row for a model the organization already prices", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Add model/ }));
+      fireEvent.change(screen.getByLabelText("Model name"), {
+        target: { value: "ACME-llama-70b" },
+      });
+      fireEvent.change(priceInput("Input"), { target: { value: "1" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+
+      expect(
+        screen.getByText(/This model already has an organization price/),
+      ).toBeVisible();
+      expect(mutateAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("models without a price", () => {
+    const used = (
+      model: string,
+      workspace: string,
+      priceSource: "none" | "built_in",
+    ) => ({
+      model,
+      provider: "",
+      last_seen: "2026-11-05T10:00:00Z",
+      days_used: 3,
+      workspaces: [{ id: workspace, name: workspace }],
+      price_source: priceSource,
+    });
+
+    it("lists the current workspace's unpriced models and prefills a new price", async () => {
+      current.modelsUsed = {
+        content: [
+          used("acme-finetune-v3", "research", "none"),
+          used("other-model", "sales", "none"),
+          used("gpt-4o-mini", "research", "built_in"),
+        ],
+      };
+      mutateAsync.mockImplementation(async ({ dryRun }) =>
+        replaceResult(dryRun),
+      );
+      renderTab(ADMIN);
+
+      const banner = screen.getByTestId("no-price-banner");
+      expect(banner).toHaveTextContent(
+        "1 model in your workspace has no price",
+      );
+      fireEvent.click(within(banner).getByRole("button", { expanded: false }));
+      expect(within(banner).queryByText("other-model")).toBeNull();
+      fireEvent.click(
+        within(banner).getByRole("button", { name: "Add prices" }),
+      );
+
+      expect(screen.getByLabelText("Model name")).toHaveValue(
+        "acme-finetune-v3",
+      );
+      fireEvent.change(priceInput("Input"), { target: { value: "2" } });
+      fireEvent.change(priceInput("Output"), { target: { value: "8" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+      expect(sentRows()[3]).toEqual({
+        model: "acme-finetune-v3",
+        provider: "",
+        kind: "fixed",
+        input_price: "2",
+        output_price: "8",
+      });
+    });
+
+    it("falls back to the whole organization when this workspace has none", () => {
+      current.modelsUsed = {
+        content: [used("other-model", "sales", "none")],
+      };
+      renderTab(ADMIN);
+
+      expect(screen.getByTestId("no-price-banner")).toHaveTextContent(
+        "1 model in your organization has no price",
+      );
+    });
+
+    it("stays hidden when every model has a price", () => {
+      current.modelsUsed = {
+        content: [used("gpt-4o-mini", "research", "built_in")],
+      };
+      renderTab(ADMIN);
+
+      expect(screen.queryByTestId("no-price-banner")).toBeNull();
+    });
+  });
+
+  describe("batch update", () => {
+    const UPLOAD = JSON.stringify({
+      "gpt-4o": { litellm_provider: "openai", input_cost_per_token: 0.0000018 },
+      "fresh-model": {
+        input_cost_per_token: 0.000001,
+        output_cost_per_token: 0.000002,
+      },
+    });
+
+    it("previews the upload merged into the list, then saves it", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun, request }) => ({
+        ...replaceResult(dryRun),
+        created: [request.rows[3]],
+        updated: [{ before: LIST.rows[0], after: request.rows[0] }],
+      }));
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: UPLOAD },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+      expect(await screen.findByTestId("batch-preview")).toHaveTextContent(
+        "1 added, 1 changed",
+      );
+      expect(mutateAsync.mock.lastCall![0].dryRun).toBe(true);
+      expect(sentRows().map((row: { model: string }) => row.model)).toEqual([
+        "gpt-4o",
+        "acme-llama-70b",
+        "team-model",
+        "fresh-model",
+      ]);
+      expect(sentRows()[0]).toMatchObject({
+        input_price: "1.8",
+        note: "Contract rate",
       });
 
-      expect(await screen.findByText('No prices match "zzz".')).toBeVisible();
-      expect(screen.queryAllByTestId("model-price-row")).toHaveLength(0);
+      fireEvent.click(screen.getByRole("button", { name: "Save 2 changes" }));
+
+      await waitFor(() =>
+        expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false),
+      );
+    });
+
+    it("explains what is wrong with the file instead of sending it", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "{ not json" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+      expect(screen.getByText(/This isn't valid JSON/)).toBeVisible();
+      expect(mutateAsync).not.toHaveBeenCalled();
     });
   });
 });
