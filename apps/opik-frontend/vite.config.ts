@@ -1,5 +1,4 @@
-/// <reference types="vitest" />
-import { TanStackRouterVite } from "@tanstack/router-vite-plugin";
+/// <reference types="vitest/config" />
 import react from "@vitejs/plugin-react-swc";
 import * as path from "path";
 import { defineConfig, loadEnv, UserConfig } from "vite";
@@ -39,7 +38,6 @@ export default defineConfig(({ mode }) => {
       }),
       react(),
       tsconfigPaths(),
-      TanStackRouterVite({ enableRouteGeneration: false }),
     ],
     test: {
       globals: true,
@@ -50,11 +48,14 @@ export default defineConfig(({ mode }) => {
     resolve: {
       preserveSymlinks: true,
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
       },
     },
     build: {
       sourcemap: true,
+      // Lightning CSS (the Vite 8 default) rounds values to 5 digits, which moves
+      // Tailwind Typography line-heights (1.3333333 -> 1.33333) off by a pixel.
+      cssMinify: "esbuild",
     },
     server: {
       host: "0.0.0.0",

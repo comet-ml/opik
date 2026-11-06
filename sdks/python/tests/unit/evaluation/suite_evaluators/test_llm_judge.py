@@ -729,6 +729,46 @@ class TestLLMJudgeRetries:
 
         assert calls["n"] == 1, "auth failures must not be retried"
 
+    def test_score__json_array_verdict__retried_like_any_malformed_verdict(self):
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class ArrayThenValidModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return {"role": "assistant", "content": f"[{valid}]"}
+                return {"role": "assistant", "content": valid}
+
+        evaluator = self._judge_with_model(ArrayThenValidModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 2, "a non-object verdict should have been retried"
+        assert len(results) == 1
+        assert results[0].value == 1.0
+
+    def test_score__json_array_verdict_on_every_attempt__returns_failed_results(
+        self,
+    ):
+        calls = {"n": 0}
+
+        class ArrayModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                return {"role": "assistant", "content": "[]"}
+
+        evaluator = self._judge_with_model(ArrayModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 3, "every attempt of the retry policy should be used"
+        assert len(results) == 1
+        assert results[0].name == "The response contains the literal text PASS."
+        assert results[0].scoring_failed is True
+        assert "Failed to parse model output" in results[0].reason
+
     def test_score__empty_response_logged__diagnostic_reaches_logger(self, capture_log):
         from opik import exceptions
         from opik.evaluation.models import base_model

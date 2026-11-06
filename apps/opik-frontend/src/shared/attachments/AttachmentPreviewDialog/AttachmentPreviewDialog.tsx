@@ -1,5 +1,5 @@
 import React from "react";
-import ReactPlayer from "react-player/lazy";
+import ReactPlayer from "@/lib/react-player";
 
 import { ATTACHMENT_TYPE } from "@/types/attachments";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";

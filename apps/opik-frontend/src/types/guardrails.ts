@@ -6,12 +6,6 @@ export enum GuardrailTypes {
   CUSTOM_CLASSIFIER = "CUSTOM_CLASSIFIER",
 }
 
-// Subset configurable via the in-app "Set a guardrail" quick-config dialog today.
-// LLM judge, prompt injection, and custom guardrails are configured through the SDK.
-export type QuickConfigGuardrailType =
-  | GuardrailTypes.TOPIC
-  | GuardrailTypes.PII;
-
 export enum GuardrailResult {
   PASSED = "passed",
   FAILED = "failed",

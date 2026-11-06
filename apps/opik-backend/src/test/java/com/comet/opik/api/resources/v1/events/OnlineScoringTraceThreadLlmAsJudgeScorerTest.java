@@ -15,6 +15,7 @@ import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.cost.ModelPriceService;
 import com.comet.opik.domain.cost.PriceLayers;
+import com.comet.opik.domain.evaluation.EvaluatedSubject;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -158,6 +159,10 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+
+        Mockito.lenient().when(onlineEvaluationRecorder.begin(
+                any(EvaluatedSubject.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
 
         agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry,
                 LlmModelRegistryTestUtils.bundledRegistry());
