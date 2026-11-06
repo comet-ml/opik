@@ -1251,6 +1251,7 @@ class Dataset(DatasetExportOperations):
 
         batch_group_id = id_helpers.generate_id()
 
+        completed = False
         try:
             for batch in batches:
                 LOGGER.debug(
@@ -1261,16 +1262,24 @@ class Dataset(DatasetExportOperations):
                 self._delete_batch_with_retry(batch, batch_group_id=batch_group_id)
 
                 for item_id in batch:
-                    if item_id in self._id_to_hash:
-                        hash = self._id_to_hash[item_id]
-                        self._hashes.discard(hash)
-                        del self._id_to_hash[item_id]
+                    self._id_to_hash.pop(item_id, None)
+            completed = True
         finally:
             # In a `finally` for the same reason the insert path is: a delete that fails
             # part-way has already removed the batches before it, so a count cached from
             # before the call no longer describes the dataset -- and would be reported
             # indefinitely, since the cache is only refilled once cleared.
             self._dataset_items_count = None
+            if completed:
+                # Several ids can share one content hash. Rebuild the set from the
+                # surviving ids, or deleting one item would drop a hash another stored
+                # item still matches and the next insert would duplicate its content.
+                self._hashes = set(self._id_to_hash.values())
+            else:
+                # A batch that raised may still have been applied by the backend, so the
+                # cache can no longer be trusted; re-sync before the next deduplicated
+                # insert, like a failed upload does.
+                self._hashes_synced = False
 
     def clear(self) -> None:
         """
