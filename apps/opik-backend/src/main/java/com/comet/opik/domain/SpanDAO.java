@@ -9,6 +9,8 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.cost.CostVersion;
+import com.comet.opik.domain.cost.PriceLayers;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -42,6 +44,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
@@ -123,6 +126,9 @@ public class SpanDAO {
      * 2. When the span exists in the database but the provided span has different values for the fields such as end_time, input, output, metadata and tags.
      **/
     // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
+    // total_estimated_cost_version comes from the row the cost comes from: a 0 cost can carry a version now (a free
+    // organization row, a failed price load), so picking the two separately could label a cost with another's version.
+    // When both costs are 0 the cost is the same either way, so the version that says how it was priced wins.
     private static final String INSERT = """
             INSERT INTO spans (
                 id,
@@ -213,7 +219,9 @@ public class SpanDAO {
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
-                    LENGTH(old_span.total_estimated_cost_version) > 0, old_span.total_estimated_cost_version,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost_version,
+                    new_span.total_estimated_cost > 0, new_span.total_estimated_cost_version,
+                    notEmpty(old_span.total_estimated_cost_version), old_span.total_estimated_cost_version,
                     new_span.total_estimated_cost_version
                 ) as total_estimated_cost_version,
                 multiIf(
@@ -395,6 +403,7 @@ public class SpanDAO {
      */
     //TODO: refactor to implement proper conflict resolution
     // The old_span read carries the <id_weeks> bound, see SELECT_TARGET_PROJECTS_FOR_SPANS.
+    // total_estimated_cost_version comes from the row the cost comes from, as in INSERT.
     private static final String PARTIAL_INSERT = """
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
@@ -469,9 +478,10 @@ public class SpanDAO {
                     new_span.total_estimated_cost
                 ) as total_estimated_cost,
                 multiIf(
-                    LENGTH(new_span.total_estimated_cost_version) > 0, new_span.total_estimated_cost_version,
-                    LENGTH(old_span.total_estimated_cost_version) > 0, old_span.total_estimated_cost_version,
-                    new_span.total_estimated_cost_version
+                    new_span.total_estimated_cost > 0, new_span.total_estimated_cost_version,
+                    old_span.total_estimated_cost > 0, old_span.total_estimated_cost_version,
+                    notEmpty(new_span.total_estimated_cost_version), new_span.total_estimated_cost_version,
+                    old_span.total_estimated_cost_version
                 ) as total_estimated_cost_version,
                 multiIf(
                     notEmpty(new_span.tags), new_span.tags,
@@ -2112,10 +2122,6 @@ public class SpanDAO {
                     FORMAT Values (:input, :output, :metadata, :input_slim, :output_slim)
                     """;
 
-    // ESTIMATED COST CHANGE
-    // 1.1 - Added cached tokens for OpenAI
-    private static final String ESTIMATED_COST_VERSION = "1.1";
-
     /**
      * Sort mapping applied under {@code spanColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
      * {@code end_time} to {@code NULL} so it sorts last in ASC like a Nullable column did. Mirrors the trace-side
@@ -2133,25 +2139,25 @@ public class SpanDAO {
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @WithSpan
-    public Mono<Void> insert(@NonNull Span span) {
+    public Mono<Void> insert(@NonNull Span span, @NonNull PriceLayers priceLayers) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> insert(span, connection))
+                .flatMapMany(connection -> insert(span, connection, priceLayers))
                 .then();
     }
 
     @WithSpan
-    public Mono<Long> batchInsert(List<Span> spans) {
+    public Mono<Long> batchInsert(List<Span> spans, @NonNull PriceLayers priceLayers) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
 
-        return insertJsonEachRow(spans);
+        return insertJsonEachRow(spans, priceLayers);
     }
 
     /**
      * Span rows streamed as JSONEachRow through the v2 client. Replaced an R2DBC insert that bound 27
      * named parameters per row. See {@link SpanJsonRowMapper} for the per-column notes.
      */
-    private Mono<Long> insertJsonEachRow(List<Span> spans) {
+    private Mono<Long> insertJsonEachRow(List<Span> spans, PriceLayers priceLayers) {
         return makeMonoContextAware((userName, workspaceId) -> {
             // One value for the whole batch, rendered once rather than per row. makeMonoContextAware is
             // deferContextual, so this already runs on subscription and again on a resubscription.
@@ -2162,25 +2168,18 @@ public class SpanDAO {
                     getLogComment("batch_insert_spans", workspaceId, userName, spans.size()),
                     spans,
                     span -> {
-                        // Resolved here, not in the mapper: the cost model and the version constant both
-                        // belong to this DAO, and the binder stamps the version only for a cost it
-                        // computed itself that came out positive.
-                        BigDecimal cost = span.totalEstimatedCost() != null
-                                ? span.totalEstimatedCost()
-                                : calculateCost(span);
-                        String costVersion = span.totalEstimatedCost() == null
-                                && cost.compareTo(BigDecimal.ZERO) > 0
-                                        ? ESTIMATED_COST_VERSION
-                                        : "";
+                        // Resolved here, not in the mapper: pricing belongs to this DAO, and the prices were
+                        // loaded once for the whole batch before the rows are mapped.
+                        var cost = costOf(span, priceLayers);
 
-                        return SpanJsonRowMapper.toJsonRow(span, userName, workspaceId, nowForBatch, cost,
-                                costVersion, spanColumnsNonNullable(),
+                        return SpanJsonRowMapper.toJsonRow(span, userName, workspaceId, nowForBatch, cost.cost(),
+                                cost.version(), spanColumnsNonNullable(),
                                 configuration.getResponseFormatting().getTruncationSize());
                     });
         });
     }
 
-    private Publisher<? extends Result> insert(Span span, Connection connection) {
+    private Publisher<? extends Result> insert(Span span, Connection connection, PriceLayers priceLayers) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newInsertTemplate(workspaceId, userName);
             var idWeeks = idWeeks(Set.of(span.id()));
@@ -2238,7 +2237,7 @@ public class SpanDAO {
 
             TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
-            bindCost(span, statement, "");
+            bindCost(span, statement, "", priceLayers);
 
             bindNanSentinel(statement, "ttft", span.ttft());
 
@@ -2347,18 +2346,21 @@ public class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate, Span existingSpan) {
+    public Mono<Long> update(@NonNull UUID id, @NonNull SpanUpdate spanUpdate, Span existingSpan,
+            @NonNull PriceLayers priceLayers) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> update(id, spanUpdate, connection, existingSpan))
+                .flatMapMany(connection -> update(id, spanUpdate, connection, existingSpan, priceLayers))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
 
     @WithSpan
-    public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
+    public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate,
+            @NonNull PriceLayers priceLayers) {
+        var cost = costToWrite(spanUpdate, false, priceLayers);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false, "partial_insert_span",
+                    var template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, cost, "partial_insert_span",
                             workspaceId, userName);
                     var idWeeks = idWeeks(Set.of(id));
                     idWeeks.ifPresent(_ -> template.add("id_weeks", true));
@@ -2376,7 +2378,7 @@ public class SpanDAO {
                         statement.bind("parent_span_id", "");
                     }
 
-                    bindUpdateParams(spanUpdate, statement, false);
+                    bindUpdateParams(spanUpdate, statement, cost);
 
                     // PARTIAL_INSERT builds the full new_span row, so end_time/ttft are referenced unconditionally and
                     // must always be bound (sentinel or null for an absent value) — unlike the conditional UPDATE
@@ -2401,7 +2403,7 @@ public class SpanDAO {
     }
 
     private Publisher<? extends Result> update(UUID id, SpanUpdate spanUpdate, Connection connection,
-            Span existingSpan) {
+            Span existingSpan, PriceLayers priceLayers) {
         var finalUpdate = spanUpdate.model() != null || spanUpdate.usage() != null || spanUpdate.provider() != null
                 ? spanUpdate.toBuilder()
                         .model(spanUpdate.model() != null ? spanUpdate.model() : existingSpan.model())
@@ -2410,16 +2412,17 @@ public class SpanDAO {
                         .build()
                 : spanUpdate;
 
+        // Priced once, so the SQL names the cost columns exactly when the binder binds them.
+        var cost = costToWrite(finalUpdate, isManualCost(existingSpan), priceLayers);
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = newUpdateTemplate(finalUpdate, UPDATE, isManualCost(existingSpan), "update_span",
-                    workspaceId, userName);
+            var template = newUpdateTemplate(finalUpdate, UPDATE, cost, "update_span", workspaceId, userName);
             var idWeeks = idWeeks(Set.of(id));
             idWeeks.ifPresent(_ -> template.add("id_weeks", true));
             var statement = connection.createStatement(template.render());
             statement.bind("id", id);
             idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
-            bindUpdateParams(finalUpdate, statement, isManualCost(existingSpan));
+            bindUpdateParams(finalUpdate, statement, cost);
 
             bindUserNameAndWorkspace(statement, userName, workspaceId);
 
@@ -2430,7 +2433,7 @@ public class SpanDAO {
         });
     }
 
-    private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement, boolean isManualCostExist) {
+    private void bindUpdateParams(SpanUpdate spanUpdate, Statement statement, Optional<SpanCost> cost) {
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             statement.bind("name", spanUpdate.name());
         }
@@ -2452,18 +2455,10 @@ public class SpanDAO {
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.readTree(errorInfo).toString()));
 
-        if (spanUpdate.totalEstimatedCost() != null) {
-            // Update with new manually set cost
-            statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
-            statement.bind("total_estimated_cost_version", "");
-        } else if (!isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate)) {
-            // Calculate estimated cost only in case Span doesn't have manually set cost
-            BigDecimal estimatedCost = CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(),
-                    spanUpdate.usage(), spanUpdate.metadata());
-            statement.bind("total_estimated_cost", estimatedCost.toString());
-            statement.bind("total_estimated_cost_version",
-                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
-        }
+        cost.ifPresent(spanCost -> {
+            statement.bind("total_estimated_cost", spanCost.cost().toString());
+            statement.bind("total_estimated_cost_version", spanCost.version());
+        });
 
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
@@ -2484,7 +2479,7 @@ public class SpanDAO {
                 Objects.toString(spanUpdate.metadata(), null));
     }
 
-    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
+    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, Optional<SpanCost> cost, String queryName,
             String workspaceId, String userName) {
         var template = getSTWithLogComment(sql, queryName, workspaceId, userName, "");
         if (StringUtils.isNotBlank(spanUpdate.name())) {
@@ -2513,9 +2508,7 @@ public class SpanDAO {
         Optional.ofNullable(spanUpdate.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", JsonUtils.readTree(errorInfo).toString()));
 
-        // If we have manual cost in update OR if we can calculate it and user didn't set manual cost before
-        boolean shouldRecalculateEstimatedCost = !isManualCostExist && isUpdateCostRecalculationAvailable(spanUpdate);
-        if (spanUpdate.totalEstimatedCost() != null || shouldRecalculateEstimatedCost) {
+        if (cost.isPresent()) {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
         }
@@ -3005,15 +2998,40 @@ public class SpanDAO {
                 .onErrorResume(ErrorUtils::isMalformedJsonPath, e -> Flux.empty());
     }
 
-    private BigDecimal calculateCost(Span span) {
+    private record SpanCost(BigDecimal cost, String version) {
+    }
+
+    // A cost the client sent always wins, even 0, and gets a blank version.
+    private SpanCost costOf(Span span, PriceLayers priceLayers) {
+        if (span.totalEstimatedCost() != null) {
+            return new SpanCost(span.totalEstimatedCost(), "");
+        }
         // Later we could just use span.model(), but now it's still located inside metadata
         String model = StringUtils.isNotBlank(span.model())
                 ? span.model()
                 : Optional.ofNullable(span.metadata())
                         .map(metadata -> metadata.get("model"))
                         .map(JsonNode::asText).orElse("");
+        var priced = CostService.price(model, span.provider(), span.usage(), span.metadata(), priceLayers);
+        return new SpanCost(priced.cost(), CostVersion.of(priced, priceLayers, MapUtils.isNotEmpty(span.usage())));
+    }
 
-        return CostService.calculateCost(model, span.provider(), span.usage(), span.metadata());
+    // An update recomputes the cost only for a span whose cost the client never set, and only when the new cost is
+    // positive or the organization's rows set it, so a missing price never wipes a cost already stored.
+    private Optional<SpanCost> costToWrite(SpanUpdate spanUpdate, boolean manualCostExists, PriceLayers priceLayers) {
+        if (spanUpdate.totalEstimatedCost() != null) {
+            return Optional.of(new SpanCost(spanUpdate.totalEstimatedCost(), ""));
+        }
+        if (manualCostExists) {
+            return Optional.empty();
+        }
+        var priced = CostService.price(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
+                spanUpdate.metadata(), priceLayers);
+        if (priced.cost().signum() <= 0 && priced.source() != CostService.CostSource.ORGANIZATION) {
+            return Optional.empty();
+        }
+        return Optional.of(new SpanCost(priced.cost(),
+                CostVersion.of(priced, priceLayers, MapUtils.isNotEmpty(spanUpdate.usage()))));
     }
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
@@ -3513,11 +3531,6 @@ public class SpanDAO {
         return span.totalEstimatedCost() != null && StringUtils.isBlank(span.totalEstimatedCostVersion());
     }
 
-    private boolean isUpdateCostRecalculationAvailable(SpanUpdate spanUpdate) {
-        return CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
-                spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
-    }
-
     // Bind the usage map as parallel key/value arrays for the Map(String, Int64) CAST. UsageUtils
     // drops null token counts (a null value would fail the CAST with CANNOT_CONVERT_TYPE, code 70).
     private static void bindUsage(Statement statement, Map<String, Integer> usage) {
@@ -3526,17 +3539,10 @@ public class SpanDAO {
         statement.bind("usage_values", sanitized.values().toArray(Integer[]::new));
     }
 
-    private void bindCost(Span span, Statement statement, String index) {
-        if (span.totalEstimatedCost() != null) {
-            // Cost is set manually by the user
-            statement.bind("total_estimated_cost" + index, span.totalEstimatedCost().toString());
-            statement.bind("total_estimated_cost_version" + index, "");
-        } else {
-            BigDecimal estimatedCost = calculateCost(span);
-            statement.bind("total_estimated_cost" + index, estimatedCost.toString());
-            statement.bind("total_estimated_cost_version" + index,
-                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
-        }
+    private void bindCost(Span span, Statement statement, String index, PriceLayers priceLayers) {
+        var cost = costOf(span, priceLayers);
+        statement.bind("total_estimated_cost" + index, cost.cost().toString());
+        statement.bind("total_estimated_cost_version" + index, cost.version());
     }
 
     @WithSpan
