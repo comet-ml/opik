@@ -117,7 +117,7 @@ public class TopicVectorsDAO {
      */
     static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\p{Z}]|[\\x{A0}\\x{2007}\\x{202F}]";
 
-    /** The runbook's summary read: each trace's latest output row, its text extracted in SQL exactly as stored. */
+    /** The summary read: each trace's latest output row, its text extracted in SQL exactly as stored. */
     private static final String FIND_SUMMARIES = """
             SELECT project_id, trace_id, task_version, JSONExtractString(output, 'summary') AS summary
             FROM ai_labels

@@ -2624,7 +2624,7 @@ aiLabels:
 
 # Topics: groups traces by the intent ai-labels summarizes. Step 1 stores a bge-small vector of every trace_summary in
 # ClickHouse topic_vectors, for the workspaces ai-labels is enabled for. Calls aiLabels.inference's deployment with its
-# credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md, section "Topic vectors".
+# credential (/v1/embed).
 topics:
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
