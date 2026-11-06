@@ -9,6 +9,11 @@ One process, two roles:
                               Returns {access_token, token_type, expires_in}.
                               A credential row "scope: ttl:<N>" overrides the
                               token lifetime for that request only.
+  POST /service-account/token Service-account token endpoint (OPIK-8732 shape).
+                              Requires HTTP Basic (SA_USERNAME/SA_PASSWORD) and
+                              an empty body (400 otherwise); replies with the bare
+                              token as text/plain and no lifetime, so callers need
+                              a fallback one.
   POST /v1/chat/completions   OpenAI-compatible gateway (sync + SSE streaming).
                               Accepts only bearers this process issued (or the
                               static API key), so a missing/stale bearer fails
@@ -53,6 +58,8 @@ from urllib.parse import parse_qs
 
 CLIENT_ID = "opik-test"
 CLIENT_SECRET = "opik-secret"
+SA_USERNAME = "opik-service-account"
+SA_PASSWORD = "opik-sa-password"  # betterleaks:allow — fixed credential of this local mock service
 STATIC_API_KEY = "mock-static-key"  # accepted as a bearer, for the static-auth provider entry
 
 TTL_SECONDS = 3600
@@ -125,6 +132,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/oauth/token":
             self._handle_token(raw_body)
+        elif self.path == "/service-account/token":
+            self._handle_service_account_token(raw_body)
         elif self.path == "/revoke":
             count = len(ISSUED_TOKENS)
             ISSUED_TOKENS.clear()
@@ -183,6 +192,34 @@ class Handler(BaseHTTPRequestHandler):
             "expires_in": ttl,
             **({"scope": scope} if scope else {}),
         })
+
+    def _handle_service_account_token(self, raw_body):
+        if raw_body:
+            STATS["token_refused"] += 1
+            log("service-account token request REFUSED: unexpected request body")
+            self._reply(400, {"error": "unexpected_body"})
+            return
+        auth = self.headers.get("Authorization") or ""
+        try:
+            username, password = base64.b64decode(auth.removeprefix("Basic ")).decode().split(":", 1)
+        except Exception:
+            username, password = None, None
+        if not auth.startswith("Basic ") or (username, password) != (SA_USERNAME, SA_PASSWORD):
+            STATS["token_refused"] += 1
+            log("service-account token request REFUSED: bad or missing HTTP Basic credentials")
+            self._reply(401, {"error": "invalid_credentials"})
+            return
+
+        token = secrets.token_urlsafe(24)
+        ISSUED_TOKENS[token] = time.time() + TTL_SECONDS
+        STATS["tokens_issued"] += 1
+        log(f"service-account token ISSUED as plain text: ...{token[-8:]}")
+        body = token.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_chat_status(self, raw_body):
         """Register (or clear) the HTTP status the gateway must answer for one model.

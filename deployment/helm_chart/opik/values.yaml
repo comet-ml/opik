@@ -1112,7 +1112,9 @@ clickhouse:
   # policy is attached to a table (see `ttl`), so `enabled: false` (default) is
   # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
   # ({shard}/{replica}) cannot be used because the S3 disk is read at server
-  # start, before macros bind.
+  # start, before macros bind. With `backupServer` on, set
+  # `backupServer.env.S3_OBJECT_DISK_PATH` (outside `S3_PATH`) before any part
+  # reaches cold, or every backup after that fails.
   tieredStorage:
     enabled: false
     hot:
