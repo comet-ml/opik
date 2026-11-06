@@ -173,3 +173,82 @@ def test_load_conversation_thread__thread_id_with_double_quote__filter_stays_sco
         call_kwargs["filter_string"]
     ).get_filter_expressions()
     assert parsed[0]["value"] == 'thread"123'
+
+
+def _load_thread_with_traces(trace_count, max_results, count_known=True):
+    start = datetime.datetime(2026, 1, 1)
+    mock_opik_client = mock.MagicMock()
+    # Newest first and cut at max_results, like the backend.
+    mock_opik_client.search_traces.return_value = [
+        TracePublic(
+            id=f"trace_{i}",
+            input={"content": f"user input {i}"},
+            output={"content": f"assistant output {i}"},
+            start_time=start + datetime.timedelta(minutes=i),
+        )
+        for i in reversed(range(trace_count))
+    ][:max_results]
+    return helpers.load_conversation_thread(
+        thread=TraceThread(
+            id="thread_1",
+            # The backend counts two messages per trace.
+            number_of_messages=trace_count * 2 if count_known else None,
+        ),
+        trace_input_transform=lambda x: x.get("content", ""),
+        trace_output_transform=lambda x: x.get("content", ""),
+        max_results=max_results,
+        project_name="test_project",
+        client=mock_opik_client,
+    )
+
+
+def _warnings(caplog):
+    return [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+
+
+def test_load_conversation_thread__more_traces_than_max_results__warning_logged(
+    caplog,
+):
+    with caplog.at_level("WARNING", logger="opik.evaluation.threads.helpers"):
+        result = _load_thread_with_traces(trace_count=3, max_results=2)
+
+    assert [item.content for item in result.discussion] == [
+        "user input 1",
+        "assistant output 1",
+        "user input 2",
+        "assistant output 2",
+    ]
+    warnings = _warnings(caplog)
+    assert len(warnings) == 1
+    assert "Thread 'thread_1' has 3 traces" in warnings[0]
+    assert "max_traces_per_thread=2" in warnings[0]
+    assert "Only its 2 most recent traces" in warnings[0]
+
+
+def test_load_conversation_thread__trace_count_equals_max_results__no_warning(
+    caplog,
+):
+    with caplog.at_level("WARNING", logger="opik.evaluation.threads.helpers"):
+        result = _load_thread_with_traces(trace_count=2, max_results=2)
+
+    assert len(result.discussion) == 4
+    assert _warnings(caplog) == []
+
+
+def test_load_conversation_thread__unknown_trace_count_at_max_results__warning_logged(
+    caplog,
+):
+    with caplog.at_level("WARNING", logger="opik.evaluation.threads.helpers"):
+        _load_thread_with_traces(trace_count=2, max_results=2, count_known=False)
+
+    warnings = _warnings(caplog)
+    assert len(warnings) == 1
+    assert "Thread 'thread_1' has at least 2 traces" in warnings[0]
+
+
+def test_load_conversation_thread__fewer_traces_than_max_results__no_warning(caplog):
+    with caplog.at_level("WARNING", logger="opik.evaluation.threads.helpers"):
+        result = _load_thread_with_traces(trace_count=1, max_results=2)
+
+    assert len(result.discussion) == 2
+    assert _warnings(caplog) == []

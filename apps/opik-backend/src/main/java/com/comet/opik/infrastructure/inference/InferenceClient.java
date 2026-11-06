@@ -1,7 +1,12 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
+import com.comet.opik.infrastructure.http.HttpModule;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.dropwizard.client.JerseyClientConfiguration;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.HttpMethod;
@@ -22,15 +27,15 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
@@ -43,10 +48,11 @@ import java.util.function.Function;
  * Every call takes a deadline: each attempt's connect and read timeouts are cut to the time left, no retry starts that
  * can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without sending anything.
  * <p>
- * {@link #decide}, which a request waits on, has a client of its own: on the shared one it would queue behind batch
- * calls for a pooled connection, and a call cut off at its deadline would still hold a thread and the connection until
- * the body ended, because closing an Apache response reads the rest of it. Cancelling a call on its own client drops
- * the connection, and at most {@code maxConcurrentDecides} calls are in flight.
+ * {@link #decide}, which a request waits on, runs on a client of its own, built like the shared one: on the shared
+ * client it would queue behind batch calls for a pooled connection. Its connections and threads are sized to
+ * {@code maxConcurrentDecides}, the most decide calls in flight; a call over it fails with {@code client_busy} after the
+ * usual retries. A call cut off at its deadline frees its caller, but its thread reads on until the response ends and
+ * keeps its slot until then, so a slow service ties up decide's slots, never the shared client.
  * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
@@ -73,20 +79,32 @@ public class InferenceClient {
 
     private final @NonNull Client client;
     private final @NonNull AiLabelsConfig config;
-    private final @NonNull HttpClient decideClient;
+    private final @NonNull Client decideClient;
     private final @NonNull Semaphore decidePermits;
 
     @Inject
     public InferenceClient(@NonNull Client client, @NonNull @Config("aiLabels") AiLabelsConfig config) {
         this.client = client;
         this.config = config;
-        this.decideClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                // opik-inference never redirects, and following one would send the credential where it points.
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .connectTimeout(config.getInference().getConnectTimeout().toJavaDuration())
-                .build();
-        this.decidePermits = new Semaphore(config.getInference().getMaxConcurrentDecides());
+        var maxConcurrentDecides = config.getInference().getMaxConcurrentDecides();
+        this.decideClient = newDecideClient(maxConcurrentDecides);
+        this.decidePermits = new Semaphore(maxConcurrentDecides);
+    }
+
+    private static Client newDecideClient(int maxConcurrentDecides) {
+        var clientConfig = new JerseyClientConfiguration();
+        clientConfig.setMaxConnections(maxConcurrentDecides);
+        clientConfig.setMaxConnectionsPerRoute(maxConcurrentDecides);
+        // The rest as the shared client sends to opik-inference.
+        clientConfig.setGzipEnabledForRequests(false);
+        clientConfig.setChunkedEncodingEnabled(false);
+        clientConfig.setValidateAfterInactivityPeriod(io.dropwizard.util.Duration.seconds(5));
+        clientConfig.setUserAgent(Optional.of("opik-inference-decide"));
+        // A thread per call in flight, started when needed: the permits keep calls within the cap, so none queues.
+        var executor = new ThreadPoolExecutor(0, maxConcurrentDecides, 60, TimeUnit.SECONDS, new SynchronousQueue<>(),
+                new ThreadFactoryBuilder().setNameFormat("opik-inference-decide-%d").setDaemon(true).build());
+        return HttpModule.buildClient(
+                new DestinationGuardJerseyClientBuilder(new MetricRegistry()).using(executor), clientConfig);
     }
 
     public Mono<BatchSubmitResponse> submitDecide(@NonNull BatchDecideRequest request, @NonNull Instant deadline) {
@@ -170,8 +188,7 @@ public class InferenceClient {
                     .failFastOnDeadlineExceeded(true)
                     .realtime(true)
                     .build())
-                    // The realtime client has no read timeout: this bounds the whole call, and its cancel drops the
-                    // connection.
+                    // A body that trickles in escapes the socket timeouts: this frees the caller at the deadline.
                     .timeout(left.isNegative() ? Duration.ZERO : left)
                     .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime());
         });
@@ -235,12 +252,15 @@ public class InferenceClient {
                 "aiLabels.inference.url must be set to call opik-inference");
         Preconditions.checkState(StringUtils.isNotBlank(inference.getCredential()),
                 "aiLabels.inference.credential must be set to call opik-inference");
-        if (call.realtime()) {
-            return sendRealtime(call, inference.getCredential(),
-                    call.target().apply(client.target(inference.getUrl())).getUri());
+        if (call.realtime() && !decidePermits.tryAcquire()) {
+            return Mono.error(InferenceException.clientBusy());
         }
-        return Mono.<Response>create(sink -> {
-            var builder = call.target().apply(client.target(inference.getUrl()))
+        // A decide call keeps its slot until its thread is done, which a cancel at the deadline does not cut short.
+        Runnable release = call.realtime() ? decidePermits::release : () -> {
+        };
+        var httpClient = call.realtime() ? decideClient : client;
+        return Mono.<T>create(sink -> {
+            var builder = call.target().apply(httpClient.target(inference.getUrl()))
                     .request(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + inference.getCredential())
                     // opik-inference never redirects, and following one would send the credential where it points.
@@ -248,55 +268,46 @@ public class InferenceClient {
                     .property(ClientProperties.CONNECT_TIMEOUT,
                             timeoutMillis(inference.getConnectTimeout().toJavaDuration(), left))
                     .property(ClientProperties.READ_TIMEOUT, timeoutMillis(call.readTimeout(), left));
+            // Read on the client's thread, even after a cancel: the response is always closed, and its pooled
+            // connection given back.
             var callback = new InvocationCallback<Response>() {
                 @Override
                 public void completed(Response response) {
-                    sink.success(response);
+                    T value;
+                    try {
+                        value = read(call, response);
+                    } catch (RuntimeException exception) {
+                        sink.error(exception);
+                        return;
+                    } finally {
+                        release.run();
+                    }
+                    sink.success(value);
                 }
 
                 @Override
                 public void failed(Throwable throwable) {
+                    release.run();
                     sink.error(InferenceException.transport(throwable));
                 }
             };
-            if (call.body() != null) {
-                builder.async().method(call.method(), Entity.entity(call.body(), MediaType.APPLICATION_JSON_TYPE),
-                        callback);
-            } else {
-                builder.async().method(call.method(), callback);
+            try {
+                if (call.body() != null) {
+                    builder.async().method(call.method(),
+                            Entity.entity(call.body(), MediaType.APPLICATION_JSON_TYPE), callback);
+                } else {
+                    builder.async().method(call.method(), callback);
+                }
+            } catch (RuntimeException exception) {
+                release.run();
+                throw exception;
             }
-        })
-                // A response that arrives after a cancel would otherwise hold its pooled connection.
-                .doOnDiscard(Response.class, Response::close)
-                .map(response -> read(call, response));
-    }
-
-    private <T> Mono<T> sendRealtime(Call<T> call, String credential, URI uri) {
-        return Mono.defer(() -> {
-            if (!decidePermits.tryAcquire()) {
-                return Mono.<T>error(InferenceException.clientBusy());
-            }
-            var request = HttpRequest.newBuilder(uri)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + credential)
-                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON)
-                    .method(call.method(), call.body() != null
-                            ? HttpRequest.BodyPublishers.ofByteArray(call.body())
-                            : HttpRequest.BodyPublishers.noBody())
-                    .build();
-            // Not suppressing the cancel: cancelling the future aborts the exchange and closes its connection.
-            return Mono.fromFuture(() -> decideClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()),
-                    false)
-                    .onErrorMap(exception -> !(exception instanceof InferenceException),
-                            InferenceException::transport)
-                    .map(response -> parse(call, response.statusCode(),
-                            response.headers().firstValue(HttpHeaders.RETRY_AFTER).orElse(null), response.body()))
-                    .doFinally(signal -> decidePermits.release());
         });
     }
 
     private <T> T read(Call<T> call, Response response) {
         try (response) {
+            var status = response.getStatus();
             byte[] body;
             try {
                 body = response.hasEntity() ? response.readEntity(byte[].class) : new byte[0];
@@ -304,30 +315,26 @@ public class InferenceClient {
                 // A connection reset or truncated body after the headers: as retryable as one before them.
                 throw InferenceException.transport(exception);
             }
-            return parse(call, response.getStatus(), response.getHeaderString(HttpHeaders.RETRY_AFTER), body);
+            if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
+                // Redirects are not followed, and the same request would only be redirected again.
+                throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
+                        null);
+            }
+            if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
+                throw InferenceException.fromResponse(status, response.getHeaderString(HttpHeaders.RETRY_AFTER),
+                        body);
+            }
+            T value;
+            try {
+                value = InferenceJson.MAPPER.readValue(body, call.type());
+            } catch (IOException | RuntimeException exception) {
+                throw InferenceException.upstreamError(status, null, exception);
+            }
+            if (value == null) {
+                throw InferenceException.upstreamError(status, null, null);
+            }
+            return value;
         }
-    }
-
-    private <T> T parse(Call<T> call, int status, String retryAfter, byte[] body) {
-        var family = Response.Status.Family.familyOf(status);
-        if (family == Response.Status.Family.REDIRECTION) {
-            // Redirects are not followed, and the same request would only be redirected again.
-            throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
-                    null);
-        }
-        if (family != Response.Status.Family.SUCCESSFUL) {
-            throw InferenceException.fromResponse(status, retryAfter, body);
-        }
-        T value;
-        try {
-            value = InferenceJson.MAPPER.readValue(body, call.type());
-        } catch (IOException | RuntimeException exception) {
-            throw InferenceException.upstreamError(status, null, exception);
-        }
-        if (value == null) {
-            throw InferenceException.upstreamError(status, null, null);
-        }
-        return value;
     }
 
     /** The timeout cut to the time left, and at least 1 ms: Jersey reads 0 as no timeout at all. */
