@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { MoreHorizontal, Pencil, RotateCcw, Trash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
@@ -191,6 +191,11 @@ const ModelPricesTable: React.FC<ModelPricesTableProps> = ({
   dispatch,
   onEdit,
 }) => {
+  const changedElsewhereKeys = useMemo(
+    () => new Set(changedElsewhere),
+    [changedElsewhere],
+  );
+
   return (
     <div className="overflow-x-auto rounded-md border">
       <Table className="min-w-[1100px]">
@@ -216,7 +221,7 @@ const ModelPricesTable: React.FC<ModelPricesTableProps> = ({
             const statusTag = STATUS_TAGS[status];
             const rowErrors = errors[draftRow.key] ?? [];
             const rowWarnings = warnings[draftRow.key] ?? [];
-            const isChangedElsewhere = changedElsewhere.includes(draftRow.key);
+            const isChangedElsewhere = changedElsewhereKeys.has(draftRow.key);
             const { row } = draftRow;
             const isEditable = canEdit && !draftRow.deleted;
             const hasProblems = rowErrors.length > 0 || rowWarnings.length > 0;

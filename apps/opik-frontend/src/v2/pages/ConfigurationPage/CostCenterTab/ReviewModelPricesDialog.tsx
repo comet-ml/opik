@@ -9,20 +9,14 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import Loader from "@/shared/Loader/Loader";
-import {
-  ModelPriceReplace,
-  ModelPriceReplaceResult,
-  describeReplaceResult,
-  rowLabel,
-} from "@/lib/model-prices";
-
-type Outcome = { request: ModelPriceReplace; result: ModelPriceReplaceResult };
+import { describeReplaceResult, rowLabel } from "@/lib/model-prices";
+import { ReviewedSave } from "./useModelPricesEditor";
 
 type ReviewModelPricesDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  preview: () => Promise<Outcome | undefined>;
-  save: () => Promise<Outcome | undefined>;
+  preview: () => Promise<ReviewedSave | undefined>;
+  save: (reviewed: ReviewedSave) => Promise<ReviewedSave | undefined>;
 };
 
 const Section: React.FC<{ title: string; lines: string[] }> = ({
@@ -48,7 +42,7 @@ const ReviewModelPricesDialog: React.FC<ReviewModelPricesDialogProps> = ({
   preview,
   save,
 }) => {
-  const [outcome, setOutcome] = useState<Outcome>();
+  const [outcome, setOutcome] = useState<ReviewedSave>();
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -69,8 +63,10 @@ const ReviewModelPricesDialog: React.FC<ReviewModelPricesDialogProps> = ({
   }, []);
 
   const confirm = async () => {
+    if (!outcome) return;
     setIsSaving(true);
-    await save();
+    // Save exactly what was reviewed: if the list changed meanwhile, its old version gets a 409 and a fresh review.
+    await save(outcome);
     setOpen(false);
   };
 

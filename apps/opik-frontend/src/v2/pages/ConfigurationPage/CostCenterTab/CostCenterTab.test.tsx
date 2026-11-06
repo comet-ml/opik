@@ -51,8 +51,15 @@ const { LIST, HISTORY, mutateAsync, refetch } = vi.hoisted(() => {
   };
 });
 
+const current = vi.hoisted(() => ({ list: undefined as unknown }));
+
 vi.mock("@/api/model-prices/useModelPrices", () => ({
-  default: () => ({ data: LIST, isPending: false, isError: false, refetch }),
+  default: () => ({
+    data: current.list ?? LIST,
+    isPending: false,
+    isError: false,
+    refetch,
+  }),
 }));
 
 vi.mock("@/api/model-prices/useModelPriceHistory", () => ({
@@ -65,18 +72,19 @@ vi.mock("@/api/model-prices/useModelPricesReplaceMutation", () => ({
 
 import CostCenterTab from "./CostCenterTab";
 
-const renderTab = (access?: ModelPricesAccess) =>
-  render(
-    <TooltipProvider>
-      {access ? (
-        <ModelPricesAccessProvider value={access}>
-          <CostCenterTab />
-        </ModelPricesAccessProvider>
-      ) : (
+const tab = (access?: ModelPricesAccess) => (
+  <TooltipProvider>
+    {access ? (
+      <ModelPricesAccessProvider value={access}>
         <CostCenterTab />
-      )}
-    </TooltipProvider>,
-  );
+      </ModelPricesAccessProvider>
+    ) : (
+      <CostCenterTab />
+    )}
+  </TooltipProvider>
+);
+
+const renderTab = (access?: ModelPricesAccess) => render(tab(access));
 
 const ADMIN: ModelPricesAccess = {
   canEdit: true,
@@ -91,6 +99,7 @@ describe("CostCenterTab", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     refetch.mockReset();
+    current.list = undefined;
   });
 
   it("shows the list read-only to an organization member", () => {
@@ -123,6 +132,17 @@ describe("CostCenterTab", () => {
       screen.getByText(/One list for every workspace on this installation/),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /Add price/ })).toBeVisible();
+  });
+
+  it("doesn't claim who may edit while the access is still loading", () => {
+    renderTab({ canEdit: true, isPending: true });
+
+    expect(
+      screen.getByText(/Checking who can edit these prices\./),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/One list for every workspace on this installation/),
+    ).toBeNull();
   });
 
   it("shows the version and who saved it last", () => {
@@ -180,7 +200,7 @@ describe("CostCenterTab", () => {
       unchanged: 1,
       warnings: [],
     }));
-    refetch.mockResolvedValue({ data: LIST });
+    refetch.mockResolvedValue({ isSuccess: true, data: LIST });
     renderTab(ADMIN);
 
     fireEvent.change(inputPrice(), { target: { value: "1.9" } });
@@ -247,5 +267,129 @@ describe("CostCenterTab", () => {
     const rowAbove = problem.closest("tr")?.previousElementSibling;
     expect(rowAbove).toHaveTextContent("gpt-4o");
     expect(rowAbove).not.toHaveTextContent("bifrost");
+  });
+
+  const previewThenSave = (savedVersion: number) =>
+    mutateAsync.mockImplementation(async ({ dryRun }: { dryRun: boolean }) => ({
+      version: dryRun ? 3 : savedVersion,
+      saved: !dryRun,
+      created: [],
+      updated: [
+        {
+          before: LIST.rows[0],
+          after: { ...LIST.rows[0], input_price: "1.9" },
+        },
+      ],
+      deleted: [],
+      unchanged: 1,
+      warnings: [],
+    }));
+
+  it("saves the list that was reviewed, even if a newer one loads during the review", async () => {
+    previewThenSave(4);
+    refetch.mockResolvedValue({ isSuccess: true, data: LIST });
+    const view = renderTab(ADMIN);
+
+    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review and save" }));
+    await screen.findByText("gpt-4o on openai: input 2 → 1.9");
+
+    current.list = {
+      version: 4,
+      rows: [{ ...LIST.rows[0], output_price: "7.5" }, LIST.rows[1]],
+    };
+    view.rerender(tab(ADMIN));
+    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    const sent = mutateAsync.mock.lastCall![0].request;
+    expect(sent.expected_version).toBe(3);
+    expect(sent.rows[0]).toMatchObject({
+      input_price: "1.9",
+      output_price: "8",
+    });
+  });
+
+  it("keeps the saved prices when reloading the list after a save fails", async () => {
+    previewThenSave(4);
+    refetch.mockResolvedValue({ isSuccess: false, isError: true, data: LIST });
+    renderTab(ADMIN);
+
+    fireEvent.change(inputPrice(), { target: { value: "1.9" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review and save" }));
+    await screen.findByText("gpt-4o on openai: input 2 → 1.9");
+    fireEvent.click(screen.getByRole("button", { name: "Save prices" }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("model-prices-save-bar")).toBeNull(),
+    );
+    expect(inputPrice()).toHaveValue("1.9");
+  });
+
+  describe("search", () => {
+    const SEARCHABLE = {
+      version: 5,
+      rows: [
+        {
+          id: "s-1",
+          model: "acme-llama-70b",
+          provider: "vllm",
+          kind: "fixed" as const,
+          input_price: "0.6",
+          note: "GPU cost",
+        },
+        {
+          id: "s-2",
+          model: "team-model",
+          provider: "gateway",
+          kind: "alias" as const,
+          alias_of: { model: "claude-sonnet-5", provider: "anthropic" },
+        },
+        {
+          id: "s-3",
+          model: "gpt-4o",
+          provider: "openai",
+          kind: "fixed" as const,
+          input_price: "2",
+          note: "Contract rate",
+        },
+      ],
+    };
+
+    const shownModels = () =>
+      screen
+        .queryAllByTestId("model-price-row")
+        .map((row) =>
+          SEARCHABLE.rows.find((r) => row.textContent?.includes(r.model)),
+        )
+        .map((r) => r?.model);
+
+    it.each([
+      ["the model", "ACME", ["acme-llama-70b"]],
+      ["the provider", "gateway", ["team-model"]],
+      ["the model an alias points to", "sonnet", ["team-model"]],
+      ["the note", "contract", ["gpt-4o"]],
+    ])("finds rows by %s", async (_, needle, expected) => {
+      current.list = SEARCHABLE;
+      renderTab(ADMIN);
+
+      fireEvent.change(screen.getByPlaceholderText("Search models"), {
+        target: { value: needle },
+      });
+
+      await waitFor(() => expect(shownModels()).toEqual(expected));
+    });
+
+    it("says when nothing matches", async () => {
+      current.list = SEARCHABLE;
+      renderTab(ADMIN);
+
+      fireEvent.change(screen.getByPlaceholderText("Search models"), {
+        target: { value: "zzz" },
+      });
+
+      expect(await screen.findByText('No prices match "zzz".')).toBeVisible();
+      expect(screen.queryAllByTestId("model-price-row")).toHaveLength(0);
+    });
   });
 });

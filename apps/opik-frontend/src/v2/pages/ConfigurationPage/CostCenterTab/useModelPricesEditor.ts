@@ -16,6 +16,9 @@ import {
   validateDraft,
 } from "@/lib/model-prices";
 
+export type PreparedSave = { request: ModelPriceReplace; keys: string[] };
+export type ReviewedSave = PreparedSave & { result: ModelPriceReplaceResult };
+
 const useModelPricesEditor = () => {
   const { toast } = useToast();
   const { data, isPending, isError, refetch } = useModelPrices();
@@ -61,29 +64,36 @@ const useModelPricesEditor = () => {
     [refetch, toast],
   );
 
-  const run = useCallback(
+  const send = useCallback(
     async (
+      prepared: PreparedSave,
       dryRun: boolean,
-    ): Promise<
-      | { request: ModelPriceReplace; result: ModelPriceReplaceResult }
-      | undefined
-    > => {
-      const { request, keys } = toReplaceRequest(draft);
+    ): Promise<ReviewedSave | undefined> => {
       try {
-        const result = await mutateAsync({ request, dryRun });
+        const result = await mutateAsync({
+          request: prepared.request,
+          dryRun,
+        });
         if (result.saved) {
-          // Load the saved list before the draft forgets its edits, so rows just added aren't shown twice.
-          const { data: saved } = await refetch();
-          if (saved) dispatch({ type: "reset", list: saved });
+          // Load the saved list before the draft forgets its edits, so rows just added aren't shown twice. A failed
+          // refetch still returns the old cached list, so fall back to the rows that were just saved.
+          const fetched = await refetch();
+          dispatch({
+            type: "reset",
+            list:
+              fetched.isSuccess && fetched.data
+                ? fetched.data
+                : { version: result.version, rows: prepared.request.rows },
+          });
           toast({ description: `Prices saved as version ${result.version}` });
         }
-        return { request, result };
+        return { ...prepared, result };
       } catch (error) {
-        await handleSaveError(error, keys);
+        await handleSaveError(error, prepared.keys);
         return undefined;
       }
     },
-    [draft, mutateAsync, refetch, handleSaveError, toast],
+    [mutateAsync, refetch, handleSaveError, toast],
   );
 
   return {
@@ -96,8 +106,14 @@ const useModelPricesEditor = () => {
     isPending,
     isError,
     isSaving,
-    preview: useCallback(() => run(true), [run]),
-    save: useCallback(() => run(false), [run]),
+    preview: useCallback(
+      () => send(toReplaceRequest(draft), true),
+      [send, draft],
+    ),
+    save: useCallback(
+      (reviewed: PreparedSave) => send(reviewed, false),
+      [send],
+    ),
   };
 };
 

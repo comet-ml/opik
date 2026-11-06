@@ -21,11 +21,15 @@ const describeAccess = (
   canEdit: boolean,
   isAccessPending: boolean,
 ) => {
+  if (isAccessPending) {
+    return organizationName
+      ? `One list for every workspace in ${organizationName}.`
+      : "Checking who can edit these prices.";
+  }
   if (!organizationName) {
     return "One list for every workspace on this installation.";
   }
   const scope = `One list for every workspace in ${organizationName}.`;
-  if (isAccessPending) return scope;
   return canEdit
     ? `${scope} You can edit it because you are an organization admin.`
     : `${scope} Only organization admins can change it.`;
