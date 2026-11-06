@@ -59,6 +59,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import { useRowSelectionChange } from "./hooks/useRowSelectionChange";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   useIsDraftMode,
@@ -367,23 +368,11 @@ function DatasetItemsTab({
     [rowSelection, rows],
   );
 
-  const handleRowSelectionChange: typeof setRowSelection = useCallback(
-    (updaterOrValue) => {
-      // Queued as-is: shift-click calls this once per row in the range, so each update must build on the previous one.
-      setRowSelection(updaterOrValue);
-
-      if (isAllItemsSelected) {
-        const next =
-          typeof updaterOrValue === "function"
-            ? updaterOrValue(rowSelection)
-            : updaterOrValue;
-
-        if (Object.keys(next).length < Object.keys(rowSelection).length) {
-          setIsAllItemsSelected(false);
-        }
-      }
-    },
-    [rowSelection, isAllItemsSelected, setIsAllItemsSelected],
+  const handleRowSelectionChange = useRowSelectionChange(
+    rowSelection,
+    setRowSelection,
+    isAllItemsSelected,
+    setIsAllItemsSelected,
   );
 
   const effectiveIsAllItemsSelected = useMemo(
