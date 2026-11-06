@@ -666,7 +666,7 @@ scripts/dev-runner.sh --build-be
 # 2. Start backend separately if needed
 cd apps/opik-backend
 mvn clean install
-java -jar target/opik-backend-*.jar server config.yml
+java --add-modules jdk.incubator.vector -jar target/opik-backend-*.jar server config.yml
 
 # 3. Configure SDK
 opik configure --use_local
