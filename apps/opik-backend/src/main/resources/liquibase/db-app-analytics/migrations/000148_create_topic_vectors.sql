@@ -10,6 +10,9 @@
 --     embed_model and embed_dimensions say which model made the vector, so a model change can be re-made from ai_labels.
 --   * updated_at is the ReplacingMergeTree version and is set by ClickHouse at insert. A rewrite of the same key is the
 --     same vector, so which row a merge keeps does not matter; readers still dedupe explicitly (LIMIT 1 BY the sort key).
+--   * is_deleted is the ReplacingMergeTree soft-delete marker, as on traces_local_v2 and span_weeks. Nothing sets it
+--     today: deletes are lightweight DELETEs. It is in the engine now because engine parameters cannot be added by
+--     ALTER, so a later switch to delete-by-merge needs no table rebuild.
 --   * id_at and the partition key are ai_label_status's (000139), so retention and the trace-delete cascade prune the
 --     same weekly partitions as for the trace. No TTL: a vector lives exactly as long as its trace.
 --   * idx_trace_created_at: trace_created_at is copied from the trace and never changes for a key, so a minmax index on
@@ -28,10 +31,11 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTE
     text             String                                          CODEC(ZSTD(3)),
     vector           Array(Float32)                                  CODEC(ZSTD(1)),
     updated_at       DateTime64(6, 'UTC')   DEFAULT now64(6)         CODEC(Delta, ZSTD(1)),
+    is_deleted       UInt8                  DEFAULT 0,
     INDEX idx_trace_created_at trace_created_at TYPE minmax GRANULARITY 1
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/topic_vectors',
-    '{replica}', updated_at)
+    '{replica}', updated_at, is_deleted)
 PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
 ORDER BY (workspace_id, project_id, trace_id, task_version)
 SETTINGS index_granularity = 8192;

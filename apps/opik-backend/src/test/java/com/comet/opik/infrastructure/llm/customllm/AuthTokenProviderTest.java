@@ -22,6 +22,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.options.KeysScanOptions;
@@ -179,6 +181,16 @@ class AuthTokenProviderTest {
                         credential("client_secret", SECRET_VALUE, true)));
     }
 
+    private ProviderAuthConfig.ProviderAuthConfigBuilder serviceAccountRecipe() {
+        return ProviderAuthConfig.builder()
+                .tokenUrl(wireMock.baseUrl() + TOKEN_PATH)
+                .sendAs(ProviderAuthConfig.SendAs.BASIC)
+                .credentials(List.of(
+                        credential("username", "opik-service-account", false),
+                        credential("password", SECRET_VALUE, true)))
+                .fallbackTtlSeconds(86_400L);
+    }
+
     private ProviderAuthConfig.Credential credential(String key, String value, boolean secret) {
         return ProviderAuthConfig.Credential.builder().key(key).value(value).secret(secret).build();
     }
@@ -237,6 +249,95 @@ class AuthTokenProviderTest {
         wireMock.verify(postRequestedFor(urlEqualTo(TOKEN_PATH))
                 .withHeader("Authorization", equalTo(expectedBasic))
                 .withRequestBody(equalTo("grant_type=client_credentials&scope=data%3Aread")));
+    }
+
+    @Test
+    @DisplayName("basic mode also takes a service account's username/password, with an empty body")
+    void basicModeSendsServiceAccountCredentials() {
+        stubToken("{\"access_token\": \"tok-sa\", \"expires_in\": 3600}");
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("tok-sa");
+
+        String expectedBasic = "Basic " + Base64.getEncoder()
+                .encodeToString(("opik-service-account:" + SECRET_VALUE).getBytes());
+        var requests = wireMock.findAll(postRequestedFor(urlEqualTo(TOKEN_PATH))
+                .withHeader("Authorization", equalTo(expectedBasic)));
+        assertThat(requests).singleElement()
+                .satisfies(request -> assertThat(request.getBodyAsString()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("basic mode without an id/secret pair is a clear error")
+    void basicModeWithoutCredentialPairIsRejected() {
+        var recipe = serviceAccountRecipe()
+                .credentials(List.of(credential("username", "opik-service-account", false)))
+                .build();
+
+        assertThatThrownBy(() -> provider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage("requires 'client_id' and 'client_secret' (or 'username' and 'password') credentials");
+        wireMock.verify(0, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    @Test
+    @DisplayName("a plain-text reply is the token itself, with the fallback lifetime, and is cached")
+    void plainTextReplyIsTheToken() {
+        var jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvcGlrLXRlc3QifQ.c2lnbmF0dXJl"; // betterleaks:allow — fake JWT, signature is base64 of "signature"
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/plain")
+                .withBody(jwt + "\n")));
+        var providerId = UUID.randomUUID();
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", providerId, wrap(recipe))).isEqualTo(jwt);
+        assertThat(provider.bearer("ws", providerId, wrap(recipe))).isEqualTo(jwt);
+
+        wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
+        assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
+    }
+
+    @Test
+    @DisplayName("a reply that is a bare JSON string is the token itself")
+    void jsonStringReplyIsTheToken() {
+        stubToken("\"tok-string-0123456789\"");
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(serviceAccountRecipe().build())))
+                .isEqualTo("tok-string-0123456789");
+    }
+
+    @Test
+    @DisplayName("an all-digit plain-text reply is the token itself, not a JSON number to look a field up in")
+    void numericPlainTextReplyIsTheToken() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/plain")
+                .withBody("4829130571638204\n")));
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("4829130571638204");
+        assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"null", "-1", "1.5", "1e5"})
+    @DisplayName("a JSON literal that isn't an all-digit token (null, negative, decimal, exponent) is rejected")
+    void nonTokenJsonLiteralIsRejected(String reply) {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody(reply)));
+
+        assertThatThrownBy(() -> provider.testFetch(serviceAccountRecipe().build()))
+                .isExactlyInstanceOf(AuthTokenException.class);
+    }
+
+    @Test
+    @DisplayName("a bare-token reply without a fallback lifetime is a clear error")
+    void plainTextReplyWithoutFallbackIsRejected() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("tok-plain-0123456789")));
+        var recipe = serviceAccountRecipe().fallbackTtlSeconds(null).build();
+
+        assertThatThrownBy(() -> provider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(
+                        "token reply is a bare token, which states no lifetime, and no fallback lifetime is configured");
     }
 
     @Test
@@ -537,12 +638,14 @@ class AuthTokenProviderTest {
                 .hasMessageContaining("no fallback lifetime");
     }
 
-    @Test
-    @DisplayName("a non-JSON reply is a clear error")
-    void nonJsonReplyIsRejected() {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"<html>gateway login page</html>", "<html>Unauthorized</html>", "{\"error\"", "OK",
+            "Unauthorized"})
+    @DisplayName("a non-JSON reply that isn't a bare token (e.g. a login page or truncated JSON) is a clear error")
+    void nonJsonReplyIsRejected(String reply) {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withStatus(200)
-                .withBody("<html>gateway login page</html>")));
+                .withBody(reply)));
 
         assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)

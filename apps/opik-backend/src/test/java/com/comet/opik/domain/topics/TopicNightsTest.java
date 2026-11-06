@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.infrastructure.TopicsConfig;
@@ -73,7 +74,7 @@ class TopicNightsTest {
         });
         meter = new TopicsTestMeter();
         clock = new MutableClock(NIGHT.plusDays(1).atTime(12, 0).toInstant(ZoneOffset.UTC));
-        config = new TopicsConfig();
+        config = TestConfigUtils.loadConfigTest().getTopics();
         config.setEnabled(true);
         down = new AtomicBoolean();
         var template = mock(TransactionTemplate.class);

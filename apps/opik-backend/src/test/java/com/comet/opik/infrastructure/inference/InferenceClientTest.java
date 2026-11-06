@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AiLabelsConfig;
@@ -12,7 +13,6 @@ import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
-import jakarta.ws.rs.HttpMethod;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -286,29 +286,33 @@ class InferenceClientTest {
                 .hasSize(InferenceClient.MAX_RETRIES + 1);
     }
 
-    static Stream<Arguments> redirects() {
-        return Stream.of(arguments(HttpMethod.GET, 302), arguments(HttpMethod.POST, 307));
+    @Test
+    void redirectOfAGetIsNotFollowed() {
+        var elsewhere = "/elsewhere";
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(
+                aResponse().withStatus(302).withHeader("Location", server.baseUrl() + elsewhere)));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(jobView()));
+
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(302);
+                });
+        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
     }
 
-    @ParameterizedTest(name = "{0} answered {1}")
-    @MethodSource("redirects")
-    void redirectIsNotFollowed(String method, int status) {
+    @Test
+    void redirectOfAPostIsNotFollowed() {
         var elsewhere = "/elsewhere";
-        var redirect = aResponse().withStatus(status).withHeader("Location", server.baseUrl() + elsewhere);
-        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(redirect));
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(redirect));
-        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(method.equals(HttpMethod.GET) ? jobView() : embedded()));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(
+                aResponse().withStatus(307).withHeader("Location", server.baseUrl() + elsewhere)));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(embedded()));
 
-        assertThatThrownBy(() -> {
-            if (method.equals(HttpMethod.GET)) {
-                client.getJob(JOB_ID, 0, false, later()).block();
-            } else {
-                client.embed(embedRequest(), later()).block();
-            }
-        }).isInstanceOfSatisfying(InferenceException.class, exception -> {
-            assertThat(exception.getCode()).isEqualTo("upstream_error");
-            assertThat(exception.getHttpStatus()).isEqualTo(status);
-        });
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(307);
+                });
         assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
     }
 
@@ -596,7 +600,7 @@ class InferenceClientTest {
     void embedRejectsANonPositiveDeadline(long deadlineMs) {
         var request = embedRequest().toBuilder().deadlineMs(deadlineMs).build();
 
-        assertThatThrownBy(() -> client.embed(request, later())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.embed(request, later())).isExactlyInstanceOf(IllegalArgumentException.class);
         assertThat(server.getAllServeEvents()).isEmpty();
     }
 
@@ -606,9 +610,9 @@ class InferenceClientTest {
                 .toList();
 
         assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().inputs(List.of()).build(), later()))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isExactlyInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().inputs(tooMany).build(), later()))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isExactlyInstanceOf(IllegalArgumentException.class);
         assertThat(server.getAllServeEvents()).isEmpty();
     }
 
@@ -751,7 +755,7 @@ class InferenceClientTest {
     }
 
     private AiLabelsConfig config(Duration readTimeout, long maxJobBytes) {
-        var config = new AiLabelsConfig();
+        var config = TestConfigUtils.loadConfigTest().getAiLabels();
         config.getInference().setUrl(server.baseUrl());
         config.getInference().setCredential(CREDENTIAL);
         config.getInference().setConnectTimeout(io.dropwizard.util.Duration.seconds(1));
@@ -844,7 +848,6 @@ class InferenceClientTest {
     private static EmbedRequest embedRequest() {
         return EmbedRequest.builder()
                 .orgId("workspace-1")
-                .workspaceId("workspace-1")
                 .inputs(List.of("refund a duplicate invoice charge", "export traces to csv"))
                 .build();
     }

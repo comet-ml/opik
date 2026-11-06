@@ -181,6 +181,17 @@ public class AiLabelsConfig {
                 && StringUtils.isNotBlank(inference.getCredential()));
     }
 
+    /**
+     * The credential and the traces go with every call, so never in clear over a network: https, or http only to this
+     * host ({@code localhost} or a loopback address, for tests and a local runner). Checked only when ai-labels is on,
+     * so an install with it off starts whatever the URL.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) must be an https URL, or an http URL to localhost, when aiLabels.enabled (AI_LABELS_ENABLED) is true")
+    public boolean isInferenceUrlSecure() {
+        return !enabled || inference == null || inference.isUrlSecure();
+    }
+
     @JsonIgnore
     @AssertTrue(message = "aiLabels.tickBudget must be shorter than aiLabels.tickInterval") public boolean isTickBudgetValid() {
         return tickBudget == null || tickInterval == null
@@ -222,20 +233,33 @@ public class AiLabelsConfig {
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration readTimeout = Duration.seconds(30);
 
-        /**
-         * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
-         * largest expected bodies, a full embed call and a page of job results, are a few MiB.
-         */
+        /** Synchronous decide calls in flight from this instance, on a client of their own. */
         @JsonProperty
-        @Min(1) @Max(1024L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
+        @Min(1) private int maxConcurrentDecides = 256;
+
+        /** How long an idle connection for decide calls is kept for reuse; 0 closes each one after a single call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
+        private Duration decideKeepAlive = Duration.seconds(30);
+
+        /** Longest a connection for decide calls is reused, so calls move to new upstream instances after a rollout. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration decideTimeToLive = Duration.minutes(5);
 
         /**
-         * The credential and the traces go with every call, so never in clear over a network: https, or http only to
-         * this host ({@code localhost} or a loopback address, for tests and a local runner). Unset passes here:
-         * {@link AiLabelsConfig#isInferenceConfigured()} requires it when ai-labels is on.
+         * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
+         * largest expected bodies, a full embed call and a page of job results, are a few MiB. Every call in flight
+         * can hold up to this much heap, so it is capped at 64 MiB, twice the default.
+         */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024) private long maxResponseBytes;
+
+        /**
+         * https, or http to {@code localhost} or a loopback address; see {@link AiLabelsConfig#isInferenceUrlSecure()}.
+         * Unset passes here: {@link AiLabelsConfig#isInferenceConfigured()} requires it when ai-labels is on.
          */
         @JsonIgnore
-        @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) must be an https URL, or an http URL to localhost")
         public boolean isUrlSecure() {
             if (StringUtils.isBlank(url)) {
                 return true;

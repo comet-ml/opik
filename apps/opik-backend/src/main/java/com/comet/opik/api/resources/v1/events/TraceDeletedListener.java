@@ -95,15 +95,13 @@ public class TraceDeletedListener {
                                     error);
                             return Mono.empty();
                         })))
-                // Topic vectors hold the summary text, so they go with the trace too. After ai-labels, so a tick that
-                // read the done status before its delete has usually written the vector by now. On their own, so neither
-                // delete's failure can skip the other; neither ever blocks the span cascade.
+                // Topic vectors hold the summary text, so they go with the trace too. After the status rows: a tick
+                // that writes a vector after this delete finds the status gone and deletes the vector itself. On their
+                // own, so neither delete's failure can skip the other; neither ever blocks the span cascade.
                 .then(Mono.defer(() -> topicVectorsDAO.deleteByTraceIds(traceIds, projectId)
                         .onErrorResume(error -> {
-                            log.warn("Failed to delete topic vectors for deleted traces, workspace '{}', project '{}', "
-                                    + "count '{}'; they stay until a retention delete", workspaceId, projectId,
-                                    traceIds.size(),
-                                    error);
+                            log.warn("Failed to delete topic vectors, workspace '{}', project '{}', traces '{}'",
+                                    workspaceId, projectId, traceIds.size(), error);
                             return Mono.empty();
                         })))
                 // A trace's topic goes with it as its vector does, on its own for the same reason.

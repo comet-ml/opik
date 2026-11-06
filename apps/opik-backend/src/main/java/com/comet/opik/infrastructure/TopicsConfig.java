@@ -26,13 +26,13 @@ import java.util.stream.Collectors;
  * for the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for; the nightly job builds each project's
  * topic list from them. Off by default, and deliberately not a service toggle. Needs ai-labels on, and calls the same
  * opik-inference deployment with the same credential ({@code aiLabels.inference}); see
- * {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
+ * {@code OpikConfiguration#isTopicsAiLabelsEnabled}. The defaults are in {@code config.yml}.
  */
 @Data
 public class TopicsConfig {
 
     @JsonProperty
-    private boolean enabled = false;
+    private boolean enabled;
 
     /**
      * The workspaces topics run for, comma-separated (Helm's {@code TOGGLE_TOPICS_WORKSPACES}). A workspace in it runs
@@ -48,13 +48,13 @@ public class TopicsConfig {
     private String enabledWorkspaces;
 
     @Valid @NotNull @JsonProperty
-    private VectorsConfig vectors = new VectorsConfig();
+    private VectorsConfig vectors;
 
     @Valid @NotNull @JsonProperty
-    private NightlyConfig nightly = new NightlyConfig();
+    private NightlyConfig nightly;
 
     @Valid @NotNull @JsonProperty
-    private FirstBuildConfig firstBuild = new FirstBuildConfig();
+    private FirstBuildConfig firstBuild;
 
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
@@ -77,46 +77,47 @@ public class TopicsConfig {
 
         /** Runs only when {@code topics.enabled} is on too. */
         @JsonProperty
-        private boolean enabled = true;
+        private boolean enabled;
 
         /** Quartz cron, UTC. The night is the UTC date the job starts on. */
         @NotBlank @JsonProperty
-        private String schedule = "0 0 2 * * ?";
+        private String schedule;
 
         /** No project starts after this much of the night has passed; the rest run the next night. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 20, unit = TimeUnit.HOURS)
-        private Duration budget = Duration.hours(2);
+        private Duration budget;
 
         /** One project's run is stopped and failed with {@code timeout} after this. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 2, unit = TimeUnit.HOURS)
-        private Duration projectTimeout = Duration.minutes(15);
+        private Duration projectTimeout;
 
         /** A project is built when its window holds at least this many traces with a vector. */
         @JsonProperty
-        @Min(2) private int minVectors = 100;
+        @Min(2) @Max(100_000) private int minVectors;
 
         /** The window: this many whole UTC days before the night. */
         @JsonProperty
-        @Min(1) @Max(90) private int windowDays = 30;
+        @Min(1) @Max(90) private int windowDays;
 
         /** A larger window keeps its newest traces. */
         @JsonProperty
-        @Min(100) @Max(100_000) private int maxVectors = 100_000;
+        @Min(100) @Max(100_000) private int maxVectors;
 
         /** The deadline of the Qwen call that names the groups. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
-        private Duration qwenDeadline = Duration.seconds(120);
+        private Duration qwenDeadline;
 
         /** {@code topic_runs} rows are deleted after this. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.DAYS)
-        private Duration runsRetention = Duration.days(90);
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration runsRetention;
 
         @JsonIgnore
         @AssertTrue(message = "topics.nightly.projectTimeout must be shorter than topics.nightly.budget") public boolean isProjectTimeoutValid() {
@@ -140,17 +141,19 @@ public class TopicsConfig {
 
         /** Runs only when {@code topics.enabled} and {@code topics.nightly.enabled} are on too. */
         @JsonProperty
-        private boolean enabled = true;
+        private boolean enabled;
 
         /** How often every pod fires the job; one run per interval across the cluster. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        private Duration interval = Duration.minutes(10);
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration interval;
 
         /** No project starts after this much of a run has passed; the rest wait for the next run. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        private Duration budget = Duration.minutes(9);
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration budget;
 
         @JsonIgnore
         @AssertTrue(message = "topics.firstBuild.budget must be shorter than topics.firstBuild.interval") public boolean isBudgetValid() {
@@ -163,24 +166,26 @@ public class TopicsConfig {
 
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        private Duration tickInterval = Duration.minutes(1);
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration tickInterval;
 
         /** Every ClickHouse query and embed call of a tick ends within this; what is left waits for the next tick. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        private Duration tickBudget = Duration.seconds(50);
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration tickBudget;
 
         /** How far back, by status write time, each tick looks for labeled traces without a vector. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
-        private Duration window = Duration.hours(24);
+        private Duration window;
 
         /** The window of the pass run once per {@code longWindowInterval}, for rows the short window missed. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
-        private Duration longWindow = Duration.days(7);
+        private Duration longWindow;
 
         /**
          * How often the long-window pass starts. A pass stays on, tick after tick, until one of its ticks drains it;
@@ -188,7 +193,8 @@ public class TopicsConfig {
          */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        private Duration longWindowInterval = Duration.days(1);
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration longWindowInterval;
 
         /**
          * When above zero, the long-window pass uses this window instead of {@code longWindow}, to catch up after a late
@@ -197,15 +203,15 @@ public class TopicsConfig {
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
-        private Duration backfillWindow = Duration.seconds(0);
+        private Duration backfillWindow;
 
         /** The most traces one tick embeds per workspace, oldest first; the tick budget bounds the total. */
         @JsonProperty
-        @Min(1) @Max(100_000) private int maxTracesPerTick = 5_000;
+        @Min(1) @Max(100_000) private int maxTracesPerTick;
 
         /** Texts per embed call; the service takes at most 256. */
         @JsonProperty
-        @Min(1) @Max(256) private int embedBatchSize = 256;
+        @Min(1) @Max(256) private int embedBatchSize;
 
         /**
          * Each embed call's deadline. A chunk starts only with at least this much of the tick budget left, so a call
@@ -214,10 +220,10 @@ public class TopicsConfig {
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
-        private Duration embedTimeout = Duration.seconds(10);
+        private Duration embedTimeout;
 
         @Valid @NotNull @JsonProperty
-        private FindConfig find = new FindConfig();
+        private FindConfig find;
 
         @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be shorter than topics.vectors.tickInterval") public boolean isTickBudgetValid() {
@@ -257,15 +263,15 @@ public class TopicsConfig {
     public static class FindConfig {
 
         @JsonProperty
-        @Min(1) private long maxRowsToRead = 30_000_000L;
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
 
         @JsonProperty
-        @Min(1) private long maxMemoryUsage = 1024L * 1024 * 1024;
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
         /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        private Duration maxExecutionTime = Duration.seconds(30);
+        private Duration maxExecutionTime;
 
         /**
          * ai-labels labels only traces created within {@code aiLabels.horizon}, so a status written at or after the
@@ -274,6 +280,7 @@ public class TopicsConfig {
          */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
-        private Duration createdAtSlack = Duration.days(1);
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration createdAtSlack;
     }
 }

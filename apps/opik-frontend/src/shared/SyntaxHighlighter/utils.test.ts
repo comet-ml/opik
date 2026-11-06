@@ -158,6 +158,36 @@ describe("generateSyntaxHighlighterCode - YAML mode", () => {
     },
   );
 
+  it.each([
+    ["a space before a newline", { k: " \n" }, 'k: "\\ \\n"\n'],
+    ["only newlines", { k: "\n\n" }, 'k: "\\n\\n"\n'],
+    ["a tab and a newline", { k: "\t\n" }, 'k: "\\t\\n"\n'],
+    ["spaces between newlines", { k: "\n \n" }, 'k: "\\n\\ \\n"\n'],
+    [
+      "whitespace values in a nested list",
+      { a: { c: ["\n", " \n", "  \n\n"] } },
+      'a:\n  c:\n    - "\\n"\n    - "\\ \\n"\n    - " \\ \\n\\n"\n',
+    ],
+    ["a whitespace key", { " \n": " \n" }, '"\\ \\n": "\\ \\n"\n'],
+  ])(
+    "double-quotes a whitespace-only multiline string with %s",
+    (_label, data, expected) => {
+      const result = toYaml(data);
+
+      expect(result).toBe(expected);
+      expect(parse(result, { version: "1.1" })).toEqual(data);
+    },
+  );
+
+  it("double-quotes a top-level whitespace-only multiline string", () => {
+    const value = " \n";
+
+    const result = toYaml(value as unknown as object);
+
+    expect(result).toBe('"\\ \\n"\n');
+    expect(parse(result)).toBe(value);
+  });
+
   it("indents a top-level multiline string", () => {
     const value = "You are a helpful assistant.\nAnswer briefly.";
 

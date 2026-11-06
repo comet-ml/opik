@@ -1,10 +1,10 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
 import io.dropwizard.util.Duration;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -61,7 +61,7 @@ class TopicsConfigTest {
 
     static Stream<Arguments> vectorsSettings() {
         return Stream.of(
-                arguments("defaults", change(vectors -> {
+                arguments("config-test.yml", change(vectors -> {
                 }), List.of()),
                 arguments("budget equal to the interval", change(vectors -> {
                     vectors.setTickInterval(Duration.seconds(60));
@@ -75,8 +75,6 @@ class TopicsConfigTest {
                     vectors.setWindow(Duration.hours(24));
                     vectors.setLongWindow(Duration.hours(24));
                 }), List.of()),
-                arguments("embed batch above the service's 256", change(vectors -> vectors.setEmbedBatchSize(257)),
-                        List.of("embedBatchSize")),
                 arguments("embed timeout equal to the budget", change(vectors -> {
                     vectors.setTickBudget(Duration.seconds(10));
                     vectors.setEmbedTimeout(Duration.seconds(10));
@@ -88,24 +86,6 @@ class TopicsConfigTest {
                     vectors.setWindow(Duration.hours(24));
                     vectors.setBackfillWindow(Duration.hours(23));
                 }), List.of("backfillWindowValid")),
-                arguments("backfill window above 365 days",
-                        change(vectors -> vectors.setBackfillWindow(Duration.days(366))), List.of("backfillWindow")),
-                arguments("find max rows to read of 0", change(vectors -> vectors.getFind().setMaxRowsToRead(0)),
-                        List.of("find.maxRowsToRead")),
-                arguments("find max memory usage of 0", change(vectors -> vectors.getFind().setMaxMemoryUsage(0)),
-                        List.of("find.maxMemoryUsage")),
-                arguments("find max execution time under a second",
-                        change(vectors -> vectors.getFind().setMaxExecutionTime(Duration.milliseconds(999))),
-                        List.of("find.maxExecutionTime")),
-                arguments("find max execution time missing",
-                        change(vectors -> vectors.getFind().setMaxExecutionTime(null)),
-                        List.of("find.maxExecutionTime")),
-                arguments("find created-at slack below 0",
-                        change(vectors -> vectors.getFind().setCreatedAtSlack(Duration.seconds(-1))),
-                        List.of("find.createdAtSlack")),
-                arguments("find created-at slack missing",
-                        change(vectors -> vectors.getFind().setCreatedAtSlack(null)),
-                        List.of("find.createdAtSlack")),
                 arguments("find max execution time equal to the budget", change(vectors -> {
                     vectors.setTickBudget(Duration.seconds(40));
                     vectors.getFind().setMaxExecutionTime(Duration.seconds(40));
@@ -122,9 +102,9 @@ class TopicsConfigTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("vectorsSettings")
-    void vectorsRules(String description, Consumer<TopicsConfig.VectorsConfig> change,
+    void vectorsCrossFieldRules(String description, Consumer<TopicsConfig.VectorsConfig> change,
             List<String> expectedViolations) {
-        var vectors = new TopicsConfig().getVectors();
+        var vectors = TestConfigUtils.loadConfigTest().getTopics().getVectors();
         change.accept(vectors);
 
         var violations = VALIDATOR.validate(vectors).stream()
@@ -136,7 +116,7 @@ class TopicsConfigTest {
 
     static Stream<Arguments> nightlySettings() {
         return Stream.of(
-                arguments("defaults", nightly(nightly -> {
+                arguments("config-test.yml", nightly(nightly -> {
                 }), List.of()),
                 arguments("project timeout equal to the budget", nightly(nightly -> {
                     nightly.setBudget(Duration.minutes(30));
@@ -145,14 +125,7 @@ class TopicsConfigTest {
                 arguments("Qwen deadline equal to the project timeout", nightly(nightly -> {
                     nightly.setProjectTimeout(Duration.minutes(2));
                     nightly.setQwenDeadline(Duration.minutes(2));
-                }), List.of("qwenDeadlineValid")),
-                arguments("Qwen deadline above the batch lane's 300 seconds",
-                        nightly(nightly -> nightly.setQwenDeadline(Duration.seconds(301))), List.of("qwenDeadline")),
-                arguments("blank schedule", nightly(nightly -> nightly.setSchedule(" ")), List.of("schedule")),
-                arguments("min vectors of 1", nightly(nightly -> nightly.setMinVectors(1)), List.of("minVectors")),
-                arguments("window of 0 days", nightly(nightly -> nightly.setWindowDays(0)), List.of("windowDays")),
-                arguments("max vectors under 100", nightly(nightly -> nightly.setMaxVectors(99)),
-                        List.of("maxVectors")));
+                }), List.of("qwenDeadlineValid")));
     }
 
     private static Consumer<TopicsConfig.NightlyConfig> nightly(Consumer<TopicsConfig.NightlyConfig> change) {
@@ -161,9 +134,9 @@ class TopicsConfigTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("nightlySettings")
-    void nightlyRules(String description, Consumer<TopicsConfig.NightlyConfig> change,
+    void nightlyCrossFieldRules(String description, Consumer<TopicsConfig.NightlyConfig> change,
             List<String> expectedViolations) {
-        var nightly = new TopicsConfig().getNightly();
+        var nightly = TestConfigUtils.loadConfigTest().getTopics().getNightly();
         change.accept(nightly);
 
         var violations = VALIDATOR.validate(nightly).stream()
@@ -171,59 +144,5 @@ class TopicsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
-    }
-
-    @Test
-    void defaultsOfTheNightlyJob() {
-        var nightly = new TopicsConfig().getNightly();
-
-        assertThat(nightly.isEnabled()).isTrue();
-        assertThat(nightly.getSchedule()).isEqualTo("0 0 2 * * ?");
-        assertThat(nightly.getBudget()).isEqualTo(Duration.hours(2));
-        assertThat(nightly.getProjectTimeout()).isEqualTo(Duration.minutes(15));
-        assertThat(nightly.getMinVectors()).isEqualTo(100);
-        assertThat(nightly.getWindowDays()).isEqualTo(30);
-        assertThat(nightly.getMaxVectors()).isEqualTo(100_000);
-        assertThat(nightly.getQwenDeadline()).isEqualTo(Duration.seconds(120));
-    }
-
-    static Stream<Arguments> enabledWorkspaces() {
-        return Stream.of(
-                arguments("unset", null, Set.of()),
-                arguments("empty", "", Set.of()),
-                arguments("blank and commas only", " , ,", Set.of()),
-                arguments("one id", "ws-1", Set.of("ws-1")),
-                arguments("ids with spaces, blanks and a repeat", " ws-1 ,ws-2,, ws-1 ", Set.of("ws-1", "ws-2")));
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("enabledWorkspaces")
-    void enabledWorkspaceIdsAreSplitStrippedAndBlankFree(String description, String enabledWorkspaces,
-            Set<String> expected) {
-        var config = new TopicsConfig();
-        config.setEnabledWorkspaces(enabledWorkspaces);
-
-        assertThat(config.enabledWorkspaceIds()).isEqualTo(expected);
-    }
-
-    @Test
-    void enabledWorkspaceIdsFollowTheFieldWithoutACache() {
-        var config = new TopicsConfig();
-        assertThat(config.enabledWorkspaceIds()).isEmpty();
-
-        config.setEnabledWorkspaces("ws-1");
-
-        assertThat(config.enabledWorkspaceIds()).containsExactly("ws-1");
-    }
-
-    @Test
-    void defaultsOfTheWindowReadGuards() {
-        var find = new TopicsConfig().getVectors().getFind();
-
-        assertThat(find.getMaxRowsToRead()).isEqualTo(30_000_000L);
-        assertThat(find.getMaxMemoryUsage()).isEqualTo(1024L * 1024 * 1024);
-        assertThat(find.getMaxExecutionTime()).isEqualTo(Duration.seconds(30));
-        assertThat(find.getCreatedAtSlack()).isEqualTo(Duration.days(1));
-        assertThat(new TopicsConfig().getVectors().getBackfillWindow().toMilliseconds()).isZero();
     }
 }

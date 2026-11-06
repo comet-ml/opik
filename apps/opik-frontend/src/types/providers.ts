@@ -104,6 +104,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_IMAGE_2_6_FLARE = "gpt-image-2.6-flare",
+  GPT_IMAGE_2_6_SUNBURST = "gpt-image-2.6-sunburst",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -796,6 +798,7 @@ export enum PROVIDER_MODEL_TYPE {
   REKAAI_REKA_FLASH_3 = "rekaai/reka-flash-3",
   RELACE_RELACE_APPLY_3 = "relace/relace-apply-3",
   RELACE_RELACE_SEARCH = "relace/relace-search",
+  RICURSIVEAI_RIPPLE_65B_PREVIEW = "ricursiveai/ripple-65b-preview",
   SAKANA_FUGU_MAX = "sakana/fugu-max",
   SAKANA_FUGU_ULTRA = "sakana/fugu-ultra",
   SAKANA_FUGU_ULTRA_V2 = "sakana/fugu-ultra-v2",
@@ -807,6 +810,7 @@ export enum PROVIDER_MODEL_TYPE {
   SAO10K_L3_3_EURYALE_70B = "sao10k/l3.3-euryale-70b",
   SCALEDOWN_EXTRACT = "scaledown/extract",
   SCALEDOWN_SUMMARIZE = "scaledown/summarize",
+  STEALTH_CROUTON_ALPHA = "stealth/crouton-alpha",
   STEALTH_OX_ALPHA = "stealth/ox-alpha",
   STEALTH_SPACE_BUNNY_ALPHA = "stealth/space-bunny-alpha",
   STEALTH_UNION_ALPHA = "stealth/union-alpha",
@@ -824,6 +828,7 @@ export enum PROVIDER_MODEL_TYPE {
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
   TENCENT_HY3_FREE = "tencent/hy3:free",
+  TENCENT_HY4 = "tencent/hy4",
   TENCENT_HY4_PREVIEW = "tencent/hy4-preview",
   THEDRUMMER_ANUBIS_70B_V1_1 = "thedrummer/anubis-70b-v1.1",
   THEDRUMMER_CYDONIA_24B_V4_1 = "thedrummer/cydonia-24b-v4.1",
@@ -866,7 +871,9 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_3_BATCH = "x-ai/grok-4.3:batch",
   X_AI_GROK_4_5 = "x-ai/grok-4.5",
   X_AI_GROK_4_6 = "x-ai/grok-4.6",
+  X_AI_GROK_4_6_BATCH = "x-ai/grok-4.6:batch",
   X_AI_GROK_4_7 = "x-ai/grok-4.7",
+  X_AI_GROK_4_7_BATCH = "x-ai/grok-4.7:batch",
   X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
@@ -898,6 +905,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_3_FLASH = "z-ai/glm-5.3-flash",
   Z_AI_GLM_5_3_FLASH_BATCH = "z-ai/glm-5.3-flash:batch",
   Z_AI_GLM_5_3_FLASHX = "z-ai/glm-5.3-flashx",
+  Z_AI_GLM_5_3_FLASHX_LEGAL = "z-ai/glm-5.3-flashx-legal",
   Z_AI_GLM_5_3_PRIME = "z-ai/glm-5.3-prime",
   Z_AI_GLM_5_3_BATCH = "z-ai/glm-5.3:batch",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
@@ -1016,6 +1024,14 @@ export const OPENAI_PIPELINE_MODE_VALUES = [
 
 export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
+export const BEDROCK_API_VALUES = [
+  "chat_completions",
+  "anthropic_messages",
+  "converse",
+] as const;
+
+export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -1030,6 +1046,7 @@ export interface ProviderKeyConfiguration {
   /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
    * and falls back to chat_completions_api on unknown values. */
   openai_pipeline_mode?: OpenAiPipelineMode;
+  bedrock_api?: BedrockApi;
 }
 
 /** Read-back sentinel for secret credential values: the backend never returns a stored secret,
@@ -1065,6 +1082,8 @@ export interface BaseProviderKey {
   created_at: string;
   provider: PROVIDER_TYPE;
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
+  // masked by the backend, or the string "null" when no key is stored
+  api_key?: string;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
   auth_config?: ProviderAuthConfig;

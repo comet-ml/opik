@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.topics.TopicsNightlyService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -29,7 +30,7 @@ import static org.mockito.Mockito.when;
 @DisplayName("topics first-build job")
 class TopicsFirstBuildJobTest {
 
-    private final TopicsConfig config = new TopicsConfig();
+    private final TopicsConfig config = TestConfigUtils.loadConfigTest().getTopics();
     private final TopicsNightlyService nightlyService = mock(TopicsNightlyService.class);
     private final LockService lockService = mock(LockService.class);
     private final ListAppender<ILoggingEvent> appender = new ListAppender<>();

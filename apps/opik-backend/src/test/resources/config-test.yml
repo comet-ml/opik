@@ -177,14 +177,8 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: false
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: false
   #  Default: false
   #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
@@ -192,19 +186,6 @@ databaseAnalyticsDataModel:
   #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
   #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: false
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: 3
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: 200ms
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: 2s
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -928,6 +909,18 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
 
+  # Default: 10
+  # Description: Number of batches the log queue holds (batchSize * maxQueuedBatches logs). Past it, new logs are dropped
+  maxQueuedBatches: 10
+
+  # Default: PT5S or 5s
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
+  shutdownTimeout: PT5S
+
+  # Default: PT1M or 1 minute
+  # Description: Upper bound on one log insert; past it the insert is abandoned so later flushes can run (max PT10M)
+  insertTimeout: PT1M
+
 workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting.
@@ -1001,6 +994,122 @@ attachmentsConfig:
   # For tests, use 5KB (same as local dev default)
   stripMinSize: 5000
 
+workspaceFeatures:
+  # Off in tests, like the auth cache: a test that needs it turns it on.
+  cacheTtl: 0s
+
+aiLabels:
+  inference:
+    # The synchronous decide calls guardrail checks make, on a client of their own.
+    maxConcurrentDecides: 256
+    decideKeepAlive: 30s
+    decideTimeToLive: 5m
+    #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+    #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+    #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+    #  flight can hold this much heap
+    maxResponseBytes: 33554432
+
+topics:
+  #  Default: false
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
+  #  never exposed to the UI
+  enabled: false
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
+  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  enabledWorkspaces: ""
+  vectors:
+    #  Default: 1m
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. At most
+    #  1h
+    tickInterval: 1m
+    #  Default: 50s
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
+    tickBudget: 50s
+    #  Default: 24h
+    #  Description: How far back, by ai_label_status write time, each tick looks for done traces without a vector. Never
+    #  before the task's applies_from
+    window: 24h
+    #  Default: 7d
+    #  Description: The window of the long-window pass, for rows the short window missed. At least window
+    longWindow: 7d
+    #  Default: 1d
+    #  Description: How often the long-window pass starts (a cluster-wide Redis lock). The pass stays on, tick after
+    #  tick, until one of its ticks drains it (every workspace read, each under maxTracesPerTick, nothing left for want
+    #  of time, a read, a back-off or an insert); the interval runs from that tick. At most 7d
+    longWindowInterval: 1d
+    #  Default: 0 (off)
+    #  Description: When above zero, the long-window pass uses this window instead of longWindow, to catch up after a
+    #  late start or a re-enabled workspace. The window read's cost grows with it. 0 or at least window; at most 365d
+    backfillWindow: 0s
+    #  Default: 5000
+    #  Description: The most traces one tick embeds per workspace, oldest first; the tick budget bounds the total
+    maxTracesPerTick: 5000
+    #  Default: 256 (the most /v1/embed takes)
+    #  Description: Texts per embed call
+    embedBatchSize: 256
+    #  Default: 10s
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
+    #  tickBudget, at most 60s
+    embedTimeout: 10s
+    find:
+      #  Default: 30000000
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  1000000000
+      maxRowsToRead: 30000000
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  8589934592 (8 GiB)
+      maxMemoryUsage: 1073741824
+      #  Default: 30s
+      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
+      maxExecutionTime: 30s
+      #  Default: 1d
+      #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
+      #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
+      createdAtSlack: 1d
+  nightly:
+    #  Default: true
+    #  Description: Runs the nightly job that builds each project's topic list. Needs topics.enabled
+    enabled: true
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date the job starts on
+    schedule: "0 0 2 * * ?"
+    #  Default: 2h
+    #  Description: No project starts after this much of the night; the rest run the next night
+    budget: 2h
+    #  Default: 15m
+    #  Description: One project's run is stopped and failed with timeout after this. Under budget
+    projectTimeout: 15m
+    #  Default: 100
+    #  Description: A project is built when its window holds at least this many traces with a vector. At most 100000
+    minVectors: 100
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the night
+    windowDays: 30
+    #  Default: 100000
+    #  Description: A larger window keeps its newest traces
+    maxVectors: 100000
+    #  Default: 120s
+    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
+    qwenDeadline: 120s
+    #  Default: 90d
+    #  Description: topic_runs rows are deleted after this. At most 365d
+    runsRetention: 90d
+  firstBuild:
+    #  Default: true
+    #  Description: Runs the first-build job, which builds the list of a project that has none yet during the day, with
+    #  tomorrow's window (today's traces so far), instead of leaving it to the next night. Needs topics.enabled and
+    #  topics.nightly.enabled
+    enabled: true
+    #  Default: 10m
+    #  Description: How often every pod fires the job; one run per interval across the cluster. At most 1d
+    interval: 10m
+    #  Default: 9m
+    #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
+    budget: 9m
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
@@ -1073,6 +1182,9 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
   # Default: false
+  # Description: Whether or not the backend runs guardrails itself
+  guardrailsValidationsEnabled: "false"
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
   # Default: true
@@ -1137,9 +1249,6 @@ serviceToggles:
   # Default: false
   # Description: Whether Agent Insights project guidance is enabled, effective only while Agent Insights is active.
   agentInsightsGuidanceEnabled: "false"
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
-  onlineScoringTracingEnabled: "true"
   # Default: true, matched here so the test application boots the feature the way a deployment does:
   #   the score listener registered, the Redis buffer flush job scheduled and the routing consumer
   #   started. Unlike the other scheduled jobs this configuration switches off, this one cannot be

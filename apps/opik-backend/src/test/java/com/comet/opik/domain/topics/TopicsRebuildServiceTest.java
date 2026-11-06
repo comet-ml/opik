@@ -1,7 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
@@ -92,8 +92,8 @@ class TopicsRebuildServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         var names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
-        service = new TopicsRebuildService(new TopicsConfig(), template, windowDAO, traceTopicsDAO, client,
-                idGenerator, new TopicsMetrics(meter.meter, names));
+        service = new TopicsRebuildService(TestConfigUtils.loadConfigTest().getTopics(), template, windowDAO,
+                traceTopicsDAO, client, idGenerator, new TopicsMetrics(meter.meter, names));
     }
 
     @Test
@@ -303,7 +303,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("the window read stops after 120 s, or after a shorter run timeout")
     void readSeconds() {
-        var nightly = new TopicsConfig.NightlyConfig();
+        var nightly = TestConfigUtils.loadConfigTest().getTopics().getNightly();
         assertThat(TopicsRebuildService.readSeconds(nightly)).isEqualTo(120);
 
         nightly.setProjectTimeout(Duration.minutes(1));

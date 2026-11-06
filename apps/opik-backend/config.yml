@@ -15,6 +15,12 @@ logging:
     # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
     #   own retries without it
     dev.langchain4j.internal.RetryUtils: ERROR
+    # Default: WARN
+    # Description: pinned so a DEBUG root level (GENERAL_LOG_LEVEL) can't enable them; at DEBUG they log full HTTP
+    #   headers and bodies, including authorization headers. Set the logger by name to debug the wire deliberately
+    org.eclipse.jetty.http.HttpParser: WARN
+    org.apache.hc.client5.http.wire: WARN
+    org.apache.hc.client5.http.headers: WARN
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -204,14 +210,8 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED:-false}
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
   #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
@@ -219,19 +219,6 @@ databaseAnalyticsDataModel:
   #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
   #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: ${SPAN_WEEKS_REGISTRATION_MAX_RETRIES:-3}
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: ${SPAN_WEEKS_REGISTRATION_MIN_BACKOFF:-200ms}
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: ${SPAN_WEEKS_REGISTRATION_MAX_BACKOFF:-2s}
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -1803,6 +1790,18 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}
 
+  # Default: 10
+  # Description: Number of batches the log queue holds (batchSize * maxQueuedBatches logs). Past it, new logs are dropped
+  maxQueuedBatches: ${CLICKHOUSE_LOG_APPENDER_MAX_QUEUED_BATCHES:-10}
+
+  # Default: PT5S or 5s
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
+  shutdownTimeout: ${CLICKHOUSE_LOG_APPENDER_SHUTDOWN_TIMEOUT:-PT5S}
+
+  # Default: PT1M or 1 minute
+  # Description: Upper bound on one log insert; past it the insert is abandoned so later flushes can run (max PT10M)
+  insertTimeout: ${CLICKHOUSE_LOG_APPENDER_INSERT_TIMEOUT:-PT1M}
+
 workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting.
@@ -1869,6 +1868,13 @@ attachmentsConfig:
   # Description: Minimum size (bytes) for base64 strings to be considered attachments
   # Default: 256000 (256KB)
   stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
+
+# Per-organization features the platform switches on (guardrails today), asked for on demand by the endpoints that
+# need them, and only when authentication is enabled.
+workspaceFeatures:
+  # Default: 5s
+  # Description: How long one workspace's answer for a feature is cached in Redis; a feature switched on or off in the platform is seen within it. 0s asks the platform on every call
+  cacheTtl: ${WORKSPACE_FEATURES_CACHE_TTL:-5s}
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1937,6 +1943,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the backend runs guardrails itself: the checks on opik-inference (POST /v1/private/guardrails/validations) and the guardrail policies API
+  guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
@@ -2013,11 +2022,6 @@ serviceToggles:
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
-  #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
-  #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
-  onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not automatic annotation queue population is enabled. When false the score
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
@@ -2499,8 +2503,8 @@ aiLabels:
   #  Description: Directory of task YAML to load instead of the bundled tasks
   tasksDir: ${AI_LABELS_TASKS_DIR:-}
   inference:
-    #  Description: opik-inference base URL. Required when enabled. https, or http only to localhost or a loopback
-    #  address; the backend refuses to start with any other URL
+    #  Description: opik-inference base URL. Required when enabled. When enabled, https, or http only to localhost or a
+    #  loopback address; the backend then refuses to start with any other URL
     url: ${AI_LABELS_INFERENCE_URL:-}
     #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
     credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
@@ -2511,9 +2515,22 @@ aiLabels:
     #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
     #  sends get past tickBudget, so it lengthens the leader lease
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+    #  Default: 256
+    #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
+    #  retries after a short backoff, then fails
+    maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
+    #  Default: 30s
+    #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
+    #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+    decideKeepAlive: ${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}
+    #  Default: 5m
+    #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
+    #  upstream instances after a rollout
+    decideTimeToLive: ${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}
     #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
     #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
-    #  upstream_error, and its connection is closed without reading the rest
+    #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+    #  flight can hold this much heap
     maxResponseBytes: ${AI_LABELS_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
@@ -2621,8 +2638,7 @@ aiLabels:
 
 # Topics: groups traces by the intent ai-labels summarizes. Step 1 stores a bge-small vector of every trace_summary in
 # ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for. Calls
-# aiLabels.inference's deployment with its credential (/v1/embed). See apps/opik-backend/docs/ai-labels-runbook.md,
-# section "Topic vectors".
+# aiLabels.inference's deployment with its credential (/v1/embed).
 topics:
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
@@ -2634,10 +2650,11 @@ topics:
   enabledWorkspaces: ${TOGGLE_TOPICS_WORKSPACES:-""}
   vectors:
     #  Default: 1m
-    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. At most
+    #  1h
     tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
     #  Default: 50s
-    #  Description: Every ClickHouse query and embed call of a tick ends within this. Must be under tickInterval
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
     tickBudget: ${TOPICS_VECTORS_TICK_BUDGET:-50s}
     #  Default: 24h
     #  Description: How far back, by ai_label_status write time, each tick looks for done traces without a vector. Never
@@ -2649,7 +2666,7 @@ topics:
     #  Default: 1d
     #  Description: How often the long-window pass starts (a cluster-wide Redis lock). The pass stays on, tick after
     #  tick, until one of its ticks drains it (every workspace read, each under maxTracesPerTick, nothing left for want
-    #  of time, a read, a back-off or an insert); the interval runs from that tick
+    #  of time, a read, a back-off or an insert); the interval runs from that tick. At most 7d
     longWindowInterval: ${TOPICS_VECTORS_LONG_WINDOW_INTERVAL:-1d}
     #  Default: 0 (off)
     #  Description: When above zero, the long-window pass uses this window instead of longWindow, to catch up after a
@@ -2667,17 +2684,19 @@ topics:
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
     find:
       #  Default: 30000000
-      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  1000000000
       maxRowsToRead: ${TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ:-30000000}
       #  Default: 1073741824 (1 GiB)
-      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  8589934592 (8 GiB)
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
       #  Default: 30s
       #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
       #  Default: 1d
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
-      #  margin, which covers the time from the ai-labels sweep to the status write
+      #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
       createdAtSlack: ${TOPICS_VECTORS_FIND_CREATED_AT_SLACK:-1d}
   nightly:
     #  Default: true
@@ -2693,7 +2712,7 @@ topics:
     #  Description: One project's run is stopped and failed with timeout after this. Under budget
     projectTimeout: ${TOPICS_NIGHTLY_PROJECT_TIMEOUT:-15m}
     #  Default: 100
-    #  Description: A project is built when its window holds at least this many traces with a vector
+    #  Description: A project is built when its window holds at least this many traces with a vector. At most 100000
     minVectors: ${TOPICS_NIGHTLY_MIN_VECTORS:-100}
     #  Default: 30
     #  Description: The window: this many whole UTC days before the night
@@ -2705,7 +2724,7 @@ topics:
     #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
     qwenDeadline: ${TOPICS_NIGHTLY_QWEN_DEADLINE:-120s}
     #  Default: 90d
-    #  Description: topic_runs rows are deleted after this
+    #  Description: topic_runs rows are deleted after this. At most 365d
     runsRetention: ${TOPICS_NIGHTLY_RUNS_RETENTION:-90d}
   firstBuild:
     #  Default: true
@@ -2714,8 +2733,21 @@ topics:
     #  topics.nightly.enabled
     enabled: ${TOPICS_FIRST_BUILD_ENABLED:-true}
     #  Default: 10m
-    #  Description: How often every pod fires the job; one run per interval across the cluster
+    #  Description: How often every pod fires the job; one run per interval across the cluster. At most 1d
     interval: ${TOPICS_FIRST_BUILD_INTERVAL:-10m}
     #  Default: 9m
     #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
     budget: ${TOPICS_FIRST_BUILD_BUDGET:-9m}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
+# server-side only; the validations endpoint rejects a threshold sent by the caller.
+guardrails:
+  # Default: 0.5
+  # Description: A PII check fails when any selected class scores at or above this
+  piiThreshold: ${GUARDRAILS_PII_THRESHOLD:-0.5}
+  # Default: 0.3
+  # Description: A topic counts as matched when its probability is at or above this
+  topicThreshold: ${GUARDRAILS_TOPIC_THRESHOLD:-0.3}
+  # Default: 0.4
+  # Description: A prompt injection check fails when the probability is at or above this
+  promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}

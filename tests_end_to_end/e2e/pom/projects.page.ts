@@ -117,4 +117,68 @@ export class ProjectsPage {
       has: this.page.getByRole('heading', { name: 'Delete project' }),
     });
   }
+
+  // --- Create project ---
+
+  /**
+   * `AddEditProjectDialog` in its create mode, scoped by its own title.
+   *
+   * The dialog has no testid and the page's own "Create project" button shares
+   * an accessible name with the dialog's submit, so everything inside is
+   * addressed through this root rather than off the page.
+   */
+  get createProjectDialog(): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: 'Create a new project' }),
+    });
+  }
+
+  /** Open the create-project dialog from the page header's button. */
+  async openCreateProjectDialog(): Promise<void> {
+    return test.step('Open the create-project dialog', async () => {
+      // Scoped away from the dialog's own submit, which carries the same name:
+      // the header button is the one outside any dialog.
+      await this.page
+        .getByRole('button', { name: 'Create project', exact: true })
+        .first()
+        .click();
+      await this.createProjectDialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Type a name into the open dialog and submit it.
+   *
+   * Resolves on the POST having answered, not on the dialog closing: the
+   * dialog is wrapped in `DialogClose` and so closes on the click whether the
+   * create succeeded or failed, which makes its disappearance say nothing. The
+   * response is returned so a caller can compare what the server said against
+   * what the toast shows — the whole subject of opik#9187 is which of the two
+   * the user is given.
+   */
+  async submitNewProject(name: string): Promise<{ status: number; message: string | null }> {
+    return test.step(`Submit a new project named "${name}"`, async () => {
+      const dialog = this.createProjectDialog;
+      await dialog.getByLabel('Name', { exact: true }).fill(name);
+      // The trailing slash is optional in the match, not in the URL: the
+      // frontend's `PROJECTS_REST_ENDPOINT` carries one and the backend does
+      // not, and a matcher that assumed either would silently never fire.
+      const posted = this.page.waitForResponse(
+        (res) =>
+          res.request().method() === 'POST' &&
+          /\/v1\/private\/projects\/?$/.test(new URL(res.url()).pathname),
+      );
+      await dialog.getByRole('button', { name: 'Create project', exact: true }).click();
+      const response = await posted;
+      let message: string | null = null;
+      try {
+        const body = (await response.json()) as { message?: unknown } | null;
+        if (typeof body?.message === 'string') message = body.message;
+      } catch {
+        // A 201 answers with an empty body and a Location header; only a
+        // failure carries a message, and the caller asserts the status.
+      }
+      return { status: response.status(), message };
+    });
+  }
 }

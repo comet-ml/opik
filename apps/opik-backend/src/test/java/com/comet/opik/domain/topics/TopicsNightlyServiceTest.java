@@ -1,7 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
@@ -121,8 +121,8 @@ class TopicsNightlyServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
 
-        service = new TopicsNightlyService(new TopicsConfig(), template, workspaceService, windowDAO, rebuildService,
-                new TopicsMetrics(meter.meter), lockService, idGenerator);
+        service = new TopicsNightlyService(TestConfigUtils.loadConfigTest().getTopics(), template, workspaceService,
+                windowDAO, rebuildService, new TopicsMetrics(meter.meter), lockService, idGenerator);
     }
 
     @Test

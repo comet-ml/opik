@@ -4,6 +4,9 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.comet.opik.TestConfigUtils;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelEndpoint;
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
@@ -39,7 +42,10 @@ import reactor.core.publisher.Mono;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -49,6 +55,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -59,8 +66,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -72,14 +80,24 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @DisplayName("topic vectors tick, without containers")
 class TopicVectorsTickServiceTest {
 
-    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+    private static final String WORKSPACE_ID = ID_GENERATOR.generateId().toString();
     private static final Instant NOW = Instant.parse("2026-11-20T12:00:00Z");
     private static final Instant APPLIES_FROM = Instant.parse("2026-11-01T00:00:00Z");
+    // config-test.yml's topics.vectors: the windows and the embed timeout. With the clock at the tick's start, a window
+    // read gets find.maxExecutionTime (30 s, under the 50 s budget), and a later read the whole budget.
+    private static final Duration SHORT_WINDOW = Duration.ofHours(24);
+    private static final Duration LONG_WINDOW = Duration.ofDays(7);
+    private static final Duration EMBED_TIMEOUT = Duration.ofSeconds(10);
+    private static final long FIND_SECONDS = 30;
+    private static final long BUDGET_SECONDS = 50;
 
     @Nested
     @DisplayName("normalize")
@@ -140,7 +158,7 @@ class TopicVectorsTickServiceTest {
     @DisplayName("summary text")
     class SummaryText {
 
-        private final TopicVectorCandidate candidate = candidate(UUID.randomUUID(), 2, NOW);
+        private final TopicVectorCandidate candidate = candidate(ID_GENERATOR.generateId(), 2, NOW);
 
         @Test
         @DisplayName("is the summary exactly as stored")
@@ -174,50 +192,58 @@ class TopicVectorsTickServiceTest {
         private TopicWorkspaceService workspaces;
         private AiLabelTaskRegistry registry;
         private TestMeter meter;
+        private TestClock clock;
         private TopicVectorsTickService service;
         private final List<EmbedRequest> requests = Collections.synchronizedList(new ArrayList<>());
         private final List<TopicVector> inserted = Collections.synchronizedList(new ArrayList<>());
+        private final List<List<TopicTraceKey>> statusChecks = Collections.synchronizedList(new ArrayList<>());
 
         @BeforeEach
         @SuppressWarnings("unchecked")
         void setUp() {
-            config = new TopicsConfig();
+            config = TestConfigUtils.loadConfigTest().getTopics();
             dao = mock(TopicVectorsDAO.class);
             client = mock(InferenceClient.class);
             lockService = mock(LockService.class);
             workspaces = mock(TopicWorkspaceService.class);
             registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
+            clock = new TestClock(NOW);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
+                    registry, names(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
             // The long-window pass is not due unless a test says so.
-            when(lockService.lockUsingToken(any(), any())).thenReturn(Mono.just(false));
-            when(lockService.unlockUsingToken(any())).thenReturn(Mono.empty());
-            when(client.embed(any(), any())).thenAnswer(invocation -> {
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(false));
+            when(lockService.unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK)).thenReturn(Mono.empty());
+            // A chunk no test stubs gets the vectors of its own inputs, so this takes any request and deadline.
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
                 EmbedRequest request = invocation.getArgument(0);
                 requests.add(request);
-                return Mono.just(EmbedResponse.builder()
-                        .result(EmbedResult.builder()
-                                .embeddings(request.inputs().stream().map(TopicVectorsTickServiceTest::vectorOf)
-                                        .toList())
-                                .dimensions(384)
-                                .build())
-                        .build());
+                return Mono.just(embedded(request.inputs()));
             });
-            when(dao.insert(any())).thenAnswer(invocation -> {
+            // Records the rows it gets, so this takes any list.
+            when(dao.insert(anyList())).thenAnswer(invocation -> {
                 List<TopicVector> rows = invocation.getArgument(0);
                 inserted.addAll(rows);
                 return Mono.just((long) rows.size());
             });
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
-                    registry, names(), meter.meter);
+            // No trace is deleted while it is embedded unless a test says so: the status check answers every key it
+            // is asked for, and records them, so this takes any workspace, keys and time left.
+            when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                    .thenAnswer(invocation -> {
+                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                        statusChecks.add(List.copyOf(keys));
+                        return Flux.fromIterable(keys);
+                    });
         }
 
         @Test
         @DisplayName("600 texts go out as 256 + 256 + 88 in order, and each vector is stored with its own trace")
         void chunksInOrder() {
             var candidates = IntStream.range(0, 600)
-                    .mapToObj(i -> candidate(UUID.randomUUID(), 1, NOW.minusSeconds(600 - i)))
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(600 - i)))
                     .toList();
             stub(candidates, candidate -> "intent of " + candidate.traceId());
 
@@ -244,12 +270,13 @@ class TopicVectorsTickServiceTest {
         @Test
         @DisplayName("a zero vector and a missing summary are skipped and counted, the rest written")
         void zeroVectorAndMissingSummary() {
-            var zero = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(3));
-            var missing = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(2));
-            var normal = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1));
-            stub(List.of(zero, missing, normal), candidate -> candidate == zero ? "zero" : "fine");
-            when(dao.findSummaries(anyString(), anyString(), any(), anyLong())).thenReturn(Flux.just(
-                    summary(zero, 1, "zero"), summary(normal, 1, "fine")));
+            var zero = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(3));
+            var missing = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2));
+            var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
+            var candidates = List.of(zero, missing, normal);
+            stub(candidates, candidate -> candidate == zero ? "zero" : "fine");
+            when(dao.findSummaries(WORKSPACE_ID, TopicVectorsTickService.TASK, keys(candidates), BUDGET_SECONDS))
+                    .thenReturn(Flux.just(summary(zero, 1, "zero"), summary(normal, 1, "fine")));
 
             var result = service.tick(NOW);
 
@@ -262,17 +289,19 @@ class TopicVectorsTickServiceTest {
         @Test
         @DisplayName("a null embedding and a null element cost only their own traces, the rest of the chunk is written")
         void nullEmbeddingAndNullElement() {
-            var nullEmbedding = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(3));
-            var nullElement = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(2));
-            var normal = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1));
-            stub(List.of(nullEmbedding, nullElement, normal), candidate -> "intent of " + candidate.traceId());
+            var nullEmbedding = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(3));
+            var nullElement = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2));
+            var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
+            var candidates = List.of(nullEmbedding, nullElement, normal);
+            stub(candidates, candidate -> "intent of " + candidate.traceId());
+            var texts = candidates.stream().map(candidate -> "intent of " + candidate.traceId()).toList();
             var withNull = new ArrayList<>(vectorOf("x"));
             withNull.set(7, null);
             var embeddings = new ArrayList<List<Float>>();
             embeddings.add(null);
             embeddings.add(withNull);
             embeddings.add(vectorOf("intent of " + normal.traceId()));
-            answerEmbed(EmbedResponse.builder()
+            answerEmbed(embedRequest(WORKSPACE_ID, texts), EmbedResponse.builder()
                     .result(EmbedResult.builder().embeddings(embeddings).dimensions(384).build())
                     .build());
 
@@ -288,30 +317,21 @@ class TopicVectorsTickServiceTest {
         void nullEmbeddingsList() {
             config.getVectors().setEmbedBatchSize(2);
             var candidates = IntStream.range(0, 4)
-                    .mapToObj(i -> candidate(UUID.randomUUID(), 1, NOW.minusSeconds(4 - i)))
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(4 - i)))
                     .toList();
             stub(candidates, candidate -> "intent of " + candidate.traceId());
-            var calls = new java.util.concurrent.atomic.AtomicInteger();
-            doAnswer(invocation -> {
-                EmbedRequest request = invocation.getArgument(0);
-                requests.add(request);
-                if (calls.incrementAndGet() == 1) {
-                    return Mono.just(EmbedResponse.builder()
-                            .result(EmbedResult.builder().embeddings(null).dimensions(384).build())
-                            .build());
-                }
-                return Mono.just(EmbedResponse.builder()
-                        .result(EmbedResult.builder()
-                                .embeddings(request.inputs().stream().map(TopicVectorsTickServiceTest::vectorOf)
-                                        .toList())
-                                .dimensions(384)
-                                .build())
-                        .build());
-            }).when(client).embed(any(), any());
+            var texts = candidates.stream().map(candidate -> "intent of " + candidate.traceId()).toList();
+            var first = embedRequest(WORKSPACE_ID, texts.subList(0, 2));
+            var second = embedRequest(WORKSPACE_ID, texts.subList(2, 4));
+            answerEmbed(first, EmbedResponse.builder()
+                    .result(EmbedResult.builder().embeddings(null).dimensions(384).build())
+                    .build());
 
             var result = service.tick(NOW);
 
-            assertThat(requests).hasSize(2);
+            verify(client).embed(first, NOW.plus(EMBED_TIMEOUT));
+            verify(client).embed(second, NOW.plus(EMBED_TIMEOUT));
+            verifyNoMoreInteractions(client);
             assertThat(inserted).extracting(TopicVector::traceId)
                     .containsExactly(candidates.get(2).traceId(), candidates.get(3).traceId());
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
@@ -321,13 +341,12 @@ class TopicVectorsTickServiceTest {
         @DisplayName("an empty answer or one without a result counts the chunk as invalid and throws nothing")
         void nullResult() {
             config.getVectors().setEmbedBatchSize(1);
-            var candidates = List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(2)),
-                    candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1)));
+            var candidates = List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2)),
+                    candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1)));
             stub(candidates, c -> "intent");
-            var calls = new java.util.concurrent.atomic.AtomicInteger();
-            doAnswer(invocation -> calls.incrementAndGet() == 1
-                    ? Mono.empty()
-                    : Mono.just(EmbedResponse.builder().build())).when(client).embed(any(), any());
+            // Both chunks send the same request: the first answer is empty, the second has no result.
+            doReturn(Mono.empty(), Mono.just(EmbedResponse.builder().build())).when(client)
+                    .embed(embedRequest(WORKSPACE_ID, List.of("intent")), NOW.plus(EMBED_TIMEOUT));
 
             var result = service.tick(NOW);
 
@@ -335,11 +354,8 @@ class TopicVectorsTickServiceTest {
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
         }
 
-        private void answerEmbed(EmbedResponse response) {
-            doAnswer(invocation -> {
-                requests.add(invocation.getArgument(0));
-                return Mono.just(response);
-            }).when(client).embed(any(), any());
+        private void answerEmbed(EmbedRequest request, EmbedResponse response) {
+            doReturn(Mono.just(response)).when(client).embed(request, NOW.plus(EMBED_TIMEOUT));
         }
 
         @Test
@@ -348,33 +364,35 @@ class TopicVectorsTickServiceTest {
         void windowBounds() {
             stub(List.of(), candidate -> "");
             config.getVectors().setLongWindow(io.dropwizard.util.Duration.days(30));
+            stub(Duration.ofDays(30), List.of(), candidate -> "");
             var horizonAndSlack = Duration.ofDays(7).plus(Duration.ofDays(1));
 
             service.tick(NOW);
             var shortLower = NOW.minus(Duration.ofHours(24));
-            verify(dao).findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), eq(shortLower), eq(NOW),
-                    eq(shortLower.minus(horizonAndSlack)), eq(5_000), anyLong());
+            verify(dao).findUnvectored(WORKSPACE_ID, TopicVectorsTickService.TASK, shortLower, NOW,
+                    shortLower.minus(horizonAndSlack), 5_000, FIND_SECONDS);
 
             longWindowDue();
             var result = service.tick(NOW);
             assertThat(result.longWindowPass()).isTrue();
-            verify(dao).findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), eq(APPLIES_FROM),
-                    eq(NOW), eq(APPLIES_FROM.minus(horizonAndSlack)), eq(5_000), anyLong());
+            verify(dao).findUnvectored(WORKSPACE_ID, TopicVectorsTickService.TASK, APPLIES_FROM, NOW,
+                    APPLIES_FROM.minus(horizonAndSlack), 5_000, FIND_SECONDS);
         }
 
         @Test
         @DisplayName("with a backfill window, the long-window pass uses it instead of the long window")
         void backfillWindow() {
-            stub(List.of(), candidate -> "");
             config.getVectors().setBackfillWindow(io.dropwizard.util.Duration.days(12));
+            stub(Duration.ofDays(12), List.of(), candidate -> "");
             longWindowDue();
 
             var result = service.tick(NOW);
 
             assertThat(result.longWindowPass()).isTrue();
-            verify(dao).findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK),
-                    eq(NOW.minus(Duration.ofDays(12))), eq(NOW), any(), eq(5_000), anyLong());
-            assertThat(TopicVectorsTickService.longWindow(new TopicsConfig().getVectors()))
+            var lower = NOW.minus(Duration.ofDays(12));
+            verify(dao).findUnvectored(WORKSPACE_ID, TopicVectorsTickService.TASK, lower, NOW,
+                    lower.minus(Duration.ofDays(7).plus(Duration.ofDays(1))), 5_000, FIND_SECONDS);
+            assertThat(TopicVectorsTickService.longWindow(TestConfigUtils.loadConfigTest().getTopics().getVectors()))
                     .isEqualTo(io.dropwizard.util.Duration.days(7));
         }
 
@@ -385,9 +403,10 @@ class TopicVectorsTickServiceTest {
             config.getVectors().setMaxTracesPerTick(2);
             longWindowDue();
             var lease = service.leaderLease();
-            var full = IntStream.range(0, 2).mapToObj(i -> candidate(UUID.randomUUID(), 1, NOW.minusSeconds(9 - i)))
+            var full = IntStream.range(0, 2)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(9 - i)))
                     .toList();
-            stub(full, candidate -> "intent of " + candidate.traceId());
+            stub(LONG_WINDOW, full, candidate -> "intent of " + candidate.traceId());
 
             assertThat(service.tick(NOW).written()).isEqualTo(2);
 
@@ -398,7 +417,8 @@ class TopicVectorsTickServiceTest {
             verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
                     Duration.ofDays(1));
 
-            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1))), candidate -> "last");
+            stub(LONG_WINDOW, List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1))),
+                    candidate -> "last");
 
             assertThat(service.tick(NOW).written()).isOne();
 
@@ -411,9 +431,11 @@ class TopicVectorsTickServiceTest {
         @DisplayName("a long-window pass cut by a back-off is not drained")
         void longWindowNotDrainedAfterBackOff() {
             longWindowDue();
-            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1))), candidate -> "x");
+            stub(LONG_WINDOW, List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1))),
+                    candidate -> "x");
             var exception = inferenceException(503, "something_new", false);
-            doReturn(Mono.error(exception)).when(client).embed(any(), any());
+            doReturn(Mono.error(exception)).when(client)
+                    .embed(embedRequest(WORKSPACE_ID, List.of("x")), NOW.plus(EMBED_TIMEOUT));
 
             var result = service.tick(NOW);
 
@@ -438,18 +460,20 @@ class TopicVectorsTickServiceTest {
         @DisplayName("workspaces are read from an offset that moves by one every tick interval")
         void rotation() {
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
-            when(dao.findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong()))
-                    .thenReturn(Flux.empty());
             var order = new ArrayList<List<String>>();
             for (int minute = 0; minute < 4; minute++) {
-                var start = NOW.plus(Duration.ofMinutes(minute));
+                var start = clock.instant();
                 var calls = new ArrayList<String>();
-                doAnswer(invocation -> {
-                    calls.add(invocation.getArgument(0));
-                    return Flux.empty();
-                }).when(dao).findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong());
+                for (var workspaceId : List.of("a", "b", "c")) {
+                    when(findUnvectored(dao, workspaceId, start, SHORT_WINDOW, 5_000, FIND_SECONDS))
+                            .thenAnswer(invocation -> {
+                                calls.add(workspaceId);
+                                return Flux.empty();
+                            });
+                }
                 service.tick(start);
                 order.add(calls);
+                clock.advance(Duration.ofMinutes(1));
             }
 
             var first = order.getFirst();
@@ -472,35 +496,26 @@ class TopicVectorsTickServiceTest {
                     .toList();
             var healthy = IntStream.range(0, 3).mapToObj(i -> candidate("healthy", NOW.minusSeconds(10 - i)))
                     .toList();
-            when(dao.findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong()))
-                    .thenAnswer(invocation -> Flux.fromIterable(
-                            "failing".equals(invocation.getArgument(0)) ? failing : healthy));
-            when(dao.findSummaries(anyString(), anyString(), any(), anyLong())).thenAnswer(invocation -> {
-                Set<UUID> traceIds = invocation.getArgument(2);
-                return Flux.concat(Flux.fromIterable(failing), Flux.fromIterable(healthy))
-                        .filter(candidate -> traceIds.contains(candidate.traceId()))
-                        .map(candidate -> summary(candidate, 1, "intent of " + candidate.traceId()));
-            });
+            Function<TopicVectorCandidate, String> text = candidate -> "intent of " + candidate.traceId();
+            when(findUnvectored(dao, "failing", NOW, SHORT_WINDOW, 3, FIND_SECONDS))
+                    .thenReturn(Flux.fromIterable(failing));
+            when(findUnvectored(dao, "healthy", NOW, SHORT_WINDOW, 3, FIND_SECONDS))
+                    .thenReturn(Flux.fromIterable(healthy));
+            stubSummaries("failing", failing, text, BUDGET_SECONDS);
+            stubSummaries("healthy", healthy, text, BUDGET_SECONDS);
             var exception = inferenceException(503, "something_new", false);
-            doAnswer(invocation -> {
-                EmbedRequest request = invocation.getArgument(0);
-                requests.add(request);
-                if ("failing".equals(request.orgId())) {
-                    return Mono.error(exception);
-                }
-                return Mono.just(EmbedResponse.builder()
-                        .result(EmbedResult.builder()
-                                .embeddings(request.inputs().stream().map(TopicVectorsTickServiceTest::vectorOf)
-                                        .toList())
-                                .dimensions(384)
-                                .build())
-                        .build());
-            }).when(client).embed(any(), any());
+            var failed = embedRequest("failing", List.of(text.apply(failing.getFirst())));
+            doReturn(Mono.error(exception)).when(client).embed(failed, NOW.plus(EMBED_TIMEOUT));
 
             var result = service.tick(NOW);
 
-            verify(dao, times(2)).findUnvectored(anyString(), anyString(), any(), any(), any(), eq(3), anyLong());
-            assertThat(requests).filteredOn(request -> request.orgId().equals("failing")).hasSize(1);
+            findUnvectored(verify(dao), "failing", NOW, SHORT_WINDOW, 3, FIND_SECONDS);
+            findUnvectored(verify(dao), "healthy", NOW, SHORT_WINDOW, 3, FIND_SECONDS);
+            // The failing workspace is called once and backs off; the healthy one goes on.
+            verify(client).embed(failed, NOW.plus(EMBED_TIMEOUT));
+            healthy.forEach(candidate -> verify(client)
+                    .embed(embedRequest("healthy", List.of(text.apply(candidate))), NOW.plus(EMBED_TIMEOUT)));
+            verifyNoMoreInteractions(client);
             assertThat(inserted).extracting(TopicVector::traceId)
                     .containsExactlyElementsOf(healthy.stream().map(TopicVectorCandidate::traceId).toList());
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 3));
@@ -512,60 +527,49 @@ class TopicVectorsTickServiceTest {
             config.getVectors().setTickBudget(io.dropwizard.util.Duration.milliseconds(1_500));
             config.getVectors().setEmbedTimeout(io.dropwizard.util.Duration.seconds(1));
             config.getVectors().setEmbedBatchSize(1);
-            var early = earlyTask();
-            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(early));
-            var now = Instant.now();
-            var candidates = IntStream.range(0, 3).mapToObj(i -> candidate(UUID.randomUUID(), 1, now.minusSeconds(5)))
+            // The lease follows the budget: the long-window pass is not due under the new one either.
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(false));
+            var candidates = IntStream.range(0, 3)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5)))
                     .toList();
-            stub(candidates, candidate -> "intent of " + candidate.traceId());
-            var deadlines = new ArrayList<Duration>();
+            // With 1.5 s left, each read gets the 1 whole second left.
+            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, 5_000, 1))
+                    .thenReturn(Flux.fromIterable(candidates));
+            stubSummaries(WORKSPACE_ID, candidates, candidate -> "intent of " + candidate.traceId(), 1);
+            var first = embedRequest(WORKSPACE_ID, List.of("intent of " + candidates.getFirst().traceId()));
+            var callDeadline = NOW.plusSeconds(1);
             doAnswer(invocation -> {
-                EmbedRequest request = invocation.getArgument(0);
-                Instant callDeadline = invocation.getArgument(1);
-                deadlines.add(Duration.between(Instant.now(), callDeadline));
-                requests.add(request);
                 // Leaves less than the embed timeout of the 1.5 s budget.
-                Thread.sleep(600);
-                return Mono.just(EmbedResponse.builder()
-                        .result(EmbedResult.builder()
-                                .embeddings(request.inputs().stream().map(TopicVectorsTickServiceTest::vectorOf)
-                                        .toList())
-                                .dimensions(384)
-                                .build())
-                        .build());
-            }).when(client).embed(any(), any());
+                clock.advance(Duration.ofMillis(600));
+                return Mono.just(embedded(first.inputs()));
+            }).when(client).embed(first, callDeadline);
 
-            var result = service.tick(Instant.now());
+            var result = service.tick(NOW);
 
-            assertThat(requests).hasSize(1);
+            // A call that starts gets its whole timeout: its deadline is exactly the embed timeout from its start.
+            verify(client).embed(first, callDeadline);
+            verifyNoMoreInteractions(client);
             assertThat(result.written()).isOne();
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.OVER_BUDGET, 2));
-            // A call that starts gets its whole timeout, even when that runs past the tick's budget.
-            assertThat(deadlines).singleElement()
-                    .satisfies(left -> assertThat(left).isGreaterThan(Duration.ofMillis(900)));
         }
 
         @ParameterizedTest(name = "{0} ms left: {1} window reads")
-        // Time only shrinks between here and the read, so the cases sit at the far side of each bound: 1,990 ms keeps
-        // ~1 s of slack above the 1 s minimum and still rounds down to max_execution_time = 1; 0 and 900 ms can only
-        // shrink, so they stay under it.
-        @CsvSource({"0, 0", "900, 0", "1990, 1"})
+        // A read needs at least 1 s left, and gets the whole seconds left: 1,999 ms is a read of 1 s.
+        @CsvSource({"0, 0", "999, 0", "1000, 1", "1999, 1"})
         @DisplayName("a window read starts only with at least a second left in the tick, and gets the whole seconds left")
         void noWindowReadUnderASecondLeft(long leftMillis, int reads) {
-            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
-            stub(List.of(), candidate -> "");
-            var budget = config.getVectors().getTickBudget().toJavaDuration();
+            var start = NOW.minus(config.getVectors().getTickBudget().toJavaDuration()).plusMillis(leftMillis);
+            when(findUnvectored(dao, WORKSPACE_ID, start, SHORT_WINDOW, 5_000, 1)).thenReturn(Flux.empty());
             var appender = new ListAppender<ILoggingEvent>();
             var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
             appender.start();
             logger.addAppender(appender);
             try {
-                service.tick(Instant.now().minus(budget).plusMillis(leftMillis));
+                service.tick(start);
 
-                verify(dao, times(reads)).findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(),
-                        eq(1L));
-                verify(dao, times(reads)).findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(),
-                        anyLong());
+                findUnvectored(verify(dao, times(reads)), WORKSPACE_ID, start, SHORT_WINDOW, 5_000, 1);
+                verifyNoMoreInteractions(dao);
                 assertThat(appender.list)
                         .filteredOn(event -> event.getFormattedMessage().contains("workspaces not read"))
                         .hasSize(1 - reads);
@@ -577,9 +581,9 @@ class TopicVectorsTickServiceTest {
         @Test
         @DisplayName("done statuses without a summary log one WARN per workspace with the count and the oldest trace")
         void missingSummaryWarn() {
-            var oldest = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(30));
-            var newer = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(20));
-            var normal = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(10));
+            var oldest = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(30));
+            var newer = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(20));
+            var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(10));
             stub(List.of(oldest, newer, normal), candidate -> candidate == normal ? "fine" : "   ");
             var appender = new ListAppender<ILoggingEvent>();
             var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
@@ -590,14 +594,14 @@ class TopicVectorsTickServiceTest {
 
                 assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.MISSING_SUMMARY, 2));
                 assertThat(appender.list)
-                        .filteredOn(event -> event.getFormattedMessage().contains("without a usable summary"))
+                        .filteredOn(event -> event.getFormattedMessage().contains("without a summary"))
                         .singleElement()
                         .satisfies(event -> {
                             assertThat(event.getLevel()).isEqualTo(Level.WARN);
                             assertThat(event.getFormattedMessage())
                                     .contains("workspace '" + WORKSPACE_ID + "'")
                                     .contains("traces '2'")
-                                    .contains("oldest trace '" + oldest.traceId() + "'");
+                                    .contains("oldest '" + oldest.traceId() + "'");
                         });
             } finally {
                 logger.detachAppender(appender);
@@ -609,16 +613,12 @@ class TopicVectorsTickServiceTest {
         void findFailure() {
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("broken", "fine"));
             var fine = candidate("fine", NOW.minusSeconds(60));
-            when(dao.findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong()))
-                    .thenAnswer(invocation -> "broken".equals(invocation.getArgument(0))
-                            ? Flux.error(new IllegalStateException("too many rows"))
-                            : Flux.just(fine));
-            when(dao.findSummaries(anyString(), anyString(), any(), anyLong()))
-                    .thenReturn(Flux.just(summary(fine, 1, "fine")));
-            config.getVectors().setTickInterval(io.dropwizard.util.Duration.hours(1));
-            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
+            when(findUnvectored(dao, "broken", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS))
+                    .thenReturn(Flux.error(new IllegalStateException("too many rows")));
+            when(findUnvectored(dao, "fine", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(fine));
+            stubSummaries("fine", List.of(fine), candidate -> "fine", BUDGET_SECONDS);
 
-            service.tick(Instant.now());
+            service.tick(NOW);
 
             verify(meter.counter("topics.vectors.read.failures"))
                     .add(1, workspace("broken").put(stringKey("phase"), "find")
@@ -629,8 +629,9 @@ class TopicVectorsTickServiceTest {
         @Test
         @DisplayName("a failed summary read is skipped as read_failed and counted")
         void summaryReadFailure() {
-            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(1))), candidate -> "x");
-            when(dao.findSummaries(anyString(), anyString(), any(), anyLong()))
+            var candidates = List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1)));
+            stub(candidates, candidate -> "x");
+            when(dao.findSummaries(WORKSPACE_ID, TopicVectorsTickService.TASK, keys(candidates), BUDGET_SECONDS))
                     .thenReturn(Flux.error(new IllegalStateException("down")));
 
             var result = service.tick(NOW);
@@ -645,17 +646,116 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
-        @DisplayName("the gauge is published only while this pod's last tick is under two tick intervals old")
-        void gaugeGoesStale() throws InterruptedException {
-            config.getVectors().setTickInterval(io.dropwizard.util.Duration.milliseconds(100));
-            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
+        @DisplayName("a trace deleted between the summary read and the insert has its vector deleted, and is skipped "
+                + "as trace_deleted, not written")
+        void traceDeletedWhileEmbedding() {
+            var kept = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2));
+            var deleted = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
+            stub(List.of(kept, deleted), candidate -> "intent of " + candidate.traceId());
+            var texts = List.of("intent of " + kept.traceId(), "intent of " + deleted.traceId());
+            var cascaded = ConcurrentHashMap.<TopicTraceKey>newKeySet();
+            doAnswer(invocation -> {
+                // The trace-delete cascade runs while the chunk is embedded, and deletes the status rows first.
+                cascaded.add(key(deleted));
+                return Mono.just(embedded(texts));
+            }).when(client).embed(embedRequest(WORKSPACE_ID, texts), NOW.plus(EMBED_TIMEOUT));
+            var written = List.of(key(kept), key(deleted));
+            doAnswer(invocation -> Flux.fromIterable(written).filter(traceKey -> !cascaded.contains(traceKey)))
+                    .when(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, written, BUDGET_SECONDS);
+            when(dao.deleteByKeys(WORKSPACE_ID, Set.of(key(deleted)))).thenReturn(Mono.empty());
+
+            var result = service.tick(NOW);
+
+            assertThat(inserted).extracting(TopicVector::traceId).containsExactly(kept.traceId(), deleted.traceId());
+            verify(dao).deleteByKeys(WORKSPACE_ID, Set.of(key(deleted)));
+            assertThat(result.written()).isOne();
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.TRACE_DELETED, 1));
+            var writtenCounter = meter.counter("topics.vectors.written");
+            verify(writtenCounter).add(1, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(writtenCounter);
+            var skippedCounter = meter.counter("topics.vectors.skipped");
+            verify(skippedCounter)
+                    .add(1, workspace(WORKSPACE_ID).put(stringKey("reason"), TopicVectorsTickService.TRACE_DELETED)
+                            .build());
+            verifyNoMoreInteractions(skippedCounter);
+        }
+
+        @Test
+        @DisplayName("a failed deleted-trace check keeps the vectors as written and deletes nothing")
+        void deletedTraceCheckFailure() {
+            var candidate = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
+            stub(List.of(candidate), c -> "intent");
+            when(dao.findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, List.of(key(candidate)),
+                    BUDGET_SECONDS)).thenReturn(Flux.error(new IllegalStateException("down")));
+
+            var result = service.tick(NOW);
+
+            assertThat(inserted).extracting(TopicVector::traceId).containsExactly(candidate.traceId());
+            verify(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, List.of(key(candidate)),
+                    BUDGET_SECONDS);
+            verify(dao, never()).deleteByKeys(WORKSPACE_ID, Set.of(key(candidate)));
+            assertThat(result.written()).isOne();
+            assertThat(result.skipped()).isEmpty();
+            verify(meter.counter("topics.vectors.written")).add(1, workspace(WORKSPACE_ID).build());
+            verifyNoInteractions(meter.counter("topics.vectors.skipped"));
+        }
+
+        @Test
+        @DisplayName("the deleted-trace check runs once per workspace, after its last chunk, reading 1,000 keys at a "
+                + "time")
+        void oneDeletedTraceCheckPerWorkspace() {
+            var candidates = IntStream.range(0, 1_001)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1_001 - i)))
+                    .toList();
+            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, config.getVectors().getMaxTracesPerTick(),
+                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
+            stubSummaries(WORKSPACE_ID, candidates.subList(0, 1_000), candidate -> "intent of " + candidate.traceId(),
+                    BUDGET_SECONDS);
+            stubSummaries(WORKSPACE_ID, candidates.subList(1_000, 1_001),
+                    candidate -> "intent of " + candidate.traceId(), BUDGET_SECONDS);
+
+            var result = service.tick(NOW);
+
+            // Four embed chunks (256 + 256 + 256 + 233), one check of their 1,001 keys in two reads.
+            assertThat(requests).extracting(request -> request.inputs().size()).containsExactly(256, 256, 256, 233);
+            assertThat(statusChecks).containsExactly(keys(candidates.subList(0, 1_000)),
+                    keys(candidates.subList(1_000, 1_001)));
+            assertThat(result.written()).isEqualTo(1_001);
+            var writtenCounter = meter.counter("topics.vectors.written");
+            verify(writtenCounter).add(1_001, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(writtenCounter);
+        }
+
+        @Test
+        @DisplayName("a trace id reused in another project counts as missed only for the project whose row the short "
+                + "window missed")
+        void missedKeyedByProject() {
+            longWindowDue();
+            var traceId = ID_GENERATOR.generateId();
+            var old = candidate(traceId, 1, NOW.minus(Duration.ofDays(2)));
+            var recent = candidate(traceId, 1, NOW.minusSeconds(5));
+            stub(LONG_WINDOW, List.of(old, recent), candidate -> "intent of " + candidate.projectId());
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(2);
+            var missed = meter.counter("topics.vectors.long_window.missed");
+            verify(missed).add(1L, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(missed);
+        }
+
+        @Test
+        @DisplayName("the gauge is published only while this pod's last tick is at most two tick intervals old")
+        void gaugeGoesStale() {
             stub(List.of(), candidate -> "");
 
             assertThat(meter.observeGauge()).isEmpty();
-            service.tick(Instant.now());
+            service.tick(NOW);
             assertThat(meter.observeGauge()).containsOnlyKeys(WORKSPACE_ID);
 
-            Thread.sleep(300);
+            clock.advance(Duration.ofMinutes(2));
+            assertThat(meter.observeGauge()).containsOnlyKeys(WORKSPACE_ID);
+            clock.advance(Duration.ofMillis(1));
             assertThat(meter.observeGauge()).isEmpty();
         }
 
@@ -665,24 +765,14 @@ class TopicVectorsTickServiceTest {
         void metrics() {
             config.getVectors().setEmbedBatchSize(1);
             longWindowDue();
-            var old = candidate(UUID.randomUUID(), 1, NOW.minus(Duration.ofDays(2)));
-            var recent = candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5));
-            var oldFailing = candidate(UUID.randomUUID(), 1, NOW.minus(Duration.ofDays(3)));
-            stub(List.of(oldFailing, old, recent), candidate -> candidate == oldFailing ? "bad" : "fine " + candidate);
+            var old = candidate(ID_GENERATOR.generateId(), 1, NOW.minus(Duration.ofDays(2)));
+            var recent = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5));
+            var oldFailing = candidate(ID_GENERATOR.generateId(), 1, NOW.minus(Duration.ofDays(3)));
+            stub(LONG_WINDOW, List.of(oldFailing, old, recent),
+                    candidate -> candidate == oldFailing ? "bad" : "fine " + candidate);
             var exception = inferenceException(400, "invalid_request", false);
-            doAnswer(invocation -> {
-                EmbedRequest request = invocation.getArgument(0);
-                if (request.inputs().getFirst().equals("bad")) {
-                    return Mono.error(exception);
-                }
-                return Mono.just(EmbedResponse.builder()
-                        .result(EmbedResult.builder()
-                                .embeddings(request.inputs().stream().map(TopicVectorsTickServiceTest::vectorOf)
-                                        .toList())
-                                .dimensions(384)
-                                .build())
-                        .build());
-            }).when(client).embed(any(), any());
+            doReturn(Mono.error(exception)).when(client)
+                    .embed(embedRequest(WORKSPACE_ID, List.of("bad")), NOW.plus(EMBED_TIMEOUT));
 
             var result = service.tick(NOW);
 
@@ -691,8 +781,9 @@ class TopicVectorsTickServiceTest {
                     .add(1, workspace(WORKSPACE_ID).put(longKey("http_status"), 400L)
                             .put(stringKey("code"), "invalid_request")
                             .put(stringKey("error_type"), "InferenceException").build());
-            verify(meter.counter("topics.vectors.long_window.missed")).add(1L, workspace(WORKSPACE_ID).build());
-            verify(meter.counter("topics.vectors.long_window.missed"), never()).add(eq(2L), any());
+            var missed = meter.counter("topics.vectors.long_window.missed");
+            verify(missed).add(1L, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(missed);
         }
 
         @Test
@@ -704,13 +795,14 @@ class TopicVectorsTickServiceTest {
                     registry, new TopicsWorkspaceNames(id -> {
                         lookups.incrementAndGet();
                         return "name-" + id;
-                    }, Clock.systemUTC()), meter.meter);
-            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5))), candidate -> "intent");
+                    }, clock), meter.meter, clock);
+            stub(List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5))), candidate -> "intent");
 
             assertThat(service.tick(NOW).written()).isOne();
 
             var workspace = workspace(WORKSPACE_ID).build();
             verify(meter.counter("topics.vectors.written")).add(1, workspace);
+            // The call's wall time is not the test's to know.
             verify(meter.histogram("topics.vectors.embed.duration_seconds"))
                     .record(anyDouble(), eq(workspace(WORKSPACE_ID).put(stringKey("outcome"), "ok").build()));
             assertThat(meter.observeGaugeAttributes()).containsExactly(Map.entry(WORKSPACE_ID, workspace));
@@ -725,8 +817,8 @@ class TopicVectorsTickServiceTest {
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
                     registry, new TopicsWorkspaceNames(id -> {
                         throw new IllegalStateException("react service down");
-                    }, Clock.systemUTC()), meter.meter);
-            stub(List.of(candidate(UUID.randomUUID(), 1, NOW.minusSeconds(5))), candidate -> "intent");
+                    }, clock), meter.meter, clock);
+            stub(List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5))), candidate -> "intent");
 
             assertThat(service.tick(NOW).written()).isOne();
 
@@ -743,26 +835,25 @@ class TopicVectorsTickServiceTest {
             var names = new TopicsWorkspaceNames(id -> {
                 looked.add(id);
                 return "name-" + id;
-            }, Clock.systemUTC());
+            }, clock);
             names.name("b");
             looked.clear();
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
-                    registry, names, meter.meter);
+                    registry, names, meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
-            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(earlyTask()));
             var budget = config.getVectors().getTickBudget().toJavaDuration();
 
-            service.tick(Instant.now().minus(budget));
+            service.tick(NOW.minus(budget));
 
-            verify(dao, never()).findUnvectored(any(), any(), any(), any(), any(), anyInt(), anyLong());
+            verifyNoInteractions(dao);
             // Only the first workspace in visiting order is looked up, before the time check stops the reads.
             assertThat(looked).hasSizeLessThanOrEqualTo(1);
+            var notRead = meter.counter("topics.vectors.workspaces_not_read");
             for (var id : List.of("a", "b", "c")) {
                 var name = id.equals("b") || looked.contains(id) ? "name-" + id : id;
-                verify(meter.counter("topics.vectors.workspaces_not_read"))
-                        .add(1, TopicsWorkspaceNames.builder(id, name).build());
+                verify(notRead).add(1, TopicsWorkspaceNames.builder(id, name).build());
             }
-            verify(meter.counter("topics.vectors.workspaces_not_read"), times(3)).add(anyLong(), any());
+            verifyNoMoreInteractions(notRead);
             assertThat(meter.observeGauge()).isEmpty();
         }
 
@@ -771,14 +862,19 @@ class TopicVectorsTickServiceTest {
         void missingTask() {
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.empty());
 
-            assertThatThrownBy(() -> service.tick(NOW)).isInstanceOf(IllegalStateException.class)
+            assertThatThrownBy(() -> service.tick(NOW)).isExactlyInstanceOf(IllegalStateException.class)
                     .hasMessageContaining(TopicVectorsTickService.TASK);
-            verify(dao, never()).findUnvectored(any(), any(), any(), any(), any(), anyInt(), anyLong());
+            verifyNoInteractions(dao);
         }
 
         private void longWindowDue() {
-            when(lockService.lockUsingToken(eq(TopicVectorsTickService.LONG_WINDOW_LOCK), any()))
-                    .thenAnswer(invocation -> Mono.just(!Duration.ofDays(1).equals(invocation.getArgument(1))));
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(true));
+            // The pass ends by setting the lock again: for the interval when drained, else for 1.5 tick intervals.
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofDays(1)))
+                    .thenReturn(Mono.just(true));
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90)))
+                    .thenReturn(Mono.just(true));
         }
 
         @Test
@@ -787,19 +883,45 @@ class TopicVectorsTickServiceTest {
             var result = service.tick(APPLIES_FROM.minusSeconds(1));
 
             assertThat(result.written()).isZero();
-            verify(dao, never()).findUnvectored(any(), any(), any(), any(), any(), anyInt(), anyLong());
+            verifyNoInteractions(dao);
         }
 
-        private void stub(List<TopicVectorCandidate> candidates,
-                java.util.function.Function<TopicVectorCandidate, String> text) {
-            when(dao.findUnvectored(anyString(), anyString(), any(), any(), any(), anyInt(), anyLong()))
-                    .thenReturn(Flux.fromIterable(candidates));
-            when(dao.findSummaries(anyString(), anyString(), any(), anyLong())).thenAnswer(invocation -> {
-                Set<UUID> traceIds = invocation.getArgument(2);
-                return Flux.fromIterable(candidates)
-                        .filter(candidate -> traceIds.contains(candidate.traceId()))
-                        .map(candidate -> summary(candidate, candidate.taskVersion(), text.apply(candidate)));
-            });
+        /** Stubs a short-window tick at {@code NOW}. */
+        private void stub(List<TopicVectorCandidate> candidates, Function<TopicVectorCandidate, String> text) {
+            stub(SHORT_WINDOW, candidates, text);
+        }
+
+        /**
+         * Stubs a tick at {@code NOW} with {@code window}, the clock at {@code NOW}: the window read answers
+         * {@code candidates}, and the summary read of their keys answers their {@code text}.
+         */
+        private void stub(Duration window, List<TopicVectorCandidate> candidates,
+                Function<TopicVectorCandidate, String> text) {
+            when(findUnvectored(dao, WORKSPACE_ID, NOW, window, config.getVectors().getMaxTracesPerTick(),
+                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
+            stubSummaries(WORKSPACE_ID, candidates, text, BUDGET_SECONDS);
+        }
+
+        /** Stubs one summary read of {@code candidates}' keys, in find order, answering their {@code text}. */
+        private void stubSummaries(String workspaceId, List<TopicVectorCandidate> candidates,
+                Function<TopicVectorCandidate, String> text, long maxExecutionSeconds) {
+            when(dao.findSummaries(workspaceId, TopicVectorsTickService.TASK, keys(candidates), maxExecutionSeconds))
+                    .thenReturn(Flux.fromIterable(candidates)
+                            .map(candidate -> summary(candidate, candidate.taskVersion(), text.apply(candidate))));
+        }
+
+        /**
+         * The window read a tick at {@code start} makes for {@code workspaceId}, with the bounds the tick derives from
+         * {@code window}, the task's first applies_from, the 7 d ai-labels horizon and the 1 d slack. Called on
+         * {@code dao} to stub it, on {@code verify(dao)} to verify it.
+         */
+        private Flux<TopicVectorCandidate> findUnvectored(TopicVectorsDAO on, String workspaceId, Instant start,
+                Duration window, int limit, long maxExecutionSeconds) {
+            var lowerBound = TopicVectorsTickService.lowerBound(APPLIES_FROM, start, window);
+            var createdAfter = TopicVectorsTickService.createdAfter(lowerBound, Duration.ofDays(7),
+                    Duration.ofDays(1));
+            return on.findUnvectored(workspaceId, TopicVectorsTickService.TASK, lowerBound, start, createdAfter,
+                    limit, maxExecutionSeconds);
         }
     }
 
@@ -827,7 +949,7 @@ class TopicVectorsTickServiceTest {
     private static TopicVectorCandidate candidate(UUID traceId, int taskVersion, Instant statusUpdatedAt) {
         return TopicVectorCandidate.builder()
                 .workspaceId(WORKSPACE_ID)
-                .projectId(UUID.randomUUID())
+                .projectId(ID_GENERATOR.generateId())
                 .traceId(traceId)
                 .traceCreatedAt(statusUpdatedAt.minusSeconds(60))
                 .taskVersion(taskVersion)
@@ -841,15 +963,30 @@ class TopicVectorsTickServiceTest {
     }
 
     private static TopicVectorCandidate candidate(String workspaceId, Instant statusUpdatedAt) {
-        return candidate(UUID.randomUUID(), 1, statusUpdatedAt).toBuilder().workspaceId(workspaceId).build();
+        return candidate(ID_GENERATOR.generateId(), 1, statusUpdatedAt).toBuilder().workspaceId(workspaceId).build();
     }
 
-    /** A task that applied long before the real clock, for tests that tick at the real time. */
-    private static AiLabelTask earlyTask() {
-        return task().toBuilder()
-                .appliesFrom(Instant.parse("2020-01-02T00:00:00Z"))
-                .history(List.of(AiLabelTask.Version.builder().version(1)
-                        .appliesFrom(Instant.parse("2020-01-01T00:00:00Z")).build()))
+    private static TopicTraceKey key(TopicVectorCandidate candidate) {
+        return TopicTraceKey.builder().projectId(candidate.projectId()).traceId(candidate.traceId()).build();
+    }
+
+    /** The keys of {@code candidates}, in their order: what one summary read gets. */
+    private static List<TopicTraceKey> keys(List<TopicVectorCandidate> candidates) {
+        return candidates.stream().map(TopicVectorsTickServiceTest::key).toList();
+    }
+
+    /** One chunk's embed request, as the tick builds it. */
+    private static EmbedRequest embedRequest(String workspaceId, List<String> inputs) {
+        return EmbedRequest.builder().orgId(workspaceId).cache(false).inputs(inputs).build();
+    }
+
+    /** The embed answer for {@code inputs}: {@link #vectorOf} of each, in order. */
+    private static EmbedResponse embedded(List<String> inputs) {
+        return EmbedResponse.builder()
+                .result(EmbedResult.builder()
+                        .embeddings(inputs.stream().map(TopicVectorsTickServiceTest::vectorOf).toList())
+                        .dimensions(384)
+                        .build())
                 .build();
     }
 
@@ -865,6 +1002,35 @@ class TopicVectorsTickServiceTest {
         }
     }
 
+    /** A clock that stands still until a test moves it, so every deadline, time left and age the tick uses is exact. */
+    static final class TestClock extends Clock {
+
+        private volatile Instant now;
+
+        TestClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+
     /** A Meter whose instruments are mocks to verify, by name, and whose gauge callback can be observed. */
     static final class TestMeter {
 
@@ -873,7 +1039,9 @@ class TopicVectorsTickServiceTest {
         private final Map<String, DoubleHistogram> histograms = new ConcurrentHashMap<>();
         private final AtomicReference<Consumer<ObservableDoubleMeasurement>> gauge = new AtomicReference<>();
 
+        @SuppressWarnings("unchecked")
         TestMeter() {
+            // Each builder answers the instrument kept under the name it is given, so these take any name.
             when(meter.counterBuilder(anyString())).thenAnswer(invocation -> {
                 var builder = mock(LongCounterBuilder.class, RETURNS_SELF);
                 var counter = counter(invocation.getArgument(0));
@@ -888,10 +1056,11 @@ class TopicVectorsTickServiceTest {
             });
             when(meter.gaugeBuilder(anyString())).thenAnswer(invocation -> {
                 var builder = mock(DoubleGaugeBuilder.class, RETURNS_SELF);
+                // Keeps the callback the service registers, whichever it is, to observe it.
                 doAnswer(build -> {
                     gauge.set(build.getArgument(0));
                     return null;
-                }).when(builder).buildWithCallback(any());
+                }).when(builder).buildWithCallback(any(Consumer.class));
                 return builder;
             });
         }
@@ -920,6 +1089,7 @@ class TopicVectorsTickServiceTest {
 
         private void observe(java.util.function.BiConsumer<Double, Attributes> recorded) {
             var measurement = mock(ObservableDoubleMeasurement.class);
+            // Hands on whatever the scrape publishes, so this takes any value and attributes.
             doAnswer(invocation -> {
                 recorded.accept(invocation.getArgument(0), invocation.getArgument(1));
                 return null;

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
 import io.dropwizard.util.Duration;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -34,7 +35,7 @@ class AiLabelsConfigTest {
     void inferenceBlockIsAlwaysRequiredAndItsSettingsWhenEnabled(String description, boolean enabled,
             boolean inferenceBlock, String url,
             String credential, List<String> expectedViolations) {
-        var config = new AiLabelsConfig();
+        var config = TestConfigUtils.loadConfigTest().getAiLabels();
         config.setEnabled(enabled);
         if (inferenceBlock) {
             config.getInference().setUrl(url);
@@ -52,32 +53,38 @@ class AiLabelsConfigTest {
 
     static Stream<Arguments> inferenceUrls() {
         return Stream.of(
-                arguments("unset", null, true),
-                arguments("blank", " ", true),
-                arguments("https", URL, true),
-                arguments("https, upper case scheme, with a port and a path", "HTTPS://opik-inference:8443/base", true),
-                arguments("http to localhost", "http://localhost:8080", true),
-                arguments("http to 127.0.0.1", "http://127.0.0.1:8080", true),
-                arguments("http to [::1]", "http://[::1]:8080", true),
-                arguments("http to a cluster service", "http://opik-inference.inference.svc:8000", false),
-                arguments("http to a private address", "http://10.0.0.12:8000", false),
-                arguments("http to a name that starts with localhost", "http://localhost.example.com", false),
-                arguments("another scheme", "ftp://opik-inference.example.com", false),
-                arguments("no host", "https:///v1", false),
-                arguments("not a URL", "https://opik inference", false));
+                arguments("unset", true, null, true),
+                arguments("blank", true, " ", true),
+                arguments("https", true, URL, true),
+                arguments("https, upper case scheme, with a port and a path", true, "HTTPS://opik-inference:8443/base",
+                        true),
+                arguments("http to localhost", true, "http://localhost:8080", true),
+                arguments("http to 127.0.0.1", true, "http://127.0.0.1:8080", true),
+                arguments("http to [::1]", true, "http://[::1]:8080", true),
+                arguments("http to a cluster service", true, "http://opik-inference.inference.svc:8000", false),
+                arguments("http to a private address", true, "http://10.0.0.12:8000", false),
+                arguments("http to a name that starts with localhost", true, "http://localhost.example.com", false),
+                arguments("another scheme", true, "ftp://opik-inference.example.com", false),
+                arguments("no host", true, "https:///v1", false),
+                arguments("not a URL", true, "https://opik inference", false),
+                // Off, the URL is not checked, so an install with ai-labels off starts after an upgrade.
+                arguments("off, http to a cluster service", false, "http://opik-inference.inference.svc:8000", true),
+                arguments("off, not a URL", false, "https://opik inference", true));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("inferenceUrls")
-    void inferenceUrlIsHttpsOrHttpToLocalhost(String description, String url, boolean valid) {
-        var config = new AiLabelsConfig();
+    void inferenceUrlIsHttpsOrHttpToLocalhostWhenEnabled(String description, boolean enabled, String url,
+            boolean valid) {
+        var config = TestConfigUtils.loadConfigTest().getAiLabels();
+        config.setEnabled(enabled);
         config.getInference().setUrl(url);
 
-        var violations = VALIDATOR.validate(config).stream()
+        var violations = VALIDATOR.validateProperty(config, "inferenceUrlSecure").stream()
                 .map(violation -> violation.getPropertyPath().toString())
                 .toList();
 
-        assertThat(violations).isEqualTo(valid ? List.of() : List.of("inference.urlSecure"));
+        assertThat(violations).isEqualTo(valid ? List.of() : List.of("inferenceUrlSecure"));
     }
 
     @Test
@@ -96,6 +103,30 @@ class AiLabelsConfigTest {
         assertThat(VALIDATOR.validateProperty(config, "aiLabelsDataModelSupported")).isEmpty();
     }
 
+    static Stream<Arguments> decideConnectionSettings() {
+        return Stream.of(
+                arguments("the defaults", Duration.seconds(30), Duration.minutes(5), List.of()),
+                arguments("no keep-alive", Duration.milliseconds(0), Duration.minutes(5), List.of()),
+                arguments("no keep-alive set", null, Duration.minutes(5), List.of("inference.decideKeepAlive")),
+                arguments("a time to live under a second", Duration.seconds(30), Duration.milliseconds(999),
+                        List.of("inference.decideTimeToLive")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("decideConnectionSettings")
+    void decideConnectionSettingsAreValidated(String description, Duration decideKeepAlive,
+            Duration decideTimeToLive, List<String> expectedViolations) {
+        var config = TestConfigUtils.loadConfigTest().getAiLabels();
+        config.getInference().setDecideKeepAlive(decideKeepAlive);
+        config.getInference().setDecideTimeToLive(decideTimeToLive);
+
+        var violations = VALIDATOR.validate(config).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
     static Stream<Arguments> renderMaxExecutionTimes() {
         return Stream.of(
                 arguments(Duration.seconds(1), List.of()),
@@ -108,7 +139,7 @@ class AiLabelsConfigTest {
     @MethodSource("renderMaxExecutionTimes")
     void renderMaxExecutionTimeIsAtLeastASecondAndAtMostTheTickBudget(Duration renderMaxExecutionTime,
             List<String> expectedViolations) {
-        var config = new AiLabelsConfig();
+        var config = TestConfigUtils.loadConfigTest().getAiLabels();
         config.setTickBudget(Duration.seconds(25));
         config.setRenderMaxExecutionTime(renderMaxExecutionTime);
 
@@ -117,31 +148,5 @@ class AiLabelsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
-    }
-
-    static Stream<Arguments> maxResponseBytes() {
-        return Stream.of(
-                arguments(32L * 1024 * 1024, List.of()),
-                arguments(1L, List.of()),
-                arguments(0L, List.of("inference.maxResponseBytes")),
-                arguments(1024L * 1024 * 1024 + 1, List.of("inference.maxResponseBytes")));
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("maxResponseBytes")
-    void maxResponseBytesIsPositiveAndAtMostAGibibyte(long maxResponseBytes, List<String> expectedViolations) {
-        var config = new AiLabelsConfig();
-        config.getInference().setMaxResponseBytes(maxResponseBytes);
-
-        var violations = VALIDATOR.validate(config).stream()
-                .map(violation -> violation.getPropertyPath().toString())
-                .toList();
-
-        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
-    }
-
-    @Test
-    void maxResponseBytesDefaultsTo32MiB() {
-        assertThat(new AiLabelsConfig().getInference().getMaxResponseBytes()).isEqualTo(32L * 1024 * 1024);
     }
 }

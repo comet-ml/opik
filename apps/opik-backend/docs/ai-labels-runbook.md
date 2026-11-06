@@ -97,210 +97,6 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 | `ai_labels.render.duration_seconds` by `outcome` | Wall time per chunk (ClickHouse reads + render): `ok`, or `one_at_a_time` after a chunk read failed. |
 | `ai_labels.render.cpu_seconds` | Java CPU spent rendering, excluding ClickHouse reads; its rate is cores. Spec 10 budgets about 0.25 core of Opik CPU per tick. Emitted only when the JVM supports and enables current-thread CPU time: no series means no measurement, not zero CPU or a met budget. ClickHouse's side is in `system.query_log`, where `log_comment` starts with `ai-labels:render:` (filter `log_comment LIKE 'ai-labels:render:%'`). |
 
-## Topic vectors
-
-The topic vectors job stores one bge-small vector (384 numbers, unit length) for every trace that has a `done`
-`trace_summary` label. It embeds the summary text through opik-inference `/v1/embed` and writes the row to the
-ClickHouse table `topic_vectors`, one row per (trace, task version). It is off by default everywhere.
-
-### Opting workspaces in and out
-
-Topics have their own opt-in, the env var `TOGGLE_TOPICS_WORKSPACES`: a comma-separated list of workspace ids, set
-per environment in comet-helm. There is no API and no table. Topics read the ai-labels `trace_summary`, so a listed
-workspace runs topics only while it is also enabled in `ai_label_workspaces`. Opting a workspace in to ai-labels does
-not turn topics on.
-
-- **Enable a workspace.** Check that it is enabled in `ai_label_workspaces` (see "Opting workspaces in and out" above).
-  Then add its id to `TOGGLE_TOPICS_WORKSPACES` in a comet-helm PR. It runs after the deploy.
-- **Disable a workspace.** Remove its id in a comet-helm PR. After the deploy, the next tick drops it. Stored vectors
-  stay.
-- **Stop one workspace now, without a deploy.** Disable it in `ai_label_workspaces`. The next tick drops it. This also
-  stops its ai-labels summaries.
-
-```sql
--- MySQL: of the listed workspaces, the ones topics run for. A listed id missing here does not run.
-SELECT workspace_id, added_at, added_by
-FROM ai_label_workspaces
-WHERE enabled = TRUE AND workspace_id IN ('<workspace_id>', '<workspace_id>')
-ORDER BY workspace_id;
-```
-
-A workspace opted in after its traces were labeled gets vectors for the last 7 days (the long window). For older
-labels, see "Backfill".
-
-### Turning it on
-
-| Env var | Default | Meaning |
-|---|---|---|
-| `TOPICS_ENABLED` | `false` | Runs the job. The backend refuses to start with it on unless `AI_LABELS_ENABLED=true` and `AI_LABELS_INFERENCE_URL` is set: it uses the same opik-inference URL and credential. |
-| `TOGGLE_TOPICS_WORKSPACES` | empty (none) | Comma-separated workspace ids topics run for, each only while it is also enabled in `ai_label_workspaces`. See "Opting workspaces in and out". |
-| `TOPICS_VECTORS_TICK_INTERVAL` | `1m` | How often the job ticks. At most one tick runs per interval across all pods (see "How ticks run"). |
-| `TOPICS_VECTORS_TICK_BUDGET` | `50s` | Every query and embed call of a tick starts within this. Must be under the tick interval. |
-| `TOPICS_VECTORS_WINDOW` | `24h` | How far back, by `ai_label_status` write time, a normal tick looks. Never before the task's `applies_from`. |
-| `TOPICS_VECTORS_LONG_WINDOW` | `7d` | The window of the long-window pass, for rows a normal tick missed. At least `TOPICS_VECTORS_WINDOW`. |
-| `TOPICS_VECTORS_LONG_WINDOW_INTERVAL` | `1d` | How often the long-window pass starts. The pass stays on until it drains (see "How ticks run"); the interval runs from the tick that drained it. |
-| `TOPICS_VECTORS_BACKFILL_WINDOW` | `0s` (off) | When above zero, the long-window pass uses this window instead of `TOPICS_VECTORS_LONG_WINDOW`. 0, or at least `TOPICS_VECTORS_WINDOW`; at most `365d`. See "Backfill". |
-| `TOPICS_VECTORS_MAX_TRACES_PER_TICK` | `5000` | The most traces one tick embeds **per workspace**, oldest first. The tick budget bounds the total. The rest wait for the next tick. |
-| `TOPICS_VECTORS_EMBED_BATCH_SIZE` | `256` | Texts per embed call. 256 is the most `/v1/embed` takes. |
-| `TOPICS_VECTORS_EMBED_TIMEOUT` | `10s` | Each embed call's deadline. A chunk starts only with at least this much of the tick budget left; the rest is `over_budget`. Under the tick budget, at most 60s. |
-| `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` | `30000000` | ClickHouse `max_rows_to_read` of one workspace's window read. A trip fails that workspace's read for the tick. The nightly job's window count and window read use it too. |
-| `TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE` | `1073741824` | ClickHouse `max_memory_usage` of one window read (1 GiB). |
-| `TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME` | `30s` | ClickHouse `max_execution_time` of one window read, cut to the time left in the tick. At most `TOPICS_VECTORS_TICK_BUDGET`. |
-| `TOPICS_VECTORS_FIND_CREATED_AT_SLACK` | `1d` | The window read skips traces created before its lower bound minus `AI_LABELS_HORIZON` minus this margin. The margin covers the time from the ai-labels sweep to the status write. |
-
-To turn it off, set `TOPICS_ENABLED=false` and restart. Stored vectors stay. When it is turned on again, the next
-ticks write the vectors that are missing in the window, and the long-window pass writes the ones in the long window.
-Older ones need a backfill.
-
-### How ticks run
-
-- Every pod fires the job every tick interval, each at its own second. Two Redis locks make that one tick per interval
-  across the cluster:
-  - `topics:vectors:leader` is held for the tick and released when it ends, so two ticks never overlap. Its lease is
-    tick budget + embed timeout + find max execution time + 5s (95s by default). It matters only when the pod dies
-    mid-tick: the next tick starts when the lease expires.
-  - `topics:vectors:tick` is taken by the leader before it ticks and never released. It expires one interval (less up to
-    1s for trigger jitter) after the tick started, so a pod that fires sooner skips.
-- A skipped tick logs `Topic vectors tick skipped, lock '<name>' ...` at INFO. With several pods, expect most firings
-  to skip on `topics:vectors:tick`. Ticks skipped on `topics:vectors:leader` for longer than one lease mean a tick
-  is stuck.
-- Each tick reads the enabled workspaces in turn, starting at an offset that moves by one every interval, so no
-  workspace is always last. A read starts only with at least 1s of the budget left. A workspace that is not reached in
-  time is read the next tick (one WARN).
-- After an embed call fails with a 429 or a 5xx (whatever the error code), a timeout or a retryable code, the job stops
-  calling for **that workspace** for the rest of the tick (`embed_failed`). Other workspaces go on.
-- **Long-window pass.** Once per `TOPICS_VECTORS_LONG_WINDOW_INTERVAL` a tick uses the long window (Redis key
-  `topics:vectors:long_window`). The pass stays on, tick after tick, until one of its ticks drains it: every workspace
-  read with no failure, each under the per-workspace cap, and no candidate left for want of time (`over_budget`), a
-  read (`read_failed`), a back-off or an insert (`insert_failed`). Then the interval starts. After an outage longer than
-  the short window, the pass therefore runs every tick until the backlog in the long window is written. A summary that
-  makes `/v1/embed` fail with a 5xx every time keeps the pass on until its status leaves the long window: each pass
-  tick costs one long-window read per workspace.
-
-### Backfill
-
-The job only looks back as far as the long window (7 days). To write vectors for older labels, for example when
-topics is turned on weeks after ai-labels, or a workspace is opted in to topics later than to ai-labels:
-
-1. Set `TOPICS_VECTORS_BACKFILL_WINDOW` to the age to cover (for example `30d`), and restart.
-2. Delete the Redis key `topics:vectors:long_window` to start the pass now. Otherwise it starts at the next interval.
-3. Watch `topics.vectors.long_window.missed` and `topics.vectors.written`. The pass stays on until it drains.
-4. Set `TOPICS_VECTORS_BACKFILL_WINDOW=0s` again, and restart.
-
-Cost: the window read's cost grows with the window, not with what it finds. In the load test (one workspace, 2.07M
-statuses) a 24h read took 220–440 ms and read 0.9–2.7M rows; a 7d read took 570–750 ms, read 2.4–5.0M rows and used
-about 300 MiB. A 30d or 90d read of a large workspace reads proportionally more and can trip
-`TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` or `..._MAX_MEMORY_USAGE`; the read then fails every pass tick for that workspace
-(`topics.vectors.read.failures{phase=find}`). Raise the guards for the backfill, or backfill in steps (7d, 14d, 30d).
-While the pass is on, every tick does this read for every enabled workspace.
-
-### Checking that vectors flow
-
-Run both queries for one workspace. The counts must match, up to the traces labeled since the last tick. A gap that
-stays means the job skips traces: see `topics.vectors.skipped` and the logs.
-
-```sql
--- ClickHouse: traces with a done trace_summary label in the last 24 hours (latest status per trace, as the job reads it)
-SELECT count()
-FROM (
-    SELECT status, updated_at
-    FROM ai_label_status
-    WHERE workspace_id = '<workspace_id>'
-      AND task = 'trace_summary'
-    ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
-    LIMIT 1 BY workspace_id, project_id, task, trace_id
-)
-WHERE status = 'done'
-  AND updated_at >= now64(6) - INTERVAL 24 HOUR;
-
--- ClickHouse: vectors for the same traces
-SELECT count()
-FROM (
-    SELECT trace_id, task_version
-    FROM topic_vectors
-    WHERE workspace_id = '<workspace_id>'
-      AND (project_id, trace_id, task_version) IN (
-          SELECT project_id, trace_id, task_version
-          FROM (
-              SELECT project_id, trace_id, task_version, status, updated_at
-              FROM ai_label_status
-              WHERE workspace_id = '<workspace_id>'
-                AND task = 'trace_summary'
-              ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
-              LIMIT 1 BY workspace_id, project_id, task, trace_id
-          )
-          WHERE status = 'done'
-            AND updated_at >= now64(6) - INTERVAL 24 HOUR
-      )
-    ORDER BY workspace_id, project_id, trace_id, task_version, updated_at DESC
-    LIMIT 1 BY workspace_id, project_id, trace_id, task_version
-);
-```
-
-### What to watch
-
-Every metric but `topics.vectors.ticks` and `topics.vectors.tick.phase_seconds` carries `workspace_id` and
-`workspace_name`. The name comes from the React service, once an hour per pod, and is the workspace id when the lookup
-fails. Every series also carries `k8s_namespace_name`: group by it.
-
-| Metric | Meaning |
-|---|---|
-| `topics.vectors.oldest_unvectored_seconds` by workspace | Age of the oldest done label without a vector that the last tick found in its window. The headline. It grows when the job falls behind or stops. Only the pod that ticked within the last two tick intervals publishes it, so read it with `max` across pods. A workspace whose window read failed, or was not reached, has no value for that tick: watch `topics.vectors.read.failures` and `topics.vectors.workspaces_not_read` with it. It sees only the window: after an outage longer than the short window it stays near the window's length until the long-window pass runs. Once a day the long-window tick can show a spike up to the long window: rows normal ticks missed. |
-| `topics.vectors.ticks` by `outcome` | Firings of the job, per pod: `ran`; `not_due` (a tick ran less than one interval ago: most firings with several pods); `lock_held` (another pod holds `topics:vectors:leader`: every firing on a pod that is not the leader); `failed` (the tick threw: the log has `Topic vectors tick failed`). Summed over pods, about one `ran` per tick interval. Each outcome starts at 0 on every pod with topics on. No `ran` while every pod counts `lock_held` means a tick stuck past its lease, or Redis down: the lock service then takes the same path and logs `Failed to acquire lock, executing fallback action`. |
-| `topics.vectors.workspaces_not_read` by workspace | Enabled workspaces a tick did not read because its budget ran out (one WARN per tick). They have no lag value for that tick. The offset moves by one workspace per tick, so the same workspaces can stay unread for many ticks in a row. Counted every tick: too many enabled workspaces, or slow window reads (see `topics.vectors.tick.phase_seconds{phase="find"}`). |
-| `topics.vectors.written` by workspace | Vectors stored. |
-| `topics.vectors.skipped` by `reason`, workspace | `missing_summary` (the output row the window read saw was gone or of another task version by the summary read, which usually clears on the next tick; a WARN per workspace per tick names the count and the oldest trace), `embed_failed` (the call failed, or the workspace backed off: the next tick retries), `invalid_vector` (a missing, null, zero or wrong-dimension vector), `over_budget` (not enough of the tick left to start a call: the next tick continues), `insert_failed` (the ClickHouse insert failed: the next tick embeds them again), `read_failed` (the summary read failed: the next tick reads them again). |
-| `topics.vectors.read.failures` by `phase`, `error_type`, workspace | Failed ClickHouse reads: `find` (one workspace's window read, for example a guard trip) or `summaries` (one workspace's summary read). `error_type` is the root cause's class name. |
-| `topics.vectors.embed.failures` by `http_status`, `code`, `error_type`, workspace | Failed embed calls. 429 `quota_exceeded` means the embed pool is full. Do not alert on it alone: a failure backs off one workspace for one tick, and the next tick retries. |
-| `topics.vectors.embed.duration_seconds` by `outcome`, workspace | Wall time per embed call: `ok`, or the error code. |
-| `topics.vectors.tick.phase_seconds` by `phase` | Time in `find` (ClickHouse window reads) and `embed` (summary reads, embed calls and inserts). |
-| `topics.vectors.long_window.missed` by workspace | Vectors the long-window pass wrote for statuses older than the short window: rows normal ticks missed, for example after an outage longer than the window. Above zero outside a backfill or an outage means normal ticks miss rows. |
-
-The window read leaves out a done status whose latest output is missing, of another task version, or empty or only
-whitespace. Such a status gets no vector and is not counted, and it does not take a place in the per-workspace cap, so
-it never holds back newer traces.
-
-ClickHouse queries of the job have a `log_comment` that starts with `topics:`.
-
-### Alerts
-
-The rules live in comet-monitoring as a PrometheusRule, armed per environment, not in this repo. None fires on a
-quiet day: a workspace with no new traces reports 0, and a disabled workspace, or a deployment with topics off,
-publishes no series.
-
-| Alert | PromQL | Drill down |
-|---|---|---|
-| Vectors lag | `min_over_time(max by (k8s_namespace_name, workspace_id, workspace_name) (topics_vectors_oldest_unvectored_seconds)[15m:1m]) > 1800` | Run "Checking that vectors flow" for the workspace. Then `topics.vectors.skipped` by reason and `topics.vectors.embed.failures` for it: a trace that fails every tick (`invalid_vector`, or `embed_failed` with a 4xx) holds the age up until its status leaves the window. Many workspaces at once: opik-inference, or the tick budget (`over_budget`). |
-| Vectors tick stopped | `sum by (k8s_namespace_name) (increase(topics_vectors_ticks_total{outcome="ran"}[10m])) == 0` | `topics.vectors.ticks` by outcome. `failed`: the backend log line `Topic vectors tick failed`. Only `lock_held`: Redis, or a tick stuck past its lease (the TTL of the Redis key `topics:vectors:leader`). Only `not_due`: the TTL of `topics:vectors:tick`. |
-| Vectors workspace not read | `sum by (k8s_namespace_name, workspace_id) (increase({__name__=~"topics_vectors_workspaces_not_read_total\|topics_vectors_read_failures_total", phase=~"find\|"}[15m])) >= 10` | The workspace's window read failed, or the tick budget ran out before it, on most ticks of the last 15 minutes. `topics.vectors.read.failures` by `error_type` for it: ClickHouse timeouts or guards on a large workspace. Only `workspaces_not_read`: the tick budget is too short for the enabled workspaces, or one slow workspace ahead of it in the rotation. |
-
-- **Vectors lag.** `min_over_time` over 15 minutes ignores the daily long-window spike and one slow tick, so the alert
-  fires about 15 minutes after the lag first passes the threshold. The threshold, 30 minutes, is 15 times the 2-minute
-  target and far above a healthy value (under two tick intervals). It is not measured on prod yet. It must stay under
-  24 hours: the window caps the gauge. A workspace with no value (its read fails, or the budget never reaches it) is
-  invisible to this alert: "Vectors workspace not read" covers it.
-- **Vectors tick stopped.** The heartbeat. The lag gauge disappears when the job stops, so the lag alert resolves
-  instead of firing; this one fires. Every outcome starts at 0 when a pod starts the job, so `increase()` loses at most
-  the pod's first firing, not the ticks after a deploy.
-- **Vectors workspace not read.** The heartbeat of one workspace: its lag series disappears exactly when its read
-  fails or is never reached. Both counters carry the workspace, and the tick runs every minute, so 10 in 15 minutes
-  means most ticks missed it; the first increment a new series loses does not matter at that rate. It groups by
-  `workspace_id` alone: while a name lookup falls back to the id, the same workspace has two `workspace_name` values,
-  and grouping by both would split the count under the threshold. Find the name on the lag panel.
-
-### Deletes
-
-A vector lives as long as its trace. Retention deletes vectors with the traces (the same rules as `ai_labels`), and a
-trace delete deletes its vectors. There is no project or workspace delete path, the same as for `ai_labels`: deleting
-a project or a workspace leaves its vectors until retention removes them. A trace deleted between a tick's read and its
-insert (at most one tick) can leave a vector row behind, exactly like `ai_labels`. The retention sweep removes such rows
-by trace id range and week.
-
-A trace delete deletes the vectors before the ai-labels rows, each on its own, so neither failure skips the other.
-If the ai-labels delete fails, the trace's `done` status stays in `ai_label_status`, and the next tick writes its vector
-again from the label (the job reads only `ai_label_status` and `ai_labels`). Retention removes both, in workspaces with
-a retention policy.
-
 ## Topics nightly job
 
 Once a night the job builds each project's topic list from its topic vectors. Stage 2a has the first build only: a
@@ -332,18 +128,21 @@ or in Other, and a name that is a catch-all as a whole ("Other", "General Reques
 | `TOPICS_NIGHTLY_SCHEDULE` | `0 0 2 * * ?` | Quartz cron, UTC. The night is the UTC date the job starts on. |
 | `TOPICS_NIGHTLY_BUDGET` | `2h` | No project starts after this; the rest run the next night. |
 | `TOPICS_NIGHTLY_PROJECT_TIMEOUT` | `15m` | One run is stopped and failed with `timeout` after this. Under the budget. |
-| `TOPICS_NIGHTLY_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. |
+| `TOPICS_NIGHTLY_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. At most 100000. |
 | `TOPICS_NIGHTLY_WINDOW_DAYS` | `30` | The window, in whole UTC days before the night. |
 | `TOPICS_NIGHTLY_MAX_VECTORS` | `100000` | A larger window keeps its newest traces. |
 | `TOPICS_NIGHTLY_QWEN_DEADLINE` | `120s` | The deadline of the Qwen call. The call uses the `batch` lane, which takes up to 300s. |
-| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` and `topic_run_counts` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. |
+| `TOPICS_NIGHTLY_RUNS_RETENTION` | `90d` | `topic_runs` and `topic_run_counts` rows and the night records (`topic_nights`, `topic_night_projects`) are deleted after this. At most `365d`. |
+
+The window count and the window read also use `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` as their ClickHouse
+`max_rows_to_read`.
 
 To turn it off, set `TOPICS_NIGHTLY_ENABLED=false` and restart. Saved lists stay.
 
 To stop it for one workspace, remove the workspace from `TOGGLE_TOPICS_WORKSPACES` (a deploy), or, without a deploy,
-disable it in `ai_label_workspaces`, which also stops its ai-labels summaries (see "Opting workspaces in and out"
-under "Topic vectors"). Either one also stops its topic vectors. The next night skips it; a night already running
-reads the workspaces once, at its start, so it still runs the workspace's projects.
+disable it in `ai_label_workspaces`, which also stops its ai-labels summaries (see "Opting workspaces in and out").
+Either one also stops its topic vectors. The next night skips it; a night already running reads the workspaces once,
+at its start, so it still runs the workspace's projects.
 
 ### How a night runs
 
@@ -506,7 +305,7 @@ at tomorrow's start, so it holds today's traces so far.
 | Env var | Default | Meaning |
 |---|---|---|
 | `TOPICS_FIRST_BUILD_ENABLED` | `true` | Runs the job. Needs `TOPICS_ENABLED=true` and `TOPICS_NIGHTLY_ENABLED=true`. |
-| `TOPICS_FIRST_BUILD_INTERVAL` | `10m` | How often every pod fires the job; one run per interval across the cluster. |
+| `TOPICS_FIRST_BUILD_INTERVAL` | `10m` | How often every pod fires the job; one run per interval across the cluster. At most `1d`. |
 | `TOPICS_FIRST_BUILD_BUDGET` | `9m` | No project starts after this much of a run; the rest wait for the next run. Under the interval. |
 
 - Every pod fires the job every interval, each at its own second. Two Redis locks make that one run per interval

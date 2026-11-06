@@ -2262,6 +2262,8 @@ paths:
       - name: project_name
         in: query
         schema:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -3260,13 +3262,25 @@ paths:
         schema:
           minimum: 1
           type: integer
+          description: "Page size. At most 100 when experiment_ids is omitted, since\
+            \ each item then carries a result per experiment"
           format: int32
           default: 10
       - name: experiment_ids
         in: query
-        required: true
         schema:
           type: string
+          description: "JSON array of experiment IDs. Omit to include every regular\
+            \ experiment on the dataset (optimizer trial, mini-batch and mutation\
+            \ experiments are excluded); item filters are then evaluated against the\
+            \ newest version of each item that those experiments reference"
+      - name: dataset_version
+        in: query
+        schema:
+          type: string
+          description: Dataset version hash or tag. Only experiments run against this
+            version are included. Requires experiment_ids to be omitted. Returns 404
+            if the version does not exist
       - name: filters
         in: query
         schema:
@@ -10490,6 +10504,8 @@ components:
           description: Project ID. Either project_id or project_name must be provided
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Either project_id or project_name must be provided
@@ -10752,6 +10768,8 @@ components:
           description: Project ID. Either project_id or project_name must be provided
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Either project_id or project_name must be provided
@@ -12315,6 +12333,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -12387,6 +12407,8 @@ components:
           minLength: 1
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -12481,6 +12503,8 @@ components:
         mime_type:
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -12800,6 +12824,10 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode"
+        api:
+          type: string
+          enum:
+          - decisions
     LlmAsJudgeOutputSchema:
       required:
       - description
@@ -13257,6 +13285,10 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode_Write"
+        api:
+          type: string
+          enum:
+          - decisions
     LlmAsJudgeOutputSchema_Write:
       required:
       - description
@@ -13739,6 +13771,10 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode_Public"
+        api:
+          type: string
+          enum:
+          - decisions
     LlmAsJudgeOutputSchema_Public:
       required:
       - description
@@ -14589,6 +14625,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -14952,6 +14990,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -15072,6 +15112,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -15230,6 +15272,8 @@ components:
           description: "If null, dataset_name must be provided"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Optional. Associates the batch with a project by name. Ignored
@@ -15286,6 +15330,8 @@ components:
           format: uuid
           readOnly: true
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         input:
@@ -15466,6 +15512,8 @@ components:
           description: "If null, dataset_name must be provided"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Optional. Associates the batch with a project by name. Ignored
@@ -17105,6 +17153,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -17299,6 +17349,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -17584,6 +17636,8 @@ components:
             \ with the given experimentName"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "Project for traces auto-created from items that provide evaluate_task_result\
@@ -17642,6 +17696,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -17752,6 +17808,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -17943,6 +18001,8 @@ components:
             \ with the given experimentName"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "Project for traces auto-created from items that provide evaluate_task_result\
@@ -18093,6 +18153,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -18264,6 +18326,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -18527,6 +18591,8 @@ components:
           description: "Truncate image included in either input, output or metadata"
           default: true
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ChunkedOutputJsonNode_Public:
@@ -18556,6 +18622,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     BooleanFeedbackDefinition:
@@ -19164,6 +19232,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -19226,6 +19296,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -19292,6 +19364,8 @@ components:
           type: boolean
         thinksByDefault:
           type: boolean
+        onlyRoute:
+          type: string
         routes:
           type: object
           additionalProperties:
@@ -19432,8 +19506,8 @@ components:
         send_as:
           type: string
           description: "How credentials are sent: form body (default), JSON body,\
-            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
-            \ the form body)"
+            \ or basic auth (client_id/client_secret, or username/password, in an\
+            \ HTTP Basic header; remaining fields in the form body)"
           enum:
           - form
           - json
@@ -19450,7 +19524,9 @@ components:
           maxLength: 250
           minLength: 0
           type: string
-          description: Field holding the token in the reply; dot-path for nested replies
+          description: Field holding the token in the reply; dot-path for nested replies.
+            A reply that is the bare token itself (plain text or a JSON string) is
+            used as-is and needs fallback_ttl_seconds
           example: access_token
         expires_field:
           maxLength: 250
@@ -19569,8 +19645,8 @@ components:
         send_as:
           type: string
           description: "How credentials are sent: form body (default), JSON body,\
-            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
-            \ the form body)"
+            \ or basic auth (client_id/client_secret, or username/password, in an\
+            \ HTTP Basic header; remaining fields in the form body)"
           enum:
           - form
           - json
@@ -19587,7 +19663,9 @@ components:
           maxLength: 250
           minLength: 0
           type: string
-          description: Field holding the token in the reply; dot-path for nested replies
+          description: Field holding the token in the reply; dot-path for nested replies.
+            A reply that is the bare token itself (plain text or a JSON string) is
+            used as-is and needs fallback_ttl_seconds
           example: access_token
         expires_field:
           maxLength: 250
@@ -19682,8 +19760,8 @@ components:
         send_as:
           type: string
           description: "How credentials are sent: form body (default), JSON body,\
-            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
-            \ the form body)"
+            \ or basic auth (client_id/client_secret, or username/password, in an\
+            \ HTTP Basic header; remaining fields in the form body)"
           enum:
           - form
           - json
@@ -19700,7 +19778,9 @@ components:
           maxLength: 250
           minLength: 0
           type: string
-          description: Field holding the token in the reply; dot-path for nested replies
+          description: Field holding the token in the reply; dot-path for nested replies.
+            A reply that is the bare token itself (plain text or a JSON string) is
+            used as-is and needs fallback_ttl_seconds
           example: access_token
         expires_field:
           maxLength: 250
@@ -20290,6 +20370,8 @@ components:
           minLength: 1
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -20500,6 +20582,8 @@ components:
           minLength: 1
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -20965,7 +21049,8 @@ components:
           format: uuid
           readOnly: true
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -21036,7 +21121,8 @@ components:
       type: object
       properties:
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -21077,7 +21163,8 @@ components:
           format: uuid
           readOnly: true
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -21239,6 +21326,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags
@@ -21393,7 +21483,8 @@ components:
           format: uuid
           readOnly: true
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -21479,6 +21570,8 @@ components:
       type: object
       properties:
         name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         description:
@@ -21507,6 +21600,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -21668,6 +21763,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -21826,6 +21923,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If provided, scopes the prompt to the specified project. Ignored\
@@ -22020,6 +22119,8 @@ components:
           description: "If provided, resolves to the version with this sequential\
             \ number (e.g. v3); mutually exclusive with commit and environment"
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If provided, scopes the search to the specified project; prompts\
@@ -22445,7 +22546,6 @@ components:
       - guardrailsEnabled
       - ollamaProviderEnabled
       - ollieEnabled
-      - onlineScoringTracingEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -22508,8 +22608,6 @@ components:
           type: boolean
         projectHomepageEnabled:
           type: boolean
-        onlineScoringTracingEnabled:
-          type: boolean
         annotationQueueAutomationEnabled:
           type: boolean
         eventBridgeAlertsEnabled:
@@ -22551,6 +22649,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null and project_id not specified, Default Project is assumed"
@@ -22655,6 +22755,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -22821,6 +22923,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -22989,6 +23093,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -23132,6 +23238,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null and project_id not specified, Default Project is assumed"
@@ -23283,6 +23391,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -23382,6 +23492,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, project_id must be provided"
@@ -23757,6 +23869,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -24053,6 +24167,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags

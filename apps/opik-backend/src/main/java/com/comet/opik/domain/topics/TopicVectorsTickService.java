@@ -28,6 +28,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,7 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -74,6 +75,7 @@ public class TopicVectorsTickService {
     static final String OVER_BUDGET = "over_budget";
     static final String INSERT_FAILED = "insert_failed";
     static final String READ_FAILED = "read_failed";
+    static final String TRACE_DELETED = "trace_deleted";
 
     /**
      * Present while the long-window pass is not due. A tick that finds it absent sets it for one lease and runs the
@@ -81,7 +83,8 @@ public class TopicVectorsTickService {
      * next tick runs the pass again. A leader that dies mid-pass leaves it to expire with its lease.
      */
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
-    // An insert after the last embed call, which has no deadline of its own, still ends within this past the rest.
+    // The insert after the last embed call, which has no deadline of its own, and the status check after it, which has
+    // at least a second, still end within this past the rest.
     private static final Duration LEASE_SLACK = Duration.ofSeconds(5);
     // ClickHouse's max_execution_time is in whole seconds: a window read starts only with at least one left.
     private static final Duration MIN_READ_TIME = Duration.ofSeconds(1);
@@ -94,6 +97,7 @@ public class TopicVectorsTickService {
     private final LockService lockService;
     private final AiLabelTaskRegistry registry;
     private final TopicsWorkspaceNames workspaceNames;
+    private final Clock clock;
 
     /**
      * The oldest done status without a vector, per workspace, as this pod's latest tick found it, and when. Only the
@@ -178,10 +182,6 @@ public class TopicVectorsTickService {
     /** Trace ids per summary read: about 40 KB of SQL. */
     static final int SUMMARY_READ_CHUNK = 1_000;
 
-    /** A trace id reused in another project is another trace. */
-    private record TraceKey(UUID projectId, UUID traceId) {
-    }
-
     private record Pending(TopicVectorCandidate candidate, String text) {
     }
 
@@ -191,13 +191,13 @@ public class TopicVectorsTickService {
             @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client, @NonNull LockService lockService,
             @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames) {
         this(config, aiLabelsConfig, workspaces, dao, client, lockService, registry, workspaceNames,
-                GlobalOpenTelemetry.get().getMeter("opik.topics"));
+                GlobalOpenTelemetry.get().getMeter("opik.topics"), Clock.systemUTC());
     }
 
     TopicVectorsTickService(@NonNull TopicsConfig config, @NonNull AiLabelsConfig aiLabelsConfig,
             @NonNull TopicWorkspaceService workspaces, @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry,
-            @NonNull TopicsWorkspaceNames workspaceNames, @NonNull Meter meter) {
+            @NonNull TopicsWorkspaceNames workspaceNames, @NonNull Meter meter, @NonNull Clock clock) {
         this.config = config;
         this.aiLabelsConfig = aiLabelsConfig;
         this.workspaces = workspaces;
@@ -206,14 +206,15 @@ public class TopicVectorsTickService {
         this.lockService = lockService;
         this.registry = registry;
         this.workspaceNames = workspaceNames;
+        this.clock = clock;
 
         meter.gaugeBuilder("topics.vectors.oldest_unvectored_seconds").setUnit("s")
                 .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, as the "
                         + "latest tick's window found it; 0 with none. Published only by the pod that ticked within "
                         + "two tick intervals; a workspace whose read failed or was not reached has no value")
-                .buildWithCallback(measurement -> fresh(Instant.now())
+                .buildWithCallback(measurement -> fresh(clock.instant())
                         .ifPresent(snapshot -> {
-                            var now = Instant.now();
+                            var now = clock.instant();
                             snapshot.oldest().forEach((workspaceId, oldest) -> measurement.record(
                                     oldest.statusAt().equals(Instant.MAX) ? 0 : seconds(oldest.statusAt(), now),
                                     TopicsWorkspaceNames.builder(workspaceId, oldest.workspaceName()).build()));
@@ -222,8 +223,8 @@ public class TopicVectorsTickService {
                 .setDescription("Vectors written to topic_vectors, by workspace")
                 .build();
         this.skipped = meter.counterBuilder("topics.vectors.skipped")
-                .setDescription("Traces a tick found but did not write, by reason and workspace; all are found again "
-                        + "by a later tick")
+                .setDescription("Traces a tick found but did not write, by reason and workspace; all but "
+                        + "trace_deleted are found again by a later tick")
                 .build();
         this.embedFailures = meter.counterBuilder("topics.vectors.embed.failures")
                 .setDescription("Embed calls that failed, by HTTP status (0 without a response), code, error type and "
@@ -351,7 +352,7 @@ public class TopicVectorsTickService {
         for (int i = 0; i < workspaceIds.size(); i++) {
             var workspaceId = workspaceIds.get(i);
             var workspaceName = tally.name(workspaceId);
-            var left = Duration.between(Instant.now(), deadline);
+            var left = Duration.between(clock.instant(), deadline);
             if (left.compareTo(MIN_READ_TIME) < 0) {
                 complete = false;
                 var notRead = workspaceIds.subList(i, workspaceIds.size());
@@ -375,7 +376,7 @@ public class TopicVectorsTickService {
                         exception);
             }
         }
-        lastOldest = new OldestSnapshot(Instant.now(), Map.copyOf(oldest));
+        lastOldest = new OldestSnapshot(clock.instant(), Map.copyOf(oldest));
         return new Found(List.copyOf(found), complete);
     }
 
@@ -383,9 +384,10 @@ public class TopicVectorsTickService {
      * Per workspace, oldest first: read the summaries, embed them in chunks and write each chunk's vectors. A chunk
      * starts only with at least {@code embedTimeout} left in the tick, so a call never ends on the tick's deadline; the
      * rest is {@code over_budget}. After an embed call fails with a 429, a 5xx, a timeout or a retryable code, the
-     * workspace is not called again this tick; other workspaces go on.
+     * workspace is not called again this tick; other workspaces go on. After the workspace's last insert, one check
+     * deletes the vectors of traces deleted meanwhile.
      */
-    private Void embedAndWrite(List<TopicVectorCandidate> candidates, Instant deadline, Instant missedBefore,
+    private void embedAndWrite(List<TopicVectorCandidate> candidates, Instant deadline, Instant missedBefore,
             Tally tally) {
         var byWorkspace = candidates.stream().collect(Collectors.groupingBy(TopicVectorCandidate::workspaceId,
                 LinkedHashMap::new, Collectors.toList()));
@@ -396,16 +398,14 @@ public class TopicVectorsTickService {
                 tally.cut(workspaceId, OVER_BUDGET, group.size());
                 continue;
             }
-            Map<TraceKey, TopicSummary> summaries;
+            Map<TopicTraceKey, TopicSummary> summaries;
             try {
                 // In chunks: ClickHouse parses the ids as SQL, and one read of maxTracesPerTick ids could pass
                 // max_query_size.
                 summaries = Flux.fromIterable(Lists.partition(group, SUMMARY_READ_CHUNK))
                         .concatMap(chunk -> dao.findSummaries(workspaceId, TASK,
-                                chunk.stream().map(TopicVectorCandidate::traceId).collect(Collectors.toSet()),
-                                secondsLeft(deadline)))
-                        .collectMap(summary -> new TraceKey(summary.projectId(), summary.traceId()),
-                                Function.identity())
+                                chunk.stream().map(TopicVectorsTickService::key).toList(), secondsLeft(deadline)))
+                        .collectMap(TopicVectorsTickService::key, Function.identity())
                         .block();
             } catch (RuntimeException exception) {
                 tally.cut(workspaceId, READ_FAILED, group.size());
@@ -417,7 +417,7 @@ public class TopicVectorsTickService {
             var pending = new ArrayList<Pending>();
             var missing = new ArrayList<TopicVectorCandidate>();
             for (var candidate : group) {
-                summaryText(candidate, summaries.get(new TraceKey(candidate.projectId(), candidate.traceId())))
+                summaryText(candidate, summaries.get(key(candidate)))
                         .ifPresentOrElse(
                                 text -> pending.add(new Pending(candidate, text)),
                                 () -> missing.add(candidate));
@@ -425,11 +425,11 @@ public class TopicVectorsTickService {
             if (!missing.isEmpty()) {
                 tally.skip(workspaceId, MISSING_SUMMARY, missing.size());
                 // They stay at the head of this workspace's queue until a summary arrives or they leave the window.
-                log.warn("Topic vectors found done statuses without a usable summary, workspace '{}', traces '{}', "
-                        + "oldest trace '{}', status at '{}'; skipped until one arrives", workspaceId, missing.size(),
-                        missing.getFirst().traceId(), missing.getFirst().statusUpdatedAt());
+                log.warn("Topic vectors skip done statuses without a summary, workspace '{}', traces '{}', oldest '{}'",
+                        workspaceId, missing.size(), missing.getFirst().traceId());
             }
             boolean backOff = false;
+            var written = new ArrayList<TopicVector>();
             for (var chunk : Lists.partition(pending, config.getVectors().getEmbedBatchSize())) {
                 if (backOff) {
                     tally.skip(workspaceId, EMBED_FAILED, chunk.size());
@@ -446,9 +446,9 @@ public class TopicVectorsTickService {
                     tally.skip(workspaceId, EMBED_FAILED, chunk.size());
                     backOff = backsOff(exception);
                     tally.cut = tally.cut || backOff;
-                    log.warn("Topic vectors embed failed, workspace '{}', code '{}', status '{}', traces '{}', "
-                            + "backing off the workspace for the tick '{}'", workspaceId, exception.getCode(),
-                            exception.getHttpStatus(), chunk.size(), backOff, exception);
+                    log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}', back off '{}'",
+                            workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), backOff,
+                            exception);
                     continue;
                 }
                 try {
@@ -459,18 +459,67 @@ public class TopicVectorsTickService {
                             workspaceId, vectors.size(), exception);
                     continue;
                 }
-                tally.written(workspaceId, vectors.size());
-                if (missedBefore != null) {
-                    var missed = chunk.stream().map(Pending::candidate)
-                            .filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
-                            .map(TopicVectorCandidate::traceId)
-                            .collect(Collectors.toSet());
-                    longWindowMissed.add(vectors.stream().filter(vector -> missed.contains(vector.traceId())).count(),
-                            tally.workspace(workspaceId).build());
-                }
+                written.addAll(vectors);
+            }
+            if (written.isEmpty()) {
+                continue;
+            }
+            // Once per workspace, after its last insert, so it covers every vector written above.
+            var deleted = deleteVectorsOfDeletedTraces(workspaceId, written, deadline);
+            var kept = written.stream().filter(vector -> !deleted.contains(key(vector))).toList();
+            tally.skip(workspaceId, TRACE_DELETED, deleted.size());
+            tally.written(workspaceId, kept.size());
+            if (missedBefore != null) {
+                var missed = pending.stream().map(Pending::candidate)
+                        .filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
+                        .map(TopicVectorsTickService::key)
+                        .collect(Collectors.toSet());
+                longWindowMissed.add(kept.stream().filter(vector -> missed.contains(key(vector))).count(),
+                        tally.workspace(workspaceId).build());
             }
         }
-        return null;
+    }
+
+    /**
+     * Deletes the vectors just written whose trace was deleted while they were embedded, and returns their keys. The
+     * trace-delete cascade deletes the status rows before the vectors: when its vector delete ran before this insert,
+     * the status is gone by now; when it runs after, it deletes the vector itself. A failed check or delete leaves the
+     * vectors to retention.
+     */
+    private Set<TopicTraceKey> deleteVectorsOfDeletedTraces(String workspaceId, List<TopicVector> vectors,
+            Instant deadline) {
+        var written = vectors.stream().map(TopicVectorsTickService::key).distinct().toList();
+        try {
+            // In chunks, for the same max_query_size reason as the summary read.
+            var withStatus = Flux.fromIterable(Lists.partition(written, SUMMARY_READ_CHUNK))
+                    .concatMap(chunk -> dao.findStatusKeys(workspaceId, TASK, chunk, secondsLeft(deadline)))
+                    .collect(Collectors.toSet())
+                    .block();
+            var deleted = written.stream().filter(key -> !withStatus.contains(key))
+                    .collect(Collectors.toUnmodifiableSet());
+            if (!deleted.isEmpty()) {
+                dao.deleteByKeys(workspaceId, deleted).block();
+                log.info("Topic vectors deleted for traces deleted during the tick, workspace '{}', traces '{}'",
+                        workspaceId, deleted.size());
+            }
+            return deleted;
+        } catch (RuntimeException exception) {
+            log.warn("Topic vectors deleted-trace check failed, workspace '{}', rows '{}'; retention removes any left",
+                    workspaceId, vectors.size(), exception);
+            return Set.of();
+        }
+    }
+
+    private static TopicTraceKey key(TopicVectorCandidate candidate) {
+        return TopicTraceKey.builder().projectId(candidate.projectId()).traceId(candidate.traceId()).build();
+    }
+
+    private static TopicTraceKey key(TopicSummary summary) {
+        return TopicTraceKey.builder().projectId(summary.projectId()).traceId(summary.traceId()).build();
+    }
+
+    private static TopicTraceKey key(TopicVector vector) {
+        return TopicTraceKey.builder().projectId(vector.projectId()).traceId(vector.traceId()).build();
     }
 
     private void countReadFailure(String phase, String workspaceId, Tally tally, Throwable error) {
@@ -488,7 +537,7 @@ public class TopicVectorsTickService {
     }
 
     private boolean hasTimeForChunk(Instant deadline) {
-        return Duration.between(Instant.now(), deadline)
+        return Duration.between(clock.instant(), deadline)
                 .compareTo(config.getVectors().getEmbedTimeout().toJavaDuration()) >= 0;
     }
 
@@ -497,10 +546,9 @@ public class TopicVectorsTickService {
      * numbers are dropped and counted.
      */
     private List<TopicVector> embed(String workspaceId, List<Pending> chunk, Tally tally) {
-        var callDeadline = Instant.now().plus(config.getVectors().getEmbedTimeout().toJavaDuration());
+        var callDeadline = clock.instant().plus(config.getVectors().getEmbedTimeout().toJavaDuration());
         var request = EmbedRequest.builder()
                 .orgId(workspaceId)
-                .workspaceId(workspaceId)
                 .cache(false)
                 .inputs(chunk.stream().map(Pending::text).toList())
                 .build();
@@ -607,6 +655,13 @@ public class TopicVectorsTickService {
         return Optional.of(List.copyOf(normalized));
     }
 
+    private void timed(String phase, Runnable action) {
+        timed(phase, () -> {
+            action.run();
+            return null;
+        });
+    }
+
     private <T> T timed(String phase, Supplier<T> action) {
         long started = System.nanoTime();
         try {
@@ -658,8 +713,8 @@ public class TopicVectorsTickService {
     }
 
     /** ClickHouse's {@code max_execution_time} for a query started now: the whole seconds left, at least 1. */
-    private static long secondsLeft(Instant deadline) {
-        return Math.max(1, Duration.between(Instant.now(), deadline).toSeconds());
+    private long secondsLeft(Instant deadline) {
+        return Math.max(1, Duration.between(clock.instant(), deadline).toSeconds());
     }
 
     private static double seconds(Instant from, Instant to) {

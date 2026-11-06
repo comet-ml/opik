@@ -36,10 +36,9 @@ public class TopicWorkspaceService {
         return aiLabelsEnabled().stream().filter(listed::contains).toList();
     }
 
+    /** Whether the workspace is listed and enabled in {@code ai_label_workspaces}; MySQL is read only when listed. */
     public boolean isEligible(@NonNull String workspaceId) {
-        return config.enabledWorkspaceIds().contains(workspaceId)
-                && template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(AiLabelWorkspaceDAO.class).isEnabled(workspaceId));
+        return config.enabledWorkspaceIds().contains(workspaceId) && aiLabelsEnabled().contains(workspaceId);
     }
 
     /** The listed workspaces that do not run because they are not enabled in {@code ai_label_workspaces}, by id. */

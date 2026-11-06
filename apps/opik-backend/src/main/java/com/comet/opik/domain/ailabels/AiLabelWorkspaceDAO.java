@@ -12,9 +12,6 @@ public interface AiLabelWorkspaceDAO {
     @SqlQuery("SELECT workspace_id FROM ai_label_workspaces WHERE enabled = TRUE ORDER BY workspace_id")
     List<String> enabledWorkspaceIds();
 
-    @SqlQuery("SELECT COUNT(*) > 0 FROM ai_label_workspaces WHERE workspace_id = :workspaceId AND enabled = TRUE")
-    boolean isEnabled(@Bind("workspaceId") String workspaceId);
-
     @SqlUpdate("""
             INSERT INTO ai_label_workspaces (workspace_id, enabled, added_by)
             VALUES (:workspaceId, :enabled, :addedBy)

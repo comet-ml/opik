@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueReference;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
@@ -34,6 +35,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.api.sorting.Direction;
@@ -165,6 +167,7 @@ class FindTraceThreadsResourceTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
+    private ThreadCommentResourceClient threadCommentResourceClient;
     private IdGenerator idGenerator;
     private TransactionTemplateAsync clickHouseTemplate;
 
@@ -182,6 +185,7 @@ class FindTraceThreadsResourceTest {
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
+        this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
         this.idGenerator = idGenerator;
         this.clickHouseTemplate = clickHouseTemplate;
     }
@@ -323,6 +327,8 @@ class FindTraceThreadsResourceTest {
                                                         : getKey(filter.getKey()))
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
+                                // COMMENTS only supports no-value operators, so there's no invalid value to send
+                                case COMMENTS -> Stream.of();
                                 case LIST, ENUM -> {
                                     // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
@@ -1087,6 +1093,80 @@ class FindTraceThreadsResourceTest {
                     Map.of("annotation_queue_id", getQueueId.apply(fixture).toString()), apiKey, workspaceName);
         }
 
+        @Test
+        @DisplayName("When filtering by comments, should return only threads with or without comments")
+        void whenFilterByComments__thenReturnThreadsWithOrWithoutComments() {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            var commentedThreadId = UUID.randomUUID().toString();
+            var otherThreadId = UUID.randomUUID().toString();
+
+            var traces = Stream.of(commentedThreadId, otherThreadId)
+                    .map(threadId -> createTrace().toBuilder()
+                            .projectName(project.name())
+                            .usage(null)
+                            .threadId(threadId)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Thread rows are created asynchronously from the trace batch
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> Stream.of(commentedThreadId, otherThreadId)
+                            .forEach(threadId -> assertThat(traceResourceClient
+                                    .getTraceThread(threadId, projectId, apiKey, workspaceName)
+                                    .threadModelId()).isNotNull()));
+
+            var commentedThreadModelId = traceResourceClient
+                    .getTraceThread(commentedThreadId, projectId, apiKey, workspaceName)
+                    .threadModelId();
+            var comment = threadCommentResourceClient.generateAndCreateComment(commentedThreadModelId, apiKey,
+                    workspaceName, HttpStatus.SC_CREATED);
+
+            var commentedThread = traceResourceClient.getTraceThread(commentedThreadId, projectId, apiKey,
+                    workspaceName);
+            var otherThread = traceResourceClient.getTraceThread(otherThreadId, projectId, apiKey, workspaceName);
+            assertThat(commentedThread.comments()).hasSize(1);
+            assertThat(otherThread.comments()).isNullOrEmpty();
+
+            var isNotEmptyFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.COMMENTS)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            assertThreadPage(null, projectId, List.of(commentedThread), List.of(isNotEmptyFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, List.of(commentedThread),
+                    List.of(isNotEmptyFilter));
+
+            var isEmptyFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.COMMENTS)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            assertThreadPage(null, projectId, List.of(otherThread), List.of(isEmptyFilter), Map.of(), apiKey,
+                    workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, List.of(otherThread), List.of(isEmptyFilter));
+
+            threadCommentResourceClient.deleteComments(BatchDelete.builder().ids(Set.of(comment.id())).build(),
+                    apiKey, workspaceName);
+
+            assertThreadPage(null, projectId, List.of(), List.of(isNotEmptyFilter), Map.of(), apiKey, workspaceName);
+            assertTheadStream(null, projectId, apiKey, workspaceName, List.of(), List.of(isNotEmptyFilter));
+        }
+
         private Stream<Arguments> getSourceFilterTestArguments() {
             return Stream.of(
                     Arguments.of(false, Source.PLAYGROUND, Source.EXPERIMENT),
@@ -1379,6 +1459,96 @@ class FindTraceThreadsResourceTest {
                     TEST_WORKSPACE);
             TraceAssertions.assertThreads(List.of(expectedThread),
                     List.of(traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE)));
+        }
+
+        /**
+         * Both traces start at the epoch sentinel: the first message is the input of the lowest trace id, the last
+         * message the output of the trace that ends last, and start, end and duration stay unset.
+         */
+        @Test
+        void whenAllThreadTracesHaveSentinelStart__thenMessagesBreakTiesOnTraceId() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var firstTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(Instant.EPOCH)
+                    .endTime(ranAt.plus(1000, ChronoUnit.MILLIS))
+                    .build();
+            var lastTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(firstTrace.environment())
+                    .startTime(Instant.EPOCH)
+                    .endTime(ranAt.plus(2000, ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(lastTrace, firstTrace), API_KEY, TEST_WORKSPACE);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var expectedThread = getExpectedThreads(List.of(firstTrace, lastTrace), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).getFirst().toBuilder()
+                    .startTime(Instant.EPOCH)
+                    .endTime(null)
+                    .duration(null)
+                    .firstMessage(firstTrace.input())
+                    .lastMessage(lastTrace.output())
+                    .build();
+
+            assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        /**
+         * The two last traces end at the same time: the last message is the output of the higher trace id of the two.
+         */
+        @Test
+        void whenLastTracesTieOnEndTime__thenLastMessageBreaksTheTieOnTraceId() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var endedAt = ranAt.plus(1000, ChronoUnit.MILLIS);
+            var firstTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(100, ChronoUnit.MILLIS))
+                    .build();
+            var lowerTiedTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(firstTrace.environment())
+                    .startTime(ranAt.plus(200, ChronoUnit.MILLIS))
+                    .endTime(endedAt)
+                    .build();
+            var higherTiedTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(2)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(firstTrace.environment())
+                    .startTime(ranAt.plus(300, ChronoUnit.MILLIS))
+                    .endTime(endedAt)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(higherTiedTrace, firstTrace, lowerTiedTrace), API_KEY,
+                    TEST_WORKSPACE);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var expectedThread = getExpectedThreads(List.of(firstTrace, lowerTiedTrace, higherTiedTrace), projectId,
+                    threadId, List.of(), TraceThreadStatus.ACTIVE).getFirst().toBuilder()
+                    .lastMessage(higherTiedTrace.output())
+                    .build();
+
+            assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
+                    TEST_WORKSPACE);
         }
 
         @ParameterizedTest(name = "truncate={0}")

@@ -1177,7 +1177,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -1211,7 +1211,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -1248,7 +1248,7 @@ class TestExportAll:
             ) as mock_proj,
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ) as mock_exp,
         ):
             from opik.cli.exports.all import export_all
@@ -1282,7 +1282,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(3, 0, 3, 1, False),
+                return_value=(3, 0, 3, 1, 0, False),
             ),
             patch(f"{_EXPORT_MODULE}.print_export_summary") as mock_summary,
         ):
@@ -1319,7 +1319,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
