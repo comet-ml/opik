@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
@@ -37,6 +37,26 @@ const submittedName = (buttonName: string) => {
   return (button.form?.elements.namedItem("name") as HTMLInputElement).value;
 };
 
+const renderEditPanel = () => {
+  const setOpen = vi.fn();
+  render(
+    <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+      <TooltipProvider>
+        <GuardrailPolicyPanel
+          mode="edit"
+          policy={POLICY}
+          open
+          setOpen={setOpen}
+        />
+      </TooltipProvider>
+    </PermissionsProvider>,
+  );
+  return setOpen;
+};
+
+const pressEscape = () =>
+  fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+
 describe("GuardrailPolicyPanel", () => {
   it("submits the form of its own panel when another panel is open too", () => {
     render(
@@ -55,5 +75,24 @@ describe("GuardrailPolicyPanel", () => {
 
     expect(submittedName("Create policy")).toBe("");
     expect(submittedName("Save changes")).toBe("support-bot-safety");
+  });
+
+  it("closes on Escape while nothing is changed", () => {
+    const setOpen = renderEditPanel();
+
+    pressEscape();
+
+    expect(setOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("stays open on Escape while there are unsaved changes", () => {
+    const setOpen = renderEditPanel();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /description/i }), {
+      target: { value: "Typed but not saved" },
+    });
+    pressEscape();
+
+    expect(setOpen).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { Copy, MoreHorizontal, Pencil, Trash } from "lucide-react";
 
@@ -15,27 +15,25 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { GuardrailPolicy } from "@/types/guardrails";
 import useGuardrailPolicyBatchDeleteMutation from "@/api/guardrail-policies/useGuardrailPolicyBatchDeleteMutation";
-import GuardrailPolicyPanel from "@/v2/pages-shared/guardrails/GuardrailPolicyPanel/GuardrailPolicyPanel";
 
+type CustomMeta = {
+  onEdit: (policy: GuardrailPolicy) => void;
+  onDuplicate: (policy: GuardrailPolicy) => void;
+};
+
+// Edit and Duplicate open the page's panels: a panel owned by the row would close with it when a
+// refetch moves the policy to another page.
 const GuardrailPolicyRowActionsCell: React.FunctionComponent<
   CellContext<GuardrailPolicy, unknown>
 > = (context) => {
-  const resetKeyRef = useRef(0);
   const policy = context.row.original;
+  const { onEdit, onDuplicate } = (context.column.columnDef.meta?.custom ??
+    {}) as CustomMeta;
   const { toast } = useToast();
-
-  // Only the names on this page, which is enough to stop the obvious "(copy)" collisions; a clash
-  // with a policy on another page still surfaces as an inline error on the name field.
-  const takenNames = useMemo(
-    () => context.table.getRowModel().rows.map((row) => row.original.name),
-    [context.table],
-  );
 
   const { mutate: deletePolicy } = useGuardrailPolicyBatchDeleteMutation();
 
   const [open, setOpen] = useState(false);
-  const [openEdit, setOpenEdit] = useState(false);
-  const [openDuplicate, setOpenDuplicate] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const handleDeleteConfirm = useCallback(() => {
@@ -52,16 +50,14 @@ const GuardrailPolicyRowActionsCell: React.FunctionComponent<
   }, [deletePolicy, policy, toast]);
 
   const handleEdit = useCallback(() => {
-    setOpenEdit(true);
     setOpen(false);
-    resetKeyRef.current = resetKeyRef.current + 1;
-  }, []);
+    onEdit(policy);
+  }, [onEdit, policy]);
 
   const handleDuplicate = useCallback(() => {
-    setOpenDuplicate(true);
     setOpen(false);
-    resetKeyRef.current = resetKeyRef.current + 1;
-  }, []);
+    onDuplicate(policy);
+  }, [onDuplicate, policy]);
 
   const handleDelete = useCallback(() => {
     setOpenConfirmDialog(true);
@@ -100,23 +96,7 @@ const GuardrailPolicyRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <GuardrailPolicyPanel
-        mode="edit"
-        key={`edit-${resetKeyRef.current}`}
-        policy={policy}
-        open={openEdit}
-        setOpen={setOpenEdit}
-      />
-      <GuardrailPolicyPanel
-        mode="duplicate"
-        key={`duplicate-${resetKeyRef.current}`}
-        policy={policy}
-        takenNames={takenNames}
-        open={openDuplicate}
-        setOpen={setOpenDuplicate}
-      />
       <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
         open={openConfirmDialog}
         setOpen={setOpenConfirmDialog}
         onConfirm={handleDeleteConfirm}

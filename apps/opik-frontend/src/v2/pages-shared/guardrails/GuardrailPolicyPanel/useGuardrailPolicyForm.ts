@@ -162,8 +162,11 @@ const useGuardrailPolicyForm = ({
     ],
   );
 
+  // Against the name the form was seeded with, not the latest policy: a teammate's rename arriving
+  // on a refetch is not a rename by this user.
   const name = form.watch("name");
-  const isRenamed = isEdit && !!policy && name.trim() !== policy.name;
+  const isRenamed =
+    isEdit && name.trim() !== form.formState.defaultValues?.name;
 
   // Creating or duplicating always has something to save; an edit only once a value changed.
   const isDirty = !isEdit || form.formState.isDirty;

@@ -58,7 +58,7 @@ import GuardrailPolicyRowActionsCell from "@/v2/pages/GuardrailsPage/GuardrailPo
 import GuardrailPolicyPanel from "@/v2/pages-shared/guardrails/GuardrailPolicyPanel/GuardrailPolicyPanel";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-const DOCS_URL = buildDocsUrl("/production/gateway-guardrails/guardrails");
+const DOCS_URL = buildDocsUrl("/guardrails/guardrails");
 
 const SELECTED_COLUMNS_KEY = "guardrail-policies-selected-columns";
 const COLUMNS_WIDTH_KEY = "guardrail-policies-columns-width";
@@ -103,6 +103,8 @@ const GuardrailsPage: React.FunctionComponent = () => {
   } = usePermissions();
 
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
+  const [openDuplicatePanel, setOpenDuplicatePanel] = useState(false);
+  const [policyToDuplicate, setPolicyToDuplicate] = useState<GuardrailPolicy>();
 
   // Which policy is open, in the URL: a policy has no route of its own, so this is what a link to
   // one resolves through.
@@ -229,16 +231,24 @@ const GuardrailsPage: React.FunctionComponent = () => {
     [data?.sortable_by],
   );
   const total = data?.total ?? 0;
+  // Only the names on this page, which is enough to stop the obvious "(copy)" collisions; a clash
+  // with a policy on another page still surfaces as an inline error on the name field.
+  const policyNames = useMemo(
+    () => policies.map((policy) => policy.name),
+    [policies],
+  );
 
   const policyOnPage = useMemo(
     () => policies.find((policy) => policy.id === openedPolicyId),
     [policies, openedPolicyId],
   );
 
+  // Looked up by id only once the list has answered without it: a link to a policy on this page
+  // needs no second request.
   const { data: fetchedPolicy, error: policyLookupError } =
     useGuardrailPolicyById(
       { policyId: openedPolicyId! },
-      { enabled: Boolean(openedPolicyId) && !policyOnPage },
+      { enabled: Boolean(openedPolicyId) && !isPending && !policyOnPage },
     );
 
   // A link to a policy that was deleted, or that failed to load, drops the id from the URL rather
@@ -257,7 +267,16 @@ const GuardrailsPage: React.FunctionComponent = () => {
     });
   }, [policyLookupError, setOpenedPolicyId, toast]);
 
-  const openedPolicy = policyOnPage ?? fetchedPolicy;
+  // The last copy of the open policy seen, so the panel, and whatever is typed in it, stays while a
+  // refetch moves the policy off this page and it is looked up by id.
+  const latestOpenedPolicy = policyOnPage ?? fetchedPolicy;
+  const [lastOpenedPolicy, setLastOpenedPolicy] = useState<GuardrailPolicy>();
+  useEffect(() => {
+    if (latestOpenedPolicy) setLastOpenedPolicy(latestOpenedPolicy);
+  }, [latestOpenedPolicy]);
+  const openedPolicy =
+    latestOpenedPolicy ??
+    (lastOpenedPolicy?.id === openedPolicyId ? lastOpenedPolicy : undefined);
 
   const selectedPolicies = useMemo(
     () => policies.filter((policy) => rowSelection[policy.id]),
@@ -284,9 +303,23 @@ const GuardrailsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  // There is no detail page: the whole policy fits in the panel, so a row click, or Edit in the
+  // row menu, opens it and puts its id in the URL.
+  const handleOpenPolicy = useCallback(
+    (policy: GuardrailPolicy) => setOpenedPolicyId(policy.id),
+    [setOpenedPolicyId],
+  );
+
+  const handleDuplicatePolicy = useCallback((policy: GuardrailPolicy) => {
+    setPolicyToDuplicate(policy);
+    setOpenDuplicatePanel(true);
+  }, []);
+
   const columns = useMemo(
     () => [
-      generateSelectColumDef<GuardrailPolicy>(),
+      ...(canConfigureWorkspaceSettings
+        ? [generateSelectColumDef<GuardrailPolicy>()]
+        : []),
       ...convertColumnDataToColumn<GuardrailPolicy, GuardrailPolicy>(
         columnsDef,
         {
@@ -299,6 +332,10 @@ const GuardrailsPage: React.FunctionComponent = () => {
         ? [
             generateActionsColumDef({
               cell: GuardrailPolicyRowActionsCell,
+              customMeta: {
+                onEdit: handleOpenPolicy,
+                onDuplicate: handleDuplicatePolicy,
+              },
             }),
           ]
         : []),
@@ -309,6 +346,8 @@ const GuardrailsPage: React.FunctionComponent = () => {
       selectedColumns,
       sortableBy,
       canConfigureWorkspaceSettings,
+      handleOpenPolicy,
+      handleDuplicatePolicy,
     ],
   );
 
@@ -328,12 +367,6 @@ const GuardrailsPage: React.FunctionComponent = () => {
       onColumnResize: setColumnsWidth,
     }),
     [columnsWidth, setColumnsWidth],
-  );
-
-  // There is no detail page: the whole policy fits in the panel, so a row click opens it.
-  const handleRowClick = useCallback(
-    (policy: GuardrailPolicy) => setOpenedPolicyId(policy.id),
-    [setOpenedPolicyId],
   );
 
   const handleCloseEditPanel = useCallback(
@@ -423,7 +456,7 @@ const GuardrailsPage: React.FunctionComponent = () => {
           <DataTable
             columns={columns}
             data={policies}
-            onRowClick={handleRowClick}
+            onRowClick={handleOpenPolicy}
             sortConfig={sortConfig}
             resizeConfig={resizeConfig}
             selectionConfig={{
@@ -453,6 +486,13 @@ const GuardrailsPage: React.FunctionComponent = () => {
         mode="create"
         open={openCreatePanel}
         setOpen={setOpenCreatePanel}
+      />
+      <GuardrailPolicyPanel
+        mode="duplicate"
+        policy={policyToDuplicate}
+        takenNames={policyNames}
+        open={openDuplicatePanel}
+        setOpen={setOpenDuplicatePanel}
       />
       {openedPolicy && (
         <GuardrailPolicyPanel

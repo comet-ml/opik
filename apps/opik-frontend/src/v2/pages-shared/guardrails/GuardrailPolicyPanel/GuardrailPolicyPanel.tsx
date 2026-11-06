@@ -43,7 +43,7 @@ import {
   GuardrailExecutionScopeLabelMap,
 } from "@/constants/guardrails";
 
-const DOCS_URL = buildDocsUrl("/production/gateway-guardrails/guardrails");
+const DOCS_URL = buildDocsUrl("/guardrails/guardrails");
 
 const EXECUTION_SCOPES = [
   GUARDRAIL_EXECUTION_SCOPE.ON_REQUEST,
@@ -102,9 +102,10 @@ const GuardrailPolicyPanel: React.FunctionComponent<
       onClose={handleClose}
       initialWidth={0.5}
       minWidth={520}
-      // Clicking away closes the panel, except while there is unsaved work to lose: the same
-      // condition that enables Save.
+      // Clicking away or pressing Escape closes the panel, except while there is unsaved work to
+      // lose: the same condition that enables Save.
       blockOverlayClose={isDirty}
+      ignoreHotkeys={isDirty}
       header={
         <ResizableSidePanelTopBar
           variant="form"

@@ -12,7 +12,8 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
  *
  * Reads the toggles query itself rather than the provider, which reports its defaults until the toggles arrive and
  * would turn a hard load of the page into a "no access" flash. A failed lookup is not an answer: it comes back as
- * isError with a refetch, so callers can offer a retry instead of showing guardrails as off.
+ * isError with a refetch, so callers can offer a retry instead of showing guardrails as off. A failed background
+ * refetch keeps the answer already given, so it doesn't take the page away from someone in the middle of an edit.
  */
 export default function useGuardrailsEnabled() {
   const workspaceName = useActiveWorkspaceName();
@@ -41,7 +42,7 @@ export default function useGuardrailsEnabled() {
     staleTime: 60000,
   });
 
-  if (isTogglesError) {
+  if (isTogglesError && !toggles) {
     return {
       isEnabled: false,
       isPending: false,
@@ -76,7 +77,7 @@ export default function useGuardrailsEnabled() {
   return {
     isEnabled: Boolean(isOrganizationEnabled),
     isPending: isOrganizationPending,
-    isError: isOrganizationError,
+    isError: isOrganizationError && isOrganizationEnabled === undefined,
     refetch: refetchOrganization,
   };
 }

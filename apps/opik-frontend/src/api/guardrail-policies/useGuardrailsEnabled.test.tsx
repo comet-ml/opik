@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import usePluginsStore from "@/store/PluginsStore";
@@ -83,6 +83,16 @@ describe("useGuardrailsEnabled", () => {
     expect(refetch).toHaveBeenCalled();
   });
 
+  it("keeps guardrails on when a background refetch of the toggles fails", () => {
+    toggles.current = { ...togglesLoaded(true), isError: true };
+
+    expect(renderEnabled().result.current).toMatchObject({
+      isEnabled: true,
+      isPending: false,
+      isError: false,
+    });
+  });
+
   it("is disabled when the deployment does not run guardrails, without asking the plugin", () => {
     const getGuardrailsEnabled = vi.fn();
     usePluginsStore.setState({ getGuardrailsEnabled });
@@ -137,5 +147,25 @@ describe("useGuardrailsEnabled", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.isEnabled).toBe(false);
+  });
+
+  it("keeps the organization's answer when a background refetch of it fails", async () => {
+    const getGuardrailsEnabled = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockRejectedValue(new Error("down"));
+    usePluginsStore.setState({ getGuardrailsEnabled });
+    toggles.current = togglesLoaded(true);
+
+    const { result } = renderEnabled();
+    await waitFor(() => expect(result.current.isEnabled).toBe(true));
+    await act(async () => {
+      await result.current.refetch();
+      // React Query hands the result to the component on a later tick.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(getGuardrailsEnabled).toHaveBeenCalledTimes(2);
+    expect(result.current).toMatchObject({ isEnabled: true, isError: false });
   });
 });

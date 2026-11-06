@@ -179,4 +179,22 @@ describe("useGuardrailPolicyForm", () => {
 
     expect(result.current.form.getValues("name")).toBe("support-bot");
   });
+
+  it("warns about a rename only when this user changes the name", () => {
+    const setOpen = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ policy }) =>
+        useGuardrailPolicyForm({ mode: "edit", policy, open: true, setOpen }),
+      { initialProps: { policy: createPolicy() } },
+    );
+
+    // A teammate renames the policy while the panel is open, and a refetch brings the new name.
+    rerender({ policy: createPolicy({ name: "renamed-by-a-teammate" }) });
+    expect(result.current.isRenamed).toBe(false);
+
+    act(() => {
+      result.current.form.setValue("name", "support-bot-v2");
+    });
+    expect(result.current.isRenamed).toBe(true);
+  });
 });
