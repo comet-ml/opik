@@ -13,11 +13,14 @@ import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
+import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +48,7 @@ class OpenRouterDecisionsClientTest {
 
     private static final String PATH = "/api/alpha/decisions";
     private static final int MAX_ATTEMPTS = 2;
+    private static final int ERROR_BODY_MAX_SIZE = 1024;
 
     // Real response and error bodies captured from the OpenRouter Decisions API.
     private static final String SUCCESS_BODY = """
@@ -76,6 +80,7 @@ class OpenRouterDecisionsClientTest {
         clientConfig.setProviderErrorMessageMaxLength(500);
         clientConfig.setConnectTimeout(Duration.seconds(5));
         clientConfig.setReadTimeout(Duration.seconds(5));
+        clientConfig.setProviderErrorBodyMaxSize(DataSize.bytes(ERROR_BODY_MAX_SIZE));
         decisionsClient = newDecisionsClient(RELAXED_GUARD);
     }
 
@@ -163,6 +168,31 @@ class OpenRouterDecisionsClientTest {
     }
 
     @Test
+    void documentedErrorOverTheBodyLimitDropsUpstreamText() {
+        var padding = " ".repeat(ERROR_BODY_MAX_SIZE);
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(400).withHeader("Content-Type", "application/json")
+                        .withBody(ERROR_BODY.replaceFirst("\\{", "{" + padding))));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOf(ClientErrorException.class)
+                .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .hasMessageNotContaining("At least one question is required");
+    }
+
+    @Test
+    void unreadableSuccessBodyDropsUpstreamText() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"answers\": upstream-secret}")));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOf(InternalServerErrorException.class)
+                .satisfies(error -> assertThat(ExceptionUtils.getStackTrace(error))
+                        .doesNotContain("upstream-secret"));
+    }
+
+    @Test
     void timeoutIsNotRetriedInProcess() {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse().withStatus(524).withBody("timeout")));
@@ -240,7 +270,7 @@ class OpenRouterDecisionsClientTest {
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), config).block())
                 .isInstanceOf(DecisionsUrlException.class)
-                .hasMessageContaining("must end with /v1");
+                .hasMessage(DecisionsUrlException.MESSAGE);
         assertThat(wireMock.server().getAllServeEvents()).isEmpty();
     }
 
@@ -261,9 +291,19 @@ class OpenRouterDecisionsClientTest {
     @CsvSource({
             "https://openrouter.ai/api/v1, https://openrouter.ai/api/alpha/decisions",
             "https://eu.openrouter.ai/api/v1/, https://eu.openrouter.ai/api/alpha/decisions",
-            "https://my-proxy.example.com/openrouter/v1, https://my-proxy.example.com/openrouter/alpha/decisions"})
+            "https://my-proxy.example.com/openrouter/v1, https://my-proxy.example.com/openrouter/alpha/decisions",
+            "https://h.example.com/api/v1?x=/v1, https://h.example.com/api/alpha/decisions?x=/v1"})
     void decisionsUrlReplacesTheTrailingV1(String openRouterUrl, String expected) {
         assertThat(OpenRouterDecisionsClient.decisionsUrl(openRouterUrl)).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://v1", "https://h.example.com/api", "https://h.example.com/api/v1/chat",
+            "not a url"})
+    void decisionsUrlRejectsAPathWithoutTheTrailingV1(String openRouterUrl) {
+        assertThatThrownBy(() -> OpenRouterDecisionsClient.decisionsUrl(openRouterUrl))
+                .isInstanceOf(DecisionsUrlException.class)
+                .hasMessage(DecisionsUrlException.MESSAGE);
     }
 
     private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard) {

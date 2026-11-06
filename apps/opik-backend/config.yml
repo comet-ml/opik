@@ -1676,8 +1676,8 @@ llmProviderClient:
   #   at most 1000
   providerErrorMessageMaxLength: ${LLM_PROVIDER_ERROR_MESSAGE_MAX_LENGTH:-300}
   # Default: 64KB
-  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
-  #   short message parsed from it reaches callers; at most 1MiB
+  # Description: Most bytes read from the error response body of a custom provider or of the OpenRouter Decisions
+  #   API; the rest is discarded, as only a short message parsed from it reaches callers; at most 1MiB
   providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
   # Default: 120s
   # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a

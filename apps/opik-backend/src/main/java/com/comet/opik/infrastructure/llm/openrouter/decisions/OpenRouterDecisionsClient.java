@@ -2,8 +2,10 @@ package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
@@ -11,7 +13,7 @@ import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
-import com.comet.opik.infrastructure.net.LoggableUrl;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -28,6 +30,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -112,21 +119,33 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     }
 
     static String decisionsUrl(@NonNull String openRouterUrl) {
-        var url = StringUtils.stripEnd(openRouterUrl.trim(), "/");
-        if (!url.endsWith(CHAT_API_SUFFIX)) {
-            throw new DecisionsUrlException(("Decision models cannot use the OpenRouter base URL '%s'. The base URL"
-                    + " must end with %s, for example https://openrouter.ai/api/v1.").formatted(
-                            LoggableUrl.of(openRouterUrl), CHAT_API_SUFFIX));
+        URI uri;
+        try {
+            uri = new URI(openRouterUrl.trim());
+        } catch (URISyntaxException invalidUrl) {
+            throw new DecisionsUrlException();
         }
-        return StringUtils.removeEnd(url, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX;
+        var path = StringUtils.stripEnd(uri.getRawPath(), "/");
+        if (uri.getRawAuthority() == null || !StringUtils.endsWith(path, CHAT_API_SUFFIX)) {
+            throw new DecisionsUrlException();
+        }
+        return uri.getScheme() + "://" + uri.getRawAuthority()
+                + StringUtils.removeEnd(path, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX
+                + (uri.getRawQuery() != null ? "?" + uri.getRawQuery() : "");
     }
 
     private DecisionsResponse processResponse(Response response) {
         int status = response.getStatus();
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
-            var body = response.hasEntity() && response.bufferEntity()
-                    ? response.readEntity(DecisionsResponse.class)
-                    : null;
+            DecisionsResponse body;
+            try {
+                body = response.hasEntity() ? response.readEntity(DecisionsResponse.class) : null;
+            } catch (ProcessingException unreadable) {
+                // redacted as on the chat path: a parse error can quote the upstream body
+                throw new InternalServerErrorException(
+                        "OpenRouter Decisions API returned an unreadable response, status '%s'".formatted(status),
+                        ProviderFailures.redacted(unreadable));
+            }
             if (body == null || body.answers() == null) {
                 throw new InternalServerErrorException(
                         "OpenRouter Decisions API returned an empty response, status '%s'".formatted(status));
@@ -148,21 +167,39 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     }
 
     private String extractErrorMessage(Response response) {
-        if (!response.hasEntity() || !response.bufferEntity()) {
+        if (!response.hasEntity()) {
             return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
         }
         OpenRouterErrorMessage errorResponse;
         try {
-            errorResponse = response.readEntity(OpenRouterErrorMessage.class);
-        } catch (ProcessingException | IllegalStateException parseErrorResponse) {
-            // the type only: a parse error can quote the upstream body
-            log.debug("Failed to parse OpenRouter error response, error type '{}'",
-                    parseErrorResponse.getClass().getSimpleName());
+            errorResponse = JsonUtils.readValue(readErrorBody(response), OpenRouterErrorMessage.class);
+        } catch (IOException | ProcessingException | IllegalStateException | UncheckedIOException unreadable) {
+            // the type only: the message can quote the upstream body or name the destination
+            log.debug("Failed to read OpenRouter error response, error type '{}'",
+                    unreadable.getClass().getSimpleName());
             return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
         }
         if (errorResponse != null && errorResponse.error() != null && errorResponse.isDocumented()) {
             return providerErrorMessageValidator.validate(errorResponse.toErrorMessage()).getMessage();
         }
         return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+    }
+
+    /**
+     * At most {@code providerErrorBodyMaxSize} bytes, read within the read timeout as a whole, as for a custom
+     * provider: the base URL can be the workspace's. Closing the body before its end cancels the connection.
+     */
+    private byte[] readErrorBody(Response response) throws IOException {
+        int maxBytes = Math.toIntExact(llmProviderClientConfig.getProviderErrorBodyMaxSize().toBytes());
+        var readTimeout = Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .map(io.dropwizard.util.Duration::toJavaDuration);
+        try (var body = response.readEntity(InputStream.class);
+                var deadline = readTimeout.map(within -> BodyDeadline.closing(body, within)).orElse(null)) {
+            var bytes = body.readNBytes(maxBytes);
+            if (deadline != null && deadline.expired()) {
+                throw new IOException("the deadline closed the body");
+            }
+            return bytes;
+        }
     }
 }

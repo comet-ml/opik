@@ -103,8 +103,8 @@ public class LlmProviderClientConfig {
     private DataSize mediaDownloadMaxSize;
 
     /**
-     * Most bytes read from a custom provider's non-2xx response body; the rest is discarded. Only a short message
-     * parsed from it reaches callers, so a larger body is never needed.
+     * Most bytes read from the non-2xx response body of a custom provider or of the OpenRouter Decisions API; the
+     * rest is discarded. Only a short message parsed from it reaches callers, so a larger body is never needed.
      */
     @NotNull @MinDataSize(1)
     @MaxDataSize(value = 1, unit = DataSizeUnit.MEBIBYTES)

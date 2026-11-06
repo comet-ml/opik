@@ -7,13 +7,16 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import java.util.Optional;
 
 /**
- * The OpenRouter base URL has no decisions URL. Its message is built by Opik, not by the provider, so the rule
- * logs can show it.
+ * The OpenRouter base URL has no decisions URL. Its message is fixed text, without the URL, so the rule logs can
+ * show it.
  */
 public class DecisionsUrlException extends BadRequestException {
 
-    public DecisionsUrlException(String message) {
-        super(message);
+    static final String MESSAGE = "Decision models need an OpenRouter base URL whose path ends with /v1,"
+            + " for example https://openrouter.ai/api/v1.";
+
+    public DecisionsUrlException() {
+        super(MESSAGE);
     }
 
     public static Optional<DecisionsUrlException> find(@NonNull Throwable error) {

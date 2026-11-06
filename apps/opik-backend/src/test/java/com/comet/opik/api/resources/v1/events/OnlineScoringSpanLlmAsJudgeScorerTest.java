@@ -527,7 +527,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
         var span = createSpan();
         var clientConfig = LlmProviderClientApiConfig.builder().apiKey("key").build();
-        var urlError = new DecisionsUrlException("Decision models cannot use the OpenRouter base URL");
+        var urlError = new DecisionsUrlException();
 
         when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
