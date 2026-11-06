@@ -2,7 +2,7 @@
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM python:3.12.16-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS builder
+FROM python:3.15.2-slim@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS builder
 
 # uv is a drop-in faster pip; the binary is copied from the official distroless
 # image (pinned) and used only in this builder stage — it never reaches runtime.
@@ -42,7 +42,7 @@ RUN sh /usr/local/bin/selftest.sh ./scoring_runner.pyc
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM python:3.12.16-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS runtime
+FROM python:3.15.2-slim@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS runtime
 
 WORKDIR /opt/opik-sandbox-executor-python
 
