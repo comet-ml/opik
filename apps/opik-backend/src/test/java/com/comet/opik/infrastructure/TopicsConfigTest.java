@@ -134,6 +134,59 @@ class TopicsConfigTest {
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
 
+    static Stream<Arguments> nightlySettings() {
+        return Stream.of(
+                arguments("defaults", nightly(nightly -> {
+                }), List.of()),
+                arguments("project timeout equal to the budget", nightly(nightly -> {
+                    nightly.setBudget(Duration.minutes(30));
+                    nightly.setProjectTimeout(Duration.minutes(30));
+                }), List.of("projectTimeoutValid")),
+                arguments("Qwen deadline equal to the project timeout", nightly(nightly -> {
+                    nightly.setProjectTimeout(Duration.minutes(2));
+                    nightly.setQwenDeadline(Duration.minutes(2));
+                }), List.of("qwenDeadlineValid")),
+                arguments("Qwen deadline above the batch lane's 300 seconds",
+                        nightly(nightly -> nightly.setQwenDeadline(Duration.seconds(301))), List.of("qwenDeadline")),
+                arguments("blank schedule", nightly(nightly -> nightly.setSchedule(" ")), List.of("schedule")),
+                arguments("min vectors of 1", nightly(nightly -> nightly.setMinVectors(1)), List.of("minVectors")),
+                arguments("window of 0 days", nightly(nightly -> nightly.setWindowDays(0)), List.of("windowDays")),
+                arguments("max vectors under 100", nightly(nightly -> nightly.setMaxVectors(99)),
+                        List.of("maxVectors")));
+    }
+
+    private static Consumer<TopicsConfig.NightlyConfig> nightly(Consumer<TopicsConfig.NightlyConfig> change) {
+        return change;
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("nightlySettings")
+    void nightlyRules(String description, Consumer<TopicsConfig.NightlyConfig> change,
+            List<String> expectedViolations) {
+        var nightly = new TopicsConfig().getNightly();
+        change.accept(nightly);
+
+        var violations = VALIDATOR.validate(nightly).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
+    @Test
+    void defaultsOfTheNightlyJob() {
+        var nightly = new TopicsConfig().getNightly();
+
+        assertThat(nightly.isEnabled()).isTrue();
+        assertThat(nightly.getSchedule()).isEqualTo("0 0 2 * * ?");
+        assertThat(nightly.getBudget()).isEqualTo(Duration.hours(2));
+        assertThat(nightly.getProjectTimeout()).isEqualTo(Duration.minutes(15));
+        assertThat(nightly.getMinVectors()).isEqualTo(100);
+        assertThat(nightly.getWindowDays()).isEqualTo(30);
+        assertThat(nightly.getMaxVectors()).isEqualTo(30_000);
+        assertThat(nightly.getQwenDeadline()).isEqualTo(Duration.seconds(120));
+    }
+
     @Test
     void defaultsOfTheWindowReadGuards() {
         var find = new TopicsConfig().getVectors().getFind();

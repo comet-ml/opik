@@ -1,0 +1,67 @@
+{
+ "topics": [
+  {
+   "name": "Daily Briefing Reports",
+   "definition": "Generate daily briefing reports for specific projects or the default project.",
+   "clusters": [
+    1,
+    2,
+    14
+   ]
+  },
+  {
+   "name": "Project Details Lookup",
+   "definition": "Read or retrieve details and information about specific projects.",
+   "clusters": [
+    0,
+    10
+   ]
+  },
+  {
+   "name": "Trace Analysis and Debugging",
+   "definition": "Analyze traces, identify errors, latency issues, and debug agent or LLM trace problems.",
+   "clusters": [
+    4,
+    8,
+    12,
+    13
+   ]
+  },
+  {
+   "name": "Trace Explanation and Cost",
+   "definition": "Explain trace concepts, duration, cost, and breakdown to engineers.",
+   "clusters": [
+    11
+   ]
+  },
+  {
+   "name": "Automation Rule Management",
+   "definition": "Check, list, add, or configure automation rules and evaluators in Opik.",
+   "clusters": [
+    9
+   ]
+  },
+  {
+   "name": "Dashboard and Chart Creation",
+   "definition": "Add charts to dashboards or generate visualizations of trace metrics.",
+   "clusters": [
+    5
+   ]
+  },
+  {
+   "name": "Session and Response Issues",
+   "definition": "Retry previous responses, explain session resumption, or handle response failures.",
+   "clusters": [
+    7
+   ]
+  },
+  {
+   "name": "General System Access",
+   "definition": "Access the playground or identify general user frustration points.",
+   "clusters": [
+    6
+   ]
+  }
+ ],
+ "other": []
+}

@@ -9,14 +9,15 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.util.concurrent.TimeUnit;
 
 /**
- * Topics: groups traces by the intent ai-labels summarizes. Step 1 only stores a bge-small vector of every summary, for
- * the workspaces ai-labels is enabled for. Off by default, and deliberately not a service toggle. Needs ai-labels on,
+ * Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every summary,
+ * for the workspaces ai-labels is enabled for; the nightly job builds each project's topic list from them. Off by default, and deliberately not a service toggle. Needs ai-labels on,
  * and calls the same opik-inference deployment with the same credential ({@code aiLabels.inference}); see
  * {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
  */
@@ -28,6 +29,72 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors = new VectorsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly = new NightlyConfig();
+
+    /**
+     * The nightly job: builds a project's topic list from its window of vectors. Stage 2a builds a project that has no
+     * list yet (the first build); a project with one is skipped until the nightly update exists.
+     */
+    @Data
+    public static class NightlyConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. */
+        @JsonProperty
+        private boolean enabled = true;
+
+        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        @NotBlank @JsonProperty
+        private String schedule = "0 0 2 * * ?";
+
+        /** No project starts after this much of the night has passed; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget = Duration.hours(2);
+
+        /** One project's run is stopped and failed with {@code timeout} after this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 2, unit = TimeUnit.HOURS)
+        private Duration projectTimeout = Duration.minutes(15);
+
+        /** A project is built when its window holds at least this many traces with a vector. */
+        @JsonProperty
+        @Min(2) private int minVectors = 100;
+
+        /** The window: this many whole UTC days before the night. */
+        @JsonProperty
+        @Min(1) @Max(90) private int windowDays = 30;
+
+        /** A larger window keeps its newest traces. */
+        @JsonProperty
+        @Min(100) @Max(100_000) private int maxVectors = 30_000;
+
+        /** The deadline of the Qwen call that names the groups. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration qwenDeadline = Duration.seconds(120);
+
+        /** {@code topic_runs} rows are deleted after this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration runsRetention = Duration.days(90);
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.projectTimeout must be shorter than topics.nightly.budget") public boolean isProjectTimeoutValid() {
+            return projectTimeout == null || budget == null
+                    || projectTimeout.toMilliseconds() < budget.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.qwenDeadline must be shorter than topics.nightly.projectTimeout") public boolean isQwenDeadlineValid() {
+            return qwenDeadline == null || projectTimeout == null
+                    || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+    }
 
     @Data
     public static class VectorsConfig {

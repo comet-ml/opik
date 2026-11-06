@@ -29,6 +29,16 @@ public interface TopicWorkspaceDAO {
             """)
     boolean isEligible(@Bind("workspaceId") String workspaceId);
 
+    /** Workspaces opted in to topics but not to ai-labels: no night runs them, and nothing else says so. */
+    @SqlQuery("""
+            SELECT t.workspace_id
+            FROM topic_workspaces t
+            LEFT JOIN ai_label_workspaces a ON a.workspace_id = t.workspace_id
+            WHERE t.enabled = TRUE AND (a.workspace_id IS NULL OR a.enabled = FALSE)
+            ORDER BY t.workspace_id
+            """)
+    List<String> mismatchedWorkspaceIds();
+
     @SqlUpdate("""
             INSERT INTO topic_workspaces (workspace_id, enabled, added_by)
             VALUES (:workspaceId, :enabled, :addedBy)
