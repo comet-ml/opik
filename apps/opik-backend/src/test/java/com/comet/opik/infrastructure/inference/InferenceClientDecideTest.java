@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
-import com.sun.net.httpserver.HttpServer;
+import jakarta.ws.rs.client.ClientBuilder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -22,16 +22,11 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -42,6 +37,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class InferenceClientDecideTest {
@@ -216,6 +212,21 @@ class InferenceClientDecideTest {
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY).withFixedDelay(3_000)));
         var start = Instant.now();
 
+        // The socket's read timeout, cut to the deadline, and the bound on the whole call fire together.
+        assertThatThrownBy(() -> client.decide(request(noulQuestion()), start.plusMillis(500)).block())
+                .isExactlyInstanceOf(InferenceException.class);
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofMillis(1_500));
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void tricklingBodyIsCutOffAtTheDeadline() {
+        // Each chunk arrives well within the read timeout, so only a bound on the whole call stops it. Gzip off: a
+        // gzipped body arrives in one piece.
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(okJson(SUCCESS_BODY).withGzipDisabled(true).withChunkedDribbleDelay(20, 3_000)));
+        var start = Instant.now();
+
         assertThatThrownBy(() -> client.decide(request(noulQuestion()), start.plusMillis(500)).block())
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.isOutOfTime()).isTrue());
@@ -224,47 +235,37 @@ class InferenceClientDecideTest {
     }
 
     @Test
-    void tricklingBodyIsCutOffAtTheDeadlineAndItsConnectionDropped() throws IOException {
-        var dropped = new CompletableFuture<Void>();
-        var executor = Executors.newCachedThreadPool();
-        var server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.setExecutor(executor);
-        server.createContext(PATH, exchange -> {
-            try (exchange) {
-                exchange.getRequestBody().readAllBytes();
-                exchange.getResponseHeaders().add("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, 0);
-                // Six seconds of leading whitespace, which JSON allows, a byte every 100 ms: each one arrives well
-                // within any read timeout, so only a bound on the whole call stops it.
-                var body = exchange.getResponseBody();
-                for (var i = 0; i < 60; i++) {
-                    body.write(' ');
-                    body.flush();
-                    Thread.sleep(100);
-                }
-                body.write(SUCCESS_BODY.getBytes(StandardCharsets.UTF_8));
-            } catch (IOException exception) {
-                dropped.complete(null);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        server.start();
-        try {
-            var trickling = new InferenceClient(TestHttpClientUtils.client(),
-                    config("http://localhost:%d".formatted(server.getAddress().getPort())));
-            var start = Instant.now();
+    void callCutOffAtTheDeadlineKeepsItsSlotUntilItsBodyEnds() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(okJson(SUCCESS_BODY).withGzipDisabled(true).withChunkedDribbleDelay(20, 2_000)));
+        var singleSlotConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
+        singleSlotConfig.getInference().setMaxConcurrentDecides(1);
+        var singleSlot = new InferenceClient(TestHttpClientUtils.client(), singleSlotConfig);
 
-            assertThatThrownBy(() -> trickling.decide(request(noulQuestion()), start.plusMillis(500)).block())
-                    .isInstanceOfSatisfying(InferenceException.class,
-                            exception -> assertThat(exception.isOutOfTime()).isTrue());
-            assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofMillis(1_500));
-            // The server sees the connection closed long before the body would end: nothing is left reading it.
-            assertThat(dropped).succeedsWithin(Duration.ofSeconds(3));
-        } finally {
-            server.stop(0);
-            executor.shutdownNow();
-        }
+        assertThatThrownBy(() -> singleSlot.decide(request(noulQuestion()), Instant.now().plusMillis(300)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isOutOfTime()).isTrue());
+
+        // Its thread is still reading the body, so the next call finds no slot, even after its retries.
+        assertThatThrownBy(() -> singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo(InferenceException.CLIENT_BUSY));
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
+        await().atMost(Duration.ofSeconds(5)).ignoreExceptionsInstanceOf(InferenceException.class)
+                .untilAsserted(() -> assertThat(
+                        singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                        .isEqualTo(SUCCESS_RESPONSE));
+    }
+
+    @Test
+    void decideDoesNotUseTheSharedClient() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
+        var closedSharedClient = ClientBuilder.newClient();
+        closedSharedClient.close();
+        var isolated = new InferenceClient(closedSharedClient, config);
+
+        assertThat(isolated.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                .isEqualTo(SUCCESS_RESPONSE);
     }
 
     @Test
