@@ -6,8 +6,10 @@ import {
   sortCatalog,
 } from "./catalog";
 import {
+  describePerToken,
   overrideFields,
   problemsForRow,
+  problemsForRows,
   replaceOne,
   upsertMany,
 } from "./single";
@@ -90,20 +92,96 @@ describe("buildCatalog", () => {
     ]);
   });
 
+  const models = (entries: { model: string }[]) =>
+    entries.map((entry) => entry.model);
+  const is = (field: string, value: string) => ({
+    field,
+    operator: "=",
+    value,
+  });
+
   it("filters by search, provider and type, and sorts by model", () => {
+    expect(models(filterCatalog(catalog, { search: "LLAMA" }))).toEqual([
+      "acme-llama",
+    ]);
     expect(
-      filterCatalog(catalog, { search: "LLAMA" }).map((entry) => entry.model),
-    ).toEqual(["acme-llama"]);
-    expect(
-      filterCatalog(catalog, { providers: ["anthropic"] }).map(
-        (entry) => entry.model,
+      models(
+        filterCatalog(catalog, { filters: [is("provider", "anthropic")] }),
       ),
     ).toEqual(["claude-haiku-4-5"]);
     expect(
-      filterCatalog(catalog, { types: ["custom"] }).map((entry) => entry.model),
+      models(filterCatalog(catalog, { filters: [is("type", "Custom")] })),
     ).toEqual(["acme-llama", "gpt-5"]);
     expect(sortCatalog(catalog, "desc")[0].model).toBe("GPT-5");
-    expect(providersOf(catalog)).toEqual(["anthropic", "bifrost", "openai"]);
+  });
+
+  it("treats two values of one filter as either, and different filters as both", () => {
+    expect(
+      models(
+        filterCatalog(catalog, {
+          filters: [is("provider", "anthropic"), is("provider", "bifrost")],
+        }),
+      ),
+    ).toEqual(["gpt-5", "claude-haiku-4-5"]);
+    expect(
+      models(
+        filterCatalog(catalog, {
+          filters: [is("provider", "openai"), is("type", "Default")],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("finds rows without a provider through the Any provider option", () => {
+    expect(providersOf(catalog)).toEqual([
+      "Any provider",
+      "anthropic",
+      "bifrost",
+      "openai",
+    ]);
+    expect(
+      models(
+        filterCatalog(catalog, { filters: [is("provider", "Any provider")] }),
+      ),
+    ).toEqual(["acme-llama"]);
+  });
+
+  it("filters by price per 1M tokens and by having cache prices", () => {
+    expect(
+      models(
+        filterCatalog(catalog, {
+          filters: [{ field: "input_price", operator: ">=", value: "1" }],
+        }),
+      ),
+    ).toEqual(["GPT-5", "claude-haiku-4-5"]);
+    expect(
+      models(
+        filterCatalog(catalog, {
+          filters: [
+            { field: "cache_prices", operator: "is_not_empty", value: "" },
+          ],
+        }),
+      ),
+    ).toEqual(["GPT-5"]);
+  });
+
+  it("ranks an exact name first, then names that start with the search", () => {
+    const searchable = buildCatalog(
+      [
+        { model: "azure/gpt-5", provider: "azure", input_price: "1" },
+        { model: "gpt-5-mini", provider: "openai", input_price: "1" },
+        { model: "gpt-5", provider: "openai", input_price: "1" },
+        { model: "my-gpt-5", provider: "x", input_price: "1" },
+      ],
+      [],
+    );
+    const found = filterCatalog(searchable, { search: "gpt-5" });
+    expect(models(sortCatalog(found, "asc", "gpt-5"))).toEqual([
+      "azure/gpt-5",
+      "gpt-5",
+      "gpt-5-mini",
+      "my-gpt-5",
+    ]);
   });
 });
 
@@ -153,14 +231,33 @@ describe("saving one model", () => {
     ).toEqual({ output_price: "8" });
   });
 
-  it("upserts uploaded rows by model and provider", () => {
-    const request = upsertMany(list, [
+  it("upserts uploaded rows by model and provider and says where they landed", () => {
+    const { request, positions } = upsertMany(list, [
       { model: "gpt-5", provider: "OpenAI", kind: "fixed", input_price: "0.9" },
       { model: "fresh", provider: "x", kind: "fixed", output_price: "3" },
     ]);
     expect(request.rows).toHaveLength(4);
     expect(request.rows[0].input_price).toBe("0.9");
     expect(request.rows[3].model).toBe("fresh");
+    expect(positions).toEqual([0, 3]);
+  });
+
+  it("keeps only the warnings about the uploaded rows or the whole list", () => {
+    const warnings = [
+      { row: 1, field: "provider", code: "a", message: "existing row" },
+      { row: 3, field: "provider", code: "b", message: "uploaded row" },
+      { row: null, field: null, code: "c", message: "list" },
+    ];
+    expect(problemsForRows(warnings, [0, 3]).map((p) => p.message)).toEqual([
+      "uploaded row",
+      "list",
+    ]);
+  });
+
+  it("shows the built-in per-token price when a field falls back to it", () => {
+    expect(describePerToken("13.1", "20")).toBe("= 0.0000131 / tok");
+    expect(describePerToken("", "2.5")).toBe("= 0.0000025 / tok (built-in)");
+    expect(describePerToken("", undefined)).toBe("= no price");
   });
 
   it("keeps the problems of the saved row and of the whole list", () => {

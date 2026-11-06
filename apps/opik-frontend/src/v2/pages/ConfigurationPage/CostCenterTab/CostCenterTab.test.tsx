@@ -7,6 +7,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { QueryParamProvider } from "use-query-params";
+import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import { TooltipProvider } from "@/ui/tooltip";
 import {
   ModelPricesAccess,
@@ -121,16 +123,30 @@ import CostCenterTab from "./CostCenterTab";
 
 const renderTab = (access?: ModelPricesAccess) =>
   render(
-    <TooltipProvider>
-      {access ? (
-        <ModelPricesAccessProvider value={access}>
+    <QueryParamProvider adapter={WindowHistoryAdapter}>
+      <TooltipProvider>
+        {access ? (
+          <ModelPricesAccessProvider value={access}>
+            <CostCenterTab />
+          </ModelPricesAccessProvider>
+        ) : (
           <CostCenterTab />
-        </ModelPricesAccessProvider>
-      ) : (
-        <CostCenterTab />
-      )}
-    </TooltipProvider>,
+        )}
+      </TooltipProvider>
+    </QueryParamProvider>,
   );
+
+const withFilters = (filters: object[]) =>
+  window.history.replaceState(
+    {},
+    "",
+    `/?prices_filters=${encodeURIComponent(JSON.stringify(filters))}`,
+  );
+
+const quickAccessModels = () =>
+  within(screen.getByTestId("quick-access"))
+    .getAllByRole("button")
+    .map((card) => card.querySelector(".font-mono")?.textContent);
 
 const ADMIN: ModelPricesAccess = {
   canEdit: true,
@@ -170,6 +186,8 @@ describe("CostCenterTab", () => {
     mutateAsync.mockReset();
     refetch.mockReset();
     current.modelsUsed = undefined;
+    window.history.replaceState({}, "", "/");
+    window.localStorage.clear();
   });
 
   describe("access", () => {
@@ -202,8 +220,11 @@ describe("CostCenterTab", () => {
       renderTab();
 
       expect(
-        screen.getByText(/One list for every workspace on this installation/),
+        screen.getByText(
+          "Model prices used to estimate cost. Changes apply to spans logged after you save.",
+        ),
       ).toBeVisible();
+      expect(screen.queryByText(/One list for every workspace/)).toBeNull();
       expect(screen.getByRole("button", { name: /Add model/ })).toBeVisible();
       expect(
         screen.getByRole("button", { name: /Batch update/ }),
@@ -292,14 +313,110 @@ describe("CostCenterTab", () => {
       ).toBeVisible();
     });
 
-    it("filters by type", () => {
+    it("filters by type from the filter chips", () => {
+      withFilters([
+        {
+          id: "f1",
+          field: "type",
+          type: "string",
+          operator: "=",
+          value: "Custom",
+        },
+      ]);
       renderTab(ADMIN);
 
-      fireEvent.click(screen.getByRole("button", { name: /^Type/ }));
-      fireEvent.click(screen.getByRole("checkbox", { name: "Custom" }));
-
       expect(shownModels()).toEqual(["acme-llama-70b", "team-model"]);
-      expect(screen.getByRole("button", { name: /^Type · 1/ })).toBeVisible();
+      expect(screen.getByTestId("filter-chip-type")).toHaveTextContent(
+        "Custom",
+      );
+    });
+
+    it("finds models with no provider through the Any provider option", () => {
+      withFilters([
+        {
+          id: "f1",
+          field: "provider",
+          type: "string",
+          operator: "=",
+          value: "Any provider",
+        },
+      ]);
+      renderTab(ADMIN);
+
+      expect(shownModels()).toEqual(["acme-llama-70b"]);
+    });
+
+    it("puts exact matches first when searching", async () => {
+      renderTab(ADMIN);
+
+      fireEvent.change(
+        screen.getByPlaceholderText("Search models or providers"),
+        { target: { value: "gpt-4o" } },
+      );
+
+      await waitFor(() =>
+        expect(shownModels()).toEqual(["gpt-4o", "gpt-4o-mini"]),
+      );
+    });
+  });
+
+  describe("quick access", () => {
+    const usedModel = (
+      model: string,
+      provider: string,
+      daysUsed: number,
+      lastSeen: string,
+    ) => ({
+      model,
+      provider,
+      last_seen: lastSeen,
+      days_used: daysUsed,
+      workspaces: [{ id: "research", name: "research" }],
+      price_source: "built_in" as const,
+    });
+
+    it("shows the most used models first, newest first on a tie", () => {
+      current.modelsUsed = {
+        content: [
+          usedModel("gpt-4o-mini", "openai", 2, "2026-11-05T10:00:00Z"),
+          usedModel(
+            "claude-sonnet-4-5",
+            "anthropic",
+            9,
+            "2026-11-01T10:00:00Z",
+          ),
+          usedModel("gpt-4o", "openai", 2, "2026-11-06T10:00:00Z"),
+        ],
+      };
+      renderTab(ADMIN);
+
+      expect(quickAccessModels()).toEqual([
+        "claude-sonnet-4-5",
+        "gpt-4o",
+        "gpt-4o-mini",
+      ]);
+    });
+
+    it("puts a model pinned from the table first and remembers it", () => {
+      const { unmount } = renderTab(ADMIN);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Pin gpt-4o-mini to quick access" }),
+      );
+
+      expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
+      expect(screen.queryByLabelText("Model name")).toBeNull();
+
+      unmount();
+      renderTab(ADMIN);
+
+      expect(quickAccessModels()[0]).toBe("gpt-4o-mini");
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Unpin gpt-4o-mini from quick access",
+        }),
+      );
+      expect(quickAccessModels()).not.toContain("gpt-4o-mini");
     });
   });
 
@@ -599,6 +716,29 @@ describe("CostCenterTab", () => {
       await waitFor(() =>
         expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false),
       );
+    });
+
+    it("shows only the warnings about the uploaded models", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun, request }) => ({
+        ...replaceResult(dryRun, [
+          { row: 0, field: "input_price", message: "gpt-4o got cheaper" },
+          { row: 1, field: "model", message: "someone else's row" },
+          { row: 3, field: "output_price", message: "fresh-model is pricey" },
+        ]),
+        created: [request.rows[3]],
+      }));
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: UPLOAD },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+      const warnings = await screen.findByTestId("batch-preview-warnings");
+      expect(warnings).toHaveTextContent("Check these before saving");
+      expect(within(warnings).getAllByRole("listitem")).toHaveLength(2);
+      expect(warnings).not.toHaveTextContent("someone else's row");
     });
 
     it("explains what is wrong with the file instead of sending it", () => {
