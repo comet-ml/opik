@@ -2737,6 +2737,63 @@ async def test_track__async_generator_closed__underlying_generator_cleanup_runs(
     assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
 
 
+def test_track__generator_closed_early_inside_tracked_consumer__cleanup_updates_generator_span(
+    fake_backend,
+):
+    # Closing runs the generator's `finally`, which must see the generator's span as
+    # current, as each `next()` does, not the span of the function closing it.
+    @tracker.track
+    def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    def consumer():
+        generator = stream()
+        next(generator)
+        generator.close()
+
+    consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    stream_span = consumer_span.spans[0]
+    assert stream_span.name == "stream"
+    assert stream_span.metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_closed_early_inside_tracked_consumer__cleanup_updates_generator_span(
+    fake_backend,
+):
+    @tracker.track
+    async def stream():
+        try:
+            yield "token"
+        finally:
+            opik_context.update_current_span(metadata={"stream_closed": True})
+
+    @tracker.track
+    async def consumer():
+        generator = stream()
+        await generator.__anext__()
+        await generator.aclose()
+
+    await consumer()
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    consumer_span = fake_backend.trace_trees[0].spans[0]
+    stream_span = consumer_span.spans[0]
+    assert stream_span.name == "stream"
+    assert stream_span.metadata == {"stream_closed": True}
+    assert consumer_span.metadata is None
+
+
 def test_track__generator_cleanup_raises_on_close__error_recorded_on_span(fake_backend):
     # A generator whose `finally` fails during close must not be reported as a span
     # that succeeded. Ending on close would otherwise record the partial output with

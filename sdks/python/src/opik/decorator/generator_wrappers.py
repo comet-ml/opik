@@ -196,7 +196,15 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         claims to have succeeded.
         """
         try:
-            self._generator.close()
+            if self._created_span_data is None:
+                self._generator.close()
+            else:
+                # The generator's `finally` runs here, so it must see its own span
+                # as current, as it does in `__next__`.
+                with context_storage.temporary_context(
+                    self._created_span_data, self._created_trace_data
+                ):
+                    self._generator.close()
         except BaseException as exception:
             self._handle_generator_exception_before_raising(exception)
             raise
@@ -266,7 +274,13 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         instead of being replaced by a successful one.
         """
         try:
-            await self._generator.aclose()
+            if self._created_span_data is None:
+                await self._generator.aclose()
+            else:
+                with context_storage.temporary_context(
+                    self._created_span_data, self._created_trace_data
+                ):
+                    await self._generator.aclose()
         except BaseException as exception:
             self._handle_generator_exception_before_raising(exception)
             raise
