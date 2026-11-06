@@ -56,7 +56,6 @@ class StreamingExecutor(Generic[T]):
 
         # Callback state — accessed from worker threads under lock
         self._lock = threading.Lock()
-        self._results: List[T] = []
         self._score_totals: Dict[str, float] = defaultdict(float)
         self._score_counts: Dict[str, int] = defaultdict(int)
         self._group_completed: Dict[str, int] = defaultdict(int)
@@ -159,8 +158,6 @@ class StreamingExecutor(Generic[T]):
         result = future.result()
 
         with self._lock:
-            self._results.append(result)
-
             # Update running scores if result has score_results attribute
             if hasattr(result, "score_results") and isinstance(
                 result.score_results, list
@@ -228,12 +225,10 @@ class StreamingExecutor(Generic[T]):
             elapsed,
         )
 
-        # Re-raise first exception if any task failed
-        for future in self._submitted_futures:
-            future.result()
-
-        with self._lock:
-            return list(self._results)
+        # Re-raise first exception if any task failed. Past this point every task succeeded, so the
+        # results come from the futures: a future wakes its waiters before running its done-callbacks,
+        # so the list the callbacks append to can still be missing the last results here.
+        return [future.result() for future in self._submitted_futures]
 
 
 def execute(
