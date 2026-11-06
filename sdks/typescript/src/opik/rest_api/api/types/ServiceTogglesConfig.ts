@@ -26,7 +26,6 @@ export interface ServiceTogglesConfig {
     agentInsightsEnabled: boolean;
     agentInsightsGuidanceEnabled: boolean;
     projectHomepageEnabled: boolean;
-    onlineScoringTracingEnabled: boolean;
     annotationQueueAutomationEnabled: boolean;
     eventBridgeAlertsEnabled: boolean;
     defaultPageSize?: number;
