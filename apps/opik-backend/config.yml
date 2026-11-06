@@ -1765,6 +1765,10 @@ cacheManager:
     #   event. Kept short because a stale negative is silent: the events it turns away are dropped
     #   at the guard and there is no backfill, so this is the floor under the eviction on rule writes.
     annotation_queue_automations: ${CACHE_MANAGER_ANNOTATION_QUEUE_AUTOMATIONS_DURATION:-PT1S}
+    # Default: PT60S
+    # Description: Cache TTL for an organization's custom model prices, read once per span batch. A save evicts
+    #   the entry, so this only bounds how long a stale entry written back by a read that raced the save can live.
+    model_prices: ${CACHE_MANAGER_MODEL_PRICES_DURATION:-PT60S}
     # Default: PT1H
     # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
     # The estimate scans all of the project's spans, so cache misses are expensive by design.
