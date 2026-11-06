@@ -9,6 +9,8 @@ import { PRICE_FIELDS } from "./types";
 import type { BuiltInPrice } from "./litellm";
 import { perMillionToPerToken } from "./litellm";
 import { canonicalPrice, identityOf, toEditableRow } from "./rows";
+import { PRICE_LABELS, rowLabel } from "./describe";
+import { MAX_PRICE_PER_MILLION } from "./validation";
 
 export interface SingleSave {
   request: ModelPriceReplace;
@@ -131,3 +133,43 @@ export const blockingWarnings = (
         (warning) => !NOT_BLOCKING_FOR_CUSTOM_PRICES.has(warning.code),
       )
     : warnings;
+
+const OUT_OF_RANGE = /^(\S+) per 1M tokens is far from the built-in ([^:\s]+)/;
+const PER_TOKEN_HINT = "Prices in the file are per token.";
+
+const priceFieldOf = (field?: string | null): PriceField | undefined =>
+  PRICE_FIELDS.find((name) => name === field);
+
+const describeFieldProblem = (
+  problem: ModelPriceProblem,
+  field: PriceField,
+): string => {
+  const label = `${PRICE_LABELS[field]} price`;
+  if (problem.code === "price_too_high") {
+    return `${label} is over $${MAX_PRICE_PER_MILLION.toLocaleString(
+      "en-US",
+    )} per 1M tokens. ${PER_TOKEN_HINT}`;
+  }
+  if (problem.code === "price_out_of_range") {
+    const match = OUT_OF_RANGE.exec(problem.message);
+    const detail = match
+      ? `$${match[1]} per 1M tokens is far from the built-in $${match[2]}`
+      : "is far from the built-in price";
+    return `${label} ${detail}. ${PER_TOKEN_HINT}`;
+  }
+  return problem.message.startsWith(field)
+    ? `${label}${problem.message.slice(field.length)}`
+    : `${label}: ${problem.message}`;
+};
+
+export const describeBatchProblem = (
+  problem: ModelPriceProblem,
+  rows: ModelPriceRow[],
+): string => {
+  const row = typeof problem.row === "number" ? rows[problem.row] : undefined;
+  const field = priceFieldOf(problem.field);
+  const message = field
+    ? describeFieldProblem(problem, field)
+    : problem.message;
+  return row ? `${rowLabel(row)}: ${message}` : message;
+};

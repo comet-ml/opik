@@ -14,6 +14,8 @@ import { Tag } from "@/ui/tag";
 import { Textarea } from "@/ui/textarea";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 import {
   BuiltInPrice,
   CATALOG_TYPE_LABELS,
@@ -45,6 +47,21 @@ export type DrawerTarget = {
 };
 
 type Line = { id: number; field: PriceField; value: string; locked: boolean };
+
+const KeyName: React.FC<{ name: string }> = ({ name }) => (
+  <>
+    {name.split("_").map((part, index) => (
+      <React.Fragment key={index}>
+        {index > 0 && (
+          <>
+            _<wbr />
+          </>
+        )}
+        {part}
+      </React.Fragment>
+    ))}
+  </>
+);
 
 type ModelPriceDrawerProps = {
   open: boolean;
@@ -295,7 +312,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
         header={null}
         blockOverlayClose
       >
-        <div className="flex shrink-0 flex-col gap-2 px-6 pb-2 pt-6">
+        <div className="flex shrink-0 flex-col gap-2 px-6 pt-6">
           <div className="flex items-start justify-between gap-3">
             <SheetTitle className="comet-title-m break-all text-left font-mono">
               {title}
@@ -311,25 +328,21 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             {CATALOG_TYPE_LABELS[type]} price for {providerLabel}
           </SheetDescription>
           <div className="flex flex-wrap gap-1.5">
-            <Tag variant={TYPE_TAG_VARIANT[type]} size="sm">
+            <Tag variant={TYPE_TAG_VARIANT[type]}>
               {CATALOG_TYPE_LABELS[type]}
             </Tag>
-            <Tag variant="default" size="sm">
-              {providerLabel}
-            </Tag>
+            <Tag variant="default">{providerLabel}</Tag>
             {entry?.mode && (
-              <Tag variant="gray" size="sm">
-                {MODE_LABELS[entry.mode] ?? entry.mode}
-              </Tag>
+              <Tag variant="gray">{MODE_LABELS[entry.mode] ?? entry.mode}</Tag>
             )}
             {entry?.lastUpdatedAt && (
-              <Tag variant="default" size="sm">
+              <Tag variant="default">
                 Updated {formatDay(entry.lastUpdatedAt)}
               </Tag>
             )}
           </div>
         </div>
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-4 pt-2">
           {isNew && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -376,14 +389,13 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
             </div>
           )}
 
-          {(isNew || type === "custom") && (
+          {canEdit && (isNew || type === "custom") && (
             <div className="flex gap-1 rounded-md border p-1" role="group">
               {(["fixed", "alias"] as const).map((option) => (
                 <Button
                   key={option}
                   size="xs"
                   variant={kind === option ? "secondary" : "ghost"}
-                  disabled={readOnly}
                   onClick={() => {
                     resetFeedback();
                     setKind(option);
@@ -442,7 +454,7 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
               <div>
                 <h4 className="comet-body-s-accented">Prices</h4>
                 <p className="comet-body-xs text-muted-slate">{helpText}</p>
-                {isCustomPrice && !cachePriced && (
+                {canEdit && isCustomPrice && !cachePriced && (
                   <p className="comet-body-xs mt-1 text-light-slate">
                     Cached tokens are billed at the input price unless you add a
                     cache price.
@@ -482,7 +494,12 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                         />
                       )}
                       <div className="relative flex-1">
-                        <span className="comet-body-s absolute left-3 top-1/2 -translate-y-1/2 text-light-slate">
+                        <span
+                          className={cn(
+                            "comet-body-s absolute left-3 top-1/2 -translate-y-1/2",
+                            readOnly ? "text-light-slate" : "text-foreground",
+                          )}
+                        >
                           $
                         </span>
                         <Input
@@ -503,18 +520,22 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                         </span>
                       </div>
                       {canReset ? (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Reset ${
-                            PRICE_LABELS[line.field]
-                          } to the built-in price`}
-                          onClick={() =>
-                            updateLine(line.id, { value: builtInValue ?? "" })
-                          }
-                        >
-                          <RotateCcw className="size-3.5" />
-                        </Button>
+                        <TooltipWrapper content="Reset to built-in price">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Reset ${
+                              PRICE_LABELS[line.field]
+                            } to the built-in price`}
+                            onClick={() =>
+                              updateLine(line.id, {
+                                value: builtInValue ?? "",
+                              })
+                            }
+                          >
+                            <RotateCcw className="size-3.5" />
+                          </Button>
+                        </TooltipWrapper>
                       ) : !line.locked && canEdit ? (
                         <Button
                           variant="ghost"
@@ -529,8 +550,8 @@ const ModelPriceDrawer: React.FC<ModelPriceDrawerProps> = ({
                       )}
                     </div>
                     <div className="comet-body-xs flex gap-2 font-mono text-light-slate">
-                      <span className="flex-1 break-all pl-3">
-                        {LITELLM_KEYS[line.field]}
+                      <span className="flex-1 break-words pl-3">
+                        <KeyName name={LITELLM_KEYS[line.field]} />
                       </span>
                       <span className="flex-1 truncate pl-3">
                         {describePerToken(

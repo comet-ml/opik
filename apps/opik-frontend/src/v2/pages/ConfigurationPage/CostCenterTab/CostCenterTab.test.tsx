@@ -146,7 +146,7 @@ const withFilters = (filters: object[]) =>
 const quickAccessModels = () =>
   within(screen.getByTestId("quick-access"))
     .getAllByRole("button", { name: /^Open / })
-    .map((card) => card.querySelector(".font-mono")?.textContent);
+    .map((card) => card.textContent);
 
 const ADMIN: ModelPricesAccess = {
   canEdit: true,
@@ -207,6 +207,16 @@ describe("CostCenterTab", () => {
       expect(screen.queryByRole("button", { name: /Add price/ })).toBeNull();
     });
 
+    it("hides the controls a member can't use on a custom model", () => {
+      renderTab({ canEdit: false, isPending: false, organizationName: "Acme" });
+
+      openRow("acme-llama-70b");
+
+      expect(priceInput("Input")).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Own price" })).toBeNull();
+      expect(screen.queryByText(/Cached tokens are billed/)).toBeNull();
+    });
+
     it("stays read-only while the role is loading, without the view-only badge", () => {
       renderTab({ canEdit: true, isPending: true, organizationName: "Acme" });
 
@@ -262,6 +272,9 @@ describe("CostCenterTab", () => {
       expect(within(rowOf("gpt-4o")).getByText("Override")).toBeVisible();
       expect(within(rowOf("gpt-4o")).getByText("$2.00")).toBeVisible();
       expect(within(rowOf("gpt-4o")).getByText("$10.00")).toBeVisible();
+      expect(
+        within(rowOf("acme-llama-70b")).getAllByText("$0.600"),
+      ).toHaveLength(2);
       expect(within(rowOf("gpt-4o")).getByText("+1 field")).toBeVisible();
       expect(within(rowOf("gpt-4o-mini")).getByText("Default")).toBeVisible();
       expect(within(rowOf("acme-llama-70b")).getByText("Custom")).toBeVisible();
@@ -443,6 +456,37 @@ describe("CostCenterTab", () => {
       );
       expect(quickAccessModels()).not.toContain("gpt-4o-mini");
     });
+
+    it("stops pinning once quick access holds 8 models", () => {
+      const extra = ["m-1", "m-2", "m-3", "m-4"].map((model) => ({
+        model,
+        provider: "acme",
+        mode: "chat",
+        input_price: "1",
+        output_price: "2",
+      }));
+      BUILT_INS.push(...extra);
+      try {
+        renderTab(ADMIN);
+        const pinButton = (model: string) =>
+          within(rowOf(model)).getByRole("button", {
+            name: `Pin ${model} to quick access`,
+          });
+        const models = shownModels() as string[];
+        models
+          .slice(0, 8)
+          .forEach((model) => fireEvent.click(pinButton(model)));
+
+        expect(quickAccessModels()).toHaveLength(8);
+        const ninth = pinButton(models[8]);
+        expect(ninth).toHaveAttribute("aria-disabled", "true");
+        fireEvent.click(ninth);
+        expect(quickAccessModels()).not.toContain(models[8]);
+        expect(screen.queryByLabelText("Model name")).toBeNull();
+      } finally {
+        BUILT_INS.splice(3);
+      }
+    });
   });
 
   describe("editing one model", () => {
@@ -456,6 +500,18 @@ describe("CostCenterTab", () => {
 
       expect(notPrevented).toBe(false);
       expect(priceInput("Input")).toBeInTheDocument();
+    });
+
+    it("gives focus back to the row once the drawer closes", async () => {
+      renderTab(ADMIN);
+
+      const row = rowOf("gpt-4o");
+      row.focus();
+      fireEvent.keyDown(row, { key: "Enter" });
+      expect(row).not.toHaveFocus();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      await waitFor(() => expect(row).toHaveFocus());
     });
 
     it("asks before throwing away unsaved edits", () => {
@@ -839,6 +895,83 @@ describe("CostCenterTab", () => {
       await waitFor(() =>
         expect(mutateAsync.mock.lastCall![0].dryRun).toBe(false),
       );
+    });
+
+    it("counts the uploaded models that stay the same", async () => {
+      mutateAsync.mockImplementation(async ({ dryRun, request }) => ({
+        ...replaceResult(dryRun),
+        created: [request.rows[3]],
+        updated: [{ before: LIST.rows[0], after: request.rows[0] }],
+      }));
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: {
+          value: JSON.stringify({
+            ...JSON.parse(UPLOAD),
+            "acme-llama-70b": {
+              input_cost_per_token: 0.0000006,
+              output_cost_per_token: 0.0000006,
+            },
+          }),
+        },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+      expect(await screen.findByTestId("batch-preview")).toHaveTextContent(
+        "1 added, 1 changed, 1 unchanged",
+      );
+    });
+
+    it("names the model and the field when the backend rejects a price", async () => {
+      mutateAsync.mockRejectedValue({
+        response: {
+          status: 422,
+          data: {
+            errors: [
+              {
+                row: 0,
+                field: "input_price",
+                code: "price_too_high",
+                message: "input_price is over 100000 per 1M tokens",
+              },
+            ],
+            warnings: [],
+          },
+        },
+      });
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: UPLOAD },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+
+      expect(
+        await screen.findByText(
+          "gpt-4o on openai: Input price is over $100,000 per 1M tokens. Prices in the file are per token.",
+        ),
+      ).toBeVisible();
+    });
+
+    it("asks before throwing away a pasted update", () => {
+      renderTab(ADMIN);
+
+      fireEvent.click(screen.getByRole("button", { name: /Batch update/ }));
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: UPLOAD },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+
+      expect(screen.getByRole("textbox")).toHaveValue(UPLOAD);
+
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+      expect(screen.queryByText("Batch update prices")).toBeNull();
     });
 
     it("shows only the warnings about the uploaded models", async () => {

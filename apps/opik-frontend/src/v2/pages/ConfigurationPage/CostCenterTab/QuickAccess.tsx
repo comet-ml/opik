@@ -34,24 +34,20 @@ const QuickAccess: React.FC<QuickAccessProps> = ({
           return (
             <div
               key={entry.key}
-              role="button"
-              tabIndex={0}
-              aria-label={`Open ${entry.model}`}
-              className="flex min-w-0 cursor-pointer flex-col gap-1 rounded-md border bg-background p-3 text-left outline-none hover:border-primary focus-visible:ring-1 focus-visible:ring-ring"
-              onClick={() => onOpen(entry)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                onOpen(entry);
-              }}
+              className="relative flex min-w-0 flex-col gap-1 rounded-md border bg-background p-3 hover:border-primary"
             >
               <span className="flex items-start justify-between gap-2">
-                <span
-                  className="truncate font-mono text-[15px] font-semibold leading-5"
+                {/* ::after stretches this button over the card, so the whole
+                    card is clickable without nesting the pin inside a button. */}
+                <button
+                  type="button"
+                  className="min-w-0 truncate text-left font-mono text-[15px] font-semibold leading-5 outline-none after:absolute after:inset-0 after:rounded-md after:content-[''] focus-visible:after:ring-1 focus-visible:after:ring-ring"
                   title={entry.model}
+                  aria-label={`Open ${entry.model}`}
+                  onClick={() => onOpen(entry)}
                 >
                   {entry.model}
-                </span>
+                </button>
                 <span className="flex shrink-0 items-center gap-1">
                   <TooltipWrapper
                     content={
@@ -61,7 +57,7 @@ const QuickAccess: React.FC<QuickAccessProps> = ({
                     <button
                       type="button"
                       className={cn(
-                        "flex size-5 items-center justify-center rounded hover:bg-primary-100",
+                        "relative z-10 flex size-5 items-center justify-center rounded hover:bg-primary-100",
                         pinned ? "text-warning-box-text" : "text-light-slate",
                       )}
                       aria-label={
@@ -70,11 +66,7 @@ const QuickAccess: React.FC<QuickAccessProps> = ({
                           : `Pin ${entry.model} to quick access`
                       }
                       aria-pressed={pinned}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onTogglePin(entry);
-                      }}
-                      onKeyDown={(event) => event.stopPropagation()}
+                      onClick={() => onTogglePin(entry)}
                     >
                       <Star
                         className={cn("size-3.5", pinned && "fill-current")}
@@ -97,7 +89,7 @@ const QuickAccess: React.FC<QuickAccessProps> = ({
                 <span className="text-foreground">
                   {formatPrice(entry.prices.input_price) ?? "—"}
                 </span>
-                {"  "}out{" "}
+                <span className="ml-2">out</span>{" "}
                 <span className="text-foreground">
                   {formatPrice(entry.prices.output_price) ?? "—"}
                 </span>

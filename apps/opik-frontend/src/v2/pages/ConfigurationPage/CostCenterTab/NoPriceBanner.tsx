@@ -26,7 +26,7 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
   } in your ${scope} ${count === 1 ? "has" : "have"} no price`;
   return (
     <div
-      className="mb-6 rounded-md border border-warning-box-text/30 bg-warning-box-bg"
+      className="mb-6 rounded-md border border-warning-box-text/30 bg-warning-box-bg dark:bg-warning-box-bg/30"
       data-testid="no-price-banner"
     >
       <button
@@ -47,7 +47,7 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
       </button>
       {open && (
         <div className="px-4 pb-4">
-          <p className="comet-body-xs mb-3 text-warning-box-text/80">
+          <p className="comet-body-xs mb-3 text-warning-box-text">
             These appear in your spans but aren&apos;t in the price table, so
             their cost can&apos;t be estimated.
           </p>
@@ -57,14 +57,16 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
                 key={`${model.model}|${model.provider}`}
                 className="flex items-center gap-3 px-3 py-2"
               >
-                <span className="comet-code break-all">{model.model}</span>
+                <span className="break-all font-mono text-[15px] leading-5">
+                  {model.model}
+                </span>
                 <span className="comet-body-xs flex-1 text-muted-slate">
                   {model.provider ? `${model.provider} · ` : ""}used on{" "}
                   {model.days_used} {model.days_used === 1 ? "day" : "days"}
                 </span>
                 {canEdit && (
                   <Button
-                    size="xs"
+                    size="2xs"
                     variant="outline"
                     onClick={() => onAddPrices(model)}
                   >

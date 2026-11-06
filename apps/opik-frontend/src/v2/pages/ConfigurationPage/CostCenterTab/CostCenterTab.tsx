@@ -1,4 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
@@ -33,6 +39,7 @@ import BatchUpdateDrawer from "./BatchUpdateDrawer";
 import NoPriceBanner from "./NoPriceBanner";
 import QuickAccess from "./QuickAccess";
 import useBuiltInPrices from "./useBuiltInPrices";
+import { MAX_QUICK_ACCESS } from "./format";
 
 const HISTORY_PAGE = { page: 1, size: 100 };
 const PAGE_SIZES = [25, 50, 100];
@@ -45,7 +52,6 @@ const QUICK_ACCESS_DEFAULTS = [
 
 const PINNED_STORAGE_KEY = "cost-center:pinned-models";
 const IS_LABEL = { "=": "is" } as const;
-const MAX_QUICK_ACCESS = 8;
 
 const identityKey = (model: string, provider: string) =>
   identityOf({ model, provider, kind: "fixed" });
@@ -75,6 +81,23 @@ const CostCenterTab: React.FC = () => {
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget>();
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const drawerKey = useRef(0);
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+  const isAnyDrawerOpen = Boolean(drawerTarget) || isBatchOpen;
+
+  // Radix hands focus back only to its own trigger, and these drawers are
+  // opened from rows and cards, so without this focus falls to <body>.
+  useEffect(() => {
+    if (isAnyDrawerOpen) return;
+    returnFocusTo.current?.focus();
+    returnFocusTo.current = null;
+  }, [isAnyDrawerOpen]);
+
+  const rememberFocus = () => {
+    returnFocusTo.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+  };
 
   const catalog = useMemo(
     () => buildCatalog(builtIns ?? [], list?.rows ?? []),
@@ -214,10 +237,16 @@ const CostCenterTab: React.FC = () => {
     [setPinned],
   );
 
+  const pinnedEntries = useMemo(
+    () =>
+      pinned
+        .map((key) => byIdentity.get(key))
+        .filter((entry): entry is CatalogEntry => Boolean(entry)),
+    [pinned, byIdentity],
+  );
+  const canPin = pinnedEntries.length < MAX_QUICK_ACCESS;
+
   const quickAccess = useMemo(() => {
-    const pinnedEntries = pinned
-      .map((key) => byIdentity.get(key))
-      .filter((entry): entry is CatalogEntry => Boolean(entry));
     const used = [...(modelsUsed?.content ?? [])]
       .filter((model) => model.price_source !== "none")
       .sort(byMostUsed)
@@ -231,9 +260,10 @@ const CostCenterTab: React.FC = () => {
     return [...pinnedEntries, ...used, ...defaults]
       .filter((entry) => !seen.has(entry.key) && seen.add(entry.key))
       .slice(0, limit);
-  }, [pinned, modelsUsed, byIdentity]);
+  }, [pinnedEntries, modelsUsed, byIdentity]);
 
   const openDrawer = (target: DrawerTarget) => {
+    rememberFocus();
     drawerKey.current += 1;
     setDrawerTarget(target);
   };
@@ -293,8 +323,8 @@ const CostCenterTab: React.FC = () => {
         onTogglePin={togglePin}
       />
 
-      <div className="mb-3 flex flex-wrap items-start gap-2">
-        <div className="min-w-0 flex-[1_1_520px]">
+      <div className="mb-3 flex flex-wrap items-start gap-1.5">
+        <div className="min-w-0 flex-[1_1_510px]">
           <FilterChipBar
             chipsPinned={chips.chipsPinned}
             chipsUnpinned={chips.chipsUnpinned}
@@ -320,13 +350,19 @@ const CostCenterTab: React.FC = () => {
           />
         </div>
         {canEdit && (
-          <div className="ml-auto flex shrink-0 gap-2">
+          <div className="ml-auto flex shrink-0 gap-1.5">
             <Button size="sm" variant="outline" onClick={() => openDrawer({})}>
-              <Plus className="mr-1.5 size-3.5" />
+              <Plus className="mr-1.5 hidden size-3.5 xl:block" />
               Add model
             </Button>
-            <Button size="sm" onClick={() => setIsBatchOpen(true)}>
-              <Layers className="mr-1.5 size-3.5" />
+            <Button
+              size="sm"
+              onClick={() => {
+                rememberFocus();
+                setIsBatchOpen(true);
+              }}
+            >
+              <Layers className="mr-1.5 hidden size-3.5 xl:block" />
               Batch update
             </Button>
           </div>
@@ -350,6 +386,7 @@ const CostCenterTab: React.FC = () => {
             }}
             onOpen={(entry) => openDrawer({ entry })}
             isPinned={isPinned}
+            canPin={canPin}
             onTogglePin={togglePin}
           />
           <div className="pt-4">

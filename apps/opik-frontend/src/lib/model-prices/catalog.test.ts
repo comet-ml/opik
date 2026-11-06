@@ -7,6 +7,7 @@ import {
 } from "./catalog";
 import {
   blockingWarnings,
+  describeBatchProblem,
   describePerToken,
   overrideFields,
   problemsForRow,
@@ -284,6 +285,52 @@ describe("saving one model", () => {
       "shadows_builtin",
     ]);
     expect(blockingWarnings(warnings, false)).toHaveLength(4);
+  });
+
+  it("names the model and the field in a batch problem", () => {
+    const uploaded = [
+      { model: "gpt-5", provider: "openai", kind: "fixed" as const },
+      { model: "acme", provider: "", kind: "fixed" as const },
+    ];
+    const explain = (problem: object) =>
+      describeBatchProblem(
+        { row: 0, field: null, code: "x", message: "", ...problem },
+        uploaded,
+      );
+
+    expect(
+      explain({
+        field: "input_price",
+        code: "price_too_high",
+        message: "input_price is over 100000 per 1M tokens",
+      }),
+    ).toBe(
+      "gpt-5 on openai: Input price is over $100,000 per 1M tokens. Prices in the file are per token.",
+    );
+    expect(
+      explain({
+        row: 1,
+        field: "cache_read_price",
+        code: "price_out_of_range",
+        message:
+          "25 per 1M tokens is far from the built-in 2.5: prices are per 1M tokens, not per token",
+      }),
+    ).toBe(
+      "acme on any provider: Cache read price $25 per 1M tokens is far from the built-in $2.5. Prices in the file are per token.",
+    );
+    expect(
+      explain({
+        field: "output_price",
+        code: "negative_price",
+        message: "output_price can't be negative",
+      }),
+    ).toBe("gpt-5 on openai: Output price can't be negative");
+    expect(
+      explain({ field: "model", code: "duplicate_row", message: "Twice" }),
+    ).toBe("gpt-5 on openai: Twice");
+    expect(
+      explain({ row: null, code: "too_many_rows", message: "Too many" }),
+    ).toBe("Too many");
   });
 
   it("keeps the problems of the saved row and of the whole list", () => {

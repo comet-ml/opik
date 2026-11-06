@@ -18,7 +18,12 @@ import {
   describeAliasTarget,
   extraFields,
 } from "@/lib/model-prices";
-import { TYPE_TAG_VARIANT, formatDay, formatPrice } from "./format";
+import {
+  MAX_QUICK_ACCESS,
+  TYPE_TAG_VARIANT,
+  formatDay,
+  formatPrice,
+} from "./format";
 
 type CatalogTableProps = {
   entries: CatalogEntry[];
@@ -26,6 +31,7 @@ type CatalogTableProps = {
   onToggleSort: () => void;
   onOpen: (entry: CatalogEntry) => void;
   isPinned: (entry: CatalogEntry) => boolean;
+  canPin: boolean;
   onTogglePin: (entry: CatalogEntry) => void;
 };
 
@@ -70,6 +76,7 @@ const MoreFields: React.FC<{ entry: CatalogEntry }> = ({ entry }) => {
 };
 
 const WIDE_ONLY = "hidden xl:table-cell";
+const PRICE_HEAD_CLASS = cn(HEAD_CLASS, "w-[148px] text-right");
 
 const Cell: React.FC<{
   children: React.ReactNode;
@@ -82,11 +89,16 @@ const Cell: React.FC<{
     <div
       className={cn(
         "flex h-11 min-w-0 items-center overflow-hidden whitespace-nowrap",
-        align === "right" && "justify-end",
         className,
       )}
     >
-      {children}
+      {align === "right" ? (
+        // justify-end would push overflow out on the left and cut the "$";
+        // an auto margin keeps the start visible and clips the end instead.
+        <span className="ml-auto min-w-0 truncate">{children}</span>
+      ) : (
+        children
+      )}
     </div>
   </TableCell>
 );
@@ -97,6 +109,7 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
   onToggleSort,
   onOpen,
   isPinned,
+  canPin,
   onTogglePin,
 }) => {
   const SortIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
@@ -125,12 +138,8 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
               Provider
             </TableHead>
             <TableHead className={cn(HEAD_CLASS, "w-[104px]")}>Type</TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[128px] text-right")}>
-              Input
-            </TableHead>
-            <TableHead className={cn(HEAD_CLASS, "w-[128px] text-right")}>
-              Output
-            </TableHead>
+            <TableHead className={PRICE_HEAD_CLASS}>Input</TableHead>
+            <TableHead className={PRICE_HEAD_CLASS}>Output</TableHead>
             <TableHead className={cn(HEAD_CLASS, WIDE_ONLY, "w-[96px]")}>
               More
             </TableHead>
@@ -144,6 +153,7 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
         <TableBody>
           {entries.map((entry) => {
             const pinned = isPinned(entry);
+            const pinBlocked = !pinned && !canPin;
             return (
               <TableRow
                 key={entry.key}
@@ -160,16 +170,24 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                 <TableCell className="w-12 px-0">
                   <TooltipWrapper
                     content={
-                      pinned ? "Unpin from quick access" : "Pin to quick access"
+                      pinned
+                        ? "Unpin from quick access"
+                        : pinBlocked
+                          ? `Quick access holds ${MAX_QUICK_ACCESS} models`
+                          : "Pin to quick access"
                     }
                   >
                     <button
                       type="button"
+                      tabIndex={-1}
                       className={cn(
-                        "mx-auto flex size-7 items-center justify-center rounded text-muted-slate hover:bg-primary-100 hover:text-foreground focus-visible:opacity-100",
+                        "mx-auto flex size-7 items-center justify-center rounded text-muted-slate",
                         pinned
                           ? "text-warning-box-text"
                           : "opacity-0 group-hover:opacity-100",
+                        pinBlocked
+                          ? "cursor-not-allowed group-hover:opacity-40"
+                          : "hover:bg-primary-100 hover:text-foreground",
                       )}
                       aria-label={
                         pinned
@@ -177,9 +195,10 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                           : `Pin ${entry.model} to quick access`
                       }
                       aria-pressed={pinned}
+                      aria-disabled={pinBlocked}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onTogglePin(entry);
+                        if (!pinBlocked) onTogglePin(entry);
                       }}
                       onKeyDown={(event) => event.stopPropagation()}
                     >
@@ -216,11 +235,9 @@ const CatalogTable: React.FC<CatalogTableProps> = ({
                 </Cell>
                 {entry.row?.kind === "alias" ? (
                   <Cell colSpan={2} align="right" className="comet-body-s">
-                    <span className="truncate">
-                      Priced like{" "}
-                      <span className="comet-code">
-                        {describeAliasTarget(entry.row)}
-                      </span>
+                    Priced like{" "}
+                    <span className="comet-code">
+                      {describeAliasTarget(entry.row)}
                     </span>
                   </Cell>
                 ) : (

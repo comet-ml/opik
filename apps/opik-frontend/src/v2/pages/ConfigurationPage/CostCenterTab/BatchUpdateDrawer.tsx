@@ -20,11 +20,12 @@ import { Button } from "@/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
 import { cn } from "@/lib/utils";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import {
   ModelPriceList,
-  ModelPriceProblem,
   ModelPriceReplace,
   ModelPriceReplaceResult,
+  describeBatchProblem,
   describeReplaceResult,
   parseLiteLlmUpload,
   problemsForRows,
@@ -67,7 +68,8 @@ const SKILL_STEPS = [
 type Preview = {
   request: ModelPriceReplace;
   result: ModelPriceReplaceResult;
-  warnings: ModelPriceProblem[];
+  uploaded: number;
+  warnings: string[];
 };
 
 const CopyTextButton: React.FC<{ text: string }> = ({ text }) => {
@@ -147,11 +149,20 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   const { send, isSaving } = useSaveModelPrices();
   const [text, setText] = useState("");
   const [parseErrors, setParseErrors] = useState<string[]>([]);
-  const [serverErrors, setServerErrors] = useState<ModelPriceProblem[]>([]);
+  const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview>();
   const [isDragging, setIsDragging] = useState(false);
   const [isFormatOpen, setIsFormatOpen] = useState(false);
   const [isSkillOpen, setIsSkillOpen] = useState(false);
+  const [isDiscardOpen, setIsDiscardOpen] = useState(false);
+
+  const requestClose = () => {
+    if (text.trim()) {
+      setIsDiscardOpen(true);
+      return;
+    }
+    setOpen(false);
+  };
 
   const changeText = (value: string) => {
     setText(value);
@@ -179,10 +190,17 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
       setPreview({
         request,
         result: outcome.result,
-        warnings: problemsForRows(outcome.result.warnings, positions),
+        uploaded: positions.length,
+        warnings: problemsForRows(outcome.result.warnings, positions).map(
+          (warning) => describeBatchProblem(warning, request.rows),
+        ),
       });
     } else if (outcome.kind === "invalid") {
-      setServerErrors(outcome.errors);
+      setServerErrors(
+        outcome.errors.map((problem) =>
+          describeBatchProblem(problem, request.rows),
+        ),
+      );
     }
   };
 
@@ -192,7 +210,11 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
     if (outcome.kind === "saved") {
       setOpen(false);
     } else if (outcome.kind === "invalid") {
-      setServerErrors(outcome.errors);
+      setServerErrors(
+        outcome.errors.map((problem) =>
+          describeBatchProblem(problem, preview.request.rows),
+        ),
+      );
       setPreview(undefined);
     } else {
       setPreview(undefined);
@@ -203,9 +225,22 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
   const changeCount = described
     ? described.created.length + described.updated.length
     : 0;
+  const unchangedCount = preview
+    ? Math.max(0, preview.uploaded - changeCount)
+    : 0;
+  const summary = described
+    ? [
+        `${described.created.length} added`,
+        `${described.updated.length} changed`,
+        ...(unchangedCount ? [`${unchangedCount} unchanged`] : []),
+      ].join(", ")
+    : "";
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => (next ? setOpen(true) : requestClose())}
+    >
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[720px]"
@@ -288,7 +323,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                 value={text}
                 onChange={(event) => changeText(event.target.value)}
               />
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <Disclosure
                   label="File format"
                   open={isFormatOpen}
@@ -336,8 +371,8 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
               )}
               {serverErrors.length > 0 && (
                 <ul className="comet-body-s space-y-1 rounded-md border border-destructive/40 p-3 text-destructive">
-                  {serverErrors.map((problem, i) => (
-                    <li key={i}>{problem.message}</li>
+                  {serverErrors.map((error, i) => (
+                    <li key={i}>{error}</li>
                   ))}
                 </ul>
               )}
@@ -347,9 +382,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                   data-testid="batch-preview"
                 >
                   <p className="comet-body-s-accented">
-                    {changeCount
-                      ? `${described.created.length} added, ${described.updated.length} changed`
-                      : "Nothing changes"}
+                    {changeCount ? summary : "Nothing changes"}
                   </p>
                   <ul className="list-disc pl-5 text-muted-slate">
                     {described.created.map((line, i) => (
@@ -369,7 +402,7 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
                       </p>
                       <ul className="list-disc pl-5">
                         {preview.warnings.map((warning, i) => (
-                          <li key={i}>{warning.message}</li>
+                          <li key={i}>{warning}</li>
                         ))}
                       </ul>
                     </div>
@@ -418,6 +451,16 @@ const BatchUpdateDrawer: React.FC<BatchUpdateDrawerProps> = ({
           </Tabs>
         </div>
       </SheetContent>
+      <ConfirmDialog
+        open={isDiscardOpen}
+        setOpen={setIsDiscardOpen}
+        onConfirm={() => setOpen(false)}
+        title="Discard this update?"
+        description="The prices you pasted or uploaded here aren't saved yet."
+        confirmText="Discard"
+        cancelText="Keep editing"
+        confirmButtonVariant="destructive"
+      />
     </Sheet>
   );
 };
