@@ -99,6 +99,10 @@ public class InferenceClient {
         clientConfig.setGzipEnabledForRequests(false);
         clientConfig.setChunkedEncodingEnabled(false);
         clientConfig.setValidateAfterInactivityPeriod(io.dropwizard.util.Duration.seconds(5));
+        clientConfig.setTimeToLive(io.dropwizard.util.Duration.minutes(5));
+        // Dropwizard's default of 0 closes every connection after one call, so each check paid a new TCP and TLS
+        // handshake. Idle connections are dropped before the usual 60 s load balancer idle timeout.
+        clientConfig.setKeepAlive(io.dropwizard.util.Duration.seconds(30));
         clientConfig.setUserAgent(Optional.of("opik-inference-decide"));
         // A thread per call in flight, started when needed: the permits keep calls within the cap, so none queues.
         var executor = new ThreadPoolExecutor(0, maxConcurrentDecides, 60, TimeUnit.SECONDS, new SynchronousQueue<>(),
