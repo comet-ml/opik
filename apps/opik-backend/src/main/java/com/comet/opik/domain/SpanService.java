@@ -22,7 +22,9 @@ import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.domain.cost.ModelPriceService;
+import com.comet.opik.domain.cost.ModelUsageService;
 import com.comet.opik.domain.cost.PriceLayers;
+import com.comet.opik.domain.cost.UsedModel;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -41,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -88,6 +91,7 @@ public class SpanService {
     private final @NonNull SpanWeeksDAO spanWeeksDAO;
     private final @NonNull @Config OpikConfiguration config;
     private final @NonNull ModelPriceService modelPriceService;
+    private final @NonNull ModelUsageService modelUsageService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -232,7 +236,9 @@ public class SpanService {
                                 .projectName(projectName)
                                 .build();
                         return priceLayersFor(List.of(processedSpan))
-                                .flatMap(priceLayers -> spanDAO.insert(processedSpan, priceLayers))
+                                .flatMap(priceLayers -> spanDAO.insert(processedSpan, priceLayers)
+                                        .doOnSuccess(__ -> recordModelsUsed(priceLayers, workspaceId,
+                                                workspaceName, List.of(savedSpan))))
                                 .doOnSuccess(__ -> eventBus.post(
                                         new SpansCreated(List.of(savedSpan), workspaceId, userName, workspaceName)))
                                 .thenReturn(processedSpan.id());
@@ -301,7 +307,10 @@ public class SpanService {
                     spanUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate -> priceLayersFor(processedUpdate)
                             .flatMap(priceLayers -> spanDAO.partialInsert(id, project.id(), processedUpdate,
-                                    priceLayers)));
+                                    priceLayers)
+                                    .doOnSuccess(__ -> recordModelsUsed(priceLayers, workspaceId,
+                                            ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""), projectName,
+                                            processedUpdate.model(), processedUpdate.provider()))));
         });
     }
 
@@ -373,7 +382,12 @@ public class SpanService {
                     .flatMap(processedUpdate ->
             // Step 3: Update the span in database transaction
             priceLayersFor(processedUpdate)
-                    .flatMap(priceLayers -> spanDAO.update(id, processedUpdate, existingSpan, priceLayers))
+                    .flatMap(priceLayers -> spanDAO.update(id, processedUpdate, existingSpan, priceLayers)
+                            .doOnSuccess(__ -> recordModelsUsed(priceLayers, workspaceId,
+                                    ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""), projectName,
+                                    StringUtils.defaultIfBlank(processedUpdate.model(), existingSpan.model()),
+                                    StringUtils.defaultIfBlank(processedUpdate.provider(),
+                                            existingSpan.provider()))))
                     .flatMap(updateResult -> {
                         // Step 4: Delete only auto-stripped attachments from the old data
                         // User-uploaded attachments are preserved unless explicitly removed by user
@@ -454,7 +468,9 @@ public class SpanService {
                     return resolveProjects
                             .flatMap(this::stripAttachmentsFromSpanBatch)
                             .flatMap(spans -> priceLayersFor(spans)
-                                    .flatMap(priceLayers -> spanDAO.batchInsert(spans, priceLayers))
+                                    .flatMap(priceLayers -> spanDAO.batchInsert(spans, priceLayers)
+                                            .doOnSuccess(__ -> recordModelsUsed(priceLayers, workspaceId,
+                                                    workspaceName, spans)))
                                     .doOnSuccess(__ -> eventBus.post(
                                             new SpansCreated(spans, workspaceId, userName, workspaceName))));
                 }));
@@ -471,6 +487,25 @@ public class SpanService {
         boolean toPrice = spanUpdate.totalEstimatedCost() == null
                 && (spanUpdate.usage() != null || spanUpdate.model() != null || spanUpdate.provider() != null);
         return toPrice ? modelPriceService.layersFor() : Mono.just(PriceLayers.BUILT_IN_ONLY);
+    }
+
+    // Demo projects are skipped, or every new workspace would list the demo's models as used.
+    private void recordModelsUsed(PriceLayers priceLayers, String workspaceId, String workspaceName,
+            List<Span> spans) {
+        var models = spans.stream()
+                .filter(span -> !DemoData.PROJECTS.contains(WorkspaceUtils.getProjectName(span.projectName())))
+                .flatMap(span -> UsedModel.of(span.model(), span.provider()).stream())
+                .toList();
+        modelUsageService.record(priceLayers, workspaceId, workspaceName, models);
+    }
+
+    private void recordModelsUsed(PriceLayers priceLayers, String workspaceId, String workspaceName,
+            String projectName, String model, String provider) {
+        if (DemoData.PROJECTS.contains(projectName)) {
+            return;
+        }
+        UsedModel.of(model, provider).ifPresent(usedModel -> modelUsageService.record(priceLayers, workspaceId,
+                workspaceName, List.of(usedModel)));
     }
 
     private Mono<List<Span>> stripAttachmentsFromSpanBatch(List<Span> spans) {

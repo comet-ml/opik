@@ -8,8 +8,10 @@ import com.comet.opik.api.modelprice.CustomModelPriceReplace;
 import com.comet.opik.api.modelprice.CustomModelPriceReplaceResult;
 import com.comet.opik.api.modelprice.CustomModelPriceResolution;
 import com.comet.opik.api.modelprice.CustomModelPriceResolveRequest;
+import com.comet.opik.api.modelprice.CustomModelPricesUsed;
 import com.comet.opik.domain.cost.ModelPriceService;
 import com.comet.opik.domain.cost.ModelPriceValidationException;
+import com.comet.opik.domain.cost.ModelUsageService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -58,6 +60,7 @@ public class ModelPricesResource {
     static final String DISABLED = "Custom model prices are disabled";
 
     private final @NonNull ModelPriceService modelPriceService;
+    private final @NonNull ModelUsageService modelUsageService;
     private final @NonNull OrganizationResolver organizationResolver;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull OpikConfiguration config;
@@ -139,6 +142,25 @@ public class ModelPricesResource {
                     .block();
             log.info("Found model price history, workspace '{}', total '{}'", workspaceId, history.total());
             return Response.ok(history).build();
+        });
+    }
+
+    @GET
+    @Path("/models-used")
+    @Operation(operationId = "findModelsUsed", summary = "Find the models the organization used", description = "Every model and provider the organization's spans used in the last 30 days, most used first, with the workspaces that used it and where its price comes from today. At most 1,000 models", responses = {
+            @ApiResponse(responseCode = "200", description = "Models used", content = @Content(schema = @Schema(implementation = CustomModelPricesUsed.class))),
+            @ApiResponse(responseCode = "503", description = "Custom model prices are disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    public Response findModelsUsed() {
+        return whenEnabled(() -> {
+            String workspaceId = requestContext.get().getWorkspaceId();
+            log.info("Finding models used, workspace '{}'", workspaceId);
+            var used = organizationResolver.organizationId()
+                    .flatMap(modelUsageService::findModelsUsed)
+                    .defaultIfEmpty(CustomModelPricesUsed.empty(ModelUsageService.DAYS))
+                    .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                    .block();
+            log.info("Found models used, workspace '{}', models '{}'", workspaceId, used.content().size());
+            return Response.ok(used).build();
         });
     }
 
