@@ -18,10 +18,12 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.domain.utils.UnscopedNameUtils;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
@@ -36,7 +38,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -83,6 +84,14 @@ public interface DatasetService {
     Dataset findByNameDetailed(DatasetIdentifier identifier, Visibility visibility);
 
     Mono<Dataset> resolveDatasetByNameAsync(DatasetIdentifier identifier);
+
+    Mono<Dataset> resolveDatasetByNameAsync(String datasetName, UUID projectId);
+
+    /**
+     * Finds the only dataset with this name in any project of the workspace, for requests that carry no project.
+     * Fails with 400 when several projects have the name. Every other lookup is scoped to a project.
+     */
+    Mono<Optional<Dataset>> findUniqueByNameInAnyProject(String datasetName);
 
     void delete(DatasetIdentifier identifier);
 
@@ -147,8 +156,9 @@ class DatasetServiceImpl implements DatasetService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
 
-        if (StringUtils.isNotBlank(dataset.projectName()) && dataset.projectId() == null) {
-            var project = projectService.getOrCreate(workspaceId, dataset.projectName(), userName);
+        if (dataset.projectId() == null) {
+            var project = projectService.getOrCreate(workspaceId, WorkspaceUtils.getProjectName(dataset.projectName()),
+                    userName);
             builder.projectId(project.id());
         }
 
@@ -157,9 +167,15 @@ class DatasetServiceImpl implements DatasetService {
         IdGenerator.validateVersion(newDataset.id(), "dataset");
 
         projectService.validateProjectIdExists(newDataset.projectId(), workspaceId);
+        boolean defaultProject = isDefaultProject(workspaceId, newDataset.projectId());
 
         return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
+
+            if (defaultProject) {
+                checkNameNotTakenByProjectless(dao, workspaceId, newDataset.name(), newDataset.projectId(),
+                        newDataset.id());
+            }
 
             try {
                 dao.save(newDataset, workspaceId);
@@ -177,14 +193,11 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     private UUID getOrCreate(@NonNull String workspaceId, @NonNull String name, @NonNull String userName,
-            UUID projectId) {
+            @NonNull UUID projectId) {
+        boolean includeProjectless = isDefaultProject(workspaceId, projectId);
         var dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var result = dao.findByName(workspaceId, name, projectId);
-            if (result.isEmpty() && projectId != null) {
-                result = dao.findByName(workspaceId, name, null);
-            }
-            return result;
+            return dao.findByName(workspaceId, name, projectId, includeProjectless, DemoData.DATASETS);
         });
 
         if (dataset.isEmpty()) {
@@ -220,11 +233,15 @@ class DatasetServiceImpl implements DatasetService {
             String userName = ctx.get(RequestContext.USER_NAME);
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
+            if (projectId == null) {
+                return getOrCreateDatasetWithoutProject(workspaceId, datasetName, userName);
+            }
+
             return Mono.fromCallable(() -> getOrCreate(workspaceId, datasetName, userName, projectId))
-                    .subscribeOn(Schedulers.boundedElastic());
-        })
-                .onErrorResume(throwable -> handleDatasetCreationError(throwable, datasetName, projectId)
-                        .map(Dataset::id));
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .onErrorResume(throwable -> handleDatasetCreationError(throwable, datasetName, projectId)
+                            .map(Dataset::id));
+        });
     }
 
     @Override
@@ -242,9 +259,18 @@ class DatasetServiceImpl implements DatasetService {
     public void update(@NonNull UUID id, @NonNull DatasetUpdate dataset) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+        UUID defaultProjectId = projectService.findProjectIdByName(workspaceId, ProjectService.DEFAULT_PROJECT)
+                .orElse(null);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetDAO.class);
+
+            if (dataset.name() != null) {
+                var current = dao.findById(id, workspaceId).orElseThrow(this::newNotFoundException);
+                if (current.projectId() == null || current.projectId().equals(defaultProjectId)) {
+                    checkNameNotTakenByProjectless(dao, workspaceId, dataset.name(), defaultProjectId, id);
+                }
+            }
 
             try {
                 int result = dao.update(workspaceId, id, dataset, userName);
@@ -328,11 +354,11 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     private Dataset findByNameNoContext(String workspaceId, String name, UUID projectId, Visibility visibility) {
+        boolean includeProjectless = isDefaultProject(workspaceId, projectId);
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset d = dao.findByName(workspaceId, name, projectId)
-                    .or(() -> dao.findByName(workspaceId, name, null))
+            Dataset d = dao.findByName(workspaceId, name, projectId, includeProjectless, DemoData.DATASETS)
                     .orElseThrow(this::newNotFoundException);
 
             log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, d.id(), workspaceId);
@@ -343,19 +369,11 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     private Dataset findByName(String workspaceId, String name, UUID projectId, Visibility visibility) {
+        boolean includeProjectless = isDefaultProject(workspaceId, projectId);
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            return dao.findByName(workspaceId, name, projectId)
-                    .or(() -> {
-                        if (projectId == null) {
-                            return Optional.empty();
-                        }
-                        return dao.findByName(workspaceId, name, null).map(d -> {
-                            requestContext.get().setWorkspaceFallbackFor("Dataset", name);
-                            return d;
-                        });
-                    })
+            return dao.findByName(workspaceId, name, projectId, includeProjectless, DemoData.DATASETS)
                     .orElseThrow(this::newNotFoundException);
         });
 
@@ -367,20 +385,8 @@ class DatasetServiceImpl implements DatasetService {
 
     private Dataset findByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        UUID projectId = null;
-
-        boolean projectNameProvided = StringUtils.isNotBlank(identifier.projectName());
-        if (projectNameProvided) {
-            projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
-        }
-
-        Dataset dataset = findByName(workspaceId, identifier.datasetName(), projectId, visibility);
-
-        if (projectNameProvided && projectId == null) {
-            requestContext.get().setWorkspaceFallbackFor("Dataset", identifier.datasetName());
-        }
-
-        return verifyVisibility(dataset, visibility);
+        UUID projectId = findProjectId(workspaceId, identifier.projectName());
+        return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
     }
 
     @Override
@@ -398,14 +404,54 @@ class DatasetServiceImpl implements DatasetService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             Visibility visibility = ctx.get(RequestContext.VISIBILITY);
-            return Mono.fromCallable(() -> {
-                UUID projectId = null;
-                if (StringUtils.isNotBlank(identifier.projectName())) {
-                    projectId = projectService.findProjectIdByName(workspaceId, identifier.projectName()).orElse(null);
-                }
-                return findByNameNoContext(workspaceId, identifier.datasetName(), projectId, visibility);
-            }).subscribeOn(Schedulers.boundedElastic());
+            return Mono.fromCallable(() -> findByNameNoContext(workspaceId, identifier.datasetName(),
+                    findProjectId(workspaceId, identifier.projectName()), visibility))
+                    .subscribeOn(Schedulers.boundedElastic());
         });
+    }
+
+    /**
+     * Clients that cannot send a project (older SDKs, raw REST) keep using a dataset they name when it is the only
+     * one with that name in the workspace. Otherwise the dataset is the Default Project's, and a name shared by
+     * several projects is rejected, as the intended one cannot be told apart.
+     */
+    private Mono<UUID> getOrCreateDatasetWithoutProject(String workspaceId, String datasetName, String userName) {
+        return Mono.fromCallable(() -> findUniqueByNameInAnyProject(workspaceId, datasetName))
+                .flatMap(dataset -> {
+                    if (dataset.isPresent()) {
+                        return Mono.just(dataset.get().id());
+                    }
+                    UUID defaultProjectId = resolveProjectIdOrCreateDefault(workspaceId, null, userName);
+                    return Mono.fromCallable(() -> getOrCreate(workspaceId, datasetName, userName, defaultProjectId))
+                            .onErrorResume(throwable -> handleDatasetCreationError(throwable, datasetName,
+                                    defaultProjectId).map(Dataset::id));
+                })
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Dataset> resolveDatasetByNameAsync(@NonNull String datasetName, @NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            Visibility visibility = ctx.get(RequestContext.VISIBILITY);
+            return Mono.fromCallable(() -> findByNameNoContext(workspaceId, datasetName, projectId, visibility))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    @Override
+    public Mono<Optional<Dataset>> findUniqueByNameInAnyProject(@NonNull String datasetName) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> findUniqueByNameInAnyProject(workspaceId, datasetName))
+                    .subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    private Optional<Dataset> findUniqueByNameInAnyProject(String workspaceId, String datasetName) {
+        var datasets = template.inTransaction(READ_ONLY, handle -> handle.attach(DatasetDAO.class)
+                .findByNameInAnyProject(workspaceId, datasetName, UnscopedNameUtils.MATCH_LIMIT));
+        return UnscopedNameUtils.requireUnique(datasets, "Dataset", datasetName);
     }
 
     /**
@@ -423,7 +469,7 @@ class DatasetServiceImpl implements DatasetService {
             deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
 
             var datasetDao = handle.attach(DatasetDAO.class);
-            datasetDao.delete(workspaceId, identifier.datasetName());
+            datasetDao.delete(dataset.id(), workspaceId);
             return null;
         });
 
@@ -431,6 +477,43 @@ class DatasetServiceImpl implements DatasetService {
                 Set.of(dataset.id()),
                 workspaceId,
                 requestContext.get().getUserName()));
+    }
+
+    /**
+     * Resolves the project a by-name lookup runs in: the named project, or the Default Project when none is
+     * named. An unknown project is a 404: a lookup never searches outside the project.
+     */
+    private UUID findProjectId(String workspaceId, String projectName) {
+        return projectService.findProjectIdByName(workspaceId, WorkspaceUtils.getProjectName(projectName))
+                .orElseThrow(this::newNotFoundException);
+    }
+
+    /**
+     * Datasets created before project scoping have no project and belong to the Default Project.
+     */
+    private boolean isDefaultProject(String workspaceId, UUID projectId) {
+        return projectService.findProjectIdByName(workspaceId, ProjectService.DEFAULT_PROJECT)
+                .map(projectId::equals)
+                .orElse(false);
+    }
+
+    /**
+     * The unique key cannot see this clash: project-less datasets count as the Default Project, but MySQL treats
+     * each NULL {@code project_id} as distinct.
+     */
+    private void checkNameNotTakenByProjectless(DatasetDAO dao, String workspaceId, String name,
+            UUID defaultProjectId, UUID id) {
+        if (dao.existsInProjectOrProjectless(workspaceId, name, defaultProjectId, DemoData.DATASETS, id)) {
+            String message = formatDatasetAlreadyExistsMessage(name);
+            log.info(message);
+            throw new EntityAlreadyExistsException(new ErrorMessage(List.of(message)));
+        }
+    }
+
+    private UUID resolveProjectIdOrCreateDefault(String workspaceId, UUID projectId, String userName) {
+        return projectId != null
+                ? projectId
+                : projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, userName).id();
     }
 
     private NotFoundException newNotFoundException() {
@@ -565,17 +648,19 @@ class DatasetServiceImpl implements DatasetService {
         // read in one READ_ONLY transaction and are now two, so a version written between them is observable
         // where it was not before. Benign for count/summary metadata, and only find() is affected -- findById,
         // findByNameDetailed and the experiments-only branch already enriched outside any transaction.
+        boolean includeProjectless = criteria.projectId() != null
+                && isDefaultProject(workspaceId, criteria.projectId());
         DatasetPage rawPage = template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(DatasetDAO.class);
             int offset = (page - 1) * size;
 
             long count = repository.findCount(workspaceId, criteria.name(), criteria.projectId(),
-                    criteria.withExperimentsOnly(),
+                    includeProjectless, DemoData.DATASETS, criteria.withExperimentsOnly(),
                     criteria.withOptimizationsOnly(), visibility, filtersSQL, filterMapping);
 
             List<Dataset> datasets = repository.find(size, offset, workspaceId, criteria.name(), criteria.projectId(),
-                    criteria.withExperimentsOnly(),
+                    includeProjectless, DemoData.DATASETS, criteria.withExperimentsOnly(),
                     criteria.withOptimizationsOnly(),
                     sortingFieldsSql, visibility, filtersSQL, filterMapping);
 

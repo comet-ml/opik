@@ -1,6 +1,6 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetIdentifier;
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
@@ -203,7 +203,8 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
      * <ol>
      * <li>the explicit request {@code project_name}, when provided;</li>
      * <li>otherwise the existing experiment's project, when it already exists and has one;</li>
-     * <li>otherwise the existing dataset's project, when it already exists and has one;</li>
+     * <li>otherwise the project of the only dataset with that name in the workspace, when it has one; when several
+     * projects have a dataset with that name, the request is rejected, as the project cannot be told apart;</li>
      * <li>otherwise the default project (deprecated fallback).</li>
      * </ol>
      * Derivation only reads existing entities; it never creates an experiment or dataset to obtain a project.
@@ -220,19 +221,19 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         }
 
         return resolveDatasetProjectName(experiment.datasetName())
-                .map(datasetProjectName -> new ResolvedProject(datasetProjectName, ProjectFallback.DATASET))
+                .map(datasetProjectName -> new ResolvedProject(datasetProjectName,
+                        ProjectService.DEFAULT_PROJECT.equals(datasetProjectName)
+                                ? ProjectFallback.DEFAULT
+                                : ProjectFallback.DATASET))
                 .defaultIfEmpty(new ResolvedProject(ProjectService.DEFAULT_PROJECT, ProjectFallback.DEFAULT));
     }
 
     private Mono<String> resolveDatasetProjectName(String datasetName) {
-        return datasetService
-                .resolveDatasetByNameAsync(DatasetIdentifier.builder().datasetName(datasetName).build())
-                .flatMap(dataset -> dataset.projectId() == null
-                        ? Mono.<String>empty()
-                        : projectService.getOrFail(dataset.projectId())
-                                .map(Project::name)
-                                .onErrorResume(NotFoundException.class, ex -> Mono.empty()))
-                .onErrorResume(NotFoundException.class, ex -> Mono.empty());
+        return datasetService.findUniqueByNameInAnyProject(datasetName)
+                .flatMap(dataset -> Mono.justOrEmpty(dataset.map(Dataset::projectId)))
+                .flatMap(projectId -> projectService.getOrFail(projectId)
+                        .map(Project::name)
+                        .onErrorResume(NotFoundException.class, ex -> Mono.empty()));
     }
 
     private Mono<Void> validateExperimentConsistency(Experiment experiment, String projectName,
@@ -261,28 +262,8 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                                 .formatted(experiment.id(), existingExperiment.get().projectName(), projectName);
                         return Mono.<Void>error(new ClientErrorException(errorMessage, Response.Status.CONFLICT));
                     }
-
-                    return resolveDatasetProjectId(experiment.datasetName(), projectName)
-                            .flatMap(datasetProjectId -> {
-                                if (datasetProjectId.isPresent() && !datasetProjectId.equals(requestProjectId)) {
-                                    String errorMessage = "Dataset '%s' belongs to a different project than the request project_name '%s'"
-                                            .formatted(experiment.datasetName(), projectName);
-                                    return Mono.<Void>error(
-                                            new ClientErrorException(errorMessage, Response.Status.CONFLICT));
-                                }
-                                return Mono.<Void>empty();
-                            });
+                    return Mono.<Void>empty();
                 });
-    }
-
-    private Mono<Optional<UUID>> resolveDatasetProjectId(String datasetName, String projectName) {
-        // Resolve the dataset scoped to the request project so the lookup is project-aware.
-        return datasetService
-                .resolveDatasetByNameAsync(
-                        DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build())
-                .map(dataset -> Optional.ofNullable(dataset.projectId()))
-                .defaultIfEmpty(Optional.empty())
-                .onErrorResume(NotFoundException.class, ex -> Mono.just(Optional.empty()));
     }
 
     private Mono<? extends Tuple3<Long, ? extends Number, Integer>> saveAll(List<Trace> traces,

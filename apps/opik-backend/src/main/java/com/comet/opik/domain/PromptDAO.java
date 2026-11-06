@@ -155,7 +155,7 @@ public interface PromptDAO {
                 FROM prompts AS p
                 WHERE workspace_id = :workspace_id
                 <if(name)> AND name like concat('%', :name, '%') <endif>
-                <if(project_id)> AND project_id = :project_id <endif>
+                <if(project_id)> AND (project_id = :project_id <if(include_projectless)> OR (project_id IS NULL AND name NOT IN (<demo_names>)) <endif>) <endif>
             ) AS prompt_full
             <if(filters)> WHERE <filters> <endif>
             ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
@@ -165,6 +165,8 @@ public interface PromptDAO {
     @AllowUnusedBindings
     List<Prompt> find(@Define("name") @Bind("name") String name, @Bind("workspace_id") String workspaceId,
             @Define("project_id") @Bind("project_id") UUID projectId,
+            @Define("include_projectless") boolean includeProjectless,
+            @BindList("demo_names") List<String> demoNames,
             @Bind("offset") int offset, @Bind("limit") int limit,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("filters") String filters,
@@ -260,7 +262,7 @@ public interface PromptDAO {
                 FROM prompts AS p
                 WHERE workspace_id = :workspace_id
                 <if(name)> AND name like concat('%', :name, '%') <endif>
-                <if(project_id)> AND project_id = :project_id <endif>
+                <if(project_id)> AND (project_id = :project_id <if(include_projectless)> OR (project_id IS NULL AND name NOT IN (<demo_names>)) <endif>) <endif>
             ) AS prompt_full
             <if(filters)> WHERE <filters> <endif>
             """)
@@ -268,24 +270,31 @@ public interface PromptDAO {
     @AllowUnusedBindings
     long count(@Define("name") @Bind("name") String name, @Bind("workspace_id") String workspaceId,
             @Define("project_id") @Bind("project_id") UUID projectId,
+            @Define("include_projectless") boolean includeProjectless,
+            @BindList("demo_names") List<String> demoNames,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
+    @SqlQuery("SELECT * FROM prompts WHERE workspace_id = :workspace_id AND name = :name ORDER BY id LIMIT :limit")
+    List<Prompt> findByNameInAnyProject(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+            @Bind("limit") int limit);
+
     @SqlQuery("SELECT * FROM prompts WHERE name = :name AND workspace_id = :workspace_id" +
-            " <if(project_id)> AND project_id = :project_id <endif>" +
-            " ORDER BY id LIMIT 1")
+            " AND (project_id = :project_id <if(include_projectless)> OR (project_id IS NULL AND name NOT IN (<demo_names>)) <endif>)"
+            +
+            " ORDER BY project_id IS NULL, id LIMIT 1")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Prompt findByName(@Bind("name") String name, @Bind("workspace_id") String workspaceId,
-            @Define("project_id") @Bind("project_id") UUID projectId);
+            @Bind("project_id") UUID projectId, @Define("include_projectless") boolean includeProjectless,
+            @BindList("demo_names") List<String> demoNames);
 
-    @SqlQuery("""
-            SELECT * FROM prompts
-            WHERE name = :name AND workspace_id = :workspace_id AND project_id IS NULL
-            ORDER BY id
-            LIMIT 1
-            """)
-    Prompt findByNameWithoutProject(@Bind("name") String name, @Bind("workspace_id") String workspaceId);
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM prompts WHERE workspace_id = :workspace_id AND name = :name" +
+            " AND (project_id = :project_id OR (project_id IS NULL AND name NOT IN (<demo_names>)))" +
+            " AND id <> :id)")
+    boolean existsInProjectOrProjectless(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+            @Bind("project_id") UUID projectId, @BindList("demo_names") List<String> demoNames,
+            @Bind("id") UUID id);
 
     @SqlUpdate("UPDATE prompts SET name = :bean.name, description = :bean.description, last_updated_by = :bean.lastUpdatedBy, "
             +

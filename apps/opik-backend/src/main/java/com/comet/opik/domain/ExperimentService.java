@@ -518,8 +518,7 @@ public class ExperimentService {
         idGenerator.validateIdNotInFutureIfPresent(experiment.optimizationId(), "optimization");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
         return resolveProjectId(experiment)
-                .flatMap(resolvedExperiment -> datasetService
-                        .getOrCreateDataset(resolvedExperiment.datasetName(), resolvedExperiment.projectId())
+                .flatMap(resolvedExperiment -> resolveDatasetId(resolvedExperiment)
                         .flatMap(datasetId -> {
                             // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
                             if (!featureFlags.isDatasetVersioningEnabled()) {
@@ -649,6 +648,16 @@ public class ExperimentService {
                         return Mono.empty();
                     });
         });
+    }
+
+    /**
+     * An experiment created internally for a dataset the caller already resolved keeps that dataset; the API never
+     * sends a dataset id, so its experiments get or create the dataset by name in the experiment's project.
+     */
+    private Mono<UUID> resolveDatasetId(Experiment experiment) {
+        return experiment.datasetId() != null
+                ? Mono.just(experiment.datasetId())
+                : datasetService.getOrCreateDataset(experiment.datasetName(), experiment.projectId());
     }
 
     private Mono<Experiment> resolveProjectId(Experiment experiment) {

@@ -462,13 +462,17 @@ public class DatasetResourceClient {
     }
 
     public void deleteDatasetByName(String name, String apiKey, String workspaceName) {
+        deleteDatasetByName(DatasetIdentifier.builder().datasetName(name).build(), apiKey, workspaceName);
+    }
+
+    public void deleteDatasetByName(DatasetIdentifier identifier, String apiKey, String workspaceName) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(DatasetIdentifier.builder().datasetName(name).build()))) {
+                .post(Entity.json(identifier))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();

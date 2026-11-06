@@ -71,9 +71,6 @@ public interface DatasetDAO {
     @SqlUpdate("DELETE FROM datasets WHERE id = :id AND workspace_id = :workspace_id")
     void delete(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
 
-    @SqlUpdate("DELETE FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
-    void delete(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
-
     @SqlUpdate("DELETE FROM datasets WHERE id IN (<ids>) AND workspace_id = :workspace_id")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
 
@@ -81,7 +78,7 @@ public interface DatasetDAO {
             SELECT COUNT(id) FROM datasets
             WHERE workspace_id = :workspace_id
             <if(name)> AND name like concat('%', :name, '%') <endif>
-            <if(project_id)> AND project_id = :project_id <endif>
+            <if(project_id)> AND (project_id = :project_id <if(include_projectless)> OR (project_id IS NULL AND name NOT IN (<demo_names>)) <endif>) <endif>
             <if(filters)> AND <filters> <endif>
             <if(visibility)> AND visibility = :visibility <endif>
             <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
@@ -91,6 +88,8 @@ public interface DatasetDAO {
     @AllowUnusedBindings
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
             @Define("project_id") @Bind("project_id") UUID projectId,
+            @Define("include_projectless") boolean includeProjectless,
+            @BindList("demo_names") List<String> demoNames,
             @Define("with_experiments_only") boolean withExperimentsOnly,
             @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("visibility") @Bind("visibility") Visibility visibility,
@@ -171,7 +170,7 @@ public interface DatasetDAO {
             SELECT * FROM datasets
             WHERE workspace_id = :workspace_id
             <if(name)> AND name like concat('%', :name, '%') <endif>
-            <if(project_id)> AND project_id = :project_id <endif>
+            <if(project_id)> AND (project_id = :project_id <if(include_projectless)> OR (project_id IS NULL AND name NOT IN (<demo_names>)) <endif>) <endif>
             <if(filters)> AND <filters> <endif>
             <if(visibility)> AND visibility = :visibility <endif>
             <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
@@ -186,6 +185,8 @@ public interface DatasetDAO {
             @Bind("workspace_id") String workspaceId,
             @Define("name") @Bind("name") String name,
             @Define("project_id") @Bind("project_id") UUID projectId,
+            @Define("include_projectless") boolean includeProjectless,
+            @BindList("demo_names") List<String> demoNames,
             @Define("with_experiments_only") boolean withExperimentsOnly,
             @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
@@ -193,12 +194,26 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
+    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name ORDER BY id LIMIT :limit")
+    List<Dataset> findByNameInAnyProject(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+            @Bind("limit") int limit);
+
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
+            " AND (project_id = :project_id OR (project_id IS NULL AND name NOT IN (<demo_names>)))" +
+            " AND id <> :id)")
+    boolean existsInProjectOrProjectless(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+            @Bind("project_id") UUID projectId, @BindList("demo_names") List<String> demoNames,
+            @Bind("id") UUID id);
+
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " <if(project_id)> AND project_id = :project_id <endif>")
+            " AND (project_id = :project_id <if(include_projectless)> OR (project_id IS NULL AND name NOT IN (<demo_names>)) <endif>)"
+            +
+            " ORDER BY project_id IS NULL LIMIT 1")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
-            @Define("project_id") @Bind("project_id") UUID projectId);
+            @Bind("project_id") UUID projectId, @Define("include_projectless") boolean includeProjectless,
+            @BindList("demo_names") List<String> demoNames);
 
     @SqlQuery("SELECT id FROM datasets WHERE workspace_id = :workspace_id AND name LIKE CONCAT('%', :name, '%') ESCAPE '\\\\'")
     List<UUID> findIdsByPartialName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);

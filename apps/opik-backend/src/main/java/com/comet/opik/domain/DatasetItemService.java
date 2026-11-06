@@ -797,11 +797,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     request.datasetName(), !filters.isEmpty(),
                     request.datasetVersion(), workspaceId);
 
-            return datasetService.resolveDatasetByNameAsync(
-                    DatasetIdentifier.builder()
+            Mono<Dataset> resolvedDataset = request.projectId() != null
+                    ? datasetService.resolveDatasetByNameAsync(request.datasetName(), request.projectId())
+                    : datasetService.resolveDatasetByNameAsync(DatasetIdentifier.builder()
                             .datasetName(request.datasetName())
                             .projectName(request.projectName())
-                            .build())
+                            .build());
+
+            return resolvedDataset
                     .flatMap(dataset -> Mono.deferContextual(ctx2 -> {
                         return ensureLazyMigration(dataset.id(), workspaceId)
                                 .thenReturn(dataset);
