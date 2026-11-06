@@ -380,15 +380,10 @@ export class OpikClient {
       // Flush the queue first to ensure all pending datasets are created
       await this.datasetBatchQueue.flush();
 
-      let projectId: string;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch (error) {
-        if (error instanceof OpikApiError && error.statusCode === 404) {
-          // A project that does not exist has no datasets
-          return [];
-        }
-        throw error;
+      // A project that does not exist has no datasets
+      const projectId = await this.findProjectIdByName(resolvedProjectName);
+      if (projectId === undefined) {
+        return [];
       }
 
       const response = await this.api.datasets.findDatasets({
@@ -561,6 +556,21 @@ export class OpikClient {
       throw new Error("Failed to retrieve test suites");
     }
   };
+
+  /**
+   * Resolves a project name to its ID, or undefined when the project does not exist.
+   * Any other failure is rethrown, so an outage is not mistaken for a missing project.
+   */
+  private async findProjectIdByName(projectName: string): Promise<string | undefined> {
+    try {
+      return await this.getProjectIdByName(projectName);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
 
   private async getProjectIdByName(projectName: string): Promise<string> {
     const project = await this.api.projects.retrieveProject({
@@ -1762,15 +1772,10 @@ export class OpikClient {
           : undefined;
       }
 
-      let projectId: string;
-      try {
-        projectId = await this.getProjectIdByName(searchProjectName);
-      } catch (error) {
-        if (error instanceof OpikApiError && error.statusCode === 404) {
-          // A project that does not exist has no prompts
-          return [];
-        }
-        throw error;
+      // A project that does not exist has no prompts
+      const projectId = await this.findProjectIdByName(searchProjectName);
+      if (projectId === undefined) {
+        return [];
       }
 
       const response = await this.api.prompts.getPrompts(
