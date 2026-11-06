@@ -29,7 +29,7 @@ def streamer_with_file_upload_manager(
         online = online_message_processor.OpikMessageProcessor(
             rest_client=mock.Mock(),
             file_upload_manager=file_upload_manager,
-            fallback_replay_manager=mock.Mock(),
+            fallback_replay_manager=mock.Mock(flush=mock.Mock(return_value=True)),
             unauthorized_message_types_registry=mock.Mock(),
             data_loss_tracker=data_loss.DataLossTracker(),
         )
@@ -40,7 +40,7 @@ def streamer_with_file_upload_manager(
             use_attachment_extraction=False,
             file_uploader=file_upload_manager,
             max_queue_size=None,
-            fallback_replay_manager=mock.Mock(),
+            fallback_replay_manager=mock.Mock(flush=mock.Mock(return_value=True)),
         )
 
         yield streamer_, file_upload_manager
