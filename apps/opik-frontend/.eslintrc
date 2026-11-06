@@ -56,6 +56,13 @@
         ]
       }
     ],
-    "tailwindcss/no-contradicting-classname": "error"
+    "tailwindcss/no-contradicting-classname": "error",
+    "no-restricted-imports": ["error", {
+      "paths": [{
+        "name": "@uiw/react-codemirror",
+        "importNames": ["default"],
+        "message": "Use @/shared/CodeMirrorEditor/CodeMirrorEditor, which commits each edit before the next keystroke."
+      }]
+    }]
   }
 }
