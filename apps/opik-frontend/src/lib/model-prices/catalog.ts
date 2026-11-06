@@ -105,45 +105,163 @@ export const findBuiltIn = (
 export const extraFields = (entry: CatalogEntry): PriceField[] =>
   EXTRA_FIELDS.filter((field) => entry.prices[field]);
 
+export const ANY_PROVIDER_LABEL = "Any provider";
+
+export interface CatalogFieldFilter {
+  field: string;
+  operator: string;
+  value: string | number;
+}
+
 export interface CatalogFilter {
   search?: string;
-  providers?: string[];
-  types?: CatalogType[];
+  filters?: CatalogFieldFilter[];
 }
+
+const TYPE_BY_LABEL: Record<string, CatalogType> = {
+  default: "default",
+  override: "override",
+  custom: "custom",
+};
+
+const PRICE_FILTER_FIELDS: Record<string, PriceField> = {
+  input_price: "input_price",
+  output_price: "output_price",
+};
+
+const textOf = (entry: CatalogEntry, field: string): string | undefined => {
+  if (field === "provider") return entry.provider;
+  if (field === "type") return entry.type;
+  return undefined;
+};
+
+const normalizedValue = (field: string, value: string | number): string => {
+  const text = String(value).trim();
+  if (field === "provider") {
+    return text === ANY_PROVIDER_LABEL ? "" : text;
+  }
+  if (field === "type") {
+    return TYPE_BY_LABEL[text.toLowerCase()] ?? text.toLowerCase();
+  }
+  return text;
+};
+
+const compareNumbers = (
+  actual: number,
+  operator: string,
+  expected: number,
+): boolean => {
+  switch (operator) {
+    case "=":
+      return actual === expected;
+    case ">":
+      return actual > expected;
+    case ">=":
+      return actual >= expected;
+    case "<":
+      return actual < expected;
+    case "<=":
+      return actual <= expected;
+    default:
+      return true;
+  }
+};
+
+const matchesNumber = (
+  entry: CatalogEntry,
+  filter: CatalogFieldFilter,
+): boolean => {
+  const price = entry.prices[PRICE_FILTER_FIELDS[filter.field]];
+  if (!price) return false;
+  return compareNumbers(Number(price), filter.operator, Number(filter.value));
+};
+
+const matchesFieldFilters = (
+  entry: CatalogEntry,
+  filters: CatalogFieldFilter[],
+): boolean => {
+  const byField = new Map<string, CatalogFieldFilter[]>();
+  filters.forEach((filter) => {
+    byField.set(filter.field, [...(byField.get(filter.field) ?? []), filter]);
+  });
+  return Array.from(byField.entries()).every(([field, group]) => {
+    if (field === "cache_prices") {
+      return group.every((filter) =>
+        filter.operator === "is_empty"
+          ? !extraFields(entry).length
+          : extraFields(entry).length > 0,
+      );
+    }
+    if (PRICE_FILTER_FIELDS[field]) {
+      return group.every((filter) => matchesNumber(entry, filter));
+    }
+    const actual = textOf(entry, field);
+    if (actual === undefined) return true;
+    const included = group.filter((filter) => filter.operator === "=");
+    const excluded = group.filter((filter) => filter.operator === "!=");
+    return (
+      (!included.length ||
+        included.some(
+          (filter) => normalizedValue(field, filter.value) === actual,
+        )) &&
+      excluded.every(
+        (filter) => normalizedValue(field, filter.value) !== actual,
+      )
+    );
+  });
+};
+
+const searchRank = (entry: CatalogEntry, needle: string): number => {
+  const model = entry.model.toLowerCase();
+  const bareModel = model.includes("/")
+    ? model.slice(model.indexOf("/") + 1)
+    : model;
+  if (model === needle || bareModel === needle) return 0;
+  if (model.startsWith(needle) || bareModel.startsWith(needle)) return 1;
+  if (model.includes(needle)) return 2;
+  return 3;
+};
+
+const matchesSearch = (entry: CatalogEntry, needle: string): boolean =>
+  !needle ||
+  entry.model.toLowerCase().includes(needle) ||
+  entry.provider.toLowerCase().includes(needle) ||
+  (entry.row?.alias_of?.model ?? "").toLowerCase().includes(needle);
 
 export const filterCatalog = (
   entries: CatalogEntry[],
   filter: CatalogFilter,
 ): CatalogEntry[] => {
   const needle = (filter.search ?? "").trim().toLowerCase();
-  const providers = new Set(filter.providers ?? []);
-  const types = new Set(filter.types ?? []);
+  const filters = filter.filters ?? [];
   return entries.filter(
     (entry) =>
-      (!needle ||
-        entry.model.toLowerCase().includes(needle) ||
-        entry.provider.toLowerCase().includes(needle) ||
-        (entry.row?.alias_of?.model ?? "").toLowerCase().includes(needle)) &&
-      (!providers.size || providers.has(entry.provider)) &&
-      (!types.size || types.has(entry.type)),
+      matchesSearch(entry, needle) && matchesFieldFilters(entry, filters),
   );
 };
 
 export const sortCatalog = (
   entries: CatalogEntry[],
   direction: "asc" | "desc",
+  search?: string,
 ): CatalogEntry[] => {
   const sign = direction === "asc" ? 1 : -1;
+  const needle = (search ?? "").trim().toLowerCase();
   return [...entries].sort(
     (left, right) =>
+      (needle ? searchRank(left, needle) - searchRank(right, needle) : 0) ||
       sign *
         left.model.localeCompare(right.model, undefined, {
           sensitivity: "base",
-        }) || sign * left.provider.localeCompare(right.provider),
+        }) ||
+      sign * left.provider.localeCompare(right.provider),
   );
 };
 
-export const providersOf = (entries: CatalogEntry[]): string[] =>
-  Array.from(new Set(entries.map((entry) => entry.provider)))
+export const providersOf = (entries: CatalogEntry[]): string[] => {
+  const providers = Array.from(new Set(entries.map((entry) => entry.provider)));
+  const named = providers
     .filter(Boolean)
     .sort((left, right) => left.localeCompare(right));
+  return providers.includes("") ? [ANY_PROVIDER_LABEL, ...named] : named;
+};

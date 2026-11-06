@@ -19,7 +19,7 @@ const QuickAccess: React.FC<QuickAccessProps> = ({ entries, onOpen }) => {
         <Star className="size-3.5" />
         Quick access
       </h3>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {entries.map((entry) => (
           <button
             key={entry.key}
@@ -28,8 +28,14 @@ const QuickAccess: React.FC<QuickAccessProps> = ({ entries, onOpen }) => {
             onClick={() => onOpen(entry)}
           >
             <span className="flex items-start justify-between gap-2">
-              <span className="comet-code truncate">{entry.model}</span>
-              <Tag variant={TYPE_TAG_VARIANT[entry.type]} size="sm">
+              <span className="truncate font-mono text-[15px] font-medium leading-5">
+                {entry.model}
+              </span>
+              <Tag
+                variant={TYPE_TAG_VARIANT[entry.type]}
+                size="sm"
+                className="shrink-0"
+              >
                 {CATALOG_TYPE_LABELS[entry.type]}
               </Tag>
             </span>

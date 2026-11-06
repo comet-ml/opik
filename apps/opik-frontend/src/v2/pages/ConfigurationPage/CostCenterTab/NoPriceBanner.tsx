@@ -31,12 +31,12 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
     >
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+        className="flex w-full items-center gap-2 p-4 text-left"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
         <CircleAlert className="size-4 shrink-0 text-warning-box-text" />
-        <span className="comet-body-s-accented flex-1 text-warning-box-text">
+        <span className="comet-body-s flex-1 font-semibold text-warning-box-text">
           {title}
         </span>
         {open ? (
@@ -47,7 +47,7 @@ const NoPriceBanner: React.FC<NoPriceBannerProps> = ({
       </button>
       {open && (
         <div className="px-4 pb-4">
-          <p className="comet-body-s mb-3 text-muted-slate">
+          <p className="comet-body-xs mb-3 text-warning-box-text/80">
             These appear in your spans but aren&apos;t in the price table, so
             their cost can&apos;t be estimated.
           </p>

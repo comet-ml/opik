@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import { Layers, Plus } from "lucide-react";
 import useModelPrices from "@/api/model-prices/useModelPrices";
 import useModelPriceHistory from "@/api/model-prices/useModelPriceHistory";
@@ -7,13 +8,16 @@ import { useModelPricesAccess } from "@/contexts/ModelPricesAccessContext";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
+import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
+import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
+import { COLUMN_TYPE } from "@/types/shared";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import { Button } from "@/ui/button";
 import {
   CATALOG_TYPES,
   CATALOG_TYPE_LABELS,
   CatalogEntry,
-  CatalogType,
   ModelUsed,
   buildCatalog,
   filterCatalog,
@@ -24,7 +28,6 @@ import {
 } from "@/lib/model-prices";
 import CostCenterHeader from "./CostCenterHeader";
 import CatalogTable from "./CatalogTable";
-import CheckboxFilter from "./CheckboxFilter";
 import ModelPriceDrawer, { DrawerTarget } from "./ModelPriceDrawer";
 import BatchUpdateDrawer from "./BatchUpdateDrawer";
 import NoPriceBanner from "./NoPriceBanner";
@@ -40,8 +43,15 @@ const QUICK_ACCESS_DEFAULTS = [
   { model: "claude-haiku-4-5", provider: "anthropic" },
 ];
 
+const PINNED_STORAGE_KEY = "cost-center:pinned-models";
+const MAX_QUICK_ACCESS = 8;
+
 const identityKey = (model: string, provider: string) =>
   identityOf({ model, provider, kind: "fixed" });
+
+const byMostUsed = (left: ModelUsed, right: ModelUsed) =>
+  right.days_used - left.days_used ||
+  right.last_seen.localeCompare(left.last_seen);
 
 const CostCenterTab: React.FC = () => {
   const access = useModelPricesAccess();
@@ -57,8 +67,6 @@ const CostCenterTab: React.FC = () => {
   );
 
   const [search, setSearch] = useState("");
-  const [providers, setProviders] = useState<string[]>([]);
-  const [types, setTypes] = useState<CatalogType[]>([]);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(PAGE_SIZES[0]);
@@ -79,21 +87,90 @@ const CostCenterTab: React.FC = () => {
     return map;
   }, [catalog]);
 
+  const providerOptions = useMemo(() => providersOf(catalog), [catalog]);
+  const chipDefinitions = useMemo<ChipDefinition[]>(
+    () => [
+      {
+        id: "provider",
+        field: "provider",
+        label: "Provider",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.string,
+        operators: ["="],
+        defaultOperator: "=",
+        addLabel: "Add provider",
+        value: {
+          placeholder: "Select a provider…",
+          options: chipOptionsValue({
+            items: providerOptions,
+            isLoading: false,
+          }),
+        },
+      },
+      {
+        id: "type",
+        field: "type",
+        label: "Type",
+        kind: "query-builder",
+        columnType: COLUMN_TYPE.string,
+        operators: ["="],
+        defaultOperator: "=",
+        addLabel: "Add type",
+        value: {
+          placeholder: "Select a type…",
+          options: chipOptionsValue({
+            items: CATALOG_TYPES.map((type) => CATALOG_TYPE_LABELS[type]),
+            isLoading: false,
+          }),
+        },
+      },
+      {
+        id: "input_price",
+        field: "input_price",
+        label: "Input price /1M",
+        kind: "numeric",
+        columnType: COLUMN_TYPE.number,
+        format: "currency",
+      },
+      {
+        id: "output_price",
+        field: "output_price",
+        label: "Output price /1M",
+        kind: "numeric",
+        columnType: COLUMN_TYPE.number,
+        format: "currency",
+      },
+      {
+        id: "cache_prices",
+        field: "cache_prices",
+        label: "Has cache prices",
+        kind: "boolean",
+        onOperator: "is_not_empty",
+        columnType: COLUMN_TYPE.string,
+      },
+    ],
+    [providerOptions],
+  );
+  const chips = useFilterChips({
+    tableId: "cost-center-prices",
+    urlKey: "prices_filters",
+    definitions: chipDefinitions,
+    defaultPinned: ["provider", "type"],
+    onChange: () => setPage(1),
+  });
+
   const visible = useMemo(
     () =>
       sortCatalog(
-        filterCatalog(catalog, { search, providers, types }),
+        filterCatalog(catalog, { search, filters: chips.filters }),
         sortDirection,
+        search,
       ),
-    [catalog, search, providers, types, sortDirection],
+    [catalog, search, chips.filters, sortDirection],
   );
   const pageEntries = useMemo(
     () => visible.slice((page - 1) * size, page * size),
     [visible, page, size],
-  );
-  const providerOptions = useMemo(
-    () => providersOf(catalog).map((value) => ({ value, label: value })),
-    [catalog],
   );
 
   const unpriced = useMemo(() => {
@@ -108,19 +185,46 @@ const CostCenterTab: React.FC = () => {
       : { models: all, scope: "organization" as const };
   }, [modelsUsed, workspaceName]);
 
+  const [pinned = [], setPinned] = useLocalStorageState<string[]>(
+    PINNED_STORAGE_KEY,
+    { defaultValue: [] },
+  );
+  const pinnedSet = useMemo(() => new Set(pinned), [pinned]);
+  const isPinned = useCallback(
+    (entry: CatalogEntry) =>
+      pinnedSet.has(identityKey(entry.model, entry.provider)),
+    [pinnedSet],
+  );
+  const togglePin = useCallback(
+    (entry: CatalogEntry) => {
+      const key = identityKey(entry.model, entry.provider);
+      setPinned((current = []) =>
+        current.includes(key)
+          ? current.filter((item) => item !== key)
+          : [...current, key],
+      );
+    },
+    [setPinned],
+  );
+
   const quickAccess = useMemo(() => {
-    const used = (modelsUsed?.content ?? [])
+    const pinnedEntries = pinned
+      .map((key) => byIdentity.get(key))
+      .filter((entry): entry is CatalogEntry => Boolean(entry));
+    const used = [...(modelsUsed?.content ?? [])]
       .filter((model) => model.price_source !== "none")
+      .sort(byMostUsed)
       .map((model) => byIdentity.get(identityKey(model.model, model.provider)))
       .filter((entry): entry is CatalogEntry => Boolean(entry));
     const defaults = QUICK_ACCESS_DEFAULTS.map((item) =>
       byIdentity.get(identityKey(item.model, item.provider)),
     ).filter((entry): entry is CatalogEntry => Boolean(entry));
     const seen = new Set<string>();
-    return [...used, ...defaults]
+    const limit = Math.min(Math.max(4, pinnedEntries.length), MAX_QUICK_ACCESS);
+    return [...pinnedEntries, ...used, ...defaults]
       .filter((entry) => !seen.has(entry.key) && seen.add(entry.key))
-      .slice(0, 4);
-  }, [modelsUsed, byIdentity]);
+      .slice(0, limit);
+  }, [pinned, modelsUsed, byIdentity]);
 
   const openDrawer = (target: DrawerTarget) => {
     drawerKey.current += 1;
@@ -180,34 +284,34 @@ const CostCenterTab: React.FC = () => {
         onOpen={(entry) => openDrawer({ entry })}
       />
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput
-            searchText={search}
-            setSearchText={resetPage(setSearch)}
-            className="w-[280px]"
-            placeholder="Search models or providers"
-            dimension="sm"
-          />
-          <CheckboxFilter
-            label="Provider"
-            options={providerOptions}
-            selected={providers}
-            onChange={resetPage(setProviders)}
-            searchable
-          />
-          <CheckboxFilter
-            label="Type"
-            options={CATALOG_TYPES.map((value) => ({
-              value,
-              label: CATALOG_TYPE_LABELS[value],
-            }))}
-            selected={types}
-            onChange={resetPage(setTypes)}
+      <div className="mb-3 flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <FilterChipBar
+            chipsPinned={chips.chipsPinned}
+            chipsUnpinned={chips.chipsUnpinned}
+            values={chips.values}
+            managerOpen={chips.managerOpen}
+            onManagerOpenChange={chips.setManagerOpen}
+            onApplyValue={chips.applyValue}
+            onClearValue={chips.clearValue}
+            onPinChip={chips.pinChip}
+            onUnpinChip={chips.unpinChip}
+            onClearAll={chips.clearAll}
+            openChipId={chips.openChipId}
+            onOpenChipIdChange={chips.setOpenChipId}
+            prefix={
+              <SearchInput
+                searchText={search}
+                setSearchText={resetPage(setSearch)}
+                className="w-[280px] shrink-0"
+                placeholder="Search models or providers"
+                dimension="sm"
+              />
+            }
           />
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="ml-auto flex shrink-0 gap-2">
             <Button size="sm" variant="outline" onClick={() => openDrawer({})}>
               <Plus className="mr-1.5 size-3.5" />
               Add model
@@ -235,6 +339,8 @@ const CostCenterTab: React.FC = () => {
               )
             }
             onOpen={(entry) => openDrawer({ entry })}
+            isPinned={isPinned}
+            onTogglePin={togglePin}
           />
           <div className="pt-4">
             <DataTablePagination
