@@ -78,6 +78,8 @@ export {
   type LlmJudgeModelRef,
   type LlmJudgeRuleBodyRef,
   type JudgeOutputSchemaType,
+  type JudgeModelApi,
+  type JudgeRuleWrite,
   type TraceJsonSection,
   type EnvironmentRef,
   type AnnotationQueueDetail,

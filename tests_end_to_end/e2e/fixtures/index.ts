@@ -1,4 +1,4 @@
-export { test, expect } from './playground-span-loads.fixture';
+export { test, expect } from './settled-compare-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -686,3 +686,24 @@ export type {
   PlaygroundSpanLoadsFixtures,
 } from './playground-span-loads.fixture';
 export { LOGGED_GOOGLE_AI, LOGGED_GOOGLE_VERTEXAI } from './playground-span-loads.fixture';
+export type {
+  EvaluationMethodExperimentRef,
+  EvaluationMethodExperimentsRef,
+  EvaluationMethodExperimentsFixtures,
+} from './evaluation-method-experiments.fixture';
+export type {
+  EvaluatorSourceTraceRef,
+  EvaluatorSourceTracesRef,
+  EvaluatorSourceTracesFixtures,
+} from './evaluator-source-traces.fixture';
+export type {
+  MultiAnnotatorTraceRef,
+  MultiAnnotatorQueueRef,
+  MultiAnnotatorQueueFixtures,
+} from './multi-annotator-queue.fixture';
+export type {
+  SettledCompareExperimentRef,
+  SettledCompareExperimentsRef,
+  SettledCompareExperimentsFixtures,
+} from './settled-compare-experiments.fixture';
+export { SETTLED_ITEM_COUNT, compareMarker } from './settled-compare-experiments.fixture';

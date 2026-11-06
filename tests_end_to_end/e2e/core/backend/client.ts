@@ -1246,6 +1246,65 @@ export interface LlmJudgeModelRef {
 }
 
 /**
+ * The provider API a judge rule asks its model for, as `LlmAsJudgeModelApi`
+ * enumerates it — one value today, plus genuinely absent.
+ *
+ * A union with `undefined` rather than a plain string because absence is a
+ * state the product distinguishes: a decisions-ONLY model (Jev) resolves to the
+ * Decisions API with no `api` key at all, while a model its provider also
+ * serves over chat (gpt-6-luna) reaches it only when the rule says so. So a
+ * read that defaulted the absent case to `'decisions'` would make
+ * "the key round-tripped" true for a rule that never carried it.
+ */
+export type JudgeModelApi = 'decisions';
+
+/**
+ * The `code` of one judge rule as a caller wants to WRITE it, with every field
+ * the decision-model validator reads left expressible — including the shapes it
+ * exists to refuse.
+ *
+ * Deliberately un-defaulted and deliberately flat, unlike `createLlmJudgeRule`
+ * above, which fills in a model, a schema and a variable map so a seed can be
+ * one line. `DecisionModelRuleValidator`'s whole contract is which payloads are
+ * rejected, and every default is a field a rejection test cannot then state: a
+ * builder that always sent exactly one USER message cannot express the
+ * two-message refusal, and one that always sent a BOOLEAN schema cannot express
+ * the INTEGER one. `maxCostUsd` is omitted from the request when absent rather
+ * than sent as `null` for the same reason it is on `createLlmJudgeRule` — the
+ * validator refuses a budget that is PRESENT, so "no budget" and "a null
+ * budget" have to stay distinguishable.
+ */
+export interface JudgeRuleWrite {
+  /**
+   * The evaluator discriminator. `trace_thread_llm_as_judge` is in the union
+   * because "a thread rule cannot use a decisions model" is one of the
+   * refusals, and it is unreachable from the two trace/span types.
+   */
+  type: 'llm_as_judge' | 'span_llm_as_judge' | 'trace_thread_llm_as_judge';
+  projectId: string;
+  name: string;
+  model: { name: string; temperature?: number; api?: JudgeModelApi };
+  messages: Array<{ role: string; content: string }>;
+  /**
+   * Absent for a thread rule, which takes none — the scorer hands the metric
+   * the rendered conversation rather than binding fields of one entity.
+   */
+  variables?: Record<string, string>;
+  schema: Array<{ name: string; type: JudgeOutputSchemaType; description: string }>;
+  maxCostUsd?: number;
+  samplingRate?: number;
+  /**
+   * Defaults to FALSE here, the opposite of `createLlmJudgeRule`.
+   *
+   * A validation spec creates rules it never wants to fire: an enabled judge
+   * rule on a shared workspace starts sampling real traffic the moment it is
+   * stored, and every call it makes is billed. The rules this writes exist to
+   * be accepted or refused, never to score.
+   */
+  enabled?: boolean;
+}
+
+/**
  * One `llm_as_judge` rule's whole stored body — the top-level fields the editor
  * can change, plus `code` exactly as `GET /automations/evaluators/{id}` answers
  * it.
@@ -1511,6 +1570,17 @@ export interface AnnotationQueueWrite {
    * states and a seed must be able to produce either.
    */
   instructions?: string;
+  /**
+   * How many distinct annotators an item needs before the reviewer flow calls
+   * it Completed — the create sheet's "Annotators per item", and the ceiling
+   * `getItemState` compares the distinct-annotator count against.
+   *
+   * Omitted from the request entirely when not given rather than sent as `1`:
+   * the field is `@Nullable` on the API and absent is what every queue written
+   * before it existed carries, so a seed has to be able to produce that state
+   * as well as an explicit number.
+   */
+  annotatorsPerItem?: number;
   feedbackDefinitionNames?: string[];
   automation?: {
     enabled: boolean;
@@ -3812,6 +3882,12 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * `truncate: false`, unlike the two readers above: truncation shortens
      * string values, and a caller here is comparing an output against what it
      * seeded.
+     *
+     * `traceMetadata` rides here alongside `input` and `output` because
+     * opik#9402 late-materializes all THREE of them in one join per page — so a
+     * mis-join that paired a row with another row's payloads moves them
+     * together, and a projection that could only see two of the three would
+     * leave the one a user most often spots the discrepancy in unasserted.
      */
     async compareItemsTraceData(args: {
       datasetId: string;
@@ -3822,11 +3898,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       total: number;
       rows: Array<{
         id: string;
+        data: Record<string, unknown>;
         experimentItems: Array<{
           experimentId: string;
           traceId: string;
           input: unknown;
           output: unknown;
+          traceMetadata: unknown;
           duration: number | null;
           totalEstimatedCost: number | null;
         }>;
@@ -3862,6 +3940,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         total: body.total,
         rows: (body.content ?? []).map((item) => ({
           id: String(item.id ?? ''),
+          // The dataset item's own `data`, so a caller can pair the row's
+          // identity against the payloads below without a second read — which
+          // is the whole question when the two are joined separately.
+          data: (item.data ?? {}) as Record<string, unknown>,
           experimentItems: ((item.experiment_items ?? []) as Array<Record<string, unknown>>).map(
             (ei) => ({
               experimentId: String(ei.experiment_id ?? ''),
@@ -3871,6 +3953,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
               // here would hide it.
               input: ei.input ?? null,
               output: ei.output ?? null,
+              traceMetadata: ei.trace_metadata ?? null,
               duration: typeof ei.duration === 'number' ? ei.duration : null,
               totalEstimatedCost:
                 typeof ei.total_estimated_cost === 'number' ? ei.total_estimated_cost : null,
@@ -4453,6 +4536,84 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         datasetId: e.datasetId ? String(e.datasetId) : null,
         projectId: e.projectId ? String(e.projectId) : null,
       }));
+    },
+
+    /**
+     * `GET /v1/private/experiments` under a `filters` payload, reporting the
+     * status and message rather than throwing on them.
+     *
+     * Its own method rather than an option on `listExperimentsForDataset`,
+     * which goes through the pinned SDK: that client has no `filters`
+     * parameter, and what opik#9456 added is a new filterable FIELD, so the two
+     * failure classes the repo's own filter checklist names are both HTTP
+     * answers rather than row sets — a missing `FIELD_TYPE_VALIDATION_MAP`
+     * entry is a 500 from an NPE, and a missing operator entry is a 400. A
+     * helper that threw on either could not tell them apart from each other, or
+     * from a read that simply returned nothing.
+     *
+     * `datasetId` travels as the endpoint's own camelCase `datasetId` param
+     * (every sibling on this resource is snake_case; this one is not), and it
+     * is required: the workspace is shared, so an unscoped read is a
+     * truncation test rather than a closed set.
+     *
+     * `total` and `ids` are both carried for the reason the compare readers
+     * give — a filter that leaked rows can move either one without the other —
+     * and `ids` is left in server order, since ordering is not what a filter
+     * assertion is about.
+     */
+    async listExperimentsFiltered(args: {
+      datasetId: string;
+      filters?: BackendFilter[];
+      page?: number;
+      size?: number;
+    }): Promise<RawApiResult & { total: number | null; ids: string[] }> {
+      const query = new URLSearchParams({
+        datasetId: args.datasetId,
+        page: String(args.page ?? 1),
+        size: String(args.size ?? 100),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      });
+      const { status, message, location, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments',
+        { query },
+      );
+      if (status !== 200) return { status, message, location, total: null, ids: [] };
+      const body = (json ?? {}) as { total?: unknown; content?: Array<{ id?: unknown }> };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `listExperimentsFiltered: dataset ${args.datasetId} answered 200 without a total — ` +
+            'cannot tell a filtered population from a partial read.',
+        );
+      }
+      return {
+        status,
+        message,
+        location,
+        total: body.total,
+        ids: (body.content ?? []).map((e) => String(e.id ?? '')),
+      };
+    },
+
+    /**
+     * The `evaluation_method` one experiment reads back as.
+     *
+     * Read, never assumed, by any spec about the filter opik#9456 added: an
+     * experiment created without the field is stored on the enum's default, and
+     * a spec that hard-coded a guess at which value that is would assert its
+     * own assumption. Returns the string verbatim, `null` only when the key is
+     * genuinely absent — collapsing an absent method into `'dataset'` is what
+     * would let a filter that matched nothing look like one that matched the
+     * default.
+     */
+    async getExperimentEvaluationMethod(id: string): Promise<string | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/experiments/${id}`);
+      if (status !== 200) {
+        throw new Error(`getExperimentEvaluationMethod: ${id} answered ${status}: ${message}`);
+      }
+      const method = (json as { evaluation_method?: unknown } | null)?.evaluation_method;
+      if (method === undefined || method === null) return null;
+      return String(method);
     },
 
     async deleteExperiment(id: string): Promise<void> {
@@ -5727,6 +5888,103 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One trace's feedback scores projected to `value_by_author` — the MAP KEY
+     * each entry is stored under, and the `author` the entry itself reports.
+     *
+     * The two are different things, and that is the whole point. A queue-scoped
+     * score is keyed `<author>_<sourceQueueId>` while a plain one is keyed
+     * `<author>`, so one person who scored a trace both ways holds TWO keys and
+     * one author — which is exactly what opik#9474 fixed the annotator count to
+     * see (`getDistinctAnnotatorCount` now reads `entry.author` instead of
+     * counting keys). A reader that returned only the keys could not state that
+     * claim at all, and one that returned only the authors could not show the
+     * composite key was ever produced.
+     *
+     * `author` and `sourceQueueId` are nullable, never defaulted: an entry the
+     * server sent without an author is the regression a caller is here to
+     * catch, and substituting the key's prefix for it would reproduce the old
+     * behaviour inside the test.
+     */
+    async getTraceScoreAuthors(traceId: string): Promise<
+      Array<{
+        name: string;
+        entries: Array<{
+          key: string;
+          author: string | null;
+          value: number | null;
+          sourceQueueId: string | null;
+        }>;
+      }>
+    > {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (status !== 200) {
+        throw new Error(`getTraceScoreAuthors: ${traceId} answered ${status}: ${message}`);
+      }
+      const scores = ((json as { feedback_scores?: unknown } | null)?.feedback_scores ??
+        []) as Array<{ name?: unknown; value_by_author?: Record<string, unknown> }>;
+      return scores.map((score) => {
+        const byAuthor = score.value_by_author ?? {};
+        return {
+          name: String(score.name ?? ''),
+          entries: Object.entries(byAuthor)
+            .map(([key, raw]) => {
+              const entry = (raw ?? {}) as {
+                author?: unknown;
+                value?: unknown;
+                source_queue_id?: unknown;
+              };
+              const queueId = entry.source_queue_id;
+              return {
+                key,
+                author: typeof entry.author === 'string' && entry.author !== '' ? entry.author : null,
+                value: entry.value === undefined || entry.value === null ? null : Number(entry.value),
+                // The backend stores a FixedString(36), so an unscoped entry
+                // arrives as the empty string rather than as a missing key —
+                // folded to `null` here so "no queue" is one value and not two.
+                sourceQueueId:
+                  typeof queueId === 'string' && queueId !== '' ? queueId : null,
+              };
+            })
+            // Sorted by key so a caller can compare the whole collection
+            // instead of hunting its own entry inside it.
+            .sort((a, b) => a.key.localeCompare(b.key)),
+        };
+      });
+    },
+
+    /**
+     * Every comment on one trace, with the user each was created by.
+     *
+     * `getTraceComment` answers one comment by id, which a caller only has when
+     * it wrote the comment over REST itself. A comment left through a UI never
+     * surfaces its id, so "the person who scored also commented" — half of what
+     * makes one reviewer look like two to a key-counting annotator tally — is
+     * only observable by listing.
+     *
+     * `createdBy` is nullable for the usual reason: a comment the server
+     * returned with no author is a different answer from one by the test's own
+     * user, and defaulting it would collapse them.
+     */
+    async listTraceComments(
+      traceId: string,
+    ): Promise<Array<{ id: string; text: string; createdBy: string | null }>> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/traces/${traceId}`);
+      if (status !== 200) {
+        throw new Error(`listTraceComments: ${traceId} answered ${status}: ${message}`);
+      }
+      const comments = ((json as { comments?: unknown } | null)?.comments ?? []) as Array<{
+        id?: unknown;
+        text?: unknown;
+        created_by?: unknown;
+      }>;
+      return comments.map((c) => ({
+        id: String(c.id ?? ''),
+        text: String(c.text ?? ''),
+        createdBy: typeof c.created_by === 'string' && c.created_by !== '' ? c.created_by : null,
+      }));
+    },
+
+    /**
      * The trace feedback score names a project has, sorted.
      *
      * This is the endpoint behind the score picker in a `trace:feedback_score`
@@ -6341,6 +6599,90 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * but a present value that is not an object throws rather than being cast,
      * because the backend types it as a bare `JsonNode`.
      */
+    /**
+     * Write one judge rule verbatim, reporting the status and message instead
+     * of throwing on them.
+     *
+     * The counterpart of `createLlmJudgeRule` for the rejection side of
+     * `DecisionModelRuleValidator` (opik#9357): a caller there is asserting the
+     * 400 AND its message, so a helper that threw on a non-201 would turn the
+     * answer under test into a thrown error, and one that filled in defaults
+     * could not express the payloads being refused — see `JudgeRuleWrite`.
+     *
+     * `location` is returned with the status so an accepted rule can be read
+     * back and deleted: the create answers 201 with an empty body, and the id
+     * exists nowhere else.
+     */
+    async writeJudgeRuleStatus(
+      args: JudgeRuleWrite,
+    ): Promise<RawApiResult & { ruleId: string | null }> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: args.type,
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate ?? 1,
+            enabled: args.enabled ?? false,
+            code: {
+              model: {
+                name: args.model.name,
+                ...(args.model.temperature === undefined
+                  ? {}
+                  : { temperature: args.model.temperature }),
+                ...(args.model.api === undefined ? {} : { api: args.model.api }),
+              },
+              messages: args.messages.map((m) => ({ role: m.role, content: m.content })),
+              ...(args.variables === undefined ? {} : { variables: args.variables }),
+              schema: args.schema,
+              ...(args.maxCostUsd === undefined ? {} : { max_cost_usd: args.maxCostUsd }),
+            },
+          },
+        },
+      );
+      const ruleId = location?.split('/').filter(Boolean).pop() ?? null;
+      return { status, message, location, ruleId: status === 201 ? ruleId : null };
+    },
+
+    /**
+     * The `api` one judge rule's model block carries, with ABSENT reported as
+     * `undefined` rather than normalised away.
+     *
+     * Its own reader rather than a field on `LlmJudgeModelRef` because the
+     * question is about absence: a decisions-only model resolves to the
+     * Decisions API carrying no `api` key, so "reads back as decisions" and
+     * "reads back absent" are both correct answers for different models, and a
+     * shape that defaulted either way would make one of them unobservable.
+     *
+     * Throws when the key is present but is not a string the enum declares — a
+     * value this suite cannot name is a response it cannot assert on, not a
+     * missing one.
+     */
+    async getLlmJudgeModelApi(ruleId: string): Promise<JudgeModelApi | undefined> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${ruleId}`,
+      );
+      if (status !== 200) {
+        throw new Error(`getLlmJudgeModelApi: ${ruleId} answered ${status}: ${message}`);
+      }
+      const model = (json as { code?: { model?: { api?: unknown } } } | null)?.code?.model;
+      if (model === undefined) {
+        throw new Error(`getLlmJudgeModelApi: ${ruleId} returned no code.model`);
+      }
+      if (model.api === undefined || model.api === null) return undefined;
+      if (model.api !== 'decisions') {
+        throw new Error(
+          `getLlmJudgeModelApi: ${ruleId} returned code.model.api as ` +
+            `${JSON.stringify(model.api)}, which is not a value LlmAsJudgeModelApi declares`,
+        );
+      }
+      return 'decisions';
+    },
+
     /**
      * The `type` of every score an `llm_as_judge` rule declares, in order.
      *
@@ -8167,6 +8509,18 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       projectId: string;
       scope: string;
       instructions: string | null;
+      /**
+       * `annotators_per_item`, or `null` when the queue carries none.
+       *
+       * Nullable rather than defaulted to 1 because the ceiling is what decides
+       * whether an item reads Reviewed or Completed: a queue that silently
+       * stored no ceiling would, under a defaulting read, be indistinguishable
+       * from one configured for a single annotator — and the second is the
+       * state in which "the item is not Completed yet" can never hold.
+       */
+      annotatorsPerItem: number | null;
+      /** The score names the reviewer flow offers, or `null` when absent. */
+      feedbackDefinitionNames: string[] | null;
     }> {
       const { status, message, json } = await rawFetch(
         'GET',
@@ -8182,6 +8536,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         project_id?: unknown;
         scope?: unknown;
         instructions?: unknown;
+        annotators_per_item?: unknown;
+        feedback_definition_names?: unknown;
       } | null;
       if (typeof raw?.name !== 'string' || typeof raw.project_id !== 'string') {
         throw new Error(
@@ -8194,6 +8550,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         projectId: raw.project_id,
         scope: typeof raw.scope === 'string' ? raw.scope : '',
         instructions: typeof raw.instructions === 'string' ? raw.instructions : null,
+        annotatorsPerItem:
+          typeof raw.annotators_per_item === 'number' ? raw.annotators_per_item : null,
+        feedbackDefinitionNames: Array.isArray(raw.feedback_definition_names)
+          ? raw.feedback_definition_names.map((n) => String(n))
+          : null,
       };
     },
 
@@ -8223,6 +8584,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           name: queue.name,
           scope: queue.scope,
           ...(queue.instructions === undefined ? {} : { instructions: queue.instructions }),
+          ...(queue.annotatorsPerItem === undefined
+            ? {}
+            : { annotators_per_item: queue.annotatorsPerItem }),
           ...(queue.feedbackDefinitionNames
             ? { feedback_definition_names: queue.feedbackDefinitionNames }
             : {}),
