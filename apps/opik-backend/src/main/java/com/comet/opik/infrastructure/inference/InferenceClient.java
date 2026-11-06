@@ -2,6 +2,8 @@ package com.comet.opik.infrastructure.inference;
 
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.google.common.base.Preconditions;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -42,7 +44,7 @@ import java.util.function.Function;
  * <p>
  * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body,
  * success or error, is read up to {@code aiLabels.inference.maxResponseBytes}; a longer one fails the call the same
- * way, without being read further.
+ * way, and its connection is closed without reading the rest.
  * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
@@ -71,6 +73,15 @@ public class InferenceClient {
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
     private static final String EMBED_PATH = "v1/embed";
     private static final String GENERATE_PATH = "v1/generate";
+
+    /**
+     * A relaxed guard checks no address or scheme: opik-inference is an internal service. It is set on every request
+     * only so that closing the response ends its connection instead of reading the rest of the body, see
+     * {@code DestinationGuardJerseyClientBuilder}; a body read to its end keeps its connection for reuse.
+     */
+    private static final DestinationGuard CLOSE_WITHOUT_DRAINING = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .build();
 
     private final @NonNull Client client;
     private final @NonNull @Config("aiLabels") AiLabelsConfig config;
@@ -272,6 +283,8 @@ public class InferenceClient {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + inference.getCredential())
                     // A redirect would carry the credential and the request to a destination nobody configured.
                     .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                    // A body over the cap could otherwise keep the read going as long as the service sends it.
+                    .property(DestinationGuardDnsResolver.PROPERTY, CLOSE_WITHOUT_DRAINING)
                     .property(ClientProperties.CONNECT_TIMEOUT,
                             timeoutMillis(inference.getConnectTimeout().toJavaDuration(), left))
                     .property(ClientProperties.READ_TIMEOUT, timeoutMillis(call.readTimeout(), left));
@@ -328,7 +341,8 @@ public class InferenceClient {
 
     /**
      * The body, read up to one byte past {@code maxBytes}, so a longer one is seen without holding more of it, as
-     * {@code WebhookHttpClient} reads a response.
+     * {@code WebhookHttpClient} reads a response. Closing the stream of a longer one ends its connection, see
+     * {@link #CLOSE_WITHOUT_DRAINING}, so the rest is never read.
      */
     private static byte[] readBody(Response response, long maxBytes) {
         try {
