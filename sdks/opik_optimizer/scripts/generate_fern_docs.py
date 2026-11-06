@@ -394,17 +394,16 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 ## Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+- **Shared lifecycle**: Prompt optimizers use `optimize_prompt()`; parameter search uses `ParameterOptimizer.optimize_parameter()`
 - **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, and GEPA
-- **MCP Support**: Built-in support for Model Context Protocol tool calling and optimization
+- **MCP Support**: Install `opik-optimizer[mcp]` for MCP tool calling and description optimization
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
-- **Backward Compatibility**: All original parameters preserved through kwargs extraction
 - **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 ## Core Classes
 
-The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
+The SDK provides several optimizer classes that inherit from `BaseOptimizer` and return `OptimizationResult`:
 
 - **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 - **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
@@ -415,7 +414,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 
 ## Standardized Method Signatures
 
-All optimizers implement these core methods with identical signatures:
+The prompt optimizers share the following entrypoint. `ParameterOptimizer` uses `optimize_parameter()` with a `parameter_space` argument; calling its `optimize_prompt()` raises `NotImplementedError`.
 
 ### optimize_prompt()
 ```python wordWrap
@@ -426,40 +425,79 @@ def optimize_prompt(
     metric: MetricFunction,
     agent: OptimizableAgent | None = None,
     experiment_config: dict | None = None,
-    n_samples: int | None = None,
+    n_samples: int | float | str | None = None,
+    n_samples_minibatch: int | None = None,
+    n_samples_strategy: str | None = None,
     auto_continue: bool = False,
     project_name: str | None = None,
     optimization_id: str | None = None,
     validation_dataset: Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
+    optimize_prompts: bool | str | list[str] | None = "system",
+    optimize_tools: bool | dict[str, bool] | None = None,
+    *args: Any,
     **kwargs: Any,
-) -> OptimizationResult
+) -> OptimizationResult:
+    ...
 ```
 
-## Deprecation Warnings
+## Model settings
 
-The following parameters are deprecated and will be removed in future versions:
+`ChatPrompt.model` and `model_parameters` control agent evaluation. The optimizer's `model` and
+`model_parameters` control its internal reasoning calls and are not copied into prompt settings.
+Custom agents own their calls and should read each supplied prompt's model and `model_kwargs`.
+HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
-### Constructor Parameters
+Images in prompts, training items or agent traces reach the optimizer model as native image
+blocks, so it must support vision; otherwise the run fails before any evaluation. Audio, video and
+file content is named but not sent. Agent media and settings are retained. Candidate responses contain targeted text edits
+(`segment_id`, `text`), not full messages. GEPA requires `gepa>=0.1.4` for native reflection images.
 
-- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+## Structured evidence and text edits
 
-### Example Migration
+Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`, and
+`apply_text_edits` directly from `opik_optimizer` when extending an optimizer.
 
-```python wordWrap
-# ❌ Deprecated
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    num_threads=16,  # Deprecated
-)
+- `ReasoningEvidence(prompts=..., cases=None, sections=None, editable=True)` supplies named prompt
+  templates, selected cases and optional observations to `llm_calls.call_model` or its async
+  equivalent. The client sends only the cases you pass; `cases=None` and `cases=()` send none.
+- `EvidenceCase(case_id, inputs, output=None, scores=None, observations=None)` keeps a case's
+  rendered inputs, native images and feedback together.
+- `describe_text_segments(prompt, allowed_roles=None)` returns existing editable segment IDs.
+  `TextEdit(segment_id, text)` replaces one such string or text block.
+- `apply_text_edits(prompt, edits, allowed_roles=None)` validates the full edit set and applies it
+  to a copy. It retains media, role order, tools and agent model settings. Placeholder preservation
+  is enabled by default; callers with their own guard can explicitly disable that check.
 
-# ✅ Correct
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    n_threads=16,  # Use n_threads instead
-)
-```
+## Trial experiments
+
+Each candidate evaluation is logged as an experiment in the Opik optimization run. Its metadata
+records `candidate_id`, `parent_candidate_ids` (the prompts the candidate was derived from; the
+baseline is the root) and `step_index` (its depth in that tree), which the Opik UI uses to mark
+trials as Passed or Discarded. A prompt already scored on the same items in the run is not
+scored again. `evaluate_prompt(..., experiment_type="mini-batch")` logs an evaluation that is not a
+ranking trial, such as HRPO's failure analysis on training items, so it stays out of trial scores.
+
+## Migration and deprecated APIs
+
+- **Tracking IDs:** a supplied `optimization_id` must be a valid UUIDv7 string. Existing runs are
+  reused; unknown IDs are created. Failure to create an explicitly requested run raises an error.
+- **ParameterOptimizer:** constructor `model` and `model_parameters` are deprecated, ignored, and
+  emit `DeprecationWarning`. Set them on each `ChatPrompt` instead. Parameter search changes only
+  selected fields. Result `details["baseline_parameters"]` and `details["optimized_model_kwargs"]`
+  are maps keyed by prompt name.
+- **MCP:** install the optional `opik-optimizer[mcp]` extra (MCP 1.x). Plain function tools do not
+  require this extra. Description optimization is supported by MetaPrompt, Evolutionary, GEPA,
+  and HRPO.
+- **FewShot:** `enable_optuna_pruning` is deprecated and has no effect. Use `n_threads` to configure
+  evaluation parallelism.
+- **Custom optimizers:** implement `run_optimization(context)` and return `AlgorithmResult`.
+  The `begin_round`, `finish_round`, `start_candidate`, and `finish_candidate` hooks are removed;
+  use `pre_round`, `post_round`, `pre_trial`, and `post_trial` respectively.
+
+See [Configure models](/development/optimization-runs/optimization/configure_models) and
+[ParameterOptimizer](/development/optimization-runs/algorithms/parameter_optimizer) for examples.
 
 """
 

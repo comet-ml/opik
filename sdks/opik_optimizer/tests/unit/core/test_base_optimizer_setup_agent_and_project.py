@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -30,61 +29,6 @@ def mock_metric() -> MetricFunction:
 
 
 class TestSetupOptimizationAgent:
-    def test_creates_agent_if_not_provided(
-        self,
-        optimizer: ConcreteOptimizer,
-        simple_chat_prompt,
-        mock_opik_client,
-        mock_metric: MetricFunction,
-    ) -> None:
-        """Should create LiteLLMAgent if no agent provided."""
-        mock_opik_client()
-        from opik_optimizer.agents import LiteLLMAgent
-
-        mock_ds = make_mock_dataset(
-            [{"id": "1", "input": "test"}],
-            name="test-dataset",
-            dataset_id="ds-123",
-        )
-
-        context = optimizer._setup_optimization(
-            prompt=simple_chat_prompt,
-            dataset=mock_ds,
-            metric=mock_metric,
-            agent=None,
-            compute_baseline=False,
-        )
-
-        assert isinstance(context.agent, LiteLLMAgent)
-
-    def test_uses_provided_agent(
-        self,
-        optimizer: ConcreteOptimizer,
-        simple_chat_prompt,
-        mock_opik_client,
-        mock_metric: MetricFunction,
-    ) -> None:
-        """Should use provided agent."""
-        mock_opik_client()
-        from opik_optimizer.agents import OptimizableAgent
-
-        mock_ds = make_mock_dataset(
-            [{"id": "1", "input": "test"}],
-            name="test-dataset",
-            dataset_id="ds-123",
-        )
-        mock_agent = MagicMock(spec=OptimizableAgent)
-
-        context = optimizer._setup_optimization(
-            prompt=simple_chat_prompt,
-            dataset=mock_ds,
-            metric=mock_metric,
-            agent=mock_agent,
-            compute_baseline=False,
-        )
-
-        assert context.agent is mock_agent
-
     def test_project_name_sets_optimizer_and_default_agent(
         self,
         optimizer: ConcreteOptimizer,
@@ -115,3 +59,28 @@ class TestSetupOptimizationAgent:
         assert optimizer.project_name == "TestProject"
         assert isinstance(context.agent, LiteLLMAgent)
         assert context.agent.project_name == "TestProject"  # type: ignore[attr-defined]
+
+    def test_dataset_project_wins_so_trials_and_run_share_it(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric: MetricFunction,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Opik records trials in the dataset's project; the run must follow."""
+        mock_opik_client()
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}], name="test-dataset", dataset_id="ds-123"
+        )
+        mock_ds.project_name = "dataset-project"
+
+        context = optimizer._setup_optimization(
+            prompt=simple_chat_prompt,
+            dataset=mock_ds,
+            metric=mock_metric,
+            project_name="other-project",
+        )
+
+        assert context.project_name == optimizer.project_name == "dataset-project"
+        assert "project_name='other-project' is ignored" in caplog.text

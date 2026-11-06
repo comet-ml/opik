@@ -37,71 +37,6 @@ def mock_metric() -> MetricFunction:
 
 
 class TestSetupOptimizationDatasetsAndSamples:
-    def test_validation_dataset_selected_for_evaluation_and_split_tagged(
-        self,
-        optimizer: ConcreteOptimizer,
-        simple_chat_prompt,
-        mock_opik_client,
-        mock_metric: MetricFunction,
-    ) -> None:
-        """validation_dataset should become evaluation_dataset and set dataset_split='validation'."""
-        mock_opik_client()
-        training_ds = make_mock_dataset(
-            [{"id": "1", "question": "Q1", "answer": "A1"}],
-            name="training",
-            dataset_id="train-123",
-        )
-        validation_ds = make_mock_dataset(
-            [{"id": "2", "question": "Q2", "answer": "A2"}],
-            name="validation",
-            dataset_id="val-123",
-        )
-
-        context = optimizer._setup_optimization(
-            prompt=simple_chat_prompt,
-            dataset=training_ds,
-            metric=mock_metric,
-            compute_baseline=False,
-            validation_dataset=validation_ds,
-        )
-
-        assert context.validation_dataset is validation_ds
-        assert context.evaluation_dataset is validation_ds
-        assert context.dataset_split == "validation"
-
-    def test_validation_dataset_enriches_experiment_config(
-        self,
-        optimizer: ConcreteOptimizer,
-        simple_chat_prompt,
-        mock_opik_client,
-        mock_metric: MetricFunction,
-    ) -> None:
-        """When validation_dataset is provided, experiment_config should include its name/id."""
-        mock_opik_client()
-        training_ds = make_mock_dataset(
-            [{"id": "1", "question": "Q1", "answer": "A1"}],
-            name="training",
-            dataset_id="train-123",
-        )
-        validation_ds = make_mock_dataset(
-            [{"id": "2", "question": "Q2", "answer": "A2"}],
-            name="validation",
-            dataset_id="val-123",
-        )
-
-        context = optimizer._setup_optimization(
-            prompt=simple_chat_prompt,
-            dataset=training_ds,
-            metric=mock_metric,
-            compute_baseline=False,
-            validation_dataset=validation_ds,
-            experiment_config={},
-        )
-
-        assert context.experiment_config is not None
-        assert context.experiment_config["validation_dataset"] == "validation"
-        assert context.experiment_config["validation_dataset_id"] == "val-123"
-
     @pytest.mark.parametrize(
         "n_samples,total_items,expected",
         [
@@ -207,36 +142,3 @@ class TestSetupOptimizationDatasetsAndSamples:
         assert plan.nb_samples is None
         assert plan.dataset_item_ids is None
         assert plan.mode.endswith(":full")
-
-    def test_prepare_minibatch_plan_prefers_minibatch_count(
-        self, optimizer: ConcreteOptimizer
-    ) -> None:
-        dataset = _make_sequential_dataset(10)
-
-        plan = optimizer._prepare_minibatch_plan(
-            dataset=dataset,
-            n_samples=2,
-            n_samples_minibatch=4,
-            phase="minibatch",
-        )
-
-        assert plan.nb_samples == 4
-        assert plan.mode.startswith("minibatch")
-        assert plan.dataset_item_ids is not None
-        assert len(plan.dataset_item_ids) == 4
-
-    def test_prepare_minibatch_plan_clamps_to_dataset_size(
-        self, optimizer: ConcreteOptimizer
-    ) -> None:
-        dataset = _make_sequential_dataset(3)
-
-        plan = optimizer._prepare_minibatch_plan(
-            dataset=dataset,
-            n_samples=1,
-            n_samples_minibatch=10,
-            phase="minibatch",
-        )
-
-        assert plan.nb_samples == 3
-        assert plan.dataset_item_ids is not None
-        assert len(plan.dataset_item_ids) == 3

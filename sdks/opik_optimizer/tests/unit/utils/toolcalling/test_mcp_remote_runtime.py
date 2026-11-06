@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from typing import Any
 
 import pytest
@@ -54,3 +55,18 @@ def test_start_client__cleans_up_transport_and_session_on_initialize_error(
 
     assert transport.exited is True
     assert session_holder["session"].exited is True
+
+
+def test_missing_mcp_sdk_points_at_the_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    from opik_optimizer.utils.toolcalling.runtime import mcp as mcp_runtime
+
+    for module in ("mcp.client.session", "modelcontextprotocol.client.session"):
+        monkeypatch.setitem(sys.modules, module, None)
+    with pytest.raises(
+        mcp_runtime.ToolCallingDependencyError, match=r"opik-optimizer\[mcp\]"
+    ):
+        mcp_remote._load_remote_sdk()
+    with pytest.raises(
+        mcp_runtime.ToolCallingDependencyError, match=r"opik-optimizer\[mcp\]"
+    ):
+        mcp_runtime._load_sdk()

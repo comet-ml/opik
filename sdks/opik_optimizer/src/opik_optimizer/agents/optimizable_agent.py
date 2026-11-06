@@ -27,17 +27,6 @@ if TYPE_CHECKING:
 
 
 # TODO: Verify if this function is still used anywhere, remove if unused
-def tools_to_dict(tools: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Convert tools dictionary to a simplified format."""
-    retval = {}
-    for name in tools:
-        parts = {}
-        for part in tools[name]:
-            if isinstance(tools[name][part], (int, float, str)):
-                parts[part] = tools[name][part]
-        if parts:
-            retval[name] = parts
-    return retval
 
 
 class OptimizableAgent(ABC):

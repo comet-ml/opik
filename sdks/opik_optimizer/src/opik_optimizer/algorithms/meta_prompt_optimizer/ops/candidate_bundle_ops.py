@@ -2,20 +2,24 @@
 Agent-bundle candidate generation for the Meta-Prompt Optimizer.
 """
 
+from ....utils.prompt_editing import apply_text_edits
+
+from ....core.reasoning import EvidenceCase, ReasoningEvidence
+
 import json
 import logging
 from typing import Any
 from collections.abc import Callable, Sequence
 
-from litellm.exceptions import BadRequestError
+from litellm.exceptions import AuthenticationError, BadRequestError, NotFoundError
 
 from ....api_objects import chat_prompt
+from ....utils.multimodal import text_only_messages
 from ....api_objects.types import MetricFunction
 from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from ....utils import display as display_utils
-from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from .. import prompts as meta_prompts
 from .. import reporting
 from ..types import AgentBundleCandidate, AgentBundleCandidatesResponse, AgentMetadata
@@ -31,7 +35,7 @@ def _format_agent_prompts_for_prompt(
     """
     blocks: list[str] = []
     for agent_name, prompt in agent_prompts.items():
-        messages = prompt.get_messages()
+        messages = text_only_messages(prompt.get_messages())
         blocks.append(
             f"Agent name: {agent_name}\nMessages:\n{json.dumps(messages, indent=2)}"
         )
@@ -87,11 +91,12 @@ def generate_agent_bundle_candidates(
 
         history_context = build_history_context_fn(previous_rounds)
         task_context_str = ""
+        task_cases: list[EvidenceCase] = []
         analysis_instruction = ""
         metric_focus_instruction = ""
 
         if optimizer.enable_context:
-            task_context_str, _ = get_task_context_fn(metric=metric)
+            task_context_str, task_cases = get_task_context_fn(metric=metric)
             analysis_instruction = "Analyze the examples/feedback (if any), metric description, and score history."
             metric_focus_instruction = "Focus on improving evaluation scores while keeping each agent's role distinct."
         else:
@@ -125,6 +130,7 @@ def generate_agent_bundle_candidates(
             )
 
             response = _llm_calls.call_model(
+                evidence=ReasoningEvidence(prompts=current_prompts, cases=task_cases),
                 messages=[
                     {
                         "role": "system",
@@ -168,38 +174,11 @@ def generate_agent_bundle_candidates(
                             continue
 
                         try:
-                            messages_dict = [
-                                msg.model_dump() for msg in agent_update.messages
-                            ]
-                            updated_prompt = chat_prompt.ChatPrompt(
-                                name=current_prompts[name].name or name,
-                                messages=messages_dict,
-                                tools=current_prompts[name].tools,
-                                function_map=current_prompts[name].function_map,
-                                model=current_prompts[name].model,
-                                model_parameters=current_prompts[name].model_kwargs,
+                            updated_prompt = apply_text_edits(
+                                current_prompts[name],
+                                agent_update.edits,
+                                getattr(optimizer, "_optimizable_roles", None),
                             )
-                            allowed_roles = getattr(
-                                optimizer, "_optimizable_roles", None
-                            )
-                            if allowed_roles is not None:
-                                constrained = apply_role_constraints(
-                                    current_prompts[name].get_messages(),
-                                    updated_prompt.get_messages(),
-                                    allowed_roles,
-                                )
-                                dropped = count_disallowed_role_updates(
-                                    current_prompts[name].get_messages(),
-                                    updated_prompt.get_messages(),
-                                    allowed_roles,
-                                )
-                                if dropped:
-                                    logger.debug(
-                                        "MetaPrompt bundle candidate dropped %s update(s) for agent '%s' due to optimize_prompt constraints.",
-                                        dropped,
-                                        name,
-                                    )
-                                updated_prompt.set_messages(constrained)
                             updated_prompts[name] = updated_prompt
                             agent_metadata[name] = AgentMetadata(
                                 improvement_focus=agent_update.improvement_focus,
@@ -230,7 +209,15 @@ def generate_agent_bundle_candidates(
             return candidates
 
         except Exception as exc:
-            if isinstance(exc, (BadRequestError, StructuredOutputParsingError)):
+            if isinstance(
+                exc,
+                (
+                    AuthenticationError,
+                    BadRequestError,
+                    NotFoundError,
+                    StructuredOutputParsingError,
+                ),
+            ):
                 raise
             raise ValueError(
                 f"Unexpected error during agent bundle prompt generation: {exc}"

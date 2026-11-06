@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 from collections.abc import Generator
 
@@ -13,9 +14,12 @@ _E2E_PROJECT_NAME = "e2e-optimizer-tests"
 
 @pytest.fixture(scope="session")
 def setup_environment() -> Generator[None, Any, None]:
-    """Setup environment for e2e optimizer tests."""
+    """Log to OPIK_PROJECT_NAME when the caller set it, else the shared e2e project."""
     with pytest.MonkeyPatch.context() as m:
-        m.setenv("OPIK_PROJECT_NAME", _E2E_PROJECT_NAME)
+        m.setenv(
+            "OPIK_PROJECT_NAME",
+            os.environ.get("OPIK_PROJECT_NAME") or _E2E_PROJECT_NAME,
+        )
         yield
 
 

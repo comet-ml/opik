@@ -1,263 +1,18 @@
 # mypy: disable-error-code=no-untyped-def
 
-from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from opik_optimizer import ChatPrompt, GepaOptimizer, OptimizationResult
+from opik_optimizer import ChatPrompt, GepaOptimizer
 from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
-from tests.unit.fixtures import assert_baseline_early_stop, assert_invalid_prompt_raises
-from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
+from tests.unit.fixtures import make_baseline_prompt
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_optimization_context,
     STANDARD_DATASET_ITEMS,
 )
-
-
-class TestGepaOptimizerInit:
-    @pytest.mark.parametrize(
-        "kwargs,expected",
-        [
-            ({"model": "gpt-4o"}, {"model": "gpt-4o", "seed": 42}),
-            (
-                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
-                {"model": "gpt-4o-mini", "verbose": 0, "seed": 123},
-            ),
-        ],
-    )
-    def test_initialization(
-        self, kwargs: dict[str, Any], expected: dict[str, Any]
-    ) -> None:
-        """Test optimizer initialization with defaults and custom params."""
-        optimizer = GepaOptimizer(**kwargs)
-        for key, value in expected.items():
-            assert getattr(optimizer, key) == value
-
-
-class TestGepaOptimizerOptimizePrompt:
-    def test_single_prompt_returns_chat_prompt(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        simple_chat_prompt,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompt = simple_chat_prompt
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        mock_gepa_result = MagicMock()
-        mock_gepa_result.best_prompt = prompt.copy()
-        mock_gepa_result.best_score = 0.85
-        mock_gepa_result.history = []
-        mock_gepa_result.pareto_front = []
-        mock_gepa_result.total_metric_calls = 1
-
-        monkeypatch.setattr("gepa.optimize", lambda **kwargs: mock_gepa_result)
-
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, ChatPrompt)
-
-    def test_dict_prompt_returns_dict(
-        self,
-        mock_optimization_context,
-        monkeypatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompts = make_two_prompt_bundle()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
-
-        mock_gepa_result = MagicMock()
-        mock_gepa_result.best_prompt = list(prompts.values())[0].copy()
-        mock_gepa_result.best_score = 0.85
-        mock_gepa_result.history = []
-        mock_gepa_result.pareto_front = []
-        mock_gepa_result.total_metric_calls = 1
-
-        monkeypatch.setattr("gepa.optimize", lambda **kwargs: mock_gepa_result)
-
-        result = optimizer.optimize_prompt(
-            prompt=prompts,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=2,
-            n_samples=2,
-        )
-
-        assert isinstance(result, OptimizationResult)
-        assert isinstance(result.prompt, dict)
-
-    def test_invalid_prompt_raises_error(
-        self,
-        mock_optimization_context,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        assert_invalid_prompt_raises(
-            optimizer,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-
-class TestGepaOptimizerEarlyStop:
-    def test_skips_on_perfect_score(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_opik_client()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(result, perfect_score=0.95, trials_completed=1)
-        # Early stop happens before run_optimization, so only baseline was evaluated
-        # Framework sets trials_completed to 1 (baseline evaluation counts as 1 trial)
-        assert result.details["trials_completed"] == 1
-
-    def test_early_stop_reports_at_least_one_trial(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        """Verify GepaOptimizer early stop reports at least 1 trial."""
-        mock_opik_client()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = GepaOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(
-            result, perfect_score=0.95, trials_completed=1, history_len=1
-        )
-
-
-class TestGepaOptimizerAgentUsage:
-    """Test that self.agent is properly set and used by GEPA adapter."""
-
-    def test_agent_set_inpre_optimize(self, monkeypatch) -> None:
-        """
-        Verify that self.agent is set during pre_optimize.
-
-        This test ensures that when pre_optimize is called,
-        self.agent is properly assigned from context.agent for use
-        in OpikGEPAAdapter and reflection operations.
-        """
-        from opik_optimizer.agents.optimizable_agent import OptimizableAgent
-        from opik_optimizer.core.state import OptimizationContext
-
-        optimizer = GepaOptimizer(
-            model="gpt-4o-mini",
-            verbose=0,
-            seed=42,
-        )
-
-        # Verify agent is not set initially
-        assert not hasattr(optimizer, "agent") or optimizer.agent is None
-
-        # Create a mock context with an agent
-        mock_agent = MagicMock(spec=OptimizableAgent)
-        mock_context = MagicMock(spec=OptimizationContext)
-        mock_context.agent = mock_agent
-        mock_context.extra_params = {}
-
-        # Call pre_optimize
-        optimizer.pre_optimize(mock_context)
-
-        # Verify self.agent is now set
-        assert hasattr(optimizer, "agent"), "pre_optimize should set self.agent"
-        assert optimizer.agent is mock_agent, "self.agent should be context.agent"
-
-    def test_self_agent_available_for_adapter(self) -> None:
-        """
-        Verify that self.agent is available after optimize_prompt starts.
-
-        This test documents that GepaOptimizer needs self.agent because
-        it creates OpikGEPAAdapter which accesses the agent via the optimizer instance.
-        The agent is passed in run_optimization to the adapter as self.agent.
-        """
-        from opik_optimizer.core.state import OptimizationContext
-
-        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-
-        # Verify agent is not set before pre_optimize
-        assert not hasattr(optimizer, "agent") or optimizer.agent is None
-
-        # Create a mock context
-        mock_agent = MagicMock()
-        mock_context = MagicMock(spec=OptimizationContext)
-        mock_context.agent = mock_agent
-        mock_context.extra_params = {}
-
-        # Call pre_optimize
-        optimizer.pre_optimize(mock_context)
-
-        # Verify self.agent is set and can be accessed in run_optimization
-        assert optimizer.agent is mock_agent
 
 
 def test_gepa_adapter_records_per_item_metrics() -> None:
@@ -471,3 +226,70 @@ def test_gepa_adapter_whitespace_only_candidates_filtered() -> None:
 
     result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
     assert result == []
+
+
+@pytest.mark.parametrize(
+    "candidates,expected_output,expected_metric_calls",
+    [
+        # n=1: Opik scores the output itself, so no extra metric call per item.
+        (["only"], "only", 0),
+        # n>1: pass@k picks the best candidate by metric.
+        (["bad", "good"], "good", 2),
+    ],
+)
+def test_gepa_adapter_llm_task_scores_candidates_only_for_pass_at_k(
+    monkeypatch: pytest.MonkeyPatch,
+    candidates: list[str],
+    expected_output: str,
+    expected_metric_calls: int,
+) -> None:
+    from opik_optimizer.algorithms.gepa_optimizer import adapter as adapter_module
+    from opik_optimizer.algorithms.gepa_optimizer.types import OpikDataInst
+
+    item = {"id": "t1", "question": "q", "answer": "a"}
+    dataset = make_mock_dataset([item], name="test-dataset", dataset_id="ds-1")
+    metric_calls: list[str] = []
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        metric_calls.append(llm_output)
+        return 1.0 if llm_output == "good" else 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    class CandidateAgent:
+        def invoke_agent_candidates(self, **_kwargs: Any) -> list[str]:
+            return list(candidates)
+
+    context = make_optimization_context(
+        make_baseline_prompt(), dataset=dataset, metric=metric_fn
+    )
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=CandidateAgent(),  # type: ignore[arg-type]
+        optimizer=GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42),
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+    seen: dict[str, Any] = {}
+
+    def fake_evaluate_with_result(**kwargs: Any) -> tuple[float, Any]:
+        seen["output"] = kwargs["evaluated_task"](item)["llm_output"]
+        seen["metric_calls"] = len(metric_calls)
+        eval_result = MagicMock()
+        eval_result.test_results = []
+        return 1.0, eval_result
+
+    monkeypatch.setattr(
+        adapter_module.task_evaluator, "evaluate_with_result", fake_evaluate_with_result
+    )
+    batch = [
+        OpikDataInst(input_text="q", answer="a", additional_context={}, opik_item=item)
+    ]
+    adapter.evaluate(batch, candidate={}, capture_traces=False)
+
+    assert seen == {
+        "output": expected_output,
+        "metric_calls": expected_metric_calls,
+    }

@@ -34,10 +34,10 @@
             "additionalProperties": true
           },
           "optimizer": { "type": "string", "description": "Optimizer key from benchmark_config.OPTIMIZER_CONFIGS." },
-          "model": { "type": "string", "description": "Model identifier (e.g., openai/gpt-4o-mini)." },
+          "model": { "type": "string", "description": "Evaluation model identifier for the ChatPrompt or package agent (e.g., openai/gpt-4o-mini)." },
           "test_mode": { "type": "boolean", "description": "Override test_mode for this task." },
-          "model_parameters": { "type": "object", "description": "Model parameters forwarded to the optimizer constructor." },
-          "optimizer_params": { "type": "object", "description": "Constructor kwargs merged into the optimizer (per-task override)." },
+          "model_parameters": { "type": "object", "description": "Evaluation model parameters. Empty objects are preserved; configure reasoning separately in optimizer_params." },
+          "optimizer_params": { "type": "object", "description": "Constructor kwargs merged into the optimizer, including reasoning model and model_parameters (per-task override)." },
           "optimizer_prompt_params": { "type": "object", "description": "optimize_prompt kwargs (per-task override), e.g., max_trials, n_samples." },
           "prompt": {
             "type": "array",

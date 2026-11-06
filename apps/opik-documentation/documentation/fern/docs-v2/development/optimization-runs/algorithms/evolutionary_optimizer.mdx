@@ -129,7 +129,7 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to automatically continue optimization</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project for the optimization run. Falls back to the `OPIK_PROJECT_NAME` environment variable, then "Optimization". Trial traces are logged to the dataset's project.</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="Dataset | None" optional={true}>Optional validation dataset used to rank candidates.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10" />
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation.</ParamField>

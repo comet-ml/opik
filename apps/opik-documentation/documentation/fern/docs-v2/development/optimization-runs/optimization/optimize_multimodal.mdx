@@ -8,71 +8,81 @@ og:title: Optimize multimodal performance with Opik
 title: Optimize multimodal prompts
 ---
 
-Multimodal agents often juggle text instructions, images, audio, video, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for non-text modalities (GPT-4o, Gemini, Claude Sonnet 4.6, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
+Image evidence reaches both the evaluated agent and the optimizer as native content blocks.
+Configure their models independently: `ChatPrompt.model` runs the task; the optimizer's `model`
+improves its instructions. HRPO uses its independently configured `reasoning_model` for analysis.
+No model or model parameters are borrowed from the other role.
 
-### Optimizer multimodal support
-
-Use optimizers that can forward OpenAI-style content parts (string or an array of structured parts like `{ type: "text" | "image_url" }`) to a multimodal LLM. Current support:
-
-| Optimizer | Multimodal (text+image) | Notes |
-|---|---|---|
-| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Ensure both optimizer `model` and `ChatPrompt.model` are multimodal-capable. |
-| MetaPrompt Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-| Evolutionary Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-| Few-shot Bayesian Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-| Parameter Optimizer | ✓ | Tunes parameters only, but supports multimodal prompts for evaluation. |
-| GEPA Optimizer | ✓ | Uses content parts; requires a multimodal-capable model for evaluation. |
-
-## Dataset design
-
-- Store image, audio, or video references as signed URLs in your dataset items (for example `metadata["image_url"]`, `metadata["audio_url"]`, or `metadata["video_url"]`).
-- Include textual descriptions alongside assets so metrics can run without downloading large files when possible.
-- Tag rows with modality info (`metadata["modality"] = "image+text"`) to filter during analysis.
-
-## Prompt structure
+## Configure image optimization
 
 ```python wordWrap
-from opik_optimizer import ChatPrompt
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 prompt = ChatPrompt(
     messages=[
-        {"role": "system", "content": "Analyze the provided image and answer the question."},
+        {"role": "system", "content": "Read the image and answer the question."},
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "Question: {question}"},
-                {"type": "image_url", "image_url": {"url": "{image_url}"}},
+                {"type": "image_url", "image_url": {"url": "{image}", "detail": "low"}},
             ],
         },
     ],
-    model="openai/gpt-4o-mini"
+    model="openai/gpt-4o-mini",
+    model_parameters={},
 )
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")  # must support vision
 ```
 
-- Describe the expected output schema (JSON, markdown table, etc.) to reduce ambiguity.
+Dataset rows supply `question` and `image`. The image value may be an HTTPS URL or an image data
+URL. Keep remote URLs valid for the full optimization run. A data URL remains inside an
+`image_url` block; it is never expanded into the textual prompt description.
 
-## Metrics
+## What the optimizer sees and edits
 
-- Reuse existing text metrics when possible by comparing textual descriptions.
-- For vision-specific scoring, call external models from your metric function, but cache results to control cost.
-- Record reasons that mention the modality: “Image not described” or “Chart incorrectly transcribed”.
-- When possible, augment automated metrics with lightweight human review or deterministic checks—LLM-as-a-judge signals can be noisy for multimodal tasks.
+Each optimizer chooses the training cases it shows its model, always from the training dataset:
+MetaPrompt shows `num_task_examples` items, HRPO each failure-analysis batch (`batch_size`), GEPA
+its reflection minibatch, and FewShot the items it builds its template from. Evolutionary reasons
+about prompts only. Each case is rendered once, with its image blocks next to its case ID,
+rendered input, output, scores and, for HRPO, the agent's recorded steps and the images it saw.
 
-## Running optimizations
+The optimizer returns edits addressed to existing text segments. For example, `message:1:part:0`
+identifies the first text block in the second message. Media, message roles, tool callables,
+unselected text blocks and agent model settings remain unchanged. Duplicate, unknown or
+non-editable targets and edits that remove template variables are rejected.
 
-- Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
-- Use HRPO to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
-- Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
-- All prompt optimizers can forward multimodal content parts, but evaluation will fail if the chosen models do not support the modality. Use multimodal-capable models for both optimizer generation and prompt evaluation.
+Image cost depends on the number, size and detail of images in those cases; the settings above
+control how many cases each request carries. Image evidence requires a vision-capable optimizer
+model; an unsupported model fails the run before any evaluation. For custom model aliases or
+deployments, register their vision capability in LiteLLM before the run.
 
-## Validation
+## Optimizer support
 
-- Spot-check generated outputs with the associated media in the dashboard.
-- Confirm that dataset asset URLs remain valid for the duration of the optimization.
-- When sharing results, include thumbnails or sample outputs so reviewers understand the changes.
+| Optimizer | Image evidence for reasoning | How edits are applied |
+|---|---|---|
+| MetaPrompt | Native blocks with its `num_task_examples` training cases | Targeted text edits for each prompt or bundle member |
+| HRPO | Native images for every case in each analysis batch, including recorded agent images | Targeted text edits and selected tool descriptions |
+| Evolutionary | Images in the prompt template; no dataset cases | Targeted edits of each original parent/template |
+| FewShot Bayesian | Native images in template generation | Text edits select the example placeholder; image demonstrations are inserted before the current task |
+| GEPA | Native images from its reflection batch; requires `gepa>=0.1.4` | Individual text-block and tool-description components |
+| ParameterOptimizer | Makes no reasoning calls | Changes only explicitly searched model parameters; forwards media during evaluation |
+
+FewShot image demonstrations keep their images as native blocks. The current task's input and
+media remain the final user message.
+
+Native optimizer evidence supports **images**. Audio, video and file blocks are named in the
+optimizer's context but not sent. Evaluation support for those modalities depends on the agent
+and its model.
+
+## Validate your run
+
+Use metrics that assess the task output and return useful reasons. Inspect cases with their
+images and scores in Opik. Confirm that the winning prompt retains the original image
+placeholders and the intended agent model configuration.
 
 ## Related guides
 
+- [Configure models](/development/optimization-runs/optimization/configure_models)
 - [Define datasets](/development/optimization-runs/optimization/define_datasets)
 - [Define metrics](/development/optimization-runs/optimization/define_metrics)
-- [Automatic Prompt Optimization for Multimodal Vision Agents (self-driving car example)](https://towardsdatascience.com/automatic-prompt-optimization-for-multimodal-vision-agents-a-self-driving-car-example/)

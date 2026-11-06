@@ -18,8 +18,7 @@ from ..types import HallOfFameEntry, PatternExtractionResponse
 from ....utils.prompt_library import PromptLibrary
 from ....utils.display import format as display_format
 from ....utils.logging import debug_log
-from ....core.llm_calls import StructuredOutputParsingError
-from litellm.exceptions import BadRequestError
+from ....utils.multimodal import text_only_messages
 
 logger = logging.getLogger(__name__)
 
@@ -129,35 +128,15 @@ class PromptHallOfFame:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt_analysis},
             ]
-            try:
-                response = _llm_calls.call_model(
-                    messages=messages,
-                    model=model,
-                    model_parameters=model_parameters,
-                    is_reasoning=True,
-                    response_model=PatternExtractionResponse,
-                    return_all=_llm_calls.requested_multiple_candidates(
-                        model_parameters
-                    ),
-                )
-            except (BadRequestError, StructuredOutputParsingError):
-                retry_messages = [
-                    messages[0],
-                    {
-                        "role": "user",
-                        "content": f"{prompt_analysis}\n\nReturn ONLY valid JSON. Do not include commentary or markdown.",
-                    },
-                ]
-                response = _llm_calls.call_model(
-                    messages=retry_messages,
-                    model=model,
-                    model_parameters=model_parameters,
-                    is_reasoning=True,
-                    response_model=PatternExtractionResponse,
-                    return_all=_llm_calls.requested_multiple_candidates(
-                        model_parameters
-                    ),
-                )
+            response = _llm_calls.call_model(
+                metadata={"opik_call_type": "pattern_extraction"},
+                messages=messages,
+                model=model,
+                model_parameters=model_parameters,
+                is_reasoning=True,
+                response_model=PatternExtractionResponse,
+                return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+            )
 
             responses = response if isinstance(response, list) else [response]
             patterns: list[str] = []
@@ -225,7 +204,9 @@ class PromptHallOfFame:
                 f"\n--- Prompt #{i + 1} (Score: {entry.score:.3f}, "
                 f"Improvement: {entry.improvement_over_baseline:+.1%}) ---\n"
             )
-            prompt_scorecard += json.dumps(entry.prompt_messages, indent=2)
+            prompt_scorecard += json.dumps(
+                text_only_messages(entry.prompt_messages), indent=2
+            )
             prompt_scorecard += "\n"
 
         if self.prompts is not None:

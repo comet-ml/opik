@@ -1,3 +1,5 @@
+from ...core.reasoning import ReasoningEvidence
+
 import logging
 import math
 import threading
@@ -18,7 +20,6 @@ from ...core.state import (
     AlgorithmResult,
     FinishReason,
     OptimizationContext,
-    build_optimization_metadata,
 )
 from ...utils.prompt_library import PromptOverrides
 from . import helpers, reporting as gepa_reporting
@@ -259,7 +260,7 @@ def _build_gepa_stop_callbacks(
 
 
 _GEPA_VERSION_REQUIREMENT = (
-    "opik-optimizer requires gepa>=0.1.0 (the <curr_param>/<side_info> "
+    "opik-optimizer requires gepa>=0.1.4 (the <curr_param>/<side_info> "
     "reflection-template contract; gepa 0.0.x speaks the older "
     "<curr_instructions>/<inputs_outputs_feedback> dialect)."
 )
@@ -434,11 +435,6 @@ def _resolve_gepa_finish_reason(
 
 
 class GepaOptimizer(BaseOptimizer):
-    # FIXME(opik_optimizer/#gepa-tool-optimization): Re-enable when GEPA adapter
-    # can mutate and score tool descriptions end-to-end.
-    supports_tool_optimization: bool = False
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     The GEPA (Genetic-Pareto) Optimizer uses a genetic algorithm with Pareto optimization
     to improve prompts while balancing multiple objectives.
@@ -459,6 +455,10 @@ class GepaOptimizer(BaseOptimizer):
             through to gepa.optimize() as the instruction-proposal prompt; it must
             contain the <curr_param> and <side_info> markers.
     """
+
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
 
     DEFAULT_PROMPTS = gepa_prompts.DEFAULT_PROMPTS
 
@@ -509,7 +509,6 @@ class GepaOptimizer(BaseOptimizer):
         self._max_reflection_calls = 0
         self._reflection_budget_warned = False
         self._reflection_budget_exhausted = False
-        self._adapter = None  # Will be set during optimization
         self._validation_dataset = None
         self._gepa_rescored_scores: list[float] = []
         self._gepa_filtered_val_scores: list[float | None] = []
@@ -571,7 +570,7 @@ class GepaOptimizer(BaseOptimizer):
         gepa's LanguageModel protocol hands the callable either a plain prompt
         string or an OpenAI-style messages list (multimodal), so both shapes are
         accepted. This does NOT imply gepa 0.0.x support: the optimizer already
-        requires gepa>=0.1.0 for its reflection-template dialect, enforced at
+        requires gepa>=0.1.4 for its reflection-template dialect, enforced at
         construction by _validate_reflection_prompt_template.
         """
         metadata = _llm_calls.build_llm_call_metadata(self, "gepa_reflection")
@@ -608,10 +607,17 @@ class GepaOptimizer(BaseOptimizer):
                 self._reflection_call_count += 1
                 return True
 
-        @opik.track(name="gepa_reflection", project_name=self.project_name)
+        @opik.track(
+            name="gepa_reflection",
+            project_name=self.project_name,
+            source="optimization",
+        )
         def _tracked_reflection_call(messages: list[dict[str, Any]]) -> str:
             self._tag_trace(phase="Reflection")
             result = _llm_calls.call_model(
+                evidence=ReasoningEvidence(
+                    prompts=context.prompts, cases=(), editable=False
+                ),
                 messages=messages,
                 model=self.model,
                 seed=self.seed,
@@ -702,7 +708,6 @@ class GepaOptimizer(BaseOptimizer):
         """
         # Initialize progress tracking for display
         self._current_round = 0
-        self._total_rounds = context.max_trials
 
         optimizable_prompts = context.prompts
         initial_score = cast(float, context.baseline_score)
@@ -735,7 +740,7 @@ class GepaOptimizer(BaseOptimizer):
         run_dir = context.extra_params.get("run_dir", None)
         track_best_outputs = context.extra_params.get("track_best_outputs", False)
         display_progress_bar = context.extra_params.get("display_progress_bar", False)
-        seed = context.extra_params.get("seed", 42)
+        seed = context.extra_params.get("seed", self.seed)
         raise_on_exception = context.extra_params.get("raise_on_exception", True)
         optimizable_roles = (
             context.extra_params.get("optimizable_roles")
@@ -751,16 +756,11 @@ class GepaOptimizer(BaseOptimizer):
                 "GEPA will drop candidate edits for disallowed roles due to optimize_prompt constraints."
             )
 
-        for p in optimizable_prompts.values():
-            if p.model is None:
-                p.model = self.model
-            if not p.model_kwargs:
-                p.model_kwargs = dict(self.model_parameters)
-
         seed_candidate = candidate_ops.build_seed_candidate(
             optimizable_prompts=optimizable_prompts,
             allowed_roles=optimizable_roles,
-            tool_names=context.extra_params.get("tool_names"),
+            tool_names=context.extra_params.get("tool_names_by_prompt")
+            or context.extra_params.get("tool_names"),
             enable_tools=bool(context.extra_params.get("optimize_tools")),
         )
 
@@ -775,11 +775,12 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         val_source = validation_dataset or dataset
+        # GEPA's valset drives its stop decisions, so it must be the sample
+        # Opik scores the baseline and the final candidates on.
         val_plan = self._prepare_sampling_plan(
             dataset=val_source,
             n_samples=n_samples,
-            phase="val",
-            seed_override=seed,
+            phase="eval",
             strategy=context.n_samples_strategy,
         )
 
@@ -893,6 +894,7 @@ class GepaOptimizer(BaseOptimizer):
                 "max_merge_invocations": max_merge_invocations,
                 "max_metric_calls": max_metric_calls,
                 "stop_callbacks": stop_callbacks,
+                "callbacks": [adapter.lineage_callback()],
                 "run_dir": run_dir,
                 "track_best_outputs": track_best_outputs,
                 "display_progress_bar": use_adapter_progress_bar,
@@ -1001,6 +1003,3 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             known_placeholder_keys=known_placeholder_keys,
         )
-
-    def _build_optimization_config(self) -> dict[str, Any]:
-        return build_optimization_metadata(self)

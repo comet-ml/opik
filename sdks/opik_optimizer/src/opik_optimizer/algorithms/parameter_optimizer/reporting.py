@@ -17,37 +17,6 @@ from ...utils.display.format import format_score_progress
 
 
 @contextmanager
-def display_evaluation(
-    message: str = "First we will establish the baseline performance:",
-    verbose: int = 1,
-    selection_summary: str | None = None,
-) -> Iterator[Any]:
-    """Context manager to display messages during an evaluation phase."""
-
-    # Entry point
-    if verbose >= 1:
-        display_text_block(f"> {message}")
-        if selection_summary:
-            display_text_block(
-                f"│ Evaluation settings: {selection_summary}", style="dim"
-            )
-
-    # Create a simple object with a method to set the score
-    class Reporter:
-        def set_score(self, s: float) -> None:
-            if verbose >= 1:
-                display_text_block(f"│ Baseline score was: {s:.4f}.\n", style="green")
-
-    # Use our log suppression context manager and yield the reporter
-    with suppress_opik_logs():
-        with convert_tqdm_to_rich("│ Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
-
-
-@contextmanager
 def display_trial_evaluation(
     trial_number: int,
     total_trials: int,
@@ -86,7 +55,4 @@ def display_trial_evaluation(
 
     with suppress_opik_logs():
         with convert_tqdm_to_rich("│   Evaluation", verbose=verbose):
-            try:
-                yield Reporter()
-            finally:
-                pass
+            yield Reporter()

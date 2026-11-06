@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from collections.abc import Callable
 import logging
 
-from optuna.trial import FrozenTrial, TrialState
+from optuna.trial import FrozenTrial
 
 from ..core import runtime
 
@@ -83,38 +82,3 @@ def build_optuna_round(
         context=context,
         stop_reason=context.finish_reason,
     )
-
-
-def record_optuna_trial_history(
-    *,
-    optimizer: Any,
-    context: Any,
-    study: Any,
-    build_prompt_payload: Callable[[FrozenTrial], Any],
-    build_extra: Callable[[FrozenTrial], dict[str, Any] | None],
-    build_round_meta: Callable[[FrozenTrial], dict[str, Any]] | None = None,
-    timestamp_provider: Callable[[FrozenTrial], str] | None = None,
-    on_skip: Callable[[FrozenTrial], None] | None = None,
-    post_extras: dict[str, Any] | None = None,
-    post_metrics: dict[str, Any] | None = None,
-) -> None:
-    """Record completed Optuna trials into optimizer history."""
-    get_timestamp = timestamp_provider or _default_trial_timestamp
-    for trial in study.trials:
-        if trial.state != TrialState.COMPLETE or trial.value is None:
-            if on_skip is not None:
-                on_skip(trial)
-            continue
-        round_meta = build_round_meta(trial) if build_round_meta else {}
-        build_optuna_round(
-            optimizer=optimizer,
-            context=context,
-            trial=trial,
-            prompt_or_payload=build_prompt_payload(trial),
-            score=float(trial.value) if trial.value is not None else None,
-            extra=build_extra(trial),
-            timestamp=get_timestamp(trial),
-            round_meta=round_meta,
-            post_extras=post_extras,
-            post_metrics=post_metrics,
-        )

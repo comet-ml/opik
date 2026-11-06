@@ -8,6 +8,7 @@ import json
 
 from ...api_objects import chat_prompt
 from ..candidate_selection import DEFAULT_SELECTION_POLICY
+from ..multimodal import redact_inline_media, format_message_content
 
 
 def format_float(value: Any, digits: int = 6) -> str:
@@ -88,11 +89,12 @@ def format_prompt_messages(
     pretty: bool = True,
 ) -> str:
     """Format chat messages for history/context rendering."""
+    messages = redact_inline_media(messages)
     if pretty:
         lines: list[str] = []
         for msg in messages:
             role = msg.get("role", "unknown")
-            msg_content = msg.get("content", "")
+            msg_content = format_message_content(msg.get("content", "")).plain
             lines.append("  [" + role.upper() + "]: " + msg_content)
         return "\n".join(lines)
     return json.dumps(messages, indent=2)

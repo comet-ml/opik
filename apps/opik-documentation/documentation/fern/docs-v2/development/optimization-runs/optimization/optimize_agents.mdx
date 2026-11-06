@@ -22,7 +22,12 @@ The Opik Agent Optimizer can optimize both simple prompts and complex agent work
 - Agent framework integration - connecting to ADK, LangGraph, CrewAI, etc.
 - Custom execution logic - special tool handling, async workflows, etc.
 
-Optimizers work seamlessly with both approaches. The optimizer calls your agent's `invoke_agent()` method repeatedly during optimization, passing different prompt candidates to evaluate.
+All six optimizers accept custom agents. The optimizer calls your agent's `invoke_agent()` method
+repeatedly with candidate prompts. Use `optimize_prompt()` for prompt and tool optimization, or
+`ParameterOptimizer.optimize_parameter()` for model-parameter search.
+
+Your agent owns its execution and model calls. Use the supplied prompts' model settings when
+calling your framework; a hardcoded model or temperature will bypass those candidate settings.
 
 ## Single-prompt optimization
 
@@ -122,15 +127,14 @@ Here's a simple example of a two-step workflow that analyzes input and then gene
 ```python wordWrap
 from typing import Any
 from opik_optimizer import ChatPrompt, OptimizableAgent
-from openai import OpenAI
+from opik_optimizer.agents import LiteLLMAgent
 
 class AnalyzeRespondAgent(OptimizableAgent):
-    """Two-step agent: analyze input, then respond based on analysis."""
-    
-    def __init__(self, model: str = "gpt-4o-mini"):
+    """Two-step agent that honors each candidate prompt's model and settings."""
+
+    def __init__(self):
         super().__init__()
-        self.model = model
-        self.client = OpenAI()
+        self.runtime = LiteLLMAgent(project_name=self.project_name)
 
     def invoke_agent(
         self,
@@ -141,28 +145,23 @@ class AnalyzeRespondAgent(OptimizableAgent):
     ) -> str:
         # Step 1: Analyze the input
         analyze_prompt = prompts["analyze"]
-        analyze_messages = analyze_prompt.get_messages(dataset_item)
-        
-        analyze_response = self.client.chat.completions.create(
-            model=self.model,
-            messages=analyze_messages,
+        analysis = self.runtime.invoke_agent(
+            prompts={"analyze": analyze_prompt},
+            dataset_item=dataset_item,
+            allow_tool_use=allow_tool_use,
             seed=seed,
         )
-        analysis = analyze_response.choices[0].message.content
 
         # Step 2: Generate response based on analysis
         respond_prompt = prompts["respond"]
         # Pass analysis result to the respond prompt
         respond_context = {**dataset_item, "analysis": analysis}
-        respond_messages = respond_prompt.get_messages(respond_context)
-        
-        respond_response = self.client.chat.completions.create(
-            model=self.model,
-            messages=respond_messages,
+        return self.runtime.invoke_agent(
+            prompts={"respond": respond_prompt},
+            dataset_item=respond_context,
+            allow_tool_use=allow_tool_use,
             seed=seed,
         )
-        
-        return respond_response.choices[0].message.content
 ```
 
 ### Using the multi-prompt agent
@@ -176,11 +175,13 @@ from opik.evaluation.metrics import LevenshteinRatio
 # Define both prompts in the workflow
 prompts = {
     "analyze": ChatPrompt(
+        name="analyze",
         system="You are an analysis assistant. Extract key information from the input.",
         user="{text}",
         model="gpt-4o-mini"
     ),
     "respond": ChatPrompt(
+        name="respond",
         system="You are a response assistant. Generate a helpful response based on the analysis.",
         user="Analysis: {analysis}\n\nOriginal question: {text}",
         model="gpt-4o-mini"
@@ -203,7 +204,10 @@ result.display()
 The optimizer will optimize both prompts in the dictionary, trying different combinations to improve performance.
 
 <Note>
-  The prompts dict keys (like "analyze" and "respond") are used to identify which prompt to optimize. The optimizer can optimize all prompts or specific ones based on the `optimize_prompts` parameter.
+  Dictionary keys identify prompts in the bundle. `optimize_prompts` selects message roles, such as
+  `"system"`, `"user"`, or `["system", "user"]`, across those prompts. It does not select prompt names.
+  To select a tool in one prompt, use a qualified selector such as
+  `optimize_tools={"analyze.lookup": True}`.
 </Note>
 
 ## Key implementation details

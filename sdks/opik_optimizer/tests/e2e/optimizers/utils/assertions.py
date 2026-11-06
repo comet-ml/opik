@@ -86,8 +86,26 @@ def assert_multimodal_structure_preserved(
     """
     original_msgs = original_prompt.get_messages()
     optimized_msgs = optimized_prompt.get_messages()
+    assert len(optimized_msgs) >= len(original_msgs), "Original messages were dropped"
+    extra_count = len(optimized_msgs) - len(original_msgs)
+    if extra_count:
+        task_index = max(
+            index
+            for index, message in enumerate(original_msgs)
+            if message["role"] == "user"
+        )
+        demonstrations = optimized_msgs[task_index : task_index + extra_count]
+        assert all(
+            message["role"] == "user"
+            and "Demonstration example" in str(message["content"])
+            for message in demonstrations
+        )
+        optimized_msgs = (
+            optimized_msgs[:task_index] + optimized_msgs[task_index + extra_count :]
+        )
 
     for i, (orig, opt) in enumerate(zip(original_msgs, optimized_msgs)):
+        assert orig["role"] == opt["role"], f"Message {i}: role changed"
         orig_content = orig.get("content")
         opt_content = opt.get("content")
 
@@ -116,15 +134,9 @@ def assert_multimodal_structure_preserved(
                     assert opt_part.get("type") == "image_url", (
                         f"Image URL part was converted to {opt_part.get('type')}"
                     )
-                    # The URL placeholder should be preserved
-                    orig_url = orig_part.get("image_url", {}).get("url", "")
-                    opt_url = opt_part.get("image_url", {}).get("url", "")
-                    if "{" in orig_url and "}" in orig_url:
-                        # It's a template placeholder, should be preserved
-                        assert "{" in opt_url and "}" in opt_url, (
-                            f"Image URL placeholder was not preserved. "
-                            f"Original: {orig_url}, Optimized: {opt_url}"
-                        )
+                    assert opt_part == orig_part, (
+                        f"Message {i}: original image block changed"
+                    )
 
 
 def assert_multi_prompt_changed(

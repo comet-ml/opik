@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
@@ -10,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer import ChatPrompt
+from opik_optimizer.algorithms.evolutionary_optimizer.types import PopulationResponse
 from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import (
     initialize_population,
 )
@@ -36,15 +36,22 @@ def _initialize_population_with_defaults(
     )
 
 
-def _fresh_response(*, system_text: str, user_template: str) -> str:
-    return json.dumps([[system_message(system_text), user_message(user_template)]])
+def _fresh_response(*, system_text: str, user_template: str) -> PopulationResponse:
+    return _variation_response(system_texts=[system_text], user_template=user_template)
 
 
-def _variation_response(*, system_texts: list[str], user_template: str) -> str:
-    return json.dumps(
+def _variation_response(
+    *, system_texts: list[str], user_template: str
+) -> PopulationResponse:
+    return PopulationResponse.model_validate(
         {
             "prompts": [
-                {"prompt": [system_message(text), user_message(user_template)]}
+                {
+                    "edits": [
+                        {"segment_id": "message:0", "text": text},
+                        {"segment_id": "message:1", "text": user_template},
+                    ]
+                }
                 for text in system_texts
             ]
         }
@@ -76,54 +83,6 @@ def initializing_population_context(monkeypatch: pytest.MonkeyPatch) -> MagicMoc
 
 
 class TestInitializePopulation:
-    def test_returns_single_prompt_for_population_size_1(
-        self,
-        evo_prompts: Any,
-        initializing_population_context: MagicMock,
-    ) -> None:
-        _ = initializing_population_context
-
-        prompt = ChatPrompt(system="Test prompt", user="{input}")
-
-        result = _initialize_population_with_defaults(
-            prompt=prompt, evo_prompts=evo_prompts, population_size=1
-        )
-
-        assert len(result) == 1
-        assert result[0] is prompt
-
-    def test_generates_fresh_and_variation_prompts(
-        self,
-        evo_prompts: Any,
-        initializing_population_context: MagicMock,
-        mock_llm_sequence: Callable[[list[Any]], dict[str, Any]],
-    ) -> None:
-        _ = initializing_population_context
-
-        mock_llm_sequence(
-            [
-                _fresh_response(system_text="Fresh prompt 1", user_template="{input}"),
-                _variation_response(
-                    system_texts=["Variation 1", "Variation 2"],
-                    user_template="{input}",
-                ),
-            ]
-        )
-
-        prompt = ChatPrompt(system="Original prompt", user="{input}")
-
-        result = _initialize_population_with_defaults(
-            prompt=prompt, evo_prompts=evo_prompts, population_size=5
-        )
-
-        # At minimum: original + one fresh + one variation.
-        assert len(result) >= 3
-        assert _system_contents(result) >= {
-            "Original prompt",
-            "Fresh prompt 1",
-            "Variation 1",
-        }
-
     def test_handles_llm_error_for_fresh_starts(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -145,27 +104,6 @@ class TestInitializePopulation:
 
         assert result[0] is prompt
 
-    def test_handles_json_decode_error(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        evo_prompts: Any,
-        initializing_population_context: MagicMock,
-    ) -> None:
-        _ = initializing_population_context
-
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.call_model",
-            make_fake_llm_call("This is not valid JSON"),
-        )
-
-        prompt = ChatPrompt(system="Original prompt", user="{input}")
-
-        result = _initialize_population_with_defaults(
-            prompt=prompt, evo_prompts=evo_prompts, population_size=5
-        )
-
-        assert result[0] is prompt
-
     def test_deduplicates_population(
         self,
         evo_prompts: Any,
@@ -177,9 +115,9 @@ class TestInitializePopulation:
         same_messages = [system_message("Same content"), user_message("{q}")]
         mock_llm_sequence(
             [
-                json.dumps([same_messages]),
-                json.dumps(
-                    {"prompts": [{"prompt": same_messages}, {"prompt": same_messages}]}
+                _fresh_response(system_text="Same content", user_template="{q}"),
+                _variation_response(
+                    system_texts=["Same content", "Same content"], user_template="{q}"
                 ),
             ]
         )

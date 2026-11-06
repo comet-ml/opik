@@ -15,6 +15,11 @@ single system prompt for single-turn tasks. It maps Opik datasets and metrics in
 format, runs GEPA’s optimization using a task model and a reflection model, and returns a standard
 `OptimizationResult` compatible with the Opik SDK.
 
+The same adapter also accepts custom `OptimizableAgent` implementations and dictionaries of
+prompts for multi-step agents. It preserves prompt models, media, and tool bindings, and supports
+tool-description optimization with `optimize_tools`. See [Optimize agents](/development/optimization-runs/optimization/optimize_agents)
+and [Optimize tools](/development/optimization-runs/optimization/optimize_tools).
+
 <Note>
   `GepaOptimizer` is ideal when you have a single-turn task (one user input → one model
   response) and you want to optimize the system prompt using a reflection-driven search.
@@ -22,7 +27,7 @@ format, runs GEPA’s optimization using a task model and a reflection model, an
 
 ## How it works
 
-The GEPA optimizer companies two key approaches to optimize agents:
+The GEPA optimizer combines two key approaches to optimize agents:
 
 1. **Reflection**: The optimizer uses the outcomes from evaluations to improve the prompts.
 2. **Evolution**: The optimizer uses an evolutionary algorithm to explore the space of prompts.
@@ -80,10 +85,11 @@ result.display()
 ### Determinism and tool usage
 
 - GEPA’s seed is forwarded directly to the underlying `gepa.optimize` call, but any non-determinism in your prompt (tool calls, non-zero temperature, external APIs) will still introduce variance. To test seeding in isolation, disable tools or substitute cached responses.
-- GEPA emits its own baseline evaluation inside the optimization loop. You’ll see one baseline score from Opik’s wrapper and another from GEPA before the first trial; this is expected and does not double-charge the metric budget.
+- GEPA scores its seed prompt before searching. That prompt is your baseline, which Opik has already scored; when GEPA's items are the same ones (the default), it reuses that result and the run shows a single baseline trial.
+- Each GEPA candidate is shown in Opik as a child of the program GEPA built it from: the one it reflected on, or both programs of a merge (`use_merge=True`). Candidates that lose on their reflection mini-batch appear only as mini-batch experiments, not as trials.
 - Reflection only triggers after GEPA accepts at least `reflection_minibatch_size` unique prompts. If the minibatch is larger than the trial budget, the optimizer logs a warning and skips reflection.
 - Reflection calls use `GepaOptimizer.model`, are traced as Opik spans, and count toward the run's reported LLM cost. They are **not** metric calls, so `max_trials` does not bound them — a run typically makes many more reflection calls than trials, because an iteration whose candidate loses on the mini-batch costs only `2 * reflection_minibatch_size` metric calls. The run reports the total as `reflection_call_count` in the result details; set `max_reflection_calls` to cap it.
-- GEPA supports **tool use during evaluation** (`allow_tool_use=True`) but does **not** support `optimize_tools=True` yet. Tool-description optimization requests are currently degraded/blocked until the adapter supports it.
+- GEPA supports tool use during evaluation (`allow_tool_use=True`) and tool-description optimization (`optimize_tools=True`). For prompt bundles, use qualified selectors such as `optimize_tools={"planner.lookup": True}` to select a particular prompt’s tool.
 
 ### GEPA scores vs. Opik scores
 
@@ -123,12 +129,12 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
 <ParamField path="project_name" type="str | None" optional={true}>Opik project for the optimization run. Falls back to the `OPIK_PROJECT_NAME` environment variable, then "Optimization". Trial traces are logged to the dataset's project.</ParamField>
-<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run.</ParamField>
+<ParamField path="optimization_id" type="str | None" optional={true}>Optional ID of the Opik optimization run to log to. An existing run is reused; if none exists with this ID, one is created with it (must be a valid UUIDv7 string).</ParamField>
 <ParamField path="validation_dataset" type="Dataset | None" optional={true}>Optional validation dataset used to rank candidates.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation.</ParamField>
 <ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles the optimizer may change, for example `"system"`, `"user"`, or a list of roles.</ParamField>
-<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Not supported by this optimizer. A warning is logged and the value is ignored.</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optimize tool and parameter descriptions. Use `True` for all tools or a selector such as `&#123;"planner.lookup": True&#125;` for one bundle tool. Tool reflection and evaluation add to the run's cost. See [Optimize tools](/development/optimization-runs/optimization/optimize_tools).</ParamField>
 <ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
 <ParamField path="max_reflection_calls" type="int" optional={true} default="0">Cap on reflection-LLM calls — the calls GEPA makes to propose new candidates, which are not metric calls and are billed on top of them. Defaults to `0`, meaning no cap: GEPA reflects as often as its search requires. Set a positive value to bound reflection spend; the run then stops once the cap is reached and reports `finish_reason="reflection_budget"` (a run that spent its full metric budget at the same time reports `max_trials`, since the trials are the reason it ended). Reflection calls scale with engine iterations rather than trials, so pick this from the run's reported `reflection_call_count`, not from `max_trials`.</ParamField>
 <ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (choose from "pareto", "current_best", or "epsilon_greedy"; default: "pareto")</ParamField>

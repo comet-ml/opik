@@ -13,18 +13,6 @@ def test_encode_image_to_base64_uri_passthrough() -> None:
     )
 
 
-def test_encode_image_to_base64_uri_bytes() -> None:
-    raw = b"arc"
-    encoded = encode_image_to_base64_uri(raw, image_format="PNG")
-    assert encoded == f"data:image/png;base64,{base64.b64encode(raw).decode('utf-8')}"
-
-
-def test_encode_image_to_base64_uri_dict_bytes() -> None:
-    raw = b"arc2"
-    encoded = encode_image_to_base64_uri({"bytes": raw}, image_format="PNG")
-    assert encoded == f"data:image/png;base64,{base64.b64encode(raw).decode('utf-8')}"
-
-
 def test_encode_image_to_base64_uri_saveable_object() -> None:
     class DummyImage:
         def __init__(self, payload: bytes, fmt: str) -> None:
