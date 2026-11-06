@@ -10,13 +10,16 @@ have.
 | Env var | Value |
 |---|---|
 | `AI_LABELS_ENABLED` | `true` |
-| `AI_LABELS_INFERENCE_URL` | the opik-inference cell, e.g. `https://opik-inference.comet.com` |
+| `AI_LABELS_INFERENCE_URL` | the opik-inference cell, e.g. `https://opik-inference.comet.com`. The backend refuses to start with an `http` URL, except to `localhost` or a loopback address |
 | `AI_LABELS_INFERENCE_CREDENTIAL` | the deployment's opik-inference credential, from a secret (`component.backend.secretRefs`) |
 
 - The backend refuses to start with ai-labels on unless `ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE=true`
   (the cut-over `traces` table). The `spans` cutover doesn't need to be done.
 - opik-inference: the deployment needs its own `deployments` entry and credential in `config/inference.yaml`, with
   `allowed_orgs: "*"`. Opik sends workspace ids as `org_id`, so a real-org allow-list answers 403 `org_not_allowed`.
+- Calls to opik-inference (ai-labels and topic vectors) never follow a redirect, and read at most
+  `AI_LABELS_INFERENCE_MAX_RESPONSE_BYTES` (32 MiB) of a response body. A redirect or a longer body fails the call
+  as `upstream_error`; a longer body's connection is closed without reading the rest.
 - Every other `aiLabels` setting is in `apps/opik-backend/config.yml` and overridable as `AI_LABELS_*`.
 
 ## Opting workspaces in and out

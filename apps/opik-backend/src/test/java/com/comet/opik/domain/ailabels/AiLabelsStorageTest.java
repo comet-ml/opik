@@ -515,8 +515,9 @@ class AiLabelsStorageTest {
                     });
             assertThat(countRows(AiLabelStatusDAO.TABLE, otherWorkspaceId)).isOne();
             assertThat(countRows(AiLabelsDAO.TABLE, otherWorkspaceId)).isOne();
-            // Both tables' deletes are scoped to the trace's partition, so the mutation does not visit every part.
-            assertThat(partitionScopedCascadeDeletes(workspaceId)).isEqualTo(2);
+            // The deletes of ai_labels, ai_label_status and topic_vectors (shared AiLabelTableDeletes) are scoped to the
+            // trace's partition, so the mutation does not visit every part.
+            assertThat(partitionScopedCascadeDeletes(workspaceId)).isEqualTo(3);
         }
 
         /** The tables whose cascade delete ran partition-scoped, however many statements each took. */

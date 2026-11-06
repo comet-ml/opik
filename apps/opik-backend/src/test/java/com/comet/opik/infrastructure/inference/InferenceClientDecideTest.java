@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AiLabelsConfig;
@@ -383,7 +384,7 @@ class InferenceClientDecideTest {
     }
 
     private AiLabelsConfig config(String url) {
-        var newConfig = new AiLabelsConfig();
+        var newConfig = TestConfigUtils.loadConfigTest().getAiLabels();
         newConfig.getInference().setUrl(url);
         newConfig.getInference().setCredential(credential);
         newConfig.getInference().setConnectTimeout(io.dropwizard.util.Duration.seconds(5));
