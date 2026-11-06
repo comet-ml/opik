@@ -5,6 +5,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node_write import JsonNodeWrite
+from .llm_as_judge_model_parameters_write_api import LlmAsJudgeModelParametersWriteApi
 
 
 class LlmAsJudgeModelParametersWrite(UniversalBaseModel):
@@ -12,6 +13,7 @@ class LlmAsJudgeModelParametersWrite(UniversalBaseModel):
     temperature: typing.Optional[float] = None
     seed: typing.Optional[int] = None
     custom_parameters: typing.Optional[JsonNodeWrite] = None
+    api: typing.Optional[LlmAsJudgeModelParametersWriteApi] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
