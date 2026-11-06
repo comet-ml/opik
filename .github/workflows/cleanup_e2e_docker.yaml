@@ -34,8 +34,11 @@ jobs:
   cleanup:
     name: Cleanup CI images
     # Fork PRs never push ci-e2e-pr* images (the E2E builds skip forks), so
-    # there is nothing to clean up.
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.fork != true
+    # there is nothing to clean up. Matching the repo name rather than
+    # `fork != true` also skips PRs whose fork was deleted (head.repo is null).
+    if: >-
+      github.event_name != 'pull_request_target'
+      || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
