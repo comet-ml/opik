@@ -6,5 +6,11 @@ disallow_untyped_calls = true
 check_untyped_defs = true
 python_version = "3.10"
 
+# Vendored from comet-ml; checked so callers see its attributes (a file-level
+# `# type: ignore` hides them under mypy 2), but its own errors are not ours.
+[[tool.mypy.overrides]]
+module = "opik.semantic_version"
+ignore_errors = true
+
 [tool.uv]
 managed = false

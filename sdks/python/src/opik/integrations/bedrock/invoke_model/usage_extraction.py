@@ -89,11 +89,11 @@ def try_extract_usage_from_bedrock_response(
             # If it's already in Bedrock's format, we are good (tested with amazon.nova-pro-v1:0, it has bedrock usage format)
             # If it's not, but it's in some other format that Opik supports, we will at least extract
             # completion and prompt tokens count so that backend could calculate cost based on them.
-            opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
+            fallback_usage = llm_usage.build_opik_usage_from_unknown_provider(
                 presumably_usage_dict
             )
             LOGGER.debug("Fallback usage extracted: %s", presumably_usage_dict)
-            return opik_usage
+            return fallback_usage
 
         LOGGER.debug("No usage found in response body")
         return None

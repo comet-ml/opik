@@ -38,7 +38,9 @@ class _DummyOptimizer(BaseOptimizer):
         super().__init__(model="gpt-4o-mini", verbose=0)
         self.calls: list[tuple[Any, str]] = []
 
-    def _finalize_optimization(self, context: Any, status: str = "completed") -> None:
+    def _finalize_optimization(
+        self, context: Any, status: str = "completed", error_info: dict | None = None
+    ) -> None:
         self.calls.append((context, status))
 
 

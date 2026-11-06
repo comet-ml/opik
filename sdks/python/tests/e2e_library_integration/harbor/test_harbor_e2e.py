@@ -153,10 +153,12 @@ class TestHarborSDKIntegration:
         await tracked_job.run()
 
         if not synchronization.until(
-            function=lambda: opik_client.search_traces(
-                project_name=configure_e2e_tests_env_unique_project_name
-            )[0].output
-            is not None,
+            function=lambda: (
+                opik_client.search_traces(
+                    project_name=configure_e2e_tests_env_unique_project_name
+                )[0].output
+                is not None
+            ),
             allow_errors=True,
             max_try_seconds=60,
         ):
@@ -254,10 +256,12 @@ class TestHarborCLIIntegration:
         assert result.exit_code == 0, f"CLI failed: {result.output}"
 
         if not synchronization.until(
-            function=lambda: opik_client.search_traces(
-                project_name=configure_e2e_tests_env_unique_project_name
-            )[0].output
-            is not None,
+            function=lambda: (
+                opik_client.search_traces(
+                    project_name=configure_e2e_tests_env_unique_project_name
+                )[0].output
+                is not None
+            ),
             allow_errors=True,
             max_try_seconds=60,
         ):
