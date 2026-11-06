@@ -209,7 +209,7 @@ def test_track__start_message_fails__call_logged_and_next_call_gets_own_trace(
     with _fail_first_call(failing_start_message):
         assert f(1) == 1
 
-    assert "tried to log the start of f" in caplog.text
+    assert "log the start of f" in caplog.text
 
     assert context_storage.top_span_data() is None
     assert context_storage.get_trace_data() is None
@@ -217,13 +217,39 @@ def test_track__start_message_fails__call_logged_and_next_call_gets_own_trace(
     f(2)
     tracker.flush_tracker()
 
-    assert [t.input for t in fake_backend.trace_trees] == [{"x": 1}, {"x": 2}]
-    expected_span_inputs = (
-        [[{"x": 1}], [{"x": 2}]] if create_duplicate_root_span else [[], []]
-    )
-    assert [
-        [s.input for s in t.spans] for t in fake_backend.trace_trees
-    ] == expected_span_inputs
+    EXPECTED_TRACE_TREES = [
+        TraceModel(
+            id=ANY_STRING,
+            name="f",
+            input={"x": x},
+            output={"output": x},
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            spans=(
+                [
+                    SpanModel(
+                        id=ANY_STRING,
+                        name="f",
+                        input={"x": x},
+                        output={"output": x},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        type="general",
+                        spans=[],
+                        source="sdk",
+                    )
+                ]
+                if create_duplicate_root_span
+                else []
+            ),
+        )
+        for x in (1, 2)
+    ]
+
+    assert len(fake_backend.trace_trees) == 2
+    for expected, actual in zip(EXPECTED_TRACE_TREES, fake_backend.trace_trees):
+        assert_equal(expected=expected, actual=actual)
 
 
 def test_track__start_message_fails__current_span_still_updatable(fake_backend):

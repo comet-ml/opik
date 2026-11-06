@@ -24,7 +24,7 @@ def recursive_shallow_copy(obj: Any, seen: Optional[Set[int]] = None) -> Any:
 
     obj_id = id(obj)
     if obj_id in seen:
-        # Matches the marker jsonable_encoder writes for cyclic objects
+        # Same format as the cyclic reference marker in jsonable_encoder
         return f"<Cyclic reference to {type(obj).__name__} id={obj_id}>"
 
     seen.add(obj_id)

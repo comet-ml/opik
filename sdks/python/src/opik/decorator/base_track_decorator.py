@@ -838,7 +838,7 @@ def _send_start_message(
     send: Callable[..., Any], start_parameters: Dict[str, Any]
 ) -> None:
     # The span or trace is already on the context, so a failed start message must not
-    # escape: the end message still logs it in full and pops it from the context.
+    # escape. Raising here would skip _after_call and leave it there for later calls.
     try:
         send(**start_parameters)
     except Exception as exception:

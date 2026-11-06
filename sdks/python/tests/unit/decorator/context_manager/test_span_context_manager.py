@@ -563,10 +563,13 @@ def test_start_as_current_span__context_cleanup__project_name_released_in_loop(
     assert context_storage.get_context_project_name() is None
 
 
+@pytest.mark.parametrize(
+    "failing_start_message", ["__internal_api__span__", "__internal_api__trace__"]
+)
 def test_start_as_current_span__start_message_fails__span_logged_on_exit(
-    fake_backend,
+    fake_backend, failing_start_message
 ):
-    send_span = opik_client.Opik.__internal_api__span__
+    send = getattr(opik_client.Opik, failing_start_message)
     start_message_sent = False
 
     def fail_start_message(self, **kwargs):
@@ -574,14 +577,13 @@ def test_start_as_current_span__start_message_fails__span_logged_on_exit(
         if not start_message_sent:
             start_message_sent = True
             raise RuntimeError("boom")
-        return send_span(self, **kwargs)
+        return send(self, **kwargs)
 
-    with mock.patch.object(
-        opik_client.Opik, "__internal_api__span__", fail_start_message
-    ):
+    with mock.patch.object(opik_client.Opik, failing_start_message, fail_start_message):
         with opik.start_as_current_span("test-span", input={"a": 1}, flush=True):
             pass
 
     assert context_storage.top_span_data() is None
+    assert context_storage.get_trace_data() is None
     assert len(fake_backend.trace_trees) == 1
     assert fake_backend.trace_trees[0].spans[0].input == {"a": 1}
