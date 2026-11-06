@@ -6,6 +6,7 @@ import cerebras.cloud.sdk as cerebras
 from opik.types import LLMProvider
 
 from . import cerebras_chat_completions_decorator, chat_completion_chunks_aggregator
+from ... import analytics
 
 CerebrasClient = TypeVar("CerebrasClient", cerebras.Cerebras, cerebras.AsyncCerebras)
 
@@ -32,6 +33,7 @@ def track_cerebras(
     Returns:
         The Cerebras client with integrated Opik tracking.
     """
+    analytics.track_event("integration", "cerebras")
     if hasattr(cerebras_client, "opik_tracked"):
         return cerebras_client
 

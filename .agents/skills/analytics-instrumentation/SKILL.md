@@ -192,10 +192,12 @@ arguments; adding one never changes the API.
    splitting, as `metric_created` does. Never a value the user chose: report the
    Opik-owned name and `"custom"` otherwise.
 
-5. **Check it should be reported at all.** Skip it if Opik calls the same entry point
-   internally (litellm's `track_completion`), or if it is a per-call hot path
+5. **Check it should be reported at all.** Skip it if it is a per-call hot path
    (`Opik.trace()`, `Opik.span()`, an OTel `on_start`) — instrument the constructor or
-   the user-facing function instead.
+   the user-facing function instead. An entry point Opik also calls itself is fine
+   when that caller lives in another Opik module: the call records nothing (see *How
+   it works*), as `LiteLLMChatModel` calling litellm's `track_completion` shows. A
+   caller in the *same* module looks like a user, so mark it `@analytics.internal`.
 
 6. **Verify it locally.** Intercepting the HTTP call is the quickest way to see the
    exact payload without sending anything:
@@ -279,9 +281,9 @@ arguments; adding one never changes the API.
   `"custom"` otherwise (see `_track_metric_creation` in
   `evaluation/metrics/base_metric.py`).
 - **Don't add try/except around `track_event`** - it already swallows everything.
-- **Don't instrument an entry point that Opik itself calls internally.** The
-  litellm `track_completion` case is why: `LiteLLMChatModel` calls it, so the event would
-  measure Opik's own behaviour rather than the user's.
+- **Don't leave a same-module internal caller unmarked.** Calls from another Opik
+  module are dropped automatically, but one from the reporter's own module counts as
+  the user's - mark it `@analytics.internal`, as `get_global_client` is.
 - **Don't instrument per-callback hot paths** (e.g. an OTel `on_start`). Instrument the
   constructor or the user-facing function instead. `Opik.trace()` and `Opik.span()` are
   deliberately uninstrumented for the same reason - the backend already sees them.
