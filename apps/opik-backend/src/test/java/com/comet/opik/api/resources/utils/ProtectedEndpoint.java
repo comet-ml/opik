@@ -44,8 +44,8 @@ public record ProtectedEndpoint(
 
     /**
      * Marks an endpoint that RemoteAuthService also serves to unauthenticated callers of public workspaces.
-     * A denied caller is then retried as a public visitor, which looks the workspace up by name. The deny
-     * test stubs that lookup to reject the workspace with 400, so the 400 is what proves the denial.
+     * A denied caller is then retried as a public visitor, which looks the workspace up by name, so these
+     * endpoints are checked by {@link #assertPublicFallbackRejectedWhenDenied} instead of the 403 check.
      */
     public ProtectedEndpoint withPublicFallback() {
         return new ProtectedEndpoint(method, path, entity, permissions, true);
@@ -81,8 +81,17 @@ public record ProtectedEndpoint(
         return new ProtectedEndpoint(method, path, Entity.json(Map.of()), List.of(permissions));
     }
 
-    /** One argument pair per (endpoint, required permission), for tests that deny a single permission. */
+    /** One argument pair per (endpoint, required permission) for endpoints that answer a denial with 403. */
     public static Stream<Arguments> permissionDenials(Stream<ProtectedEndpoint> endpoints) {
+        return denials(endpoints.filter(endpoint -> !endpoint.publicFallback()));
+    }
+
+    /** One argument pair per (endpoint, required permission) for endpoints with the public-visitor fallback. */
+    public static Stream<Arguments> publicFallbackDenials(Stream<ProtectedEndpoint> endpoints) {
+        return denials(endpoints.filter(ProtectedEndpoint::publicFallback));
+    }
+
+    private static Stream<Arguments> denials(Stream<ProtectedEndpoint> endpoints) {
         return endpoints.flatMap(endpoint -> endpoint.permissions().stream()
                 .map(permission -> Arguments.of(endpoint, permission)));
     }
@@ -112,13 +121,24 @@ public record ProtectedEndpoint(
         String workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
         AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock, apiKey, workspaceName,
                 deniedPermission.getValue());
+
+        try (var response = send(client, baseUri, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+    }
+
+    public void assertPublicFallbackRejectedWhenDenied(WireMockServer wireMock, ClientSupport client,
+            String baseUri, WorkspaceUserPermission deniedPermission) {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+        AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock, apiKey, workspaceName,
+                deniedPermission.getValue());
         wireMock.stubFor(WireMock.get(urlPathEqualTo("/workspaces/workspace-id"))
                 .withQueryParam("name", equalTo(workspaceName))
                 .willReturn(aResponse().withStatus(HttpStatus.SC_BAD_REQUEST)));
 
         try (var response = send(client, baseUri, apiKey, workspaceName)) {
-            assertThat(response.getStatus())
-                    .isEqualTo(publicFallback ? HttpStatus.SC_BAD_REQUEST : HttpStatus.SC_FORBIDDEN);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
     }
 

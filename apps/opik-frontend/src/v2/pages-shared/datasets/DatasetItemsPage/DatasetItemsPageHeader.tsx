@@ -124,15 +124,18 @@ const DatasetItemsPageHeader: React.FunctionComponent<
                 <X className="mr-1 size-4" />
                 Discard changes
               </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onSaveClick}
-                data-testid="dataset-items-commit-button"
-              >
-                <Check className="mr-1 size-4" />
-                Save changes
-              </Button>
+              {/* Discard stays available so a user who lost edit access can clear the draft. */}
+              {canEditDatasets && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={onSaveClick}
+                  data-testid="dataset-items-commit-button"
+                >
+                  <Check className="mr-1 size-4" />
+                  Save changes
+                </Button>
+              )}
             </>
           )}
           {canEditDatasets && (

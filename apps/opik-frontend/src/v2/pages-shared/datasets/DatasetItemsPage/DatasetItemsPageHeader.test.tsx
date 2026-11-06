@@ -41,7 +41,7 @@ const onSettingsClick = vi.fn();
 
 const renderHeader = (
   canEditDatasets: boolean,
-  { isTestSuite = true, dataset = buildDataset() } = {},
+  { isTestSuite = true, dataset = buildDataset(), hasDraft = false } = {},
 ) =>
   render(
     <TooltipProvider>
@@ -51,7 +51,7 @@ const renderHeader = (
         isTestSuite={isTestSuite}
         entityName={isTestSuite ? "test suite" : "dataset"}
         activeProjectId="p1"
-        hasDraft={false}
+        hasDraft={hasDraft}
         canEditDatasets={canEditDatasets}
         effectiveAssertions={["is polite"]}
         onAddTag={vi.fn()}
@@ -125,5 +125,19 @@ describe("DatasetItemsPageHeader", () => {
 
     expect(screen.getByText("prod")).toBeInTheDocument();
     expect(screen.queryByTestId("add-tag-button")).toBeNull();
+  });
+
+  it("shows Save and Discard for a draft when editing is allowed", () => {
+    renderHeader(true, { hasDraft: true });
+
+    expect(screen.getByTestId("dataset-items-commit-button")).toBeVisible();
+    expect(screen.getByTestId("dataset-items-discard-button")).toBeVisible();
+  });
+
+  it("keeps only Discard for a draft without edit permission", () => {
+    renderHeader(false, { hasDraft: true });
+
+    expect(screen.queryByTestId("dataset-items-commit-button")).toBeNull();
+    expect(screen.getByTestId("dataset-items-discard-button")).toBeVisible();
   });
 });

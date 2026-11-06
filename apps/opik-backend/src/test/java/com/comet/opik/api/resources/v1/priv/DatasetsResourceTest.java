@@ -581,6 +581,18 @@ class DatasetsResourceTest {
         static Stream<Arguments> permissionDenials() {
             return ProtectedEndpoint.permissionDenials(protectedEndpoints());
         }
+
+        @ParameterizedTest(name = "{0} denied {1}")
+        @MethodSource("publicFallbackDenials")
+        @DisplayName("Public dataset reads fall back to the public-visitor lookup when a required permission is denied")
+        void publicFallbackEndpointRetriesAsPublicVisitorWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertPublicFallbackRejectedWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> publicFallbackDenials() {
+            return ProtectedEndpoint.publicFallbackDenials(protectedEndpoints());
+        }
     }
 
     @Nested
