@@ -706,12 +706,16 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   isPlainObject(value) ? (value as Record<string, unknown>) : {};
 
 // A judge rule saves an OpenAI effort under custom_parameters, which the backend sends in place of the
-// typed reasoning_effort.
-const getCustomParametersReasoningEffort = (
+// typed reasoning_effort. Nested first, as ParamResolver.reasoningEffort reads it: on the Responses API
+// a stored reasoning object replaces the one built from reasoning_effort, and the rule editor writes the
+// effort there next to keys such as summary. Callers take the first one the model offers.
+export const getCustomParametersReasoningEfforts = (
   customParameters: unknown,
-): string | undefined => {
-  const effort = asRecord(customParameters).reasoning_effort;
-  return isString(effort) ? effort : undefined;
+): string[] => {
+  const params = asRecord(customParameters);
+  return [asRecord(params.reasoning).effort, params.reasoning_effort].filter(
+    (effort): effort is string => isString(effort) && effort.trim() !== "",
+  );
 };
 
 /**
@@ -828,7 +832,7 @@ export const resolveOpenAIConfigEffort = (
   resolveOpenAIEffort(
     params,
     configs.reasoningEffort,
-    getCustomParametersReasoningEffort(configs.custom_parameters),
+    ...getCustomParametersReasoningEfforts(configs.custom_parameters),
   );
 
 export const supportsOpenAIReasoningEffort = (
@@ -1214,6 +1218,7 @@ export const resolveSamplingParams = (
         temperature,
         topP,
         reasoningEffort: configs.reasoningEffort,
+        custom_parameters: configs.custom_parameters,
       });
     }
   }
@@ -1369,7 +1374,7 @@ export const resolveEffort = (
     }
     const stored = [
       configs.reasoningEffort,
-      getCustomParametersReasoningEffort(configs.custom_parameters),
+      ...getCustomParametersReasoningEfforts(configs.custom_parameters),
     ]
       .map((effort) => options.find((o) => o.value === effort)?.value)
       .find((effort) => effort !== undefined);

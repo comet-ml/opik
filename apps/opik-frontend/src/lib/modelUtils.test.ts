@@ -9,6 +9,7 @@ import {
   getOpenAIReasoningEffortOptions,
   getOpenRouterReasoningEffortOptions,
   getThinkingLevelDescription,
+  getCustomParametersReasoningEfforts,
   getThinkingLevelOptions,
   isAnthropicThinkingRequested,
   isReasoningModel,
@@ -1889,6 +1890,44 @@ describe("resolveEffort", () => {
     },
   );
 
+  // The order ParamResolver.reasoningEffort uses: on the Responses API the nested object is what runs.
+  it.each<[Record<string, unknown>, string[]]>([
+    [{ reasoning: { effort: "high", summary: "auto" } }, ["high"]],
+    [
+      { reasoning: { effort: "low" }, reasoning_effort: "none" },
+      ["low", "none"],
+    ],
+    [{ reasoning: { effort: " " }, reasoning_effort: "none" }, ["none"]],
+    [
+      { reasoning: { summary: "auto" }, reasoning_effort: "medium" },
+      ["medium"],
+    ],
+    [{ reasoning: { effort: 1 } }, []],
+    [{ reasoning: "high" }, []],
+  ])(
+    "reads the effort nested under reasoning before the flat one (%o)",
+    (customParameters, efforts) => {
+      expect(getCustomParametersReasoningEfforts(customParameters)).toEqual(
+        efforts,
+      );
+    },
+  );
+
+  it("drops the sampling of a reasoning model whose saved effort is nested next to summary", () => {
+    const configs = {
+      temperature: 0.3,
+      topP: 0.9,
+      custom_parameters: { reasoning: { effort: "high", summary: "auto" } },
+    };
+
+    expect(resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_4, configs)).toEqual({
+      reasoningEffort: "high",
+    });
+    expect(resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_4, configs)).toEqual(
+      {},
+    );
+  });
+
   it("keeps the temperature of a reasoning model whose saved custom_parameters effort is none", () => {
     expect(
       resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
@@ -2805,6 +2844,26 @@ describe("an OpenAI or Gemini model reached through OpenRouter", () => {
   ])("supports penalties on %s: %s", (model, expected) => {
     expect(supportsPenaltyParams(model)).toBe(expected);
   });
+
+  // Probed 11-06 on OpenRouter: openai/gpt-5.4 with no reasoning object used 0 reasoning tokens and took
+  // temperature 0.7, so it runs at OpenAI's default, none, like the native model.
+  it.each<[EffortParams, SamplingParams]>([
+    [{}, SAMPLING],
+    [{ reasoningEffort: "none" }, SAMPLING],
+    [{ reasoningEffort: "high" }, {}],
+    [{ custom_parameters: { reasoning: { effort: "high" } } }, {}],
+    [{ custom_parameters: { reasoning: { effort: "none" } } }, SAMPLING],
+  ])(
+    "resolves openai/gpt-5.4 at the effort the config or its custom_parameters set (%o)",
+    (effort, expected) => {
+      expect(
+        resolveSamplingParams(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4, {
+          ...SAMPLING,
+          ...effort,
+        }),
+      ).toEqual(expected);
+    },
+  );
 
   it("follows the registry for a native id only the registry lists", () => {
     const model = PROVIDER_MODEL_TYPE.OPENAI_O3_PRO;

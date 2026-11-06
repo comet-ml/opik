@@ -25,6 +25,7 @@ import {
 } from "@/types/providers";
 import {
   getAnthropicThinkingEffortOptions,
+  getCustomParametersReasoningEfforts,
   getNestedThinkingEffort,
   getOpenAIReasoningEffortOptions,
   getOpenRouterReasoningEffortOptions,
@@ -710,15 +711,11 @@ const getPersistedReasoningEffort = (
   if (!getReasoningEffortProvider(model) || !isPlainObject(customParameters)) {
     return undefined;
   }
-  const params = customParameters as Record<string, unknown>;
-  const toLevel = (value: unknown) =>
-    OPENAI_REASONING_EFFORT_VALUES.find((level) => level === value);
-  // Nested first: on the Responses API a stored reasoning object replaces the one built from
-  // reasoning_effort, so of two copies the nested one is what the model runs at.
-  return (
-    toLevel((params.reasoning as { effort?: unknown } | undefined)?.effort) ??
-    toLevel(params.reasoning_effort)
-  );
+  return getCustomParametersReasoningEfforts(customParameters)
+    .map((effort) =>
+      OPENAI_REASONING_EFFORT_VALUES.find((level) => level === effort),
+    )
+    .find((level) => level !== undefined);
 };
 
 const withOpenAIReasoningEffort = (
