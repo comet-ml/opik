@@ -788,11 +788,22 @@ describe("Opik prompt operations", () => {
     });
 
     it("should return no prompts when the project does not exist", async () => {
-      retrieveProjectSpy.mockRejectedValue(new Error("Project not found"));
+      retrieveProjectSpy.mockRejectedValue(
+        new OpikApiError({ message: "Not found", statusCode: 404 })
+      );
 
       const results = await client.searchPrompts();
 
       expect(results).toEqual([]);
+      expect(getPromptsSpy).not.toHaveBeenCalled();
+    });
+
+    it("should rethrow project lookup failures other than not found", async () => {
+      retrieveProjectSpy.mockRejectedValue(
+        new OpikApiError({ message: "Server error", statusCode: 500 })
+      );
+
+      await expect(client.searchPrompts()).rejects.toThrow();
       expect(getPromptsSpy).not.toHaveBeenCalled();
     });
 

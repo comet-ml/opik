@@ -383,9 +383,12 @@ export class OpikClient {
       let projectId: string;
       try {
         projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // A project that does not exist has no datasets
-        return [];
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 404) {
+          // A project that does not exist has no datasets
+          return [];
+        }
+        throw error;
       }
 
       const response = await this.api.datasets.findDatasets({
@@ -1762,9 +1765,12 @@ export class OpikClient {
       let projectId: string;
       try {
         projectId = await this.getProjectIdByName(searchProjectName);
-      } catch {
-        // A project that does not exist has no prompts
-        return [];
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 404) {
+          // A project that does not exist has no prompts
+          return [];
+        }
+        throw error;
       }
 
       const response = await this.api.prompts.getPrompts(
