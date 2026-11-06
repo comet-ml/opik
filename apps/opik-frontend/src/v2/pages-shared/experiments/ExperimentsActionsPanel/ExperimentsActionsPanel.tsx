@@ -143,6 +143,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
             <Button
               variant="outline"
               size="icon-sm"
+              aria-label="Manage tags"
               onClick={() => {
                 setOpen(3);
                 resetKeyRef.current = resetKeyRef.current + 1;
@@ -156,6 +157,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
             <Button
               variant="outline"
               size="icon-sm"
+              aria-label="Delete"
               onClick={() => {
                 setOpen(2);
                 resetKeyRef.current = resetKeyRef.current + 1;

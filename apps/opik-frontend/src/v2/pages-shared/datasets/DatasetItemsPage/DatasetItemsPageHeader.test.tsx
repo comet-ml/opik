@@ -21,16 +21,35 @@ vi.mock("@/v2/pages-shared/datasets/UseDatasetDropdown", () => ({
   default: () => null,
 }));
 
+const buildDataset = (overrides: Partial<Dataset> = {}): Dataset => ({
+  id: "d1",
+  name: "Suite",
+  tags: [],
+  dataset_items_count: 1,
+  experiment_count: 0,
+  most_recent_experiment_at: "",
+  last_created_experiment_at: "",
+  most_recent_optimization_at: "",
+  last_created_optimization_at: "",
+  optimization_count: 0,
+  created_at: "2026-09-01T00:00:00Z",
+  last_updated_at: "2026-09-01T00:00:00Z",
+  ...overrides,
+});
+
 const onSettingsClick = vi.fn();
 
-const renderHeader = (canEditDatasets: boolean) =>
+const renderHeader = (
+  canEditDatasets: boolean,
+  { isTestSuite = true, dataset = buildDataset() } = {},
+) =>
   render(
     <TooltipProvider>
       <DatasetItemsPageHeader
-        dataset={{ id: "d1", name: "Suite", tags: [] } as unknown as Dataset}
+        dataset={dataset}
         datasetId="d1"
-        isTestSuite
-        entityName="test suite"
+        isTestSuite={isTestSuite}
+        entityName={isTestSuite ? "test suite" : "dataset"}
         activeProjectId="p1"
         hasDraft={false}
         canEditDatasets={canEditDatasets}
@@ -69,5 +88,42 @@ describe("DatasetItemsPageHeader", () => {
     expect(pill).toHaveTextContent("1 global assertion");
     fireEvent.click(pill);
     expect(onSettingsClick).not.toHaveBeenCalled();
+  });
+
+  it("shows the Expand with AI and add buttons when editing is allowed", () => {
+    renderHeader(true);
+
+    expect(screen.getByTestId("dataset-header-expand-button")).toBeVisible();
+    expect(screen.getByTestId("dataset-header-add-button")).toHaveTextContent(
+      "Test case",
+    );
+  });
+
+  it("hides the Expand with AI and add buttons without edit permission", () => {
+    renderHeader(false);
+
+    expect(screen.queryByTestId("dataset-header-expand-button")).toBeNull();
+    expect(screen.queryByTestId("dataset-header-add-button")).toBeNull();
+  });
+
+  it("labels the add button 'Record' for datasets", () => {
+    renderHeader(true, { isTestSuite: false });
+
+    expect(screen.getByTestId("dataset-header-add-button")).toHaveTextContent(
+      "Record",
+    );
+  });
+
+  it("lets users with edit permission add tags", () => {
+    renderHeader(true);
+
+    expect(screen.getByTestId("add-tag-button")).toBeInTheDocument();
+  });
+
+  it("shows existing tags read-only without edit permission", () => {
+    renderHeader(false, { dataset: buildDataset({ tags: ["prod"] }) });
+
+    expect(screen.getByText("prod")).toBeInTheDocument();
+    expect(screen.queryByTestId("add-tag-button")).toBeNull();
   });
 });

@@ -64,6 +64,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Statement;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -496,27 +497,30 @@ class DatasetVersionResourceTest {
 
         static Stream<ProtectedEndpoint> protectedEndpoints() {
             var base = "/v1/private/datasets/" + UUID.randomUUID() + "/versions";
+            var versionHash = RandomStringUtils.secure().nextAlphanumeric(8);
+            var tag = RandomStringUtils.secure().nextAlphanumeric(10);
             return Stream.of(
-                    ProtectedEndpoint.patch(base + "/hash/deadbeef", DATASET_EDIT),
-                    ProtectedEndpoint.post(base + "/hash/deadbeef/tags", DATASET_EDIT),
-                    ProtectedEndpoint.delete(base + "/deadbeef/tags/some-tag", DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/hash/" + versionHash, DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/hash/" + versionHash + "/tags", DATASET_EDIT),
+                    ProtectedEndpoint.delete(base + "/" + versionHash + "/tags/" + tag, DATASET_EDIT),
                     ProtectedEndpoint.post(base + "/restore", DATASET_EDIT),
                     ProtectedEndpoint.get(base, DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/hash/" + versionHash, DATASET_VIEW),
                     ProtectedEndpoint.post(base + "/retrieve", DATASET_VIEW),
                     ProtectedEndpoint.get(base + "/diff", DATASET_VIEW));
         }
 
         @ParameterizedTest
         @MethodSource("protectedEndpoints")
-        @DisplayName("Dataset version endpoints pass required permissions to auth endpoint")
-        void protectedEndpointsPassRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+        @DisplayName("Dataset version endpoints pass exactly their required permissions to auth endpoint")
+        void annotatedEndpointPassesExactlyItsRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
             endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
         }
 
         @ParameterizedTest(name = "{0} denied {1}")
         @MethodSource("permissionDenials")
         @DisplayName("Dataset version endpoints return 403 when a required permission is denied")
-        void protectedEndpointsReturnForbiddenWhenPermissionDenied(ProtectedEndpoint endpoint,
+        void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
                 WorkspaceUserPermission deniedPermission) {
             endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
         }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { PermissionsProvider } from "@/contexts/PermissionsContext";
-import { DEFAULT_PERMISSIONS, Permissions } from "@/types/permissions";
+import PermissionsTestProvider from "@/testing/PermissionsTestProvider";
+import { Permissions } from "@/types/permissions";
 import { Trace } from "@/types/traces";
 import AddToDropdown from "./AddToDropdown";
 
@@ -22,18 +22,13 @@ const renderDropdown = (
   dataType: "traces" | "spans" | "threads" = "traces",
 ) =>
   render(
-    <PermissionsProvider
-      value={{
-        ...DEFAULT_PERMISSIONS,
-        permissions: { ...DEFAULT_PERMISSIONS.permissions, ...permissions },
-      }}
-    >
+    <PermissionsTestProvider permissions={permissions}>
       <AddToDropdown
         getDataForExport={() => Promise.resolve([])}
         selectedRows={[{ id: "trace-1" } as Trace]}
         dataType={dataType}
       />
-    </PermissionsProvider>,
+    </PermissionsTestProvider>,
   );
 
 const openMenu = () => {
@@ -60,9 +55,36 @@ describe("AddToDropdown", () => {
 
   it.each([
     ["dataset edit", { canEditDatasets: false }],
+    ["dataset view", { canViewDatasets: false }],
     ["project data view", { canViewProjectData: false }],
   ])("hides dataset and test suite without %s permission", (_, permissions) => {
     renderDropdown(permissions);
+    openMenu();
+
+    expect(screen.queryByRole("menuitem", { name: "Dataset" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Test suite" })).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "Annotation queue" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers only dataset and test suite for spans", () => {
+    renderDropdown({}, "spans");
+    openMenu();
+
+    expect(
+      screen.getByRole("menuitem", { name: "Dataset" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Test suite" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: "Annotation queue" }),
+    ).toBeNull();
+  });
+
+  it("offers only the annotation queue for threads", () => {
+    renderDropdown({}, "threads");
     openMenu();
 
     expect(screen.queryByRole("menuitem", { name: "Dataset" })).toBeNull();

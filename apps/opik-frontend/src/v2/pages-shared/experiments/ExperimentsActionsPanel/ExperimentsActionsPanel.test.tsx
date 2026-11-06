@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import { Experiment } from "@/types/datasets";
-import { PermissionsProvider } from "@/contexts/PermissionsContext";
-import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+import PermissionsTestProvider from "@/testing/PermissionsTestProvider";
 import ExperimentsActionsPanel from "./ExperimentsActionsPanel";
 
 const mockNavigate = vi.fn();
@@ -48,35 +47,27 @@ vi.mock("@/api/datasets/useExperimentsList", () => ({
 
 const renderPanel = (experiments: Experiment[], canCreateExperiments = true) =>
   render(
-    <PermissionsProvider
-      value={{
-        ...DEFAULT_PERMISSIONS,
-        permissions: {
-          ...DEFAULT_PERMISSIONS.permissions,
-          canCreateExperiments,
-        },
-      }}
-    >
+    <PermissionsTestProvider permissions={{ canCreateExperiments }}>
       <TooltipProvider>
         <ExperimentsActionsPanel experiments={experiments} />
       </TooltipProvider>
-    </PermissionsProvider>,
+    </PermissionsTestProvider>,
   );
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseExperimentsList.mockReturnValue({
+    data: {
+      content: [buildExperiment("exp-1"), buildExperiment("exp-2")],
+      total: 2,
+    },
+    isPending: false,
+  });
+});
 
 const getCompareButton = () => screen.getByRole("button", { name: "Compare" });
 
 describe("ExperimentsActionsPanel Compare button", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseExperimentsList.mockReturnValue({
-      data: {
-        content: [buildExperiment("exp-1"), buildExperiment("exp-2")],
-        total: 2,
-      },
-      isPending: false,
-    });
-  });
-
   it("is disabled when no experiment is selected", () => {
     renderPanel([]);
 
@@ -138,17 +129,19 @@ describe("ExperimentsActionsPanel Compare button", () => {
 
 describe("ExperimentsActionsPanel permissions", () => {
   it("shows the tag and delete buttons when the user can create experiments", () => {
-    const { container } = renderPanel([buildExperiment("exp-1")]);
+    renderPanel([buildExperiment("exp-1")]);
 
-    expect(container.querySelector(".lucide-tag")).not.toBeNull();
-    expect(container.querySelector(".lucide-trash")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Manage tags" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
   it("hides the tag and delete buttons but keeps Compare without experiment create permission", () => {
-    const { container } = renderPanel([buildExperiment("exp-1")], false);
+    renderPanel([buildExperiment("exp-1")], false);
 
-    expect(container.querySelector(".lucide-tag")).toBeNull();
-    expect(container.querySelector(".lucide-trash")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Manage tags" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(getCompareButton()).toBeInTheDocument();
   });
 });

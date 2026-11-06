@@ -431,6 +431,11 @@ class ExperimentsResourceTest {
             var base = "/v1/private/experiments";
             var id = UUID.randomUUID();
             return Stream.of(
+                    ProtectedEndpoint.get(base, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + id, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base, EXPERIMENT_CREATE),
+                    ProtectedEndpoint.put(base + "/cancel", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/execute", EXPERIMENT_CREATE),
                     ProtectedEndpoint.patch(base + "/" + id, EXPERIMENT_CREATE),
                     ProtectedEndpoint.patch(base + "/batch", EXPERIMENT_CREATE),
                     ProtectedEndpoint.post(base + "/delete", EXPERIMENT_CREATE),
@@ -448,15 +453,15 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @MethodSource("protectedEndpoints")
-        @DisplayName("Experiment endpoints pass required permissions to auth endpoint")
-        void protectedEndpointsPassRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+        @DisplayName("Experiment endpoints pass exactly their required permissions to auth endpoint")
+        void annotatedEndpointPassesExactlyItsRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
             endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
         }
 
         @ParameterizedTest(name = "{0} denied {1}")
         @MethodSource("permissionDenials")
         @DisplayName("Experiment endpoints return 403 when a required permission is denied")
-        void protectedEndpointsReturnForbiddenWhenPermissionDenied(ProtectedEndpoint endpoint,
+        void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
                 WorkspaceUserPermission deniedPermission) {
             endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
         }

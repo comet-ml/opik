@@ -2,16 +2,19 @@ package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.params.provider.Arguments;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,7 +22,6 @@ import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,7 +35,7 @@ public record ProtectedEndpoint(
         String method, String path, Entity<?> entity, List<WorkspaceUserPermission> permissions,
         boolean publicFallback) {
 
-    private static final String USER = "test-user-" + UUID.randomUUID();
+    private static final String USER = RandomStringUtils.secure().nextAlphanumeric(10);
 
     public ProtectedEndpoint(String method, String path, Entity<?> entity,
             List<WorkspaceUserPermission> permissions) {
@@ -42,8 +44,8 @@ public record ProtectedEndpoint(
 
     /**
      * Marks an endpoint that RemoteAuthService also serves to unauthenticated callers of public workspaces.
-     * A denied caller is then retried as a public visitor, so against a workspace that is not public the
-     * workspace lookup fails with 400 instead of the auth denial surfacing as 403.
+     * A denied caller is then retried as a public visitor, which looks the workspace up by name. The deny
+     * test stubs that lookup to reject the workspace with 400, so the 400 is what proves the denial.
      */
     public ProtectedEndpoint withPublicFallback() {
         return new ProtectedEndpoint(method, path, entity, permissions, true);
@@ -87,22 +89,27 @@ public record ProtectedEndpoint(
 
     public void assertSendsRequiredPermissions(WireMockServer wireMock, ClientSupport client, String baseUri) {
         String apiKey = UUID.randomUUID().toString();
-        String workspaceName = "test-workspace-" + UUID.randomUUID();
+        String workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
         AuthTestUtils.mockTargetWorkspace(wireMock, apiKey, workspaceName, UUID.randomUUID().toString(), USER);
 
         wireMock.resetRequests();
         send(client, baseUri, apiKey, workspaceName).close();
 
-        permissions.forEach(permission -> wireMock.verify(
-                postRequestedFor(urlPathEqualTo("/opik/auth"))
-                        .withRequestBody(matchingJsonPath(
-                                "$.requiredPermissions[?(@ == '%s')]".formatted(permission.getValue())))));
+        var authRequests = wireMock.findAll(postRequestedFor(urlPathEqualTo("/opik/auth")));
+        assertThat(authRequests).isNotEmpty();
+        var expected = permissions.stream().map(WorkspaceUserPermission::getValue).toList();
+        authRequests.forEach(request -> {
+            var sent = new ArrayList<String>();
+            JsonUtils.getJsonNodeFromString(request.getBodyAsString()).path("requiredPermissions")
+                    .forEach(node -> sent.add(node.asText()));
+            assertThat(sent).containsExactlyInAnyOrderElementsOf(expected);
+        });
     }
 
     public void assertForbiddenWhenDenied(WireMockServer wireMock, ClientSupport client, String baseUri,
             WorkspaceUserPermission deniedPermission) {
         String apiKey = UUID.randomUUID().toString();
-        String workspaceName = "test-workspace-" + UUID.randomUUID();
+        String workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
         AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock, apiKey, workspaceName,
                 deniedPermission.getValue());
         wireMock.stubFor(WireMock.get(urlPathEqualTo("/workspaces/workspace-id"))

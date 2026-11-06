@@ -193,6 +193,8 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_CREATE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_DELETE;
 import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_EDIT;
 import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_VIEW;
 import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_VIEW;
@@ -525,6 +527,14 @@ class DatasetsResourceTest {
             var itemId = UUID.randomUUID();
             var jobId = UUID.randomUUID();
             return Stream.of(
+                    ProtectedEndpoint.get(base, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/" + datasetId, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base, DATASET_CREATE),
+                    ProtectedEndpoint.put(base + "/" + datasetId, DATASET_EDIT),
+                    ProtectedEndpoint.delete(base + "/" + datasetId, DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/delete", DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/delete-batch", DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/items/delete", DATASET_DELETE),
                     ProtectedEndpoint.put(base + "/items", DATASET_EDIT),
                     ProtectedEndpoint.patch(base + "/items/" + itemId, DATASET_EDIT),
                     ProtectedEndpoint.patch(base + "/items/batch", DATASET_EDIT),
@@ -555,15 +565,15 @@ class DatasetsResourceTest {
 
         @ParameterizedTest
         @MethodSource("protectedEndpoints")
-        @DisplayName("Dataset item and export endpoints pass required permissions to auth endpoint")
-        void protectedEndpointsPassRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+        @DisplayName("Dataset item and export endpoints pass exactly their required permissions to auth endpoint")
+        void annotatedEndpointPassesExactlyItsRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
             endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
         }
 
         @ParameterizedTest(name = "{0} denied {1}")
         @MethodSource("permissionDenials")
         @DisplayName("Dataset item and export endpoints return 403 when a required permission is denied")
-        void protectedEndpointsReturnForbiddenWhenPermissionDenied(ProtectedEndpoint endpoint,
+        void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
                 WorkspaceUserPermission deniedPermission) {
             endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
         }

@@ -5,8 +5,7 @@ import { TooltipProvider } from "@/ui/tooltip";
 import DatasetExportPanel from "./DatasetExportPanel";
 import { ReactNode } from "react";
 import { DATASET_EXPORT_STATUS, DatasetExportJob } from "@/types/datasets";
-import { PermissionsProvider } from "@/contexts/PermissionsContext";
-import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+import PermissionsTestProvider from "@/testing/PermissionsTestProvider";
 import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
 
 // Mock functions that can be accessed in tests
@@ -122,9 +121,9 @@ describe("DatasetExportPanel", () => {
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+      <PermissionsTestProvider>
         <TooltipProvider>{children}</TooltipProvider>
-      </PermissionsProvider>
+      </PermissionsTestProvider>
     </QueryClientProvider>
   );
 
@@ -144,19 +143,11 @@ describe("DatasetExportPanel", () => {
     const renderWithoutViewPermission = () =>
       render(
         <QueryClientProvider client={queryClient}>
-          <PermissionsProvider
-            value={{
-              ...DEFAULT_PERMISSIONS,
-              permissions: {
-                ...DEFAULT_PERMISSIONS.permissions,
-                canViewDatasets: false,
-              },
-            }}
-          >
+          <PermissionsTestProvider permissions={{ canViewDatasets: false }}>
             <TooltipProvider>
               <DatasetExportPanel />
             </TooltipProvider>
-          </PermissionsProvider>
+          </PermissionsTestProvider>
         </QueryClientProvider>,
       );
 
@@ -170,6 +161,12 @@ describe("DatasetExportPanel", () => {
 
       expect(screen.queryByText("Preparing download")).not.toBeInTheDocument();
       expect(useDatasetExportJobs).toHaveBeenCalledWith({ enabled: false });
+    });
+
+    it("should fetch export jobs with dataset view permission", () => {
+      render(<DatasetExportPanel />, { wrapper });
+
+      expect(useDatasetExportJobs).toHaveBeenCalledWith({ enabled: true });
     });
   });
 

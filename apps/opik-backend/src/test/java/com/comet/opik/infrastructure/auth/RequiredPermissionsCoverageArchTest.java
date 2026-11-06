@@ -73,8 +73,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <li><b>Genuine writes (57)</b> — creating, updating and deleting datasets, experiments, feedback definitions,
  * attachments, agent configs, retention rules and so on. These are the burn-down work: each needs a per-endpoint
  * decision about which permission applies.</li>
- * <li><b>Read-shaped (12)</b> — {@code @POST} only to carry a request body too large for a query string:
- * {@code searchTraces}, {@code streamDatasetItems}, {@code getCost} and similar, marked inline below. Where a
+ * <li><b>Read-shaped (12; 7 remain)</b> — {@code @POST} only to carry a request body too large for a query
+ * string: {@code searchTraces}, {@code searchSpans}, {@code getCost} and similar, marked inline below. Where a
  * matching {@code *_VIEW} permission exists (datasets, experiments) it applies; the rest need permissions that
  * do not exist yet and should not be treated as quick wins.</li>
  * <li><b>Machine callers (16)</b> — {@code LocalRunnersResource} job polling and heartbeats,
@@ -103,10 +103,10 @@ class RequiredPermissionsCoverageArchTest {
             "AuthenticationResource.checkAccess");
 
     /**
-     * How many unannotated mutating endpoints remain of the 86 that existed when this rule landed. It only
-     * ever gets decremented as the debt is paid down — see {@link #theSeededCensusMustOnlyEverShrink()}.
+     * How many unannotated mutating endpoints are still in the census, which started at 85 (the 86 found minus
+     * {@code checkAccess}, waived). It only ever gets decremented as the debt is paid down — see {@link #theSeededCensusMustOnlyEverShrink()}.
      */
-    private static final int SEEDED_CENSUS_SIZE = 59;
+    private static final int SEEDED_CENSUS_SIZE = 58;
 
     /**
      * The debt exactly as it stood when the rule was introduced — the census, frozen.
@@ -278,12 +278,12 @@ class RequiredPermissionsCoverageArchTest {
      * The shrink-only contract, enforced rather than documented.
      * <p>
      * Without this, a developer whose new endpoint fails the coverage rule can append one line to the census
-     * and go green — with 59 entries sitting right there modelling exactly that move. A subset assertion does
+     * and go green — with 58 entries sitting right there modelling exactly that move. A subset assertion does
      * not catch it, because {@link #PENDING_REVIEW} is derived from the census and is therefore a subset of it
      * by construction, whatever the census contains.
      * <p>
-     * So the invariant is pinned to the census's size instead. 59 is what remains of the 86 unannotated mutating
-     * endpoints that existed when the rule landed — and it can only ever be paid down. The
+     * So the invariant is pinned to the census's size instead. 58 is what remains of the 85 census entries the
+     * rule landed with — and it can only ever be paid down. The
      * number is deliberately awkward: closing an endpoint means deleting its line <i>and</i> decrementing this,
      * and an addition is caught because the count no longer matches.
      */
