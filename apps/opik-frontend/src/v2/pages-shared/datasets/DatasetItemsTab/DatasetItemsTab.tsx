@@ -369,19 +369,19 @@ function DatasetItemsTab({
 
   const handleRowSelectionChange: typeof setRowSelection = useCallback(
     (updaterOrValue) => {
-      const next =
-        typeof updaterOrValue === "function"
-          ? updaterOrValue(rowSelection)
-          : updaterOrValue;
+      // Queued as-is: shift-click calls this once per row in the range, so each update must build on the previous one.
+      setRowSelection(updaterOrValue);
 
-      if (
-        isAllItemsSelected &&
-        Object.keys(next).length < Object.keys(rowSelection).length
-      ) {
-        setIsAllItemsSelected(false);
+      if (isAllItemsSelected) {
+        const next =
+          typeof updaterOrValue === "function"
+            ? updaterOrValue(rowSelection)
+            : updaterOrValue;
+
+        if (Object.keys(next).length < Object.keys(rowSelection).length) {
+          setIsAllItemsSelected(false);
+        }
       }
-
-      setRowSelection(next);
     },
     [rowSelection, isAllItemsSelected, setIsAllItemsSelected],
   );
