@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -296,6 +297,19 @@ class InferenceClientDecideTest {
 
     @Test
     void consecutiveCallsShareOneConnection() throws IOException {
+        var clientPorts = clientPortsOfThreeCalls(null);
+
+        // One client port: the three calls went over one connection, with no new handshake.
+        assertThat(clientPorts).hasSize(3).containsOnly(clientPorts.getFirst());
+    }
+
+    @Test
+    void zeroKeepAliveOpensAConnectionPerCall() throws IOException {
+        assertThat(clientPortsOfThreeCalls(io.dropwizard.util.Duration.milliseconds(0))).doesNotHaveDuplicates();
+    }
+
+    /** The client port of each of three decide calls to a local server, with the given keep-alive or the default. */
+    private List<Integer> clientPortsOfThreeCalls(io.dropwizard.util.Duration decideKeepAlive) throws IOException {
         var clientPorts = new CopyOnWriteArrayList<Integer>();
         var server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(PATH, exchange -> {
@@ -310,17 +324,18 @@ class InferenceClientDecideTest {
         });
         server.start();
         try {
-            var reusing = new InferenceClient(TestHttpClientUtils.client(),
-                    config("http://%s:%d".formatted(server.getAddress().getHostString(),
-                            server.getAddress().getPort())));
+            var serverConfig = config("http://%s:%d".formatted(server.getAddress().getHostString(),
+                    server.getAddress().getPort()));
+            if (decideKeepAlive != null) {
+                serverConfig.getInference().setDecideKeepAlive(decideKeepAlive);
+            }
+            var serverClient = new InferenceClient(TestHttpClientUtils.client(), serverConfig);
 
             for (var call = 0; call < 3; call++) {
-                assertThat(reusing.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                assertThat(serverClient.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
                         .isEqualTo(SUCCESS_RESPONSE);
             }
-
-            // One client port: the three calls went over one connection, with no new handshake.
-            assertThat(clientPorts).hasSize(3).containsOnly(clientPorts.getFirst());
+            return List.copyOf(clientPorts);
         } finally {
             server.stop(0);
         }
