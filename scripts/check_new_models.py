@@ -14,13 +14,19 @@ params the backend serves (GET /v1/private/llm/models) and calls the model throu
   effort X    once per effort level the catalog offers
 
 OpenAI models are called on Chat Completions and again on the Responses API, since a route can refuse what the
-model takes. When the plain call fails, the rest of that model's calls on that route are skipped. A provider error
-that names a setting is a rejected claim, and the call goes again without it, so one wrong value does not hide the
-others. Report-only: a failure is a result for a person to read, not an error. The exit code is non-zero only when
-the check itself could not run.
+model takes; a model whose params name an only_route is called on that route alone, and one whose only_route names
+none of its routes is a failure in the report and is not called. When the plain call fails, the rest of that model's
+calls on that route are skipped. A provider error that names a setting is a rejected claim, and
+the call goes again without it, so one wrong value does not hide the others. Report-only: a failure is a result for
+a person to read, not an error. The exit code is non-zero only when the check itself could not run.
 
-When nothing changed, it checks one cheap model per provider instead (from SMOKE_MODELS, when that model is in
-the registry), so a PR that touches only this script or its workflow still runs end to end.
+A changed model that no picker offers (the backend serves it without a label) is listed as not checked rather than
+called: nobody can pick it, and most such models are retired, not chat models, or a dated copy of a listed one, so a
+failure there is one nobody acts on. A model past its provider's retirement date (read the way the sync reads it) is
+listed as retired, picker or not. --models still calls both.
+
+When nothing changed, it checks one cheap model per provider instead (the first in SMOKE_MODELS that is in the
+registry and not retired), so a PR that touches only this script or its workflow still runs end to end.
 
 Usage:
   python scripts/check_new_models.py --base-ref origin/main --dry-run --catalog-file models.json
@@ -41,6 +47,7 @@ from urllib.parse import urlparse
 
 import requests
 import yaml
+from sync_provider_models import build_deprecated_by_provider, load_model_prices
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
@@ -72,11 +79,14 @@ PROVIDER_LABELS = {
 
 REASON_PRIORITY = {"new": 0, "changed": 1, "params": 2}
 OVER_CAP_NOTE = "over the call cap"
+NOT_IN_PICKER_NOTE = "not in a picker"
+RETIRED_NOTE = "retired"
 
 SMOKE_MODELS = {
-    "openai": "gpt-4.1-nano",
-    "anthropic": "claude-haiku-4-5-20251001",
-    "gemini": "gemini-2.5-flash-lite",
+    # gpt-4o-mini first: a model without reasoning takes the sampling settings, so the smoke run still sends them.
+    "openai": ("gpt-4o-mini", "gpt-5-nano"),
+    "anthropic": ("claude-haiku-4-5-20251001",),
+    "gemini": ("gemini-2.5-flash-lite",),
 }
 
 # The fields that change what the backend sends or where it routes a plain prompt. Others, such
@@ -84,6 +94,7 @@ SMOKE_MODELS = {
 CALL_FIELDS = ("qualifiedName", "structuredOutput", "reasoning")
 
 ROUTES = {"openai": (None, "responses_api")}
+CHAT_COMPLETIONS_ROUTE = "chat_completions_api"
 ROUTE_KEY_CONFIGURATION = {"responses_api": {"openai_pipeline_mode": "responses_api"}}
 ROUTE_LABELS = {None: "Chat Completions", "responses_api": "Responses"}
 
@@ -313,20 +324,50 @@ def _flag(value) -> bool:
     return False
 
 
-def smoke_models(head: dict[str, list[dict]]) -> list[ModelToCheck]:
+def smoke_models(head: dict[str, list[dict]], retired: dict[str, set[str]]) -> list[ModelToCheck]:
     to_check = []
-    for provider, model_id in SMOKE_MODELS.items():
-        model = next((m for m in head.get(provider, []) if m["id"] == model_id), None)
-        if model is not None:
-            to_check.append(ModelToCheck(provider, model_id, request_model_name(model), "smoke"))
+    for provider, candidates in SMOKE_MODELS.items():
+        for model_id in candidates:
+            row = next((m for m in head.get(provider, []) if m["id"] == model_id), None)
+            if row is None:
+                continue
+            model = ModelToCheck(provider, model_id, request_model_name(row), "smoke")
+            if not is_retired(model, retired):
+                to_check.append(model)
+                break
     return to_check
+
+
+def retired_models(ref: str | None) -> dict[str, set[str]]:
+    # Read the way the sync reads them, at the ref the catalog comes from, so the check and the picker agree on
+    # which models are gone.
+    prices = load_model_prices() if ref is None else load_model_prices(lambda path: read_at_ref(ref, path))
+    return build_deprecated_by_provider(prices)
+
+
+def is_retired(model: ModelToCheck, retired: dict[str, set[str]]) -> bool:
+    if model.provider == "vertex-ai":
+        return model.request_model in retired.get("vertexai", set())
+    return model.model_id in retired.get(model.provider, set())
+
+
+def route_names(provider: str) -> list[str]:
+    return [route or CHAT_COMPLETIONS_ROUTE for route in ROUTES.get(provider, (None,))]
+
+
+def unknown_only_route(model: ModelToCheck, params: dict | None) -> str | None:
+    only_route = (params or {}).get("only_route")
+    return None if only_route is None or only_route in route_names(model.provider) else only_route
 
 
 def plan_probes(model: ModelToCheck, params: dict | None) -> list[Probe]:
     if not params:
         return [Probe(model, None, "plain", {"max_completion_tokens": MAX_COMPLETION_TOKENS}, ())]
     probes = []
+    only_route = params.get("only_route")
     for route in ROUTES.get(model.provider, (None,)):
+        if only_route in route_names(model.provider) and (route or CHAT_COMPLETIONS_ROUTE) != only_route:
+            continue
         route_params = params if route is None else (params.get("routes") or {}).get(route, params)
         probes += _route_probes(model, route, route_params)
     return probes
@@ -590,7 +631,8 @@ def render_report(
         "through the backend with the params its API serves: once plain, then with the numbers at the top and the "
         "bottom of their ranges (only one of temperature and top_p for a model that takes one at a time), with the "
         "settings it refuses, and once per effort level that sets a request field (not the Gemini and Vertex AI "
-        "`auto` or `none` levels). Resending without a rejected setting counts toward the call cap. A `refused` call "
+        "`auto` or `none` levels). An OpenAI model the catalog serves on one route only (`only_route`) is called on "
+        "that route alone. Resending without a rejected setting counts toward the call cap. A `refused` call "
         "passes when the backend leaves those settings out or when the provider takes them anyway, so it fails only "
         "when they reach a provider that rejects them. A failure is for a person to read: it can be a real gap in "
         "the model data, or a provider-side limit."
@@ -630,7 +672,10 @@ def render_report(
             "",
             "### Other failures",
             "",
-            "A failure that names no setting the call tested, or a provider error that retries did not clear.",
+            (
+                "A failure that names no setting the call tested, a provider error that retries did not clear, or an "
+                "`only_route` that names none of the model's routes (that model is not called)."
+            ),
             "",
             "| Provider | Model | Route | Call | Why | Result | Note |",
             "| --- | --- | --- | --- | --- | --- | --- |",
@@ -678,19 +723,21 @@ def _headline(results: list[CheckResult], unexercised: list[UnexercisedChange], 
     calls = sum(r.calls for r in results)
     planned = [r for r in results if r.result == "would call"]
     not_checked = [r for r in results if r.result == "not checked"]
+    failed = {r.probe.model for r in results if r.result == "fail"}
+    failures = f"; failures on {_models(len(failed))}" if failed else ""
     if calls:
-        failed = {r.probe.model for r in results if r.result == "fail"}
         rejected = sum(len(r.rejections) for r in results)
         passed = sum(1 for r in results if r.result == "pass")
         made = sum(1 for r in results if r.result in ("pass", "fail", "unclear"))
         headline = f"{passed} of {made} checks passed ({_calls(calls)})"
         if rejected:
             headline += f", {rejected} rejected {'setting' if rejected == 1 else 'settings'}"
-        if failed:
-            headline += f"; failures on {_models(len(failed))}"
-        return headline
+        return headline + failures
     if planned:
-        return f"Dry run: {_calls(len(planned))} planned for {_models(len({r.probe.model for r in planned}))}"
+        planned_models = _models(len({r.probe.model for r in planned}))
+        return f"Dry run: {_calls(len(planned))} planned for {planned_models}{failures}"
+    if failed:
+        return f"Nothing called{failures}"
     if mode == "smoke" or not not_checked:
         if unexercised:
             return "Nothing called: no model is new or changed in a field this check exercises"
@@ -764,7 +811,9 @@ def _provider_order(items: list) -> list[str]:
     return sorted(seen, key=lambda p: rank.get(p, len(rank)))
 
 
-def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[UnexercisedChange], str]:
+def plan(
+    args: argparse.Namespace, retired: dict[str, set[str]]
+) -> tuple[list[ModelToCheck], list[UnexercisedChange], str]:
     head = load_catalog(args.head_ref)
     if args.models:
         rows = {(p, m["id"]): m for p, models in head[0].items() for m in models}
@@ -781,11 +830,12 @@ def plan(args: argparse.Namespace) -> tuple[list[ModelToCheck], list[Unexercised
     to_check, unexercised = find_models_to_check(load_catalog(args.base_ref), head)
     if to_check:
         return to_check, unexercised, "changes"
-    return smoke_models(head[0]), unexercised, "smoke"
+    return smoke_models(head[0], retired), unexercised, "smoke"
 
 
 def run(args: argparse.Namespace) -> int:
-    to_check, unexercised, mode = plan(args)
+    retired = retired_models(args.head_ref)
+    to_check, unexercised, mode = plan(args, retired)
     keys = {p: os.environ.get(env, "") for p, env in PROVIDER_KEY_ENV.items()}
     secrets = [k for k in keys.values() if k]
 
@@ -801,9 +851,19 @@ def run(args: argparse.Namespace) -> int:
     queues = {}
     for model in sorted(to_check, key=lambda m: REASON_PRIORITY.get(m.reason, len(REASON_PRIORITY))):
         served = catalog.get(model.provider, {}).get(model.model_id)
-        probes = plan_probes(model, (served or {}).get("params"))
-        if served is None:
+        params = (served or {}).get("params")
+        probes = plan_probes(model, params)
+        invalid_only_route = unknown_only_route(model, params)
+        if mode != "asked" and is_retired(model, retired):
+            results += [CheckResult(p, "not checked", None, RETIRED_NOTE) for p in probes]
+        elif served is None:
             results += [CheckResult(p, "not checked", None, "the backend doesn't list this model") for p in probes]
+        elif mode == "changes" and not served.get("label"):
+            results += [CheckResult(p, "not checked", None, NOT_IN_PICKER_NOTE) for p in probes]
+        elif invalid_only_route is not None:
+            routes = ", ".join(route_names(model.provider))
+            note = f"not called: its only_route {invalid_only_route!r} is none of its routes ({routes})"
+            results.append(CheckResult(probes[0], "fail", None, note))
         elif not keys.get(model.provider):
             results += [CheckResult(p, "not checked", None, "no CI key") for p in probes]
         else:

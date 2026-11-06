@@ -603,17 +603,17 @@ class TestUpdateSpanMessageSerialization:
         assert deserialized.source == "sdk"
 
 
-class TestDatetimeObjectHook:
-    """Tests for datetime_object_hook: only known datetime fields are converted."""
+class TestRestoreDatetimeFields:
+    """Tests for _restore_datetime_fields: only known datetime fields are converted."""
 
-    def test_datetime_object_hook__known_fields__converts_to_datetime(self):
+    def test_restore_datetime_fields__known_fields__converts_to_datetime(self):
         """Known datetime fields with valid ISO strings are converted to datetime."""
         obj = {
             "start_time": "2024-01-15T10:30:00",
             "end_time": "2024-01-15T11:00:00.123456",
             "last_updated_at": "2024-01-15T12:00:00Z",
         }
-        result = message_serialization.datetime_object_hook(obj)
+        result = message_serialization._restore_datetime_fields(obj)
 
         assert isinstance(result["start_time"], datetime.datetime)
         assert result["start_time"] == datetime.datetime(2024, 1, 15, 10, 30, 0)
@@ -621,7 +621,9 @@ class TestDatetimeObjectHook:
         assert result["end_time"] == datetime.datetime(2024, 1, 15, 11, 0, 0, 123456)
         assert isinstance(result["last_updated_at"], datetime.datetime)
 
-    def test_datetime_object_hook__unknown_fields_with_iso_strings__not_converted(self):
+    def test_restore_datetime_fields__unknown_fields_with_iso_strings__not_converted(
+        self,
+    ):
         """ISO-like strings in non-datetime fields must remain as strings."""
         obj = {
             "name": "test",
@@ -629,7 +631,7 @@ class TestDatetimeObjectHook:
             "created_at": "2024-06-01T08:00:00Z",
             "some_date": "2024-01-15T10:30:00.123456+02:00",
         }
-        result = message_serialization.datetime_object_hook(obj)
+        result = message_serialization._restore_datetime_fields(obj)
 
         assert result["timestamp"] == "2024-01-15T10:30:00"
         assert isinstance(result["timestamp"], str)
@@ -638,54 +640,54 @@ class TestDatetimeObjectHook:
         assert result["some_date"] == "2024-01-15T10:30:00.123456+02:00"
         assert isinstance(result["some_date"], str)
 
-    def test_datetime_object_hook__mixed_fields__only_known_fields_converted(self):
+    def test_restore_datetime_fields__mixed_fields__only_known_fields_converted(self):
         """Only known datetime fields are converted; others stay as strings."""
         obj = {
             "start_time": "2024-01-15T10:30:00",
             "event_time": "2024-01-15T10:30:00",
             "name": "test",
         }
-        result = message_serialization.datetime_object_hook(obj)
+        result = message_serialization._restore_datetime_fields(obj)
 
         assert isinstance(result["start_time"], datetime.datetime)
         assert isinstance(result["event_time"], str)
         assert result["event_time"] == "2024-01-15T10:30:00"
 
-    def test_datetime_object_hook__known_field_non_iso_string__not_converted(self):
+    def test_restore_datetime_fields__known_field_non_iso_string__not_converted(self):
         """Known datetime fields with non-ISO strings are left as-is."""
         obj = {
             "start_time": "not-a-date",
             "end_time": "2024/01/15 10:30:00",
         }
-        result = message_serialization.datetime_object_hook(obj)
+        result = message_serialization._restore_datetime_fields(obj)
 
         assert result["start_time"] == "not-a-date"
         assert isinstance(result["start_time"], str)
         assert result["end_time"] == "2024/01/15 10:30:00"
         assert isinstance(result["end_time"], str)
 
-    def test_datetime_object_hook__known_field_non_string_value__not_converted(self):
+    def test_restore_datetime_fields__known_field_non_string_value__not_converted(self):
         """Known datetime fields with non-string values are left as-is."""
         obj = {
             "start_time": 12345,
             "end_time": None,
             "last_updated_at": True,
         }
-        result = message_serialization.datetime_object_hook(obj)
+        result = message_serialization._restore_datetime_fields(obj)
 
         assert result["start_time"] == 12345
         assert result["end_time"] is None
         assert result["last_updated_at"] is True
 
-    def test_datetime_object_hook__empty_dict__returns_empty(self):
+    def test_restore_datetime_fields__empty_dict__returns_empty(self):
         """Empty dicts pass through without error."""
-        result = message_serialization.datetime_object_hook({})
+        result = message_serialization._restore_datetime_fields({})
         assert result == {}
 
-    def test_datetime_object_hook__no_known_fields__unchanged(self):
+    def test_restore_datetime_fields__no_known_fields__unchanged(self):
         """Dicts without known datetime fields are returned unchanged."""
         obj = {"id": "123", "value": 0.95, "data": "2024-01-15T10:30:00"}
-        result = message_serialization.datetime_object_hook(obj)
+        result = message_serialization._restore_datetime_fields(obj)
 
         assert result == {"id": "123", "value": 0.95, "data": "2024-01-15T10:30:00"}
         assert isinstance(result["data"], str)
@@ -821,6 +823,184 @@ class TestIsoStringsInDataFieldsPreserved:
 
         assert item.metadata["logged"] == "2024-03-10T14:30:01+05:00"
         assert isinstance(item.metadata["logged"], str)
+
+
+USER_DATA_WITH_DATETIME_KEYS = {
+    "start_time": "2024-01-15T10:30:00",
+    "nested": {
+        "end_time": "2024-01-15T11:00:00Z",
+        "items": [{"last_updated_at": "2024-01-15T12:00:00.123456+02:00"}],
+    },
+}
+
+
+class TestDatetimeKeysInUserDataPreserved:
+    """User data under start_time / end_time / last_updated_at keys must not be
+    turned into datetimes on replay; only the message's own fields are."""
+
+    def test_create_trace__datetime_keys_in_user_data__preserved_as_logged(self):
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
+        last_updated_at = datetime.datetime(
+            2024, 1, 1, 12, 0, 2, tzinfo=datetime.timezone.utc
+        )
+
+        original = messages.CreateTraceMessage(
+            trace_id="trace-1",
+            project_name="test-project",
+            name="test-trace",
+            start_time=start_time,
+            end_time=end_time,
+            input=USER_DATA_WITH_DATETIME_KEYS,
+            output=USER_DATA_WITH_DATETIME_KEYS,
+            metadata=USER_DATA_WITH_DATETIME_KEYS,
+            tags=[],
+            error_info=None,
+            thread_id=None,
+            last_updated_at=last_updated_at,
+            source="sdk",
+        )
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateTraceMessage,
+            json_str=json_str,
+        )
+
+        assert deserialized.start_time == start_time
+        assert deserialized.end_time == end_time
+        assert deserialized.last_updated_at == last_updated_at
+        assert deserialized.input == USER_DATA_WITH_DATETIME_KEYS
+        assert deserialized.output == USER_DATA_WITH_DATETIME_KEYS
+        assert deserialized.metadata == USER_DATA_WITH_DATETIME_KEYS
+
+    def test_create_span__datetime_keys_in_user_data__preserved_as_logged(self):
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
+        last_updated_at = datetime.datetime(
+            2024, 1, 1, 12, 0, 2, tzinfo=datetime.timezone.utc
+        )
+
+        original = messages.CreateSpanMessage(
+            span_id="span-1",
+            trace_id="trace-1",
+            project_name="test-project",
+            parent_span_id=None,
+            name="test-span",
+            start_time=start_time,
+            end_time=end_time,
+            input=USER_DATA_WITH_DATETIME_KEYS,
+            output=USER_DATA_WITH_DATETIME_KEYS,
+            metadata=USER_DATA_WITH_DATETIME_KEYS,
+            tags=[],
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=last_updated_at,
+            source="sdk",
+        )
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateSpanMessage,
+            json_str=json_str,
+        )
+
+        assert deserialized.start_time == start_time
+        assert deserialized.end_time == end_time
+        assert deserialized.last_updated_at == last_updated_at
+        assert deserialized.input == USER_DATA_WITH_DATETIME_KEYS
+        assert deserialized.output == USER_DATA_WITH_DATETIME_KEYS
+        assert deserialized.metadata == USER_DATA_WITH_DATETIME_KEYS
+
+    def test_create_trace_batch__datetime_keys_in_user_data__preserved_as_logged(
+        self,
+    ):
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
+        last_updated_at = datetime.datetime(
+            2024, 1, 1, 12, 0, 2, tzinfo=datetime.timezone.utc
+        )
+
+        traces = [
+            trace_write.TraceWrite(
+                id="trace-1",
+                project_name="test-project",
+                name="test-trace",
+                start_time=start_time,
+                end_time=end_time,
+                input=USER_DATA_WITH_DATETIME_KEYS,
+                output=USER_DATA_WITH_DATETIME_KEYS,
+                metadata=USER_DATA_WITH_DATETIME_KEYS,
+                last_updated_at=last_updated_at,
+            ),
+        ]
+        original = messages.CreateTraceBatchMessage(batch=traces)
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateTraceBatchMessage,
+            json_str=json_str,
+        )
+
+        item = deserialized.batch[0]
+        assert item.start_time == start_time
+        assert item.end_time == end_time
+        assert item.last_updated_at == last_updated_at
+        assert item.input == USER_DATA_WITH_DATETIME_KEYS
+        assert item.output == USER_DATA_WITH_DATETIME_KEYS
+        assert item.metadata == USER_DATA_WITH_DATETIME_KEYS
+
+    def test_create_spans_batch__datetime_keys_in_user_data__preserved_as_logged(
+        self,
+    ):
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
+        last_updated_at = datetime.datetime(
+            2024, 1, 1, 12, 0, 2, tzinfo=datetime.timezone.utc
+        )
+
+        spans = [
+            span_write.SpanWrite(
+                id="span-1",
+                trace_id="trace-1",
+                project_name="test-project",
+                name="test-span",
+                type="llm",
+                start_time=start_time,
+                end_time=end_time,
+                input=USER_DATA_WITH_DATETIME_KEYS,
+                output=USER_DATA_WITH_DATETIME_KEYS,
+                metadata=USER_DATA_WITH_DATETIME_KEYS,
+                last_updated_at=last_updated_at,
+            ),
+        ]
+        original = messages.CreateSpansBatchMessage(batch=spans)
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateSpansBatchMessage,
+            json_str=json_str,
+        )
+
+        item = deserialized.batch[0]
+        assert item.start_time == start_time
+        assert item.end_time == end_time
+        assert item.last_updated_at == last_updated_at
+        assert item.input == USER_DATA_WITH_DATETIME_KEYS
+        assert item.output == USER_DATA_WITH_DATETIME_KEYS
+        assert item.metadata == USER_DATA_WITH_DATETIME_KEYS
 
 
 class TestSubclassInheritance:
@@ -1002,7 +1182,7 @@ class TestNonJsonSerializableTypesInMessageFields:
         """
         datetime objects in input whose key is NOT in DATETIME_FIELD_NAMES are
         serialized to an ISO string and stay as a string after a round-trip
-        (the datetime_object_hook only converts the known set of field names).
+        (_restore_datetime_fields only converts the known set of field names).
         """
         dt = datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=datetime.timezone.utc)
         original = self._make_trace(input_data={"event_timestamp": dt})

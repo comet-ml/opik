@@ -55,6 +55,17 @@ export function hasValuesByAuthor(
   );
 }
 
+export const getAuthorName = (
+  key: string,
+  entry?: FeedbackScoreValueByAuthorMap[string],
+): string => {
+  if (entry?.author) {
+    return entry.author;
+  }
+  const lastUnderscore = key.lastIndexOf("_");
+  return lastUnderscore !== -1 ? key.substring(0, lastUnderscore) : key;
+};
+
 /**
  * Finds a value in value_by_author by userName, handling both regular keys (userName)
  * and composite keys (userName_queueId, userName_spanId, userName_queueId_spanId).

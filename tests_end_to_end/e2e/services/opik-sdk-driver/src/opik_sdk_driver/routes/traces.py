@@ -7,6 +7,7 @@ import opik
 from fastapi import APIRouter, Header, HTTPException
 
 from ..opik_factory import make_opik_client
+from ..visibility import wait_for_trace
 from ..schemas import (
     NestedTraceCreate,
     NestedTraceResponse,
@@ -47,13 +48,15 @@ def create_trace(
     # Use @opik.track to exercise the same code path users invoke; the
     # decorator emits a trace via the SDK's streamer thread. Bind the
     # global client to this request's auth context so flush_tracker and
-    # search_traces share it. ApiError from the SDK is translated to
+    # the read-back share it. ApiError from the SDK is translated to
     # HTTP by the app-wide exception handler.
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     opik.set_global_client(client, context_wise=True)
+    emitted: dict[str, str] = {}
 
     @opik.track(name=body.name, project_name=body.project_name)
     def _emit(_input_value: str) -> str:
+        emitted["trace_id"] = opik.opik_context.get_current_trace_data().id
         # thread_id is set on the live trace from within the tracked function so
         # the decorator code path (the one users invoke) still owns trace
         # creation; @opik.track itself takes no thread_id argument. A blank value
@@ -65,23 +68,11 @@ def create_trace(
     try:
         _emit(body.input)
         opik.flush_tracker()
-        traces = client.search_traces(
-            project_name=body.project_name,
-            filter_string=f'name = "{body.name}"',
-            max_results=1,
-            wait_for_at_least=1,
-        )
+        trace = wait_for_trace(client, emitted["trace_id"])
     finally:
         client.end(flush=False)
         atexit.unregister(client.end)
 
-    if not traces:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Trace {body.name} not visible after create + flush",
-        )
-
-    trace = traces[0]
     return TraceResponse(
         id=str(trace.id),
         name=trace.name,
@@ -183,21 +174,7 @@ def create_nested_trace(
             created.append(span)
 
         opik.flush_tracker()
-        # Confirm visibility by the trace's own id (unique), not by name — trace
-        # names are not unique within a project, so a name filter could return a
-        # different, older trace and make the response point at the wrong spans.
-        traces = client.search_traces(
-            project_name=body.project_name,
-            filter_string=f'id = "{trace.id}"',
-            max_results=1,
-            wait_for_at_least=1,
-        )
-        if not traces:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Trace {trace.id} not visible after create + flush",
-            )
-        found = traces[0]
+        found = wait_for_trace(client, trace.id)
         # Block until every span is queryable, not just the trace. The trace row
         # and its spans land on separate eventually-consistent paths; without
         # this, a consumer that opens the trace right after seeding can see

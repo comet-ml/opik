@@ -10,7 +10,7 @@ import lombok.ToString;
 import java.util.Map;
 import java.util.UUID;
 
-@Builder
+@Builder(toBuilder = true)
 public record LlmProviderClientApiConfig(@ToString.Exclude String apiKey, Map<String, String> headers, String baseUrl,
         Map<String, String> configuration, UUID providerId, String workspaceId, EncryptedAuthConfig authConfig,
         LlmProvider provider) {

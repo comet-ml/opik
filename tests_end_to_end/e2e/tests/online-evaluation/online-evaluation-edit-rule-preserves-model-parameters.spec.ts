@@ -72,7 +72,7 @@ function isRuleUpdate(url: string, ruleId: string): boolean {
 
 test.describe(
   'Online Evaluation — edit rule',
-  { tag: ['@t2-cuj', '@llm-daily', '@area:online-evaluation'] },
+  { tag: ['@t2-cuj', '@area:online-evaluation'] },
   () => {
     test(
       'Saving an LLM-judge rule without touching the model preserves its custom_parameters',

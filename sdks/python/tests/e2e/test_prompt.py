@@ -195,6 +195,32 @@ def test_prompt__initialize_class_instance(
     )
 
 
+def test_prompt__initialize_class_instance__no_project_name__created_in_default_project(
+    opik_client: opik.Opik, prompt_name: str
+):
+    template = f"some-prompt-text-{_generate_random_suffix()}"
+
+    prompt = opik.Prompt(name=prompt_name, prompt=template)
+
+    assert prompt.project_name == opik_client.project_name
+
+    prompts_from_api = opik_client.search_prompts(
+        filter_string=f'name = "{prompt_name}"',
+        project_name=opik_client.project_name,
+    )
+
+    assert len(prompts_from_api) == 1
+    verifiers.verify_prompt_version(
+        prompts_from_api[0],
+        name=prompt_name,
+        template=template,
+        version_id=prompt.__internal_api__version_id__,
+        prompt_id=prompt.__internal_api__prompt_id__,
+        commit=prompt.commit,
+        project_name=opik_client.project_name,
+    )
+
+
 def test_prompt__format(prompt_name: str):
     template = "Hello, {{name}} from {{place}}! Nice to meet you, {{name}}."
 
