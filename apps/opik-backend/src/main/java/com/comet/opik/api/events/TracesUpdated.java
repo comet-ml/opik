@@ -23,6 +23,7 @@ public class TracesUpdated extends BaseEvent {
     // traceId -> projectId, so consumers can split traceIds per project. May be null for callers
     // that don't carry it; consumers then fall back to {@link #projectIds}.
     private final @Nullable Map<UUID, UUID> traceIdToProjectId;
+    private final @Nullable String organizationId;
 
     public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull TraceUpdate traceUpdate) {
@@ -37,11 +38,18 @@ public class TracesUpdated extends BaseEvent {
     public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull TraceUpdate traceUpdate, @Nullable String workspaceName,
             @Nullable Map<UUID, UUID> traceIdToProjectId) {
+        this(projectIds, traceIds, workspaceId, userName, traceUpdate, workspaceName, traceIdToProjectId, null);
+    }
+
+    public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
+            @NonNull String userName, @NonNull TraceUpdate traceUpdate, @Nullable String workspaceName,
+            @Nullable Map<UUID, UUID> traceIdToProjectId, @Nullable String organizationId) {
         super(workspaceId, userName);
         this.projectIds = projectIds;
         this.traceIds = traceIds;
         this.traceUpdate = traceUpdate;
         this.workspaceName = workspaceName;
         this.traceIdToProjectId = traceIdToProjectId;
+        this.organizationId = organizationId;
     }
 }

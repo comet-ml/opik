@@ -275,7 +275,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     PromptType.MUSTACHE,
                     hasExperimentId ? UUID.randomUUID() : null,
                     "ws-name-1",
-                    null);
+                    null, null);
         }
     }
 
@@ -817,7 +817,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null, null);
+                    PromptType.MUSTACHE, null, null, null, null);
             var traceAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
                     .entityId(trace.id())
                     .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
@@ -928,7 +928,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null, null);
+                    PromptType.MUSTACHE, null, null, null, null);
         }
     }
 
@@ -1186,7 +1186,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null, null);
+                    PromptType.MUSTACHE, null, null, null, null);
         }
     }
 
@@ -1527,7 +1527,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 PromptType.MUSTACHE,
                 experimentId,
                 "ws-name-1",
-                null);
+                null, null);
     }
 
     /** Silences "unused import" on Span — used implicitly through Flux<Span>. */

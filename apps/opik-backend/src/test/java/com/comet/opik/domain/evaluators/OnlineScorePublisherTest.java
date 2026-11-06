@@ -7,6 +7,8 @@ import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.FixedOrganizationResolver;
+import com.comet.opik.infrastructure.auth.OrganizationResolver;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -59,6 +61,8 @@ class OnlineScorePublisherTest {
 
     @Mock
     private RStreamReactive<Object, Object> stream;
+
+    private OrganizationResolver organizationResolver = FixedOrganizationResolver.NONE;
 
     @Test
     void shouldUseGlobalStreamAddParams() {
@@ -194,6 +198,105 @@ class OnlineScorePublisherTest {
         }
     }
 
+    @Nested
+    @DisplayName("The organization a message carries")
+    class OrganizationStampingTests {
+
+        private static final String ORGANIZATION_ID = "organization-of-the-request";
+
+        @Test
+        @DisplayName("Stamps the organization the resolver knows onto a message that has none")
+        void stampsTheResolvedOrganization() {
+            organizationResolver = FixedOrganizationResolver.of(ORGANIZATION_ID);
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+
+            publisher.enqueueThreadMessage(List.of("thread-1", "thread-2"), threadRule(), UUID.randomUUID(),
+                    "workspace", "user").block();
+
+            assertThat(capturePayloads()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                    .containsExactly(ORGANIZATION_ID, ORGANIZATION_ID);
+        }
+
+        @Test
+        @DisplayName("Keeps the organization a message already carries")
+        void keepsTheMessagesOwnOrganization() {
+            organizationResolver = FixedOrganizationResolver.of(ORGANIZATION_ID);
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var message = threadMessage().toBuilder().organizationId("organization-of-the-job").build();
+
+            publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE).block();
+
+            assertThat(capturePayloads()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                    .containsExactly("organization-of-the-job");
+        }
+
+        @Test
+        @DisplayName("Stamps the resolved organization over a blank one")
+        void stampsTheResolvedOrganizationOverABlankOne() {
+            organizationResolver = FixedOrganizationResolver.of(ORGANIZATION_ID);
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+            var message = threadMessage().toBuilder().organizationId("   ").build();
+
+            publisher.enqueueMessage(List.of(message), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE).block();
+
+            assertThat(capturePayloads()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                    .containsExactly(ORGANIZATION_ID);
+        }
+
+        @Test
+        @DisplayName("Enqueues without an organization when none is known")
+        void enqueuesWithoutAnOrganizationWhenNoneIsKnown() {
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+
+            publisher.enqueueMessage(List.of(threadMessage()), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE)
+                    .block();
+
+            assertThat(capturePayloads()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                    .containsExactly((String) null);
+        }
+
+        @Test
+        @DisplayName("Still enqueues when the organization can't be resolved")
+        void stillEnqueuesWhenTheResolverFails() {
+            organizationResolver = new FixedOrganizationResolver(Mono.error(new IllegalStateException("Comet down")));
+            var publisher = createPublisher(createConfig(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE));
+
+            publisher.enqueueMessage(List.of(threadMessage()), AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE)
+                    .block();
+
+            assertThat(capturePayloads()).extracting(TraceThreadToScoreLlmAsJudge::organizationId)
+                    .containsExactly((String) null);
+        }
+
+        private AutomationRuleEvaluatorTraceThreadLlmAsJudge threadRule() {
+            return AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
+                    .id(UUID.randomUUID())
+                    .name(podamFactory.manufacturePojo(String.class))
+                    .code(podamFactory.manufacturePojo(TraceThreadLlmAsJudgeCode.class))
+                    .build();
+        }
+
+        private TraceThreadToScoreLlmAsJudge threadMessage() {
+            return TraceThreadToScoreLlmAsJudge.builder()
+                    .threadIds(List.of("thread-1"))
+                    .ruleId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .code(podamFactory.manufacturePojo(TraceThreadLlmAsJudgeCode.class))
+                    .workspaceId("workspace")
+                    .userName("user")
+                    .build();
+        }
+
+        private List<TraceThreadToScoreLlmAsJudge> capturePayloads() {
+            ArgumentCaptor<StreamAddParams<Object, Object>> captor = ArgumentCaptor.forClass(StreamAddParams.class);
+            verify(stream, atLeastOnce()).add(captor.capture());
+            return captor.getAllValues().stream()
+                    .map(params -> params.getEntries().get(OnlineScoringConfig.PAYLOAD_FIELD))
+                    .map(TraceThreadToScoreLlmAsJudge.class::cast)
+                    .toList();
+        }
+    }
+
     private OnlineScorePublisher createPublisher(OnlineScoringConfig onlineScoringConfig) {
         when(stream.add(any())).thenReturn(Mono.just(new StreamMessageId(System.currentTimeMillis(), 0)));
         return createPublisherWithoutStreamStubs(onlineScoringConfig);
@@ -202,8 +305,8 @@ class OnlineScorePublisherTest {
     /** For the cases that assert nothing is ever added — strict stubbing rejects an unused {@code add} stub. */
     private OnlineScorePublisher createPublisherWithoutStreamStubs(OnlineScoringConfig onlineScoringConfig) {
         when(redisClient.getStream(anyString(), any())).thenReturn(stream);
-        return new OnlineScorePublisherImpl(
-                onlineScoringConfig, serviceTogglesConfig, redisClient, automationRuleEvaluatorService);
+        return new OnlineScorePublisherImpl(onlineScoringConfig, serviceTogglesConfig, redisClient,
+                automationRuleEvaluatorService, organizationResolver);
     }
 
     private StreamAddParams<Object, Object> captureStreamAddParams() {
