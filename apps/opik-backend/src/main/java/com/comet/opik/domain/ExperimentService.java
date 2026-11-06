@@ -651,9 +651,10 @@ public class ExperimentService {
     }
 
     /**
-     * The experiment's dataset: the one an internal caller already resolved, else the dataset of the given version,
-     * else the dataset with that name in the experiment's project, created if missing. The version decides when it is
-     * given, as the experiment can live in another project than its dataset.
+     * The experiment's dataset: the one an internal caller already resolved, else the dataset of the given version
+     * when it has the experiment's dataset name, else the dataset with that name in the experiment's project, created
+     * if missing. The version decides when it matches, as the experiment can live in another project than its
+     * dataset; a version of a differently named dataset still fails the version check.
      */
     private Mono<UUID> resolveDatasetId(Experiment experiment) {
         if (experiment.datasetId() != null) {
@@ -664,14 +665,18 @@ public class ExperimentService {
         if (experiment.datasetVersionId() == null) {
             return byName;
         }
-        return Mono.deferContextual(ctx -> Mono
-                .fromCallable(() -> datasetVersionService.findByIds(Set.of(experiment.datasetVersionId()),
-                        ctx.get(RequestContext.WORKSPACE_ID)))
-                .subscribeOn(Schedulers.boundedElastic()))
-                .flatMap(versions -> versions.stream()
-                        .findFirst()
-                        .map(version -> Mono.just(version.datasetId()))
-                        .orElse(byName));
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            return Mono.fromCallable(() -> datasetVersionService
+                    .findByIds(Set.of(experiment.datasetVersionId()), workspaceId)
+                    .stream()
+                    .findFirst()
+                    .flatMap(version -> datasetService.getById(version.datasetId(), workspaceId))
+                    .filter(dataset -> dataset.name().equals(experiment.datasetName()))
+                    .map(Dataset::id))
+                    .subscribeOn(Schedulers.boundedElastic());
+        })
+                .flatMap(datasetId -> datasetId.map(Mono::just).orElse(byName));
     }
 
     private Mono<Experiment> resolveProjectId(Experiment experiment) {
