@@ -281,7 +281,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
 | component.backend.env.OTEL_VERSION | string | `"2.12.0"` |  |
 | component.backend.env.PYTHON_EVALUATOR_URL | string | `"http://opik-python-backend:8000"` |  |
-| component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
@@ -461,7 +460,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
-| component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |

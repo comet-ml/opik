@@ -199,3 +199,44 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: REDIS_URL points at the bundled Redis when it is deployed
+    documentSelector:
+      path: metadata.name
+      value: opik-python-backend
+    asserts:
+      - matchRegex:
+          path: data.REDIS_URL
+          pattern: ^redis://:.+@opik-redis-master:6379/$
+
+  - it: REDIS_URL is not rendered when the bundled Redis is disabled
+    set:
+      redis.enabled: false
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - notExists:
+          path: data.REDIS_URL
+
+  - it: an explicit REDIS_URL wins over the bundled default
+    set:
+      component.backend.env.REDIS_URL: redis://external:6379/
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.REDIS_URL
+          value: redis://external:6379/
+
+  - it: the bundled Redis password is percent-encoded in REDIS_URL
+    set:
+      redis.auth.password: "a b+c@d"
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.REDIS_URL
+          value: redis://:a%20b%2Bc%40d@opik-redis-master:6379/
