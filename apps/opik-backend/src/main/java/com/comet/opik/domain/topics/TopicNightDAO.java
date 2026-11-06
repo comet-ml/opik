@@ -107,8 +107,9 @@ public interface TopicNightDAO {
     @SqlQuery("SELECT MIN(started_at) FROM topic_nights WHERE outcome = 'running'")
     Instant runningSince();
 
-    /** The latest nights that ended, by start, newest first. */
-    @SqlQuery("SELECT * FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC LIMIT :limit")
+    /** The latest nights that ended, by start, newest first; of two that started at once, the later night first. */
+    @SqlQuery("SELECT * FROM topic_nights WHERE outcome <> 'running' ORDER BY started_at DESC, night DESC "
+            + "LIMIT :limit")
     List<TopicNight> findLatestEnded(@Bind("limit") int limit);
 
     @SqlQuery("SELECT np.workspace_id, np.decision, np.reason, COUNT(*) AS projects "
