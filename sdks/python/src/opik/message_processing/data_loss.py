@@ -8,7 +8,9 @@ surfaced through :class:`FlushResult` when the caller flushes or ends the client
 
 Only *terminal* drops are recorded here — messages that will never be sent
 again. Transient states that are still expected to be delivered (rate-limit
-re-enqueues, connection errors parked for replay) are deliberately excluded.
+re-enqueues, connection errors parked for replay) are deliberately excluded
+until they become terminal: a message still parked when the sender shuts down,
+or one evicted from a full queue, is recorded then.
 """
 
 import collections
@@ -27,6 +29,8 @@ class FailureReason(str, enum.Enum):
     HTTP_SERVER_ERROR = "http_server_error"
     UNAUTHORIZED = "unauthorized"
     SERIALIZATION = "serialization"
+    QUEUE_OVERFLOW = "queue_overflow"
+    UNDELIVERED_AT_SHUTDOWN = "undelivered_at_shutdown"
     UNKNOWN = "unknown"
 
     @staticmethod

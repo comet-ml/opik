@@ -320,6 +320,7 @@ Unlike `evaluate()`, `evaluate_prompt()`, and `evaluate_experiment()`, this meth
 1. Fetch threads from backend
    ├─► threads_client.search_threads(project_name, filter_string)
    ├─► Uses OQL filter to select specific threads
+   ├─► Limit: max_threads (default: 1000), warns when the limit is reached
    └─► Returns List[TraceThread] (existing production data)
 
 2. Fetch traces for each thread from backend

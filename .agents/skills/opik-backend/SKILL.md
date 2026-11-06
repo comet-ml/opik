@@ -227,6 +227,16 @@ Arrays.asList("A", "B", "C")
 
 ## API Design
 - **Query parameters that accept lists**: Use plural names from the start (e.g., `exclude_category_names` not `exclude_category_name`). Starting with a singular name and later adding a plural variant results in two redundant query params on the same endpoint. Plural names are backward-compatible since they work for both single and multiple values.
+- **Optional query parameters**: don't annotate `@QueryParam` parameters with `@Nullable`; none of the backend's query params are. A `@QueryParam` without `@NotNull` or `@DefaultValue` is already optional and arrives as `null` when omitted. Document what omitting it means in its `@Schema(description = ...)`. `@Nullable` stays appropriate on API models and on internal methods, including private helpers inside resource classes.
+
+### User-Named Resources (name length)
+A name longer than its column fails the INSERT with `MysqlDataTruncation` and surfaces as a 500. Every create and update/rename of a user-named resource must bound it:
+1. **One constant per name, matching its column**: `public static final int NAME_MAX_LENGTH = 150;` on the resource model (e.g. `Project.NAME_MAX_LENGTH`), referenced everywhere the limit applies. Check the column width in the migration; not every name column is 150.
+2. **Validate declaratively** on the create **and** the update/rename request models, and on every field that creates the resource implicitly (e.g. `project_name` on traces/spans/datasets): `@Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters")`. `@Size` is published as `maxLength` in the OpenAPI spec and reaches the generated SDKs.
+3. **Don't wrap it in a composed constraint annotation**: swagger-core ignores constraints on the composing annotation, so the spec loses `maxLength` (and any `pattern` it carried). Repeat `@Size` with the shared constant instead.
+4. **Normalize the same way on every path**: if one path strips the name, all paths that store or look it up must strip it too, otherwise the same name maps to two resources.
+5. **Service-level guard only for paths that bypass bean validation** (OpenTelemetry, internal callers), counting the same way as those paths.
+6. **Test** create and rename with a `max + 1` name (422) and with exactly `max` (accepted).
 
 ## Error Handling
 
