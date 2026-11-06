@@ -12,7 +12,6 @@ import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
-import jakarta.ws.rs.HttpMethod;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -284,29 +283,33 @@ class InferenceClientTest {
                 .hasSize(InferenceClient.MAX_RETRIES + 1);
     }
 
-    static Stream<Arguments> redirects() {
-        return Stream.of(arguments(HttpMethod.GET, 302), arguments(HttpMethod.POST, 307));
+    @Test
+    void redirectOfAGetIsNotFollowed() {
+        var elsewhere = "/elsewhere";
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(
+                aResponse().withStatus(302).withHeader("Location", server.baseUrl() + elsewhere)));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(jobView()));
+
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(302);
+                });
+        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
     }
 
-    @ParameterizedTest(name = "{0} answered {1}")
-    @MethodSource("redirects")
-    void redirectIsNotFollowed(String method, int status) {
+    @Test
+    void redirectOfAPostIsNotFollowed() {
         var elsewhere = "/elsewhere";
-        var redirect = aResponse().withStatus(status).withHeader("Location", server.baseUrl() + elsewhere);
-        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(redirect));
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(redirect));
-        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(method.equals(HttpMethod.GET) ? jobView() : embedded()));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(
+                aResponse().withStatus(307).withHeader("Location", server.baseUrl() + elsewhere)));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(embedded()));
 
-        assertThatThrownBy(() -> {
-            if (method.equals(HttpMethod.GET)) {
-                client.getJob(JOB_ID, 0, false, later()).block();
-            } else {
-                client.embed(embedRequest(), later()).block();
-            }
-        }).isInstanceOfSatisfying(InferenceException.class, exception -> {
-            assertThat(exception.getCode()).isEqualTo("upstream_error");
-            assertThat(exception.getHttpStatus()).isEqualTo(status);
-        });
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(307);
+                });
         assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
     }
 

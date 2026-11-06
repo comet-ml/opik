@@ -147,13 +147,14 @@ class AiLabelsConfigTest {
         return Stream.of(
                 arguments(32L * 1024 * 1024, List.of()),
                 arguments(1L, List.of()),
+                arguments(64L * 1024 * 1024, List.of()),
                 arguments(0L, List.of("inference.maxResponseBytes")),
-                arguments(1024L * 1024 * 1024 + 1, List.of("inference.maxResponseBytes")));
+                arguments(64L * 1024 * 1024 + 1, List.of("inference.maxResponseBytes")));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("maxResponseBytes")
-    void maxResponseBytesIsPositiveAndAtMostAGibibyte(long maxResponseBytes, List<String> expectedViolations) {
+    void maxResponseBytesIsPositiveAndAtMost64MiB(long maxResponseBytes, List<String> expectedViolations) {
         var config = new AiLabelsConfig();
         config.getInference().setMaxResponseBytes(maxResponseBytes);
 

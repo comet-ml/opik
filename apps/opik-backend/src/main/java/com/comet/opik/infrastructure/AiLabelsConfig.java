@@ -238,10 +238,11 @@ public class AiLabelsConfig {
 
         /**
          * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
-         * largest expected bodies, a full embed call and a page of job results, are a few MiB.
+         * largest expected bodies, a full embed call and a page of job results, are a few MiB. Every call in flight
+         * can hold up to this much heap, so it is capped at 64 MiB, twice the default.
          */
         @JsonProperty
-        @Min(1) @Max(1024L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
+        @Min(1) @Max(64L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
 
         /**
          * The credential and the traces go with every call, so never in clear over a network: https, or http only to
