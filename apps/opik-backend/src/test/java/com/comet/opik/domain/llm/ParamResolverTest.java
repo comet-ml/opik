@@ -574,31 +574,29 @@ class ParamResolverTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"low,none,true", "none,low,false", "low,'  ',false", "none,'',true"})
-    void readsTheEffortAnExtraBodyKeySendsInsteadOfTheTypedOne(String typed, String extraBody, boolean keeps) {
-        var request = effortRequest("gpt-5.4", typed, Map.of("reasoning_effort", extraBody));
+    @CsvSource(delimiter = '|', value = {
+            "low | {\"reasoning_effort\": \"none\"}",
+            "none | {\"reasoning_effort\": \"\"}",
+            "low | {\"reasoning\": {\"effort\": \"none\"}, \"reasoning_effort\": \"low\"}",
+            "low | {\"reasoning\": {\"effort\": \" \"}, \"reasoning_effort\": \"none\"}"})
+    void readsNestedThenFlatThenTypedEffortAndKeepsSamplingAtNone(String typed, String customParameters) {
+        var request = effortRequest("gpt-5.4", typed, customParameters(customParameters));
 
-        var expected = keeps
-                ? resolution(request)
-                : resolution(ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
-                        TEMPERATURE_REFUSED, TOP_P_REFUSED);
-        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(expected);
+        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(resolution(request));
     }
 
     @ParameterizedTest
-    @CsvSource(delimiter = '|', nullValues = "null", value = {
-            "none | {\"reasoning\": {\"effort\": \"high\"}} | false",
-            "none | {\"reasoning\": {\"effort\": \"low\", \"summary\": \"auto\"}, \"reasoning_effort\": \"none\"} | false",
-            "low | {\"reasoning\": {\"effort\": \"none\"}, \"reasoning_effort\": \"low\"} | true",
-            "low | {\"reasoning\": {\"effort\": \" \"}, \"reasoning_effort\": \"none\"} | true"})
-    void readsANestedEffortBeforeTheFlatOneAndTheTypedOne(String typed, String customParameters, boolean keeps) {
+    @CsvSource(delimiter = '|', value = {
+            "none | {\"reasoning_effort\": \"low\"}",
+            "low | {\"reasoning_effort\": \"  \"}",
+            "none | {\"reasoning\": {\"effort\": \"high\"}}",
+            "none | {\"reasoning\": {\"effort\": \"low\", \"summary\": \"auto\"}, \"reasoning_effort\": \"none\"}"})
+    void readsNestedThenFlatThenTypedEffortAndDropsSamplingAboveNone(String typed, String customParameters) {
         var request = effortRequest("gpt-5.4", typed, customParameters(customParameters));
 
-        var expected = keeps
-                ? resolution(request)
-                : resolution(ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
-                        TEMPERATURE_REFUSED, TOP_P_REFUSED);
-        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(expected);
+        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(resolution(
+                ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
+                TEMPERATURE_REFUSED, TOP_P_REFUSED));
     }
 
     @Test
