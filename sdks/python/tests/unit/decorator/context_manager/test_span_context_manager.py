@@ -1,9 +1,11 @@
+from unittest import mock
+
 import pytest
 
 import opik
 import opik.opik_context
 from opik import context_storage
-from opik.api_objects import attachment
+from opik.api_objects import attachment, opik_client
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 
 from tests.testlib import (
@@ -559,3 +561,27 @@ def test_start_as_current_span__context_cleanup__project_name_released_in_loop(
                 assert context_storage.get_context_project_name() == "ctx-project"
 
     assert context_storage.get_context_project_name() is None
+
+
+def test_start_as_current_span__start_message_fails__span_logged_on_exit(
+    fake_backend,
+):
+    send_span = opik_client.Opik.__internal_api__span__
+    start_message_sent = False
+
+    def fail_start_message(self, **kwargs):
+        nonlocal start_message_sent
+        if not start_message_sent:
+            start_message_sent = True
+            raise RuntimeError("boom")
+        return send_span(self, **kwargs)
+
+    with mock.patch.object(
+        opik_client.Opik, "__internal_api__span__", fail_start_message
+    ):
+        with opik.start_as_current_span("test-span", input={"a": 1}, flush=True):
+            pass
+
+    assert context_storage.top_span_data() is None
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].spans[0].input == {"a": 1}
