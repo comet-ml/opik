@@ -106,6 +106,33 @@ def test_retrieve_policies__policy_name_not_found__policy_error_raised():
     ]
 
 
+def test_retrieve_policies__names_from_a_generator__unknown_name_still_raises():
+    client, _ = _recording_client(lambda params: _page())
+
+    with pytest.raises(exceptions.GuardrailPolicyError) as exception_info:
+        stored_policies.retrieve_policies(
+            client=client, names=(name for name in ["unknown"])
+        )
+
+    assert str(exception_info.value) == "Guardrail policies not found: unknown"
+
+
+@pytest.mark.parametrize("invalid_name", [None, "", "  "])
+def test_retrieve_policies__name_not_a_non_empty_string__policy_error_raised_before_any_lookup(
+    invalid_name,
+):
+    client, calls = _recording_client(lambda params: _page())
+
+    with pytest.raises(exceptions.GuardrailPolicyError) as exception_info:
+        stored_policies.retrieve_policies(client=client, names=["known", invalid_name])
+
+    assert str(exception_info.value) == (
+        "Guardrail policy names must be non-empty strings, "
+        f"but names[1] is {invalid_name!r}"
+    )
+    assert calls == []
+
+
 def test_retrieve_policies__name_in_another_case__found():
     client, _ = _recording_client(
         lambda params: _page(_policy("No_Contact")) if "names" in params else _page()

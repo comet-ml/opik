@@ -186,8 +186,9 @@ class GuardrailValidationError(GuardrailValidationFailed):
 
 
 class GuardrailPolicyError(OpikException):
-    """Raised when a guardrail policy stored in the workspace cannot be turned into
-    rules, for example when it holds a rule type this SDK version does not know."""
+    """Raised when a guardrail cannot be built from the policies stored in the workspace:
+    a requested name is not a non-empty string or does not exist, or a policy holds a
+    rule type this SDK version does not know."""
 
 
 class OpikCloudRequestsRateLimited(OpikException):

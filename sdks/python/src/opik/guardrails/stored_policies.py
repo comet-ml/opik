@@ -43,19 +43,35 @@ def retrieve_policies(
     part of the published OpenAPI definition the client is generated from.
 
     Raises:
-        exceptions.GuardrailPolicyError: If a named policy does not exist. The list
-            leaves an unknown name out, and a guardrail must not run with fewer checks
-            than the policies it names.
+        exceptions.GuardrailPolicyError: If a name is not a non-empty string, or a named
+            policy does not exist. The list leaves an unknown name out, and a guardrail
+            must not run with fewer checks than the policies it names.
     """
+    # Read once: the names are used for two lookups, and a generator would be empty by the
+    # second, letting an unknown name through.
+    requested_names = list(names or [])
+    invalid_names = [
+        f"names[{index}] is {name!r}"
+        for index, name in enumerate(requested_names)
+        if not isinstance(name, str) or not name.strip()
+    ]
+    if invalid_names:
+        raise exceptions.GuardrailPolicyError(
+            "Guardrail policy names must be non-empty strings, but "
+            + ", ".join(invalid_names)
+        )
+
     named_policies = (
-        _list_policies(client, {"names": json.dumps(list(names))}) if names else []
+        _list_policies(client, {"names": json.dumps(requested_names)})
+        if requested_names
+        else []
     )
     # The backend matches names by its database collation, which also ignores accents and reads "ß" as "ss".
     # lower() covers the common case; a name it leaves over is looked up on its own, so the backend decides.
     found_names = {policy.name.lower() for policy in named_policies}
     missing_names = sorted(
         name
-        for name in set(names or [])
+        for name in set(requested_names)
         if name.lower() not in found_names
         and not _list_policies(client, {"names": json.dumps([name])})
     )

@@ -101,10 +101,10 @@ class Guardrail:
 
         Raises:
             opik.rest_api.core.ApiError: If the policies cannot be retrieved, for example
-                when one of ``names`` does not exist in the workspace, or guardrails are not
-                available in it.
-            opik.exceptions.GuardrailPolicyError: If a policy holds a rule type this SDK
-                version cannot run.
+                when guardrails are not available in the workspace.
+            opik.exceptions.GuardrailPolicyError: If one of ``names`` is not a non-empty
+                string or does not exist in the workspace, or a policy holds a rule type
+                this SDK version cannot run.
 
         Example:
 
