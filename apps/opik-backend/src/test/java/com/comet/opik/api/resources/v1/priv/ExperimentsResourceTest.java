@@ -56,6 +56,7 @@ import com.comet.opik.api.resources.utils.ExperimentsTestUtils;
 import com.comet.opik.api.resources.utils.ListComparators;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProtectedEndpoint;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -177,6 +178,9 @@ import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryPara
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_CREATE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -421,6 +425,44 @@ class ExperimentsResourceTest {
             try (var response = experimentResourceClient.callCreate(experiment, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
+        }
+
+        static Stream<ProtectedEndpoint> protectedEndpoints() {
+            var base = "/v1/private/experiments";
+            var id = UUID.randomUUID();
+            return Stream.of(
+                    ProtectedEndpoint.patch(base + "/" + id, EXPERIMENT_CREATE),
+                    ProtectedEndpoint.patch(base + "/batch", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/delete", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/finish", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/items", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/items/delete", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.put(base + "/items/bulk", EXPERIMENT_CREATE, TRACE_SPAN_THREAD_LOG),
+                    ProtectedEndpoint.get(base + "/groups", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/groups/aggregations", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base + "/stream", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/items/" + id, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base + "/items/stream", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/feedback-scores/names", EXPERIMENT_VIEW));
+        }
+
+        @ParameterizedTest
+        @MethodSource("protectedEndpoints")
+        @DisplayName("Experiment endpoints pass required permissions to auth endpoint")
+        void protectedEndpointsPassRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+            endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
+        }
+
+        @ParameterizedTest(name = "{0} denied {1}")
+        @MethodSource("permissionDenials")
+        @DisplayName("Experiment endpoints return 403 when a required permission is denied")
+        void protectedEndpointsReturnForbiddenWhenPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> permissionDenials() {
+            return ProtectedEndpoint.permissionDenials(protectedEndpoints());
         }
     }
 

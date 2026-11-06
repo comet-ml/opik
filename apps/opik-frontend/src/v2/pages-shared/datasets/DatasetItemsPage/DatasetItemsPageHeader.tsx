@@ -30,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 import { Dataset } from "@/types/datasets";
+import { cn } from "@/lib/utils";
 import {
   COMPARE_EXPERIMENTS_ROUTE,
   parseExperimentReturnHref,
@@ -156,7 +157,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
             isEmpty={dataset?.dataset_items_count === 0}
             isTestSuite={isTestSuite}
           />
-          {isTestSuite && (
+          {isTestSuite && canEditDatasets && (
             <TooltipWrapper content="Test settings">
               <Button
                 variant="outline"
@@ -221,8 +222,11 @@ const DatasetItemsPageHeader: React.FunctionComponent<
               <div
                 data-testid="dataset-detail-global-assertions-pill"
                 data-count={effectiveAssertions.length}
-                className="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border bg-primary-foreground pl-1 pr-1.5"
-                onClick={onSettingsClick}
+                className={cn(
+                  "flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-primary-foreground pl-1 pr-1.5",
+                  canEditDatasets && "cursor-pointer",
+                )}
+                onClick={canEditDatasets ? onSettingsClick : undefined}
               >
                 <CheckCheck className="size-3 shrink-0 text-muted-slate" />
                 <span className="comet-body-xs-accented text-foreground">

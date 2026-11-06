@@ -74,9 +74,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * attachments, agent configs, retention rules and so on. These are the burn-down work: each needs a per-endpoint
  * decision about which permission applies.</li>
  * <li><b>Read-shaped (12)</b> — {@code @POST} only to carry a request body too large for a query string:
- * {@code searchTraces}, {@code streamDatasetItems}, {@code getCost} and similar, marked inline below. Gating
- * these needs {@code *_VIEW} permissions that do not exist yet, so they are <b>not</b> closable on the same
- * terms as the writes and should not be treated as quick wins.</li>
+ * {@code searchTraces}, {@code streamDatasetItems}, {@code getCost} and similar, marked inline below. Where a
+ * matching {@code *_VIEW} permission exists (datasets, experiments) it applies; the rest need permissions that
+ * do not exist yet and should not be treated as quick wins.</li>
  * <li><b>Machine callers (16)</b> — {@code LocalRunnersResource} job polling and heartbeats,
  * {@code OpenTelemetryResource} ingest, {@code PairingResource} activation. Tempting to wave through as "not a
  * user", but they still act inside a workspace and still mutate it, and the identity they run as is a
@@ -103,10 +103,10 @@ class RequiredPermissionsCoverageArchTest {
             "AuthenticationResource.checkAccess");
 
     /**
-     * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
+     * How many unannotated mutating endpoints remain of the 86 that existed when this rule landed. It only
      * ever gets decremented as the debt is paid down — see {@link #theSeededCensusMustOnlyEverShrink()}.
      */
-    private static final int SEEDED_CENSUS_SIZE = 86;
+    private static final int SEEDED_CENSUS_SIZE = 59;
 
     /**
      * The debt exactly as it stood when the rule was introduced — the census, frozen.
@@ -132,36 +132,9 @@ class RequiredPermissionsCoverageArchTest {
             "AttachmentResource.startMultiPartUpload",
             "AttachmentResource.uploadAttachment",
             "ChatCompletionsResource.create",
-            "DatasetVersionsResource.createTag",
-            "DatasetVersionsResource.deleteTag",
-            "DatasetVersionsResource.restoreVersion",
-            "DatasetVersionsResource.retrieveVersion", // read-shaped
-            "DatasetVersionsResource.updateVersion",
-            "DatasetsResource.applyDatasetItemChanges",
-            "DatasetsResource.batchUpdate",
-            "DatasetsResource.createDatasetItems",
-            "DatasetsResource.createDatasetItemsFromCsv",
-            "DatasetsResource.createDatasetItemsFromJson",
-            "DatasetsResource.createDatasetItemsFromSpans",
-            "DatasetsResource.createDatasetItemsFromTraces",
-            "DatasetsResource.expandDataset",
-            "DatasetsResource.getDatasetByIdentifier", // read-shaped
-            "DatasetsResource.markDatasetExportJobViewed",
-            "DatasetsResource.patchDatasetItem",
-            "DatasetsResource.startDatasetExport",
-            "DatasetsResource.streamDatasetItems", // read-shaped
             "EnvironmentsResource.create",
             "EnvironmentsResource.deleteEnvironmentsBatch",
             "EnvironmentsResource.update",
-            "ExperimentsResource.batchUpdate",
-            "ExperimentsResource.createExperimentItems",
-            "ExperimentsResource.deleteExperimentItems",
-            "ExperimentsResource.deleteExperimentsById",
-            "ExperimentsResource.experimentItemsBulk",
-            "ExperimentsResource.finishExperiments",
-            "ExperimentsResource.streamExperimentItems", // read-shaped
-            "ExperimentsResource.streamExperiments", // read-shaped
-            "ExperimentsResource.update",
             "FeedbackDefinitionResource.create",
             "FeedbackDefinitionResource.deleteById",
             "FeedbackDefinitionResource.deleteFeedbackDefinitionsBatch",
@@ -305,12 +278,12 @@ class RequiredPermissionsCoverageArchTest {
      * The shrink-only contract, enforced rather than documented.
      * <p>
      * Without this, a developer whose new endpoint fails the coverage rule can append one line to the census
-     * and go green — with 86 entries sitting right there modelling exactly that move. A subset assertion does
+     * and go green — with 59 entries sitting right there modelling exactly that move. A subset assertion does
      * not catch it, because {@link #PENDING_REVIEW} is derived from the census and is therefore a subset of it
      * by construction, whatever the census contains.
      * <p>
-     * So the invariant is pinned to the census's size instead. 86 is a fact about history — how many
-     * unannotated mutating endpoints existed when the rule landed — and it can only ever be paid down. The
+     * So the invariant is pinned to the census's size instead. 59 is what remains of the 86 unannotated mutating
+     * endpoints that existed when the rule landed — and it can only ever be paid down. The
      * number is deliberately awkward: closing an endpoint means deleting its line <i>and</i> decrementing this,
      * and an addition is caught because the count no longer matches.
      */

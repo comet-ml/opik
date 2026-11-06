@@ -661,7 +661,7 @@ function DatasetItemsTab({
                 : `Add ${itemName}s to run evaluations and measure performance.`
             }
           >
-            {!(isDraftMode && deletedIds.size > 0) && (
+            {canEditDatasets && !(isDraftMode && deletedIds.size > 0) && (
               <button
                 onClick={onAddItem}
                 className="comet-body-s underline underline-offset-4 hover:text-primary"

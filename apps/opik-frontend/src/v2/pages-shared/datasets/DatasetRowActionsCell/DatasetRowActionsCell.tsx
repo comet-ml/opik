@@ -52,13 +52,15 @@ export const createDatasetRowActionsCell = ({
     const addExportJob = useAddExportJob();
     const setPanelExpanded = useSetPanelExpanded();
     const { toast } = useToast();
-    const isDatasetExportEnabled = useIsFeatureEnabled(
+    const isDatasetExportFeatureEnabled = useIsFeatureEnabled(
       FeatureToggleKeys.DATASET_EXPORT_ENABLED,
     );
 
     const {
-      permissions: { canEditDatasets, canDeleteDatasets },
+      permissions: { canViewDatasets, canEditDatasets, canDeleteDatasets },
     } = usePermissions();
+    const isDatasetExportEnabled =
+      isDatasetExportFeatureEnabled && canViewDatasets;
 
     const deleteDatasetHandler = useCallback(() => {
       deleteDataset({

@@ -34,6 +34,7 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProtectedEndpoint;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -111,6 +112,8 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsContain;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInAnyOrder;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_EDIT;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_VIEW;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -161,6 +164,7 @@ class DatasetVersionResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
+    private ClientSupport client;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
@@ -171,6 +175,7 @@ class DatasetVersionResourceTest {
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
+        this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
         this.mySqlTemplate = mySqlTemplate;
 
@@ -481,6 +486,43 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RequiredPermissions {
+
+        static Stream<ProtectedEndpoint> protectedEndpoints() {
+            var base = "/v1/private/datasets/" + UUID.randomUUID() + "/versions";
+            return Stream.of(
+                    ProtectedEndpoint.patch(base + "/hash/deadbeef", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/hash/deadbeef/tags", DATASET_EDIT),
+                    ProtectedEndpoint.delete(base + "/deadbeef/tags/some-tag", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/restore", DATASET_EDIT),
+                    ProtectedEndpoint.get(base, DATASET_VIEW),
+                    ProtectedEndpoint.post(base + "/retrieve", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/diff", DATASET_VIEW));
+        }
+
+        @ParameterizedTest
+        @MethodSource("protectedEndpoints")
+        @DisplayName("Dataset version endpoints pass required permissions to auth endpoint")
+        void protectedEndpointsPassRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+            endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
+        }
+
+        @ParameterizedTest(name = "{0} denied {1}")
+        @MethodSource("permissionDenials")
+        @DisplayName("Dataset version endpoints return 403 when a required permission is denied")
+        void protectedEndpointsReturnForbiddenWhenPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> permissionDenials() {
+            return ProtectedEndpoint.permissionDenials(protectedEndpoints());
         }
     }
 

@@ -61,6 +61,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProtectedEndpoint;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -192,6 +193,10 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_EDIT;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.PROJECT_DATA_VIEW;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -512,6 +517,59 @@ class DatasetsResourceTest {
                     factory.manufacturePojo(DatasetUpdate.class), apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
+        }
+
+        static Stream<ProtectedEndpoint> protectedEndpoints() {
+            var base = "/v1/private/datasets";
+            var datasetId = UUID.randomUUID();
+            var itemId = UUID.randomUUID();
+            var jobId = UUID.randomUUID();
+            return Stream.of(
+                    ProtectedEndpoint.put(base + "/items", DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/items/" + itemId, DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/items/batch", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/changes", DATASET_EDIT),
+                    ProtectedEndpoint.postMultipart(base + "/items/from-csv", DATASET_EDIT),
+                    ProtectedEndpoint.postMultipart(base + "/items/from-json", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/expansions", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/from-traces", DATASET_EDIT,
+                            PROJECT_DATA_VIEW),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/from-spans", DATASET_EDIT,
+                            PROJECT_DATA_VIEW),
+                    ProtectedEndpoint.post(base + "/retrieve", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base + "/items/stream", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/items/" + itemId, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/export", DATASET_VIEW),
+                    ProtectedEndpoint.put(base + "/export-jobs/" + jobId + "/mark-viewed", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs/" + jobId, DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs/" + jobId + "/download", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items", DATASET_VIEW,
+                            EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/stats",
+                            DATASET_VIEW, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/output/columns",
+                            DATASET_VIEW, EXPERIMENT_VIEW));
+        }
+
+        @ParameterizedTest
+        @MethodSource("protectedEndpoints")
+        @DisplayName("Dataset item and export endpoints pass required permissions to auth endpoint")
+        void protectedEndpointsPassRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+            endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
+        }
+
+        @ParameterizedTest(name = "{0} denied {1}")
+        @MethodSource("permissionDenials")
+        @DisplayName("Dataset item and export endpoints return 403 when a required permission is denied")
+        void protectedEndpointsReturnForbiddenWhenPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> permissionDenials() {
+            return ProtectedEndpoint.permissionDenials(protectedEndpoints());
         }
     }
 

@@ -2,6 +2,7 @@ import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import useExperimentUpdateMutation from "@/api/datasets/useExperimentUpdate";
 import { Experiment } from "@/types/datasets";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ExperimentTagsListProps = {
   tags: string[];
@@ -17,6 +18,9 @@ const ExperimentTagsList: React.FC<ExperimentTagsListProps> = ({
   className,
 }) => {
   const { mutate } = useExperimentUpdateMutation();
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
 
   const mutateTags = (newTags: string[]) => {
     mutate({
@@ -41,6 +45,7 @@ const ExperimentTagsList: React.FC<ExperimentTagsListProps> = ({
       tags={tags}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
+      readOnly={!canCreateExperiments}
       align="start"
       className={cn("[&>:first-child]:-mr-1", className)}
       tagVariant="purple"

@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import { Experiment } from "@/types/datasets";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 import ExperimentsActionsPanel from "./ExperimentsActionsPanel";
 
 const mockNavigate = vi.fn();
@@ -44,11 +46,21 @@ vi.mock("@/api/datasets/useExperimentsList", () => ({
   default: (...args: unknown[]) => mockUseExperimentsList(...args),
 }));
 
-const renderPanel = (experiments: Experiment[]) =>
+const renderPanel = (experiments: Experiment[], canCreateExperiments = true) =>
   render(
-    <TooltipProvider>
-      <ExperimentsActionsPanel experiments={experiments} />
-    </TooltipProvider>,
+    <PermissionsProvider
+      value={{
+        ...DEFAULT_PERMISSIONS,
+        permissions: {
+          ...DEFAULT_PERMISSIONS.permissions,
+          canCreateExperiments,
+        },
+      }}
+    >
+      <TooltipProvider>
+        <ExperimentsActionsPanel experiments={experiments} />
+      </TooltipProvider>
+    </PermissionsProvider>,
   );
 
 const getCompareButton = () => screen.getByRole("button", { name: "Compare" });
@@ -121,5 +133,22 @@ describe("ExperimentsActionsPanel Compare button", () => {
         search: { experiments: ["exp-1", "exp-2", "exp-3"] },
       }),
     );
+  });
+});
+
+describe("ExperimentsActionsPanel permissions", () => {
+  it("shows the tag and delete buttons when the user can create experiments", () => {
+    const { container } = renderPanel([buildExperiment("exp-1")]);
+
+    expect(container.querySelector(".lucide-tag")).not.toBeNull();
+    expect(container.querySelector(".lucide-trash")).not.toBeNull();
+  });
+
+  it("hides the tag and delete buttons but keeps Compare without experiment create permission", () => {
+    const { container } = renderPanel([buildExperiment("exp-1")], false);
+
+    expect(container.querySelector(".lucide-tag")).toBeNull();
+    expect(container.querySelector(".lucide-trash")).toBeNull();
+    expect(getCompareButton()).toBeInTheDocument();
   });
 });

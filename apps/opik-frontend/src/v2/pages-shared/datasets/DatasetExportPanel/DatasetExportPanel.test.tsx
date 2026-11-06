@@ -5,6 +5,9 @@ import { TooltipProvider } from "@/ui/tooltip";
 import DatasetExportPanel from "./DatasetExportPanel";
 import { ReactNode } from "react";
 import { DATASET_EXPORT_STATUS, DatasetExportJob } from "@/types/datasets";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
+import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
 
 // Mock functions that can be accessed in tests
 const mockMarkAsViewed = vi.fn();
@@ -119,7 +122,9 @@ describe("DatasetExportPanel", () => {
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>{children}</TooltipProvider>
+      <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </PermissionsProvider>
     </QueryClientProvider>
   );
 
@@ -133,6 +138,39 @@ describe("DatasetExportPanel", () => {
     created_at: "2024-01-01T00:00:00Z",
     last_updated_at: "2024-01-01T00:00:01Z",
     ...overrides,
+  });
+
+  describe("Dataset view permission", () => {
+    const renderWithoutViewPermission = () =>
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PermissionsProvider
+            value={{
+              ...DEFAULT_PERMISSIONS,
+              permissions: {
+                ...DEFAULT_PERMISSIONS.permissions,
+                canViewDatasets: false,
+              },
+            }}
+          >
+            <TooltipProvider>
+              <DatasetExportPanel />
+            </TooltipProvider>
+          </PermissionsProvider>
+        </QueryClientProvider>,
+      );
+
+    it("should not render the panel or fetch export jobs without dataset view permission", () => {
+      const job = createMockJob();
+      mockStore.setState({
+        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+      });
+
+      renderWithoutViewPermission();
+
+      expect(screen.queryByText("Preparing download")).not.toBeInTheDocument();
+      expect(useDatasetExportJobs).toHaveBeenCalledWith({ enabled: false });
+    });
   });
 
   describe("Panel rendering", () => {

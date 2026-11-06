@@ -8,6 +8,7 @@ export interface Permissions {
   canViewDatasets: boolean;
   canCreateDatasets: boolean;
   canEditDatasets: boolean;
+  canViewProjectData: boolean;
   canDeleteDatasets: boolean;
   canDeleteProjects: boolean;
   canCreateAnnotationQueues: boolean;
@@ -50,6 +51,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canViewDatasets: true,
     canCreateDatasets: true,
     canEditDatasets: true,
+    canViewProjectData: true,
     canDeleteDatasets: true,
     canDeleteProjects: true,
     canCreateAnnotationQueues: true,
