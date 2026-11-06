@@ -70,12 +70,13 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
   const [open, setOpen] = useState<number>(0);
 
   const {
-    permissions: { canViewDatasets },
+    permissions: { canViewDatasets, canEditDatasets, canViewProjectData },
   } = usePermissions();
 
   const isThread = dataType === "threads";
   const isSpan = dataType === "spans";
-  const showAddToDataset = !isThread && canViewDatasets;
+  const showAddToDataset =
+    !isThread && canViewDatasets && canEditDatasets && canViewProjectData;
   const showAddToQueue = isThread || !isSpan;
 
   if (!showAddToDataset && !showAddToQueue) {

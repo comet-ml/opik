@@ -6,6 +6,7 @@ import { ServerSyncProvider } from "@/contexts/server-sync-provider";
 import PermissionsGuard from "@/v2/layout/PermissionsGuard/PermissionsGuard";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+import DatasetExportPanel from "@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
 
 const WorkspaceGuard = ({
   Layout = PageLayout,
@@ -34,6 +35,7 @@ const WorkspaceGuard = ({
     <FeatureTogglesProvider>
       <ServerSyncProvider>
         <Layout />
+        <DatasetExportPanel />
       </ServerSyncProvider>
     </FeatureTogglesProvider>
   );
