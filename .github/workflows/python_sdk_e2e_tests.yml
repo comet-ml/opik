@@ -160,7 +160,7 @@ jobs:
         - name: Install test requirements
           run: |
             cd ${{ github.workspace }}/sdks/python
-            uv pip install --system -r tests/test_requirements.txt
+            uv pip install --system '.[litellm]' -r tests/test_requirements.txt
             uv pip list --system
 
         - name: Run tests

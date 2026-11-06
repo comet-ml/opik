@@ -24,11 +24,14 @@ title: Observability for LiteLLM with Opik
 
 ### Installation
 
-First, ensure you have both `opik` and `litellm` packages installed:
+Install or upgrade Opik with its LiteLLM extra:
 
 ```bash wordWrap
-pip install opik litellm
+pip install --upgrade 'opik[litellm]'
 ```
+
+The extra applies the SDK's LiteLLM version constraints. Upgrading base `opik`
+alone does not check a separately installed LiteLLM.
 
 ### Configuring Opik
 

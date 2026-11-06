@@ -29,6 +29,19 @@ pip install opik
 uv pip install opik
 ```
 
+LiteLLM is optional. If you use `LiteLLMChatModel`, LiteLLM-backed evaluation
+judges, or the LiteLLM integration, install or upgrade with the extra:
+
+```bash
+pip install --upgrade 'opik[litellm]'
+```
+
+When upgrading from an SDK version that installed LiteLLM by default, use this
+extra to keep those features working and apply the SDK's LiteLLM version
+constraints. Upgrading base `opik` alone does not check a separately installed
+LiteLLM. Tracing and evaluation that do not use LiteLLM work with the base
+installation.
+
 ## Configuration
 
 Configure the Python SDK by running the `opik configure` command. This will prompt you for your Opik server address (for self-hosted instances) or your API key and workspace (for Comet.com):
