@@ -774,6 +774,10 @@ class TopicsNightlyJobTest {
         }
         stubAnswer(FIXTURE.answer);
 
+        // The job's own filters: a run by hand would refuse the projects with a list or under minVectors anyway.
+        assertThat(nightlyService.firstBuildCandidates(tomorrow, Instant.now()))
+                .containsExactly(new TopicsNightlyService.Candidate(workspaceId, built, BUILT));
+
         runFirstBuildsUntilBuilt(built);
 
         assertThat(runs(built)).singleElement().satisfies(run -> {
