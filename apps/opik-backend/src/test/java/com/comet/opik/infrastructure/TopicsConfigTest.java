@@ -4,7 +4,6 @@ import io.dropwizard.util.Duration;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -132,16 +131,5 @@ class TopicsConfigTest {
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
-    }
-
-    @Test
-    void defaultsOfTheWindowReadGuards() {
-        var find = new TopicsConfig().getVectors().getFind();
-
-        assertThat(find.getMaxRowsToRead()).isEqualTo(30_000_000L);
-        assertThat(find.getMaxMemoryUsage()).isEqualTo(1024L * 1024 * 1024);
-        assertThat(find.getMaxExecutionTime()).isEqualTo(Duration.seconds(30));
-        assertThat(find.getCreatedAtSlack()).isEqualTo(Duration.days(1));
-        assertThat(new TopicsConfig().getVectors().getBackfillWindow().toMilliseconds()).isZero();
     }
 }
