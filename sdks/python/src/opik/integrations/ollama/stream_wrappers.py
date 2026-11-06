@@ -26,10 +26,14 @@ def _end_abandoned_stream(
     ``detach()`` is enough for a sync generator, which CPython closes before it
     clears weakrefs, but not for an async one: its ``finally`` only runs when
     the event loop awaits ``aclose()`` through the asyncgen finalizer hook,
-    which is after this has already fired. So skip once the body has started
-    and let that ``finally`` report the real output instead of ``None``.
+    which is after this has already fired. Both paths therefore share a one-shot
+    flag: whichever reaches the span first ends it and the other returns.
+
+    The finalizer cannot simply be skipped once the body has started. A loop
+    that is closed without ``shutdown_asyncgens()`` never runs that ``finally``,
+    so nothing would end the span at all.
     """
-    if state["started"] or state["finished"]:
+    if state["finished"]:
         return
     state["finished"] = True
     finally_callback(
@@ -57,11 +61,10 @@ def wrap_sync_stream(
     """
 
     finalizer: Optional[weakref.finalize] = None
-    state: Dict[str, bool] = {"started": False, "finished": False}
+    state: Dict[str, bool] = {"finished": False}
 
     def wrapper() -> Iterator[Any]:
         accumulated_items: List[Any] = []
-        state["started"] = True
         error_info: Optional[ErrorInfoDict] = None
         completed = False
         try:
@@ -129,11 +132,10 @@ def wrap_async_stream(
     """Async counterpart of :func:`wrap_sync_stream`."""
 
     finalizer: Optional[weakref.finalize] = None
-    state: Dict[str, bool] = {"started": False, "finished": False}
+    state: Dict[str, bool] = {"finished": False}
 
     async def wrapper() -> AsyncIterator[Any]:
         accumulated_items: List[Any] = []
-        state["started"] = True
         error_info: Optional[ErrorInfoDict] = None
         completed = False
         try:

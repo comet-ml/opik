@@ -696,7 +696,15 @@ def _collect_finalizations(wrap, advance):
         generators_span_to_end,
         generators_trace_to_end,
     ):
-        calls.append({"output": output, "error_info": error_info})
+        calls.append(
+            {
+                "output": output,
+                "error_info": error_info,
+                "capture_output": capture_output,
+                "span": generators_span_to_end,
+                "trace": generators_trace_to_end,
+            }
+        )
 
     async def source():
         for item in ("a", "b"):
@@ -704,7 +712,10 @@ def _collect_finalizations(wrap, advance):
 
     async def drive():
         generator = wrap(
-            source(), "SPAN", None, lambda items: {"items": list(items)},
+            source(),
+            "SPAN",
+            None,
+            lambda items: {"items": list(items)},
             finally_callback,
         )
         if advance:
@@ -729,10 +740,14 @@ def test_wrap_async_stream__advanced_then_dropped__finalizes_exactly_once():
     """
     calls = _collect_finalizations(stream_wrappers.wrap_async_stream, advance=True)
 
+    # Exactly one report is the whole invariant. Which of the two paths gets
+    # there first is not: that depends on whether the loop is still alive to
+    # await aclose(), so asserting it would pin an implementation detail.
     assert len(calls) == 1
-    # this wrapper treats abandonment as an early termination, so the partial
-    # aggregate is dropped on purpose; what matters is that it reports once.
-    assert calls[0]["error_info"]["exception_type"] == "GeneratorExit"
+    assert calls[0]["output"] is None
+    assert calls[0]["capture_output"] is True
+    assert calls[0]["span"] == "SPAN"
+    assert calls[0]["trace"] is None
 
 
 def test_wrap_async_stream__never_advanced__still_finalizes_once():
@@ -740,3 +755,63 @@ def test_wrap_async_stream__never_advanced__still_finalizes_once():
 
     assert len(calls) == 1
     assert calls[0]["output"] is None
+
+
+def _finalizations_after_loop_closed(wrap):
+    """Advance an async stream, then close the loop without shutdown_asyncgens().
+
+    ``asyncio.run()`` always calls ``loop.shutdown_asyncgens()``, which gives
+    the generator's ``finally`` a turn to end the span. A loop closed by hand
+    does not, so the weakref finalizer is the only thing left that can.
+    """
+    calls = []
+
+    def finally_callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        calls.append({"output": output, "span": generators_span_to_end})
+
+    async def source():
+        for item in ("a", "b"):
+            yield item
+
+    holder = {}
+
+    async def drive():
+        generator = wrap(
+            source(),
+            "SPAN",
+            None,
+            lambda items: {"items": list(items)},
+            finally_callback,
+        )
+        await generator.__anext__()
+        holder["generator"] = generator
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(drive())
+    finally:
+        loop.close()
+
+    holder.clear()
+    for _ in range(5):
+        gc.collect()
+    return calls
+
+
+def test_wrap_async_stream__loop_closed_without_shutdown__still_ends_span():
+    """A started generator whose `finally` never runs must still end its span.
+
+    Skipping the finalizer once the body had started left this case with
+    nothing to close the span, because the loop went away before it could
+    await aclose().
+    """
+    calls = _finalizations_after_loop_closed(stream_wrappers.wrap_async_stream)
+
+    assert len(calls) == 1
+    assert calls[0]["span"] == "SPAN"
