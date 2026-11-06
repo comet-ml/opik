@@ -232,6 +232,11 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
         name={`triggers.${index}.guardrailTypes` as Path<AlertFormType>}
         render={({ field }) => {
           const selected = (field.value as GuardrailTypes[] | undefined) ?? [];
+          // A type an alert was saved with still filters it, so it stays listed, and can be unticked.
+          const options = [
+            ...ALERT_GUARDRAIL_TYPES,
+            ...selected.filter((type) => !ALERT_GUARDRAIL_TYPES.includes(type)),
+          ];
           const toggle = (type: GuardrailTypes, checked: boolean) => {
             field.onChange(
               checked
@@ -247,7 +252,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                 on any guardrail failure.
               </Description>
               <div className="flex flex-col gap-2 pt-1">
-                {ALERT_GUARDRAIL_TYPES.map((type) => (
+                {options.map((type) => (
                   <label
                     key={type}
                     className="flex cursor-pointer items-center gap-2"

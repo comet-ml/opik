@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import { GuardrailPolicyRule, GuardrailTypes } from "@/types/guardrails";
 import {
   DEFAULT_RULES_STATE,
-  MAX_TOPIC_LENGTH,
-  MAX_TOPICS,
   RulesState,
   toRulesPayload,
   toRulesState,
@@ -77,6 +75,14 @@ describe("validateRules", () => {
     expect(validateRules(DEFAULT_RULES_STATE)).toEqual({});
   });
 
+  it("accepts a list of 254 topics of 256 characters each", () => {
+    const topics = Array.from({ length: 254 }, (_, index) =>
+      `topic ${index} `.padEnd(256, "x"),
+    );
+
+    expect(validateRules(withTopics(topics, []))).toEqual({});
+  });
+
   it("accepts restricted and allowed topics together", () => {
     expect(validateRules(withTopics(["politics"], ["billing"]))).toEqual({});
   });
@@ -93,16 +99,13 @@ describe("validateRules", () => {
 
   it.each([
     [[" ", ""], [], "Enter at least one restricted or allowed topic"],
+    // The backend's limits, written out: 254 topics per list, 256 characters per topic.
     [
-      Array.from({ length: MAX_TOPICS + 1 }, (_, index) => `topic ${index}`),
+      Array.from({ length: 255 }, (_, index) => `topic ${index}`),
       [],
-      `A list can have at most ${MAX_TOPICS} topics`,
+      "A list can have at most 254 topics",
     ],
-    [
-      [],
-      ["a".repeat(MAX_TOPIC_LENGTH + 1)],
-      `A topic can be at most ${MAX_TOPIC_LENGTH} characters`,
-    ],
+    [[], ["a".repeat(257)], "A topic can be at most 256 characters"],
     [
       ["politics", " politics"],
       [],

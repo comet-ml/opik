@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
+import uniq from "lodash/uniq";
 import { useToast } from "@/ui/use-toast";
 import api, {
   GUARDRAIL_POLICIES_KEY,
@@ -16,31 +17,56 @@ const useGuardrailPolicyBatchDeleteMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    // The API deletes one policy per call.
-    mutationFn: async ({ ids }: UseGuardrailPolicyBatchDeleteMutationParams) =>
-      Promise.all(
+    // The API deletes one policy per call. Every call is waited for, so one failure neither hides the others nor
+    // leaves a deleted policy in the cache.
+    mutationFn: async ({
+      ids,
+    }: UseGuardrailPolicyBatchDeleteMutationParams) => {
+      const results = await Promise.allSettled(
         ids.map((id) => api.delete(`${GUARDRAIL_POLICIES_REST_ENDPOINT}${id}`)),
-      ),
-    onError: (error) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
       );
 
+      // A deleted policy reopened in the same session must not come back from the cache.
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          queryClient.removeQueries({
+            queryKey: [GUARDRAIL_POLICY_KEY, { policyId: ids[index] }],
+          });
+        }
+      });
+
+      const messages = uniq(
+        results.flatMap((result) =>
+          result.status === "rejected"
+            ? [
+                get(
+                  result.reason,
+                  ["response", "data", "message"],
+                  result.reason?.message,
+                ),
+              ]
+            : [],
+        ),
+      );
+      const failed = results.filter(
+        (result) => result.status === "rejected",
+      ).length;
+      if (failed > 0) {
+        throw new Error(
+          ids.length === 1
+            ? messages[0]
+            : `${failed} of ${
+                ids.length
+              } policies could not be deleted: ${messages.join("; ")}`,
+        );
+      }
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: message,
+        description: error.message,
         variant: "destructive",
       });
-    },
-    onSuccess: (_, { ids }) => {
-      // A deleted policy reopened in the same session must not come back from the cache.
-      ids.forEach((policyId) =>
-        queryClient.removeQueries({
-          queryKey: [GUARDRAIL_POLICY_KEY, { policyId }],
-        }),
-      );
     },
     onSettled: () => {
       return queryClient.invalidateQueries({
