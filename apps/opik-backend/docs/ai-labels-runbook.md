@@ -506,11 +506,15 @@ at tomorrow's start, so it holds today's traces so far.
 | Env var | Default | Meaning |
 |---|---|---|
 | `TOPICS_FIRST_BUILD_ENABLED` | `true` | Runs the job. Needs `TOPICS_ENABLED=true` and `TOPICS_NIGHTLY_ENABLED=true`. |
-| `TOPICS_FIRST_BUILD_INTERVAL` | `10m` | How often every pod fires the job. |
+| `TOPICS_FIRST_BUILD_INTERVAL` | `10m` | How often every pod fires the job; one run per interval across the cluster. |
 | `TOPICS_FIRST_BUILD_BUDGET` | `9m` | No project starts after this much of a run; the rest wait for the next run. Under the interval. |
 
-- One run at a time across the cluster: the first pod to take the Redis lock `topics:first_build:leader` runs it, and
-  releases the lock when the run ends (lease: budget + project timeout + 5 minutes).
+- Every pod fires the job every interval, each at its own second. Two Redis locks make that one run per interval
+  across the cluster:
+  - `topics:first_build:leader` is held for the run and released when it ends, so two runs never overlap. Its lease is
+    budget + project timeout + 5 minutes. It matters only when the pod dies mid-run.
+  - `topics:first_build:run` is taken by the leader before it runs and never released. It expires one interval (less
+    up to 1s for trigger jitter) after the run started, so a pod that fires sooner skips.
 - A run counts each opted-in workspace's projects in tomorrow's window, with the night's count query and guards. It
   takes the projects with at least `TOPICS_NIGHTLY_MIN_VECTORS` vectors that exist, have no list, are not paused (as
   the night counts it) and had no run started in the last 24 hours, the most vectors first.

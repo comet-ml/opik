@@ -2714,7 +2714,7 @@ topics:
     #  topics.nightly.enabled
     enabled: ${TOPICS_FIRST_BUILD_ENABLED:-true}
     #  Default: 10m
-    #  Description: How often the job fires; one run at a time across the cluster
+    #  Description: How often every pod fires the job; one run per interval across the cluster
     interval: ${TOPICS_FIRST_BUILD_INTERVAL:-10m}
     #  Default: 9m
     #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval

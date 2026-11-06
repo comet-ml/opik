@@ -142,7 +142,7 @@ public class TopicsConfig {
         @JsonProperty
         private boolean enabled = true;
 
-        /** How often every pod fires the job; one run at a time across the cluster. */
+        /** How often every pod fires the job; one run per interval across the cluster. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration interval = Duration.minutes(10);
