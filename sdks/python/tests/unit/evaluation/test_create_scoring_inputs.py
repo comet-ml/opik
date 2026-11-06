@@ -95,3 +95,23 @@ def test_create_scoring_inputs_empty_mapping():
 
     expected = {"input": "hello", "output": "world"}
     assert_dicts_equal(result, expected)
+
+
+def test_create_scoring_inputs_mapping_target_is_source_of_another_mapping():
+    """A mapping target must not change the value read by a later mapping"""
+    dataset_item = {"question": "Capital of France?", "output": "Paris"}
+    task_output = {"answer": "London"}
+
+    for mapping in (
+        {"output": "answer", "reference": "output"},
+        {"reference": "output", "output": "answer"},
+        {"output": "answer", "reference": lambda inputs: inputs["output"]},
+    ):
+        result = create_scoring_inputs(
+            dataset_item=dataset_item,
+            task_output=task_output,
+            scoring_key_mapping=mapping,
+        )
+
+        assert result["output"] == "London"
+        assert result["reference"] == "Paris"
