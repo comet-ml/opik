@@ -54,10 +54,8 @@ export const useMarkdownSearch = ({
         currentMatchIndex,
       )(tree);
 
-      setSearchState((prev) => ({
-        ...prev,
-        totalMatches: matchIndexRef.current.value,
-      }));
+      const totalMatches = matchIndexRef.current.value;
+      setSearchState((prev) => ({ ...prev, totalMatches }));
 
       return result;
     };
@@ -79,10 +77,8 @@ export const useMarkdownSearch = ({
         currentMatchIndex,
       );
 
-      setSearchState((prev) => ({
-        ...prev,
-        totalMatches: matchIndexRef.current.value,
-      }));
+      const totalMatches = matchIndexRef.current.value;
+      setSearchState((prev) => ({ ...prev, totalMatches }));
 
       return result;
     },
@@ -99,26 +95,20 @@ export const useMarkdownSearch = ({
   }, [searchValue, container]);
 
   const findNext = useCallback((): void => {
-    setSearchState((prev) => {
-      if (prev.totalMatches === 0) return prev;
+    if (searchState.totalMatches === 0) return;
 
-      const nextIndex = getNextIndex(prev.currentMatchIndex, prev.totalMatches);
-
-      scrollToMatchByIndex(container, nextIndex);
-      return { ...prev, currentMatchIndex: nextIndex };
-    });
-  }, [container]);
+    const nextIndex = getNextIndex(currentMatchIndex, searchState.totalMatches);
+    scrollToMatchByIndex(container, nextIndex);
+    setSearchState((prev) => ({ ...prev, currentMatchIndex: nextIndex }));
+  }, [container, currentMatchIndex, searchState.totalMatches]);
 
   const findPrev = useCallback((): void => {
-    setSearchState((prev) => {
-      if (prev.totalMatches === 0) return prev;
+    if (searchState.totalMatches === 0) return;
 
-      const prevIndex = getPrevIndex(prev.currentMatchIndex, prev.totalMatches);
-
-      scrollToMatchByIndex(container, prevIndex);
-      return { ...prev, currentMatchIndex: prevIndex };
-    });
-  }, [container]);
+    const prevIndex = getPrevIndex(currentMatchIndex, searchState.totalMatches);
+    scrollToMatchByIndex(container, prevIndex);
+    setSearchState((prev) => ({ ...prev, currentMatchIndex: prevIndex }));
+  }, [container, currentMatchIndex, searchState.totalMatches]);
 
   return {
     searchPlugin,

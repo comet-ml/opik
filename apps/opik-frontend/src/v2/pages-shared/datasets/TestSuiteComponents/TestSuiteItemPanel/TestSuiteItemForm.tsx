@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { Controller, useFieldArray, useFormContext } from "react-hook-form";
 import TextareaAutosize from "react-textarea-autosize";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 

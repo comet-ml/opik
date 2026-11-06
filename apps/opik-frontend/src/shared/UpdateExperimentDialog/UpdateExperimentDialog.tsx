@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { jsonLanguage } from "@codemirror/lang-json";
 import {
   Dialog,

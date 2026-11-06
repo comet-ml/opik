@@ -133,8 +133,10 @@ const SandboxedView: React.FC<SandboxedViewProps> = ({
   onError,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const portRef = useRef<MessagePort>();
-  const renderTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const portRef = useRef<MessagePort | undefined>(undefined);
+  const renderTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const dataSeqRef = useRef(0);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;

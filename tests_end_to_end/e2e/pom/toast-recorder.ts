@@ -31,9 +31,8 @@ const TOAST_RECORD_KEY = '__opikRecordedToasts';
  * only. A spec needing history to survive a reload has to hold the array
  * test-side, through an exposed binding the init script appends to.
  *
- * Scoped to the notification region: Radix also portals a visually-hidden
- * `role="status"` announcer carrying the same text outside the region, and
- * recording both would double every toast.
+ * Matched by test id: Radix also portals a visually-hidden `role="status"`
+ * announcer carrying the same text, and recording both would double every toast.
  */
 export async function startRecordingToasts(page: Page): Promise<void> {
   return test.step('start recording toasts', async () => {
@@ -41,8 +40,8 @@ export async function startRecordingToasts(page: Page): Promise<void> {
       const recorded: Element[] = [];
       (window as unknown as Record<string, unknown>)[key] = recorded;
 
-      const isToast = (el: Element): boolean =>
-        el.matches('[role="status"]') && el.closest('[role="region"]') !== null;
+      const TOAST = '[data-testid="toast"]';
+      const isToast = (el: Element): boolean => el.matches(TOAST);
 
       new MutationObserver((mutations) => {
         for (const mutation of mutations) {
@@ -51,8 +50,8 @@ export async function startRecordingToasts(page: Page): Promise<void> {
             if (isToast(node)) recorded.push(node);
             // A toast can also arrive nested, when the region itself is the node
             // that was inserted.
-            for (const nested of Array.from(node.querySelectorAll('[role="status"]'))) {
-              if (isToast(nested)) recorded.push(nested);
+            for (const nested of Array.from(node.querySelectorAll(TOAST))) {
+              recorded.push(nested);
             }
           }
         }

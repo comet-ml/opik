@@ -311,7 +311,9 @@ describe("GuidanceSheet", () => {
     });
     // Radix registers its outside-pointer listener on the next tick.
     await new Promise((r) => setTimeout(r));
+    // A modal defers a primary-button outside press to its click.
     fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
 
     expect(await screen.findByText("Discard changes?")).toBeInTheDocument();
     expect(setOpen).not.toHaveBeenCalled();

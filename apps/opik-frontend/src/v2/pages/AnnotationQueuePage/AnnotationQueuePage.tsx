@@ -155,8 +155,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         <FeedbackScoresList scores={allocatedFeedbackScores} />
       </PageBodyStickyContainer>
       <Tabs
-        defaultValue="items"
-        value={tab as string}
+        value={(tab as string) ?? "items"}
         onValueChange={setTab}
         className="min-w-min"
       >

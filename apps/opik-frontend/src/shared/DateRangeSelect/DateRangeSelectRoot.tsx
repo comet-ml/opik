@@ -44,7 +44,7 @@ const CustomDatesOption: React.FC<CustomDatesOptionProps> = ({ className }) => {
   const isSelected = selectValue === "custom";
 
   const handleDayClick = (day: Date) => {
-    setDate((prev) => customDayClick(prev, day, setCustomRange));
+    setDate(customDayClick(date, day, setCustomRange));
   };
 
   const disabledDates = React.useMemo(

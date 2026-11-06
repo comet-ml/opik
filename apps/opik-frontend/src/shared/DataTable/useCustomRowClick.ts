@@ -15,7 +15,9 @@ const useCustomRowClick = (
   options: UseCustomRowClickOptions = {},
 ): UseCustomRowClickResponse => {
   const { delayMs = DEFAULT_CLICK_DELAY_MS } = options;
-  const callbackTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const callbackTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   return useCallback(
     (event: React.MouseEvent<HTMLElement>, onClick: () => void) => {
