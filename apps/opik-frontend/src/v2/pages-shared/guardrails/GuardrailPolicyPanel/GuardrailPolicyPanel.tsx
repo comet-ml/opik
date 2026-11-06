@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useId } from "react";
 import { ArrowUpRight, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -45,8 +45,6 @@ import {
 
 const DOCS_URL = buildDocsUrl("/production/gateway-guardrails/guardrails");
 
-const FORM_ID = "guardrail-policy-form";
-
 const EXECUTION_SCOPES = [
   GUARDRAIL_EXECUTION_SCOPE.ON_REQUEST,
   GUARDRAIL_EXECUTION_SCOPE.GLOBAL,
@@ -91,6 +89,8 @@ const GuardrailPolicyPanel: React.FunctionComponent<
   const isReadOnly = !canConfigureWorkspaceSettings;
 
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
+  // One per panel: a closed panel stays in the page, and a shared id would let Save submit its form.
+  const formId = useId();
 
   const policyName = form.watch("name");
 
@@ -131,7 +131,7 @@ const GuardrailPolicyPanel: React.FunctionComponent<
               snippet sit outside it: the snippet's copy button sets no button type and would
               submit the form. */}
             <form
-              id={FORM_ID}
+              id={formId}
               className="flex flex-col gap-4"
               onSubmit={submitHandler}
             >
@@ -350,7 +350,7 @@ const GuardrailPolicyPanel: React.FunctionComponent<
               {!isReadOnly && (
                 <Button
                   type="submit"
-                  form={FORM_ID}
+                  form={formId}
                   disabled={isSubmitting || !isDirty}
                 >
                   {isSubmitting && <Spinner size="small" className="mr-2" />}

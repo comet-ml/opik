@@ -92,7 +92,7 @@ const RuleTypesCell = (context: CellContext<unknown, unknown>) => {
           <TooltipWrapper
             content={
               <div className="flex max-w-[300px] flex-wrap gap-1">
-                {types.map((type) => (
+                {hiddenItems.map((type) => (
                   <RuleTypeTag key={type} type={type} size={tagSize} />
                 ))}
               </div>

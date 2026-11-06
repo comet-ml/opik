@@ -186,7 +186,9 @@ const TopicsList: React.FC<TopicsListProps> = ({
       {error ? (
         <FormErrorSkeleton>{error}</FormErrorSkeleton>
       ) : (
-        <Description>{hint} Use a comma to separate topics.</Description>
+        <Description>
+          {hint} Press Enter or type a comma to add a topic.
+        </Description>
       )}
     </div>
   );

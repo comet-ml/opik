@@ -354,7 +354,7 @@ const GuardrailsPage: React.FunctionComponent = () => {
   return (
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-4 flex items-center justify-between gap-4">
-        <h1 className="comet-body-accented truncate break-words">Guardrails</h1>
+        <h1 className="comet-body-accented truncate break-words">Policies</h1>
         {!isEmpty && canConfigureWorkspaceSettings && (
           <Button variant="default" size="xs" onClick={handleCreateClick}>
             <Plus className="mr-1 size-4" />
