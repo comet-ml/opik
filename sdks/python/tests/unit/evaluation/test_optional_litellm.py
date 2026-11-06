@@ -1,5 +1,7 @@
 import builtins
 import importlib.metadata
+import subprocess
+import sys
 
 import pytest
 from packaging.requirements import Requirement
@@ -53,6 +55,46 @@ def test_litellm_model_broken_install_keeps_original_error(monkeypatch):
 
     with pytest.raises(ModuleNotFoundError, match="broken_dependency"):
         LiteLLMChatModel(track=False)
+
+
+@pytest.mark.parametrize("missing_name", ["litellm", "broken_dependency"])
+def test_direct_litellm_integration_import_reports_only_missing_extra(missing_name):
+    script = """
+import builtins
+import importlib
+import sys
+
+import opik
+
+missing_name = sys.argv[1]
+original_import = builtins.__import__
+
+def without_litellm(name, *args, **kwargs):
+    if name == "litellm" or name.startswith("litellm."):
+        raise ModuleNotFoundError(f"No module named '{missing_name}'", name=missing_name)
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = without_litellm
+try:
+    importlib.import_module("opik.integrations.litellm")
+except ImportError as error:
+    if missing_name == "litellm":
+        assert type(error) is ImportError
+        assert "pip install 'opik[litellm]'" in str(error)
+    else:
+        assert type(error) is ModuleNotFoundError
+        assert error.name == missing_name
+else:
+    raise AssertionError("expected LiteLLM import to fail")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, missing_name],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_provider_independent_rate_limit_without_litellm(monkeypatch):

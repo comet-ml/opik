@@ -85,6 +85,10 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             track: Whether to track the model calls. When False, disables tracing for this model instance.
                 Defaults to True.
             completion_kwargs: key-value arguments to always pass additionally into `litellm.completion` function.
+
+        Raises:
+            ImportError: If LiteLLM is not installed. Install it with
+                `pip install 'opik[litellm]'`.
         """
         try:
             import litellm
