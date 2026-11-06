@@ -1,4 +1,5 @@
 import opik.guardrails.rules.pii as pii
+import opik.guardrails.rules.rule as rule_module
 import opik.guardrails.schemas as schemas
 
 
@@ -13,3 +14,9 @@ def test_pii__happyflow():
             "config": {"entities": ["PERSON", "PHONE_NUMBER"]},
         }
     ]
+
+
+def test_pii__checked_by_opik():
+    pii_rule = pii.PII(entities=["EMAIL_ADDRESS"])
+
+    assert pii_rule.location == rule_module.RuleLocation.OPIK

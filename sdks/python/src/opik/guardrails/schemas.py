@@ -8,6 +8,7 @@ from opik.rest_api.types.check_public_result import CheckPublicResult
 class ValidationType(str, enum.Enum):
     PII = "PII"
     TOPIC = "TOPIC"
+    LLM_JUDGE = "LLM_JUDGE"
     PROMPT_INJECTION = "PROMPT_INJECTION"
 
 
@@ -26,7 +27,7 @@ class ValidationResponse(pydantic.BaseModel):
     validations: List[ValidationResult]
     # These are client side injected
     guardrail_result: Optional[CheckPublicResult] = None
-    # Set when the guardrail could not be evaluated (backend unreachable, timeout, or
-    # guardrails not available). Kept on the response so the guardrail span still carries
-    # an output when failing closed, rather than only an error.
+    # Set when the guardrail could not be evaluated (backend unreachable, timeout,
+    # guardrails not available, or an LLM judge failure). Kept on the response so the
+    # guardrail span still carries an output when failing closed, rather than only an error.
     error: Optional[str] = None

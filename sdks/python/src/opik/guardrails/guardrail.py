@@ -151,7 +151,8 @@ class Guardrail:
         Raises:
             opik.exceptions.GuardrailValidationFailed: If validation fails
             opik.exceptions.GuardrailValidationError: If the guardrail cannot be evaluated
-                (backend unreachable, timeout, or guardrails not available in the workspace).
+                (backend unreachable, timeout, guardrails not available in the workspace, or
+                an LLM judge provider failure).
                 Guardrails fail closed, so this blocks the protected code path.
         """
         result = self._validate(generation=text)
@@ -168,23 +169,32 @@ class Guardrail:
         # Fail-closed errors are captured on the result instead of raised so the
         # decorated span still records the guardrail output; validate() re-raises them
         # once the span has been finalized.
-        validations = [
+        opik_validations = [
             validation_config
             for rule in self.rules
+            if rule.location == rules_module.RuleLocation.OPIK
             for validation_config in rule.get_validation_configs()
         ]
         try:
-            if validations:
+            if opik_validations:
                 result = rest_api_client.validate_on_opik(
                     client=self._client,
                     text=generation,
-                    validations=validations,
+                    validations=opik_validations,
                     timeout_seconds=self.config_.guardrail_timeout,
                 )
+
+            for rule in self.rules:
+                if rule.location == rules_module.RuleLocation.LOCAL:
+                    result.validations.extend(
+                        rule.validate_local(generation, self._client)
+                    )
         except (httpx.HTTPError, rest_api_core.ApiError) as e:
             result.error = (
                 f"Guardrail could not be evaluated, failing closed: {_reason(e)}"
             )
+        except exceptions.GuardrailValidationError as e:
+            result.error = str(e)
 
         if result.error is not None:
             result.validation_passed = False
