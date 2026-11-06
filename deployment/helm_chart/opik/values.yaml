@@ -946,7 +946,7 @@ clickhouse:
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
   # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
-  image: clickhouse/clickhouse-server:26.3.62.3
+  image: clickhouse/clickhouse-server:26.8.36.3
   storage: 50Gi
   logsLevel: information
   # -- Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk
@@ -1226,7 +1226,7 @@ clickhouse:
       # Backups written by the SQL-based CronJob above cannot be restored by it.
       backupName: ""
       # Override with any image that has bash and curl — the job needs nothing else.
-      image: "amazon/aws-cli:2.39.3"
+      image: "amazon/aws-cli:2.39.6"
       # Hard cap on the job runtime (seconds) so a stuck restore whose status
       # never resolves cannot run forever. Default: 24h.
       activeDeadlineSeconds: 86400
