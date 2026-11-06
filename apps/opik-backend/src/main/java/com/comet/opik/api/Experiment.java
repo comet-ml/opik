@@ -38,7 +38,7 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({Experiment.View.Public.class,
-                Experiment.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
+                Experiment.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") String projectName,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) String name,
         @Schema(implementation = JsonListString.class) @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) JsonNode metadata,

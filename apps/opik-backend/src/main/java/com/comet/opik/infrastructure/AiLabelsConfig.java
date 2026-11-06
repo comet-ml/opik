@@ -218,6 +218,10 @@ public class AiLabelsConfig {
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration readTimeout = Duration.seconds(30);
+
+        /** Synchronous decide calls in flight from this instance, on a client of their own. */
+        @JsonProperty
+        @Min(1) private int maxConcurrentDecides = 256;
     }
 
     @Data
