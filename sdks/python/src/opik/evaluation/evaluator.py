@@ -1705,6 +1705,8 @@ def evaluate_on_dict_items(
 
     Args:
         items: List of dataset item contents (dictionaries with the data to evaluate).
+            An ``id`` key, as in the dicts ``Dataset.get_items()`` returns, is used
+            as the item's id; items without one get a placeholder id.
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
@@ -1781,7 +1783,7 @@ def evaluate_on_dict_items(
 
     with asyncio_support.async_http_connections_expire_immediately():
         dataset_items = [
-            dataset_item.DatasetItem(id=f"temp_item_{i}", **item)
+            dataset_item.DatasetItem(**{"id": f"temp_item_{i}", **item})
             for i, item in enumerate(items)
         ]
         policy = dataset_execution_policy.ExecutionPolicy(
