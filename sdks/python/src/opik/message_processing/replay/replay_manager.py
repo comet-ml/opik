@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import Optional
+from typing import Iterator, Optional
 
 from opik.healthcheck import connection_monitor
 from . import db_manager, types
@@ -82,6 +82,33 @@ class ReplayManager(threading.Thread):
         """Checks if SDK has a connection to the OPIK server."""
         return self._monitor.has_server_connection
 
+    def refresh_server_connection(self, timeout: Optional[float] = None) -> None:
+        """Pings the server now if it is believed to be unreachable, waiting at
+        most ``timeout`` seconds for the answer.
+
+        The monitor pings only once per interval, so a server that came back a
+        moment ago still looks unreachable until the next scheduled ping.
+        """
+        if self._monitor.has_server_connection:
+            return
+
+        if (
+            self._monitor.ping(timeout)
+            == connection_monitor.ConnectionStatus.connection_restored
+        ):
+            self._monitor.reset()
+
+    def failed_messages(self) -> Iterator[messages.BaseMessage]:
+        """Yields the messages currently parked for replay."""
+        if not self._db_manager.initialized:
+            return
+
+        for db_messages in self._db_manager.fetch_failed_messages_batched(
+            self._db_manager.batch_size
+        ):
+            for db_message in db_messages:
+                yield db_manager.db_message_to_message(db_message)
+
     def register_message(
         self,
         message: messages.BaseMessage,
@@ -140,11 +167,18 @@ class ReplayManager(threading.Thread):
         """Stop the replay manager."""
         self._stop_running.set()
 
-    def flush(self) -> None:
-        """Force replay of all failed messages to the server."""
+    def flush(self, timeout: Optional[float] = None) -> bool:
+        """Force replay of failed messages to the server, stopping between
+        batches once ``timeout`` seconds have passed. Whatever is left stays
+        parked for the next flush.
+
+        Returns False if messages are still parked because the time ran out."""
         self._check_replay_callback()
-        # ignore MyPy check because already asserted above
-        self._replay_failed_messages()
+        start = time.monotonic()
+        self._replay_failed_messages(timeout)
+        if timeout is None or time.monotonic() - start < timeout:
+            return True
+        return self._db_manager.failed_messages_count() == 0
 
     def _loop(self) -> None:
         sleep_time = self._next_tick_time - time.time()
@@ -174,12 +208,13 @@ class ReplayManager(threading.Thread):
                 "Replay callback must be set before starting the replay manager"
             )
 
-    def _replay_failed_messages(self) -> None:
+    def _replay_failed_messages(self, timeout: Optional[float] = None) -> None:
         self._check_replay_callback()
         try:
             # ignore MyPy check because already asserted above
             replayed = self._db_manager.replay_failed_messages(
-                self._replay_callback  # type: ignore
+                self._replay_callback,  # type: ignore
+                timeout,
             )
 
             if replayed > 0:

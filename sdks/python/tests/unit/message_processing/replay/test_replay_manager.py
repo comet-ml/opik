@@ -263,12 +263,28 @@ class TestFlush:
         callback = mock.Mock()
         manager.set_replay_callback(callback)
 
-        manager.flush()
+        assert manager.flush(timeout=5) is True
 
         assert callback.call_count == 3
         for call_args in callback.call_args_list:
             replayed_msg = call_args[0][0]
             assert isinstance(replayed_msg, messages.CreateTraceMessage)
+
+    def test_flush__time_runs_out_with_messages_left__returns_false_and_keeps_them_parked(
+        self, manager: replay_manager.ReplayManager
+    ):
+        for i in range(3):
+            manager.database_manager.register_message(
+                _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}"),
+                status=db_manager.MessageStatus.failed,
+            )
+        callback = mock.Mock()
+        manager.set_replay_callback(callback)
+
+        assert manager.flush(timeout=0.0) is False
+
+        callback.assert_not_called()
+        assert manager.database_manager.failed_messages_count() == 3
 
     def test_flush__callback_failure__re_marks_message_as_failed(
         self, manager: replay_manager.ReplayManager

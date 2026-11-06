@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -30,7 +31,7 @@ public record Optimization(
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) String name,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotBlank String datasetName,
         @JsonView({
-                Optimization.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
+                Optimization.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") String projectName,
         @JsonView({Optimization.View.Public.class,
                 Optimization.View.Write.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotBlank String objectiveName,

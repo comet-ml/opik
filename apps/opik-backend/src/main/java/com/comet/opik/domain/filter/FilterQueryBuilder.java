@@ -116,6 +116,7 @@ public class FilterQueryBuilder {
     private static final String TTFT_ANALYTICS_DB = "if(isNaN(ttft), NULL, ttft)";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
     private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
+    private static final String EVALUATION_METHOD_ANALYTICS_DB = "evaluation_method";
     private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
@@ -449,6 +450,7 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.TAGS, TAGS_DB)
                     .put(ExperimentField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentField.EXPERIMENT_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentField.EVALUATION_METHOD, EVALUATION_METHOD_ANALYTICS_DB)
                     .build());
 
     private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
@@ -696,7 +698,8 @@ public class FilterQueryBuilder {
                 ExperimentField.METADATA,
                 ExperimentField.DATASET_ID,
                 ExperimentField.PROMPT_IDS,
-                ExperimentField.TAGS));
+                ExperimentField.TAGS,
+                ExperimentField.EVALUATION_METHOD));
 
         map.put(FilterStrategy.PROMPT, Set.of(
                 PromptField.ID,

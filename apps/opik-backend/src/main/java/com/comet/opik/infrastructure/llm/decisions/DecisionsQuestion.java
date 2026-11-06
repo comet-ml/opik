@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.openrouter.decisions;
+package com.comet.opik.infrastructure.llm.decisions;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;

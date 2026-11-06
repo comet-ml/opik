@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.AttachmentSearchCriteria;
@@ -26,6 +27,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -115,7 +117,7 @@ public class AttachmentResource {
     public Response uploadAttachment(
             InputStream inputStream,
             @QueryParam("file_name") @NotNull String fileName,
-            @QueryParam("project_name") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
+            @QueryParam("project_name") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "If null, the default project is used") String projectName,
             @QueryParam("mime_type") String mimeType,
             @QueryParam("entity_type") @NotNull EntityType entityType,
             @QueryParam("entity_id") @NotNull UUID entityId) throws IOException {
