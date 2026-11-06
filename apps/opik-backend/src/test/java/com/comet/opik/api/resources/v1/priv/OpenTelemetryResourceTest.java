@@ -279,14 +279,18 @@ class OpenTelemetryResourceTest {
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName,
                     UUID.randomUUID().toString(), USER, quotas);
 
+            // OTel trace and span ids are 128-bit and 64-bit
+            var otelTraceId = RandomUtils.insecure().randomBytes(16);
+            var startTimeMs = System.currentTimeMillis() - 1_000;
+
             var request = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
                             .addScopeSpans(ScopeSpans.newBuilder()
                                     .addSpans(Span.newBuilder()
                                             .setName("span")
-                                            .setTraceId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
-                                            .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
-                                            .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                                            .setTraceId(ByteString.copyFrom(otelTraceId))
+                                            .setSpanId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(8)))
+                                            .setStartTimeUnixNano(startTimeMs * 1_000_000L)
                                             .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
                                             .build())
                                     .build())
@@ -306,10 +310,16 @@ class OpenTelemetryResourceTest {
                     assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
                     assertThat(response.readEntity(ErrorMessage.class))
                             .isEqualTo(new ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED, ERR_USAGE_LIMIT_EXCEEDED));
-                } else {
-                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                    return;
                 }
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
+
+            // below the limit, ingestion must actually go through and store the span
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, startTimeMs);
+            var spanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    ProjectService.DEFAULT_PROJECT, workspaceName, apiKey);
+            assertThat(spanPage.content()).extracting(span -> span.name()).containsExactly("span");
         }
 
         private String toJson(ExportTraceServiceRequest request) {
