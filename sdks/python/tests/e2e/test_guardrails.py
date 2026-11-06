@@ -1,6 +1,23 @@
+"""E2E tests for guardrails checked by the Opik backend.
+
+The Opik backend runs these checks only when guardrails are enabled for it and for the
+workspace, with its inference service configured. That is not a given, so the module skips
+itself when the backend does not run guardrails instead of failing.
+
+To run them by hand, start a backend with guardrails enabled, then point the SDK at it:
+
+    TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED=true \\
+    AI_LABELS_INFERENCE_URL=<inference service url> \\
+    AI_LABELS_INFERENCE_CREDENTIAL=<inference service credential> \\
+        <start the backend>
+
+    OPIK_URL_OVERRIDE=http://localhost:8080/ OPIK_WORKSPACE=default OPIK_API_KEY= \\
+        pytest tests/e2e/test_guardrails.py tests/e2e/test_guardrails_stored_policies.py -v
+"""
+
 import opik
 from opik import opik_context
-from . import verifiers
+from . import guardrails_support, verifiers
 from opik.guardrails import Guardrail, PII, Topic
 from opik import exceptions
 from unittest import mock
@@ -9,6 +26,12 @@ import pytest
 from ..testlib import generate_project_name
 
 PROJECT_NAME = generate_project_name("e2e", __name__)
+
+
+@pytest.fixture(autouse=True)
+def disable_tests_if_guardrails_not_supported(opik_client: opik.Opik):
+    if not guardrails_support.guardrails_available(opik_client):
+        pytest.skip("Backend does not run guardrails - skipping E2E tests")
 
 
 def find_guardrail_span(opik_client, trace_id, project_name):
@@ -36,10 +59,10 @@ def test_passing_guardrails__happyflow(opik_client, override_project_name):
     # Setup
     ID_STORAGE = {}
 
-    guard = Guardrail(
-        guards=[
-            Topic(restricted_topics=["finance"], threshold=0.8),
-            PII(blocked_entities=["CREDIT_CARD", "PERSON"], threshold=0.4),
+    guardrail = Guardrail(
+        rules=[
+            Topic(restricted_topics=["finance"]),
+            PII(entities=["CREDIT_CARD", "PERSON"]),
         ]
     )
 
@@ -50,7 +73,7 @@ def test_passing_guardrails__happyflow(opik_client, override_project_name):
         ID_STORAGE["trace-id"] = opik_context.get_current_trace_data().id
         ID_STORAGE["parent-span-id"] = opik_context.get_current_span_data().id
 
-        result = guard.validate(generation)
+        result = guardrail.validate(generation)
 
         return result
 
@@ -101,10 +124,10 @@ def test_failing_guardrails__happyflow(opik_client: opik.Opik):
     # Setup
     ID_STORAGE = {}
 
-    guard = Guardrail(
-        guards=[
-            Topic(restricted_topics=["finance"], threshold=0.8),
-            PII(blocked_entities=["CREDIT_CARD", "PERSON"], threshold=0.4),
+    guardrail = Guardrail(
+        rules=[
+            Topic(restricted_topics=["finance"]),
+            PII(entities=["CREDIT_CARD", "PERSON"]),
         ]
     )
 
@@ -116,7 +139,7 @@ def test_failing_guardrails__happyflow(opik_client: opik.Opik):
         ID_STORAGE["parent-span-id"] = opik_context.get_current_span_data().id
 
         with pytest.raises(exceptions.GuardrailValidationFailed):
-            guard.validate(generation)
+            guardrail.validate(generation)
 
     test_function()
 

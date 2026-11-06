@@ -1,18 +1,20 @@
 from typing import List, Dict, Any
-from . import guard
+from . import rule
 from .. import schemas
 import functools
 
 
-class CustomGuardrail(guard.Guard):
+class CustomGuardrail(rule.Rule):
     """
-    Guard backed by a custom binary classifier that you trained on your own labeled
+    Rule backed by a custom binary classifier that you trained on your own labeled
     examples.
 
-    The model is served by the guardrails backend, which loads it by name from its
-    local adapters directory, so the guardrails server (with the trained model
+    The model is served by a self-hosted Opik guardrails service, which loads it by name
+    from its local adapters directory, so the guardrails server (with the trained model
     available to it) must be running.
     """
+
+    location = rule.RuleLocation.GUARDRAILS_SERVICE
 
     def __init__(
         self,
@@ -24,7 +26,7 @@ class CustomGuardrail(guard.Guard):
 
         Args:
             model_name: Name of the trained model to run, as returned by training.
-            threshold: Score threshold above which the guard fails (default: 0.5).
+            threshold: Score threshold above which the rule fails (default: 0.5).
                 Lower it to be stricter, raise it to be more permissive.
         """
         self._model_name = model_name

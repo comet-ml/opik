@@ -1,5 +1,5 @@
 from .guardrail import Guardrail
-from .guards import Topic, PII, LLMJudge, PromptInjection, CustomGuardrail
+from .rules import Topic, PII, LLMJudge, PromptInjection, CustomGuardrail
 from .custom_training import create_custom_guardrail
 
 __all__ = [

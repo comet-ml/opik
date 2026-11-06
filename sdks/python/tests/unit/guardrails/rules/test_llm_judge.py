@@ -3,7 +3,8 @@ import types
 import pytest
 
 import opik.exceptions as exceptions
-import opik.guardrails.guards.llm_judge as llm_judge
+import opik.guardrails.rules.llm_judge as llm_judge
+import opik.guardrails.rules.rule as rule_module
 import opik.guardrails.schemas as schemas
 
 
@@ -37,21 +38,21 @@ def _make_client(
 
 
 def test_llm_judge__runs_locally_without_backend_config():
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="no_medical_advice", instructions="No medical advice.", model="gpt-4o-mini"
     )
 
-    assert guard.local is True
-    assert guard.get_validation_configs() == []
+    assert judge_rule.location == rule_module.RuleLocation.LOCAL
+    assert judge_rule.get_validation_configs() == []
 
 
 def test_llm_judge__failed_decision():
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="no_medical_advice", instructions="No medical advice.", model="gpt-4o-mini"
     )
 
     client = _make_client('{"passed": false, "reason": "gives dosage advice"}')
-    results = guard.validate_local("Take 400mg ibuprofen.", client)
+    results = judge_rule.validate_local("Take 400mg ibuprofen.", client)
 
     assert len(results) == 1
     result = results[0]
@@ -65,40 +66,40 @@ def test_llm_judge__failed_decision():
 
 
 def test_llm_judge__parses_json_embedded_in_prose():
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="policy", instructions="Some policy.", model="gpt-4o-mini"
     )
 
     client = _make_client('Sure. {"passed": true, "reason": "fine"} done.')
-    results = guard.validate_local("Hello", client)
+    results = judge_rule.validate_local("Hello", client)
 
     assert results[0].validation_passed is True
 
 
 def test_llm_judge__fails_closed_on_unparseable_output():
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="policy", instructions="Some policy.", model="gpt-4o-mini"
     )
 
     client = _make_client("I cannot comply with that.")
 
     with pytest.raises(exceptions.GuardrailValidationError):
-        guard.validate_local("Hello", client)
+        judge_rule.validate_local("Hello", client)
 
 
 def test_llm_judge__fails_closed_on_provider_error():
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="policy", instructions="Some policy.", model="gpt-4o-mini"
     )
 
     client = _make_client(raise_exc=RuntimeError("provider unavailable"))
 
     with pytest.raises(exceptions.GuardrailValidationError):
-        guard.validate_local("Hello", client)
+        judge_rule.validate_local("Hello", client)
 
 
 def test_llm_judge__records_nested_llm_span(monkeypatch):
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="policy", instructions="Some policy.", model="gpt-4o-mini"
     )
 
@@ -119,7 +120,7 @@ def test_llm_judge__records_nested_llm_span(monkeypatch):
     )
     client.span = span
 
-    results = guard.validate_local("Hello", client)
+    results = judge_rule.validate_local("Hello", client)
 
     assert results[0].validation_passed is True
     assert recorded["span"]["type"] == "llm"
@@ -134,7 +135,7 @@ def test_llm_judge__records_nested_llm_span(monkeypatch):
 
 
 def test_llm_judge__span_recording_failure_is_not_fatal(monkeypatch):
-    guard = llm_judge.LLMJudge(
+    judge_rule = llm_judge.LLMJudge(
         name="policy", instructions="Some policy.", model="gpt-4o-mini"
     )
 
@@ -146,6 +147,6 @@ def test_llm_judge__span_recording_failure_is_not_fatal(monkeypatch):
     client = _make_client('{"passed": true, "reason": "ok"}')
     client.span = lambda **kwargs: (_ for _ in ()).throw(RuntimeError("span boom"))
 
-    results = guard.validate_local("Hello", client)
+    results = judge_rule.validate_local("Hello", client)
 
     assert results[0].validation_passed is True

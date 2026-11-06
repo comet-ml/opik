@@ -1,7 +1,7 @@
 PII guardrail
 =============
 
-.. automodule:: opik.guardrails.guards.pii
+.. automodule:: opik.guardrails.rules.pii
     :members:
     :undoc-members:
     :show-inheritance:
