@@ -18,8 +18,18 @@ vi.mock("@/contexts/feature-toggles-provider", () => ({
   useIsFeatureEnabled: () => false,
 }));
 vi.mock("@/icons/ollie-owl.svg?react", () => ({ default: () => null }));
+type TableState = {
+  onSortingChange: (sorting: unknown) => void;
+  onColumnsWidthChange: (widths: Record<string, number>) => void;
+};
+const vegaProps = vi.hoisted(() => ({
+  current: undefined as { tableState: TableState } | undefined,
+}));
 vi.mock("@/shared/VegaChart/VegaChart", () => ({
-  default: ({ rows }: { rows: unknown[] }) => <div>{rows.length} rows</div>,
+  default: (props: { rows: unknown[]; tableState: TableState }) => {
+    vegaProps.current = props;
+    return <div>{props.rows.length} rows</div>;
+  },
 }));
 vi.mock("@/shared/Dashboard/DashboardWidget/DashboardWidget", () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => (
@@ -381,5 +391,59 @@ describe("OllieChartWidget KPI comparison", () => {
 
     expect(screen.getByText("$5")).toBeTruthy();
     expect(screen.queryByText(/vs previous/)).toBeNull();
+  });
+});
+
+describe("OllieChartWidget table state", () => {
+  const updateWidget = vi.fn();
+  const tableState = () => vegaProps.current!.tableState;
+
+  beforeEach(() => {
+    updateWidget.mockReset();
+    setStore(ollieWidget("preview"));
+    useDashboardStore.setState({ updateWidget, readOnly: false });
+    queryMock.mockReset();
+    queryMock.mockReturnValue({
+      data: [{ model: "a", cost: 1 }],
+      isPending: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+      dataUpdatedAt: 1,
+    } as never);
+  });
+
+  it("saves the sort and column widths into the widget config", () => {
+    render(<OllieChartWidget sectionId="s1" widgetId="w-1" />);
+
+    act(() => tableState().onSortingChange([{ id: "cost", desc: true }]));
+    expect(updateWidget).toHaveBeenLastCalledWith("s1", "w-1", {
+      config: {
+        spec: { mark: "bar" },
+        query: { id: "q-1" },
+        sorting: [{ id: "cost", desc: true }],
+      },
+    });
+
+    act(() => tableState().onColumnsWidthChange({ cost: 180 }));
+    expect(updateWidget).toHaveBeenLastCalledWith("s1", "w-1", {
+      config: {
+        spec: { mark: "bar" },
+        query: { id: "q-1" },
+        columnsWidth: { cost: 180 },
+      },
+    });
+  });
+
+  it.each([
+    ["a read-only dashboard", { sectionId: "s1", widgetId: "w-1" }, true],
+    ["the editor preview", { preview: true }, false],
+  ])("does not save from %s", (_, props, readOnly) => {
+    useDashboardStore.setState({ readOnly });
+    render(<OllieChartWidget {...props} />);
+
+    act(() => tableState().onSortingChange([{ id: "cost", desc: true }]));
+    act(() => tableState().onColumnsWidthChange({ cost: 180 }));
+    expect(updateWidget).not.toHaveBeenCalled();
   });
 });

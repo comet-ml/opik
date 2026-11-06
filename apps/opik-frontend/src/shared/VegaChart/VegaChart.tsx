@@ -5,13 +5,15 @@ import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import { renderVegaChart, VegaRows, VegaSpec } from "@/lib/charts/vega";
 import { cn } from "@/lib/utils";
 import ChartSkeleton from "./ChartSkeleton";
-import RowsTable, { tableColumns } from "./RowsTable";
+import RowsTable, { RowsTableState, tableColumns } from "./RowsTable";
 
 type VegaChartProps = {
   spec: VegaSpec;
   rows?: VegaRows | null;
   height?: number | "container";
   className?: string;
+  // Sorting and column widths of a table "chart", and where to save them.
+  tableState?: RowsTableState;
 };
 
 const VegaChart: React.FunctionComponent<VegaChartProps> = (props) => {
@@ -19,7 +21,11 @@ const VegaChart: React.FunctionComponent<VegaChartProps> = (props) => {
   if (columns) {
     return (
       <div className={cn("size-full", props.className)}>
-        <RowsTable rows={props.rows ?? []} columns={columns} />
+        <RowsTable
+          rows={props.rows ?? []}
+          columns={columns}
+          {...props.tableState}
+        />
       </div>
     );
   }

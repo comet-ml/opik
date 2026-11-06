@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import isArray from "lodash/isArray";
 import { useShallow } from "zustand/react/shallow";
 import { RefreshCw } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -19,6 +20,7 @@ import {
   selectRuntimeConfig,
   selectReadOnly,
   selectSavedWidgetIds,
+  selectUpdateWidget,
 } from "@/store/DashboardStore";
 import {
   DASHBOARD_SCOPE,
@@ -32,6 +34,7 @@ import useDashboardWidgetQuery from "@/api/dashboards/useDashboardWidgetQuery";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import { Sorting } from "@/types/sorting";
 
 const MINUTE = 60_000;
 
@@ -91,6 +94,7 @@ const OllieChartWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const readOnly = useDashboardStore(selectReadOnly);
+  const updateWidget = useDashboardStore(selectUpdateWidget);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
   const dateRange = useDashboardStore(
     (state) => selectRuntimeConfig(state)?.dateRange ?? DEFAULT_DATE_PRESET,
@@ -132,7 +136,10 @@ const OllieChartWidget: React.FunctionComponent<
     !queryWidgetId ||
     !savedWidgetIds.includes(queryWidgetId);
 
-  const config = (widget?.config ?? {}) as OllieChartWidgetType["config"];
+  const config = useMemo(
+    () => (widget?.config ?? {}) as OllieChartWidgetType["config"],
+    [widget?.config],
+  );
   const { spec, query, rows: snapshotRows } = config;
   const kpi = parseKpiSpec(spec);
 
@@ -206,6 +213,22 @@ const OllieChartWidget: React.FunctionComponent<
     widgetId,
     query?.id,
   ]);
+
+  // Saved with the widget only where the dashboard can be edited; elsewhere the table still sorts and resizes.
+  const tableState = useMemo(() => {
+    const saveConfig = (patch: Partial<OllieChartWidgetType["config"]>) => {
+      if (preview || readOnly || !sectionId || !widgetId) return;
+      updateWidget(sectionId, widgetId, { config: { ...config, ...patch } });
+    };
+    return {
+      // The dashboards API stores the config as is, so a hand-edited sort may not be a list.
+      sorting: isArray(config.sorting) ? config.sorting : undefined,
+      columnsWidth: config.columnsWidth,
+      onSortingChange: (sorting: Sorting) => saveConfig({ sorting }),
+      onColumnsWidthChange: (columnsWidth: Record<string, number>) =>
+        saveConfig({ columnsWidth }),
+    };
+  }, [config, preview, readOnly, sectionId, widgetId, updateWidget]);
 
   if (!widget) {
     return null;
@@ -296,7 +319,7 @@ const OllieChartWidget: React.FunctionComponent<
 
     return (
       <div className="size-full p-2">
-        <VegaChart spec={spec} rows={chartRows} />
+        <VegaChart spec={spec} rows={chartRows} tableState={tableState} />
       </div>
     );
   };
