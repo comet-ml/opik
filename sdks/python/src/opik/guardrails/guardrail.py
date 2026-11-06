@@ -75,10 +75,6 @@ class Guardrail:
             guardrail_timeout=guardrail_timeout,
         )
 
-        self._initialize_api_client(
-            host_url=self._client.config.guardrails_backend_host,
-        )
-
     @classmethod
     def from_stored_policies(
         cls,
@@ -142,15 +138,6 @@ class Guardrail:
 
         return cls(rules=policy_rules, guardrail_timeout=guardrail_timeout)
 
-    def _initialize_api_client(self, host_url: str) -> None:
-        self._api_client = rest_api_client.GuardrailsApiClient(
-            httpx_client=rest_api_client.build_httpx_client(
-                config=self._client.config,
-                timeout_seconds=self.config_.guardrail_timeout,
-            ),
-            host_url=host_url,
-        )
-
     def validate(self, text: str) -> schemas.ValidationResponse:
         """
         Validate text against all configured rules.
@@ -164,8 +151,7 @@ class Guardrail:
         Raises:
             opik.exceptions.GuardrailValidationFailed: If validation fails
             opik.exceptions.GuardrailValidationError: If the guardrail cannot be evaluated
-                (backend unreachable, timeout, guardrails not available in the workspace, or
-                an LLM judge provider failure).
+                (backend unreachable, timeout, or guardrails not available in the workspace).
                 Guardrails fail closed, so this blocks the protected code path.
         """
         result = self._validate(generation=text)
@@ -175,9 +161,6 @@ class Guardrail:
 
         return self._parse_result(result)
 
-    def _rules_at(self, location: rules_module.RuleLocation) -> List[rules_module.Rule]:
-        return [rule for rule in self.rules if rule.location == location]
-
     @GUARDRAIL_DECORATOR.track
     def _validate(self, generation: str) -> schemas.ValidationResponse:
         result = schemas.ValidationResponse(validation_passed=True, validations=[])
@@ -185,40 +168,23 @@ class Guardrail:
         # Fail-closed errors are captured on the result instead of raised so the
         # decorated span still records the guardrail output; validate() re-raises them
         # once the span has been finalized.
+        validations = [
+            validation_config
+            for rule in self.rules
+            for validation_config in rule.get_validation_configs()
+        ]
         try:
-            opik_validations = [
-                validation_config
-                for rule in self._rules_at(rules_module.RuleLocation.OPIK)
-                for validation_config in rule.get_validation_configs()
-            ]
-            if opik_validations:
+            if validations:
                 result = rest_api_client.validate_on_opik(
                     client=self._client,
                     text=generation,
-                    validations=opik_validations,
+                    validations=validations,
                     timeout_seconds=self.config_.guardrail_timeout,
                 )
-
-            service_validations = [
-                validation_config
-                for rule in self._rules_at(rules_module.RuleLocation.GUARDRAILS_SERVICE)
-                for validation_config in rule.get_validation_configs()
-            ]
-            if service_validations:
-                result.validations.extend(
-                    self._api_client.validate(
-                        generation, service_validations
-                    ).validations
-                )
-
-            for rule in self._rules_at(rules_module.RuleLocation.LOCAL):
-                result.validations.extend(rule.validate_local(generation, self._client))
         except (httpx.HTTPError, rest_api_core.ApiError) as e:
             result.error = (
                 f"Guardrail could not be evaluated, failing closed: {_reason(e)}"
             )
-        except exceptions.GuardrailValidationError as e:
-            result.error = str(e)
 
         if result.error is not None:
             result.validation_passed = False

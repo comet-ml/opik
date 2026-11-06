@@ -44,7 +44,7 @@ A policy has a name, an optional description, an execution scope, and the rules 
 
     A policy can hold the **PII**, **Topic**, and **Prompt injection** rules. PII asks which categories of personal data to block, Topic takes lists of allowed and restricted topics, and prompt injection has nothing to configure.
 
-    The rule types are described in full on the [Rules](/guardrails/guardrails) page. The **LLM judge** and **custom classifier** rules are not stored in policies: [define them in code](/guardrails/guardrails#defining-rules-in-code).
+    The rule types are described in full on the [Rules](/guardrails/guardrails) page.
   </Step>
 </Steps>
 
@@ -98,9 +98,9 @@ Saved changes apply to every application that references the policy the next tim
 
 <CardGroup cols={2}>
   <Card title="Rules" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    What each of the five rule types checks, and how to configure it.
+    What each of the three rule types checks, and how to configure it.
   </Card>
-  <Card title="Custom models" href="/guardrails/custom-guardrails" icon="fa-regular fa-brain">
-    Fine-tune a model for a check the built-in rules do not cover.
+  <Card title="Overview" href="/guardrails/overview" icon="fa-regular fa-book-open">
+    How guardrails, rules, and policies fit together.
   </Card>
 </CardGroup>
