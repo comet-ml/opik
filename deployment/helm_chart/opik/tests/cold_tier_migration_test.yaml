@@ -230,3 +230,17 @@ tests:
             resources: ["deployments"]
             resourceNames: ["opik-altinity-clickhouse-operator"]
             verbs: ["get", "patch"]
+
+  # The script waits for this many StatefulSets, so a replica the operator has
+  # deleted mid-rebuild is not mistaken for a healthy cluster.
+  - it: expects one StatefulSet per shard x replica
+    set:
+      clickhouse.shardsCount: 2
+      clickhouse.replicasCount: 3
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="EXPECTED_STS")].value
+          value: "6"
