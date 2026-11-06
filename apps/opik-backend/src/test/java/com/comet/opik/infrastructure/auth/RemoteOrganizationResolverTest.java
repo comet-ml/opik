@@ -27,7 +27,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.testcontainers.lifecycle.Startables;
@@ -205,30 +204,46 @@ class RemoteOrganizationResolverTest {
             assertCometCalls(API_KEY_PATH, 1);
         }
 
-        static Stream<Arguments> answersWithoutAnOrganization() {
+        static Stream<Arguments> answersThatMeanNoOrganization() {
             return Stream.of(
-                    arguments("404", given(test -> notFound()), true),
-                    arguments("an organization with a blank ID", given(test -> test.organization("", false)), true),
-                    arguments("Comet's unknown-workspace 400", given(test -> cometError(400, "No such workspace!")),
-                            true),
-                    arguments("another 400 from Comet",
-                            given(test -> cometError(400, RandomStringUtils.secure().nextAlphabetic(20))), false),
-                    arguments("a 400 without Comet's error body", given(test -> badRequest()), false),
-                    arguments("401", given(test -> unauthorized()), false),
-                    arguments("a server error", given(test -> serverError()), false));
+                    arguments("404", given(test -> notFound())),
+                    arguments("an organization with a blank ID", given(test -> test.organization("", false))),
+                    arguments("Comet's unknown-workspace 400", given(test -> cometError(400, "No such workspace!"))));
         }
 
         @ParameterizedTest(name = "{0}")
-        @MethodSource("answersWithoutAnOrganization")
-        void answerWithoutAnOrganizationLeavesNoneAndIsRememberedOnlyWhenItMeansNone(String name,
-                Given<ResponseDefinitionBuilder> answer, boolean remembered) {
+        @MethodSource("answersThatMeanNoOrganization")
+        void answerThatMeansNoOrganizationLeavesNoneAndIsRemembered(String name,
+                Given<ResponseDefinitionBuilder> answer) {
             stubApiKey(answer.of(RemoteOrganizationResolverTest.this));
 
             assertThat(ask()).isNull();
 
             requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isNull();
-            assertCometCalls(API_KEY_PATH, remembered ? 1 : 2);
+            assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        static Stream<Arguments> answersThatAreNotRemembered() {
+            return Stream.of(
+                    arguments("another 400 from Comet",
+                            given(test -> cometError(400, RandomStringUtils.secure().nextAlphabetic(20)))),
+                    arguments("a 400 without Comet's error body", given(test -> badRequest())),
+                    arguments("401", given(test -> unauthorized())),
+                    arguments("a server error", given(test -> serverError())));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("answersThatAreNotRemembered")
+        void answerThatIsNotRememberedLeavesNoneAndCometIsAskedAgain(String name,
+                Given<ResponseDefinitionBuilder> answer) {
+            stubApiKey(answer.of(RemoteOrganizationResolverTest.this));
+
+            assertThat(ask()).isNull();
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 2);
         }
 
         @Test
@@ -282,30 +297,43 @@ class RemoteOrganizationResolverTest {
                     .satisfies(line -> assertThat(line).contains("ProcessingException"));
         }
 
-        static Stream<Arguments> answersAfterAStaleEntry() {
-            return Stream.of(
-                    arguments("404: Comet no longer reports one", given(test -> notFound()), false, 1),
-                    arguments("403: the caller is denied", given(test -> forbidden()), true, 2),
-                    arguments("401: the caller is denied", given(test -> unauthorized()), true, 2));
-        }
-
-        @ParameterizedTest(name = "{0}")
-        @MethodSource("answersAfterAStaleEntry")
-        void staleOrganizationIsKeptOnlyWhenCometDeniesTheCaller(String name, Given<ResponseDefinitionBuilder> answer,
-                boolean keepsStale, int cometCalls) {
+        @Test
+        void staleOrganizationIsDroppedWhenCometNoLongerReportsOne() {
             stubApiKey(organization(organizationId, false));
             ask();
             wireMock.server().resetAll();
-            stubApiKey(answer.of(RemoteOrganizationResolverTest.this));
+            stubApiKey(notFound());
             clock.advance(FRESH_FOR);
-            var expected = keepsStale ? organizationId : null;
 
             requestContext = request(CometCredentials.apiKey(apiKey));
-            assertThat(ask()).isEqualTo(expected);
+            assertThat(ask()).isNull();
 
             requestContext = request(CometCredentials.apiKey(apiKey));
-            assertThat(ask()).isEqualTo(expected);
-            assertCometCalls(API_KEY_PATH, cometCalls);
+            assertThat(ask()).isNull();
+            assertCometCalls(API_KEY_PATH, 1);
+        }
+
+        static Stream<Arguments> denialsAfterAStaleEntry() {
+            return Stream.of(
+                    arguments("403", given(test -> forbidden())),
+                    arguments("401", given(test -> unauthorized())));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("denialsAfterAStaleEntry")
+        void staleOrganizationIsKeptWhenCometDeniesTheCaller(String name, Given<ResponseDefinitionBuilder> denial) {
+            stubApiKey(organization(organizationId, false));
+            ask();
+            wireMock.server().resetAll();
+            stubApiKey(denial.of(RemoteOrganizationResolverTest.this));
+            clock.advance(FRESH_FOR);
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isEqualTo(organizationId);
+
+            requestContext = request(CometCredentials.apiKey(apiKey));
+            assertThat(ask()).isEqualTo(organizationId);
+            assertCometCalls(API_KEY_PATH, 2);
         }
 
         @Test
@@ -512,13 +540,17 @@ class RemoteOrganizationResolverTest {
             verifyNoInteractions(untouchedCache);
         }
 
-        @ParameterizedTest(name = "carries an organization: {0}")
-        @ValueSource(booleans = {false, true})
-        void jobUsesOnlyTheOrganizationItCarries(boolean carriesOrganization) {
-            var carried = carriesOrganization ? organizationId : null;
+        @Test
+        void jobGetsTheOrganizationItCarries() {
+            StepVerifier.create(offResolver().organizationId().contextWrite(job(organizationId)))
+                    .expectNext(organizationId)
+                    .verifyComplete();
+            verifyNoInteractions(untouchedCache);
+        }
 
-            StepVerifier.create(offResolver().organizationId().contextWrite(job(carried)))
-                    .expectNextSequence(Stream.ofNullable(carried).toList())
+        @Test
+        void jobWithoutAnOrganizationGetsNone() {
+            StepVerifier.create(offResolver().organizationId().contextWrite(job(null)))
                     .verifyComplete();
             verifyNoInteractions(untouchedCache);
         }

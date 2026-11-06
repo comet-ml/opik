@@ -37,7 +37,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull WorkspaceOrganizationClient client;
     private final @NonNull WorkspaceOrganizationCache cache;
-    private final boolean lookupEnabled;
+    private final boolean organizationIdLookupEnabled;
 
     @Override
     public Mono<String> organizationId() {
@@ -48,7 +48,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             }
             Optional<String> workspaceId = ctx.<String>getOrEmpty(RequestContext.WORKSPACE_ID)
                     .filter(StringUtils::isNotBlank);
-            if (!lookupEnabled || workspaceId.isEmpty()) {
+            if (!organizationIdLookupEnabled || workspaceId.isEmpty()) {
                 return Mono.empty();
             }
             String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
