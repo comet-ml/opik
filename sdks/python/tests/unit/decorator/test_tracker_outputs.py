@@ -2737,6 +2737,54 @@ async def test_track__async_generator_closed__underlying_generator_cleanup_runs(
     assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
 
 
+def test_track__generator_closed__cleanup_runs_inside_generator_span(fake_backend):
+    # The `finally` of a generator closed early must see the generator's own span as
+    # the current one, as it does when the generator is exhausted. Otherwise
+    # `update_current_span` in cleanup code lands on whatever span the consumer has open.
+    seen = {}
+
+    @tracker.track
+    def f(x):
+        seen["body"] = context_storage.top_span_data()
+        try:
+            yield "yielded-1"
+            yield "yielded-2"
+        finally:
+            seen["cleanup"] = context_storage.top_span_data()
+
+    generator = f("generator-input")
+    next(iter(generator))
+    generator.close()
+
+    assert seen["body"] is not None
+    assert seen["cleanup"] is seen["body"]
+    assert context_storage.top_span_data() is None
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_closed__cleanup_runs_inside_generator_span(
+    fake_backend,
+):
+    seen = {}
+
+    @tracker.track
+    async def f(x):
+        seen["body"] = context_storage.top_span_data()
+        try:
+            yield "yielded-1"
+            yield "yielded-2"
+        finally:
+            seen["cleanup"] = context_storage.top_span_data()
+
+    generator = f("generator-input")
+    await generator.__anext__()
+    await generator.aclose()
+
+    assert seen["body"] is not None
+    assert seen["cleanup"] is seen["body"]
+    assert context_storage.top_span_data() is None
+
+
 def test_track__generator_cleanup_raises_on_close__error_recorded_on_span(fake_backend):
     # A generator whose `finally` fails during close must not be reported as a span
     # that succeeded. Ending on close would otherwise record the partial output with
