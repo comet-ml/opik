@@ -517,7 +517,7 @@ class DatasetVersionResourceTest {
             endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
         }
 
-        @ParameterizedTest(name = "{0} denied {1}")
+        @ParameterizedTest
         @MethodSource("permissionDenials")
         @DisplayName("Dataset version endpoints return 403 when a required permission is denied")
         void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,

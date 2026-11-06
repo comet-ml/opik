@@ -570,7 +570,7 @@ class DatasetsResourceTest {
             endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
         }
 
-        @ParameterizedTest(name = "{0} denied {1}")
+        @ParameterizedTest
         @MethodSource("permissionDenials")
         @DisplayName("Dataset item and export endpoints return 403 when a required permission is denied")
         void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
@@ -582,7 +582,7 @@ class DatasetsResourceTest {
             return ProtectedEndpoint.permissionDenials(protectedEndpoints());
         }
 
-        @ParameterizedTest(name = "{0} denied {1}")
+        @ParameterizedTest
         @MethodSource("publicFallbackDenials")
         @DisplayName("Public dataset reads fall back to the public-visitor lookup when a required permission is denied")
         void publicFallbackEndpointRetriesAsPublicVisitorWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
