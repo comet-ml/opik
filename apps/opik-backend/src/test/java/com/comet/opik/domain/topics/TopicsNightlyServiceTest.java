@@ -45,7 +45,7 @@ import static org.mockito.Mockito.when;
 /**
  * What a night counts and records, with every store mocked: each project's decision with its reason, a failed count
  * read, a run that cannot start, the runs housekeeping finds abandoned, a paused project, and the night's record. Also
- * the queue order.
+ * the queue order, and the first-build job's projects and order.
  */
 @DisplayName("topics nightly service metrics")
 class TopicsNightlyServiceTest {
@@ -68,6 +68,7 @@ class TopicsNightlyServiceTest {
     private TopicNightDAO nightDAO;
     private TopicWindowDAO windowDAO;
     private TopicsRebuildService rebuildService;
+    private LockService lockService;
     private TopicsNightlyService service;
 
     @BeforeEach
@@ -107,7 +108,7 @@ class TopicsNightlyServiceTest {
         when(windowDAO.countByProject(eq(BROKEN_WORKSPACE_ID), isNull(), any(), any(), anyLong()))
                 .thenReturn(Flux.error(new IllegalStateException("ClickHouse guard tripped")));
 
-        var lockService = mock(LockService.class);
+        lockService = mock(LockService.class);
         when(lockService.lockUsingToken(any(), any())).thenAnswer(invocation -> Mono.just(
                 !invocation.<LockService.Lock>getArgument(0).equals(TopicsNightlyService.projectLock(locked))));
         when(lockService.unlockUsingToken(any())).thenReturn(Mono.empty());
@@ -324,6 +325,63 @@ class TopicsNightlyServiceTest {
         queue.sort(TopicsNightlyService.queueOrder(windowUntil));
 
         assertThat(queue).containsExactly(noListSmall, nullWindow, noListLarge, older, newer);
+    }
+
+    @Test
+    @DisplayName("first builds: the projects with minVectors in tomorrow's window that exist, have no list, are not "
+            + "paused and had no run in the last 24 h, the most vectors first")
+    void firstBuildCandidates() {
+        var otherWorkspaceId = "ws-2";
+        var recent = UUID.randomUUID();
+        var paused = UUID.randomUUID();
+        var largest = UUID.randomUUID();
+        var otherWorkspace = UUID.randomUUID();
+        var tiedLow = new UUID(0, 1);
+        var tiedHigh = new UUID(0, 2);
+        when(workspaceService.eligibleWorkspaceIds())
+                .thenReturn(List.of(WORKSPACE_ID, BROKEN_WORKSPACE_ID, otherWorkspaceId));
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), isNull(), any(), any(), anyLong())).thenReturn(Flux.just(
+                new TopicWindowDAO.ProjectCount(small, 99),
+                new TopicWindowDAO.ProjectCount(deleted, 900),
+                new TopicWindowDAO.ProjectCount(built, 900),
+                new TopicWindowDAO.ProjectCount(recent, 900),
+                new TopicWindowDAO.ProjectCount(paused, 900),
+                new TopicWindowDAO.ProjectCount(tiedHigh, 100),
+                new TopicWindowDAO.ProjectCount(largest, 500),
+                new TopicWindowDAO.ProjectCount(tiedLow, 100)));
+        when(windowDAO.countByProject(eq(otherWorkspaceId), isNull(), any(), any(), anyLong()))
+                .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(otherWorkspace, 300)));
+        when(topicDAO.findExistingProjectIds(eq(otherWorkspaceId), any()))
+                .thenAnswer(invocation -> Set.copyOf(invocation.<Collection<UUID>>getArgument(1)));
+        when(runDAO.findStartedSince(any(), any())).thenReturn(Set.of(recent));
+        when(runDAO.findPausedProjectIds(any(), anyInt(), any())).thenReturn(Set.of(paused));
+        var tomorrow = NIGHT.plusDays(1);
+
+        var candidates = service.firstBuildCandidates(tomorrow, START);
+
+        assertThat(candidates).extracting(TopicsNightlyService.Candidate::workspaceId,
+                TopicsNightlyService.Candidate::projectId, TopicsNightlyService.Candidate::vectors)
+                .containsExactly(
+                        tuple(WORKSPACE_ID, largest, 500L),
+                        tuple(otherWorkspaceId, otherWorkspace, 300L),
+                        tuple(WORKSPACE_ID, tiedLow, 100L),
+                        tuple(WORKSPACE_ID, tiedHigh, 100L));
+        verify(windowDAO).countByProject(eq(WORKSPACE_ID), isNull(), eq(Instant.parse("2026-10-04T00:00:00Z")),
+                eq(Instant.parse("2026-11-03T00:00:00Z")), anyLong());
+        verify(runDAO).findStartedSince(any(), eq(START.minus(Duration.ofHours(24))));
+        verify(runDAO).findPausedProjectIds(any(), eq(3), eq(Instant.parse("2026-10-27T00:00:00Z")));
+        verify(nightDAO, never()).insertProjects(any());
+    }
+
+    @Test
+    @DisplayName("first builds start no run while the night holds its lock, and do not read the projects")
+    void firstBuildsSkipWhileTheNightRuns() {
+        when(lockService.isLocked(TopicsNightlyService.NIGHT_LOCK)).thenReturn(Mono.just(true));
+
+        service.runFirstBuilds(START);
+
+        verify(workspaceService, never()).eligibleWorkspaceIds();
+        verify(rebuildService, never()).startRun(any(), any(), any());
     }
 
     @SuppressWarnings("unchecked")

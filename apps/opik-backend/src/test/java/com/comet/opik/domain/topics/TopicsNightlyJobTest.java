@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.v1.events.TopicsProjectDeletedListener;
+import com.comet.opik.api.resources.v1.jobs.TopicsFirstBuildJob;
 import com.comet.opik.api.resources.v1.jobs.TopicsNightlyJob;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -18,6 +19,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -38,6 +40,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.quartz.CronTrigger;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
+import org.quartz.SimpleTrigger;
 import org.quartz.impl.matchers.GroupMatcher;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -46,6 +49,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
@@ -65,6 +69,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -82,6 +88,8 @@ import static org.assertj.core.api.Assertions.tuple;
  * The topics nightly job against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/generate} stubbed
  * in WireMock. Tests seed {@code topic_vectors} with the fixture's traces (its texts, vectors and times, so the night
  * is the fixture's) and call {@link TopicsNightlyService#runNight(Instant)}; the scheduled job fires at 02:00 UTC only.
+ * The first-build job's tests call {@link TopicsNightlyService#runFirstBuilds(Instant)}; the scheduled one fires at
+ * startup, before any workspace is opted in, and then hourly.
  */
 @DisplayName("topics nightly job")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -131,7 +139,8 @@ class TopicsNightlyJobTest {
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
                         new CustomConfig("topics.vectors.tickInterval", "1h"),
-                        new CustomConfig("topics.vectors.tickBudget", "30s")))
+                        new CustomConfig("topics.vectors.tickBudget", "30s"),
+                        new CustomConfig("topics.firstBuild.interval", "1h")))
                 .build());
     }
 
@@ -143,12 +152,13 @@ class TopicsNightlyJobTest {
     private TraceTopicsDAO traceTopicsDAO;
     private TopicsProjectDeletedListener projectDeletedListener;
     private GuiceJobManager jobManager;
+    private LockService lockService;
     private ClientSupport client;
     private String baseUrl;
 
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
-            TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager,
+            TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
             @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.client = client;
@@ -157,6 +167,7 @@ class TopicsNightlyJobTest {
         this.template = template;
         this.clickHouseTemplate = clickHouseTemplate;
         this.jobManager = jobManager;
+        this.lockService = lockService;
         this.nightlyService = nightlyService;
         this.vectorsDAO = vectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
@@ -194,6 +205,23 @@ class TopicsNightlyJobTest {
                 .singleElement()
                 .isInstanceOfSatisfying(CronTrigger.class,
                         trigger -> assertThat(trigger.getCronExpression()).isEqualTo("0 0 2 * * ?")));
+    }
+
+    @Test
+    @DisplayName("enabled, the first-build job is scheduled on its interval")
+    void firstBuildJobIsScheduled() throws SchedulerException {
+        var scheduler = jobManager.getScheduler();
+        var jobKeys = new ArrayList<JobKey>();
+        for (var key : scheduler.getJobKeys(GroupMatcher.anyGroup())) {
+            if (scheduler.getJobDetail(key).getJobClass() == TopicsFirstBuildJob.class) {
+                jobKeys.add(key);
+            }
+        }
+
+        assertThat(jobKeys).singleElement().satisfies(key -> assertThat(scheduler.getTriggersOfJob(key))
+                .singleElement()
+                .isInstanceOfSatisfying(SimpleTrigger.class,
+                        trigger -> assertThat(trigger.getRepeatInterval()).isEqualTo(Duration.ofHours(1).toMillis())));
     }
 
     @Test
@@ -713,6 +741,94 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("the first-build job builds a project with minVectors in tomorrow's window, for tomorrow; it skips one "
+            + "with a list, with a run in the last 24 h, paused, or under minVectors")
+    void firstBuildsByDay() {
+        var workspaceId = enabledWorkspace();
+        var tomorrow = LocalDate.now(ZoneOffset.UTC).plusDays(1);
+        var tomorrowStart = tomorrow.atStartOfDay(ZoneOffset.UTC).toInstant();
+        var built = UUID.randomUUID();
+        var withList = UUID.randomUUID();
+        var recentRun = UUID.randomUUID();
+        var paused = UUID.randomUUID();
+        var small = UUID.randomUUID();
+        for (var projectId : List.of(built, withList, recentRun, paused)) {
+            seed(workspaceId, projectId, 0, BUILT, FIXTURE.night, tomorrowStart);
+        }
+        seed(workspaceId, small, BUILT, SMALL, FIXTURE.night, tomorrowStart);
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertState(TopicProjectState.builder()
+                    .projectId(withList)
+                    .workspaceId(workspaceId)
+                    .rebuilds(1)
+                    .firstBuiltAt(Instant.now())
+                    .lastRunId(UUID.randomUUID())
+                    .lastSuccessAt(Instant.now())
+                    .windowUntil(tomorrowStart)
+                    .build());
+            return null;
+        });
+        insertRun(workspaceId, recentRun, 0, TopicRun.Status.FAILED, "qwen_error");
+        for (int daysAgo : List.of(4, 3, 2)) {
+            insertRun(workspaceId, paused, daysAgo, TopicRun.Status.FAILED, "timeout");
+        }
+        stubAnswer(FIXTURE.answer);
+
+        runFirstBuildsUntilBuilt(built);
+
+        assertThat(runs(built)).singleElement().satisfies(run -> {
+            assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED);
+            assertThat(json(run.stats()).path("vectors").asInt()).isEqualTo(BUILT);
+        });
+        assertThat(topics(built)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(tomorrow));
+        assertThat(state(built).windowUntil()).isEqualTo(tomorrowStart);
+        assertThat(runs(withList)).isEmpty();
+        assertThat(runs(recentRun)).hasSize(1);
+        assertThat(runs(paused)).hasSize(3);
+        assertThat(runs(small)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the first-build job starts nothing while the night holds its lock, and builds once it is released")
+    void firstBuildsWaitForTheNight() throws InterruptedException {
+        var workspaceId = enabledWorkspace();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT, FIXTURE.night,
+                LocalDate.now(ZoneOffset.UTC).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
+        stubAnswer(FIXTURE.answer);
+        var nightStarted = new CountDownLatch(1);
+        var nightEnds = new CountDownLatch(1);
+        var night = lockService.bestEffortLock(
+                TopicsNightlyService.NIGHT_LOCK,
+                Mono.fromCallable(() -> {
+                    nightStarted.countDown();
+                    nightEnds.await();
+                    return true;
+                }).subscribeOn(Schedulers.boundedElastic()),
+                Mono.empty(),
+                Duration.ofMinutes(1),
+                Duration.ZERO)
+                .subscribe();
+        try {
+            assertThat(nightStarted.await(10, TimeUnit.SECONDS)).isTrue();
+
+            nightlyService.runFirstBuilds(Instant.now());
+
+            assertThat(runs(projectId)).isEmpty();
+        } finally {
+            nightEnds.countDown();
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(10))
+                .until(() -> Boolean.FALSE.equals(lockService.isLocked(TopicsNightlyService.NIGHT_LOCK).block()));
+        night.dispose();
+
+        runFirstBuildsUntilBuilt(projectId);
+
+        assertThat(runs(projectId)).singleElement()
+                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED));
+    }
+
+    @Test
     @DisplayName("housekeeping deletes run counts saved before the runs retention, and keeps newer ones")
     void housekeepingDeletesOldRunCounts() {
         var workspaceId = enabledWorkspace();
@@ -746,6 +862,17 @@ class TopicsNightlyJobTest {
                 .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
         assertThat(guards("topics:read_window", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "", "120"));
+    }
+
+    /**
+     * Runs the first-build job's run until it has built the project: a run stops at the first project that cannot
+     * start, as when a run by hand or a night of an earlier test still holds its lock for a moment.
+     */
+    private void runFirstBuildsUntilBuilt(UUID projectId) {
+        Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            nightlyService.runFirstBuilds(Instant.now());
+            assertThat(runs(projectId)).isNotEmpty();
+        });
     }
 
     private void assertFailedWithNothingWritten(String workspaceId, UUID projectId, String errorCode) {

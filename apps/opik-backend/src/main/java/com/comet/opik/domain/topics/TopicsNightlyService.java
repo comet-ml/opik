@@ -53,7 +53,8 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * list, then the oldest {@code window_until}, and among equals the smallest. None starts after {@code budget}, and
  * those left run the next night. A project whose last {@value #PAUSE_FAILURES} runs failed is paused for
  * {@value #PAUSE_NIGHTS} nights; a run by hand ignores the pause. Each run gets its own thread and is stopped
- * (interrupted) and failed with {@code timeout} after {@code projectTimeout}.
+ * (interrupted) and failed with {@code timeout} after {@code projectTimeout}. During the day, the first-build job
+ * ({@link #runFirstBuilds}) builds a project's first list early, through the run by hand.
  *
  * <p>Each night writes its record as it goes: its {@code topic_nights} row when it starts and ends, and one
  * {@code topic_night_projects} row per project as it decides it. The state gauges ({@link TopicsNightlyGauges}) read it.
@@ -71,6 +72,12 @@ public class TopicsNightlyService {
 
     /** One run started by hand at a time across the cluster: each holds a whole window in memory. */
     static final Lock BY_HAND_LOCK = new Lock("topics:by_hand");
+
+    /** The first-build job's lock, held for one of its runs and released when it ends, so two runs never overlap. */
+    public static final Lock FIRST_BUILD_LOCK = new Lock("topics:first_build:leader");
+
+    /** The first-build job leaves out a project with a run started this recently: a failed one waits for the night. */
+    static final Duration FIRST_BUILD_RUN_GAP = Duration.ofHours(24);
 
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
@@ -102,6 +109,10 @@ public class TopicsNightlyService {
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
+    /** A run started by hand; {@code saved} completes once the run has ended and released its locks. */
+    private record ByHandRun(@NonNull UUID runId, @NonNull CompletableFuture<Boolean> saved) {
+    }
+
     /** A project the night listed and skipped, with why. */
     private record Skipped(@NonNull Candidate candidate, @NonNull String reason) {
     }
@@ -119,6 +130,12 @@ public class TopicsNightlyService {
         var nightly = config.getNightly();
         return nightly.getBudget().toJavaDuration().plus(nightly.getProjectTimeout().toJavaDuration())
                 .plus(LEASE_SLACK);
+    }
+
+    /** How long the first-build job's lock must last, as the night's: its budget, then one whole project timeout. */
+    public Duration firstBuildLease() {
+        return config.getFirstBuild().getBudget().toJavaDuration()
+                .plus(config.getNightly().getProjectTimeout().toJavaDuration()).plus(LEASE_SLACK);
     }
 
     /**
@@ -203,6 +220,10 @@ public class TopicsNightlyService {
      *                           topic list (a list is built once; the night updates it)
      */
     public UUID runNow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
+        return startByHand(workspaceId, projectId, night).runId();
+    }
+
+    private ByHandRun startByHand(String workspaceId, UUID projectId, LocalDate night) {
         checkByHand(workspaceId);
         long vectors = windowVectors(workspaceId, projectId, night);
         if (vectors < config.getNightly().getMinVectors()) {
@@ -231,22 +252,127 @@ public class TopicsNightlyService {
             log.info("Topics run '{}' started by hand, workspace '{}', project '{}', night '{}'", runId, workspaceId,
                     projectId, night);
             var candidate = new Candidate(workspaceId, projectId, vectors);
+            var saved = new CompletableFuture<Boolean>();
             Thread.ofPlatform().name("topics-by-hand-" + projectId).daemon(true).start(() -> {
                 var executor = Executors.newThreadPerTaskExecutor(
                         Thread.ofPlatform().name("topics-by-hand-run-", 0).daemon(true).factory());
+                boolean result = false;
                 try {
-                    run(executor, runId, candidate, night);
+                    result = run(executor, runId, candidate, night);
                 } finally {
                     executor.shutdownNow();
                     unlockProject(projectId);
                     unlock(BY_HAND_LOCK);
+                    // After the locks, so a caller that waits for it can start the next run at once.
+                    saved.complete(result);
                 }
             });
-            return runId;
+            return new ByHandRun(runId, saved);
         } catch (RuntimeException exception) {
             unlockProject(projectId);
             unlock(BY_HAND_LOCK);
             throw exception;
+        }
+    }
+
+    /**
+     * The first-build job's run: builds, one at a time and in {@link #firstBuildCandidates} order, the list of each
+     * project that has none yet, for tomorrow's night (UTC), so its window holds today's traces so far. Each goes
+     * through the run by hand ({@link #runNow}) under its usual locks, and is waited for. Skipped while the night holds
+     * its lock. No project starts once the night takes the lock or {@code topics.firstBuild.budget} is used, nor after
+     * one that cannot start: the next run reads the projects again. A failed run is left to the night: the project is
+     * out of this job for {@link #FIRST_BUILD_RUN_GAP}.
+     */
+    public void runFirstBuilds(@NonNull Instant start) {
+        if (nightRunning()) {
+            log.info("Topics first builds skipped, the night holds lock '{}'", NIGHT_LOCK.key());
+            return;
+        }
+        var began = Instant.now();
+        var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
+        var candidates = firstBuildCandidates(night, began);
+        log.info("Topics first builds started, night '{}', projects to build '{}'", night, candidates.size());
+        var budgetEnd = began.plus(config.getFirstBuild().getBudget().toJavaDuration());
+        int saved = 0;
+        int failed = 0;
+        for (var candidate : candidates) {
+            if (Thread.currentThread().isInterrupted() || !Instant.now().isBefore(budgetEnd) || nightRunning()) {
+                break;
+            }
+            try {
+                if (startByHand(candidate.workspaceId(), candidate.projectId(), night).saved().join()) {
+                    saved++;
+                } else {
+                    failed++;
+                }
+            } catch (ConflictException exception) {
+                log.info("Topics first builds stopped at project '{}': {}", candidate.projectId(),
+                        exception.getMessage());
+                break;
+            } catch (RuntimeException exception) {
+                log.warn("Topics first builds stopped, project '{}' could not start", candidate.projectId(),
+                        exception);
+                break;
+            }
+        }
+        log.info("Topics first builds finished, night '{}', saved '{}', failed '{}', not started '{}', seconds '{}'",
+                night, saved, failed, candidates.size() - saved - failed,
+                Duration.between(began, Instant.now()).toSeconds());
+    }
+
+    /**
+     * The first-build job's projects for {@code night}, the most vectors first: those of the opted-in workspaces whose
+     * window holds at least {@code minVectors} vectors, that exist, have no list, are not paused (as the night counts
+     * it) and had no run started in the {@link #FIRST_BUILD_RUN_GAP} before {@code now}. A workspace whose count read
+     * fails is left for the next run.
+     */
+    List<Candidate> firstBuildCandidates(@NonNull LocalDate night, @NonNull Instant now) {
+        var nightly = config.getNightly();
+        var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
+        var from = night.minusDays(nightly.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var found = new ArrayList<Candidate>();
+        for (var workspaceId : workspaceService.eligibleWorkspaceIds()) {
+            try {
+                windowDAO.countByProject(workspaceId, null, from, to, COUNT_SECONDS).collectList().block().stream()
+                        .filter(count -> count.traces() >= nightly.getMinVectors())
+                        .forEach(count -> found.add(new Candidate(workspaceId, count.projectId(), count.traces())));
+            } catch (RuntimeException exception) {
+                log.warn("Topics first builds count read failed, workspace '{}'; it is read again the next run",
+                        workspaceId, exception);
+            }
+        }
+        if (found.isEmpty()) {
+            return List.of();
+        }
+        var projectIds = found.stream().map(Candidate::projectId).collect(Collectors.toSet());
+        var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
+        return template.inTransaction(READ_ONLY, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            var runDAO = handle.attach(TopicRunDAO.class);
+            Set<UUID> leftOut = new HashSet<>();
+            topicDAO.findStates(projectIds).forEach(state -> leftOut.add(state.projectId()));
+            leftOut.addAll(runDAO.findStartedSince(projectIds, now.minus(FIRST_BUILD_RUN_GAP)));
+            leftOut.addAll(runDAO.findPausedProjectIds(projectIds, PAUSE_FAILURES, pausedSince));
+            Set<UUID> existing = new HashSet<>();
+            found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
+                    Collectors.mapping(Candidate::projectId, Collectors.toSet())))
+                    .forEach((workspaceId, ids) -> existing.addAll(topicDAO.findExistingProjectIds(workspaceId, ids)));
+            return found.stream()
+                    .filter(candidate -> existing.contains(candidate.projectId())
+                            && !leftOut.contains(candidate.projectId()))
+                    .sorted(Comparator.comparingLong(Candidate::vectors).reversed()
+                            .thenComparing(Candidate::projectId))
+                    .toList();
+        });
+    }
+
+    /** Whether a night holds its lock now, read without taking it. Unknown (Redis failed) counts as held. */
+    private boolean nightRunning() {
+        try {
+            return !Boolean.FALSE.equals(lockService.isLocked(NIGHT_LOCK).block());
+        } catch (RuntimeException exception) {
+            log.warn("Topics lock unavailable, lock '{}'", NIGHT_LOCK.key(), exception);
+            return true;
         }
     }
 

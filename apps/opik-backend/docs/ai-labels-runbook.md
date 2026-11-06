@@ -305,7 +305,8 @@ a retention policy.
 
 Once a night the job builds each project's topic list from its topic vectors. Stage 2a has the first build only: a
 project with a saved list is skipped every night until the nightly update ships. It reads the same workspaces as
-ai-labels, and runs only with `TOPICS_ENABLED=true`.
+ai-labels, and runs only with `TOPICS_ENABLED=true`. During the day, the first-build job builds a new project's first
+list without waiting for the night (see "First builds during the day").
 
 A first build reads the project's window (the 30 whole UTC days before the night, the newest 100,000 traces at most),
 merges identical intent texts, groups them with k-means (30 to 50 groups, about one per 30 unique texts), asks Qwen
@@ -495,6 +496,39 @@ DELETE FROM topics WHERE project_id = '<project_id>';
 DELETE FROM topic_prototypes WHERE project_id = '<project_id>';
 DELETE FROM topic_project_states WHERE project_id = '<project_id>';
 ```
+
+### First builds during the day
+
+A project that reaches `TOPICS_NIGHTLY_MIN_VECTORS` during the day does not wait for the night: every 10 minutes the
+first-build job builds the first list of each project that has none, for tomorrow's night (UTC). Tomorrow's window ends
+at tomorrow's start, so it holds today's traces so far.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_FIRST_BUILD_ENABLED` | `true` | Runs the job. Needs `TOPICS_ENABLED=true` and `TOPICS_NIGHTLY_ENABLED=true`. |
+| `TOPICS_FIRST_BUILD_INTERVAL` | `10m` | How often every pod fires the job. |
+| `TOPICS_FIRST_BUILD_BUDGET` | `9m` | No project starts after this much of a run; the rest wait for the next run. Under the interval. |
+
+- One run at a time across the cluster: the first pod to take the Redis lock `topics:first_build:leader` runs it, and
+  releases the lock when the run ends (lease: budget + project timeout + 5 minutes).
+- A run counts each opted-in workspace's projects in tomorrow's window, with the night's count query and guards. It
+  takes the projects with at least `TOPICS_NIGHTLY_MIN_VECTORS` vectors that exist, have no list, are not paused (as
+  the night counts it) and had no run started in the last 24 hours, the most vectors first.
+- It builds them one at a time through the run by hand of one project (see "Running by hand"): the same checks and
+  locks (`topics:by_hand`, `topics:project:<project_id>`) and timeout, and the same `topic_runs` row. It waits for each
+  run before it starts the next one.
+- The night: a run is skipped while the night holds `topics:nightly:lock` (from 02:00 UTC for the night's budget +
+  project timeout + 5 minutes). The job reads the lock and never takes it. A run going on when the night starts
+  finishes its current project and starts no other. A list the job saved is for tomorrow's night, so that night skips
+  the project as `already_saved`.
+- A failed run is not retried by the job for 24 hours: the night takes the project, and the pause after 3 failed runs
+  applies.
+- By hand: while the job builds a project it holds `topics:by_hand`, so the project endpoint answers `409`. A run by
+  hand in progress, or any project that cannot start, stops the job's run; the next run reads the projects again.
+
+To turn it off, set `TOPICS_FIRST_BUILD_ENABLED=false` and restart; `TOPICS_NIGHTLY_ENABLED=false` turns it off too.
+Each run logs `Topics first builds started` and `Topics first builds finished` with the night and its counts; each
+project's outcome is its `topic_runs` row.
 
 ### What to watch
 

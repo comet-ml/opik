@@ -95,6 +95,10 @@ public interface TopicRunDAO {
     Set<UUID> findPausedProjectIds(@BindList("projectIds") Collection<UUID> projectIds,
             @Bind("failures") int failures, @Bind("since") Instant since);
 
+    /** Of {@code projectIds}, those with a run started at or after {@code since}, whatever its status. */
+    @SqlQuery("SELECT DISTINCT project_id FROM topic_runs WHERE project_id IN (<projectIds>) AND started_at >= :since")
+    Set<UUID> findStartedSince(@BindList("projectIds") Collection<UUID> projectIds, @Bind("since") Instant since);
+
     @SqlUpdate("DELETE FROM topic_runs WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);

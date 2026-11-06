@@ -2707,3 +2707,15 @@ topics:
     #  Default: 90d
     #  Description: topic_runs rows are deleted after this
     runsRetention: ${TOPICS_NIGHTLY_RUNS_RETENTION:-90d}
+  firstBuild:
+    #  Default: true
+    #  Description: Runs the first-build job, which builds the list of a project that has none yet during the day, with
+    #  tomorrow's window (today's traces so far), instead of leaving it to the next night. Needs topics.enabled and
+    #  topics.nightly.enabled
+    enabled: ${TOPICS_FIRST_BUILD_ENABLED:-true}
+    #  Default: 10m
+    #  Description: How often the job fires; one run at a time across the cluster
+    interval: ${TOPICS_FIRST_BUILD_INTERVAL:-10m}
+    #  Default: 9m
+    #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
+    budget: ${TOPICS_FIRST_BUILD_BUDGET:-9m}

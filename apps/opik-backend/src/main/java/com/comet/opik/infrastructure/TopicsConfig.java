@@ -53,6 +53,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private NightlyConfig nightly = new NightlyConfig();
 
+    @Valid @NotNull @JsonProperty
+    private FirstBuildConfig firstBuild = new FirstBuildConfig();
+
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
      * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
@@ -125,6 +128,33 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.nightly.qwenDeadline must be shorter than topics.nightly.projectTimeout") public boolean isQwenDeadlineValid() {
             return qwenDeadline == null || projectTimeout == null
                     || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+    }
+
+    /**
+     * The first-build job: during the day, builds the list of a project that has none yet, through the run by hand,
+     * instead of leaving it to the next night. Its window is tomorrow's night's, so it holds today's traces so far.
+     */
+    @Data
+    public static class FirstBuildConfig {
+
+        /** Runs only when {@code topics.enabled} and {@code topics.nightly.enabled} are on too. */
+        @JsonProperty
+        private boolean enabled = true;
+
+        /** How often every pod fires the job; one run at a time across the cluster. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration interval = Duration.minutes(10);
+
+        /** No project starts after this much of a run has passed; the rest wait for the next run. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration budget = Duration.minutes(9);
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.firstBuild.budget must be shorter than topics.firstBuild.interval") public boolean isBudgetValid() {
+            return budget == null || interval == null || budget.toMilliseconds() < interval.toMilliseconds();
         }
     }
 
