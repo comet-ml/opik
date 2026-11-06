@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.inference.Usage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.util.Duration;
+import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.test.scheduler.VirtualTimeScheduler;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
@@ -27,6 +29,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +48,7 @@ import static org.mockito.Mockito.when;
 /**
  * What a run counts, with every store mocked: each failed run once, Qwen outcomes after the answer is read, and the
  * save order (MySQL first, then the retried trace_topics insert). A run builds the fixture's window, so its steps are
- * the real ones. Also the window read's time bound.
+ * the real ones. Also the time bounds of the window read and of each insert attempt.
  */
 @DisplayName("topics rebuild service metrics")
 class TopicsRebuildServiceTest {
@@ -208,6 +211,35 @@ class TopicsRebuildServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
         assertThat(meter.sum("topics.save.rows", "table", "topics")).isPositive();
+    }
+
+    @Test
+    @DisplayName("a stalled insert attempt stops after 120 s and is retried; when every attempt stalls, the run stays "
+            + "saved and its thread is freed")
+    void stalledInsertStops() throws Exception {
+        var attempts = new AtomicInteger();
+        when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> {
+            attempts.incrementAndGet();
+            return Mono.never();
+        }));
+        answer(FIXTURE.answer);
+        var scheduler = VirtualTimeScheduler.getOrSet();
+        TopicsRebuildService.Outcome outcome;
+        try {
+            var run = CompletableFuture.supplyAsync(() -> service.firstBuild(runId, WORKSPACE_ID, projectId, night));
+            // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
+            Awaitility.await().atMost(java.time.Duration.ofSeconds(30)).until(() -> {
+                scheduler.advanceTimeBy(java.time.Duration.ofSeconds(TopicsRebuildService.READ_SECONDS));
+                return run.isDone();
+            });
+            outcome = run.get();
+        } finally {
+            VirtualTimeScheduler.reset();
+        }
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(attempts).hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
+        assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
     }
 
     @Test

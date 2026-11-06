@@ -403,10 +403,10 @@ Every record write after the start is best-effort: a failed one is logged and th
 A failed run writes nothing but its `topic_runs` row; the project is built again the next night.
 
 A run saves in this order: one MySQL transaction (state, topics, prototypes, run counts, the run `saved`), then the
-`trace_topics` insert, retried up to 3 times. If the insert still fails, the run stays saved and an ERROR names it
-(`saved, but its trace_topics insert failed`); the window's traces keep the topics they had (none, after a first build)
-until a later saved run writes the window again. To write them now, forget the project's list and build it again (see
-"Running by hand").
+`trace_topics` insert, retried up to 3 times; each attempt stops after 120s. If the insert still fails, the run stays
+saved and an ERROR names it (`saved, but its trace_topics insert failed`); the window's traces keep the topics they had
+(none, after a first build) until a later saved run writes the window again. To write them now, forget the project's
+list and build it again (see "Running by hand").
 
 | `error_code` | Meaning |
 |---|---|

@@ -82,7 +82,10 @@ public class TopicsRebuildService {
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
     static final double UNIT_TOLERANCE = 1e-3;
-    /** A run's ClickHouse read stops after this, so one slow read does not hold the server for the whole run. */
+    /**
+     * A run's ClickHouse read stops after this, so one slow read does not hold the server for the whole run; so does
+     * each attempt of its {@code trace_topics} insert.
+     */
     static final long READ_SECONDS = 120;
     /** The {@code trace_topics} insert after the commit: retries, and the first backoff (it doubles each time). */
     static final int INSERT_RETRIES = 3;
@@ -459,11 +462,13 @@ public class TopicsRebuildService {
 
         /**
          * Inserts the saved run's trace topics, retried up to {@value #INSERT_RETRIES} times: a repeat writes the same
-         * rows, one per trace. The run is saved by now, so the insert goes on through an interrupt (a timeout that
+         * rows, one per trace. Each attempt stops after {@value #READ_SECONDS} s, so a stalled one does not keep the
+         * run's thread and window. The run is saved by now, so the insert goes on through an interrupt (a timeout that
          * came after the commit) and the interrupt is kept. False when it still failed.
          */
         private boolean insertTraceTopics(List<TraceTopic> traceTopics) {
             var insert = traceTopicsDAO.insert(traceTopics)
+                    .timeout(Duration.ofSeconds(READ_SECONDS))
                     .retryWhen(Retry.backoff(INSERT_RETRIES, INSERT_BACKOFF)
                             .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
                                     + "project '{}', attempt '{}'", runId, projectId, signal.totalRetries() + 2,
