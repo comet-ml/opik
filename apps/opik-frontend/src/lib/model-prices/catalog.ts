@@ -216,10 +216,11 @@ const searchRank = (entry: CatalogEntry, needle: string): number => {
   const bareModel = model.includes("/")
     ? model.slice(model.indexOf("/") + 1)
     : model;
-  if (model === needle || bareModel === needle) return 0;
-  if (model.startsWith(needle) || bareModel.startsWith(needle)) return 1;
-  if (model.includes(needle)) return 2;
-  return 3;
+  if (model === needle) return 0;
+  if (bareModel === needle) return 1;
+  if (model.startsWith(needle) || bareModel.startsWith(needle)) return 2;
+  if (model.includes(needle)) return 3;
+  return 4;
 };
 
 const matchesSearch = (entry: CatalogEntry, needle: string): boolean =>

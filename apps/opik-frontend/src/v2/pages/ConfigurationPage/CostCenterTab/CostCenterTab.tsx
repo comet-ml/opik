@@ -303,7 +303,7 @@ const CostCenterTab: React.FC = () => {
               <SearchInput
                 searchText={search}
                 setSearchText={resetPage(setSearch)}
-                className="w-[280px] shrink-0"
+                className="w-[200px] shrink-0 xl:w-[280px]"
                 placeholder="Search models or providers"
                 dimension="sm"
               />

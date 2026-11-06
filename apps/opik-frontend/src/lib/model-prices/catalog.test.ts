@@ -165,7 +165,7 @@ describe("buildCatalog", () => {
     ).toEqual(["GPT-5"]);
   });
 
-  it("ranks an exact name first, then names that start with the search", () => {
+  it("ranks the exact name, then the same name behind a prefix, then names that start with the search", () => {
     const searchable = buildCatalog(
       [
         { model: "azure/gpt-5", provider: "azure", input_price: "1" },
@@ -177,8 +177,8 @@ describe("buildCatalog", () => {
     );
     const found = filterCatalog(searchable, { search: "gpt-5" });
     expect(models(sortCatalog(found, "asc", "gpt-5"))).toEqual([
-      "azure/gpt-5",
       "gpt-5",
+      "azure/gpt-5",
       "gpt-5-mini",
       "my-gpt-5",
     ]);
