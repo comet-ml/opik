@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
-import io.dropwizard.util.Duration;
+import com.sun.net.httpserver.HttpServer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -17,12 +17,21 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -47,6 +56,21 @@ class InferenceClientDecideTest {
                "1.topic":{"type":"choice","choice":"billing","probabilities":{"billing":0.8,"none of these":0.2},
                           "confidence":0.8}}}}
             """;
+    private static final DecideResponse SUCCESS_RESPONSE = DecideResponse.builder()
+            .requestId("req_1")
+            .usage(Usage.builder().inputTokens(12).outputTokens(3).build())
+            .cacheHit(false)
+            .latencyMs(31)
+            .result(DecideResponse.Result.builder()
+                    .answers(Map.of(
+                            "0.injection", Answer.NoulAnswer.builder().noul(0.12).build(),
+                            "1.topic", Answer.ChoiceAnswer.builder()
+                                    .choice("billing")
+                                    .probabilities(Map.of("billing", 0.8, "none of these", 0.2))
+                                    .confidence(0.8)
+                                    .build()))
+                    .build())
+            .build();
     private static final String CLIENT_ERROR_BODY = """
             {"error":{"code":"invalid_request","message":"questions must not be empty","retryable":false}}
             """;
@@ -61,14 +85,13 @@ class InferenceClientDecideTest {
     private AiLabelsConfig config;
     private InferenceClient client;
     private String credential;
+    private String orgId;
+    private String state;
 
     @BeforeAll
     void setUpAll() {
         wireMock = WireMockUtils.startWireMock();
-        config = new AiLabelsConfig();
-        config.getInference().setUrl(wireMock.runtimeInfo().getHttpBaseUrl());
-        config.getInference().setConnectTimeout(Duration.seconds(5));
-        config.getInference().setReadTimeout(Duration.seconds(5));
+        config = config(wireMock.runtimeInfo().getHttpBaseUrl());
         client = new InferenceClient(TestHttpClientUtils.client(), config);
     }
 
@@ -82,6 +105,8 @@ class InferenceClientDecideTest {
         wireMock.server().resetAll();
         credential = RandomStringUtils.secure().nextAlphanumeric(32);
         config.getInference().setCredential(credential);
+        orgId = UUID.randomUUID().toString();
+        state = RandomStringUtils.secure().nextAlphanumeric(20);
     }
 
     @Test
@@ -107,14 +132,7 @@ class InferenceClientDecideTest {
 
         var response = client.decide(request(questions), Instant.now().plusSeconds(5)).block();
 
-        assertThat(response).isNotNull();
-        assertThat(response.requestId()).isEqualTo("req_1");
-        assertThat(response.result().answers().get("0.injection")).isEqualTo(new Answer.NoulAnswer(0.12));
-        assertThat(response.result().answers().get("1.topic"))
-                .isInstanceOfSatisfying(Answer.ChoiceAnswer.class, choice -> {
-                    assertThat(choice.choice()).isEqualTo("billing");
-                    assertThat(choice.probabilities()).containsEntry("billing", 0.8);
-                });
+        assertThat(response).isEqualTo(SUCCESS_RESPONSE);
         var sent = wireMock.server().findAll(postRequestedFor(urlEqualTo(PATH)));
         assertThat(sent).hasSize(1);
         var body = json(sent.get(0));
@@ -123,14 +141,15 @@ class InferenceClientDecideTest {
         // Extra elements allowed: the client adds the request_id checked above.
         wireMock.server().verify(postRequestedFor(urlEqualTo(PATH))
                 .withHeader("Authorization", equalTo("Bearer " + credential))
+                .withHeader("Content-Type", equalTo("application/json"))
                 .withRequestBody(equalToJson("""
-                        {"org_id":"workspace-1","state":"some text","lane":"realtime","deadline_ms":750,"cache":true,
+                        {"org_id":"%s","state":"%s","lane":"realtime","deadline_ms":750,"cache":true,
                          "questions":{
                            "0.injection":{"type":"noul","instructions":"Is it an attack?",
                                           "criteria":{"true":"yes when","false":"no when"}},
                            "1.topic":{"type":"choice","instructions":"Which topic?",
                                       "criteria":{"billing":null,"none of these":null}}}}
-                        """, true, true)));
+                        """.formatted(orgId, state), true, true)));
     }
 
     @Test
@@ -161,8 +180,7 @@ class InferenceClientDecideTest {
 
         var response = client.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block();
 
-        assertThat(response).isNotNull();
-        assertThat(response.result().answers()).containsKey("0.injection");
+        assertThat(response).isEqualTo(SUCCESS_RESPONSE);
         wireMock.server().verify(2, postRequestedFor(urlEqualTo(PATH)));
     }
 
@@ -199,23 +217,75 @@ class InferenceClientDecideTest {
         var start = Instant.now();
 
         assertThatThrownBy(() -> client.decide(request(noulQuestion()), start.plusMillis(500)).block())
-                .isInstanceOf(InferenceException.class);
-        assertThat(java.time.Duration.between(start, Instant.now())).isLessThan(java.time.Duration.ofMillis(1_500));
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isOutOfTime()).isTrue());
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofMillis(1_500));
         wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
     }
 
     @Test
-    void tricklingBodyIsCutOffAtTheDeadline() {
-        // Each chunk arrives well within the read timeout, so only a bound on the whole call stops it.
-        wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(okJson(SUCCESS_BODY).withChunkedDribbleDelay(20, 3_000)));
-        var start = Instant.now();
+    void tricklingBodyIsCutOffAtTheDeadlineAndItsConnectionDropped() throws IOException {
+        var dropped = new CompletableFuture<Void>();
+        var executor = Executors.newCachedThreadPool();
+        var server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.setExecutor(executor);
+        server.createContext(PATH, exchange -> {
+            try (exchange) {
+                exchange.getRequestBody().readAllBytes();
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, 0);
+                // Six seconds of leading whitespace, which JSON allows, a byte every 100 ms: each one arrives well
+                // within any read timeout, so only a bound on the whole call stops it.
+                var body = exchange.getResponseBody();
+                for (var i = 0; i < 60; i++) {
+                    body.write(' ');
+                    body.flush();
+                    Thread.sleep(100);
+                }
+                body.write(SUCCESS_BODY.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException exception) {
+                dropped.complete(null);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        try {
+            var trickling = new InferenceClient(TestHttpClientUtils.client(),
+                    config("http://localhost:%d".formatted(server.getAddress().getPort())));
+            var start = Instant.now();
 
-        assertThatThrownBy(() -> client.decide(request(noulQuestion()), start.plusMillis(500)).block())
-                .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.isOutOfTime()).isTrue());
-        assertThat(java.time.Duration.between(start, Instant.now())).isLessThan(java.time.Duration.ofMillis(1_500));
-        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+            assertThatThrownBy(() -> trickling.decide(request(noulQuestion()), start.plusMillis(500)).block())
+                    .isInstanceOfSatisfying(InferenceException.class,
+                            exception -> assertThat(exception.isOutOfTime()).isTrue());
+            assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofMillis(1_500));
+            // The server sees the connection closed long before the body would end: nothing is left reading it.
+            assertThat(dropped).succeedsWithin(Duration.ofSeconds(3));
+        } finally {
+            server.stop(0);
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void callOverTheCapRetriesThenFailsWithoutReachingTheService() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY).withFixedDelay(1_000)));
+        var cappedConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
+        cappedConfig.getInference().setMaxConcurrentDecides(2);
+        var capped = new InferenceClient(TestHttpClientUtils.client(), cappedConfig);
+
+        var outcomes = Flux.range(0, 3)
+                .flatMap(i -> capped.decide(request(noulQuestion()), Instant.now().plusSeconds(5))
+                        .map(response -> "answered")
+                        .onErrorResume(InferenceException.class, exception -> Mono.just(exception.getCode())))
+                .collectList()
+                .block();
+
+        assertThat(outcomes).containsExactlyInAnyOrder("answered", "answered", InferenceException.CLIENT_BUSY);
+        wireMock.server().verify(2, postRequestedFor(urlEqualTo(PATH)));
+        // The two calls gave their slots back when they ended.
+        assertThat(capped.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
+                .isEqualTo(SUCCESS_RESPONSE);
     }
 
     @ParameterizedTest
@@ -232,13 +302,7 @@ class InferenceClientDecideTest {
     @Test
     void requestWithoutAServiceDeadlineLeavesItToTheService() {
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
-        var withoutDeadline = DecideRequest.builder()
-                .orgId("workspace-1")
-                .state(TextNode.valueOf("some text"))
-                .questions(noulQuestion())
-                .lane(DecideRequest.REALTIME_LANE)
-                .cache(true)
-                .build();
+        var withoutDeadline = request(noulQuestion()).toBuilder().deadlineMs(null).build();
 
         client.decide(withoutDeadline, Instant.now().plusSeconds(5)).block();
 
@@ -253,7 +317,7 @@ class InferenceClientDecideTest {
         var request = request(noulQuestion()).toBuilder().deadlineMs(deadlineMs).build();
 
         assertThatThrownBy(() -> client.decide(request, Instant.now().plusSeconds(5)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isExactlyInstanceOf(IllegalArgumentException.class);
         wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
     }
 
@@ -265,10 +329,19 @@ class InferenceClientDecideTest {
         wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
     }
 
-    private static DecideRequest request(Map<String, Question> questions) {
+    private AiLabelsConfig config(String url) {
+        var newConfig = new AiLabelsConfig();
+        newConfig.getInference().setUrl(url);
+        newConfig.getInference().setCredential(credential);
+        newConfig.getInference().setConnectTimeout(io.dropwizard.util.Duration.seconds(5));
+        newConfig.getInference().setReadTimeout(io.dropwizard.util.Duration.seconds(5));
+        return newConfig;
+    }
+
+    private DecideRequest request(Map<String, Question> questions) {
         return DecideRequest.builder()
-                .orgId("workspace-1")
-                .state(TextNode.valueOf("some text"))
+                .orgId(orgId)
+                .state(TextNode.valueOf(state))
                 .questions(questions)
                 .lane(DecideRequest.REALTIME_LANE)
                 .deadlineMs(750L)

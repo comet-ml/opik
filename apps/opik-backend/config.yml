@@ -15,6 +15,12 @@ logging:
     # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
     #   own retries without it
     dev.langchain4j.internal.RetryUtils: ERROR
+    # Default: WARN
+    # Description: pinned so a DEBUG root level (GENERAL_LOG_LEVEL) can't enable them; at DEBUG they log full HTTP
+    #   headers and bodies, including authorization headers. Set the logger by name to debug the wire deliberately
+    org.eclipse.jetty.http.HttpParser: WARN
+    org.apache.hc.client5.http.wire: WARN
+    org.apache.hc.client5.http.headers: WARN
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -204,14 +210,8 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED:-false}
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
   #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
@@ -219,19 +219,6 @@ databaseAnalyticsDataModel:
   #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
   #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: ${SPAN_WEEKS_REGISTRATION_MAX_RETRIES:-3}
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: ${SPAN_WEEKS_REGISTRATION_MIN_BACKOFF:-200ms}
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: ${SPAN_WEEKS_REGISTRATION_MAX_BACKOFF:-2s}
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -1803,6 +1790,18 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}
 
+  # Default: 10
+  # Description: Number of batches the log queue holds (batchSize * maxQueuedBatches logs). Past it, new logs are dropped
+  maxQueuedBatches: ${CLICKHOUSE_LOG_APPENDER_MAX_QUEUED_BATCHES:-10}
+
+  # Default: PT5S or 5s
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
+  shutdownTimeout: ${CLICKHOUSE_LOG_APPENDER_SHUTDOWN_TIMEOUT:-PT5S}
+
+  # Default: PT1M or 1 minute
+  # Description: Upper bound on one log insert; past it the insert is abandoned so later flushes can run (max PT10M)
+  insertTimeout: ${CLICKHOUSE_LOG_APPENDER_INSERT_TIMEOUT:-PT1M}
+
 workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting.
@@ -2013,11 +2012,6 @@ serviceToggles:
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
-  #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
-  #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
-  onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not automatic annotation queue population is enabled. When false the score
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
@@ -2510,6 +2504,10 @@ aiLabels:
     #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
     #  sends get past tickBudget, so it lengthens the leader lease
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+    #  Default: 256
+    #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
+    #  retries after a short backoff, then fails
+    maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}

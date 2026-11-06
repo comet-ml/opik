@@ -68,8 +68,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
 
         // Initialize the UserFacingRuleLollingFactory
-        UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
-                clickHouseLogAppenderConfig.getFlushIntervalDuration());
+        UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig);
     }
 
     // Reuse the main analytics connection params (same ClickHouse instance) and only swap in the restricted user's

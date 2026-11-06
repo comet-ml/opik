@@ -2,6 +2,8 @@ import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from opik.evaluation.models import base_model, models_factory
+from opik.evaluation.models.litellm import litellm_chat_model
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.metrics import score_result
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
@@ -96,7 +98,6 @@ class TestLLMJudgeToConfig:
         assert config_dict["model"] == {
             "temperature": 0.0,
             "seed": 123,
-            "customParameters": {"reasoning_effort": "low"},
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
         # Schema items: name, type, description (matching backend's LlmAsJudgeOutputSchema)
@@ -144,6 +145,80 @@ class TestLLMJudgeToConfig:
         assert "schema_" not in config_dict
 
 
+class _FakeModel:
+    def __init__(self, reasoning_effort: bool) -> None:
+        self.supported_features = base_model.ModelFeatures(
+            reasoning_effort=reasoning_effort
+        )
+
+
+class _FakeModelsFactory:
+    def __init__(self) -> None:
+        self.takes_reasoning_effort = True
+        self.calls: list = []
+
+    def get(self, model_name, track=True, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeModel(reasoning_effort=self.takes_reasoning_effort)
+
+
+@pytest.fixture
+def fake_models_factory(monkeypatch):
+    factory = _FakeModelsFactory()
+    monkeypatch.setattr(models_factory, "get", factory.get)
+    return factory
+
+
+class TestLLMJudgeReasoningEffort:
+    def test_init__model_takes_an_effort__defaults_to_low(self, fake_models_factory):
+        fake_models_factory.takes_reasoning_effort = True
+
+        llm_judge.LLMJudge(assertions=["ok"], track=False)
+
+        assert fake_models_factory.calls[-1]["reasoning_effort"] == "low"
+
+    def test_init__model_without_reasoning__sends_no_effort(self, fake_models_factory):
+        fake_models_factory.takes_reasoning_effort = False
+
+        llm_judge.LLMJudge(assertions=["ok"], track=False)
+
+        assert all("reasoning_effort" not in call for call in fake_models_factory.calls)
+
+    def test_init__explicit_effort__sent_whatever_the_model(self, fake_models_factory):
+        fake_models_factory.takes_reasoning_effort = False
+
+        llm_judge.LLMJudge(assertions=["ok"], reasoning_effort="high", track=False)
+
+        assert fake_models_factory.calls == [{"reasoning_effort": "high"}]
+
+    def test_init__model_drops_the_temperature__warns_once(self, monkeypatch):
+        monkeypatch.setattr(models_factory, "_MODEL_CACHE", {})
+        log_warning = Mock()
+        monkeypatch.setattr(litellm_chat_model, "_log_warning", log_warning)
+
+        llm_judge.LLMJudge(
+            assertions=["ok"], model="gpt-5-nano", temperature=0.2, track=False
+        )
+
+        temperature_warnings = [
+            call
+            for call in log_warning.call_args_list
+            if "only supports temperature=1" in call.args[0]
+        ]
+        assert len(temperature_warnings) == 1
+
+    def test_to_config__explicit_effort__stored_for_the_backend_judge(self):
+        evaluator = llm_judge.LLMJudge(
+            assertions=["ok"], reasoning_effort="medium", track=False
+        )
+
+        config_dict = evaluator.to_config().model_dump(by_alias=True, exclude_none=True)
+
+        assert config_dict["model"] == {
+            "customParameters": {"reasoning_effort": "medium"}
+        }
+
+
 class TestLLMJudgeSerializedFormat:
     def test_to_config__serialized_json__matches_expected_format(self):
         """Shows the full serialized JSON that gets stored in the backend."""
@@ -166,7 +241,6 @@ class TestLLMJudgeSerializedFormat:
             "model": {
                 "temperature": 0.0,
                 "seed": 42,
-                "customParameters": {"reasoning_effort": "low"},
             },
             "messages": [
                 {
@@ -600,7 +674,6 @@ class TestLLMJudgeFromConfig:
         assert new_config_dict["model"] == {
             "temperature": 0.7,
             "seed": 123,
-            "customParameters": {"reasoning_effort": "low"},
         }
 
 
@@ -655,6 +728,46 @@ class TestLLMJudgeRetries:
             evaluator.score(input="q", output="PASS")
 
         assert calls["n"] == 1, "auth failures must not be retried"
+
+    def test_score__json_array_verdict__retried_like_any_malformed_verdict(self):
+        calls = {"n": 0}
+        valid = (
+            '{"assertion_1": {"score": true, "reason": "contains PASS", '
+            '"confidence": 1.0}}'
+        )
+
+        class ArrayThenValidModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return {"role": "assistant", "content": f"[{valid}]"}
+                return {"role": "assistant", "content": valid}
+
+        evaluator = self._judge_with_model(ArrayThenValidModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 2, "a non-object verdict should have been retried"
+        assert len(results) == 1
+        assert results[0].value == 1.0
+
+    def test_score__json_array_verdict_on_every_attempt__returns_failed_results(
+        self,
+    ):
+        calls = {"n": 0}
+
+        class ArrayModel:
+            def generate_chat_completion(self, messages, response_format=None):
+                calls["n"] += 1
+                return {"role": "assistant", "content": "[]"}
+
+        evaluator = self._judge_with_model(ArrayModel())
+        results = evaluator.score(input="q", output="PASS")
+
+        assert calls["n"] == 3, "every attempt of the retry policy should be used"
+        assert len(results) == 1
+        assert results[0].name == "The response contains the literal text PASS."
+        assert results[0].scoring_failed is True
+        assert "Failed to parse model output" in results[0].reason
 
     def test_score__empty_response_logged__diagnostic_reaches_logger(self, capture_log):
         from opik import exceptions

@@ -2055,7 +2055,7 @@ export class OpikClient {
    * @param options - Search options
    * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
    * @param options.filterString - Filter string using Opik Query Language (OQL).
-   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, metadata, etc.
+   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, comments, metadata, etc.
    *   Examples: 'status = "active"', 'feedback_scores.quality > 0.8', 'duration > 300'
    * @param options.maxResults - Maximum number of threads to return (default: 1000)
    * @param options.truncate - Whether to truncate large fields in the response (default: true)

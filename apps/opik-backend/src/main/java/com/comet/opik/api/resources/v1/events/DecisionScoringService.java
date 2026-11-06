@@ -7,10 +7,12 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine.ParsedFeedbackScores;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels.DecisionModel;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.google.common.base.Preconditions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -31,12 +33,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * Scores with decisions models (TypeSafe Jev via the OpenRouter Decisions API) instead of a chat judge.
+ * Scores with decisions models instead of a chat judge, each through its provider's Decisions API: {@link DecisionModels}
+ * says which rules use one and which provider serves the model, and the {@link DecisionsClient} registered for that
+ * provider makes the call.
  *
  * <p>The rule maps onto a Decisions request as follows: the rendered prompt is the {@code state} the model
  * reads, and every score is one yes/no ({@code noul}) question with the score description as its instructions.
@@ -49,8 +54,6 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DecisionScoringService {
 
-    /** OpenRouter's context length for Jev, covering state and questions together. */
-    static final int MAX_CONTEXT_TOKENS = 32_000;
     static final double TRUE_THRESHOLD = 0.5;
 
     private static final String REASON_TEMPLATE = "Probability: %s";
@@ -58,7 +61,7 @@ public class DecisionScoringService {
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
     private static final int MAX_SUMMARY_CHARS = 1_000;
 
-    private final @NonNull OpenRouterDecisionsClient decisionsClient;
+    private final @NonNull Set<DecisionsClient> decisionsClients;
     private final @NonNull LlmProviderFactory llmProviderFactory;
 
     /**
@@ -98,21 +101,39 @@ public class DecisionScoringService {
         return (int) Math.min(Integer.MAX_VALUE, chars / charsPerToken);
     }
 
-    /** Whether an {@link #estimateTokens estimated} request is over Jev's context length. */
-    public static boolean exceedsContext(int estimatedTokens) {
-        return estimatedTokens > MAX_CONTEXT_TOKENS;
+    /** The model's context length from {@link DecisionModels}; the smallest one for a model it doesn't list. */
+    public static int maxContextTokens(@NonNull String model) {
+        return DecisionModels.find(model)
+                .map(DecisionModel::maxContextTokens)
+                .orElse(DecisionModels.JEV_MAX_CONTEXT_TOKENS);
+    }
+
+    /** Whether an {@link #estimateTokens estimated} request is over the model's context length. */
+    public static boolean exceedsContext(@NonNull String model, int estimatedTokens) {
+        return estimatedTokens > maxContextTokens(model);
     }
 
     /**
-     * Calls the Decisions API with the workspace's OpenRouter key and records the call on {@code recorder}.
-     * The key lookup hits the database, so it runs on {@link Schedulers#boundedElastic()}.
+     * Calls the model provider's Decisions API with the workspace's key for that provider and records the call on
+     * {@code recorder}. The key lookup hits the database, so it runs on {@link Schedulers#boundedElastic()}.
      */
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request, @NonNull String workspaceId,
             @NonNull EvaluationRecorder recorder) {
         var call = Mono.fromCallable(() -> llmProviderFactory.getClientApiConfig(workspaceId, request.model()))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(config -> decisionsClient.decide(request, config));
+                .flatMap(config -> clientFor(request.model()).decide(request, config));
         return recorder.recordDecisionCall(request, call);
+    }
+
+    private DecisionsClient clientFor(String model) {
+        var provider = DecisionModels.find(model)
+                .map(DecisionModel::provider)
+                .orElseThrow(() -> new IllegalStateException("Not a decisions model: '%s'".formatted(model)));
+        return decisionsClients.stream()
+                .filter(client -> client.provider() == provider)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No Decisions API client for provider '%s'".formatted(provider)));
     }
 
     /**

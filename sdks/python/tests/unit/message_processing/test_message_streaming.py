@@ -4,7 +4,7 @@ from unittest.mock import sentinel
 
 import pytest
 
-from opik.message_processing import messages
+from opik.message_processing import data_loss, messages
 from opik.message_processing import streamer_constructors
 from ...testlib import fake_message_factory
 
@@ -120,7 +120,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             use_attachment_extraction=False,
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
-            fallback_replay_manager=mock.Mock(),
+            fallback_replay_manager=mock.Mock(flush=mock.Mock(return_value=True)),
         )
 
         for obj in objects:
@@ -166,3 +166,146 @@ def test_streamer__trace__batching_enabled__messages_that_support_batching_are_p
     assert tested.flush(1.1) is True
 
     mock_message_processor.process.assert_called_once()
+
+
+def test_streamer__flush_with_zero_timeout__does_not_wait_for_an_in_flight_message(
+    fake_file_upload_manager, fake_replay_manager
+):
+    # Opik.flush(timeout=0) reaches Streamer.flush(0). A zero budget must be
+    # honoured even while a message is still inside the consumer: Opik.flush
+    # documents that it never blocks beyond the timeout and returns once the
+    # timeout is reached, whatever the queue is doing.
+    process_started = threading.Event()
+    release_process = threading.Event()
+
+    def slow_process(message):
+        process_started.set()
+        release_process.wait(timeout=3.0)
+
+    mock_message_processor = mock.Mock()
+    mock_message_processor.process.side_effect = slow_process
+
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock_message_processor,
+        n_consumers=1,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=None,
+        fallback_replay_manager=fake_replay_manager,
+    )
+    try:
+        tested.put(messages.BaseMessage())
+        assert process_started.wait(timeout=2.0) is True
+
+        flushed = tested.flush(timeout=0)
+
+        # The message is still in flight, so the flush cannot report success,
+        # and it must not have waited for it to come out of the processor.
+        assert flushed is False
+        assert release_process.is_set() is False
+    finally:
+        release_process.set()
+        # Let the in-flight message finish before the fire-and-forget close:
+        # close(flush=False) clears the queue and resets its unfinished-task
+        # counter, and a consumer still inside the processor would then call
+        # task_done() on a queue that no longer counts it.
+        tested.flush(timeout=5)
+        tested.close(flush=False)
+
+
+def test_streamer__zero_flush_budget__does_not_grant_uploads_more_time(
+    fake_file_upload_manager, fake_replay_manager, monkeypatch
+):
+    from opik.message_processing import streamer as streamer_module
+
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock.Mock(),
+        n_consumers=1,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=None,
+        fallback_replay_manager=fake_replay_manager,
+    )
+    now = [0.0]
+
+    def clock():
+        now[0] += 0.001
+        return now[0]
+
+    try:
+        monkeypatch.setattr(streamer_module.time, "time", clock)
+        fake_file_upload_manager.flush = mock.Mock(return_value=False)
+        assert tested.flush(timeout=0) is False
+        assert fake_file_upload_manager.flush.call_args.kwargs["timeout"] == 0
+    finally:
+        tested.close(flush=False)
+
+
+def test_streamer__flush_budget__is_shared_by_waits_and_uploads(
+    fake_file_upload_manager, fake_replay_manager, monkeypatch
+):
+    from opik.message_processing import streamer as streamer_module
+
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock.Mock(),
+        n_consumers=1,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=None,
+        fallback_replay_manager=fake_replay_manager,
+    )
+    now = [0.0]
+    budgets = []
+
+    def wait_for_done(**kwargs):
+        budgets.append(kwargs["timeout"])
+        now[0] += 0.25
+
+    try:
+        monkeypatch.setattr(streamer_module.time, "time", lambda: now[0])
+        monkeypatch.setattr(
+            streamer_module.synchronization, "wait_for_done", wait_for_done
+        )
+        fake_file_upload_manager.flush = mock.Mock(return_value=True)
+        assert tested.flush(timeout=1.0) is True
+        assert budgets == [1.0, 0.75]
+        assert fake_file_upload_manager.flush.call_args.kwargs["timeout"] == 0.5
+    finally:
+        tested.close(flush=False)
+
+
+def test_streamer__bounded_queue_overflows__evicted_messages_recorded_as_dropped(
+    fake_file_upload_manager, fake_replay_manager
+):
+    tracker = data_loss.DataLossTracker()
+    # No consumers, so nothing drains the 2-slot queue and every put past the
+    # second one evicts a message.
+    tested = streamer_constructors.construct_streamer(
+        message_processor=mock.Mock(),
+        n_consumers=0,
+        use_batching=False,
+        use_attachment_extraction=False,
+        file_uploader=fake_file_upload_manager,
+        max_queue_size=2,
+        fallback_replay_manager=fake_replay_manager,
+        data_loss_tracker=tracker,
+    )
+    try:
+        for message in fake_message_factory.fake_create_trace_message_batch(
+            count=5, approximate_trace_size=fake_message_factory.ONE_KILOBYTE
+        ):
+            tested.put(message)
+
+        dropped_messages, dropped_items, failures = tracker.drops_since((0, 0))
+
+        assert dropped_messages == 3
+        assert dropped_items == 3
+        assert {failure.reason for failure in failures} == {
+            data_loss.FailureReason.QUEUE_OVERFLOW
+        }
+        assert tested.queue_size() == 2
+    finally:
+        tested.close(flush=False)
