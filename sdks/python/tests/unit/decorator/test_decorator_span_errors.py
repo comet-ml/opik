@@ -302,8 +302,35 @@ def test_track__self_referencing_input__span_logged_and_next_call_gets_own_trace
     f({"b": 2})
     tracker.flush_tracker()
 
+    EXPECTED_TRACE_TREES = [
+        TraceModel(
+            id=ANY_STRING,
+            name="f",
+            input=expected_input,
+            output={"output": "ok"},
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            spans=[
+                SpanModel(
+                    id=ANY_STRING,
+                    name="f",
+                    input=expected_input,
+                    output={"output": "ok"},
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    type="general",
+                    spans=[],
+                    source="sdk",
+                )
+            ],
+        )
+        for expected_input in (
+            {"x": {"a": 1, "self": f"<Cyclic reference to dict id={id(cyclic)}>"}},
+            {"x": {"b": 2}},
+        )
+    ]
+
     assert len(fake_backend.trace_trees) == 2
-    assert fake_backend.trace_trees[0].spans[0].input == {
-        "x": {"a": 1, "self": f"<Cyclic reference to dict id={id(cyclic)}>"}
-    }
-    assert fake_backend.trace_trees[1].input == {"x": {"b": 2}}
+    for expected, actual in zip(EXPECTED_TRACE_TREES, fake_backend.trace_trees):
+        assert_equal(expected=expected, actual=actual)

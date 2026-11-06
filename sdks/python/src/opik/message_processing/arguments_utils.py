@@ -12,8 +12,8 @@ def recursive_shallow_copy(obj: Any, seen: Optional[Set[int]] = None) -> Any:
 
     Returns:
         A recursive shallow copy of the input object where dictionaries and lists are copied,
-        but their non-container elements are referenced. A container that contains itself
-        is replaced with a cyclic reference marker string.
+        but their non-container elements are referenced. A reference back to a container
+        already on the current copy path is replaced with a cyclic reference marker string.
     """
     if not isinstance(obj, (dict, list)):
         # For non-container types, return the object itself (shallow copy)
