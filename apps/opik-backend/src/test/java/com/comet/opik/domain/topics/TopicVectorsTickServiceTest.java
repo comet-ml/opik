@@ -196,6 +196,7 @@ class TopicVectorsTickServiceTest {
         private TopicVectorsTickService service;
         private final List<EmbedRequest> requests = Collections.synchronizedList(new ArrayList<>());
         private final List<TopicVector> inserted = Collections.synchronizedList(new ArrayList<>());
+        private final List<List<TopicTraceKey>> statusChecks = Collections.synchronizedList(new ArrayList<>());
 
         @BeforeEach
         @SuppressWarnings("unchecked")
@@ -229,10 +230,11 @@ class TopicVectorsTickServiceTest {
                 return Mono.just((long) rows.size());
             });
             // No trace is deleted while it is embedded unless a test says so: the status check answers every key it
-            // is asked for, so this takes any workspace, keys and time left.
+            // is asked for, and records them, so this takes any workspace, keys and time left.
             when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
                     .thenAnswer(invocation -> {
                         Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                        statusChecks.add(List.copyOf(keys));
                         return Flux.fromIterable(keys);
                     });
         }
@@ -657,7 +659,7 @@ class TopicVectorsTickServiceTest {
                 cascaded.add(key(deleted));
                 return Mono.just(embedded(texts));
             }).when(client).embed(embedRequest(WORKSPACE_ID, texts), NOW.plus(EMBED_TIMEOUT));
-            var written = Set.of(key(kept), key(deleted));
+            var written = List.of(key(kept), key(deleted));
             doAnswer(invocation -> Flux.fromIterable(written).filter(traceKey -> !cascaded.contains(traceKey)))
                     .when(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, written, BUDGET_SECONDS);
             when(dao.deleteByKeys(WORKSPACE_ID, Set.of(key(deleted)))).thenReturn(Mono.empty());
@@ -683,19 +685,63 @@ class TopicVectorsTickServiceTest {
         void deletedTraceCheckFailure() {
             var candidate = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
             stub(List.of(candidate), c -> "intent");
-            when(dao.findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, Set.of(key(candidate)),
+            when(dao.findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, List.of(key(candidate)),
                     BUDGET_SECONDS)).thenReturn(Flux.error(new IllegalStateException("down")));
 
             var result = service.tick(NOW);
 
             assertThat(inserted).extracting(TopicVector::traceId).containsExactly(candidate.traceId());
-            verify(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, Set.of(key(candidate)),
+            verify(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, List.of(key(candidate)),
                     BUDGET_SECONDS);
             verify(dao, never()).deleteByKeys(WORKSPACE_ID, Set.of(key(candidate)));
             assertThat(result.written()).isOne();
             assertThat(result.skipped()).isEmpty();
             verify(meter.counter("topics.vectors.written")).add(1, workspace(WORKSPACE_ID).build());
             verifyNoInteractions(meter.counter("topics.vectors.skipped"));
+        }
+
+        @Test
+        @DisplayName("the deleted-trace check runs once per workspace, after its last chunk, reading 1,000 keys at a "
+                + "time")
+        void oneDeletedTraceCheckPerWorkspace() {
+            var candidates = IntStream.range(0, 1_001)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1_001 - i)))
+                    .toList();
+            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, config.getVectors().getMaxTracesPerTick(),
+                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
+            stubSummaries(WORKSPACE_ID, candidates.subList(0, 1_000), candidate -> "intent of " + candidate.traceId(),
+                    BUDGET_SECONDS);
+            stubSummaries(WORKSPACE_ID, candidates.subList(1_000, 1_001),
+                    candidate -> "intent of " + candidate.traceId(), BUDGET_SECONDS);
+
+            var result = service.tick(NOW);
+
+            // Four embed chunks (256 + 256 + 256 + 233), one check of their 1,001 keys in two reads.
+            assertThat(requests).extracting(request -> request.inputs().size()).containsExactly(256, 256, 256, 233);
+            assertThat(statusChecks).containsExactly(keys(candidates.subList(0, 1_000)),
+                    keys(candidates.subList(1_000, 1_001)));
+            assertThat(result.written()).isEqualTo(1_001);
+            var writtenCounter = meter.counter("topics.vectors.written");
+            verify(writtenCounter).add(1_001, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(writtenCounter);
+        }
+
+        @Test
+        @DisplayName("a trace id reused in another project counts as missed only for the project whose row the short "
+                + "window missed")
+        void missedKeyedByProject() {
+            longWindowDue();
+            var traceId = ID_GENERATOR.generateId();
+            var old = candidate(traceId, 1, NOW.minus(Duration.ofDays(2)));
+            var recent = candidate(traceId, 1, NOW.minusSeconds(5));
+            stub(LONG_WINDOW, List.of(old, recent), candidate -> "intent of " + candidate.projectId());
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(2);
+            var missed = meter.counter("topics.vectors.long_window.missed");
+            verify(missed).add(1L, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(missed);
         }
 
         @Test
@@ -737,7 +783,7 @@ class TopicVectorsTickServiceTest {
                             .put(stringKey("error_type"), "InferenceException").build());
             var missed = meter.counter("topics.vectors.long_window.missed");
             verify(missed).add(1L, workspace(WORKSPACE_ID).build());
-            verify(missed, never()).add(2L, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(missed);
         }
 
         @Test
@@ -921,7 +967,7 @@ class TopicVectorsTickServiceTest {
     }
 
     private static TopicTraceKey key(TopicVectorCandidate candidate) {
-        return new TopicTraceKey(candidate.projectId(), candidate.traceId());
+        return TopicTraceKey.builder().projectId(candidate.projectId()).traceId(candidate.traceId()).build();
     }
 
     /** The keys of {@code candidates}, in their order: what one summary read gets. */

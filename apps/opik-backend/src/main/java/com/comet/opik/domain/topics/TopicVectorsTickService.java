@@ -384,7 +384,8 @@ public class TopicVectorsTickService {
      * Per workspace, oldest first: read the summaries, embed them in chunks and write each chunk's vectors. A chunk
      * starts only with at least {@code embedTimeout} left in the tick, so a call never ends on the tick's deadline; the
      * rest is {@code over_budget}. After an embed call fails with a 429, a 5xx, a timeout or a retryable code, the
-     * workspace is not called again this tick; other workspaces go on.
+     * workspace is not called again this tick; other workspaces go on. After the workspace's last insert, one check
+     * deletes the vectors of traces deleted meanwhile.
      */
     private void embedAndWrite(List<TopicVectorCandidate> candidates, Instant deadline, Instant missedBefore,
             Tally tally) {
@@ -404,8 +405,7 @@ public class TopicVectorsTickService {
                 summaries = Flux.fromIterable(Lists.partition(group, SUMMARY_READ_CHUNK))
                         .concatMap(chunk -> dao.findSummaries(workspaceId, TASK,
                                 chunk.stream().map(TopicVectorsTickService::key).toList(), secondsLeft(deadline)))
-                        .collectMap(summary -> new TopicTraceKey(summary.projectId(), summary.traceId()),
-                                Function.identity())
+                        .collectMap(TopicVectorsTickService::key, Function.identity())
                         .block();
             } catch (RuntimeException exception) {
                 tally.cut(workspaceId, READ_FAILED, group.size());
@@ -429,6 +429,7 @@ public class TopicVectorsTickService {
                         workspaceId, missing.size(), missing.getFirst().traceId());
             }
             boolean backOff = false;
+            var written = new ArrayList<TopicVector>();
             for (var chunk : Lists.partition(pending, config.getVectors().getEmbedBatchSize())) {
                 if (backOff) {
                     tally.skip(workspaceId, EMBED_FAILED, chunk.size());
@@ -458,20 +459,23 @@ public class TopicVectorsTickService {
                             workspaceId, vectors.size(), exception);
                     continue;
                 }
-                var deleted = deleteVectorsOfDeletedTraces(workspaceId, vectors, deadline);
-                var kept = vectors.stream()
-                        .filter(vector -> !deleted.contains(new TopicTraceKey(vector.projectId(), vector.traceId())))
-                        .toList();
-                tally.skip(workspaceId, TRACE_DELETED, deleted.size());
-                tally.written(workspaceId, kept.size());
-                if (missedBefore != null) {
-                    var missed = chunk.stream().map(Pending::candidate)
-                            .filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
-                            .map(TopicVectorCandidate::traceId)
-                            .collect(Collectors.toSet());
-                    longWindowMissed.add(kept.stream().filter(vector -> missed.contains(vector.traceId())).count(),
-                            tally.workspace(workspaceId).build());
-                }
+                written.addAll(vectors);
+            }
+            if (written.isEmpty()) {
+                continue;
+            }
+            // Once per workspace, after its last insert, so it covers every vector written above.
+            var deleted = deleteVectorsOfDeletedTraces(workspaceId, written, deadline);
+            var kept = written.stream().filter(vector -> !deleted.contains(key(vector))).toList();
+            tally.skip(workspaceId, TRACE_DELETED, deleted.size());
+            tally.written(workspaceId, kept.size());
+            if (missedBefore != null) {
+                var missed = pending.stream().map(Pending::candidate)
+                        .filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
+                        .map(TopicVectorsTickService::key)
+                        .collect(Collectors.toSet());
+                longWindowMissed.add(kept.stream().filter(vector -> missed.contains(key(vector))).count(),
+                        tally.workspace(workspaceId).build());
             }
         }
     }
@@ -484,10 +488,11 @@ public class TopicVectorsTickService {
      */
     private Set<TopicTraceKey> deleteVectorsOfDeletedTraces(String workspaceId, List<TopicVector> vectors,
             Instant deadline) {
-        var written = vectors.stream().map(vector -> new TopicTraceKey(vector.projectId(), vector.traceId()))
-                .collect(Collectors.toSet());
+        var written = vectors.stream().map(TopicVectorsTickService::key).distinct().toList();
         try {
-            var withStatus = dao.findStatusKeys(workspaceId, TASK, written, secondsLeft(deadline))
+            // In chunks, for the same max_query_size reason as the summary read.
+            var withStatus = Flux.fromIterable(Lists.partition(written, SUMMARY_READ_CHUNK))
+                    .concatMap(chunk -> dao.findStatusKeys(workspaceId, TASK, chunk, secondsLeft(deadline)))
                     .collect(Collectors.toSet())
                     .block();
             var deleted = written.stream().filter(key -> !withStatus.contains(key))
@@ -506,7 +511,15 @@ public class TopicVectorsTickService {
     }
 
     private static TopicTraceKey key(TopicVectorCandidate candidate) {
-        return new TopicTraceKey(candidate.projectId(), candidate.traceId());
+        return TopicTraceKey.builder().projectId(candidate.projectId()).traceId(candidate.traceId()).build();
+    }
+
+    private static TopicTraceKey key(TopicSummary summary) {
+        return TopicTraceKey.builder().projectId(summary.projectId()).traceId(summary.traceId()).build();
+    }
+
+    private static TopicTraceKey key(TopicVector vector) {
+        return TopicTraceKey.builder().projectId(vector.projectId()).traceId(vector.traceId()).build();
     }
 
     private void countReadFailure(String phase, String workspaceId, Tally tally, Throwable error) {

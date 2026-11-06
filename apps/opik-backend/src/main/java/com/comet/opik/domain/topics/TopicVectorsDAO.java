@@ -134,9 +134,9 @@ public class TopicVectorsDAO {
             """;
 
     /**
-     * The check after an insert: the pairs that still have a status row of the task. The trace-delete cascade deletes
-     * the status rows before the vectors, so a pair missing here belongs to a trace deleted while its vector was
-     * embedded. The guards are the window read's.
+     * The check after a workspace's inserts: the pairs that still have a status row of the task. The trace-delete
+     * cascade deletes the status rows before the vectors, so a pair missing here belongs to a trace deleted while its
+     * vector was embedded. The guards are the window read's.
      */
     private static final String FIND_STATUS_KEYS = """
             SELECT DISTINCT project_id, trace_id
@@ -222,8 +222,10 @@ public class TopicVectorsDAO {
     public Flux<TopicTraceKey> findStatusKeys(@NonNull String workspaceId, @NonNull String task,
             @NonNull Collection<TopicTraceKey> keys, long maxExecutionSeconds) {
         return findByKeys(FIND_STATUS_KEYS, "topics:find_status_keys", workspaceId, task, keys, maxExecutionSeconds,
-                row -> new TopicTraceKey(UUID.fromString(row.get("project_id", String.class)),
-                        UUID.fromString(row.get("trace_id", String.class))));
+                row -> TopicTraceKey.builder()
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
+                        .build());
     }
 
     private <T> Flux<T> findByKeys(String query, String queryName, String workspaceId, String task,
