@@ -11,13 +11,13 @@ server outage were deleted while `FlushResult` reported success.
 import datetime
 import logging
 import time
-from typing import Tuple
+from typing import Optional, Tuple
 from unittest import mock
 
 import pytest
 
 from opik.api_objects import opik_client
-from opik.healthcheck import connection_monitor
+from opik.healthcheck import connection_monitor, connection_probe
 from opik.message_processing import (
     data_loss,
     flush_reporter,
@@ -66,10 +66,35 @@ def _make_replay_manager() -> replay_manager.ReplayManager:
     )
 
 
+def _make_disconnected_replay_manager(
+    server_is_back: bool,
+) -> replay_manager.ReplayManager:
+    """A replay manager whose monitor saw the server go down and will not ping
+    again on its own for a long while."""
+    probe = mock.Mock(spec=connection_probe.ConnectionProbe)
+    probe.check_connection.return_value = connection_probe.ProbeResult(
+        is_healthy=server_is_back,
+        error_message=None if server_is_back else "Connection refused",
+    )
+    monitor = connection_monitor.OpikConnectionMonitor(
+        ping_interval=1000, check_timeout=1, probe=probe
+    )
+    monitor.connection_failed(failure_reason="Connection refused")
+    monitor.last_beat = time.time()
+    return replay_manager.ReplayManager(
+        monitor=monitor,
+        batch_size=10,
+        batch_replay_delay=0.01,
+        tick_interval_seconds=0.05,
+    )
+
+
 def _build(
     fake_file_upload_manager,
+    rm: Optional[replay_manager.ReplayManager] = None,
+    data_loss_tracker: Optional[data_loss.DataLossTracker] = None,
 ) -> Tuple[streamer.Streamer, replay_manager.ReplayManager, mock.Mock]:
-    rm = _make_replay_manager()
+    rm = rm or _make_replay_manager()
     processor = mock.Mock()
     st = streamer_constructors.construct_streamer(
         message_processor=processor,
@@ -79,6 +104,7 @@ def _build(
         file_uploader=fake_file_upload_manager,
         max_queue_size=None,
         fallback_replay_manager=rm,
+        data_loss_tracker=data_loss_tracker,
     )
     return st, rm, processor
 
@@ -90,6 +116,19 @@ def _park_failed(rm: replay_manager.ReplayManager) -> None:
             _create_trace_message(message_id=i + 1, trace_id=trace_id),
             status=db_manager.MessageStatus.failed,
         )
+
+
+def _park_slow_to_replay(rm: replay_manager.ReplayManager) -> list:
+    """Parks 100 messages that take about 2 s to replay: batches of 10 with a
+    0.2 s pause after each."""
+    rm.database_manager.batch_replay_delay = 0.2
+    trace_ids = sorted(f"trace-{i:03d}" for i in range(100))
+    for i, trace_id in enumerate(trace_ids):
+        rm.database_manager.register_message(
+            _create_trace_message(message_id=i + 1, trace_id=trace_id),
+            status=db_manager.MessageStatus.failed,
+        )
+    return trace_ids
 
 
 def _delivered(processor: mock.Mock) -> list:
@@ -154,6 +193,177 @@ class TestReplayBeforeShutdownTeardown:
         # Every parked trace has to have reached the processor. On main the
         # replay store was closed before the flush, so none of them did.
         assert _delivered(processor) == PARKED_TRACE_IDS
+
+
+class TestShutdownWhileServerLooksUnreachable:
+    @pytest.fixture
+    def build_stack(self, fake_file_upload_manager):
+        built = []
+
+        def build(server_is_back: bool):
+            tracker = data_loss.DataLossTracker()
+            st, rm, processor = _build(
+                fake_file_upload_manager,
+                rm=_make_disconnected_replay_manager(server_is_back),
+                data_loss_tracker=tracker,
+            )
+            built.append(st)
+            reporter = flush_reporter.FlushReporter(
+                streamer=st, data_loss_tracker=tracker
+            )
+            return st, rm, processor, reporter
+
+        yield build
+        for st in built:
+            st.close(flush=False)
+
+    def test_close_flush__server_still_unreachable__parked_messages_reported_as_dropped(
+        self, build_stack
+    ):
+        st, rm, processor, reporter = build_stack(server_is_back=False)
+        _park_failed(rm)
+
+        marker = reporter.marker()
+        flushed = st.close(timeout=5, flush=True)
+        result = reporter.build_result(marker, flushed=flushed)
+
+        assert flushed is False
+        assert result.success is False
+        assert result.dropped_messages == 3
+        assert result.dropped_items == 3
+        assert {failure.reason for failure in result.failures} == {
+            data_loss.FailureReason.UNDELIVERED_AT_SHUTDOWN
+        }
+        assert _delivered(processor) == []
+
+    def test_close_flush__server_back_before_next_scheduled_ping__parked_messages_replayed(
+        self, build_stack
+    ):
+        st, rm, processor, reporter = build_stack(server_is_back=True)
+        _park_failed(rm)
+
+        marker = reporter.marker()
+        flushed = st.close(timeout=5, flush=True)
+        result = reporter.build_result(marker, flushed=flushed)
+        time.sleep(0.3)
+
+        assert flushed is True
+        assert result.success is True
+        assert result.dropped_messages == 0
+        assert _delivered(processor) == PARKED_TRACE_IDS
+
+    def test_flush__server_back_before_next_scheduled_ping__parked_messages_replayed(
+        self, build_stack
+    ):
+        st, rm, processor, _ = build_stack(server_is_back=True)
+        _park_failed(rm)
+
+        flushed = st.flush(timeout=5)
+        time.sleep(0.3)
+
+        assert flushed is True
+        assert _delivered(processor) == PARKED_TRACE_IDS
+
+    def test_flush__timeout__bounds_the_immediate_ping(self, build_stack):
+        st, rm, _, _ = build_stack(server_is_back=False)
+
+        with mock.patch.object(
+            rm, "refresh_server_connection", wraps=rm.refresh_server_connection
+        ) as refresh:
+            st.flush(timeout=0.5)
+
+        refresh.assert_called_once()
+        (ping_budget,) = refresh.call_args.args
+        assert 0.0 < ping_budget <= 0.5
+
+    def test_flush__timeout__bounds_the_replay_and_the_next_flush_finishes_it(
+        self, build_stack
+    ):
+        st, rm, processor, _ = build_stack(server_is_back=True)
+        trace_ids = _park_slow_to_replay(rm)
+
+        start = time.monotonic()
+        assert st.flush(timeout=0.5) is False
+        assert time.monotonic() - start < 1.0
+        # The rest stays parked: nothing replays it until the next flush. The
+        # last replayed batch may still be on its way through the queue.
+        parked = rm.database_manager.failed_messages_count()
+        time.sleep(0.5)
+        assert rm.database_manager.failed_messages_count() == parked > 0
+
+        assert st.flush(timeout=None) is True
+        assert _delivered(processor) == trace_ids
+
+    def test_close_flush__after_a_flush_that_ran_out_of_time__everything_delivered(
+        self, build_stack
+    ):
+        st, rm, processor, reporter = build_stack(server_is_back=True)
+        trace_ids = _park_slow_to_replay(rm)
+        st.flush(timeout=0.3)
+        time.sleep(0.5)
+
+        marker = reporter.marker()
+        flushed = st.close(timeout=None, flush=True)
+        result = reporter.build_result(marker, flushed=flushed)
+
+        assert flushed is True
+        assert result.dropped_messages == 0
+        assert _delivered(processor) == trace_ids
+
+    def test_close_flush__parked_messages_cannot_be_counted__not_reported_as_flushed(
+        self, build_stack
+    ):
+        st, rm, _, _ = build_stack(server_is_back=False)
+        _park_failed(rm)
+
+        with mock.patch.object(
+            rm, "failed_messages", side_effect=RuntimeError("store unreadable")
+        ):
+            flushed = st.close(timeout=5, flush=True)
+
+        assert flushed is False
+
+
+def test_opik_end__server_unreachable__parked_messages_reported_as_dropped(
+    fake_file_upload_manager,
+):
+    """The scenario from the user report: the backend is still down when the
+    program ends, so `end()` must report the parked traces as lost instead of
+    returning success with nothing dropped.
+
+    `construct_online_streamer` is replaced with one that keeps the tracker the
+    connection bundle passes in, so the drops reach `end()`'s `FlushResult`
+    exactly as they do in production.
+    """
+    rm = _make_disconnected_replay_manager(server_is_back=False)
+    processor = mock.Mock()
+
+    def construct_online_streamer(**kwargs):
+        return streamer_constructors.construct_streamer(
+            message_processor=processor,
+            n_consumers=1,
+            use_batching=False,
+            use_attachment_extraction=False,
+            file_uploader=fake_file_upload_manager,
+            max_queue_size=None,
+            fallback_replay_manager=rm,
+            data_loss_tracker=kwargs["data_loss_tracker"],
+        )
+
+    with mock.patch.object(
+        streamer_constructors,
+        "construct_online_streamer",
+        side_effect=construct_online_streamer,
+    ):
+        client = opik_client.Opik(_show_misconfiguration_message=False)
+        _park_failed(rm)
+        result = client.end(timeout=5)
+
+    assert result is not None
+    assert result.success is False
+    assert result.dropped_messages == 3
+    assert result.dropped_items == 3
+    assert _delivered(processor) == []
 
 
 def test_opik_end__flush__replays_parked_messages_through_the_public_boundary(

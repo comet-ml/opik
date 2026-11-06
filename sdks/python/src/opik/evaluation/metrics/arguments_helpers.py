@@ -124,16 +124,20 @@ def create_scoring_inputs(
     task_output: Dict[str, Any],
     scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
 ) -> Dict[str, Any]:
-    mapped_inputs = {**dataset_item, **task_output}
+    source_inputs = {**dataset_item, **task_output}
 
     if scoring_key_mapping is None:
-        return mapped_inputs
+        return source_inputs
     else:
+        # Every mapping reads from the unmodified merged inputs, so a mapping
+        # target that is also the source of another mapping does not depend on
+        # the order of the mapping entries.
+        mapped_inputs = dict(source_inputs)
         for key, value in scoring_key_mapping.items():
             if callable(value):
-                mapped_inputs[key] = value(mapped_inputs)
+                mapped_inputs[key] = value(source_inputs)
             else:
-                if value not in mapped_inputs:
+                if value not in source_inputs:
                     # A mapping that matches nothing is always a mistake, and
                     # it only surfaces later if the metric happens to have no
                     # default for that argument. When it does have one, the
@@ -141,7 +145,7 @@ def create_scoring_inputs(
                     # stay at debug level (OPIK-6925). The available keys are
                     # the actionable part, but they are user data and can be
                     # numerous, so only a sample goes into the warning.
-                    available_keys = list(mapped_inputs.keys())
+                    available_keys = list(source_inputs.keys())
                     sample = available_keys[:MAX_REPORTED_AVAILABLE_KEYS]
                     remaining = len(available_keys) - len(sample)
                     LOGGER.warning(
@@ -153,6 +157,6 @@ def create_scoring_inputs(
                         f" and {remaining} more" if remaining > 0 else "",
                     )
                 else:
-                    mapped_inputs[key] = mapped_inputs[value]
+                    mapped_inputs[key] = source_inputs[value]
 
     return mapped_inputs
