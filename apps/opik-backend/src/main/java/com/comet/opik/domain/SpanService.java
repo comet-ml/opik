@@ -14,7 +14,6 @@ import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUs
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
-import com.comet.opik.api.events.PartialSpanCreated;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.events.SpansDeleted;
 import com.comet.opik.api.events.SpansUpdated;
@@ -29,7 +28,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.BinaryOperatorUtils;
-import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
@@ -296,31 +294,8 @@ public class SpanService {
             // Strip attachments OUTSIDE the database transaction
             return attachmentStripperService.stripAttachments(
                     spanUpdate, id, workspaceId, userName, projectName)
-                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate))
-                    .doOnSuccess(__ -> eventBus.post(
-                            new PartialSpanCreated(id, spanUpdate.traceId(), project.id(), workspaceId, userName)));
+                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
         });
-    }
-
-    /**
-     * Records in span_weeks the weekly partition each written span is stored in, one row per distinct
-     * (project, trace, week). Spans missing an id, trace or project carry nothing to index and are skipped. A no-op
-     * while {@code databaseAnalyticsDataModel.spanWeeksWriteEnabled} is off.
-     */
-    public Mono<Void> registerWeeks(List<Span> spans) {
-        if (CollectionUtils.isEmpty(spans) || !config.getDatabaseAnalyticsDataModel().spanWeeksWriteEnabled()) {
-            return Mono.empty();
-        }
-        List<SpanWeek> rows = spans.stream()
-                .filter(span -> span.id() != null && span.traceId() != null && span.projectId() != null)
-                .map(span -> SpanWeek.builder()
-                        .projectId(span.projectId())
-                        .traceId(span.traceId())
-                        .idWeek(WeeklyPartitions.storedPartitionOf(span.id()))
-                        .build())
-                .distinct()
-                .toList();
-        return spanWeeksDAO.insert(rows).then();
     }
 
     public Mono<List<SpanWeek>> getWeeksByTraceIds(Set<UUID> traceIds) {

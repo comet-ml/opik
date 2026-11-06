@@ -18,7 +18,6 @@ import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
-import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
@@ -45,7 +44,6 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
-import com.comet.opik.api.resources.v1.events.SpanWeeksListener;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -95,6 +93,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -106,6 +105,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.FilterTestUtils.threadIdFilter;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -114,7 +114,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * The spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}), keyed by traces or by a project,
  * return every span of their traces or project, a far-future one included, on the weekly-partitioned spans table: each
  * read is compared as a whole against what those spans add up to. Weeks are registered by {@code span_weeks_mv} alone
- * ({@link SpanWeeksListener} is disabled), and each fixture waits for them to be indexed unless it says otherwise.
+ *, and each fixture waits for them to be indexed unless it says otherwise.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -182,7 +182,6 @@ class SpanWeeksReadBoundTest {
                                 // Finished experiments aggregate after this delay; its bucket lives twice as long, so
                                 // the job's 5s tick always finds it.
                                 new CustomConfig("experimentDenormalization.debounceDelay", "5s")))
-                        .disableExtensions(List.of(SpanWeeksListener.class))
                         .build());
     }
 
@@ -510,15 +509,21 @@ class SpanWeeksReadBoundTest {
     }
 
     /**
-     * A search keeps the page pushdown, whose spans reads take every trace of the page's threads, the ones the search
-     * drops included: the search matches the trace by id, so its copy in the same thread must not count.
+     * A search keeps the page pushdown and picks threads: the search matches the far-future trace by id, and the
+     * thread counts the spans of all its traces, its copy in the same thread included, as without the search.
      */
     @Test
-    void threadListSearchCountsOnlyTheSpansOfTheMatchingTrace() {
+    void threadListSearchCountsTheSpansOfAllTheMatchingThreadTraces() {
         var trace = fixtures.createFarFutureTrace();
-        fixtures.createThisWeekCopy(trace, trace.trace().threadId());
+        var copy = fixtures.createThisWeekCopy(trace, trace.trace().threadId());
 
-        var expectedThreads = List.of(expectedThread(trace));
+        var expectedUsage = new HashMap<>(trace.totalUsage());
+        copy.totalUsage().forEach((key, value) -> expectedUsage.merge(key, value, Long::sum));
+        var expectedThreads = List.of(expectedThread(trace).toBuilder()
+                .numberOfMessages(4L)
+                .totalEstimatedCost(trace.totalCost().add(copy.totalCost()))
+                .usage(expectedUsage)
+                .build());
         // Threads are materialised from their traces asynchronously.
         Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var actualThreads = traceResourceClient.getTraceThreads(trace.projectId(), null, API_KEY, WORKSPACE_NAME,
@@ -1054,14 +1059,6 @@ class SpanWeeksReadBoundTest {
                 .status(TraceThreadStatus.ACTIVE)
                 .environment(source.environment())
                 .build();
-    }
-
-    private List<TraceThreadFilter> threadIdFilter(String threadId) {
-        return List.of(TraceThreadFilter.builder()
-                .field(TraceThreadField.ID)
-                .operator(Operator.EQUAL)
-                .value(threadId)
-                .build());
     }
 
     /** The partitioned successor has no public API before the cutover, so it is installed the way the cutover does. */

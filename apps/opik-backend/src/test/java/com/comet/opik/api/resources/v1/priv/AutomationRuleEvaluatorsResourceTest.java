@@ -22,6 +22,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPyt
 import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelApi;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
@@ -925,6 +926,50 @@ class AutomationRuleEvaluatorsResourceTest {
                     id, WORKSPACE_NAME, invalidUpdate, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
                 assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
                         .contains("Decisions models only support Boolean scores");
+            }
+        }
+
+        @Test
+        @DisplayName("create evaluator: when a gpt-6-luna rule asks for the Decisions API, then the api round-trips")
+        void createEvaluator__whenGpt6LunaRuleAsksForTheDecisionsApi__thenApiRoundTrips() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + RandomStringUtils.secure().nextAlphanumeric(36), API_KEY, WORKSPACE_NAME);
+            var lunaModel = LlmAsJudgeModelParameters.builder()
+                    .name("gpt-6-luna")
+                    .api(LlmAsJudgeModelApi.DECISIONS)
+                    .build();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .code(jevCode(LlmAsJudgeOutputSchemaType.BOOLEAN).toBuilder().model(lunaModel).build())
+                    .build();
+
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var response = evaluatorsResourceClient.getEvaluator(
+                    id, projectId, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actual = (AutomationRuleEvaluatorLlmAsJudge) response.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actual.getCode().model().name()).isEqualTo(lunaModel.name());
+                assertThat(actual.getCode().model().api()).isEqualTo(LlmAsJudgeModelApi.DECISIONS);
+            }
+        }
+
+        @Test
+        @DisplayName("create evaluator: when a rule asks for the Decisions API on a model without one, then reject it")
+        void createEvaluator__whenDecisionsApiOnAModelWithoutOne__thenBadRequest() {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var invalidEvaluator = evaluator.toBuilder()
+                    .code(evaluator.getCode().toBuilder()
+                            .model(evaluator.getCode().model().toBuilder()
+                                    .name("gpt-4o")
+                                    .api(LlmAsJudgeModelApi.DECISIONS)
+                                    .build())
+                            .build())
+                    .build();
+
+            try (var actualResponse = evaluatorsResourceClient.createEvaluator(
+                    invalidEvaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
+                        .contains("Model 'gpt-4o' has no Decisions API");
             }
         }
 

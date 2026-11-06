@@ -29,7 +29,7 @@ def streamer_with_attachments_enabled(fake_file_upload_manager):
             use_attachment_extraction=True,
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
-            fallback_replay_manager=mock.Mock(),
+            fallback_replay_manager=mock.Mock(flush=mock.Mock(return_value=True)),
         )
 
         yield tested, mock_message_processor
@@ -51,7 +51,7 @@ def streamer_with_attachments_disabled(fake_file_upload_manager):
             use_attachment_extraction=False,
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
-            fallback_replay_manager=mock.Mock(),
+            fallback_replay_manager=mock.Mock(flush=mock.Mock(return_value=True)),
         )
 
         yield tested, mock_message_processor

@@ -591,10 +591,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meituan/longcat-2.0",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
-      label: "meta-llama/llama-3.1-70b-instruct",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
       label: "meta-llama/llama-3.1-8b-instruct",
     },
@@ -821,10 +817,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO,
       label: "nex-agi/nex-n2.5-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B,
-      label: "nousresearch/hermes-3-llama-3.1-405b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_4_405B,
@@ -1136,22 +1128,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "perplexity/sonar-reasoning-pro",
     },
     {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
-      label: "poolside/laguna-s-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
-      label: "poolside/laguna-s-2.1:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
-      label: "poolside/laguna-xs-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1_FREE,
-      label: "poolside/laguna-xs-2.1:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.PRISM_ML_TERNARY_BONSAI_2_27B,
       label: "prism-ml/ternary-bonsai-2-27b",
     },
@@ -1344,6 +1320,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "relace/relace-search",
     },
     {
+      value: PROVIDER_MODEL_TYPE.RICURSIVEAI_RIPPLE_65B_PREVIEW,
+      label: "ricursiveai/ripple-65b-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_MAX,
       label: "sakana/fugu-max",
     },
@@ -1374,6 +1354,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.SCALEDOWN_SUMMARIZE,
       label: "scaledown/summarize",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEALTH_CROUTON_ALPHA,
+      label: "stealth/crouton-alpha",
     },
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_5_FLASH,
@@ -1410,6 +1394,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY4,
+      label: "tencent/hy4",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY4_PREVIEW,
@@ -1454,10 +1442,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_MINI4,
       label: "upstage/solar-mini4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO_3,
-      label: "upstage/solar-pro-3",
     },
     {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO4,
@@ -1574,6 +1558,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASHX,
       label: "z-ai/glm-5.3-flashx",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASHX_LEGAL,
+      label: "z-ai/glm-5.3-flashx-legal",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_PRIME,

@@ -41,6 +41,7 @@ import useAppStore from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import NoData from "@/shared/NoData/NoData";
+import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import { Skeleton } from "@/ui/skeleton";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
@@ -85,6 +86,7 @@ import ThreadAnnotatePanel from "./ThreadAnnotatePanel";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 import ThreadDetailsTags from "./ThreadDetailsTags";
+import { traceMatchesSearch, useThreadSearch } from "./useThreadSearch";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
@@ -113,6 +115,7 @@ export type ThreadDetailsPanelProps = {
 const DEFAULT_TAB = "messages";
 // The backend counts two messages (input + output) per trace in `number_of_messages`.
 const MESSAGES_PER_TRACE = 2;
+const NO_SEARCH_MATCHES_MESSAGE = "No messages match your search";
 
 const ThreadHeaderSkeleton: React.FC = () => (
   <div className="flex flex-col gap-2">
@@ -205,6 +208,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     },
   );
 
+  const [search = undefined, setSearch] = useQueryParam(
+    "thread_panel_search",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [, setTracePanelFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
@@ -265,6 +276,34 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   // The selected trace stays visible even when internal, so the panel can scroll to it.
   const visibleTraces = useVisibleTraces(traces, traceId);
   const hiddenTracesCount = traces.length - visibleTraces.length;
+
+  // A whitespace-only search is no search, so the thread is not narrowed to turns that
+  // have nothing to highlight.
+  const searchTerm = search?.trim();
+
+  // Like the trace tree search: the thread narrows to the turns that match.
+  const searchedTraces = useMemo(
+    () =>
+      searchTerm
+        ? visibleTraces.filter((trace) => traceMatchesSearch(trace, searchTerm))
+        : visibleTraces,
+    [visibleTraces, searchTerm],
+  );
+
+  const [messagesNode, setMessagesNode] = useState<HTMLDivElement | null>(null);
+  const { findNext, findPrev } = useThreadSearch({
+    container: messagesNode,
+    search: searchTerm,
+    traces: searchedTraces,
+  });
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearch(value);
+      if (value) setActiveTab("messages");
+    },
+    [setSearch, setActiveTab],
+  );
 
   const { media } = useThreadMedia(visibleTraces);
 
@@ -524,21 +563,27 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <ThreadMessagesSkeleton />
           ) : (
             <MediaProvider media={media}>
-              {media.length > 0 && (
-                <div className="mb-4 px-4">
-                  <Accordion type="multiple" defaultValue={["attachments"]}>
-                    <AttachmentsList media={media} />
-                  </Accordion>
-                </div>
-              )}
-              <div style={bodyStyle}>
+              <div style={bodyStyle} ref={setMessagesNode}>
                 {traces.length > 0 && !visibleTraces.length ? (
                   <NoData message={ONLY_INTERNAL_CALLS_MESSAGE} icon={null} />
+                ) : searchTerm && !searchedTraces.length ? (
+                  <NoData message={NO_SEARCH_MATCHES_MESSAGE} icon={null} />
                 ) : (
                   <TraceMessages
-                    traces={visibleTraces}
+                    traces={searchedTraces}
                     handleOpenTrace={handleOpenTrace}
                     traceId={traceId}
+                    content={
+                      media.length > 0 && (
+                        <Accordion
+                          type="multiple"
+                          defaultValue={["attachments"]}
+                          className="mb-2"
+                        >
+                          <AttachmentsList media={media} />
+                        </Accordion>
+                      )
+                    }
                   />
                 )}
               </div>
@@ -584,10 +629,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
             <div className="flex size-full flex-col">
               <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
-                <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
-                  Inspect
-                </span>
-                <div className="flex-auto" />
+                <div className="relative flex flex-1 items-center">
+                  <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
+                    Inspect
+                  </span>
+                  <div className="flex-auto" />
+                  <ExpandableSearchInput
+                    value={search ?? undefined}
+                    placeholder="Search messages"
+                    onChange={handleSearchChange}
+                    onPrev={findPrev}
+                    onNext={findNext}
+                    disabled={isTracesPending}
+                    buttonVariant="ghost"
+                    tooltip="Search messages"
+                    overlayExpand
+                  />
+                </div>
                 {!hideAnnotateActions && (
                   <AddToDropdown
                     getDataForExport={async () => rows}

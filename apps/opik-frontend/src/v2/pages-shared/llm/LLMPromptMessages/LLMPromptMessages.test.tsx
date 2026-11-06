@@ -5,24 +5,33 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 
-const { focusMessage } = vi.hoisted(() => ({ focusMessage: vi.fn() }));
+const { focusMessage, changeMessage } = vi.hoisted(() => ({
+  focusMessage: vi.fn(),
+  changeMessage: new Map<string, (changes: Partial<LLMMessage>) => void>(),
+}));
 
 // The real message renders CodeMirror, which doesn't mount under jsdom; the
-// stub keeps the handle the list calls, so the test sees which message it focuses.
+// stub keeps the handle the list calls, so the test sees which message it focuses,
+// and the change callback, so the test can type into a message.
 vi.mock(
   "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessage",
   async () => {
     const { forwardRef, useImperativeHandle } = await import("react");
     return {
-      default: forwardRef<unknown, { message: LLMMessage }>(
-        ({ message }, ref) => {
-          useImperativeHandle(ref, () => ({
-            insertAtCursor: vi.fn(),
-            focus: () => focusMessage(message.id),
-          }));
-          return <div data-testid={`message-${message.id}`} />;
-        },
-      ),
+      default: forwardRef<
+        unknown,
+        {
+          message: LLMMessage;
+          onChangeMessage: (changes: Partial<LLMMessage>) => void;
+        }
+      >(({ message, onChangeMessage }, ref) => {
+        useImperativeHandle(ref, () => ({
+          insertAtCursor: vi.fn(),
+          focus: () => focusMessage(message.id),
+        }));
+        changeMessage.set(message.id, onChangeMessage);
+        return <div data-testid={`message-${message.id}`} />;
+      }),
     };
   },
 );
@@ -194,5 +203,32 @@ describe("LLMPromptMessages focus", () => {
 
       expect(focusMessage).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("LLMPromptMessages changes", () => {
+  afterEach(() => {
+    cleanup();
+    changeMessage.clear();
+  });
+
+  // Typing into a second message before the parent re-renders with the first edit
+  // must not overwrite that edit with the messages this render received.
+  it("should keep an edit the parent has not rendered yet", () => {
+    const onChange = vi.fn();
+    render(
+      <LLMPromptMessages
+        messages={[createMessage("system"), createMessage("user")]}
+        onChange={onChange}
+        onAddMessage={vi.fn()}
+      />,
+    );
+
+    changeMessage.get("system")!({ content: "You are a support agent." });
+    changeMessage.get("user")!({ content: "{{input}}" });
+
+    expect(
+      onChange.mock.lastCall![0].map((m: LLMMessage) => m.content),
+    ).toEqual(["You are a support agent.", "{{input}}"]);
   });
 });
