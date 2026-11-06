@@ -894,7 +894,8 @@ class ExperimentAggregatesIntegrationTest {
 
         // The experiment under test: scoped to a project, no items yet, so its aggregate carries no project.
         var project = createProject(apiKey, workspaceName);
-        var dataset = createDataset(apiKey, workspaceName);
+        var dataset = DatasetResourceClient.buildDataset(factory).toBuilder().projectId(project.id()).build();
+        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name())

@@ -256,17 +256,15 @@ class PromptServiceImpl implements PromptService {
                 .map(filterQueryBuilder::toStateSQLMapping)
                 .orElse(Map.of());
 
-        boolean includeProjectless = projectId != null && isDefaultProject(workspaceId, projectId);
-
         return transactionTemplate.inTransaction(handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            long total = promptDAO.count(name, workspaceId, projectId, includeProjectless, DemoData.PROMPTS,
+            long total = promptDAO.count(name, workspaceId, projectId, ProjectService.DEFAULT_PROJECT, DemoData.PROMPTS,
                     filtersSQL, filterMapping);
 
             var offset = (page - 1) * size;
 
-            List<Prompt> content = promptDAO.find(name, workspaceId, projectId, includeProjectless,
+            List<Prompt> content = promptDAO.find(name, workspaceId, projectId, ProjectService.DEFAULT_PROJECT,
                     DemoData.PROMPTS, offset, size, sortingFieldsSql,
                     filtersSQL,
                     filterMapping);
@@ -294,11 +292,27 @@ class PromptServiceImpl implements PromptService {
      * only one with that name in the workspace. Otherwise the prompt is the Default Project's.
      */
     private UUID resolveProjectIdWithoutProject(String workspaceId, String name, String userName) {
-        var prompts = transactionTemplate.inTransaction(READ_ONLY, handle -> handle.attach(PromptDAO.class)
-                .findByNameInAnyProject(workspaceId, name, UnscopedNameUtils.MATCH_LIMIT));
-        return UnscopedNameUtils.requireUnique(prompts, "Prompt", name)
+        return findUniqueByNameInAnyProject(workspaceId, name)
                 .map(Prompt::projectId)
                 .orElseGet(() -> resolveProjectId(null, null, workspaceId, userName));
+    }
+
+    /**
+     * For a read: the project of the only prompt with that name, else the Default Project. A project-less prompt
+     * belongs to the Default Project. Never creates a project.
+     */
+    private UUID resolveExistingProjectIdWithoutProject(String workspaceId, String name) {
+        return findUniqueByNameInAnyProject(workspaceId, name)
+                .map(Prompt::projectId)
+                .or(() -> projectService.findProjectIdByName(workspaceId, ProjectService.DEFAULT_PROJECT))
+                .orElseThrow(() -> new NotFoundException(PROMPT_NOT_FOUND));
+    }
+
+    private Optional<Prompt> findUniqueByNameInAnyProject(String workspaceId, String name) {
+        var prompts = transactionTemplate.inTransaction(READ_ONLY, handle -> handle.attach(PromptDAO.class)
+                .findByNameInAnyProject(workspaceId, name, DemoData.PROMPTS, UnscopedNameUtils.MATCH_LIMIT));
+        return UnscopedNameUtils.requireUnique(prompts, Prompt::projectId,
+                () -> projectService.findProjectIdByName(workspaceId, ProjectService.DEFAULT_PROJECT), "Prompt", name);
     }
 
     /**
@@ -362,9 +376,8 @@ class PromptServiceImpl implements PromptService {
     }
 
     private Prompt findByName(String workspaceId, String name, @NonNull UUID projectId) {
-        boolean includeProjectless = isDefaultProject(workspaceId, projectId);
         return transactionTemplate.inTransaction(READ_ONLY, handle -> handle.attach(PromptDAO.class)
-                .findByName(name, workspaceId, projectId, includeProjectless, DemoData.PROMPTS));
+                .findByName(name, workspaceId, projectId, ProjectService.DEFAULT_PROJECT, DemoData.PROMPTS));
     }
 
     @Override
@@ -1010,10 +1023,13 @@ class PromptServiceImpl implements PromptService {
             String versionNumber, String projectName) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        // No project: the only prompt with that name in the workspace, as for creating a version.
         // An unresolved project must not degrade into a workspace-wide search: that would match another
         // project's prompt of the same name.
-        UUID projectId = projectService.findProjectIdByName(workspaceId, WorkspaceUtils.getProjectName(projectName))
-                .orElseThrow(() -> new NotFoundException(PROMPT_NOT_FOUND));
+        UUID projectId = StringUtils.isBlank(projectName)
+                ? resolveExistingProjectIdWithoutProject(workspaceId, name)
+                : projectService.findProjectIdByName(workspaceId, projectName)
+                        .orElseThrow(() -> new NotFoundException(PROMPT_NOT_FOUND));
 
         return retrievePromptVersion(name, commit, environment, versionNumber, projectId);
     }

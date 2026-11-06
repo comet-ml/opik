@@ -420,10 +420,10 @@ class DatasetServiceEnrichmentTest {
 
         when(sortingQueryBuilder.toOrderBySql(any())).thenReturn(null);
         when(sortingFactory.getSortableFields()).thenReturn(List.of());
-        when(datasetDAO.findCount(anyString(), any(), any(), anyBoolean(), any(), anyBoolean(), anyBoolean(), any(),
+        when(datasetDAO.findCount(anyString(), any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(),
                 any(), any()))
                 .thenReturn(3L);
-        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), anyBoolean(), any(), anyBoolean(),
+        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), any(), any(), anyBoolean(),
                 anyBoolean(), any(), any(), any(), any())).thenReturn(page);
 
         var experimentAt = Instant.now().minusSeconds(90);
@@ -462,10 +462,10 @@ class DatasetServiceEnrichmentTest {
     void enrichmentOnEmptyPageReturnsEmptyContent() {
         when(sortingQueryBuilder.toOrderBySql(any())).thenReturn(null);
         when(sortingFactory.getSortableFields()).thenReturn(List.of());
-        when(datasetDAO.findCount(anyString(), any(), any(), anyBoolean(), any(), anyBoolean(), anyBoolean(), any(),
+        when(datasetDAO.findCount(anyString(), any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(),
                 any(), any()))
                 .thenReturn(0L);
-        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), anyBoolean(), any(), anyBoolean(),
+        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), any(), any(), anyBoolean(),
                 anyBoolean(), any(), any(), any(), any())).thenReturn(List.of());
 
         var actual = service.find(1, 10, DatasetCriteria.builder().build(), List.of());
@@ -711,10 +711,10 @@ class DatasetServiceEnrichmentTest {
 
         when(sortingQueryBuilder.toOrderBySql(any())).thenReturn(null);
         when(sortingFactory.getSortableFields()).thenReturn(List.of());
-        when(datasetDAO.findCount(anyString(), any(), any(), anyBoolean(), any(), anyBoolean(), anyBoolean(), any(),
+        when(datasetDAO.findCount(anyString(), any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(),
                 any(), any()))
                 .thenReturn((long) ids.length);
-        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), anyBoolean(), any(), anyBoolean(),
+        when(datasetDAO.find(anyInt(), anyInt(), anyString(), any(), any(), any(), any(), anyBoolean(),
                 anyBoolean(), any(), any(), any(), any())).thenReturn(page);
     }
 

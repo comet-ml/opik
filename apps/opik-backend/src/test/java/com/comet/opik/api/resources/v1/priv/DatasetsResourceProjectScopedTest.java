@@ -9,6 +9,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.TestContainersSetup;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
@@ -64,9 +65,11 @@ class DatasetsResourceProjectScopedTest {
     private DatasetResourceClient datasetResourceClient;
     private ProjectResourceClient projectResourceClient;
     private TransactionTemplate mySqlTemplate;
+    private ClientSupport client;
 
     @BeforeAll
     void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+        this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
         this.mySqlTemplate = mySqlTemplate;
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
@@ -676,5 +679,113 @@ class DatasetsResourceProjectScopedTest {
                 .usingRecursiveComparison()
                 .ignoringFields(DATASET_ITEM_IGNORED_FIELDS)
                 .isEqualTo(List.of(item));
+    }
+
+    @Test
+    @DisplayName("Put dataset items without a project ignores a project-less demo dataset with the same name")
+    void putDatasetItemsWithoutProjectIgnoresProjectlessDemoDataset() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String demoName = DemoData.DATASETS.getFirst();
+        saveProjectlessDataset(demoName, workspaceId);
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var datasetId = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(demoName).projectId(projectId).build(), apiKey,
+                workspaceName);
+        var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                .id(null)
+                .tags(Set.of())
+                .build();
+
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetName(demoName)
+                .items(List.of(item))
+                .build(), workspaceName, apiKey);
+
+        var itemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, apiKey, workspaceName);
+        assertThat(itemsPage.content())
+                .usingRecursiveComparison()
+                .ignoringFields(DATASET_ITEM_IGNORED_FIELDS)
+                .isEqualTo(List.of(item));
+    }
+
+    @Test
+    @DisplayName("Get dataset by name without a project finds the only dataset with that name, whatever its project")
+    void getDatasetByNameWithoutProjectFindsOnlyDatasetWithThatName() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var dataset = buildDataset().toBuilder().id(null).projectId(projectId).build();
+        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+        var actual = datasetResourceClient.getDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(dataset.name()).build(), apiKey, workspaceName);
+
+        assertDataset(actual, dataset);
+    }
+
+    @Test
+    @DisplayName("Get dataset by name without a project is rejected when several projects have a dataset with that name")
+    void getDatasetByNameWithoutProjectRejectedWhenNameInSeveralProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String datasetName = "dataset-" + UUID.randomUUID();
+        for (int i = 0; i < 2; i++) {
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+            datasetResourceClient.createDataset(
+                    buildDataset().toBuilder().id(null).name(datasetName).projectId(projectId).build(), apiKey,
+                    workspaceName);
+        }
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                "Dataset name exists in several projects, please provide project_name: '%s'".formatted(datasetName));
+
+        var identifier = DatasetIdentifier.builder().datasetName(datasetName).build();
+        try (var response = datasetResourceClient.callGetDatasetByIdentifier(identifier, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+        }
+    }
+
+    @Test
+    @DisplayName("Create experiment in another project than its dataset's links the dataset of the given version")
+    void createExperimentInAnotherProjectLinksTheDatasetOfTheGivenVersion() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var datasetProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+        String experimentProjectName = "project-" + UUID.randomUUID();
+        var experimentProjectId = projectResourceClient.createProject(experimentProjectName, apiKey, workspaceName);
+        var dataset = buildDataset().toBuilder().id(null).projectId(datasetProjectId).build();
+        var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build()))
+                .build(), workspaceName, apiKey);
+        var versionId = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content().getFirst()
+                .id();
+
+        var experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        var experimentId = experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
+                .id(null)
+                .datasetName(dataset.name())
+                .datasetVersionId(versionId)
+                .projectName(experimentProjectName)
+                .build(), apiKey, workspaceName);
+
+        var experiment = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+        assertThat(experiment.datasetId()).isEqualTo(datasetId);
+        assertThat(experiment.projectId()).isEqualTo(experimentProjectId);
+        assertThat(datasetResourceClient.getDatasetsByProjectId(experimentProjectId, workspaceName, apiKey)
+                .content()).isEmpty();
     }
 }

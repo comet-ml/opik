@@ -651,13 +651,27 @@ public class ExperimentService {
     }
 
     /**
-     * An experiment created internally for a dataset the caller already resolved keeps that dataset; the API never
-     * sends a dataset id, so its experiments get or create the dataset by name in the experiment's project.
+     * The experiment's dataset: the one an internal caller already resolved, else the dataset of the given version,
+     * else the dataset with that name in the experiment's project, created if missing. The version decides when it is
+     * given, as the experiment can live in another project than its dataset.
      */
     private Mono<UUID> resolveDatasetId(Experiment experiment) {
-        return experiment.datasetId() != null
-                ? Mono.just(experiment.datasetId())
-                : datasetService.getOrCreateDataset(experiment.datasetName(), experiment.projectId());
+        if (experiment.datasetId() != null) {
+            return Mono.just(experiment.datasetId());
+        }
+        Mono<UUID> byName = Mono
+                .defer(() -> datasetService.getOrCreateDataset(experiment.datasetName(), experiment.projectId()));
+        if (experiment.datasetVersionId() == null) {
+            return byName;
+        }
+        return Mono.deferContextual(ctx -> Mono
+                .fromCallable(() -> datasetVersionService.findByIds(Set.of(experiment.datasetVersionId()),
+                        ctx.get(RequestContext.WORKSPACE_ID)))
+                .subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(versions -> versions.stream()
+                        .findFirst()
+                        .map(version -> Mono.just(version.datasetId()))
+                        .orElse(byName));
     }
 
     private Mono<Experiment> resolveProjectId(Experiment experiment) {

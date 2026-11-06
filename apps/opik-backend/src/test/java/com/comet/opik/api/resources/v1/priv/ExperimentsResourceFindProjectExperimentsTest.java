@@ -1555,7 +1555,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
         IntStream.range(0, experimentCount)
                 .parallel()
                 .forEach(i -> {
-                    var dataset = buildDataset();
+                    var dataset = buildDataset().toBuilder().projectId(projectId).build();
                     datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
                     datasets.add(dataset);
                     var experimentId = experimentResourceClient.create(

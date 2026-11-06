@@ -863,4 +863,81 @@ class PromptResourceProjectScopedPromptsTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
         }
     }
+
+    @Test
+    @DisplayName("Creating a version with no project ignores a project-less demo prompt with the same name")
+    void createPromptVersionWithoutProjectIgnoresProjectlessDemoPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String demoName = DemoData.PROMPTS.getFirst();
+        saveProjectlessPrompt(demoName, workspaceId);
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var projectPrompt = savePrompt(demoName, projectId, workspaceId);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(demoName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .build();
+
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).promptId()).isEqualTo(projectPrompt.id());
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version without a project finds the only prompt with that name, whatever its project")
+    void retrievePromptVersionWithoutProjectFindsOnlyPromptWithThatName() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var prompt = buildPrompt()
+                .projectId(projectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(prompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder().name(prompt.name()).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(prompt.template());
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version without a project is rejected when several projects have a prompt with that name")
+    void retrievePromptVersionWithoutProjectRejectedWhenNameInSeveralProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+        for (int i = 0; i < 2; i++) {
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+            createPrompt(buildPrompt()
+                    .name(sharedName)
+                    .projectId(projectId)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build(), apiKey, workspaceName);
+        }
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                "Prompt name exists in several projects, please provide project_name: '%s'".formatted(sharedName));
+
+        var request = PromptVersionRetrieve.builder().name(sharedName).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+        }
+    }
 }

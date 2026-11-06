@@ -233,7 +233,12 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                 .flatMap(dataset -> Mono.justOrEmpty(dataset.map(Dataset::projectId)))
                 .flatMap(projectId -> projectService.getOrFail(projectId)
                         .map(Project::name)
-                        .onErrorResume(NotFoundException.class, ex -> Mono.empty()));
+                        .onErrorResume(NotFoundException.class, ex -> {
+                            log.warn(
+                                    "Dataset project not found, using the default project, datasetName '{}', projectId '{}'",
+                                    datasetName, projectId);
+                            return Mono.empty();
+                        }));
     }
 
     private Mono<Void> validateExperimentConsistency(Experiment experiment, String projectName,
