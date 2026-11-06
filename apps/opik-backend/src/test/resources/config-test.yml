@@ -998,6 +998,13 @@ workspaceFeatures:
   # Off in tests, like the auth cache: a test that needs it turns it on.
   cacheTtl: 0s
 
+aiLabels:
+  inference:
+    # The synchronous decide calls guardrail checks make, on a client of their own.
+    maxConcurrentDecides: 256
+    decideKeepAlive: 30s
+    decideTimeToLive: 5m
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000

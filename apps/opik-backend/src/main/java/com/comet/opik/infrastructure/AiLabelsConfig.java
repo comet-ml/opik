@@ -222,6 +222,16 @@ public class AiLabelsConfig {
         /** Synchronous decide calls in flight from this instance, on a client of their own. */
         @JsonProperty
         @Min(1) private int maxConcurrentDecides = 256;
+
+        /** How long an idle connection for decide calls is kept for reuse; 0 closes each one after a single call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
+        private Duration decideKeepAlive = Duration.seconds(30);
+
+        /** Longest a connection for decide calls is reused, so calls move to new upstream instances after a rollout. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration decideTimeToLive = Duration.minutes(5);
     }
 
     @Data

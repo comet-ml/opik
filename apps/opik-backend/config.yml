@@ -2518,6 +2518,14 @@ aiLabels:
     #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
     #  retries after a short backoff, then fails
     maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
+    #  Default: 30s
+    #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
+    #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+    decideKeepAlive: ${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}
+    #  Default: 5m
+    #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
+    #  upstream instances after a rollout
+    decideTimeToLive: ${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
