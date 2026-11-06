@@ -245,16 +245,24 @@ const GuardrailsPage: React.FunctionComponent = () => {
 
   // Looked up by id only once the list has answered without it: a link to a policy on this page
   // needs no second request.
-  const { data: fetchedPolicy, error: policyLookupError } =
-    useGuardrailPolicyById(
-      { policyId: openedPolicyId! },
-      { enabled: Boolean(openedPolicyId) && !isPending && !policyOnPage },
-    );
+  const isPolicyLookupEnabled =
+    Boolean(openedPolicyId) && !isPending && !policyOnPage;
+  const {
+    data: fetchedPolicy,
+    error: policyLookupError,
+    isFetching: isPolicyLookupFetching,
+  } = useGuardrailPolicyById(
+    { policyId: openedPolicyId! },
+    { enabled: isPolicyLookupEnabled },
+  );
 
   // A link to a policy that was deleted, or that failed to load, drops the id from the URL rather
-  // than leaving a panel that never opens; opening the row again retries.
+  // than leaving a panel that never opens; opening the row again retries. Only the lookup that
+  // just ran counts: a disabled one still reports an earlier failure for the same id, which would
+  // close the policy when it is opened from the list.
   useEffect(() => {
-    if (!policyLookupError) return;
+    if (!policyLookupError || !isPolicyLookupEnabled || isPolicyLookupFetching)
+      return;
 
     setOpenedPolicyId(undefined);
     toast({
@@ -265,7 +273,13 @@ const GuardrailsPage: React.FunctionComponent = () => {
       ),
       variant: "destructive",
     });
-  }, [policyLookupError, setOpenedPolicyId, toast]);
+  }, [
+    policyLookupError,
+    isPolicyLookupEnabled,
+    isPolicyLookupFetching,
+    setOpenedPolicyId,
+    toast,
+  ]);
 
   // The last copy of the open policy seen, so the panel, and whatever is typed in it, stays while a
   // refetch moves the policy off this page and it is looked up by id.

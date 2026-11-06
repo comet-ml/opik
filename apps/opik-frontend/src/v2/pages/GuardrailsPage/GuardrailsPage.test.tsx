@@ -23,6 +23,8 @@ import GuardrailsPage from "./GuardrailsPage";
 const mocks = vi.hoisted(() => ({
   policies: [] as GuardrailPolicy[] | undefined,
   byIdLookups: [] as { policyId: string; enabled: boolean }[],
+  byIdError: null as Error | null,
+  toast: vi.fn(),
 }));
 
 vi.mock("@/api/guardrail-policies/useGuardrailPoliciesList", () => ({
@@ -45,10 +47,13 @@ vi.mock("@/api/guardrail-policies/useGuardrailPolicyById", () => ({
     { enabled }: { enabled: boolean },
   ) => {
     mocks.byIdLookups.push({ policyId, enabled });
-    return { data: undefined, error: null };
+    // As React Query does, a disabled query still reports the error of its last fetch.
+    return { data: undefined, error: mocks.byIdError, isFetching: false };
   },
 }));
-vi.mock("@/ui/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
+vi.mock("@/ui/use-toast", () => ({
+  useToast: () => ({ toast: mocks.toast }),
+}));
 // The panel's own behaviour is covered by its tests; here it only shows which panel is open, for
 // which policy, and with which taken names.
 vi.mock(
@@ -123,6 +128,8 @@ describe("GuardrailsPage", () => {
     window.history.replaceState(null, "", "/");
     mocks.policies = [FIRST, SECOND];
     mocks.byIdLookups = [];
+    mocks.byIdError = null;
+    mocks.toast.mockReset();
   });
 
   it("keeps the open policy's panel while a refetch moves the policy off the page", () => {
@@ -151,6 +158,32 @@ describe("GuardrailsPage", () => {
 
     expect(mocks.byIdLookups.some(({ enabled }) => enabled)).toBe(false);
     expect(screen.getByTestId("panel-edit").dataset.policy).toBe(FIRST.name);
+  });
+
+  it("keeps a policy opened from the list open when an earlier lookup of it by id failed", () => {
+    mocks.byIdError = new Error("Request failed with status code 500");
+    window.history.replaceState(null, "", `/?policyId=${FIRST.id}`);
+
+    renderPage();
+
+    expect(screen.getByTestId("panel-edit").dataset.policy).toBe(FIRST.name);
+    expect(window.location.search).toContain(`policyId=${FIRST.id}`);
+    expect(mocks.toast).not.toHaveBeenCalled();
+  });
+
+  it("drops a linked policy whose lookup by id fails, with a toast", async () => {
+    mocks.policies = [SECOND];
+    mocks.byIdError = new Error("Request failed with status code 404");
+    window.history.replaceState(null, "", `/?policyId=${FIRST.id}`);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(window.location.search).not.toContain("policyId"),
+    );
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Policy could not be opened" }),
+    );
   });
 
   it("opens Edit from the row menu in the page's panel, with the id in the URL", async () => {
