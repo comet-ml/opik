@@ -31,6 +31,13 @@ const ConfigurationPage = () => {
     }
   }, [tab, setTab]);
 
+  // Fall back at render time instead of rewriting the URL: toggles read false until they load, so a redirect would
+  // drop a valid ?tab=cost-center link on every page load.
+  const visibleTab =
+    tab === CONFIGURATION_TABS.COST_CENTER && !isModelPricesEnabled
+      ? DEFAULT_TAB
+      : tab;
+
   return (
     <div className="pt-5">
       <h1 className="comet-body-accented">Configuration</h1>
@@ -38,7 +45,7 @@ const ConfigurationPage = () => {
       <div className="mt-6">
         <Tabs
           defaultValue="feedback-definitions"
-          value={tab as string}
+          value={visibleTab as string}
           onValueChange={setTab}
         >
           <TabsList variant="underline">
