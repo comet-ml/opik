@@ -62,10 +62,12 @@ class ModelPriceResolver {
             return Optional.empty();
         }
         Optional<PriceMatch> match = resolve(modelName, ProviderRegistry.resolve(provider, modelName), layers, true);
-        match.ifPresentOrElse(
-                found -> log.debug("Found model price, model '{}', provider '{}', name form '{}'", modelName,
-                        found.provider(), found.nameForm()),
-                () -> log.debug("No model price found, model '{}', provider '{}'", modelName, provider));
+        if (log.isDebugEnabled()) {
+            match.ifPresentOrElse(
+                    found -> log.debug("Found model price, model '{}', provider '{}', name form '{}'", modelName,
+                            found.provider(), found.nameForm()),
+                    () -> log.debug("No model price found, model '{}', provider '{}'", modelName, provider));
+        }
         return match;
     }
 

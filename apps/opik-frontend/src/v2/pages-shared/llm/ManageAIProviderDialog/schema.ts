@@ -1,4 +1,5 @@
 import { z } from "zod";
+import capitalize from "lodash/capitalize";
 import uniq from "lodash/uniq";
 
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/types/providers";
 import {
   AUTH_MODE_VALUES,
+  AUTH_TYPE_VALUES,
   PROVIDERS_WITH_HEADERS,
   supportsProviderHeaders,
 } from "./customProviderConfig";
@@ -102,7 +104,7 @@ export const CloudAIProviderDetailsFormSchema = z
     composedProviderType: z.string(),
     apiKey: z
       .string({
-        required_error: "API key is required",
+        error: "API key is required",
       })
       .min(1, { message: "API key is required" }),
     // OpenAI-only: which pipeline the backend routes the request through. Schema-level optional
@@ -124,7 +126,7 @@ export const VertexAIProviderDetailsFormSchema = z.object({
   composedProviderType: z.string(),
   apiKey: z
     .string({
-      required_error: "API key is required",
+      error: "API key is required",
     })
     .min(1, { message: "API key is required" }),
   location: z.string(),
@@ -181,6 +183,7 @@ export const createCustomProviderDetailsFormSchema = (
       authHeaderName: z.string().max(150).optional(),
       suppressDefaultAuth: z.boolean().optional(),
       authMode: z.enum(AUTH_MODE_VALUES).optional(),
+      authType: z.enum(AUTH_TYPE_VALUES).optional(),
       authTokenUrl: z.string().optional(),
       authSendAs: z.enum(AUTH_SEND_AS_VALUES).optional(),
       authCredentials: z
@@ -249,6 +252,17 @@ export const createCustomProviderDetailsFormSchema = (
               credentialKeys.push(trimmedKey);
             }
           }
+          // service-account rows have fixed keys, so only their values can be missing
+          if (
+            data.authType === "service_account" &&
+            entry.value.trim().length === 0
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `${capitalize(entry.key)} is required`,
+              path: ["authCredentials", index, "value"],
+            });
+          }
         });
 
         const fallbackTtl = (data.authFallbackTtl ?? "").trim();
@@ -269,7 +283,11 @@ export const createCustomProviderDetailsFormSchema = (
 
       // The backend refuses to send stored secrets to a new URL, so an edit that changes it has to
       // carry them again.
-      if (data.id && storedProvider && data.url !== storedProvider.base_url) {
+      if (
+        data.id &&
+        storedProvider &&
+        data.url.trim() !== storedProvider.base_url
+      ) {
         if (data.authMode === "token") {
           data.authCredentials?.forEach((entry, index) => {
             if (entry.value === AUTH_SECRET_SENTINEL) {

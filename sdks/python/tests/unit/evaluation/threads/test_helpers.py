@@ -45,6 +45,45 @@ def test_log_feedback_scores():
         assert score["reason"] == expected_scores[i].reason
 
 
+def test_log_feedback_scores__thread_without_scores__not_logged():
+    """Skipped threads and threads whose metrics all failed are not logged."""
+    failed_score = score_result.ScoreResult(
+        name="metric1", value=0.0, reason="Failed", scoring_failed=True
+    )
+    results = [
+        evaluation_result.ThreadEvaluationResult(thread_id="skipped", scores=[]),
+        evaluation_result.ThreadEvaluationResult(
+            thread_id="all_failed", scores=[failed_score]
+        ),
+    ]
+
+    mock_client = mock.MagicMock(spec=threads_client.ThreadsClient)
+
+    helpers.log_feedback_scores(
+        results, project_name="test_project", client=mock_client
+    )
+
+    mock_client.log_threads_feedback_scores.assert_not_called()
+
+
+def test_log_feedback_scores__mixed_threads__only_threads_with_scores_logged():
+    score = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
+    results = [
+        evaluation_result.ThreadEvaluationResult(thread_id="skipped", scores=[]),
+        evaluation_result.ThreadEvaluationResult(thread_id="scored", scores=[score]),
+    ]
+
+    mock_client = mock.MagicMock(spec=threads_client.ThreadsClient)
+
+    helpers.log_feedback_scores(
+        results, project_name="test_project", client=mock_client
+    )
+
+    mock_client.log_threads_feedback_scores.assert_called_once()
+    scores = mock_client.log_threads_feedback_scores.call_args[1]["scores"]
+    assert [s["id"] for s in scores] == ["scored"]
+
+
 def test_load_conversation_thread():
     """Test that load_conversation_thread correctly fetches and transforms traces."""
     # Setup mock traces
@@ -101,3 +140,36 @@ def test_load_conversation_thread():
         max_results=10,
         truncate=False,
     )
+
+
+def test_load_conversation_thread__thread_id_with_double_quote__filter_stays_scoped():
+    """A thread id containing a double quote must not break out of the filter.
+
+    The filter is built by string interpolation, so an unescaped quote would
+    terminate the literal early and make the filter match other threads'
+    traces. The OQL parser reads a doubled quote inside a double-quoted
+    literal as one quote character.
+    """
+    mock_opik_client = mock.MagicMock()
+    mock_opik_client.search_traces.return_value = []
+
+    thread = TraceThread(id='thread"123')
+    helpers.load_conversation_thread(
+        thread=thread,
+        trace_input_transform=lambda x: x.get("content", ""),
+        trace_output_transform=lambda x: x.get("content", ""),
+        max_results=10,
+        project_name="test_project",
+        client=mock_opik_client,
+    )
+
+    call_kwargs = mock_opik_client.search_traces.call_args[1]
+    assert call_kwargs["filter_string"] == 'thread_id = "thread""123"'
+
+    # The generated filter must parse back to the original thread id.
+    from opik.api_objects import opik_query_language
+
+    parsed = opik_query_language.OpikQueryLanguage.for_traces(
+        call_kwargs["filter_string"]
+    ).get_filter_expressions()
+    assert parsed[0]["value"] == 'thread"123'
