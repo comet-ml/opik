@@ -23,8 +23,9 @@ import java.util.concurrent.CancellationException;
  * centre, half the distances between centres), so a point is measured again only against the centres those bounds do
  * not rule out; the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product
  * through the Vector API in double: float points widened lane by lane against double centres, with a fixed 128-bit
- * shape, so the sums run in the same order on every machine. Needs {@code --add-modules jdk.incubator.vector} in the
- * JVM. The bounds take {@code n * k} doubles.
+ * shape, so the sums run in the same order on every machine. Only an empty cluster's new point is picked with the
+ * direct sum of {@code (x - c)²}, as plain Lloyd does. Needs {@code --add-modules jdk.incubator.vector} in the JVM.
+ * The bounds take {@code n * k} doubles.
  *
  * <p>This is not scikit-learn's k-means (whose ++ step tries several candidates greedily); stage 0 measured that the two
  * differ by about as much as scikit-learn differs from itself with another seed. Deterministic for a given input and
@@ -245,7 +246,9 @@ public class KMeans {
     /**
      * Weighted means of the clusters. An empty cluster moves to the point with the largest weighted distance to its own
      * centre that no other empty cluster took this round; the next assignment then gives it that point. The bounds keep
-     * no exact distance, so with an empty cluster each point's is measured first, to its centre before the update.
+     * no exact distance, so with an empty cluster each point's is measured first, to its centre before the update, in
+     * the direct form: a point on its centre is then exactly 0, as in plain Lloyd, not the dot form's rounding noise,
+     * which would pick another point among duplicate ones.
      */
     private static void update(Space space, double[] w, int[] labels, double[] distance, double[] centres) {
         int n = space.n;
@@ -267,7 +270,7 @@ public class KMeans {
         }
         if (anyEmpty) {
             for (int i = 0; i < n; i++) {
-                distance[i] = space.squaredDistance(i, centres, labels[i]);
+                distance[i] = space.directSquaredDistance(i, centres, labels[i]);
             }
         }
         var taken = new boolean[n];
@@ -360,6 +363,18 @@ public class KMeans {
         /** Never negative: rounding can take |x|² + |c|² - 2 x·c below 0 for a point on its centre. */
         double squaredDistance(int i, double[] centres, int j) {
             return Math.max(0, pointNorms[i] + centreNorms[j] - 2 * dot(i, centres, j));
+        }
+
+        /** The sum of {@code (x - c)²} over the dimensions, in scalar double: exactly 0 for a point on its centre. */
+        double directSquaredDistance(int i, double[] centres, int j) {
+            double s = 0;
+            int xi = i * d;
+            int cj = j * d;
+            for (int t = 0; t < d; t++) {
+                double v = x[xi + t] - centres[cj + t];
+                s += v * v;
+            }
+            return s;
         }
 
         private double dot(int i, double[] c, int j) {

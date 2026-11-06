@@ -22,7 +22,6 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
-import static org.assertj.core.api.Assertions.withinPercentage;
 
 /** The small rules of the first build: number formats, text order and strip, the answer, apply and assignment. */
 @DisplayName("topics first build: rules")
@@ -399,7 +398,11 @@ class TopicsAlgorithmRulesTest {
         @CsvSource({
                 "1500, 384, 40, 0.15, 50, 0",
                 "1500, 384, 40, 0.15, 50, 1",
-                "2000, 13, 10, 0.5, 30, 0"})
+                "2000, 13, 10, 0.5, 30, 0",
+                // 20 distinct points, each repeated: k above that leaves clusters empty, reseeded on a duplicate.
+                "300, 16, 20, 0, 30, 0",
+                // Random directions: the fit stops at MAX_ITERATIONS.
+                "30000, 8, 30000, 10, 30, 0"})
         @DisplayName("same labels, iterations and centres as the plain fit on a fixed synthetic set")
         void samePlainFit(int n, int dimensions, int clusters, double noise, int k, long seed) {
             var points = syntheticPoints(n, dimensions, clusters, noise);
@@ -415,7 +418,8 @@ class TopicsAlgorithmRulesTest {
             assertThat(fast.labels()).containsExactly(plain.labels());
             assertThat(fast.iterations()).isEqualTo(plain.iterations());
             assertThat(fast.centres()).containsExactly(plain.centres(), within(1e-6f));
-            assertThat(fast.inertia()).isCloseTo(plain.inertia(), withinPercentage(1e-7));
+            // Relative, or absolute near 0: plain Lloyd scores duplicates on their centres exactly 0, the dot form ~1e-14.
+            assertThat(fast.inertia()).isCloseTo(plain.inertia(), within(1e-9 * Math.max(1, plain.inertia())));
         }
 
         /** Unit centres from gaussians, each point a centre plus gaussian noise, normalized; seeded, so fixed. */
