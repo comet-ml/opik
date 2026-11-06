@@ -38,7 +38,12 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     is_dataclass = dataclasses.is_dataclass(obj)
     # slots=True dataclass instances have no __dict__, or only a partial one
     # inherited from a non-slots base, but are still encoded recursively.
-    track_cycles = is_dataclass or hasattr(obj, "__dict__")
+    track_cycles = (
+        is_dataclass
+        or hasattr(obj, "__dict__")
+        or isinstance(obj, (dict, list, set, frozenset, GeneratorType, tuple))
+        or (np is not None and isinstance(obj, np.ndarray))
+    )
     if track_cycles:
         obj_id = id(obj)
         if obj_id in seen:
