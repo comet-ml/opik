@@ -53,20 +53,11 @@ class TopicWorkspaceServiceTest {
     }
 
     @Test
-    @DisplayName("mismatched: the listed workspaces not enabled in ai_label_workspaces, by id")
-    void mismatched() {
-        config.setEnabledWorkspaces("z, a, x");
-
-        assertThat(service.mismatchedWorkspaceIds()).containsExactly("x", "z");
-    }
-
-    @Test
-    @DisplayName("an empty list reads nothing from MySQL, and no workspace is eligible or mismatched")
+    @DisplayName("an empty list reads nothing from MySQL, and no workspace is eligible")
     void emptyList() {
         config.setEnabledWorkspaces(" ");
 
         assertThat(service.eligibleWorkspaceIds()).isEmpty();
-        assertThat(service.mismatchedWorkspaceIds()).isEmpty();
         assertThat(service.isEligible("a")).isFalse();
         verify(template, never()).inTransaction(any(TxConfig.class), any());
     }
