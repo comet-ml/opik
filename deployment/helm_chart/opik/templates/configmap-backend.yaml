@@ -24,6 +24,14 @@ data:
   {{- range $envkey, $envvalue := $value.env }}
   {{ $envkey }}: {{ $envvalue | quote }}
   {{- end }}
+  {{- /* Point at the bundled Redis only when it is deployed; external Redis sets REDIS_URL in env or a secret. */}}
+  {{- if and (has $key (list "backend" "python-backend")) $.Values.redis.enabled (not (hasKey $value.env "REDIS_URL")) }}
+  {{- $redisAuth := "" }}
+  {{- if $.Values.redis.auth.enabled }}
+  {{- $redisAuth = printf ":%s@" (urlquery $.Values.redis.auth.password) }}
+  {{- end }}
+  REDIS_URL: {{ printf "redis://%s%s:6379/" $redisAuth ($.Values.redis.fullnameOverride | default "opik-redis-master") | quote }}
+  {{- end }}
   {{- if eq $key "python-backend" }}
   {{- if not (hasKey $value.env "PYTHON_CODE_EXECUTOR_IMAGE_TAG") }}
   PYTHON_CODE_EXECUTOR_IMAGE_TAG: {{ $.Chart.AppVersion | quote }}
