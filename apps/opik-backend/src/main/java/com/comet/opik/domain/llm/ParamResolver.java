@@ -6,7 +6,10 @@ import com.comet.opik.api.ModelParams.EffortParam;
 import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams.Level;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.annotation.Nullable;
@@ -15,9 +18,15 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -36,14 +45,15 @@ public class ParamResolver {
     public record Resolution<T>(@NonNull T request, @NonNull List<ParamChange> changes) {
     }
 
-    /** One setting left out of a request, by its wire name. */
+    /** One setting left out of a request, or moved to a level the model offers, by its wire name. */
     public record ParamChange(@NonNull String param, @NonNull Reason reason) {
 
         public enum Reason {
             REFUSED_BY_MODEL,
             REFUSED_BY_ROUTE,
             THINKING_ENABLED,
-            EXCLUSIVE_SAMPLING
+            EXCLUSIVE_SAMPLING,
+            LEVEL_NOT_OFFERED
         }
     }
 
@@ -52,6 +62,10 @@ public class ParamResolver {
     private static final String REASONING_EFFORT = "reasoning_effort";
     private static final String REASONING = "reasoning";
     private static final String EFFORT = "effort";
+    private static final String THINKING = "thinking";
+    private static final String LEVEL = "level";
+    private static final String THINKING_LEVEL = THINKING + "." + LEVEL;
+    private static final String EFFORT_NONE = "none";
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
@@ -103,11 +117,15 @@ public class ParamResolver {
             var effectiveParams = route == null || modelParams.routes() == null
                     ? modelParams
                     : modelParams.routes().getOrDefault(route, modelParams);
-            if (temperature != null && isRefused(effectiveParams.temperature())) {
+            // Effort none undoes only the model's own refusal: a route that refuses one refuses it at every effort.
+            var samplingAtEffortNone = runsAtEffortNone(effectiveParams, requestedEffort(request));
+            if (temperature != null && isRefused(effectiveParams.temperature())
+                    && !(samplingAtEffortNone && isRefused(modelParams.temperature()))) {
                 builder.temperature(null);
                 changes.add(new ParamChange(TEMPERATURE, refusalReason(isRefused(modelParams.temperature()))));
             }
-            if (topP != null && isRefused(effectiveParams.topP())) {
+            if (topP != null && isRefused(effectiveParams.topP())
+                    && !(samplingAtEffortNone && isRefused(modelParams.topP()))) {
                 builder.topP(null);
                 changes.add(new ParamChange(TOP_P, refusalReason(isRefused(modelParams.topP()))));
             }
@@ -132,24 +150,49 @@ public class ParamResolver {
             }
         }
 
+        var offeredLevel = nearestOfferedThinkingLevel(model, GeminiThinkingParams.from(request.customParameters()));
+        if (offeredLevel.isPresent()) {
+            var nextThinking = new LinkedHashMap<String, Object>();
+            ((Map<?, ?>) request.customParameters().get(THINKING))
+                    .forEach((key, value) -> nextThinking.put(String.valueOf(key), value));
+            nextThinking.put(LEVEL, offeredLevel.get());
+            var nextCustomParameters = new LinkedHashMap<>(request.customParameters());
+            nextCustomParameters.put(THINKING, nextThinking);
+            builder.customParameters(nextCustomParameters);
+            changes.add(new ParamChange(THINKING_LEVEL, ParamChange.Reason.LEVEL_NOT_OFFERED));
+        }
+
         return changes.isEmpty()
                 ? new Resolution<>(request, List.of())
                 : new Resolution<>(builder.build(), List.copyOf(changes));
     }
 
     /**
-     * Of these settings a judge sends only temperature, plus whatever its custom parameters carry. Saved judge rules
-     * keep the temperature they were created with, and the frontend strips it only on save, so a rule saved before a
-     * model stopped taking it still sends it.
+     * Of these settings a judge sends only temperature, plus what its custom parameters carry, a Gemini thinking level
+     * and an OpenAI effort among them. Saved judge rules keep the values they were created with, and the frontend
+     * strips them only on save, so a rule saved before a model stopped taking one still sends it.
      */
     public Resolution<LlmAsJudgeModelParameters> resolve(@NonNull LlmAsJudgeModelParameters parameters) {
-        var changes = new ArrayList<ParamChange>();
-        var builder = parameters.toBuilder();
         var model = parameters.name();
+        var changes = new ArrayList<ParamChange>();
+        var resolved = parameters;
         var catalogParams = catalogParams(model, null);
+
+        var offeredLevel = nearestOfferedThinkingLevel(model,
+                GeminiThinkingParams.from(parameters.customParameters()));
+        if (offeredLevel.isPresent()) {
+            var customParameters = (ObjectNode) parameters.customParameters().deepCopy();
+            ((ObjectNode) customParameters.get(THINKING)).put(LEVEL, offeredLevel.get());
+            resolved = resolved.toBuilder().customParameters(customParameters).build();
+            changes.add(new ParamChange(THINKING_LEVEL, ParamChange.Reason.LEVEL_NOT_OFFERED));
+        }
+
         if (parameters.temperature() != null) {
+            var effort = reasoningEffort(parameters.customParameters());
             var refused = ModelCapabilities.rejectsTemperature(model, registryService)
-                    || catalogParams.map(ModelParams::temperature).filter(this::isRefused).isPresent();
+                    || catalogParams
+                            .filter(params -> isRefused(params.temperature()) && !runsAtEffortNone(params, effort))
+                            .isPresent();
             // Thinking costs a judge its temperature only on a Claude (the exclusive-sampling rule's loose match),
             // unlike the chat path: a judge on another provider's thinking model keeps the temperature it was saved
             // with.
@@ -157,25 +200,27 @@ public class ParamResolver {
                     && (SamplingParamsNormalizer.thinkingEnabled(parameters.customParameters())
                             || SamplingParamsNormalizer.effortTurnsOnThinking(model, parameters.customParameters()));
             if (refused || claudeThinks) {
-                builder.temperature(null);
+                resolved = resolved.toBuilder().temperature(null).build();
                 changes.add(new ParamChange(TEMPERATURE,
                         refused ? ParamChange.Reason.REFUSED_BY_MODEL : ParamChange.Reason.THINKING_ENABLED));
             }
         }
+
         // A rule made through the API can carry an effort its model has no levels for, and gpt-4o-mini answers
         // "Unrecognized request argument supplied: reasoning_effort". The rule editor never offers one there.
-        if (parameters.customParameters() instanceof ObjectNode customParameters
+        if (resolved.customParameters() instanceof ObjectNode customParameters
                 && catalogParams.map(ModelParams::effort).filter(this::isRefused).isPresent()) {
             var kept = customParameters.deepCopy();
             var removed = removeReasoningEffort(kept);
             if (!removed.isEmpty()) {
-                builder.customParameters(kept.isEmpty() ? null : kept);
+                resolved = resolved.toBuilder().customParameters(kept.isEmpty() ? null : kept).build();
                 removed.forEach(param -> changes.add(new ParamChange(param, ParamChange.Reason.REFUSED_BY_MODEL)));
             }
         }
+
         return changes.isEmpty()
                 ? new Resolution<>(parameters, List.of())
-                : new Resolution<>(builder.build(), List.copyOf(changes));
+                : new Resolution<>(resolved, List.copyOf(changes));
     }
 
     // The Responses-shaped reasoning object carries the same effort, but the rest of it, such as summary, can still
@@ -194,6 +239,38 @@ public class ParamResolver {
         return removed;
     }
 
+    /**
+     * The OpenAI effort custom parameters set, the nested one first: on the Responses API a stored reasoning object
+     * replaces the one built from reasoning_effort, so of two copies the nested one is what the model runs at. The
+     * rule editor writes it there next to keys like summary. Chat Completions refuses the object outright ("Unknown
+     * parameter: 'reasoning'"), so reading it first changes nothing there.
+     */
+    public static @Nullable String reasoningEffort(@Nullable JsonNode customParameters) {
+        if (customParameters == null) {
+            return null;
+        }
+        return textOf(customParameters.path(REASONING).path(EFFORT))
+                .or(() -> textOf(customParameters.path(REASONING_EFFORT)))
+                .orElse(null);
+    }
+
+    /** The same rule for a chat request's {@code custom_parameters}. */
+    public static @Nullable String reasoningEffort(@Nullable Map<String, Object> customParameters) {
+        if (customParameters == null) {
+            return null;
+        }
+        var nested = customParameters.get(REASONING) instanceof Map<?, ?> reasoning ? reasoning.get(EFFORT) : null;
+        return textOf(nested).or(() -> textOf(customParameters.get(REASONING_EFFORT))).orElse(null);
+    }
+
+    private static Optional<String> textOf(JsonNode node) {
+        return node.isTextual() ? textOf(node.asText()) : Optional.empty();
+    }
+
+    private static Optional<String> textOf(Object value) {
+        return value instanceof String text && StringUtils.isNotBlank(text) ? Optional.of(text) : Optional.empty();
+    }
+
     // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
     private Optional<ModelParams> catalogParams(String model, String route) {
         if (model == null) {
@@ -203,6 +280,60 @@ public class ParamResolver {
                 .or(() -> route == null
                         ? Optional.empty()
                         : Optional.ofNullable(registryService.paramsOf(LlmProvider.OPEN_AI.getValue(), model)));
+    }
+
+    // The catalog's samplingAtEffortNone: a refused temperature or top_p comes back when the request runs at none, sent
+    // or as the model's default. A model without a none level can't run there, whatever the request asks.
+    private static boolean runsAtEffortNone(ModelParams params, @Nullable String requestedEffort) {
+        var effort = params.effort();
+        if (!Boolean.TRUE.equals(params.samplingAtEffortNone()) || effort == null
+                || CollectionUtils.isEmpty(effort.levels()) || !effort.levels().contains(EFFORT_NONE)) {
+            return false;
+        }
+        return EFFORT_NONE.equals(StringUtils.isNotBlank(requestedEffort) ? requestedEffort : effort.defaultLevel());
+    }
+
+    // An extra body key replaces the typed field of the same name on the way out (CustomParametersOverrides), so it is
+    // the effort the model runs at.
+    private static String requestedEffort(ChatCompletionRequest request) {
+        return ObjectUtils.getIfNull(reasoningEffort(request.customParameters()), request.reasoningEffort());
+    }
+
+    // Gemini answers a level its model doesn't offer with a 400 ("minimal" on gemini-3.8-flash), so it moves to the
+    // nearest offered one, the lower on a tie, as the frontend's model switch does: minimal becomes low, not the
+    // model's default, which may think the most. Never to off, which turns thinking off instead. Only where the level
+    // is what goes out: an explicit budget wins over it, and before Gemini 3 a level is sent as its budget, which
+    // every model takes.
+    private Optional<String> nearestOfferedThinkingLevel(String model, GeminiThinkingParams thinking) {
+        var requested = thinking.level();
+        if (requested == null || requested == Level.OFF || thinking.budgetTokens() != null
+                || !GeminiThinkingParams.modelAcceptsLevel(model)) {
+            return Optional.empty();
+        }
+        var offered = offeredThinkingLevels(model);
+        if (offered.isEmpty() || offered.contains(requested.wireValue())) {
+            return Optional.empty();
+        }
+        return Arrays.stream(Level.values())
+                .filter(level -> level != Level.OFF && offered.contains(level.wireValue()))
+                .min(Comparator.<Level>comparingInt(level -> Math.abs(level.ordinal() - requested.ordinal()))
+                        .thenComparingInt(Level::ordinal))
+                .map(Level::wireValue);
+    }
+
+    // The catalog's effort levels are a Gemini model's thinking levels.
+    private List<String> offeredThinkingLevels(String model) {
+        if (model == null) {
+            return List.of();
+        }
+        return registryService.findModel(model)
+                .filter(result -> result.provider() == LlmProvider.GEMINI || result.provider() == LlmProvider.VERTEX_AI)
+                .map(result -> ObjectUtils.getIfNull(result.model().params(),
+                        () -> registryService.paramsOf(result.provider().getValue(), result.model().id())))
+                .map(ModelParams::effort)
+                .filter(effort -> !Boolean.FALSE.equals(effort.accepted()) && effort.levels() != null)
+                .map(ModelParams.EffortParam::levels)
+                .orElse(List.of());
     }
 
     private static ParamChange.Reason refusalReason(boolean refusedByModel) {

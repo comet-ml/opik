@@ -34,9 +34,12 @@ profiles:
         stop: {accepted: false}
         seed: {accepted: false}
         maxOutputTokens: {min: 16}
+  # OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". So both come back when the
+  # request runs at none, sent or as the model's default (gpt-5.1/5.2/5.4); a model without a none level never does.
   openai-reasoning:
     temperature: {accepted: false}
     topP: {accepted: false}
+    samplingAtEffortNone: true
     frequencyPenalty: {accepted: false}
     presencePenalty: {accepted: false}
     # Reasoning tokens count against the limit, so a limit of 1 gets a 400 ("max_tokens or model output limit was
