@@ -341,12 +341,16 @@ def _edits_to_chat_prompts(
     metric: Any,
     optimizer: Any | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
-    prompts: list[chat_prompt.ChatPrompt] = [
-        apply_text_edits(
-            base_prompt, edits, getattr(optimizer, "_optimizable_roles", None)
-        )
-        for edits in edit_sets
-    ]
+    prompts: list[chat_prompt.ChatPrompt] = []
+    for edits in edit_sets:
+        try:
+            prompts.append(
+                apply_text_edits(
+                    base_prompt, edits, getattr(optimizer, "_optimizable_roles", None)
+                )
+            )
+        except ValueError as exc:
+            logger.warning("Skipping variation with invalid edits: %s", exc)
     # If optimizing tools apply tools to chat prompt
     if optimize_tools:
         updated: list[chat_prompt.ChatPrompt] = []

@@ -113,11 +113,15 @@ def _build_synthesis_prompts(
     for idx, item in enumerate(prompt_items, start=1):
         if not isinstance(item, dict) or not isinstance(item.get("edits"), list):
             raise ValueError("Candidate must contain a list of targeted text edits")
-        candidate = apply_text_edits(
-            current_prompt,
-            item["edits"],
-            getattr(optimizer, "_optimizable_roles", None),
-        )
+        try:
+            candidate = apply_text_edits(
+                current_prompt,
+                item["edits"],
+                getattr(optimizer, "_optimizable_roles", None),
+            )
+        except ValueError as exc:
+            logger.warning("Skipping candidate with invalid edits: %s", exc)
+            continue
         candidates.append(candidate)
         optimizer._candidate_metadata_by_prompt_id[id(candidate)] = {
             "improvement_focus": item.get("improvement_focus"),

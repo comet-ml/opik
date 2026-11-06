@@ -379,7 +379,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "\n\nReturn ONLY valid JSON. Do not include commentary or markdown."
         )
         attempt_messages = messages
-        response_content = None
+        new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+        response_content: Any = None
         for attempt in range(2):
             try:
                 response_content = _llm_calls.call_model(
@@ -397,47 +398,40 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     model_parameters=model_parameters,
                     response_model=DynamicFewShotPromptMessages,
                 )
+                if isinstance(response_content, list):
+                    response_content = response_content[0]
+                logger.debug(
+                    f"few_shot_prompt_template - LLM response: {response_content}"
+                )
+                new_prompts = {
+                    prompt_name: apply_text_edits(
+                        prompts[prompt_name],
+                        getattr(response_content, original_to_sanitized[prompt_name]),
+                        getattr(self, "_optimizable_roles", None),
+                    )
+                    for prompt_name in prompts
+                }
                 break
-            except (StructuredOutputParsingError, BadRequestError):
+            except (StructuredOutputParsingError, BadRequestError, ValueError) as exc:
                 if attempt == 0:
+                    feedback = (
+                        f"\n\nYour previous answer was rejected: {exc}"
+                        if isinstance(exc, ValueError)
+                        else ""
+                    )
                     attempt_messages = [
-                        {**msg, "content": f"{msg['content']}{strict_suffix}"}
+                        {**msg, "content": f"{msg['content']}{feedback}{strict_suffix}"}
                         if msg.get("role") == "user"
                         else msg
                         for msg in messages
                     ]
                     continue
+                logger.error(f"Couldn't create prompt with placeholder: {exc}")
                 raise
-        if response_content is None:
-            raise StructuredOutputParsingError(
-                content="",
-                error=ValueError(
-                    "Few-shot prompt synthesis failed after retrying structured output parsing."
-                ),
-            )
-        if isinstance(response_content, list):
-            response_content = response_content[0]
-        logger.debug(f"few_shot_prompt_template - LLM response: {response_content}")
-
-        new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
-        for prompt_name in prompts.keys():
-            try:
-                edits = getattr(response_content, original_to_sanitized[prompt_name])
-                new_prompt = apply_text_edits(
-                    prompts[prompt_name],
-                    edits,
-                    getattr(self, "_optimizable_roles", None),
-                )
-            except Exception as e:
-                logger.error(
-                    f"Couldn't create prompt with placeholder for {prompt_name}: {e}"
-                )
-                raise
-
-            new_prompts[prompt_name] = new_prompt
 
         return new_prompts, _usable_example_template(
-            str(response_content.template), user_message["example_fields"]
+            str(response_content.template),
+            cast(list[str], user_message["example_fields"]),
         )
 
     def _suggest_example_index(
@@ -1126,7 +1120,9 @@ def _usable_example_template(template: str, fields: list[str]) -> str:
         and (not has_answer or any(is_label_field(field) for field in used))
     ):
         return template
-    logger.warning("Few-shot example template unusable, using a plain one: %r", template)
+    logger.warning(
+        "Few-shot example template unusable, using a plain one: %r", template
+    )
     inputs = [f for f in fields if f != "id" and not is_label_field(f)]
     answers = [f for f in fields if f != "id" and is_label_field(f)]
     return "\n".join(f"{field}: {{{field}}}" for field in inputs + answers)

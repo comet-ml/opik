@@ -490,9 +490,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     if context.extra_params
                     else None
                 )
-                candidate_prompt = apply_text_edits(
-                    best_prompts[prompt_name], improved_prompt.edits, allowed_roles
-                )
+                try:
+                    candidate_prompt = apply_text_edits(
+                        best_prompts[prompt_name], improved_prompt.edits, allowed_roles
+                    )
+                except ValueError as exc:
+                    logger.warning("Skipping candidate with invalid edits: %s", exc)
+                    break
                 candidate_prompt = self._apply_tool_updates_from_improvement(
                     candidate_prompt=candidate_prompt,
                     improved_prompt=improved_prompt,
@@ -500,7 +504,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     prompt_name=prompt_name,
                 )
                 improved_chat_prompts[prompt_name] = candidate_prompt
-            improved_chat_prompts_candidates.append(improved_chat_prompts)
+            else:
+                improved_chat_prompts_candidates.append(improved_chat_prompts)
         return improved_chat_prompts_candidates
 
     def _apply_tool_updates_from_improvement(
