@@ -100,7 +100,10 @@ class RequiredPermissionsCoverageArchTest {
             // already decided that by the time the handler runs, so the body only echoes the outcome. Demanding
             // a permission to ask the question would be circular — and would change a 204 into a 403 that means
             // the opposite of what the caller asked.
-            "AuthenticationResource.checkAccess");
+            "AuthenticationResource.checkAccess",
+            // A read that is a POST only to carry a span's usage map. It prices that usage in memory and writes
+            // nothing, and it shows no more than the ungated GET of the same prices, which any member may read.
+            "ModelPricesResource.resolve");
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
