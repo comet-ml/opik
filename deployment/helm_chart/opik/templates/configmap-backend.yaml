@@ -28,7 +28,7 @@ data:
   {{- if and (has $key (list "backend" "python-backend")) $.Values.redis.enabled (not (hasKey $value.env "REDIS_URL")) }}
   {{- $redisAuth := "" }}
   {{- if $.Values.redis.auth.enabled }}
-  {{- $redisAuth = printf ":%s@" (urlquery $.Values.redis.auth.password) }}
+  {{- $redisAuth = printf ":%s@" (urlquery $.Values.redis.auth.password | replace "+" "%20") }}
   {{- end }}
   REDIS_URL: {{ printf "redis://%s%s:6379/" $redisAuth ($.Values.redis.fullnameOverride | default "opik-redis-master") | quote }}
   {{- end }}

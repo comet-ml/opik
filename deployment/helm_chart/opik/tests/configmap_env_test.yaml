@@ -229,3 +229,14 @@ tests:
       - equal:
           path: data.REDIS_URL
           value: redis://external:6379/
+
+  - it: the bundled Redis password is percent-encoded in REDIS_URL
+    set:
+      redis.auth.password: "a b+c@d"
+    documentSelector:
+      path: metadata.name
+      value: opik-backend
+    asserts:
+      - equal:
+          path: data.REDIS_URL
+          value: redis://:a%20b%2Bc%40d@opik-redis-master:6379/
