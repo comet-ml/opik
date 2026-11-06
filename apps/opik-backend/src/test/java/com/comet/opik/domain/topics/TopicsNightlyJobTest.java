@@ -149,6 +149,7 @@ class TopicsNightlyJobTest {
     private TransactionTemplateAsync clickHouseTemplate;
     private TopicsNightlyService nightlyService;
     private TopicVectorsDAO vectorsDAO;
+    private TopicWindowDAO windowDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicsProjectDeletedListener projectDeletedListener;
     private GuiceJobManager jobManager;
@@ -159,7 +160,7 @@ class TopicsNightlyJobTest {
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
-            @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO,
+            @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO, @Jit TopicWindowDAO windowDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.client = client;
         this.opikConfig = opikConfig;
@@ -170,6 +171,7 @@ class TopicsNightlyJobTest {
         this.lockService = lockService;
         this.nightlyService = nightlyService;
         this.vectorsDAO = vectorsDAO;
+        this.windowDAO = windowDAO;
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectDeletedListener = projectDeletedListener;
     }
@@ -866,6 +868,28 @@ class TopicsNightlyJobTest {
                 .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
         assertThat(guards("topics:read_window", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "", "120"));
+    }
+
+    @Test
+    @DisplayName("the window count and the window read skip the vectors of deleted traces")
+    void deletedVectorsAreNotRead() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        var deleted = FIXTURE.traceIds.subList(0, 10);
+        // deleteByKeys runs deleteByTraceIds, the trace-delete cascade's delete, as the system user.
+        vectorsDAO.deleteByKeys(workspaceId, deleted.stream()
+                .map(traceId -> TopicTraceKey.builder().projectId(projectId).traceId(traceId).build())
+                .toList()).block();
+
+        var to = night().atStartOfDay(ZoneOffset.UTC).toInstant();
+        var from = night().minusDays(opikConfig.getTopics().getNightly().getWindowDays())
+                .atStartOfDay(ZoneOffset.UTC).toInstant();
+        assertThat(windowDAO.countByProject(workspaceId, projectId, from, to, 60).collectList().block())
+                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - deleted.size()));
+        assertThat(windowDAO.readWindow(workspaceId, projectId, from, to, BUILT, 60).collectList().block())
+                .extracting(TopicWindowRow::traceId)
+                .containsExactlyInAnyOrderElementsOf(FIXTURE.traceIds.subList(deleted.size(), BUILT));
     }
 
     /**
