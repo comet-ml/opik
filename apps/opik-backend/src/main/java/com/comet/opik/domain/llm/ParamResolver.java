@@ -6,6 +6,8 @@ import com.comet.opik.api.ModelParams.EffortParam;
 import com.comet.opik.api.ModelParams.FlagParam;
 import com.comet.opik.api.ModelParams.NumberParam;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
+import com.comet.opik.infrastructure.llm.GeminiThinkingParams.Level;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -20,10 +22,10 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -64,8 +66,6 @@ public class ParamResolver {
     private static final String LEVEL = "level";
     private static final String THINKING_LEVEL = THINKING + "." + LEVEL;
     private static final String EFFORT_NONE = "none";
-    // From least to most thinking, so the nearest offered level can be found by distance.
-    private static final List<String> THINKING_LEVELS = List.of("minimal", "low", "medium", "high");
 
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull LlmModelRegistryService registryService;
@@ -117,12 +117,15 @@ public class ParamResolver {
             var effectiveParams = route == null || modelParams.routes() == null
                     ? modelParams
                     : modelParams.routes().getOrDefault(route, modelParams);
+            // Effort none undoes only the model's own refusal: a route that refuses one refuses it at every effort.
             var samplingAtEffortNone = runsAtEffortNone(effectiveParams, requestedEffort(request));
-            if (temperature != null && isRefused(effectiveParams.temperature()) && !samplingAtEffortNone) {
+            if (temperature != null && isRefused(effectiveParams.temperature())
+                    && !(samplingAtEffortNone && isRefused(modelParams.temperature()))) {
                 builder.temperature(null);
                 changes.add(new ParamChange(TEMPERATURE, refusalReason(isRefused(modelParams.temperature()))));
             }
-            if (topP != null && isRefused(effectiveParams.topP()) && !samplingAtEffortNone) {
+            if (topP != null && isRefused(effectiveParams.topP())
+                    && !(samplingAtEffortNone && isRefused(modelParams.topP()))) {
                 builder.topP(null);
                 changes.add(new ParamChange(TOP_P, refusalReason(isRefused(modelParams.topP()))));
             }
@@ -147,18 +150,16 @@ public class ParamResolver {
             }
         }
 
-        if (request.customParameters() != null
-                && request.customParameters().get(THINKING) instanceof Map<?, ?> thinking
-                && thinking.get(LEVEL) instanceof String level) {
-            nearestOfferedThinkingLevel(model, level).ifPresent(offered -> {
-                var nextThinking = new LinkedHashMap<String, Object>();
-                thinking.forEach((key, value) -> nextThinking.put(String.valueOf(key), value));
-                nextThinking.put(LEVEL, offered);
-                var nextCustomParameters = new LinkedHashMap<>(request.customParameters());
-                nextCustomParameters.put(THINKING, nextThinking);
-                builder.customParameters(nextCustomParameters);
-                changes.add(new ParamChange(THINKING_LEVEL, ParamChange.Reason.LEVEL_NOT_OFFERED));
-            });
+        var offeredLevel = nearestOfferedThinkingLevel(model, GeminiThinkingParams.from(request.customParameters()));
+        if (offeredLevel.isPresent()) {
+            var nextThinking = new LinkedHashMap<String, Object>();
+            ((Map<?, ?>) request.customParameters().get(THINKING))
+                    .forEach((key, value) -> nextThinking.put(String.valueOf(key), value));
+            nextThinking.put(LEVEL, offeredLevel.get());
+            var nextCustomParameters = new LinkedHashMap<>(request.customParameters());
+            nextCustomParameters.put(THINKING, nextThinking);
+            builder.customParameters(nextCustomParameters);
+            changes.add(new ParamChange(THINKING_LEVEL, ParamChange.Reason.LEVEL_NOT_OFFERED));
         }
 
         return changes.isEmpty()
@@ -177,8 +178,8 @@ public class ParamResolver {
         var resolved = parameters;
         var catalogParams = catalogParams(model, null);
 
-        var offeredLevel = judgeThinkingLevel(parameters.customParameters())
-                .flatMap(level -> nearestOfferedThinkingLevel(model, level));
+        var offeredLevel = nearestOfferedThinkingLevel(model,
+                GeminiThinkingParams.from(parameters.customParameters()));
         if (offeredLevel.isPresent()) {
             var customParameters = (ObjectNode) parameters.customParameters().deepCopy();
             ((ObjectNode) customParameters.get(THINKING)).put(LEVEL, offeredLevel.get());
@@ -187,7 +188,7 @@ public class ParamResolver {
         }
 
         if (parameters.temperature() != null) {
-            var effort = judgeEffort(parameters.customParameters());
+            var effort = reasoningEffort(parameters.customParameters());
             var refused = ModelCapabilities.rejectsTemperature(model, registryService)
                     || catalogParams
                             .filter(params -> isRefused(params.temperature()) && !runsAtEffortNone(params, effort))
@@ -238,6 +239,38 @@ public class ParamResolver {
         return removed;
     }
 
+    /**
+     * The OpenAI effort custom parameters set, the nested one first: on the Responses API a stored reasoning object
+     * replaces the one built from reasoning_effort, so of two copies the nested one is what the model runs at. The
+     * rule editor writes it there next to keys like summary. Chat Completions refuses the object outright ("Unknown
+     * parameter: 'reasoning'"), so reading it first changes nothing there.
+     */
+    public static @Nullable String reasoningEffort(@Nullable JsonNode customParameters) {
+        if (customParameters == null) {
+            return null;
+        }
+        return textOf(customParameters.path(REASONING).path(EFFORT))
+                .or(() -> textOf(customParameters.path(REASONING_EFFORT)))
+                .orElse(null);
+    }
+
+    /** The same rule for a chat request's {@code custom_parameters}. */
+    public static @Nullable String reasoningEffort(@Nullable Map<String, Object> customParameters) {
+        if (customParameters == null) {
+            return null;
+        }
+        var nested = customParameters.get(REASONING) instanceof Map<?, ?> reasoning ? reasoning.get(EFFORT) : null;
+        return textOf(nested).or(() -> textOf(customParameters.get(REASONING_EFFORT))).orElse(null);
+    }
+
+    private static Optional<String> textOf(JsonNode node) {
+        return node.isTextual() ? textOf(node.asText()) : Optional.empty();
+    }
+
+    private static Optional<String> textOf(Object value) {
+        return value instanceof String text && StringUtils.isNotBlank(text) ? Optional.of(text) : Optional.empty();
+    }
+
     // Only OpenAI keys have a route, so an id the registry doesn't list still gets the OpenAI profile there.
     private Optional<ModelParams> catalogParams(String model, String route) {
         if (model == null) {
@@ -263,48 +296,29 @@ public class ParamResolver {
     // An extra body key replaces the typed field of the same name on the way out (CustomParametersOverrides), so it is
     // the effort the model runs at.
     private static String requestedEffort(ChatCompletionRequest request) {
-        return request.customParameters() != null
-                && request.customParameters().get(REASONING_EFFORT) instanceof String effort
-                && StringUtils.isNotBlank(effort)
-                        ? effort
-                        : request.reasoningEffort();
-    }
-
-    // Nested first: on the Responses API a stored reasoning object replaces the one built from reasoning_effort, so of
-    // two copies the nested one is what the model runs at. The rule editor writes it there next to keys like summary.
-    private static String judgeEffort(JsonNode customParameters) {
-        if (customParameters == null) {
-            return null;
-        }
-        var nested = customParameters.path(REASONING).path(EFFORT);
-        var effort = nested.isTextual() && StringUtils.isNotBlank(nested.asText())
-                ? nested
-                : customParameters.path(REASONING_EFFORT);
-        return effort.isTextual() ? effort.asText() : null;
-    }
-
-    private static Optional<String> judgeThinkingLevel(JsonNode customParameters) {
-        var thinking = customParameters == null || !customParameters.isObject()
-                ? null
-                : customParameters.get(THINKING);
-        var level = thinking == null || !thinking.isObject() ? null : thinking.get(LEVEL);
-        return level != null && level.isTextual() ? Optional.of(level.asText()) : Optional.empty();
+        return ObjectUtils.getIfNull(reasoningEffort(request.customParameters()), request.reasoningEffort());
     }
 
     // Gemini answers a level its model doesn't offer with a 400 ("minimal" on gemini-3.8-flash), so it moves to the
     // nearest offered one, the lower on a tie, as the frontend's model switch does: minimal becomes low, not the
-    // model's default, which may think the most. Never to none, which turns thinking off instead.
-    private Optional<String> nearestOfferedThinkingLevel(String model, String level) {
-        var requested = level.toLowerCase(Locale.ROOT);
-        var rank = THINKING_LEVELS.indexOf(requested);
-        var offered = offeredThinkingLevels(model);
-        if (rank < 0 || offered.isEmpty() || offered.contains(requested)) {
+    // model's default, which may think the most. Never to off, which turns thinking off instead. Only where the level
+    // is what goes out: an explicit budget wins over it, and before Gemini 3 a level is sent as its budget, which
+    // every model takes.
+    private Optional<String> nearestOfferedThinkingLevel(String model, GeminiThinkingParams thinking) {
+        var requested = thinking.level();
+        if (requested == null || requested == Level.OFF || thinking.budgetTokens() != null
+                || !GeminiThinkingParams.modelAcceptsLevel(model)) {
             return Optional.empty();
         }
-        return offered.stream()
-                .filter(THINKING_LEVELS::contains)
-                .min(Comparator.<String>comparingInt(candidate -> Math.abs(THINKING_LEVELS.indexOf(candidate) - rank))
-                        .thenComparingInt(THINKING_LEVELS::indexOf));
+        var offered = offeredThinkingLevels(model);
+        if (offered.isEmpty() || offered.contains(requested.wireValue())) {
+            return Optional.empty();
+        }
+        return Arrays.stream(Level.values())
+                .filter(level -> level != Level.OFF && offered.contains(level.wireValue()))
+                .min(Comparator.<Level>comparingInt(level -> Math.abs(level.ordinal() - requested.ordinal()))
+                        .thenComparingInt(Level::ordinal))
+                .map(Level::wireValue);
     }
 
     // The catalog's effort levels are a Gemini model's thinking levels.

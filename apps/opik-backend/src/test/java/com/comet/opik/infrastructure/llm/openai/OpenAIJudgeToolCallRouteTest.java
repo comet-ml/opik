@@ -150,9 +150,28 @@ class OpenAIJudgeToolCallRouteTest {
     }
 
     @Test
-    void aNestedReasoningEffortIsLeftOutOnChatCompletionsWithoutReasoning() {
+    void aNestedEffortNoneKeepsChatCompletionsWithoutTheReasoningObject() {
+        callTools(onOpenAi, keyInChatCompletionsMode(null),
+                judge("{\"reasoning\": {\"effort\": \"none\", \"summary\": \"auto\"}}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+
+        assertToolsOnChatCompletionsWithoutReasoning();
+    }
+
+    @Test
+    void aNestedEffortWinsOverTheFlatOneOnTheToolRoute() {
         callTools(onOpenAi, keyInChatCompletionsMode(null),
                 judge("{\"reasoning_effort\": \"none\", \"reasoning\": {\"effort\": \"high\"}}"),
+                tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
+
+        assertThat(sentBody(RESPONSES_PATH).at("/reasoning/effort").asText()).isEqualTo("high");
+        assertThat(requestsTo(COMPLETIONS_PATH)).isZero();
+    }
+
+    @Test
+    void aCustomBaseUrlThatGivesUpReasoningLeavesTheWholeReasoningObjectOut() {
+        callTools(withoutServerWideUrl, keyInChatCompletionsMode(LlmTestClients.baseUrlOf(wireMock)),
+                judge("{\"reasoning\": {\"effort\": \"high\", \"summary\": \"auto\"}}"),
                 tools(ChatCompletionsTools.EFFORT_NONE_ONLY));
 
         assertToolsOnChatCompletionsWithoutReasoning();
