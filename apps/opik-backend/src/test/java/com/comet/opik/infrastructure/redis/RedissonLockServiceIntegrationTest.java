@@ -425,6 +425,45 @@ class RedissonLockServiceIntegrationTest {
         assertThat(results).containsExactly("first-action", "fallback-action");
     }
 
+    /**
+     * {@code isLocked} reads a lock without taking it: false before it is taken, true while its holder holds it (and
+     * reading it twice does not change that), false again once it is released.
+     */
+    @Test
+    void testIsLocked_ReadsWithoutTaking(LockService lockService) {
+        var lock = new LockService.Lock(UUID.randomUUID(),
+                "lockName-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(RANDOM_STRING_LENGTH)));
+        var holdActionStarted = new AtomicBoolean(false);
+        var releaseHold = new CountDownLatch(1);
+
+        var holdAction = Mono.defer(() -> {
+            holdActionStarted.set(true);
+            return Mono.fromCallable(() -> {
+                releaseHold.await();
+                return "held";
+            }).subscribeOn(Schedulers.boundedElastic());
+        });
+
+        assertThat(lockService.isLocked(lock).block()).isFalse();
+
+        var holder = lockService.bestEffortLock(
+                lock, holdAction, Mono.empty(),
+                Duration.ofSeconds(30), Duration.ofMillis(100))
+                .subscribe();
+        try {
+            Awaitility.await().atMost(AWAIT_ACTION_START).untilTrue(holdActionStarted);
+
+            assertThat(lockService.isLocked(lock).block()).isTrue();
+            assertThat(lockService.isLocked(lock).block()).isTrue();
+        } finally {
+            releaseHold.countDown();
+        }
+
+        Awaitility.await().atMost(AWAIT_ACTION_START)
+                .untilAsserted(() -> assertThat(lockService.isLocked(lock).block()).isFalse());
+        holder.dispose();
+    }
+
     @Test
     void testBestEffortLock_FallbackWhenLockUnavailable(LockService lockService) {
         // Create two locks with the same key to simulate contention

@@ -241,6 +241,11 @@ class RedissonLockService implements LockService {
     }
 
     @Override
+    public Mono<Boolean> isLocked(@NonNull Lock lock) {
+        return getSemaphore(lock).acquiredPermits().map(acquired -> acquired > 0);
+    }
+
+    @Override
     public Mono<Boolean> lockUsingToken(@NonNull Lock lock, @NonNull Duration lockDuration) {
         return redisClient.getBucket(lock.key()).setIfAbsent("ok", lockDuration);
     }

@@ -36,6 +36,11 @@ public class DummyLockService implements LockService {
     }
 
     @Override
+    public Mono<Boolean> isLocked(Lock lock) {
+        return Mono.just(false);
+    }
+
+    @Override
     public Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration) {
         return Mono.just(true);
     }

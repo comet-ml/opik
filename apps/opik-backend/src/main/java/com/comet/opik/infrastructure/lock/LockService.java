@@ -51,6 +51,12 @@ public interface LockService {
     <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction, Duration actionTimeout,
             Duration lockTimeout, boolean holdUntilExpiry);
 
+    /**
+     * Whether a holder of {@code lock}, taken through {@link #executeWithLock} or {@link #bestEffortLock}, holds it now.
+     * Reads it without taking it; a permit past its lease is released first, as the next acquire would.
+     */
+    Mono<Boolean> isLocked(Lock lock);
+
     Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration);
     Mono<Void> unlockUsingToken(Lock lock);
 

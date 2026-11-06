@@ -88,6 +88,11 @@ class AuthTokenProviderTest {
         }
 
         @Override
+        public Mono<Boolean> isLocked(Lock lock) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration) {
             throw new UnsupportedOperationException();
         }
