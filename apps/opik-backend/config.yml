@@ -1975,7 +1975,7 @@ serviceToggles:
   costIntelligenceEnabled: ${TOGGLE_COST_INTELLIGENCE_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not organization admins can set custom model prices through /v1/private/model-prices
-  modelPricesEnabled: ${TOGGLE_MODEL_PRICES_ENABLED:-"false"}
+  modelPricesEnabled: ${TOGGLE_MODEL_PRICES_ENABLED:-"true"}
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
