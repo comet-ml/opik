@@ -12,7 +12,6 @@ import com.comet.opik.infrastructure.inference.DecideRequest;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.Question;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.common.collect.Lists;
@@ -23,21 +22,17 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @ImplementedBy(GuardrailsValidationServiceImpl.class)
 public interface GuardrailsValidationService {
@@ -65,14 +60,8 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
     static final Duration DECIDE_DEADLINE = Duration.ofSeconds(5);
     /** Room past the service's deadline for its answer to arrive, or for a quick retry of an overloaded call. */
     static final Duration CLIENT_MARGIN = Duration.ofSeconds(1);
-    /** Each topic list is one choice question, which adds "none of these" to it, within the option limit. */
-    static final int MAX_TOPICS = Question.ChoiceQuestion.MAX_OPTIONS - 1;
-    /** A topic is a short label the model reads as one option of the topic question. */
-    static final int MAX_TOPIC_LENGTH = 256;
     /** What a check that could not run reports. The cause is logged, not returned: it may name internal hosts. */
     static final String FAIL_OPEN_MESSAGE = "Guardrail check unavailable; it passed without running";
-    static final String ALLOWED_TOPICS = "allowed_topics";
-    static final String RESTRICTED_TOPICS = "restricted_topics";
 
     private final @NonNull InferenceClient inferenceClient;
     private final @NonNull OpikConfiguration configuration;
@@ -141,91 +130,19 @@ class GuardrailsValidationServiceImpl implements GuardrailsValidationService {
                             .formatted(index));
         }
         return switch (descriptor.type()) {
-            case PII -> new PiiRule(index, descriptor, entities(index, config));
-            case TOPIC -> topicRule(index, descriptor, config);
+            case PII -> new PiiRule(index, descriptor, GuardrailQuestions.piiEntities(path(index), config));
+            case TOPIC -> {
+                var topics = GuardrailQuestions.topicLists(path(index), config);
+                yield new TopicRule(index, descriptor, topics.allowed(), topics.restricted());
+            }
             case PROMPT_INJECTION -> new InjectionRule(index, descriptor);
             default -> throw new BadRequestException("validations[%d].type '%s' is not supported by this endpoint"
                     .formatted(index, descriptor.type()));
         };
     }
 
-    private static List<String> entities(int index, JsonNode config) {
-        var entities = stringList(index, config, "entities", GuardrailQuestions.PII_DESCRIPTIONS.size());
-        for (var entity : entities) {
-            if (!GuardrailQuestions.PII_DESCRIPTIONS.containsKey(entity)) {
-                throw new BadRequestException("validations[%d].config.entities contains the unsupported class '%s'"
-                        .formatted(index, entity));
-            }
-        }
-        return entities;
-    }
-
-    private static TopicRule topicRule(int index, ValidationDescriptor descriptor, JsonNode config) {
-        var allowed = topics(index, config, ALLOWED_TOPICS);
-        var restricted = topics(index, config, RESTRICTED_TOPICS);
-        if (allowed.isEmpty() && restricted.isEmpty()) {
-            throw new BadRequestException("validations[%d].config needs %s or %s"
-                    .formatted(index, ALLOWED_TOPICS, RESTRICTED_TOPICS));
-        }
-        // Topics are compared ignoring case, as the model reads them.
-        var restrictedKeys = restricted.stream()
-                .map(GuardrailQuestions::topicKey)
-                .collect(Collectors.toSet());
-        allowed.stream()
-                .filter(topic -> restrictedKeys.contains(GuardrailQuestions.topicKey(topic)))
-                .findFirst()
-                .ifPresent(topic -> {
-                    throw new BadRequestException("validations[%d].config has '%s' in both %s and %s"
-                            .formatted(index, topic, ALLOWED_TOPICS, RESTRICTED_TOPICS));
-                });
-        return new TopicRule(index, descriptor, allowed, restricted);
-    }
-
-    /** An absent or empty list means the check does not use it. */
-    private static List<String> topics(int index, JsonNode config, String field) {
-        var node = config.path(field);
-        if (node.isMissingNode() || node.isNull() || (node.isArray() && node.isEmpty())) {
-            return List.of();
-        }
-        var topics = stringList(index, config, field, MAX_TOPICS);
-        var topicKeys = new HashSet<String>();
-        for (var topic : topics) {
-            if (topic.length() > MAX_TOPIC_LENGTH) {
-                throw new BadRequestException("validations[%d].config.%s has a topic longer than %d characters"
-                        .formatted(index, field, MAX_TOPIC_LENGTH));
-            }
-            // The check adds this option itself; a policy topic with the same name would make its answer ambiguous.
-            if (GuardrailQuestions.NONE_OF_THESE.equalsIgnoreCase(topic)) {
-                throw new BadRequestException("validations[%d].config.%s cannot contain '%s'"
-                        .formatted(index, field, GuardrailQuestions.NONE_OF_THESE));
-            }
-            // Case variants would be separate options of one choice question and split its probability.
-            if (!topicKeys.add(GuardrailQuestions.topicKey(topic))) {
-                throw new BadRequestException("validations[%d].config.%s contains '%s' more than once, ignoring case"
-                        .formatted(index, field, topic));
-            }
-        }
-        return topics;
-    }
-
-    private static List<String> stringList(int index, JsonNode config, String field, int maxSize) {
-        var node = config.path(field);
-        if (!node.isArray() || node.isEmpty() || node.size() > maxSize) {
-            throw new BadRequestException("validations[%d].config.%s must be a list of 1 to %d strings"
-                    .formatted(index, field, maxSize));
-        }
-        var values = new LinkedHashSet<String>();
-        for (var item : node) {
-            if (!item.isTextual() || StringUtils.isBlank(item.asText())) {
-                throw new BadRequestException("validations[%d].config.%s must contain only non-blank strings"
-                        .formatted(index, field));
-            }
-            if (!values.add(item.asText().trim())) {
-                throw new BadRequestException("validations[%d].config.%s contains a value more than once"
-                        .formatted(index, field));
-            }
-        }
-        return List.copyOf(values);
+    private static String path(int index) {
+        return "validations[%d].config".formatted(index);
     }
 
     private static Answer answer(Map<String, Answer> answers, String questionId) {

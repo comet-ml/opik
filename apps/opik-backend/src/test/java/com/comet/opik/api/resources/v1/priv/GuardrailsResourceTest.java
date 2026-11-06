@@ -57,6 +57,8 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.GuardrailsValidationRequest.MAX_TEXT_LENGTH;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
@@ -238,18 +240,32 @@ public class GuardrailsResourceTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("validTexts")
-    @DisplayName("guardrail validations answer 501 until they are implemented")
-    void validate__whenRequestIsValid__thenNotImplemented(String scenario, String text) {
+    @DisplayName("guardrail validations are forbidden while the backend does not run guardrails")
+    void validate__whenGuardrailsAreOff__thenForbidden(String scenario, String text) {
         var request = GuardrailsValidationRequest.builder()
                 .text(text)
                 .validations(List.of(promptInjection()))
                 .build();
 
         try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_IMPLEMENTED);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             assertThat(response.readEntity(ErrorMessage.class).getMessage())
-                    .isEqualTo("Guardrail checks are not available yet");
+                    .isEqualTo("Guardrails validation service is not enabled");
         }
+    }
+
+    @Test
+    @DisplayName("while the backend does not run guardrails, a validation never asks the platform about the organization")
+    void validate__whenGuardrailsAreOff__thenThePlatformIsNotAsked() {
+        var request = GuardrailsValidationRequest.builder()
+                .text("some text")
+                .validations(List.of(promptInjection()))
+                .build();
+
+        try (var response = guardrailsResourceClient.validate(request, API_KEY, TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+        }
+        wireMock.server().verify(0, postRequestedFor(urlPathMatching("/opik/workspace-features.*")));
     }
 
     static Stream<Arguments> invalidValidationRequests() {

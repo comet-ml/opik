@@ -4,15 +4,23 @@ import com.comet.opik.infrastructure.inference.Question;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The questions the guardrails checks ask the decision model, fixed by the evaluation of 2026-10-21 (design
  * OPIK-8803, section 04). Users never see or edit them: a policy carries only PII classes and topics.
+ * <p>
+ * It also checks the settings those questions take, for both the policies and the validations APIs, so a policy
+ * that can be saved is one the checks accept.
  */
 public final class GuardrailQuestions {
 
@@ -32,6 +40,16 @@ public final class GuardrailQuestions {
     public static final String PII_QUESTION = "Does this text contain %s?";
     /** The option that lets the choice question answer "none" instead of forcing a topic on off-topic text. */
     public static final String NONE_OF_THESE = "none of these";
+    /** Each topic list is one choice question, which adds "none of these" to it, within the option limit. */
+    public static final int MAX_TOPICS = Question.ChoiceQuestion.MAX_OPTIONS - 1;
+    /** A topic is a short label the model reads as one option of the topic question. */
+    public static final int MAX_TOPIC_LENGTH = 256;
+    public static final String ALLOWED_TOPICS = "allowed_topics";
+    public static final String RESTRICTED_TOPICS = "restricted_topics";
+
+    /** A topic rule's lists, trimmed; one of them may be empty. */
+    public record TopicLists(@NonNull List<String> allowed, @NonNull List<String> restricted) {
+    }
 
     /**
      * Topics that are the same ignoring case would be options of one choice question that split its probability,
@@ -92,5 +110,92 @@ public final class GuardrailQuestions {
         return Question.NoulQuestion.builder()
                 .instructions(TextNode.valueOf(PII_QUESTION.formatted(PII_DESCRIPTIONS.get(entity))))
                 .build();
+    }
+
+    /**
+     * A PII rule's {@code entities}, trimmed: supported classes, each at most once.
+     *
+     * @param path names the config in error messages, such as {@code rules[0].config}
+     * @throws BadRequestException naming the first problem
+     */
+    public static List<String> piiEntities(@NonNull String path, @NonNull JsonNode config) {
+        var entities = strings(path, config, "entities", PII_DESCRIPTIONS.size());
+        entities.stream()
+                .filter(entity -> !PII_DESCRIPTIONS.containsKey(entity))
+                .findFirst()
+                .ifPresent(entity -> {
+                    throw new BadRequestException("%s.entities contains the unsupported class '%s'"
+                            .formatted(path, entity));
+                });
+        return entities;
+    }
+
+    /**
+     * A topic rule's {@code allowed_topics} and {@code restricted_topics}, trimmed: at least one list, and no topic
+     * that is "none of these", too long, or in a list twice or in both lists, compared like equalsIgnoreCase.
+     *
+     * @param path names the config in error messages, such as {@code rules[0].config}
+     * @throws BadRequestException naming the first problem
+     */
+    public static TopicLists topicLists(@NonNull String path, @NonNull JsonNode config) {
+        var allowed = topics(path, config, ALLOWED_TOPICS);
+        var restricted = topics(path, config, RESTRICTED_TOPICS);
+        if (allowed.isEmpty() && restricted.isEmpty()) {
+            throw new BadRequestException("%s needs %s or %s".formatted(path, ALLOWED_TOPICS, RESTRICTED_TOPICS));
+        }
+        var restrictedKeys = restricted.stream()
+                .map(GuardrailQuestions::topicKey)
+                .collect(Collectors.toSet());
+        allowed.stream()
+                .filter(topic -> restrictedKeys.contains(topicKey(topic)))
+                .findFirst()
+                .ifPresent(topic -> {
+                    throw new BadRequestException("%s has '%s' in both %s and %s"
+                            .formatted(path, topic, ALLOWED_TOPICS, RESTRICTED_TOPICS));
+                });
+        return new TopicLists(allowed, restricted);
+    }
+
+    /** An absent or empty list means the rule does not use it. */
+    private static List<String> topics(String path, JsonNode config, String field) {
+        var node = config.path(field);
+        if (node.isMissingNode() || node.isNull() || (node.isArray() && node.isEmpty())) {
+            return List.of();
+        }
+        var topics = strings(path, config, field, MAX_TOPICS);
+        var topicKeys = new HashSet<String>();
+        for (var topic : topics) {
+            if (topic.length() > MAX_TOPIC_LENGTH) {
+                throw new BadRequestException("%s.%s has a topic longer than %d characters"
+                        .formatted(path, field, MAX_TOPIC_LENGTH));
+            }
+            // The check adds this option itself; a topic with the same name would make its answer ambiguous.
+            if (NONE_OF_THESE.equalsIgnoreCase(topic)) {
+                throw new BadRequestException("%s.%s cannot contain '%s'".formatted(path, field, NONE_OF_THESE));
+            }
+            // Case variants would be separate options of one choice question and split its probability.
+            if (!topicKeys.add(topicKey(topic))) {
+                throw new BadRequestException("%s.%s contains '%s' more than once, ignoring case"
+                        .formatted(path, field, topic));
+            }
+        }
+        return topics;
+    }
+
+    private static List<String> strings(String path, JsonNode config, String field, int maxSize) {
+        var node = config.path(field);
+        if (!node.isArray() || node.isEmpty() || node.size() > maxSize) {
+            throw new BadRequestException("%s.%s must be a list of 1 to %d strings".formatted(path, field, maxSize));
+        }
+        var values = new LinkedHashSet<String>();
+        for (var item : node) {
+            if (!item.isTextual() || StringUtils.isBlank(item.asText())) {
+                throw new BadRequestException("%s.%s must contain only non-blank strings".formatted(path, field));
+            }
+            if (!values.add(item.asText().trim())) {
+                throw new BadRequestException("%s.%s contains a value more than once".formatted(path, field));
+            }
+        }
+        return List.copyOf(values);
     }
 }

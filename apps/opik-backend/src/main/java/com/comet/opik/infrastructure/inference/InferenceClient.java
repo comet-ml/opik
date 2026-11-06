@@ -106,12 +106,12 @@ public class InferenceClient {
     public InferenceClient(@NonNull Client client, @NonNull @Config("aiLabels") AiLabelsConfig config) {
         this.client = client;
         this.config = config;
-        var maxConcurrentDecides = config.getInference().getMaxConcurrentDecides();
-        this.decideClient = newDecideClient(maxConcurrentDecides);
-        this.decidePermits = new Semaphore(maxConcurrentDecides);
+        this.decideClient = newDecideClient(config.getInference());
+        this.decidePermits = new Semaphore(config.getInference().getMaxConcurrentDecides());
     }
 
-    private static Client newDecideClient(int maxConcurrentDecides) {
+    private static Client newDecideClient(AiLabelsConfig.InferenceConfig inference) {
+        var maxConcurrentDecides = inference.getMaxConcurrentDecides();
         var clientConfig = new JerseyClientConfiguration();
         clientConfig.setMaxConnections(maxConcurrentDecides);
         clientConfig.setMaxConnectionsPerRoute(maxConcurrentDecides);
@@ -119,6 +119,10 @@ public class InferenceClient {
         clientConfig.setGzipEnabledForRequests(false);
         clientConfig.setChunkedEncodingEnabled(false);
         clientConfig.setValidateAfterInactivityPeriod(io.dropwizard.util.Duration.seconds(5));
+        clientConfig.setTimeToLive(inference.getDecideTimeToLive());
+        // Dropwizard's default of 0 closes every connection after one call: each check would pay a new TCP and TLS
+        // handshake.
+        clientConfig.setKeepAlive(inference.getDecideKeepAlive());
         clientConfig.setUserAgent(Optional.of("opik-inference-decide"));
         // A thread per call in flight, started when needed: the permits keep calls within the cap, so none queues.
         var executor = new ThreadPoolExecutor(0, maxConcurrentDecides, 60, TimeUnit.SECONDS, new SynchronousQueue<>(),

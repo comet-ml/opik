@@ -96,6 +96,30 @@ class AiLabelsConfigTest {
         assertThat(VALIDATOR.validateProperty(config, "aiLabelsDataModelSupported")).isEmpty();
     }
 
+    static Stream<Arguments> decideConnectionSettings() {
+        return Stream.of(
+                arguments("the defaults", Duration.seconds(30), Duration.minutes(5), List.of()),
+                arguments("no keep-alive", Duration.milliseconds(0), Duration.minutes(5), List.of()),
+                arguments("no keep-alive set", null, Duration.minutes(5), List.of("inference.decideKeepAlive")),
+                arguments("a time to live under a second", Duration.seconds(30), Duration.milliseconds(999),
+                        List.of("inference.decideTimeToLive")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("decideConnectionSettings")
+    void decideConnectionSettingsAreValidated(String description, Duration decideKeepAlive,
+            Duration decideTimeToLive, List<String> expectedViolations) {
+        var config = new AiLabelsConfig();
+        config.getInference().setDecideKeepAlive(decideKeepAlive);
+        config.getInference().setDecideTimeToLive(decideTimeToLive);
+
+        var violations = VALIDATOR.validate(config).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
+
     static Stream<Arguments> renderMaxExecutionTimes() {
         return Stream.of(
                 arguments(Duration.seconds(1), List.of()),

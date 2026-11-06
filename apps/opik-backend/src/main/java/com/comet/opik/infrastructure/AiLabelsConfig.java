@@ -226,6 +226,16 @@ public class AiLabelsConfig {
         @JsonProperty
         @Min(1) private int maxConcurrentDecides = 256;
 
+        /** How long an idle connection for decide calls is kept for reuse; 0 closes each one after a single call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
+        private Duration decideKeepAlive = Duration.seconds(30);
+
+        /** Longest a connection for decide calls is reused, so calls move to new upstream instances after a rollout. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration decideTimeToLive = Duration.minutes(5);
+
         /**
          * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
          * largest expected bodies, a full embed call and a page of job results, are a few MiB.
