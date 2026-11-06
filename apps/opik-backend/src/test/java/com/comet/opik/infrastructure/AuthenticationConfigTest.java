@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
 import io.dropwizard.jersey.validation.Validators;
 import io.dropwizard.util.Duration;
 import jakarta.validation.ConstraintViolation;
@@ -17,29 +18,43 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class AuthenticationConfigTest {
 
+    private static final String FRESH = "organizationCacheTTL";
+    private static final String STALE = "organizationCacheStaleTTL";
+    private static final String RETRY = "organizationCacheRetryAfterFailure";
+
     private final Validator validator = Validators.newValidator();
 
-    private static AuthenticationConfig organizationCache(Duration fresh, Duration stale) {
+    private static AuthenticationConfig organizationCache(Duration fresh, Duration stale, Duration retry) {
         return AuthenticationConfig.builder()
                 .organizationCacheTTL(fresh)
                 .organizationCacheStaleTTL(stale)
+                .organizationCacheRetryAfterFailure(retry)
                 .build();
     }
 
-    private static Stream<Arguments> configsWithDefaults() {
-        return Stream.of(
-                arguments("no-args constructor, as config.yml binds it", new AuthenticationConfig()),
-                arguments("builder", AuthenticationConfig.builder().build()));
+    private static AuthenticationConfig organizationCache(Duration fresh, Duration stale) {
+        return organizationCache(fresh, stale, Duration.seconds(30));
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("configsWithDefaults")
-    void organizationCacheDefaultsAreSetAndValid(String name, AuthenticationConfig config) {
-        assertThat(config.getOrganizationCacheTTL()).isEqualTo(Duration.minutes(10));
-        assertThat(config.getOrganizationCacheStaleTTL()).isEqualTo(Duration.hours(24));
-        assertThat(validator.validateProperty(config, "organizationCacheTtlOrderValid")).isEmpty();
-        assertThat(validator.validateProperty(config, "organizationCacheTTL")).isEmpty();
-        assertThat(validator.validateProperty(config, "organizationCacheStaleTTL")).isEmpty();
+    @Test
+    void organizationCacheSettingsHaveNoDefaultsInCode() {
+        var config = new AuthenticationConfig();
+
+        for (var property : new String[]{FRESH, STALE, RETRY}) {
+            assertThat(validator.validateProperty(config, property))
+                    .extracting(ConstraintViolation::getMessage)
+                    .containsExactly("must not be null");
+        }
+    }
+
+    @Test
+    void organizationCacheSettingsComeFromTheConfigFile() {
+        var config = TestConfigUtils.loadConfigTest().getAuthentication();
+
+        assertThat(config.getOrganizationCacheTTL()).isNotNull();
+        assertThat(config.getOrganizationCacheStaleTTL()).isNotNull();
+        assertThat(config.getOrganizationCacheRetryAfterFailure()).isNotNull();
+        assertThat(validator.validate(config)).isEmpty();
     }
 
     @Test
@@ -51,7 +66,7 @@ class AuthenticationConfigTest {
 
     @Test
     void organizationCacheStaleTtlShorterThanTheFreshOneIsRejected() {
-        var config = organizationCache(Duration.hours(24), Duration.minutes(10));
+        var config = organizationCache(Duration.minutes(30), Duration.minutes(10));
 
         assertThat(validator.validateProperty(config, "organizationCacheTtlOrderValid"))
                 .extracting(ConstraintViolation::getMessage)
@@ -59,24 +74,34 @@ class AuthenticationConfigTest {
                         "authentication.organizationCacheStaleTTL must be at least authentication.organizationCacheTTL");
     }
 
-    private static Stream<Arguments> organizationCacheTtlLimits() {
+    private static Stream<Arguments> organizationCacheLimits() {
         return Stream.of(
-                arguments("organizationCacheTTL",
-                        organizationCache(Duration.days(1), Duration.days(1)),
-                        organizationCache(Duration.hours(25), Duration.days(2)),
-                        "must be less than or equal to 1 DAYS"),
-                arguments("organizationCacheStaleTTL",
-                        organizationCache(Duration.minutes(10), Duration.days(7)),
-                        organizationCache(Duration.minutes(10), Duration.hours(169)),
-                        "must be less than or equal to 7 DAYS"));
+                arguments(FRESH, organizationCache(Duration.minutes(60), Duration.minutes(60)),
+                        organizationCache(Duration.minutes(61), Duration.minutes(60)),
+                        "must be less than or equal to 60 MINUTES"),
+                arguments(FRESH, organizationCache(Duration.minutes(1), Duration.minutes(60)),
+                        organizationCache(Duration.seconds(59), Duration.minutes(60)),
+                        "must be greater than or equal to 1 MINUTES"),
+                arguments(STALE, organizationCache(Duration.minutes(10), Duration.minutes(60)),
+                        organizationCache(Duration.minutes(10), Duration.minutes(61)),
+                        "must be less than or equal to 60 MINUTES"),
+                arguments(STALE, organizationCache(Duration.minutes(1), Duration.minutes(1)),
+                        organizationCache(Duration.minutes(1), Duration.seconds(59)),
+                        "must be greater than or equal to 1 MINUTES"),
+                arguments(RETRY, organizationCache(Duration.minutes(10), Duration.minutes(60), Duration.minutes(5)),
+                        organizationCache(Duration.minutes(10), Duration.minutes(60), Duration.seconds(301)),
+                        "must be less than or equal to 5 MINUTES"),
+                arguments(RETRY, organizationCache(Duration.minutes(10), Duration.minutes(60), Duration.seconds(1)),
+                        organizationCache(Duration.minutes(10), Duration.minutes(60), Duration.milliseconds(999)),
+                        "must be greater than or equal to 1 SECONDS"));
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("organizationCacheTtlLimits")
-    void organizationCacheTtlAcceptsItsMaximumAndRejectsAnHourMore(String property, AuthenticationConfig atMaximum,
-            AuthenticationConfig overMaximum, String message) {
-        assertThat(validator.validateProperty(atMaximum, property)).isEmpty();
-        assertThat(validator.validateProperty(overMaximum, property))
+    @ParameterizedTest(name = "{0}: {3}")
+    @MethodSource("organizationCacheLimits")
+    void organizationCacheSettingAcceptsItsLimitAndRejectsAnythingPastIt(String property,
+            AuthenticationConfig atLimit, AuthenticationConfig pastLimit, String message) {
+        assertThat(validator.validateProperty(atLimit, property)).isEmpty();
+        assertThat(validator.validateProperty(pastLimit, property))
                 .extracting(violation -> violation.getPropertyPath().toString(), ConstraintViolation::getMessage)
                 .containsExactly(tuple(property, message));
     }

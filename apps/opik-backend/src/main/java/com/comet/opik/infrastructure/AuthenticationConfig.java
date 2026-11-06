@@ -89,16 +89,19 @@ public class AuthenticationConfig {
     private Duration requestRetryMaxBackoff;
 
     @Valid @NotNull @JsonProperty
-    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    @MaxDuration(value = 1, unit = TimeUnit.DAYS)
-    @Builder.Default
-    private Duration organizationCacheTTL = Duration.minutes(10);
+    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 60, unit = TimeUnit.MINUTES)
+    private Duration organizationCacheTTL;
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 60, unit = TimeUnit.MINUTES)
+    private Duration organizationCacheStaleTTL;
 
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    @MaxDuration(value = 7, unit = TimeUnit.DAYS)
-    @Builder.Default
-    private Duration organizationCacheStaleTTL = Duration.hours(24);
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration organizationCacheRetryAfterFailure;
 
     /**
      * Cross-field constraint: a backoff whose minimum exceeds its maximum is contradictory, and

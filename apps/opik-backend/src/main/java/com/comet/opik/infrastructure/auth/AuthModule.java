@@ -106,8 +106,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     @Provides
     @Singleton
     public OrganizationResolver organizationResolver(
-            @Config("authentication") AuthenticationConfig config,
-            @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
+            @NonNull @Config("authentication") AuthenticationConfig config,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull Provider<RequestContext> requestContext,
             @NonNull RetriableHttpClient retriableHttpClient,
             @NonNull RedissonReactiveClient redissonClient) {
@@ -122,7 +122,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                         config.getRequestRetryMaxBackoff().toJavaDuration()),
                 config.getRequestTimeout().toJavaDuration());
         var cache = new WorkspaceOrganizationCache(redissonClient, config.getOrganizationCacheTTL().toJavaDuration(),
-                config.getOrganizationCacheStaleTTL().toJavaDuration(), Clock.systemUTC());
+                config.getOrganizationCacheStaleTTL().toJavaDuration(),
+                config.getOrganizationCacheRetryAfterFailure().toJavaDuration(), Clock.systemUTC());
         return new RemoteOrganizationResolver(requestContext, client, cache,
                 serviceToggles.isModelPricesEnabled());
     }

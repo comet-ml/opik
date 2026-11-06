@@ -28,16 +28,16 @@ public class AsyncUtils {
         return setRequestContext(ctx, requestContext.get());
     }
 
-    public static Context setRequestContext(Context ctx, RequestContext requestContext) {
+    public static Context setRequestContext(@NonNull Context ctx, @NonNull RequestContext requestContext) {
         var context = ctx.put(RequestContext.USER_NAME, requestContext.getUserName())
                 .put(RequestContext.WORKSPACE_ID, requestContext.getWorkspaceId())
                 .put(RequestContext.WORKSPACE_NAME, requestContext.getWorkspaceName())
                 .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
                 .put(RequestContext.VISIBILITY,
                         Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
-        return requestContext.getOrganizationLookup() == null
+        return requestContext.getCometCredentials() == null
                 ? context
-                : context.put(RequestContext.ORGANIZATION_LOOKUP, requestContext.getOrganizationLookup());
+                : context.put(RequestContext.COMET_CREDENTIALS, requestContext.getCometCredentials());
     }
 
     public static Context setRequestContext(Context ctx, String workspaceId, String userName, Visibility visibility) {

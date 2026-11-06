@@ -4,13 +4,12 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.Builder;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +24,8 @@ import java.time.Duration;
 @RequiredArgsConstructor
 class WorkspaceOrganizationClient {
 
+    static final String UNEXPECTED_RESPONSE = "Unexpected Comet response while resolving the workspace organization";
+
     sealed interface Lookup permits Found, NoOrganization, Denied {
     }
 
@@ -38,16 +39,6 @@ class WorkspaceOrganizationClient {
     record Denied() implements Lookup {
     }
 
-    @Getter
-    static final class UnexpectedResponseException extends RuntimeException {
-        private final int status;
-
-        UnexpectedResponseException(int status) {
-            super("Unexpected status while resolving the workspace organization: %d".formatted(status));
-            this.status = status;
-        }
-    }
-
     @Builder(toBuilder = true)
     record OrganizationRequest(@NonNull String workspaceName) {
     }
@@ -55,19 +46,19 @@ class WorkspaceOrganizationClient {
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record WorkspaceOrganization(String workspaceId, String organizationId, String organizationName,
-            @JsonProperty("isOrganizationAdmin") boolean isOrganizationAdmin) {
+            boolean isOrganizationAdmin) {
     }
 
     private final @NonNull RetriableHttpClient retriableHttpClient;
     private final @NonNull AuthenticationConfig.UrlConfig reactServiceUrl;
     private final @NonNull Retry retryPolicy;
-    private final Duration requestTimeout;
+    private final @NonNull Duration requestTimeout;
 
     Mono<Lookup> fetch(@NonNull CometCredentials credentials, @NonNull String workspaceName) {
         return retriableHttpClient.executePostWithRetry(RetriableHttpClient.Request.<Lookup>builder()
                 .requestFunction(client -> client.target(URI.create(reactServiceUrl.url()))
                         .path("opik")
-                        .path(credentials.kind().organizationPath()))
+                        .path(credentials.getKind().getOrganizationPath()))
                 .requestCustomizer(builder -> {
                     builder.accept(MediaType.APPLICATION_JSON)
                             .acceptEncoding("identity");
@@ -75,13 +66,22 @@ class WorkspaceOrganizationClient {
                 })
                 .body(Entity.json(OrganizationRequest.builder().workspaceName(workspaceName).build()))
                 .retryPolicy(retryPolicy)
-                .readTimeout(requestTimeout == null || requestTimeout.isZero() ? null : requestTimeout)
+                .readTimeout(requestTimeout.isZero() ? null : requestTimeout)
                 .responseFunction(WorkspaceOrganizationClient::toLookup)
                 .build());
     }
 
+    /**
+     * A Comet release without the endpoint answers 404 too, and it knows no organization either. Comet answers 400
+     * "No such workspace!" for a workspace name it doesn't know; any other 400 (a missing user name, say) says nothing
+     * about the organization, so it isn't remembered as "none". Any other answer, a success without a JSON body
+     * included, errors with {@link #UNEXPECTED_RESPONSE}, so nothing is remembered from it either.
+     */
     private static Lookup toLookup(Response response) {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
+            if (!isJsonEntity(response)) {
+                throw unexpectedResponse(response);
+            }
             var organization = response.readEntity(WorkspaceOrganization.class);
             return organization == null || StringUtils.isBlank(organization.organizationId())
                     ? new NoOrganization()
@@ -90,9 +90,6 @@ class WorkspaceOrganizationClient {
                             .isOrganizationAdmin(organization.isOrganizationAdmin())
                             .build();
         }
-        // A Comet release without the endpoint answers 404 too, and it knows no organization either. Comet answers
-        // 400 "No such workspace!" for a workspace name it doesn't know; any other 400 (a missing user name, say)
-        // says nothing about the organization, so it isn't remembered as "none".
         if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()
                 || (response.getStatus() == Response.Status.BAD_REQUEST.getStatusCode()
                         && isUnknownWorkspace(response))) {
@@ -102,18 +99,27 @@ class WorkspaceOrganizationClient {
                 || response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
             return new Denied();
         }
-        log.warn("Comet answered '{}' while resolving the workspace organization", response.getStatus());
-        throw new UnexpectedResponseException(response.getStatus());
+        throw unexpectedResponse(response);
     }
 
     private static boolean isUnknownWorkspace(Response response) {
+        if (!isJsonEntity(response)) {
+            return false;
+        }
         try {
             var error = response.readEntity(ReactServiceErrorResponse.class);
             return error != null && ReactServiceErrorResponse.NO_SUCH_WORKSPACE.equals(StringUtils.strip(error.msg()));
         } catch (ProcessingException unreadableBody) {
-            log.warn("Comet answered '{}' with a body that isn't its error response", response.getStatus(),
-                    unreadableBody);
+            log.warn("Could not read the Comet error body, status '{}'", response.getStatus(), unreadableBody);
             return false;
         }
+    }
+
+    private static boolean isJsonEntity(Response response) {
+        return response.hasEntity() && response.bufferEntity() && RemoteAuthService.isJson(response.getMediaType());
+    }
+
+    private static WebApplicationException unexpectedResponse(Response response) {
+        return new WebApplicationException(UNEXPECTED_RESPONSE, response.getStatus());
     }
 }

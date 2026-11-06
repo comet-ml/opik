@@ -12,6 +12,7 @@ import jakarta.inject.Provider;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServiceUnavailableException;
+import jakarta.ws.rs.WebApplicationException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,11 +53,10 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                 return Mono.empty();
             }
             String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
-            return ctx.<RequestOrganizationLookup>getOrEmpty(RequestContext.ORGANIZATION_LOOKUP)
-                    .filter(lookup -> StringUtils.isNotBlank(workspaceName)
+            return ctx.<CometCredentials>getOrEmpty(RequestContext.COMET_CREDENTIALS)
+                    .filter(credentials -> StringUtils.isNotBlank(workspaceName)
                             && !ProjectService.DEFAULT_WORKSPACE_NAME.equalsIgnoreCase(workspaceName))
-                    .map(lookup -> lookup.organization(
-                            credentials -> resolve(workspaceId.get(), workspaceName, credentials)))
+                    .map(credentials -> resolve(workspaceId.get(), workspaceName, credentials))
                     .orElseGet(() -> cache.organizationId(workspaceId.get()));
         }).filter(organizationId -> !ProjectService.DEFAULT_ORGANIZATION_ID.equals(organizationId));
     }
@@ -73,7 +73,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             var context = caller.get();
             return client.fetch(context.getCometCredentials(), context.getWorkspaceName())
                     .onErrorMap(error -> {
-                        warnCometFailed(ADMIN_CHECK, context.getWorkspaceId(), error);
+                        logCometFailed(ADMIN_CHECK, context.getWorkspaceId(), error);
                         return new ServiceUnavailableException(ADMIN_CHECK_FAILED);
                     })
                     .flatMap(lookup -> remember(context.getWorkspaceId(), lookup).thenReturn(lookup))
@@ -95,7 +95,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                         ? Mono.justOrEmpty(cached.map(WorkspaceOrganizationCache.Entry::organizationId))
                         : ask(workspaceId, workspaceName, credentials, cached))
                 .onErrorResume(error -> {
-                    log.warn("Could not resolve the organization of workspace '{}'", workspaceId, error);
+                    log.warn("Could not resolve the organization, workspace '{}'", workspaceId, error);
                     return Mono.empty();
                 });
     }
@@ -110,26 +110,29 @@ class RemoteOrganizationResolver implements OrganizationResolver {
                     case Denied denied -> cachedOrganization;
                 }))
                 .onErrorResume(cometFailed -> {
-                    warnCometFailed(ORGANIZATION_LOOKUP, workspaceId, cometFailed);
+                    logCometFailed(ORGANIZATION_LOOKUP, workspaceId, cometFailed);
                     return cached.isPresent() ? cache.retryLater(workspaceId).then(cachedOrganization) : Mono.empty();
                 });
     }
 
-    // Comet being down or answering an error is expected and handled, so its stack trace is only noise.
-    private static void warnCometFailed(String operation, String workspaceId, Throwable error) {
+    /**
+     * Logs a failed Comet call as one line. Comet being down or answering an error is a known failure with its own
+     * handling, so its stack trace is only noise; anything else keeps it.
+     */
+    private static void logCometFailed(String operation, String workspaceId, Throwable error) {
         Integer status = switch (error) {
-            case WorkspaceOrganizationClient.UnexpectedResponseException unexpected -> unexpected.getStatus();
+            case WebApplicationException unexpected -> unexpected.getResponse().getStatus();
             case RetryUtils.RetryableHttpException retryable -> retryable.getStatusCode();
             default -> null;
         };
         if (status != null) {
-            log.warn("Comet organization call failed, operation '{}', workspace '{}', error type '{}', status '{}'",
+            log.error("Comet organization call failed, operation '{}', workspace '{}', error type '{}', status '{}'",
                     operation, workspaceId, error.getClass().getSimpleName(), status);
         } else if (error instanceof ProcessingException) {
-            log.warn("Comet organization call failed, operation '{}', workspace '{}', error type '{}'",
+            log.error("Comet organization call failed, operation '{}', workspace '{}', error type '{}'",
                     operation, workspaceId, error.getClass().getSimpleName());
         } else {
-            log.warn("Comet organization call failed, operation '{}', workspace '{}'", operation, workspaceId, error);
+            log.error("Comet organization call failed, operation '{}', workspace '{}'", operation, workspaceId, error);
         }
     }
 
@@ -140,7 +143,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
             case Denied denied -> Mono.<Void>empty();
         };
         return save.onErrorResume(error -> {
-            log.warn("Could not cache the organization of workspace '{}'", workspaceId, error);
+            log.warn("Could not cache the organization, workspace '{}'", workspaceId, error);
             return Mono.empty();
         });
     }
@@ -149,6 +152,7 @@ class RemoteOrganizationResolver implements OrganizationResolver {
         try {
             return Optional.of(requestContext.get());
         } catch (OutOfScopeException | ProvisionException notInARequest) {
+            log.warn("Organization admin check outside a request, so there is no caller to check", notInARequest);
             return Optional.empty();
         }
     }

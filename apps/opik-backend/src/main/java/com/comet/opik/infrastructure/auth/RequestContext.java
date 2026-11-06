@@ -7,7 +7,6 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
@@ -28,7 +27,7 @@ public class RequestContext {
     public static final String SESSION_COOKIE = "sessionToken";
     public static final String WORKSPACE_ID = "workspaceId";
     public static final String ORGANIZATION_ID = "organizationId";
-    public static final String ORGANIZATION_LOOKUP = "organizationLookup";
+    public static final String COMET_CREDENTIALS = "cometCredentials";
     public static final String API_KEY = "apiKey";
     public static final String LIMIT = "Opik-%s-Limit";
     public static final String REMAINING_LIMIT = "Opik-%s-Remaining-Limit";
@@ -58,10 +57,6 @@ public class RequestContext {
 
     @ToString.Exclude
     private CometCredentials cometCredentials;
-
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
-    private RequestOrganizationLookup organizationLookup;
 
     /**
      * Whether this caller's response content must be redacted. Resolved once, after authentication, because

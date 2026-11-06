@@ -64,8 +64,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class RemoteOrganizationResolverTest {
 
-    private static final Duration FRESH_FOR = Duration.ofMinutes(10);
-    private static final Duration KEPT_FOR = Duration.ofHours(24);
+    private static final Duration FRESH_FOR = Duration.ofMinutes(1);
+    private static final Duration KEPT_FOR = Duration.ofMinutes(5);
+    private static final Duration RETRY_AFTER_FAILURE = Duration.ofSeconds(10);
 
     private static final String API_KEY_PATH = "/opik/workspace-organization";
     private static final String SESSION_PATH = "/opik/workspace-organization-session";
@@ -93,7 +94,8 @@ class RemoteOrganizationResolverTest {
         var redisConfig = new RedisConfig();
         redisConfig.setSingleNodeUrl(redis.getRedisURI());
         redissonClient = Redisson.create(redisConfig.build());
-        cache = new WorkspaceOrganizationCache(redissonClient.reactive(), FRESH_FOR, KEPT_FOR, clock);
+        cache = new WorkspaceOrganizationCache(redissonClient.reactive(), FRESH_FOR, KEPT_FOR, RETRY_AFTER_FAILURE,
+                clock);
         var httpClient = TestHttpClientUtils.client();
         client = new WorkspaceOrganizationClient(new RetriableHttpClient(httpClient),
                 new AuthenticationConfig.UrlConfig(wireMock.server().url("")),
@@ -148,16 +150,13 @@ class RemoteOrganizationResolverTest {
         }
 
         @Test
-        void oneRequestAsksAtMostOnce() {
+        void oneRequestAskingTwiceAsksCometOnce() {
             stubApiKey(organization(organizationId, false));
-            assertThat(ask()).isEqualTo(organizationId);
-            wireMock.server().resetAll();
-            stubApiKey(organization(UUID.randomUUID().toString(), false));
-            clock.advance(FRESH_FOR);
 
             assertThat(ask()).isEqualTo(organizationId);
+            assertThat(ask()).isEqualTo(organizationId);
 
-            assertCometCalls(API_KEY_PATH, 0);
+            assertCometCalls(API_KEY_PATH, 1);
         }
 
         @Test
@@ -182,7 +181,6 @@ class RemoteOrganizationResolverTest {
             stubApiKey(organization(organizationId, false));
             ask();
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             clock.advance(FRESH_FOR.minusSeconds(1));
 
             assertThat(ask()).isEqualTo(organizationId);
@@ -197,7 +195,6 @@ class RemoteOrganizationResolverTest {
             wireMock.server().resetAll();
             stubApiKey(organization(movedOrganizationId, false));
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             clock.advance(FRESH_FOR);
 
             assertThat(ask()).isEqualTo(movedOrganizationId);
@@ -219,7 +216,6 @@ class RemoteOrganizationResolverTest {
 
             assertThat(ask()).isNull();
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isNull();
             assertCometCalls(API_KEY_PATH, 1);
         }
@@ -229,6 +225,11 @@ class RemoteOrganizationResolverTest {
                     arguments("another 400 from Comet",
                             given(test -> cometError(400, RandomStringUtils.secure().nextAlphabetic(20)))),
                     arguments("a 400 without Comet's error body", given(test -> badRequest())),
+                    arguments("a 400 whose body isn't JSON", given(test -> aResponse().withStatus(400)
+                            .withHeader("Content-Type", "text/plain").withBody("No such workspace!"))),
+                    arguments("a success without a body", given(test -> aResponse().withStatus(200))),
+                    arguments("a success whose body isn't JSON", given(test -> aResponse().withStatus(200)
+                            .withHeader("Content-Type", "text/html").withBody("<html>Comet</html>"))),
                     arguments("401", given(test -> unauthorized())),
                     arguments("a server error", given(test -> serverError())));
         }
@@ -241,7 +242,6 @@ class RemoteOrganizationResolverTest {
 
             assertThat(ask()).isNull();
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isNull();
             assertCometCalls(API_KEY_PATH, 2);
         }
@@ -254,11 +254,9 @@ class RemoteOrganizationResolverTest {
             stubApiKey(serverError());
             clock.advance(FRESH_FOR);
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isEqualTo(organizationId);
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
-            clock.advance(WorkspaceOrganizationCache.RETRY_AFTER_FAILURE.minusSeconds(1));
+            clock.advance(RETRY_AFTER_FAILURE.minusSeconds(1));
 
             assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 1);
@@ -267,7 +265,9 @@ class RemoteOrganizationResolverTest {
         static Stream<Arguments> cometFailures() {
             return Stream.of(
                     arguments("a server error, with its status", serverError(),
-                            "error type 'UnexpectedResponseException', status '500'"),
+                            "error type 'WebApplicationException', status '500'"),
+                    arguments("a success without a body, with its status", aResponse().withStatus(200),
+                            "error type 'WebApplicationException', status '200'"),
                     arguments("a connection failure, without a status",
                             aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER), "error type 'ProcessingException'"));
         }
@@ -292,7 +292,7 @@ class RemoteOrganizationResolverTest {
 
             var logs = LogCaptureUtils.logEventsOf(() -> ask());
 
-            assertThat(logs).filteredOn(line -> line.startsWith("Comet answered '400' with a body"))
+            assertThat(logs).filteredOn(line -> line.startsWith("Could not read the Comet error body, status '400'"))
                     .singleElement()
                     .satisfies(line -> assertThat(line).contains("ProcessingException"));
         }
@@ -305,10 +305,8 @@ class RemoteOrganizationResolverTest {
             stubApiKey(notFound());
             clock.advance(FRESH_FOR);
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isNull();
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isNull();
             assertCometCalls(API_KEY_PATH, 1);
         }
@@ -328,10 +326,8 @@ class RemoteOrganizationResolverTest {
             stubApiKey(denial.of(RemoteOrganizationResolverTest.this));
             clock.advance(FRESH_FOR);
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isEqualTo(organizationId);
 
-            requestContext = request(CometCredentials.apiKey(apiKey));
             assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(API_KEY_PATH, 2);
         }
@@ -373,7 +369,7 @@ class RemoteOrganizationResolverTest {
                 case USERNAME -> stub.withHeader(OAUTH_USERNAME_HEADER, equalTo(value));
             };
             wireMock.server().stubFor(stub.willReturn(organization(organizationId, false)));
-            requestContext = request(new CometCredentials(kind, value));
+            requestContext = request(CometCredentials.builder().kind(kind).value(value).build());
 
             assertThat(ask()).isEqualTo(organizationId);
             assertCometCalls(path, 1);
@@ -489,7 +485,7 @@ class RemoteOrganizationResolverTest {
             assertThat(logs).filteredOn(line -> line.startsWith("Comet organization call failed"))
                     .containsExactly("""
                             Comet organization call failed, operation 'admin check', workspace '%s', \
-                            error type 'UnexpectedResponseException', status '500'\
+                            error type 'WebApplicationException', status '500'\
                             """.formatted(workspaceId));
         }
 
@@ -510,11 +506,16 @@ class RemoteOrganizationResolverTest {
                 throw new OutOfScopeException("Not in a request");
             }, client, cache, true);
 
-            StepVerifier.create(jobResolver.requireOrganizationAdmin().contextWrite(job(organizationId)))
+            var logs = LogCaptureUtils.logEventsOf(() -> StepVerifier
+                    .create(jobResolver.requireOrganizationAdmin().contextWrite(job(organizationId)))
                     .expectErrorSatisfies(error -> assertForbidden(error,
                             RemoteOrganizationResolver.UNKNOWN_ORGANIZATION))
-                    .verify();
+                    .verify());
+
             assertThat(wireMock.server().getAllServeEvents()).isEmpty();
+            assertThat(logs).anySatisfy(line -> assertThat(line)
+                    .startsWith("Organization admin check outside a request, so there is no caller to check")
+                    .contains("OutOfScopeException"));
         }
     }
 
@@ -562,7 +563,6 @@ class RemoteOrganizationResolverTest {
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
                 .cometCredentials(credentials)
-                .organizationLookup(credentials == null ? null : new RequestOrganizationLookup(credentials))
                 .build();
     }
 

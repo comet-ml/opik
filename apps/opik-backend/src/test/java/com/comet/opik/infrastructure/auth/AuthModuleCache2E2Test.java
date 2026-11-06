@@ -168,13 +168,11 @@ class AuthModuleCache2E2Test {
 
         wireMock.server().verify(0, WireMock.postRequestedFor(WireMock.urlEqualTo(ORGANIZATION_PATH)));
 
-        var credentials = CometCredentials.apiKey(apiKey);
         var request = RequestContext.builder()
                 .userName(USER)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
-                .cometCredentials(credentials)
-                .organizationLookup(new RequestOrganizationLookup(credentials))
+                .cometCredentials(CometCredentials.apiKey(apiKey))
                 .build();
         StepVerifier.create(resolver.organizationId()
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, request)))

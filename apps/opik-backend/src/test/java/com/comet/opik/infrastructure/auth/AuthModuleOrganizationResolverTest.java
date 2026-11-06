@@ -54,13 +54,11 @@ class AuthModuleOrganizationResolverTest {
 
     @Test
     void organizationResolverWhenModelPricesAreOffMakesNoCometOrRedisCall() {
-        var credentials = CometCredentials.apiKey(UUID.randomUUID().toString());
         var request = RequestContext.builder()
                 .userName(RandomStringUtils.secure().nextAlphanumeric(10))
                 .workspaceId(UUID.randomUUID().toString())
                 .workspaceName(RandomStringUtils.secure().nextAlphanumeric(10))
-                .cometCredentials(credentials)
-                .organizationLookup(new RequestOrganizationLookup(credentials))
+                .cometCredentials(CometCredentials.apiKey(UUID.randomUUID().toString()))
                 .build();
 
         var resolver = authModule.organizationResolver(enabledAuthentication(), toggles(false), () -> request,
@@ -80,6 +78,9 @@ class AuthModuleOrganizationResolverTest {
                 .requestTimeout(Duration.seconds(3))
                 .requestRetryMinBackoff(Duration.milliseconds(250))
                 .requestRetryMaxBackoff(Duration.seconds(1))
+                .organizationCacheTTL(Duration.minutes(10))
+                .organizationCacheStaleTTL(Duration.minutes(60))
+                .organizationCacheRetryAfterFailure(Duration.seconds(30))
                 .build();
     }
 

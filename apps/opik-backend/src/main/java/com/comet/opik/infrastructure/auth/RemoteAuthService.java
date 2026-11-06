@@ -415,7 +415,7 @@ class RemoteAuthService implements AuthService {
      * type tells us nothing about the body and is not treated as JSON — including a wildcard carrying the suffix
      * ({@code application/*+json}), which is not a legal response content type in the first place.
      */
-    private static boolean isJson(MediaType mediaType) {
+    static boolean isJson(MediaType mediaType) {
         if (mediaType == null) {
             return false;
         }
@@ -609,7 +609,6 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setQuotas(credentials.quotas());
         requestContext.get().setApiKey(apiKey);
         requestContext.get().setCometCredentials(cometCredentials);
-        requestContext.get().setOrganizationLookup(new RequestOrganizationLookup(cometCredentials));
         requestContext.get().setPermissions(credentials.permissions() == null
                 ? Set.of()
                 : Set.copyOf(credentials.permissions()));
