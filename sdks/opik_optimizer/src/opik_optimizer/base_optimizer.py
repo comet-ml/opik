@@ -473,20 +473,25 @@ class BaseOptimizer(ABC):
                 optimizable_prompts, dataset, optimizable_roles
             )
 
-        # Like Opik's evaluator, the dataset's project wins, so the optimization
-        # run, its trials and the optimizer's own calls land in one project.
-        dataset_project = getattr(dataset, "project_name", None)
-        if not isinstance(dataset_project, str):
-            dataset_project = None
-        if dataset_project and project_name and project_name != dataset_project:
+        # An existing run's project wins, then, like Opik's evaluator, the
+        # dataset's, so the run, its trials and the optimizer's calls share one.
+        existing_optimization = self._find_requested_optimization(optimization_id)
+        owner_project = getattr(existing_optimization, "project_name", None)
+        owner = f"optimization {optimization_id!r}"
+        if not isinstance(owner_project, str) or not owner_project:
+            owner_project = getattr(dataset, "project_name", None)
+            owner = f"dataset {getattr(dataset, 'name', None)!r}"
+        if not isinstance(owner_project, str) or not owner_project:
+            owner_project = None
+        if owner_project and project_name and project_name != owner_project:
             logger.warning(
-                "project_name=%r is ignored: dataset %r belongs to project %r, "
+                "project_name=%r is ignored: %s belongs to project %r, "
                 "where Opik records this optimization's trials.",
                 project_name,
-                getattr(dataset, "name", None),
-                dataset_project,
+                owner,
+                owner_project,
             )
-        project_name = dataset_project or resolve_project_name(project_name)
+        project_name = owner_project or resolve_project_name(project_name)
         self.project_name = project_name
 
         # Create agent if not provided
@@ -502,9 +507,13 @@ class BaseOptimizer(ABC):
         self._lineage.reset()
         self._evaluations = {}
 
-        opik_optimization = self._get_or_create_optimization(
-            dataset, metric, optimization_id
-        )
+        if existing_optimization is not None:
+            opik_optimization = existing_optimization
+            self.current_optimization_id = existing_optimization.id
+        else:
+            opik_optimization = self._create_optimization_run(
+                dataset, metric, optimization_id
+            )
 
         # Default dataset split for history/logging (overridden by optimizers as needed)
         dataset_split = "validation" if validation_dataset is not None else "train"
@@ -671,31 +680,24 @@ class BaseOptimizer(ABC):
             return None
         return n_samples
 
-    def _get_or_create_optimization(
-        self, dataset: Dataset, metric: MetricFunction, optimization_id: str | None
-    ) -> Any:
-        """Reuse the given optimization if it exists, otherwise create it with that ID."""
-        opik_optimization = None
-        if optimization_id is not None:
-            try:
-                valid_id = (
-                    isinstance(optimization_id, str)
-                    and UUID(optimization_id).version == 7
-                )
-            except (ValueError, AttributeError, TypeError):
-                valid_id = False
-            if not valid_id:
-                raise ValueError("optimization_id must be a valid UUIDv7 string")
-            try:
-                opik_optimization = self.opik_client.get_optimization_by_id(
-                    optimization_id
-                )
-            except ApiError as e:
-                if e.status_code != 404:
-                    raise
-        if opik_optimization is None:
-            return self._create_optimization_run(dataset, metric, optimization_id)
-        self.current_optimization_id = opik_optimization.id
+    def _find_requested_optimization(self, optimization_id: str | None) -> Any:
+        """Return the caller's existing optimization, or None to create one."""
+        if optimization_id is None:
+            return None
+        try:
+            valid_id = (
+                isinstance(optimization_id, str) and UUID(optimization_id).version == 7
+            )
+        except (ValueError, AttributeError, TypeError):
+            valid_id = False
+        if not valid_id:
+            raise ValueError("optimization_id must be a valid UUIDv7 string")
+        try:
+            opik_optimization = self.opik_client.get_optimization_by_id(optimization_id)
+        except ApiError as e:
+            if e.status_code != 404:
+                raise
+            return None
         logger.debug(f"Using existing optimization with ID: {opik_optimization.id}")
         return opik_optimization
 

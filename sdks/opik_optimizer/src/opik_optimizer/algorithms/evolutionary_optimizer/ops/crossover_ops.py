@@ -64,17 +64,21 @@ def _deap_crossover_word_level(
 
 
 def _crossover_messages(
-    messages_1: list[dict[str, Any]], messages_2: list[dict[str, Any]], rng: RandomLike
+    messages_1: list[dict[str, Any]],
+    messages_2: list[dict[str, Any]],
+    rng: RandomLike,
+    allowed_roles: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     parents = [
         chat_prompt.ChatPrompt(messages=messages_1),
         chat_prompt.ChatPrompt(messages=messages_2),
     ]
     right = {
-        segment["segment_id"]: segment for segment in describe_text_segments(parents[1])
+        segment["segment_id"]: segment
+        for segment in describe_text_segments(parents[1], allowed_roles)
     }
     edits: list[list[TextEdit]] = [[], []]
-    for left in describe_text_segments(parents[0]):
+    for left in describe_text_segments(parents[0], allowed_roles):
         other = right.get(left["segment_id"])
         if other is None or other["role"] != left["role"]:
             continue
@@ -87,8 +91,8 @@ def _crossover_messages(
         for index, text in enumerate(children):
             edits[index].append(TextEdit(segment_id=left["segment_id"], text=text))
     return (
-        apply_text_edits(parents[0], edits[0]).get_messages(),
-        apply_text_edits(parents[1], edits[1]).get_messages(),
+        apply_text_edits(parents[0], edits[0], allowed_roles).get_messages(),
+        apply_text_edits(parents[1], edits[1], allowed_roles).get_messages(),
     )
 
 
@@ -123,7 +127,10 @@ def deap_crossover(
             messages_1 = ind1[prompt_name]
             messages_2 = ind2[prompt_name]
             child1_messages, child2_messages = _crossover_messages(
-                messages_1, messages_2, rng
+                messages_1,
+                messages_2,
+                rng,
+                getattr(optimizer, "_optimizable_roles", None),
             )
             child1_data[prompt_name] = child1_messages
             child2_data[prompt_name] = child2_messages
@@ -183,15 +190,16 @@ def _call_llm_for_crossover(
     prompts: PromptLibrary,
     system_template_key: str,
     user_template_key: str,
+    allowed_roles: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Call the LLM for crossover and return the laddered child prompts."""
     user_prompt = prompts.get(
         user_template_key,
         parent1_messages=describe_text_segments(
-            chat_prompt.ChatPrompt(messages=messages_1)
+            chat_prompt.ChatPrompt(messages=messages_1), allowed_roles
         ),
         parent2_messages=describe_text_segments(
-            chat_prompt.ChatPrompt(messages=messages_2)
+            chat_prompt.ChatPrompt(messages=messages_2), allowed_roles
         ),
         style=output_style_guidance,
     )
@@ -222,10 +230,14 @@ def _call_llm_for_crossover(
 
     response_item = response[0] if isinstance(response, list) else response
     first_child_messages = apply_text_edits(
-        chat_prompt.ChatPrompt(messages=messages_1), response_item.child_1
+        chat_prompt.ChatPrompt(messages=messages_1),
+        response_item.child_1,
+        allowed_roles,
     ).get_messages()
     second_child_messages = apply_text_edits(
-        chat_prompt.ChatPrompt(messages=messages_2), response_item.child_2
+        chat_prompt.ChatPrompt(messages=messages_2),
+        response_item.child_2,
+        allowed_roles,
     ).get_messages()
     return first_child_messages, second_child_messages
 
@@ -237,6 +249,7 @@ def _llm_crossover_messages(
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
+    allowed_roles: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply LLM-based crossover to a single prompt's messages."""
     return _call_llm_for_crossover(
@@ -248,6 +261,7 @@ def _llm_crossover_messages(
         prompts=prompts,
         system_template_key="llm_crossover_system_prompt_template",
         user_template_key="llm_crossover_user_prompt_template",
+        allowed_roles=allowed_roles,
     )
 
 
@@ -258,6 +272,7 @@ def _semantic_crossover_messages(
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
+    allowed_roles: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply semantic LLM-based crossover to a single prompt's messages."""
     return _call_llm_for_crossover(
@@ -269,6 +284,7 @@ def _semantic_crossover_messages(
         prompts=prompts,
         system_template_key="semantic_crossover_system_prompt_template",
         user_template_key="semantic_crossover_user_prompt_template",
+        allowed_roles=allowed_roles,
     )
 
 
@@ -297,6 +313,7 @@ def llm_deap_crossover(
     child2_data: dict[str, list[dict[str, Any]]] = {}
 
     rng = rng or random.Random()
+    allowed_roles = getattr(optimizer, "_optimizable_roles", None)
 
     try:
         # Apply LLM crossover to each prompt in the dict
@@ -320,6 +337,7 @@ def llm_deap_crossover(
                                     model,
                                     model_parameters,
                                     prompts=prompts,
+                                    allowed_roles=allowed_roles,
                                 )
                             )
                         except (StructuredOutputParsingError, Exception) as e:
@@ -335,6 +353,7 @@ def llm_deap_crossover(
                                 model,
                                 model_parameters,
                                 prompts=prompts,
+                                allowed_roles=allowed_roles,
                             )
                     else:
                         child1_messages, child2_messages = _llm_crossover_messages(
@@ -344,6 +363,7 @@ def llm_deap_crossover(
                             model,
                             model_parameters,
                             prompts=prompts,
+                            allowed_roles=allowed_roles,
                         )
                     allowed_roles = getattr(optimizer, "_optimizable_roles", None)
                     child1_data[prompt_name] = apply_role_constraints(

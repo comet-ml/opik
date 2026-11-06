@@ -273,7 +273,9 @@ def _generate_variation_prompts(
     init_pop_report.start_variations(num_variations_on_initial)
     user_prompt_for_variation = prompts.get(
         "variation_user_prompt_template",
-        initial_prompt_messages=describe_text_segments(prompt),
+        initial_prompt_messages=describe_text_segments(
+            prompt, getattr(optimizer, "_optimizable_roles", None)
+        ),
         task_description=task_desc_for_llm,
         style=output_style_guidance,
         num_variations=num_variations_on_initial,

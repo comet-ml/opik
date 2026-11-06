@@ -48,8 +48,9 @@ class TestDeapCrossover:
             messages_1: list[dict[str, Any]],
             messages_2: list[dict[str, Any]],
             rng: random.Random,
+            allowed_roles: set[str] | None = None,
         ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-            _ = messages_1, messages_2, rng
+            _ = messages_1, messages_2, rng, allowed_roles
             return [system_message("child_1")], [system_message("child_2")]
 
         def fake_apply_tool_updates_to_metadata(

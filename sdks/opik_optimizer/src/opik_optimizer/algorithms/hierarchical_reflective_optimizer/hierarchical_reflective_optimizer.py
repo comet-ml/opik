@@ -314,7 +314,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts_section = ""
         for prompt_name, prompt in prompts.items():
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
-            prompts_section += f"```\n{describe_text_segments(prompt)}\n```\n"
+            segments = describe_text_segments(
+                prompt, getattr(self, "_optimizable_roles", None)
+            )
+            prompts_section += f"```\n{segments}\n```\n"
             if optimize_tools:
                 tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
                 if tool_blocks:
