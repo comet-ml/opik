@@ -20,6 +20,7 @@ export enum FeatureToggleKeys {
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
   COST_INTELLIGENCE_ENABLED = "cost_intelligence_enabled",
+  MODEL_PRICES_ENABLED = "model_prices_enabled",
   // LLM Provider feature flags
   OPENAI_PROVIDER_ENABLED = "openai_provider_enabled",
   ANTHROPIC_PROVIDER_ENABLED = "anthropic_provider_enabled",

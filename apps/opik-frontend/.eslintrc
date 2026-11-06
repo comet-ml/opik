@@ -57,5 +57,18 @@
       }
     ],
     "tailwindcss/no-contradicting-classname": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/lib/model-prices/**"],
+      "rules": {
+        "no-restricted-imports": ["error", {
+          "patterns": [{
+            "group": ["*", "!.", "!./*"],
+            "message": "src/lib/model-prices is copied into comet-react, so it may import only from its own folder."
+          }]
+        }]
+      }
+    }
+  ]
 }
