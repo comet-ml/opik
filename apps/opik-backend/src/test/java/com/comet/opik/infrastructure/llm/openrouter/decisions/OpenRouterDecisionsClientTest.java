@@ -30,6 +30,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -114,6 +115,7 @@ class OpenRouterDecisionsClientTest {
         wireMock.server().verify(postRequestedFor(urlEqualTo(PATH))
                 .withHeader("Authorization", equalTo("Bearer " + apiKey))
                 .withHeader("X-Custom", equalTo("value"))
+                .withHeader("Accept-Encoding", equalTo("identity"))
                 .withRequestBody(equalToJson("""
                         {"model":"~typesafe/jev-latest",
                          "state":"Question: What is the capital of France?\\nAnswer: Paris",
@@ -127,6 +129,23 @@ class OpenRouterDecisionsClientTest {
         assertThat(response.answers().get("answer_correct").noul()).isEqualTo(1.0);
         assertThat(response.usage().inputTokens()).isEqualTo(340);
         assertThat(response.usage().cost()).isEqualByComparingTo("0.00001428");
+    }
+
+    @Test
+    void storedHeadersAreNormalizedAndAStoredAuthorizationReplacesTheApiKey() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        var headers = new HashMap<String, String>();
+        headers.put("authorization", "Bearer stored");
+        headers.put(" ", "no name");
+        headers.put("X-Empty", null);
+
+        decisionsClient.decide(request(), apiConfig(headers)).block();
+
+        var sent = wireMock.server().getAllServeEvents().getFirst().getRequest();
+        assertThat(sent.getHeaders().getHeader("Authorization").values()).containsExactly("Bearer stored");
+        assertThat(sent.containsHeader("X-Empty")).isFalse();
     }
 
     @ParameterizedTest

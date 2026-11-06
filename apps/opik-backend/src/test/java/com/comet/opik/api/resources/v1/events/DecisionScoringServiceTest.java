@@ -7,27 +7,36 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
+import com.comet.opik.infrastructure.net.RefusedHostException;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.ServerErrorException;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
+import java.net.ConnectException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -202,6 +211,49 @@ class DecisionScoringServiceTest {
         assertThatThrownBy(() -> openRouterOnly.decide(request, "workspace", passThroughRecorder()).block())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("No Decisions API client for provider");
+    }
+
+    @Test
+    void decideMapsATransportFailureToAGenericErrorWithoutItsText() {
+        var failure = new ProcessingException(new ConnectException("Connect to probe.example.com:8443 failed"));
+
+        assertThatThrownBy(() -> decideFailingWith(failure))
+                .isInstanceOfSatisfying(ServerErrorException.class,
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(500))
+                .hasMessage(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .satisfies(error -> assertThat(ExceptionUtils.getStackTrace(error))
+                        .doesNotContain("probe.example.com"));
+    }
+
+    @Test
+    void decideMapsARefusedDestinationToABadRequestWithTheFixedText() {
+        var failure = new ProcessingException(new RefusedHostException("probe.example.com refused"));
+
+        assertThatThrownBy(() -> decideFailingWith(failure))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.DESTINATION)
+                        .getMessage())
+                .satisfies(error -> assertThat(ExceptionUtils.getStackTrace(error))
+                        .doesNotContain("probe.example.com"));
+    }
+
+    @Test
+    void decideKeepsAProviderStatusError() {
+        var failure = new ClientErrorException("OpenRouter Decisions API request failed", 402);
+
+        assertThatThrownBy(() -> decideFailingWith(failure)).isSameAs(failure);
+    }
+
+    private static void decideFailingWith(Throwable failure) {
+        var model = "~typesafe/jev-latest";
+        var openRouterClient = client(OpenRouterDecisionsClient.class, LlmProvider.OPEN_ROUTER);
+        when(openRouterClient.decide(any(), any())).thenReturn(Mono.error(failure));
+        var request = new DecisionScoringService(Set.of(openRouterClient), keyLookup(model))
+                .buildRequest(model, List.of(UserMessage.from("hi")), List.of(score("q", "?")));
+
+        new DecisionScoringService(Set.of(openRouterClient), keyLookup(model))
+                .decide(request, "workspace", passThroughRecorder())
+                .block();
     }
 
     private static <T extends DecisionsClient> T client(Class<T> type, LlmProvider provider) {

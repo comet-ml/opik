@@ -7,12 +7,16 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine.ParsedFeedbackScores;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderFailures;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels.DecisionModel;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
+import com.comet.opik.utils.RetryUtils;
 import com.google.common.base.Preconditions;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -20,9 +24,14 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -37,6 +46,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 
 /**
  * Scores with decisions models instead of a chat judge, each through its provider's Decisions API: {@link DecisionModels}
@@ -121,8 +132,28 @@ public class DecisionScoringService {
             @NonNull EvaluationRecorder recorder) {
         var call = Mono.fromCallable(() -> llmProviderFactory.getClientApiConfig(workspaceId, request.model()))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(config -> clientFor(request.model()).decide(request, config));
+                .flatMap(config -> clientFor(request.model()).decide(request, config)
+                        .onErrorMap(error -> !(error instanceof WebApplicationException
+                                || error instanceof RetryUtils.RetryableHttpException),
+                                DecisionScoringService::toProviderFailure));
         return recorder.recordDecisionCall(request, call);
+    }
+
+    /**
+     * A failure the client did not map to a provider status, mapped as on the chat path: a refused request is the
+     * caller's 400 with its fixed text, anything else a 500 with a redacted cause, as a transport failure's message
+     * can name the destination and how it resolves.
+     */
+    private static WebApplicationException toProviderFailure(Throwable error) {
+        var refused = ExceptionUtils.throwableOfType(error, ProviderRequestRefusedException.class);
+        if (refused == null && DestinationGuardDns.isRefused(error)) {
+            refused = new ProviderRequestRefusedException(ProviderRequestRefusedException.Reason.DESTINATION);
+        }
+        if (refused != null) {
+            return new BadRequestException(refused.getMessage(), refused);
+        }
+        return new ServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, Response.Status.INTERNAL_SERVER_ERROR,
+                ProviderFailures.redacted(error));
     }
 
     private DecisionsClient clientFor(String model) {

@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
@@ -36,7 +37,6 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -100,8 +100,14 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .requestCustomizer(builder -> {
                     builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
                             .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
-                    Optional.ofNullable(config.headers()).orElse(Map.of()).forEach(builder::header);
-                    builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
+                    // as for chat: no compressed reply, as an inflated body has no bound, and a stored header
+                    // replaces the one Opik sets
+                    builder.acceptEncoding("identity");
+                    var headers = ProviderHeadersHttpClient.normalizedProviderHeaders(config.headers());
+                    if (!headers.containsKey(HttpHeaders.AUTHORIZATION)) {
+                        builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
+                    }
+                    headers.forEach(builder::header);
                 })
                 .retryPolicy(RetryUtils.handleHttpErrors(
                         Optional.ofNullable(llmProviderClientConfig.getMaxAttempts()).orElse(DEFAULT_MAX_ATTEMPTS),
