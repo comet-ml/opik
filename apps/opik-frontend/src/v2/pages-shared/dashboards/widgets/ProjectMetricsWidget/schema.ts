@@ -5,7 +5,7 @@ import { BREAKDOWN_FIELD } from "@/types/dashboard";
 
 export const BreakdownConfigSchema = z
   .object({
-    field: z.nativeEnum(BREAKDOWN_FIELD).default(BREAKDOWN_FIELD.NONE),
+    field: z.nativeEnum(BREAKDOWN_FIELD),
     metadataKey: z.string().optional(),
     aggregateTotal: z.boolean().optional(),
   })
@@ -26,7 +26,7 @@ export const BreakdownConfigSchema = z
 export const ProjectMetricsWidgetSchema = z.object({
   metricType: z
     .string({
-      required_error: "Metric type is required",
+      error: "Metric type is required",
     })
     .min(1, { message: "Metric type is required" }),
   chartType: z.nativeEnum(CHART_TYPE),

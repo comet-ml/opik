@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -20,7 +21,7 @@ public record ExperimentStreamRequest(
         @NotBlank String name,
         @Min(1) @Max(2000) Integer limit,
         UUID lastRetrievedId,
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName) {
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") String projectName) {
 
     @Override
     public Integer limit() {
