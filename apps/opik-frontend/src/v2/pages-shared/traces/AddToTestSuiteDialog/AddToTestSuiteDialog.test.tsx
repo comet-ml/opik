@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AddToTestSuiteDialog from "./AddToTestSuiteDialog";
@@ -8,6 +8,7 @@ import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 import { DATASET_TYPE } from "@/types/datasets";
 import { TooltipProvider } from "@/ui/tooltip";
+import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 
 const mockAddTracesToDataset = vi.fn();
 const mockAddSpansToDataset = vi.fn();
@@ -373,6 +374,112 @@ describe("AddToTestSuiteDialog", () => {
     expect(mockAddTracesToDataset.mock.calls[0][0]).not.toHaveProperty(
       "evaluators",
     );
+  });
+
+  describe("pass criteria", () => {
+    afterEach(() => {
+      vi.mocked(useDatasetVersionsList).mockReturnValue({
+        data: { content: [], total: 0 },
+      } as unknown as ReturnType<typeof useDatasetVersionsList>);
+    });
+
+    const getPolicyInputs = () => {
+      const [runs, threshold] = screen.getAllByRole("spinbutton");
+      return { runs, threshold };
+    };
+
+    const mockSuitePolicyPending = () => {
+      vi.mocked(useDatasetVersionsList).mockReturnValue({
+        data: undefined,
+        isPending: true,
+      } as unknown as ReturnType<typeof useDatasetVersionsList>);
+    };
+
+    const mockSuitePolicyLoaded = () => {
+      vi.mocked(useDatasetVersionsList).mockReturnValue({
+        isPending: false,
+        data: {
+          content: [
+            {
+              evaluators: [],
+              execution_policy: { runs_per_item: 3, pass_threshold: 2 },
+            },
+          ],
+          total: 1,
+        },
+      } as unknown as ReturnType<typeof useDatasetVersionsList>);
+    };
+
+    const selectSuiteThenLoadPolicy = () => {
+      mockSuitePolicyPending();
+      const { rerender } = render(<AddToTestSuiteDialog {...baseProps} />, {
+        wrapper,
+      });
+      openDropdownAndSelect("Test Suite 1");
+      mockSuitePolicyLoaded();
+      rerender(<AddToTestSuiteDialog {...baseProps} />);
+    };
+
+    it("should show the suite policy and send no override when the fields are untouched", async () => {
+      selectSuiteThenLoadPolicy();
+
+      const { runs, threshold } = getPolicyInputs();
+      expect(runs).toHaveValue(3);
+      expect(threshold).toHaveValue(2);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add to test suite" }),
+      );
+
+      await waitFor(() => {
+        expect(mockAddTracesToDataset).toHaveBeenCalled();
+      });
+      expect(mockAddTracesToDataset.mock.calls[0][0]).not.toHaveProperty(
+        "executionPolicy",
+      );
+    });
+
+    it("should send an execution policy when the user changes the runs", async () => {
+      selectSuiteThenLoadPolicy();
+
+      const { runs } = getPolicyInputs();
+      fireEvent.change(runs, { target: { value: "5" } });
+      fireEvent.blur(runs);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add to test suite" }),
+      );
+
+      await waitFor(() => {
+        expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+          expect.objectContaining({
+            executionPolicy: { runs_per_item: 5, pass_threshold: 2 },
+          }),
+          expect.any(Object),
+        );
+      });
+    });
+
+    it("should lower the threshold with the runs when the runs go below it", async () => {
+      selectSuiteThenLoadPolicy();
+
+      const { runs } = getPolicyInputs();
+      fireEvent.change(runs, { target: { value: "1" } });
+      fireEvent.blur(runs);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add to test suite" }),
+      );
+
+      await waitFor(() => {
+        expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+          expect.objectContaining({
+            executionPolicy: { runs_per_item: 1, pass_threshold: 1 },
+          }),
+          expect.any(Object),
+        );
+      });
+    });
   });
 
   it("should never send field mappings for a test suite", async () => {
