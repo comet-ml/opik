@@ -8,10 +8,12 @@ const nonEmptyString = z.string().min(1, "Must not be empty");
 
 const FIELD_SCHEMAS: Partial<Record<BlueprintValueType, z.ZodType>> = {
   [BlueprintValueType.INT]: nonEmptyString.pipe(
-    z.coerce.number().int("Must be an integer"),
+    z.coerce
+      .number<string>({ message: "Must be a valid number" })
+      .int("Must be an integer"),
   ),
   [BlueprintValueType.FLOAT]: nonEmptyString.pipe(
-    z.coerce.number({ message: "Must be a valid number" }),
+    z.coerce.number<string>({ message: "Must be a valid number" }),
   ),
   [BlueprintValueType.STRING]: nonEmptyString,
 };

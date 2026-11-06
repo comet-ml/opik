@@ -23,6 +23,7 @@ import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
@@ -206,7 +207,10 @@ class LlmProviderFactoryTest {
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
                 RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
-        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
+        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator,
+                new AnthropicClientGenerator(llmProviderClientConfig, registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
 
         // When & Then - Should successfully get the service
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, modelToRequest);
@@ -244,7 +248,10 @@ class LlmProviderFactoryTest {
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
                 RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
-        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
+        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator,
+                new AnthropicClientGenerator(llmProviderClientConfig, registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
 
         // When & Then - Should throw BadRequestException
         assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, modelToRequest))
@@ -475,6 +482,20 @@ class LlmProviderFactoryTest {
                 RELAXED_GUARD);
 
         assertThat(llmProviderFactory.getLlmProvider(model.toString())).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    @ParameterizedTest
+    @MethodSource("decisionModels")
+    @DisplayName("getLlmProvider returns the provider the decisions catalog names, so the key matches the client")
+    void testGetLlmProvider_matchesTheDecisionsCatalog(DecisionModels.DecisionModel model) {
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class),
+                createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai"), registryService, RELAXED_GUARD);
+
+        assertThat(llmProviderFactory.getLlmProvider(model.name())).isEqualTo(model.provider());
+    }
+
+    static Stream<DecisionModels.DecisionModel> decisionModels() {
+        return DecisionModels.ALL.stream();
     }
 
     @Test

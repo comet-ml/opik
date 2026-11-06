@@ -960,6 +960,7 @@ class Dataset(DatasetExportOperations):
 
         opik_config = config.OpikConfig()
         batch_group_id = id_helpers.generate_id()
+        completed = False
 
         try:
             upload_client, _ = self._upload_transport()
@@ -1014,12 +1015,19 @@ class Dataset(DatasetExportOperations):
                 raise
             else:
                 pool.close()
+            completed = True
         finally:
             # In a `finally`, and around both paths, because a partial insert still
             # changed the dataset: an upload that fails after earlier bodies landed, or a
             # source that raises part-way, leaves items on the backend that a cached count
             # taken before the insert does not include.
             self._dataset_items_count = None
+            if not completed:
+                # `_deduplicating` caches each hash as the item is yielded, before its
+                # batch is sent, so after a failure the cache holds items that never
+                # reached the backend and a retry would skip them as duplicates. Re-sync
+                # before the next deduplicated insert, as `deduplication=False` does.
+                self._hashes_synced = False
 
     def insert(
         self,
