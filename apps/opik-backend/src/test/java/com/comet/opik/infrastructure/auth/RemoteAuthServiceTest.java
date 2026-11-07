@@ -160,6 +160,7 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
+                .cometCredentials(CometCredentials.apiKey(apiKey))
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
@@ -195,6 +196,7 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
+                .cometCredentials(CometCredentials.apiKey(apiKey))
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
@@ -424,6 +426,7 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(sessionTokenValue)
+                .cometCredentials(CometCredentials.session(sessionTokenValue))
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
@@ -818,6 +821,7 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .quotas(authResponse.quotas())
+                .cometCredentials(CometCredentials.username(token.userName()))
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);
     }
@@ -905,6 +909,7 @@ class RemoteAuthServiceTest {
                 .workspaceId(authResponse.workspaceId())
                 .workspaceName(authResponse.workspaceName())
                 .apiKey(apiKey)
+                .cometCredentials(CometCredentials.apiKey(apiKey))
                 .quotas(authResponse.quotas())
                 .build();
         assertThat(requestContext).isEqualTo(expectedRequestContext);

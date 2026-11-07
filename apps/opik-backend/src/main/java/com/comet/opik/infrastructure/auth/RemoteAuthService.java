@@ -290,7 +290,8 @@ class RemoteAuthService implements AuthService {
                 response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
                         () -> workspacePermissionsService.getPermissionsByUsername(token.userName(),
                                 token.workspaceName()))));
-        setCredentialIntoContext(credentials, token.workspaceName(), null);
+        setCredentialIntoContext(credentials, token.workspaceName(), null,
+                CometCredentials.username(token.userName()));
     }
 
     @Override
@@ -414,7 +415,7 @@ class RemoteAuthService implements AuthService {
      * type tells us nothing about the body and is not treated as JSON — including a wildcard carrying the suffix
      * ({@code application/*+json}), which is not a legal response content type in the first place.
      */
-    private static boolean isJson(MediaType mediaType) {
+    static boolean isJson(MediaType mediaType) {
         if (mediaType == null) {
             return false;
         }
@@ -483,7 +484,8 @@ class RemoteAuthService implements AuthService {
                 response -> ValidatedAuthCredentials.from(verifyResponse(response), grantedPermissions(
                         () -> workspacePermissionsService.getPermissionsBySession(sessionToken.getValue(),
                                 workspaceName))));
-        setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue());
+        setCredentialIntoContext(credentials, workspaceName, sessionToken.getValue(),
+                CometCredentials.session(sessionToken.getValue()));
     }
 
     private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path,
@@ -498,7 +500,7 @@ class RemoteAuthService implements AuthService {
             log.debug("Caching user and workspace id for API key");
             cacheService.cache(apiKey, workspaceName, requiredPermissions, credentials.toAuthCredentials());
         }
-        setCredentialIntoContext(credentials, workspaceName, apiKey);
+        setCredentialIntoContext(credentials, workspaceName, apiKey, CometCredentials.apiKey(apiKey));
     }
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path,
@@ -595,8 +597,8 @@ class RemoteAuthService implements AuthService {
         throw unexpectedRemoteError("authenticating user", response);
     }
 
-    private void setCredentialIntoContext(
-            ValidatedAuthCredentials credentials, String fallbackWorkspaceName, String apiKey) {
+    private void setCredentialIntoContext(ValidatedAuthCredentials credentials, String fallbackWorkspaceName,
+            String apiKey, CometCredentials cometCredentials) {
         var workspaceName = Optional.ofNullable(credentials.workspaceName()).orElse(fallbackWorkspaceName);
         log.debug(
                 "setting credentials into context, userName: '{}', workspaceId: '{}', workspaceName: '{}', quotas: '{}'",
@@ -606,6 +608,7 @@ class RemoteAuthService implements AuthService {
         requestContext.get().setWorkspaceName(workspaceName);
         requestContext.get().setQuotas(credentials.quotas());
         requestContext.get().setApiKey(apiKey);
+        requestContext.get().setCometCredentials(cometCredentials);
         requestContext.get().setPermissions(credentials.permissions() == null
                 ? Set.of()
                 : Set.copyOf(credentials.permissions()));
