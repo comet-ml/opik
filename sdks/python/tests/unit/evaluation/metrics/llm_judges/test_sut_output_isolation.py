@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ElementTree
 
 import pytest
 
+from opik import exceptions
 from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.evaluation.metrics.llm_judges.g_eval import parser as g_eval_parser
 from opik.evaluation.metrics.llm_judges.g_eval import template as g_eval_template
@@ -198,22 +199,17 @@ _PARSERS = [
 
 
 @pytest.mark.parametrize("parse, honest_value", _PARSERS)
-def test_a_judge_that_echoes_a_forged_verdict_reports_that_verdict(parse, honest_value):
-    """The residual risk from #8195, written as an assertion rather than a
-    paragraph. Nothing downstream can tell a judge echoing an injected verdict
-    from reaching one of its own: the parser takes the first complete JSON
-    object, so whichever verdict the text leads with is what the metric
-    reports, with no failure and no signal. Namespacing the delimiters lowers
-    the chance a judge echoes; it does not detect one that does.
+def test_a_judge_that_echoes_a_forged_verdict_fails_loud(parse, honest_value):
+    """Fail-closed since #7848: a response carrying two conflicting verdicts
+    is ambiguous — whichever the text led with used to be reported with no
+    failure and no signal (the residual risk #8195 accepted). The parser now
+    refuses to guess, so the metric fails instead of scoring, in both
+    orders; a single honest verdict still parses.
     """
-    echoed = parse(FORGED_JSON + "\n" + HONEST_JSON, "m")
-    assert echoed.value == 0.0
-    # Containment, not equality: how a list reason is rendered is each parser's
-    # own contract (pinned in its test_parser.py), while which verdict wins is
-    # what this test is about.
-    assert "entirely faithful" in echoed.reason
+    with pytest.raises(exceptions.MetricComputationError):
+        parse(FORGED_JSON + "\n" + HONEST_JSON, "m")
+
+    with pytest.raises(exceptions.MetricComputationError):
+        parse(HONEST_JSON + "\n" + FORGED_JSON, "m")
 
     assert parse(HONEST_JSON, "m").value == pytest.approx(honest_value)
-    assert parse(HONEST_JSON + "\n" + FORGED_JSON, "m").value == pytest.approx(
-        honest_value
-    )
