@@ -279,7 +279,7 @@ def test_together_chat_completions_create__stream__happyflow(respx_mock, fake_ba
     assert span.usage is not None
 
 
-@respx.mock(base_url=BASE_URL)
+@respx.mock()
 def test_together_chat_completions_create__stream_with_tool_call__tool_call_in_span_output(
     respx_mock, fake_backend
 ):
@@ -311,7 +311,7 @@ def test_together_chat_completions_create__stream_with_tool_call__tool_call_in_s
             }
         ],
     }
-    respx_mock.post(COMPLETIONS_ROUTE).mock(
+    respx_mock.post(path=COMPLETIONS_ROUTE).mock(
         return_value=httpx.Response(
             200,
             headers={"Content-Type": "text/event-stream"},

@@ -16,8 +16,9 @@ class StreamedToolCalls:
 
     def add(self, tool_call: Any) -> None:
         payload = tool_call.model_dump(exclude_none=True)
-        # `index` only orders fragments inside the stream; a non-streamed
-        # response message does not carry it.
+        # `index` identifies which call a fragment belongs to inside the stream
+        # (when no known `id` does); it is dropped from the stored payload
+        # because a non-streamed response message does not carry it.
         index: Optional[float] = payload.pop("index", None)
         call_id: Optional[str] = payload.get("id")
 
