@@ -29,11 +29,15 @@ export enum EVAL_TRIGGER_SCOPE {
   both = "both",
 }
 
+// The provider API a judge calls when its model has more than one; absent means the model's default.
+export type LLMJudgeModelApi = "decisions";
+
 export interface LLMJudgeModel {
   name: PROVIDER_MODEL_TYPE;
   temperature?: number;
   seed?: number | null;
   custom_parameters?: Record<string, unknown> | null;
+  api?: LLMJudgeModelApi;
 }
 
 export interface LLMJudgeObject {
