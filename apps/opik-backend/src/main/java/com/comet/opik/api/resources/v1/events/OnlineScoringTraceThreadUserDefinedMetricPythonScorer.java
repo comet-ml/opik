@@ -24,7 +24,6 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
@@ -105,7 +104,6 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
     @Override
     protected Mono<Void> onRetired(TraceThreadToScoreUserDefinedMetricPython message, Throwable error) {
-        var errorText = StringUtils.defaultIfBlank(error.getMessage(), error.getClass().getSimpleName());
         var mdc = Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, message.workspaceId(),
@@ -114,15 +112,17 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                 () -> {
                     try (var logContext = wrapWithMdc(mdc)) {
                         userFacingLogger.warn(
-                                "Retries exhausted while scoring threadIds '{}' with ruleId '{}'; re-queueing so it can be scored when the evaluator recovers. {}",
-                                message.threadIds(), message.ruleId(), errorText);
+                                "Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers",
+                                message.threadIds(), message.ruleId(), message.workspaceId(),
+                                message.requeueAttempt() + 1, onlineScoringConfig.getMaxRequeueAttempts());
                     }
                 },
                 () -> {
                     try (var logContext = wrapWithMdc(mdc)) {
-                        userFacingLogger.error(
-                                "Retries exhausted while scoring threadIds '{}' with ruleId '{}'; dropped after {} re-queues. {}",
-                                message.threadIds(), message.ruleId(), message.requeueAttempt(), errorText);
+                        userFacingLogger.warn(
+                                "Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues",
+                                message.threadIds(), message.ruleId(), message.workspaceId(),
+                                message.requeueAttempt());
                     }
                 });
     }

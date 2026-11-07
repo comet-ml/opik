@@ -18,7 +18,6 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
@@ -78,7 +77,6 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     @Override
     protected Mono<Void> onRetired(TraceToScoreUserDefinedMetricPython message, Throwable error) {
         var trace = message.trace();
-        var errorText = StringUtils.defaultIfBlank(error.getMessage(), error.getClass().getSimpleName());
         var mdc = Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, message.workspaceId(),
@@ -88,15 +86,16 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 () -> {
                     try (var logContext = wrapWithMdc(mdc)) {
                         userFacingLogger.warn(
-                                "Retries exhausted while scoring traceId '{}' with rule '{}'; re-queueing so it can be scored when the evaluator recovers. {}",
-                                trace.id(), message.ruleName(), errorText);
+                                "Retries exhausted while scoring traceId '{}' with rule '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers",
+                                trace.id(), message.ruleName(), message.workspaceId(),
+                                message.requeueAttempt() + 1, onlineScoringConfig.getMaxRequeueAttempts());
                     }
                 },
                 () -> {
                     try (var logContext = wrapWithMdc(mdc)) {
-                        userFacingLogger.error(
-                                "Retries exhausted while scoring traceId '{}' with rule '{}'; dropped after {} re-queues. {}",
-                                trace.id(), message.ruleName(), message.requeueAttempt(), errorText);
+                        userFacingLogger.warn(
+                                "Retries exhausted while scoring traceId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues",
+                                trace.id(), message.ruleName(), message.workspaceId(), message.requeueAttempt());
                     }
                 });
     }

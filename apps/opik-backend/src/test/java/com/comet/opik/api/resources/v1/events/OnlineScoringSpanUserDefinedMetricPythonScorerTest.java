@@ -48,7 +48,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -504,10 +503,12 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
             verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
             verify(userFacingLogger).warn(
-                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    eq("Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
                     eq(spanId),
                     eq(ruleName),
-                    eq("python-backend unavailable"));
+                    eq("workspace-123"),
+                    eq(1),
+                    eq(3));
         }
 
         @Test
@@ -519,7 +520,9 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
-            verify(userFacingLogger, never()).error(contains("dropped after"), any(), any(), any(), any());
+            verify(userFacingLogger, never()).warn(
+                    eq("Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues"),
+                    any(), any(), any(), any());
         }
 
         @Test
@@ -533,12 +536,35 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
-            verify(userFacingLogger).error(
-                    contains("dropped after"),
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues"),
                     eq(spanId),
                     eq(ruleName),
-                    eq(3),
-                    eq("python-backend unavailable"));
+                    eq("workspace-123"),
+                    eq(3));
+        }
+
+        @Test
+        @DisplayName("Should drop a retry-exhausted job when maxRequeueAttempts is 0")
+        void shouldDropARetryExhaustedJobWhenMaxRequeueAttemptsIsZero() {
+            when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(0);
+            var spanId = UUID.randomUUID();
+            var ruleName = "test-rule";
+            var message = spanMessage(spanId, ruleName);
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues"),
+                    eq(spanId),
+                    eq(ruleName),
+                    eq("workspace-123"),
+                    eq(0));
+            verify(userFacingLogger, never()).warn(
+                    eq("Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
+                    any(), any(), any(), any(), any());
         }
     }
 

@@ -746,27 +746,53 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     // Delete all non-retryable combined with max retries reached
                     var retired = Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList();
                     return notifyRetired(retired)
-                            .then(ackAndRemoveMessages(retired.stream().map(ProcessingResult::messageId).toList()));
+                            .flatMap(this::ackAndRemoveMessages);
                 })
                 .thenReturn(processingResults);
     }
 
+    /**
+     * Runs {@link #onRetired} for each decoded retired message and returns the ids that may be acked.
+     * {@link LeavePendingOnRetireException} is omitted so the original entry stays pending for redelivery.
+     * Other hook failures are still acked (best-effort retire, same as before).
+     */
     @SuppressWarnings("unchecked")
-    private Mono<Void> notifyRetired(List<ProcessingResult> retired) {
+    private Mono<List<StreamMessageId>> notifyRetired(List<ProcessingResult> retired) {
+        var alwaysAck = retired.stream()
+                .filter(failure -> failure.message() == null)
+                .map(ProcessingResult::messageId)
+                .toList();
         return Flux.fromIterable(retired)
                 .filter(failure -> failure.message() != null)
                 .flatMap(failure -> Mono.defer(
                         () -> onRetired((M) failure.message(), failure.messageId(), failure.error()))
                         .subscribeOn(workersScheduler)
+                        .thenReturn(failure.messageId())
                         .onErrorResume(throwable -> {
+                            if (isLeavePending(throwable)) {
+                                log.warn("Leaving messageId '{}' pending; re-queue publish did not complete",
+                                        failure.messageId());
+                                return Mono.empty();
+                            }
                             log.error("Failed to handle retired messageId '{}'", failure.messageId(), throwable);
-                            return Mono.empty();
+                            return Mono.just(failure.messageId());
                         }))
-                .then();
+                .collectList()
+                .map(ids -> Stream.concat(alwaysAck.stream(), ids.stream()).toList());
+    }
+
+    private static boolean isLeavePending(Throwable throwable) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (current instanceof LeavePendingOnRetireException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Runs once, just before a message the stream gives up on is acked and removed, so a subclass can record
-    // a terminal outcome for it. Best effort: an error here is logged and the message is removed anyway.
+    // a terminal outcome for it. Best effort: an error here is logged and the message is removed, except
+    // {@link LeavePendingOnRetireException}, which leaves the entry pending.
     protected Mono<Void> onRetired(M message, Throwable error) {
         return Mono.empty();
     }

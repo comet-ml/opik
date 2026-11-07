@@ -16,6 +16,7 @@ import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -188,8 +189,10 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
     /**
      * Puts a retry-exhausted scoring job back on its stream as a new entry, up to
      * {@link OnlineScoringConfig#getMaxRequeueAttempts()}. Permanent failures complete empty.
-     * A fresh entry resets the delivery count so the existing pending-message window remains the
-     * backoff. Never writes a score: a fabricated or zero value would be stored as a real result.
+     * A fresh entry resets the delivery count so {@code pendingMessageDuration × maxRetries} remains
+     * the backoff per generation. Never writes a score: a fabricated or zero value would be stored as
+     * a real result. If the replacement XADD fails, errors with
+     * {@link LeavePendingOnRetireException} so the original entry is not acked.
      */
     protected Mono<Void> requeueIfRetryable(@NonNull OnlineScorePublisher publisher, @NonNull M message,
             @NonNull Throwable error, @NonNull Runnable onRequeue, @NonNull Runnable onDrop) {
@@ -200,19 +203,21 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
         int max = onlineScoringConfig.getMaxRequeueAttempts();
         if (attempt >= max) {
             onDrop.run();
-            log.error("Dropped {} online-scoring message after {} re-queues, workspaceId '{}'",
-                    type, attempt, message.workspaceId(), error);
             return Mono.empty();
         }
-        onRequeue.run();
-        log.warn("Re-queueing {} online-scoring message after retry exhaustion (re-queue {}/{}), workspaceId '{}'",
-                type, attempt + 1, max, message.workspaceId(), error);
         var workspaceName = StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId());
         return publisher.enqueueMessage(List.of(message.withRequeueAttempt(attempt + 1)), type)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.WORKSPACE_NAME, workspaceName)
-                        .put(RequestContext.USER_NAME, message.userName()));
+                        .put(RequestContext.USER_NAME, message.userName()))
+                .doOnSuccess(unused -> {
+                    onRequeue.run();
+                    log.warn(
+                            "Re-queueing {} online-scoring message after retry exhaustion (re-queue {}/{}), workspaceId '{}', errorType '{}'",
+                            type, attempt + 1, max, message.workspaceId(), ErrorMetricsResolver.errorType(error));
+                })
+                .onErrorMap(LeavePendingOnRetireException::new);
     }
 
     protected Mono<Map<String, List<BigDecimal>>> storeScores(

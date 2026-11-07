@@ -584,10 +584,12 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
             verify(userFacingLogger).warn(
-                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
                     eq(List.of(threadId)),
                     eq(ruleId),
-                    eq("python-backend unavailable"));
+                    eq(workspaceId),
+                    eq(1),
+                    eq(3));
         }
 
         @Test
@@ -598,7 +600,9 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
-            verify(userFacingLogger, never()).error(contains("dropped after"), any(), any(), any(), any());
+            verify(userFacingLogger, never()).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues"),
+                    any(), any(), any(), any());
         }
 
         @Test
@@ -609,12 +613,32 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
-            verify(userFacingLogger).error(
-                    contains("dropped after"),
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues"),
                     eq(List.of(threadId)),
                     eq(ruleId),
-                    eq(3),
-                    eq("python-backend unavailable"));
+                    eq(workspaceId),
+                    eq(3));
+        }
+
+        @Test
+        void dropsTheJobWhenMaxRequeueAttemptsIsZeroAndDoesNotStoreAScore() {
+            when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(0);
+            var message = sampleMessage();
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues"),
+                    eq(List.of(threadId)),
+                    eq(ruleId),
+                    eq(workspaceId),
+                    eq(0));
+            verify(userFacingLogger, never()).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
+                    any(), any(), any(), any(), any());
         }
     }
 

@@ -474,10 +474,12 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
             verify(userFacingLogger).warn(
-                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    eq("Retries exhausted while scoring traceId '{}' with rule '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
                     eq(traceId),
                     eq(ruleName),
-                    eq("python-backend unavailable"));
+                    eq(workspaceId),
+                    eq(1),
+                    eq(3));
         }
 
         @Test
@@ -488,10 +490,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
-            verify(userFacingLogger, never()).warn(
-                    contains("re-queueing so it can be scored when the evaluator recovers"),
-                    any(), any(), any());
-            verify(userFacingLogger, never()).error(contains("dropped after"), any(), any(), any(), any());
+            assertThat(userFacingMessages())
+                    .noneMatch(msg -> msg.contains("re-queueing") || msg.contains("dropped after"));
         }
 
         @Test
@@ -502,15 +502,48 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
-            verify(userFacingLogger).error(
-                    contains("dropped after"),
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring traceId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues"),
                     eq(traceId),
                     eq(ruleName),
-                    eq(3),
-                    eq("python-backend unavailable"));
-            verify(userFacingLogger, never()).warn(
-                    contains("re-queueing so it can be scored when the evaluator recovers"),
-                    any(), any(), any());
+                    eq(workspaceId),
+                    eq(3));
+            assertThat(userFacingMessages()).noneMatch(msg -> msg.contains("re-queueing"));
+        }
+
+        @Test
+        void dropsTheJobWhenMaxRequeueAttemptsIsZeroAndDoesNotStoreAScore() {
+            when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(0);
+            var message = sampleMessage();
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring traceId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues"),
+                    eq(traceId),
+                    eq(ruleName),
+                    eq(workspaceId),
+                    eq(0));
+            assertThat(userFacingMessages()).noneMatch(msg -> msg.contains("re-queueing"));
+        }
+
+        @Test
+        void leavesTheJobUnackedWhenRequeuePublishFailsAndDoesNotStoreAScore() {
+            var message = sampleMessage();
+            when(onlineScorePublisher.enqueueMessage(any(), any()))
+                    .thenReturn(Mono.error(new RuntimeException("xadd failed")));
+
+            assertThatThrownBy(() -> scorer.onRetired(message,
+                    new InternalServerErrorException("python-backend unavailable")).block())
+                    .isInstanceOf(LeavePendingOnRetireException.class);
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(message.toBuilder().requeueAttempt(1).build()),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            assertThat(userFacingMessages())
+                    .noneMatch(msg -> msg.contains("re-queueing") || msg.contains("dropped after"));
         }
     }
 

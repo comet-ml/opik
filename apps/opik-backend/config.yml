@@ -1060,11 +1060,13 @@ onlineScoring:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10, global default)
   maxRetries: ${REDIS_SCORING_MAX_RETRIES:-3}
-  # Default: 3
+  # Default: 1
   # Description: How many times a Python online-scoring job may be put back on its stream after Redis
-  #   delivery retries are exhausted (0-20). 0 drops the job on the first exhaustion. Each re-queue is
-  #   a new stream entry, so pendingMessageDuration × maxRetries still applies per generation.
-  maxRequeueAttempts: ${ONLINE_SCORING_MAX_REQUEUE_ATTEMPTS:-3}
+  #   delivery retries are exhausted (0-20). 0 drops the job on the first exhaustion. Default 1 so a
+  #   typical python-backend outage of pendingMessageDuration × maxRetries gets one extra generation
+  #   without multiplying evaluator load. Each re-queue is a new stream entry, so that pending window
+  #   remains the backoff per generation.
+  maxRequeueAttempts: ${ONLINE_SCORING_MAX_REQUEUE_ATTEMPTS:-1}
   # Default: 10000
   # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
   streamMaxLen: ${REDIS_SCORING_STREAM_MAX_LEN:-10000}
