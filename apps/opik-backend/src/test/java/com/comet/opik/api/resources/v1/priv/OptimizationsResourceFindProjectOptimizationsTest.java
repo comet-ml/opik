@@ -210,7 +210,7 @@ class OptimizationsResourceFindProjectOptimizationsTest {
         var projectName = "project-" + UUID.randomUUID();
         var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
 
-        var dataset = buildDataset();
+        var dataset = buildDataset().toBuilder().projectId(projectId).build();
         datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
         var matched = optimizationResourceClient.createPartialOptimization()

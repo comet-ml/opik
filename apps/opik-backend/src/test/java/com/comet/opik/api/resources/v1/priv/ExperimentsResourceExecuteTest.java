@@ -173,6 +173,25 @@ class ExperimentsResourceExecuteTest {
                 .isNotNull();
     }
 
+    @Test
+    void executeRunsTheItemsOfADatasetOutsideTheDefaultProject() {
+        var workspace = newWorkspace();
+        var upstreamPath = stubUpstream();
+        createProviderApiKey(workspace, customProviderApiKey(upstreamPath));
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var dataset = createDatasetWithOneItem(workspace, projectName);
+
+        var response = experimentResourceClient.execute(ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(dataset.id())
+                .projectName(projectName)
+                .prompts(List.of(promptVariant(CUSTOM_MODEL)))
+                .build(), workspace.apiKey(), workspace.name());
+
+        assertThat(response.totalItems()).isEqualTo(1);
+        assertThat(awaitUpstreamRequestBodies(upstreamPath)).hasSize(1);
+    }
+
     @ParameterizedTest
     @EnumSource(DatasetType.class)
     void executeRejectsAnEmptyDatasetOrTestSuiteWithoutCreatingExperiments(DatasetType type) {
@@ -243,7 +262,11 @@ class ExperimentsResourceExecuteTest {
     }
 
     private CreatedDataset createDatasetWithOneItem(Workspace workspace) {
-        var dataset = DatasetResourceClient.buildDataset(podamFactory);
+        return createDatasetWithOneItem(workspace, null);
+    }
+
+    private CreatedDataset createDatasetWithOneItem(Workspace workspace, String projectName) {
+        var dataset = DatasetResourceClient.buildDataset(podamFactory).toBuilder().projectName(projectName).build();
         var datasetId = datasetResourceClient.createDataset(dataset, workspace.apiKey(), workspace.name());
         datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
                 .datasetId(datasetId)

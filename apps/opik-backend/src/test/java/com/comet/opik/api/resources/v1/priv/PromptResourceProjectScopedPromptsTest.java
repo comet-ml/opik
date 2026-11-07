@@ -13,10 +13,15 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DemoData;
+import com.comet.opik.domain.PromptDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.hc.core5.http.HttpStatus;
@@ -32,6 +37,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.net.URLEncoder;
@@ -50,6 +56,8 @@ import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -60,6 +68,8 @@ class PromptResourceProjectScopedPromptsTest {
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
 
     private static final String USER = UUID.randomUUID().toString();
+
+    private static final TimeBasedEpochGenerator ID_GENERATOR = Generators.timeBasedEpochGenerator();
 
     private final TestContainersSetup setup = new TestContainersSetup();
 
@@ -72,10 +82,12 @@ class PromptResourceProjectScopedPromptsTest {
     private ClientSupport client;
     private PromptResourceClient promptResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
+        this.mySqlTemplate = mySqlTemplate;
         this.client = client;
         this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
@@ -94,6 +106,31 @@ class PromptResourceProjectScopedPromptsTest {
 
     private Prompt.PromptBuilder buildPrompt() {
         return PromptResourceClient.buildPrompt(factory).toBuilder();
+    }
+
+    /**
+     * Seeds a prompt with no project, as created before project scoping. No API creates one any more.
+     */
+    private Prompt saveProjectlessPrompt(String name, String workspaceId) {
+        return savePrompt(name, null, workspaceId);
+    }
+
+    private Prompt savePrompt(String name, UUID projectId, String workspaceId) {
+        var prompt = buildPrompt()
+                .id(ID_GENERATOR.generate())
+                .name(name)
+                .projectId(projectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        mySqlTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(PromptDAO.class).save(workspaceId, prompt);
+            return null;
+        });
+        return prompt;
     }
 
     private UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {
@@ -351,8 +388,8 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
-    @DisplayName("Creating a version scoped to a project does not version a legacy project-less prompt")
-    void createPromptVersionDoesNotVersionLegacyProjectLessPrompt() {
+    @DisplayName("Creating a version scoped to a project does not version the Default Project's prompt")
+    void createPromptVersionDoesNotVersionDefaultProjectPrompt() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -393,7 +430,7 @@ class PromptResourceProjectScopedPromptsTest {
 
         assertThat(projectPrompts.content()).extracting(Prompt::name).containsExactly(sharedName);
 
-        // The version must land on a new project-scoped prompt, not on the legacy project-less one
+        // The version must land on a new project-scoped prompt, not on the Default Project's one
         var projectPrompt = projectPrompts.content().getFirst();
         assertThat(projectPrompt.id()).isNotEqualTo(legacyPromptId);
         assertThat(createdVersion.promptId()).isEqualTo(projectPrompt.id());
@@ -401,8 +438,8 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
-    @DisplayName("Creating a version with no project does not version another project's prompt")
-    void createPromptVersionWithoutProjectDoesNotVersionProjectScopedPrompt() {
+    @DisplayName("Creating a version with no project versions the only prompt with that name, whatever its project")
+    void createPromptVersionWithoutProjectVersionsOnlyPromptWithThatName() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -439,10 +476,67 @@ class PromptResourceProjectScopedPromptsTest {
             createdVersion = response.readEntity(PromptVersion.class);
         }
 
-        // The version must land on a new project-less prompt, never on the other project's prompt
-        assertThat(createdVersion.promptId()).isNotEqualTo(otherProjectPromptId);
+        assertThat(createdVersion.promptId()).isEqualTo(otherProjectPromptId);
         assertThat(promptResourceClient.getPrompt(otherProjectPromptId, apiKey, workspaceName).versionCount())
-                .isZero();
+                .isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("Creating a version with no project is rejected when several projects have a prompt with that name")
+    void createPromptVersionWithoutProjectRejectedWhenNameInSeveralProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+        for (int i = 0; i < 2; i++) {
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+            createPrompt(buildPrompt()
+                    .name(sharedName)
+                    .projectId(projectId)
+                    .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build(), apiKey, workspaceName);
+        }
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .build();
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                "Prompt name exists in several projects, please provide project_name: '%s'".formatted(sharedName));
+
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+        }
+    }
+
+    @Test
+    @DisplayName("Create prompt without a project creates it in the Default Project")
+    void createPromptWithoutProjectCreatesItInDefaultProject() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var prompt = buildPrompt()
+                .projectId(null)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .template(null)
+                .versionCount(0L)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+
+        var id = createPrompt(prompt, apiKey, workspaceName);
+
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        assertPrompt(promptResourceClient.getPrompt(id, apiKey, workspaceName),
+                prompt.toBuilder().id(id).projectId(defaultProjectId).build());
     }
 
     @Test
@@ -598,7 +692,7 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
-    @DisplayName("Retrieve prompt version with a null project_name resolves the project-less prompt")
+    @DisplayName("Retrieve prompt version with a null project_name resolves the Default Project's prompt")
     void retrievePromptVersionWithNullProjectName() {
         String projectName = null;
         String apiKey = UUID.randomUUID().toString();
@@ -629,8 +723,8 @@ class PromptResourceProjectScopedPromptsTest {
     }
 
     @Test
-    @DisplayName("Retrieve prompt version falls back to a workspace-level prompt with no project")
-    void retrievePromptVersionFallsBackToWorkspaceLevelPrompt() {
+    @DisplayName("Retrieve prompt version in a project does not fall back to the Default Project's prompt")
+    void retrievePromptVersionDoesNotFallBackToDefaultProjectPrompt() {
         String apiKey = UUID.randomUUID().toString();
         String workspaceName = UUID.randomUUID().toString();
         String workspaceId = UUID.randomUUID().toString();
@@ -656,9 +750,220 @@ class PromptResourceProjectScopedPromptsTest {
 
         try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
 
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
+    @DisplayName("Creating a version in the Default Project versions a project-less prompt with that name")
+    void createPromptVersionInDefaultProjectVersionsProjectlessPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        projectResourceClient.createProject(DEFAULT_PROJECT, apiKey, workspaceName);
+        var projectless = saveProjectlessPrompt("prompt-" + UUID.randomUUID(), workspaceId);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(projectless.name())
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .projectName(DEFAULT_PROJECT)
+                .build();
+
+        PromptVersion createdVersion;
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNotNull();
-            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(workspacePrompt.template());
+            createdVersion = response.readEntity(PromptVersion.class);
+        }
+        assertThat(createdVersion.promptId()).isEqualTo(projectless.id());
+
+        var retrieveRequest = PromptVersionRetrieve.builder().name(projectless.name()).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, apiKey,
+                workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).id()).isEqualTo(createdVersion.id());
+        }
+    }
+
+    @Test
+    @DisplayName("Creating a version in the Default Project prefers its prompt over a project-less one with the same name")
+    void createPromptVersionPrefersDefaultProjectPromptOverProjectless() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var defaultProjectId = projectResourceClient.createProject(DEFAULT_PROJECT, apiKey, workspaceName);
+        String sharedName = "prompt-" + UUID.randomUUID();
+        var projectless = saveProjectlessPrompt(sharedName, workspaceId);
+        var defaultProjectPrompt = savePrompt(sharedName, defaultProjectId, workspaceId);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(sharedName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .projectId(defaultProjectId)
+                .build();
+
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).promptId()).isEqualTo(defaultProjectPrompt.id());
+        }
+        assertThat(promptResourceClient.getPrompt(projectless.id(), apiKey, workspaceName).versionCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("Default Project prompts list includes project-less prompts but not project-less demo prompts")
+    void findDefaultProjectPromptsIncludesProjectlessButNotDemoPrompts() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var defaultProjectId = projectResourceClient.createProject(DEFAULT_PROJECT, apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+        var projectless = saveProjectlessPrompt("prompt-" + UUID.randomUUID(), workspaceId);
+        saveProjectlessPrompt(DemoData.PROMPTS.getFirst(), workspaceId);
+
+        List<Prompt> expectedPrompts = List.of(projectless);
+        findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null,
+                null, defaultProjectId);
+        findPromptsAndAssertPage(List.of(), apiKey, workspaceName, 0, 1, null, null, null, otherProjectId);
+    }
+
+    @Test
+    @DisplayName("Create prompt in the Default Project with a project-less prompt's name returns conflict")
+    void createPromptInDefaultProjectWithProjectlessNameReturnsConflict() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var defaultProjectId = projectResourceClient.createProject(DEFAULT_PROJECT, apiKey, workspaceName);
+        var projectless = saveProjectlessPrompt("prompt-" + UUID.randomUUID(), workspaceId);
+
+        var prompt = buildPrompt()
+                .name(projectless.name())
+                .projectId(defaultProjectId)
+                .template(null)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(prompt))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+        }
+    }
+
+    @Test
+    @DisplayName("Creating a version with no project ignores a project-less demo prompt with the same name")
+    void createPromptVersionWithoutProjectIgnoresProjectlessDemoPrompt() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String demoName = DemoData.PROMPTS.getFirst();
+        saveProjectlessPrompt(demoName, workspaceId);
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var projectPrompt = savePrompt(demoName, projectId, workspaceId);
+
+        var createVersionRequest = CreatePromptVersion.builder()
+                .name(demoName)
+                .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                        .createdBy(USER)
+                        .build())
+                .build();
+
+        try (var response = promptResourceClient.callCreatePromptVersion(createVersionRequest, apiKey,
+                workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).promptId()).isEqualTo(projectPrompt.id());
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version without a project finds the only prompt with that name, whatever its project")
+    void retrievePromptVersionWithoutProjectFindsOnlyPromptWithThatName() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var prompt = buildPrompt()
+                .projectId(projectId)
+                .lastUpdatedBy(USER)
+                .createdBy(USER)
+                .templateStructure(TemplateStructure.TEXT)
+                .build();
+        createPrompt(prompt, apiKey, workspaceName);
+
+        var request = PromptVersionRetrieve.builder().name(prompt.name()).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(prompt.template());
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version without a project is rejected when several projects have a prompt with that name")
+    void retrievePromptVersionWithoutProjectRejectedWhenNameInSeveralProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String sharedName = "prompt-" + UUID.randomUUID();
+        for (int i = 0; i < 2; i++) {
+            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+            createPrompt(buildPrompt()
+                    .name(sharedName)
+                    .projectId(projectId)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build(), apiKey, workspaceName);
+        }
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                "Prompt name exists in several projects, please provide project_name: '%s'".formatted(sharedName));
+
+        var request = PromptVersionRetrieve.builder().name(sharedName).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+        }
+    }
+
+    @Test
+    @DisplayName("Retrieve prompt version without a project is rejected when another project shares the name with Default Project and project-less prompts")
+    void retrievePromptVersionWithoutProjectRejectedWhenNameSharedBeyondProjectlessDuplicates() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var defaultProjectId = projectResourceClient.createProject(DEFAULT_PROJECT, apiKey, workspaceName);
+        var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                workspaceName);
+        String sharedName = "prompt-" + UUID.randomUUID();
+        saveProjectlessPrompt(sharedName, workspaceId);
+        saveProjectlessPrompt(sharedName, workspaceId);
+        savePrompt(sharedName, defaultProjectId, workspaceId);
+        savePrompt(sharedName, otherProjectId, workspaceId);
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                "Prompt name exists in several projects, please provide project_name: '%s'".formatted(sharedName));
+
+        var request = PromptVersionRetrieve.builder().name(sharedName).build();
+        try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
         }
     }
 }
