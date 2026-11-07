@@ -773,9 +773,19 @@ def add_start_candidates(
             client = opik_client.get_global_client()
 
             if client.config.log_start_trace_span:
-                client.__internal_api__span__(
-                    **span_creation_result.span_data.as_start_parameters
-                )
+                try:
+                    client.__internal_api__span__(
+                        **span_creation_result.span_data.as_start_parameters
+                    )
+                except Exception:
+                    # The span was already pushed onto the context above.
+                    # Without rolling it back, every later @track call in
+                    # this context would attach to a span that was never
+                    # sent, and no trace would be created for those calls
+                    # (#9435). The exception still propagates: _before_call
+                    # logs it and the user's function runs normally.
+                    _rollback_start_span(span_creation_result.span_data)
+                    raise
     else:
         _show_root_span_not_created_warning_if_needed(
             start_span_parameters=start_span_parameters,
@@ -784,15 +794,41 @@ def add_start_candidates(
         )
 
     if span_creation_result.trace_data is not None:
-        add_start_trace_candidate(
-            trace_data=span_creation_result.trace_data,
-            opik_args_data=opik_args_data,
-            tracing_active=tracing_active,
-        )
+        try:
+            add_start_trace_candidate(
+                trace_data=span_creation_result.trace_data,
+                opik_args_data=opik_args_data,
+                tracing_active=tracing_active,
+            )
+        except Exception:
+            # add_start_trace_candidate registers the trace in the context
+            # before it sends anything, so a failure there strands both
+            # the trace and the span pushed above.
+            _rollback_start_span(span_creation_result.span_data)
+            _rollback_start_trace(span_creation_result.trace_data)
+            raise
 
     _try_acquire_project_name(span_creation_result)
 
     return span_creation_result
+
+
+def _rollback_start_span(span_data: span.SpanData) -> None:
+    """Remove a span pushed by add_start_candidates when starting it fails.
+
+    The pop is qualified by id so a span that is no longer on top of the
+    stack (e.g. moved by a concurrent task) is left alone. Releasing the
+    project name is a no-op unless this span owns it.
+    """
+    context_storage.pop_span_data(ensure_id=span_data.id)
+    context_storage.release_context_project_name_if_owner(span_data.id)
+
+
+def _rollback_start_trace(trace_data: trace.TraceData) -> None:
+    """Remove a trace registered by add_start_trace_candidate on failure."""
+    context_storage.pop_trace_data(ensure_id=trace_data.id)
+    TRACES_CREATED_BY_DECORATOR.discard(trace_data.id)
+    context_storage.release_context_project_name_if_owner(trace_data.id)
 
 
 def add_start_trace_candidate(
