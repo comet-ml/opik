@@ -267,6 +267,47 @@ class OpenTelemetryMapperTest {
         assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
     }
 
+    @ParameterizedTest(name = "currency {0}")
+    @ValueSource(strings = {"EUR", "USD"})
+    void genAiUsageCostCurrencyPreservedInMetadata(String currency) {
+        // The ISO 4217 unit rides with gen_ai.usage.cost. An exact METADATA rule must
+        // match before the gen_ai.usage. prefix, otherwise the string is treated as a
+        // usage field, JSON parsing fails, and span enrichment aborts. USD is included
+        // so an explicit dollar unit is kept rather than dropped; omitting the
+        // attribute is unchanged and covered by genAiUsageCostExtractedIntoTotalEstimatedCost.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost")
+                        .setValue(AnyValue.newBuilder().setDoubleValue(0.001234))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost.currency")
+                        .setValue(AnyValue.newBuilder().setStringValue(currency))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.prompt_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(100))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.completion_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(50))
+                        .build());
+
+        var spanBuilder = newSpanBuilder();
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.totalEstimatedCost()).isEqualByComparingTo("0.001234");
+        assertThat(span.metadata().get("gen_ai.usage.cost.currency").asText()).isEqualTo(currency);
+        assertThat(span.usage()).doesNotContainKey("cost");
+        assertThat(span.usage()).doesNotContainKey("cost.currency");
+        assertThat(span.usage()).doesNotContainKey("currency");
+        assertThat(span.usage().get("prompt_tokens")).isEqualTo(100);
+        assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
+    }
+
     static Stream<Arguments> genAiUsageCostCases() {
         return Stream.of(
                 Arguments.of("double", AnyValue.newBuilder().setDoubleValue(0.001234).build(),
