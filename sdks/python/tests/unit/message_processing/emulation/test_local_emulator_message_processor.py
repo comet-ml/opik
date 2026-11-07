@@ -770,6 +770,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             source="user",
             category_name="evaluation",
             reason="high confidence",
+            evaluator_revision="judge@3f9c2a1",
         )
 
         feedback_score_2 = messages.FeedbackScoreMessage(
@@ -802,6 +803,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
         assert feedback_1.value == 0.95
         assert feedback_1.category_name == "evaluation"
         assert feedback_1.reason == "high confidence"
+        assert feedback_1.evaluator_revision == "judge@3f9c2a1"
 
         # Check the second feedback score
         feedback_2 = trace.feedback_scores[1]
@@ -809,6 +811,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
         assert feedback_2.value == 0.88
         assert feedback_2.category_name == "quality"
         assert feedback_2.reason == "good content match"
+        assert feedback_2.evaluator_revision is None
 
     def test_trace_trees_with_span_feedback_scores_batch(self):
         trace_message = messages.CreateTraceMessage(
@@ -858,6 +861,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             source="user",
             category_name="output_quality",
             reason="well structured response",
+            evaluator_revision="judge@3f9c2a1",
         )
 
         span_feedback_score_2 = messages.FeedbackScoreMessage(
@@ -895,6 +899,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
         assert span_feedback_1.value == 0.92
         assert span_feedback_1.category_name == "output_quality"
         assert span_feedback_1.reason == "well structured response"
+        assert span_feedback_1.evaluator_revision == "judge@3f9c2a1"
 
         # Check the second span feedback score
         span_feedback_2 = span.feedback_scores[1]

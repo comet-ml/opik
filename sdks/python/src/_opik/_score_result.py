@@ -15,6 +15,8 @@ class ScoreResult:
         category_name: Optional category label.
         metadata: Optional dictionary of extra metadata.
         scoring_failed: Flag indicating the scoring could not complete.
+        evaluator_revision: Optional revision of the evaluator that produced the
+            score, stored with the score when it is logged.
     """
 
     name: str
@@ -23,3 +25,4 @@ class ScoreResult:
     category_name: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     scoring_failed: bool = False
+    evaluator_revision: Optional[str] = None
