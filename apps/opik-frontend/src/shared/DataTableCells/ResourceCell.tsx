@@ -5,6 +5,7 @@ import isNumber from "lodash/isNumber";
 import { CellContext } from "@tanstack/react-table";
 
 import { Explainer } from "@/types/shared";
+import { formatExperimentCount } from "@/lib/experiments";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
@@ -104,7 +105,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ? get(data, countAggregationKey, undefined)
       : undefined;
 
-  const countText = isNumber(count) ? `(${count})` : "";
+  const countText = isNumber(count) ? formatExperimentCount(count) : "";
 
   return (
     <CellWrapper
@@ -124,7 +125,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ) : (
         <div>-</div>
       )}
-      <div className="flex shrink-0 items-center">
+      <div className="ml-auto flex shrink-0 items-center text-light-slate">
         {countText}
         {isDeleted && explainer && (
           <ExplainerIcon {...explainer} className="ml-1" />

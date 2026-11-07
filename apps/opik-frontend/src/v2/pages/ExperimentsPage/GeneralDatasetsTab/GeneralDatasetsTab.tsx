@@ -713,7 +713,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
-            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
