@@ -12,6 +12,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -183,6 +184,36 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      * {@link #storeThreadScores}.
      */
     protected abstract Mono<Void> score(M message);
+
+    /**
+     * Puts a retry-exhausted scoring job back on its stream as a new entry, up to
+     * {@link OnlineScoringConfig#getMaxRequeueAttempts()}. Permanent failures complete empty.
+     * A fresh entry resets the delivery count so the existing pending-message window remains the
+     * backoff. Never writes a score: a fabricated or zero value would be stored as a real result.
+     */
+    protected Mono<Void> requeueIfRetryable(@NonNull OnlineScorePublisher publisher, @NonNull M message,
+            @NonNull Throwable error, @NonNull Runnable onRequeue, @NonNull Runnable onDrop) {
+        if (!isRetryableException(error)) {
+            return Mono.empty();
+        }
+        int attempt = message.requeueAttempt();
+        int max = onlineScoringConfig.getMaxRequeueAttempts();
+        if (attempt >= max) {
+            onDrop.run();
+            log.error("Dropped {} online-scoring message after {} re-queues, workspaceId '{}'",
+                    type, attempt, message.workspaceId(), error);
+            return Mono.empty();
+        }
+        onRequeue.run();
+        log.warn("Re-queueing {} online-scoring message after retry exhaustion (re-queue {}/{}), workspaceId '{}'",
+                type, attempt + 1, max, message.workspaceId(), error);
+        var workspaceName = StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId());
+        return publisher.enqueueMessage(List.of(message.withRequeueAttempt(attempt + 1)), type)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                        .put(RequestContext.USER_NAME, message.userName()));
+    }
 
     protected Mono<Map<String, List<BigDecimal>>> storeScores(
             List<FeedbackScoreBatchItem> scores, Trace trace, String userName, String workspaceId) {

@@ -884,7 +884,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * provider failure as a blanket 500: a truthful 429 would have been dropped here. With the status
      * consulted, that workaround is gone and the provider's real status is reported.
      */
-    private boolean isRetryableException(Throwable exception) {
+    protected boolean isRetryableException(Throwable exception) {
         if (exception instanceof ClientErrorException clientError) {
             return !HttpStatusRetryability.isPermanent(clientError.getResponse().getStatus());
         }

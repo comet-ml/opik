@@ -2,12 +2,14 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -16,6 +18,8 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -83,6 +88,9 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
 
+    @Mock
+    private OnlineScorePublisher onlineScorePublisher;
+
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private OnlineScoringSpanUserDefinedMetricPythonScorer scorer;
@@ -118,6 +126,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
         lenient().when(onlineScoringConfig.getClaimIntervalRatio()).thenReturn(10);
         lenient().when(onlineScoringConfig.getPendingMessageDuration()).thenReturn(Duration.minutes(10));
         lenient().when(onlineScoringConfig.getMaxRetries()).thenReturn(3);
+        lenient().when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(3);
 
         scorer = new OnlineScoringSpanUserDefinedMetricPythonScorer(
                 onlineScoringConfig,
@@ -126,7 +135,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                 feedbackScoreService,
                 traceService,
                 spanService,
-                pythonEvaluatorService);
+                pythonEvaluatorService,
+                onlineScorePublisher);
     }
 
     @AfterEach
@@ -474,5 +484,81 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             // Here we just verify the scorer calls the service with the correct metric code
             assertThat(dataCaptor.getValue()).isNotNull();
         }
+    }
+
+    @Nested
+    @DisplayName("Retirement Tests")
+    class RetirementTests {
+
+        @Test
+        @DisplayName("Should re-queue a retry-exhausted job without storing a score")
+        void shouldRequeueRetryExhaustedJobWithoutStoringAScore() {
+            var spanId = UUID.randomUUID();
+            var ruleName = "test-rule";
+            var message = spanMessage(spanId, ruleName);
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(message.toBuilder().requeueAttempt(1).build()),
+                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
+            verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
+            verify(userFacingLogger).warn(
+                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    eq(spanId),
+                    eq(ruleName),
+                    eq("python-backend unavailable"));
+        }
+
+        @Test
+        @DisplayName("Should not re-queue a permanent failure or store a score")
+        void shouldNotRequeueAPermanentFailureOrStoreAScore() {
+            var message = spanMessage(UUID.randomUUID(), "test-rule");
+
+            scorer.onRetired(message, new BadRequestException("invalid metric")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
+            verify(userFacingLogger, never()).error(contains("dropped after"), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("Should drop a retry-exhausted job once the re-queue bound is reached")
+        void shouldDropARetryExhaustedJobOnceTheRequeueBoundIsReached() {
+            var spanId = UUID.randomUUID();
+            var ruleName = "test-rule";
+            var message = spanMessage(spanId, ruleName).toBuilder().requeueAttempt(3).build();
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfSpans(any());
+            verify(userFacingLogger).error(
+                    contains("dropped after"),
+                    eq(spanId),
+                    eq(ruleName),
+                    eq(3),
+                    eq("python-backend unavailable"));
+        }
+    }
+
+    private SpanToScoreUserDefinedMetricPython spanMessage(UUID spanId, String ruleName) {
+        var span = Span.builder()
+                .id(spanId)
+                .projectId(UUID.randomUUID())
+                .projectName("test-project")
+                .traceId(UUID.randomUUID())
+                .name("test-span")
+                .build();
+        return SpanToScoreUserDefinedMetricPython.builder()
+                .span(span)
+                .ruleId(UUID.randomUUID())
+                .ruleName(ruleName)
+                .code(new SpanUserDefinedMetricPythonCode(
+                        "def score(input, output): return []",
+                        Map.of("input", "input.key", "output", "output.result")))
+                .workspaceId("workspace-123")
+                .userName("test-user")
+                .build();
     }
 }

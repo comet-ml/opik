@@ -51,6 +51,15 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) @Max(10) private int maxRetries;
 
+    /**
+     * How many times a Python online-scoring job may be put back on its stream after Redis delivery
+     * retries are exhausted. 0 drops the job on the first exhaustion (visible ERROR, no score).
+     * Each re-queue is a new stream entry, so {@code pendingMessageDuration × maxRetries} still
+     * applies per generation. Field initializer so the key is optional in YAML.
+     */
+    @JsonProperty
+    @Min(0) @Max(20) private int maxRequeueAttempts = 3;
+
     @JsonProperty
     @Min(1000) @Max(10_000_000) private int streamMaxLen;
 

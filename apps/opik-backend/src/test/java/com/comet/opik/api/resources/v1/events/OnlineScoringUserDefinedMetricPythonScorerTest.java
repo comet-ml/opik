@@ -2,10 +2,12 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -14,6 +16,8 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +87,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     private SpanService spanService;
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
+    @Mock
+    private OnlineScorePublisher onlineScorePublisher;
 
     private OnlineScoringUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -116,6 +122,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
         when(onlineScoringConfig.getStreams()).thenReturn(List.of(streamConfig));
         when(onlineScoringConfig.getConsumerGroupName()).thenReturn("online_scoring");
+        lenient().when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(3);
 
         scorer = new OnlineScoringUserDefinedMetricPythonScorer(
                 onlineScoringConfig,
@@ -124,7 +131,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 feedbackScoreService,
                 traceService,
                 spanService,
-                pythonEvaluatorService);
+                pythonEvaluatorService,
+                onlineScorePublisher);
 
         projectId = UUID.randomUUID();
         traceId = UUID.randomUUID();
@@ -451,6 +459,61 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
     }
 
+    @Nested
+    class RetirementTests {
+
+        @Test
+        void requeuesRetryExhaustedJobAndDoesNotStoreAScore() {
+            var message = sampleMessage();
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+            var error = new InternalServerErrorException("python-backend unavailable");
+
+            scorer.onRetired(message, error).block();
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(message.toBuilder().requeueAttempt(1).build()),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            verify(userFacingLogger).warn(
+                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    eq(traceId),
+                    eq(ruleName),
+                    eq("python-backend unavailable"));
+        }
+
+        @Test
+        void doesNotRequeueAPermanentFailureOrStoreAScore() {
+            var message = sampleMessage();
+
+            scorer.onRetired(message, new BadRequestException("invalid metric")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            verify(userFacingLogger, never()).warn(
+                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    any(), any(), any());
+            verify(userFacingLogger, never()).error(contains("dropped after"), any(), any(), any(), any());
+        }
+
+        @Test
+        void dropsTheJobAfterTheRequeueBoundAndDoesNotStoreAScore() {
+            var message = sampleMessage().toBuilder().requeueAttempt(3).build();
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            verify(userFacingLogger).error(
+                    contains("dropped after"),
+                    eq(traceId),
+                    eq(ruleName),
+                    eq(3),
+                    eq("python-backend unavailable"));
+            verify(userFacingLogger, never()).warn(
+                    contains("re-queueing so it can be scored when the evaluator recovers"),
+                    any(), any(), any());
+        }
+    }
+
     /**
      * Every format string the user-facing sink received, in call order. Level checks such as
      * {@code isInfoEnabled()} are recorded as zero-argument invocations and carry no message, so they are
@@ -502,6 +565,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                         arguments))
                 .workspaceId(workspaceId)
                 .userName(userName)
+                .requeueAttempt(0)
                 .build();
     }
 
