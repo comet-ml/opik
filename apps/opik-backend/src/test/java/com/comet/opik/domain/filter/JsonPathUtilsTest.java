@@ -9,11 +9,33 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.filter.JsonPathUtils.hasAmbiguousDottedPlainKey;
 import static com.comet.opik.domain.filter.JsonPathUtils.toAnalyticsDbJsonPath;
+import static com.comet.opik.domain.filter.JsonPathUtils.toAnalyticsDbLiteralFlatKeyPath;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("JsonPathUtils")
 class JsonPathUtilsTest {
+
+    @Nested
+    @DisplayName("Ambiguous dotted plain keys")
+    class AmbiguousDottedPlainKeys {
+
+        @Test
+        void detectsPlainDottedKeysThatCouldBeNestedOrFlat() {
+            assertThat(hasAmbiguousDottedPlainKey("uni.workflow.id")).isTrue();
+            assertThat(hasAmbiguousDottedPlainKey("a.b.c")).isTrue();
+            assertThat(hasAmbiguousDottedPlainKey("environment")).isFalse();
+            assertThat(hasAmbiguousDottedPlainKey("['uni.workflow.id']")).isFalse();
+            assertThat(hasAmbiguousDottedPlainKey("hidden_params.retry-count")).isFalse();
+        }
+
+        @Test
+        void buildsLiteralFlatKeyPath() {
+            assertThat(toAnalyticsDbLiteralFlatKeyPath("uni.workflow.id"))
+                    .isEqualTo("$['uni.workflow.id']");
+        }
+    }
 
     @Nested
     @DisplayName("Keys expressible in dot notation")
