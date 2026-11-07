@@ -3007,6 +3007,41 @@ def test_evaluate_on_dict_items__item_has_id__id_is_kept(fake_backend):
     ] == [1.0, 1.0]
 
 
+@pytest.mark.parametrize("blank_id", [None, "", "   "])
+def test_evaluate_on_dict_items__item_has_blank_id__placeholder_id_is_used(
+    fake_backend, blank_id
+):
+    items = [
+        {"id": blank_id, "input": "2+2", "expected_output": "4"},
+        {"id": "item-b", "input": "3+3", "expected_output": "6"},
+    ]
+
+    task_calls = []
+
+    def task(item):
+        task_calls.append(item)
+        return {"output": "4" if item["input"] == "2+2" else "6"}
+
+    result = evaluation.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={"reference": "expected_output"},
+        scoring_threads=1,
+    )
+
+    assert task_calls == [
+        {"id": "temp_item_0", "input": "2+2", "expected_output": "4"},
+        {"id": "item-b", "input": "3+3", "expected_output": "6"},
+    ]
+    assert [
+        test_result.test_case.dataset_item_id for test_result in result.test_results
+    ] == ["temp_item_0", "item-b"]
+    assert [
+        test_result.score_results[0].value for test_result in result.test_results
+    ] == [1.0, 1.0]
+
+
 def test_evaluate_on_dict_items__no_metrics_returns_empty(fake_backend):
     items = [{"input": "test"}]
 
