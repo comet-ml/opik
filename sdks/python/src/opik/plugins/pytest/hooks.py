@@ -114,6 +114,12 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA.get(nodeid)
             if report is None or trace_data is None:
                 continue
+            # pytest.skip() in the test body gives a skipped report, and an
+            # xfail test that fails or unexpectedly passes carries `wasxfail`.
+            # pytest reports none of them as passed or failed, and neither
+            # does the terminal summary, so they get no "Passed" score.
+            if getattr(report, "skipped", False) or hasattr(report, "wasxfail"):
+                continue
 
             traces_feedback_scores.append(
                 BatchFeedbackScoreDict(
@@ -135,13 +141,13 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             client.flush()
     except Exception:
         LOGGER.error(
-            "Unexpected exception occured while trying to log LLM unit tests experiment results",
+            "Unexpected exception occurred while trying to log LLM unit tests experiment results",
             exc_info=True,
         )
 
 
 @_logging.convert_exception_to_log_message(
-    "Unexpected exception occured while trying to print LLM unit tests summary",
+    "Unexpected exception occurred while trying to print LLM unit tests summary",
     logger=LOGGER,
     exc_info=True,
     logging_level=logging.DEBUG,

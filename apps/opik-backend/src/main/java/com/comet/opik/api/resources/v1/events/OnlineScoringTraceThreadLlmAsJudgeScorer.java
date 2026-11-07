@@ -8,7 +8,6 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
-import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -23,11 +22,12 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -195,20 +195,18 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     }
 
     /**
-     * Decisions models (Jev) are trace/span only: a thread often exceeds their context, and rule validation
-     * rejects thread rules on them. This guards rules stored before that validation.
+     * Decisions models are trace/span only: a thread often exceeds their context, and rule validation rejects
+     * thread rules on them. This guards rules stored before that validation.
      */
     private boolean skipDecisionModel(TraceThreadToScoreLlmAsJudge message, String threadId,
             Map<String, String> mdc) {
-        String modelName = Optional.ofNullable(message.code().model())
-                .map(LlmAsJudgeModelParameters::name)
-                .orElse(null);
-        if (!OpenRouterDecisionModel.isDecisionModel(modelName)) {
+        var model = message.code().model();
+        if (model == null || !DecisionModels.isDecisionsRule(model)) {
             return false;
         }
         try (var _ = wrapWithMdc(mdc)) {
             userFacingLogger.warn("Skipped threadId '{}': thread rules don't support decisions models, model '{}'",
-                    threadId, modelName);
+                    threadId, model.name());
         }
         return true;
     }
@@ -251,20 +249,18 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         var spansSizeMono = spansSizeOrUnavailable(traceIds, message.workspaceId(), message.userName(),
                 threadId);
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per thread evaluation, with an
-        // llm span per LLM round and tool spans for the agentic loop. NOOP when the toggle is off.
+        // llm span per LLM round and tool spans for the agentic loop.
         // Resolved reactively because the project-name lookup is blocking.
         Mono<EvaluationRecorder> recorderMono = Mono.fromCallable(
-                () -> serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                        ? onlineEvaluationRecorder.begin(
-                                EvaluatedThread.builder()
-                                        .id(threadId)
-                                        .projectId(message.projectId())
-                                        .projectName(projectService.get(message.projectId(),
-                                                message.workspaceId()).name())
-                                        .build(),
-                                rule.getId(), rule.getName(), message.code().model().name(),
-                                message.workspaceId(), message.userName())
-                        : EvaluationRecorder.NOOP)
+                () -> onlineEvaluationRecorder.begin(
+                        EvaluatedThread.builder()
+                                .id(threadId)
+                                .projectId(message.projectId())
+                                .projectName(projectService.get(message.projectId(),
+                                        message.workspaceId()).name())
+                                .build(),
+                        rule.getId(), rule.getName(), message.code().model().name(),
+                        message.workspaceId(), message.userName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 // Monitoring is best-effort: a project-name lookup failure (e.g. missing project) must
                 // not abort the actual thread scoring, so degrade to NOOP instead of failing the zip.
@@ -331,10 +327,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring threadId '{}' with rule '{}': \n\n{}",
+                        .error("Unexpected error while scoring threadId '{}' with rule '{}', error type '{}'",
                                 threadId, rule.getName(),
-                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
-                                        .orElse(error.getMessage()))))
+                                // the type only: a provider's text can be in any message of the chain
+                                ProviderFailures.rootType(error))))
                 .then();
     }
 
@@ -464,7 +460,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 // Providers that reject a forced choice outright get AUTO here too — see
                 // firstRoundToolChoice.
                 scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
-                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
+                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName),
+                                message.code().model()));
             }
 
             // summarizeRequest is cheap (no per-message toString streaming). At INFO to mirror

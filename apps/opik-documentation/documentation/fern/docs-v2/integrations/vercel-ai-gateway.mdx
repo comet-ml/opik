@@ -31,7 +31,7 @@ Vercel AI Gateway provides enterprise-grade features for managing AI API access,
 
 First, ensure you have both `opik` and `openai` packages installed:
 
-```bash
+```bash wordWrap
 pip install opik openai
 ```
 
@@ -50,14 +50,14 @@ You'll need to set up the Vercel AI Gateway in your Vercel project. Follow the [
 
 Set your API keys as environment variables:
 
-```bash
+```bash wordWrap
 export VERCEL_AI_GATEWAY_URL="YOUR_VERCEL_AI_GATEWAY_URL"
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 ```
 
 Or set them programmatically:
 
-```python
+```python wordWrap
 import os
 import getpass
 
@@ -74,7 +74,7 @@ Since Vercel AI Gateway provides an OpenAI-compatible API, we can use the [Opik 
 
 ### Simple LLM Call
 
-```python
+```python wordWrap
 import os
 from opik.integrations.openai import track_openai
 from openai import OpenAI
@@ -107,7 +107,7 @@ print(response.choices[0].message.content)
 
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Vercel AI Gateway is called within one of these steps, the LLM call will be associated with that corresponding step:
 
-```python
+```python wordWrap
 import os
 from opik import track
 from opik.integrations.openai import track_openai

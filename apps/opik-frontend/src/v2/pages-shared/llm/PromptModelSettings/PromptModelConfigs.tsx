@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
 import { Settings2 } from "lucide-react";
 
 import {
@@ -29,6 +29,21 @@ import OpenRouterModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/pr
 import GeminiModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiModelConfigs";
 import VertexAIModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
+import GenericModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GenericModelConfigs";
+import {
+  ANTHROPIC_PANEL,
+  GEMINI_PANEL,
+  GenericPanelPresentation,
+  OPENAI_PANEL,
+  VERTEX_AI_PANEL,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import { getGeminiOrVertexListedParams } from "@/lib/modelUtils";
+import {
+  getModelParamsVersion,
+  subscribeToModelParams,
+} from "@/lib/modelRegistryStore";
+import { ModelParams } from "@/types/modelParams";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   isOpenAICompatibleProvider,
@@ -68,9 +83,32 @@ const PromptModelConfigs = ({
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
+  useSyncExternalStore(subscribeToModelParams, getModelParamsVersion);
+
+  const renderCatalogPanel = (
+    params: ModelParams,
+    presentation: GenericPanelPresentation,
+  ) => (
+    <GenericModelConfigs
+      model={model}
+      params={params}
+      presentation={presentation}
+      configs={configs as Record<string, unknown>}
+      unsupportedParams={unsupportedParams}
+      onChange={onChange}
+    />
+  );
 
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
+      const params = getModelParams(
+        PROVIDER_TYPE.OPEN_AI,
+        model,
+        toParamsRoute(openAiPipelineMode),
+      );
+      if (params) {
+        return renderCatalogPanel(params, OPENAI_PANEL);
+      }
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
@@ -83,6 +121,10 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.ANTHROPIC) {
+      const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+      if (params) {
+        return renderCatalogPanel(params, ANTHROPIC_PANEL);
+      }
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
@@ -105,6 +147,10 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.GEMINI) {
+      const params = getGeminiOrVertexListedParams(model);
+      if (params) {
+        return renderCatalogPanel(params, GEMINI_PANEL);
+      }
       return (
         <GeminiModelConfigs
           configs={configs as LLMGeminiConfigsType}
@@ -116,6 +162,10 @@ const PromptModelConfigs = ({
     }
 
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
+      const params = getGeminiOrVertexListedParams(model);
+      if (params) {
+        return renderCatalogPanel(params, VERTEX_AI_PANEL);
+      }
       return (
         <VertexAIModelConfigs
           configs={configs as LLMVertexAIConfigsType}
@@ -131,6 +181,7 @@ const PromptModelConfigs = ({
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
           model={model}
+          provider={provider}
           unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
@@ -161,7 +212,11 @@ const PromptModelConfigs = ({
   const disabled = disabledProp || !composedProviderType;
 
   return (
-    <DropdownMenu>
+    // Not modal: a modal menu sets pointer-events: none on the body, so the first click outside only
+    // closes the panel and is lost, e.g. Run right after changing a setting. Focus outside is still
+    // ignored, as the modal menu does, because the thinking effort list renders in a portal outside
+    // this panel and moving focus into it would otherwise close the panel.
+    <DropdownMenu modal={false}>
       <TooltipWrapper content="Model parameters">
         <DropdownMenuTrigger asChild>
           <Button variant={variant} size={size} disabled={disabled}>
@@ -175,6 +230,7 @@ const PromptModelConfigs = ({
         side="bottom"
         align="end"
         onCloseAutoFocus={(e) => e.preventDefault()}
+        onFocusOutside={(e) => e.preventDefault()}
       >
         <div className="mb-5 w-72">
           <h5 className="comet-body-s-accented text-foreground">

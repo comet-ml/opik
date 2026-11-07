@@ -593,6 +593,37 @@ public class DatasetResourceClient {
         }
     }
 
+    public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, String experimentIds,
+            String datasetVersion, Integer size, List<? extends Filter> filters, String apiKey, String workspaceName) {
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("experiments")
+                .path("items");
+
+        if (size != null) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        if (experimentIds != null) {
+            webTarget = webTarget.queryParam("experiment_ids", experimentIds);
+        }
+
+        if (StringUtils.isNotBlank(datasetVersion)) {
+            webTarget = webTarget.queryParam("dataset_version", datasetVersion);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        return webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public ProjectStats getDatasetExperimentItemsStats(UUID datasetId, List<UUID> experimentIds,
             String apiKey, String workspaceName, List<ExperimentsComparisonFilter> filters) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
@@ -815,6 +846,26 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(retrieveRequest));
+    }
+
+    public DatasetVersion getVersionByHash(UUID datasetId, String versionHash, String apiKey,
+            String workspaceName) {
+        try (var response = callGetVersionByHash(datasetId, versionHash, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callGetVersionByHash(UUID datasetId, String versionHash, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("hash")
+                .path(versionHash)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     public void deleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {

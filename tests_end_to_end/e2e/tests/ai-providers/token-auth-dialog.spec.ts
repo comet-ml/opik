@@ -3,8 +3,11 @@ import { ConfigurationPage } from '@e2e/pom/configuration.page';
 import {
   MOCK_AUTH_CLIENT_ID,
   MOCK_AUTH_CLIENT_SECRET,
+  MOCK_AUTH_SA_PASSWORD,
+  MOCK_AUTH_SA_USERNAME,
   mockAuthSkipReason,
   mockGatewayUrlForBackend,
+  mockServiceAccountTokenUrlForBackend,
   mockTokenUrlForBackend,
 } from '@e2e/core/mock-auth';
 import {
@@ -15,8 +18,9 @@ import {
 const SECRET_SENTINEL = '__SECRET__';
 
 /**
- * Dialog contracts of the OAuth2 client-credentials auth mode (OPIK-7940),
- * against the suite's hermetic mock token service — no external keys involved.
+ * Dialog contracts of the fetched-token auth mode (OAuth2 client credentials type, OPIK-7940;
+ * service account type, OPIK-8732), against the suite's hermetic mock token service — no
+ * external keys involved.
  * Provider keys are workspace-global: every test uses a namespaced provider_name,
  * seeded and torn down by the providerKeys fixture.
  */
@@ -105,8 +109,8 @@ test.describe('AI Providers — OAuth2 token auth', { tag: ['@t1-smoke', '@area:
       return configuration.openCustomProviderEdit(providerName);
     });
 
-    await test.step('OAuth2 mode is preselected with stored values; the secret is write-only', async () => {
-      await expect(dialog.getByRole('radio', { name: 'OAuth2 client credentials' })).toBeChecked();
+    await test.step('Fetched-token mode with the OAuth2 type is preselected with stored values; the secret is write-only', async () => {
+      await expect(dialog.getByRole('radio', { name: 'Fetched token' })).toBeChecked();
       await expect(dialog.getByRole('textbox', { name: 'Token URL' })).toHaveValue(
         mockTokenUrlForBackend,
       );
@@ -199,5 +203,81 @@ test.describe('AI Providers — OAuth2 token auth', { tag: ['@t1-smoke', '@area:
     });
 
     await page.keyboard.press('Escape');
+  });
+});
+
+test.describe('AI Providers — service account token auth', { tag: ['@t1-smoke', '@area:configuration'] }, () => {
+  test.beforeAll(async () => {
+    const reason = await mockAuthSkipReason();
+    test.skip(reason !== null, reason ?? '');
+  });
+
+  test('a plain-text token gets the fallback lifetime, and the recipe round-trips', { tag: ['@cap:configuration.ai-provider-add'] }, async ({
+    page,
+    testNamespace,
+    providerKeys,
+  }) => {
+    const providerName = `${testNamespace}-sa-create`;
+    providerKeys.register(providerName);
+    const configuration = new ConfigurationPage(page);
+
+    const dialog = await test.step('Open the add-provider dialog (Custom)', async () => {
+      await configuration.gotoAiProviders();
+      return configuration.openAddCustomProviderDialog();
+    });
+    test.skip(dialog === null, 'Custom provider option not offered by this deployment');
+    if (dialog === null) return;
+
+    await test.step('Fill the provider with service account credentials', async () => {
+      await dialog.getByRole('textbox', { name: 'Provider name' }).fill(providerName);
+      await dialog.getByRole('textbox', { name: 'URL', exact: true }).fill(mockGatewayUrlForBackend);
+      await dialog.getByRole('textbox', { name: 'Models list' }).fill('mock-model');
+      await configuration.fillServiceAccountAuthSection(dialog, {
+        tokenUrl: mockServiceAccountTokenUrlForBackend,
+        username: MOCK_AUTH_SA_USERNAME,
+        password: MOCK_AUTH_SA_PASSWORD,
+      });
+    });
+
+    await test.step('Test connection takes the plain-text reply as the token, with the default fallback lifetime', async () => {
+      await configuration.clickTestConnection(dialog);
+      await expect(page.getByText('Connection successful', { exact: true })).toBeVisible();
+      await expect(page.getByText(/valid for 86400 seconds/).first()).toBeVisible();
+    });
+
+    await test.step('Save and verify the provider row appears', async () => {
+      await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      await expect
+        .poll(async () => configuration.hasCustomProvider(providerName), {
+          timeout: 15_000,
+          intervals: [500, 1000],
+        })
+        .toBe(true);
+    });
+
+    await test.step('Backend stores Basic with only the username/password pair and the fallback lifetime', async () => {
+      const stored = await findProviderKeyByName(providerName);
+      expect(stored).not.toBeNull();
+      expect(stored!.auth_config?.send_as).toBe('basic');
+      expect(stored!.auth_config?.fallback_ttl_seconds).toBe(86400);
+      const credentials = stored!.auth_config?.credentials ?? [];
+      // no grant_type: that is only injected for the OAuth2 type
+      expect(credentials.map((c) => c.key)).toEqual(['username', 'password']);
+      expect(credentials[0]).toMatchObject({ value: MOCK_AUTH_SA_USERNAME, secret: false });
+      expect(credentials[1]).toMatchObject({ value: SECRET_SENTINEL, secret: true });
+    });
+
+    await test.step('Reopening shows the Service account type with the password write-only', async () => {
+      const editDialog = await configuration.openCustomProviderEdit(providerName);
+      await expect(editDialog.getByRole('combobox', { name: 'Type' })).toHaveText('Service account');
+      await expect(editDialog.getByTestId('auth-service-account-username')).toHaveValue(
+        MOCK_AUTH_SA_USERNAME,
+      );
+      const password = editDialog.getByTestId('auth-service-account-password');
+      await expect(password).toHaveValue('');
+      await expect(password).toHaveAttribute('placeholder', 'stored, write-only');
+      await page.keyboard.press('Escape');
+    });
   });
 });

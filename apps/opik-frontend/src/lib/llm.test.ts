@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   generateDefaultLLMPromptMessage,
+  getMediaUrlsFromListVariable,
   getNextMessageType,
+  parsePromptVersionRole,
   resolveTraceEvaluatorVariableDefault,
   toContentForRole,
 } from "./llm";
@@ -103,11 +105,8 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
   });
 
   it("does not auto-fill spans on span scope, where the form schema rejects the sentinel", () => {
-    // A span-scoped `def score(input, spans)` must leave `spans` unmapped. Auto-filling the
-    // trace sentinel would fail PythonCodeDetailsSpanFormSchema (asserted in
-    // AddEditRuleDialog/helpers.test.ts) while
-    // LLMPromptMessagesVariables hid the offending row, leaving the dialog unsubmittable
-    // with nothing to correct.
+    // A span-scoped `def score(input, spans)` must leave `spans` unmapped: auto-filling the
+    // trace sentinel would fail PythonCodeDetailsSpanFormSchema.
     expect(
       resolveTraceEvaluatorVariableDefault(
         "spans",
@@ -124,7 +123,7 @@ describe("resolveTraceEvaluatorVariableDefault", () => {
     //
     // Note this state is reachable only via the API: the rule dialog's own schema
     // rejects an empty mapping value (`.min(1)` plus the JSONPath/sentinel regex in
-    // AddEditRuleDialog/schema.ts), so the editor will not produce or re-submit one.
+    // RuleEditorPanel/schema.ts), so the editor will not produce or re-submit one.
     // The resolver still must not rewrite it — preserving a value it cannot author is
     // what keeps an API-created rule's prompt re-parse non-destructive.
     expect(
@@ -223,5 +222,89 @@ describe("toContentForRole", () => {
       content: "Be concise",
       mediaDropped: false,
     });
+  });
+});
+
+describe("parsePromptVersionRole", () => {
+  const MESSAGES_JSON_METADATA = {
+    created_from: "opik_ui",
+    type: "messages_json",
+  };
+
+  it("reads the role a playground message was saved with", () => {
+    expect(
+      parsePromptVersionRole({
+        template: JSON.stringify([{ role: "system", content: "Be concise" }]),
+        metadata: MESSAGES_JSON_METADATA,
+      }),
+    ).toBe(LLM_MESSAGE_ROLE.system);
+  });
+
+  it("has no role for a plain text template", () => {
+    expect(
+      parsePromptVersionRole({ template: "Be concise", metadata: {} }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ["an unknown role", JSON.stringify([{ role: "robot", content: "Hi" }])],
+    ["broken JSON", "[{"],
+    ["an empty list", "[]"],
+  ])("has no role for %s", (_label, template) => {
+    expect(
+      parsePromptVersionRole({ template, metadata: MESSAGES_JSON_METADATA }),
+    ).toBeUndefined();
+  });
+});
+
+describe("getMediaUrlsFromListVariable", () => {
+  const images = ["https://a.png", "data:image/png;base64,AAAA"];
+
+  it.each([
+    ["{{images}}", { images }],
+    ["{{ images }}", { images }],
+    ["{{{images}}}", { images }],
+    ["{{& images}}", { images }],
+    [" {{images}}\n", { images }],
+    ["{{input.images}}", { input: { images } }],
+  ])("expands %j when the value is a list", (template, data) => {
+    expect(getMediaUrlsFromListVariable(template, data)).toEqual(images);
+  });
+
+  it("expands a list stored as JSON text, as CSV uploads store it", () => {
+    expect(
+      getMediaUrlsFromListVariable("{{images}}", {
+        images: ' ["https://a.png", "https://b.png"] ',
+      }),
+    ).toEqual(["https://a.png", "https://b.png"]);
+  });
+
+  it("turns non-string items into JSON", () => {
+    expect(
+      getMediaUrlsFromListVariable("{{images}}", {
+        images: [{ url: "https://a.png" }, 7],
+      }),
+    ).toEqual(['{"url":"https://a.png"}', "7"]);
+  });
+
+  it("returns an empty list for an empty list", () => {
+    expect(getMediaUrlsFromListVariable("{{images}}", { images: [] })).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["a single URL", "{{image}}", { image: "https://a.png" }],
+    ["a missing variable", "{{images}}", {}],
+    ["an object", "{{images}}", { images: { url: "https://a.png" } }],
+    ["text that only looks like a list", "{{images}}", { images: "[oops" }],
+    ["JSON text that is not a list", "{{images}}", { images: '{"a":1}' }],
+    ["a URL around the variable", "https://cdn/{{images}}", { images }],
+    ["two variables", "{{images}}{{more}}", { images, more: images }],
+    ["a section", "{{#images}}{{.}}{{/images}}", { images }],
+    ["a broken template", "{{images", { images }],
+    ["a plain URL", "https://a.png", {}],
+  ])("returns null for %s", (_, template, data) => {
+    expect(getMediaUrlsFromListVariable(template, data)).toBeNull();
   });
 });

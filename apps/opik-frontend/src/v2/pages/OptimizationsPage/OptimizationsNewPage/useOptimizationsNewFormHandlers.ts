@@ -34,6 +34,7 @@ export const useOptimizationsNewFormHandlers = () => {
   const messages = form.watch("messages");
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
+  const optimizerModel = form.watch("optimizerParams")?.model ?? "";
 
   const { datasetSample, datasetVariables, areColumnsLoading } =
     useDatasetSamplePreview({
@@ -153,6 +154,7 @@ export const useOptimizationsNewFormHandlers = () => {
     metricType,
     model,
     config,
+    optimizerModel,
     datasetSample,
     datasetVariables,
     missingDatasetVariables,

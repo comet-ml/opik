@@ -1169,7 +1169,7 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}.prepare_project_export_dir",
                 side_effect=_fake_prepare_export_dir,
             ),
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1177,7 +1177,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -1203,7 +1203,7 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}.prepare_project_export_dir",
                 side_effect=_fake_prepare_export_dir,
             ),
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1211,7 +1211,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all
@@ -1237,7 +1237,7 @@ class TestExportAll:
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
             patch(
-                f"{_EXPORT_MODULE}._export_all_datasets", return_value=(2, 0)
+                f"{_EXPORT_MODULE}._export_all_datasets", return_value=(2, 0, 0)
             ) as mock_ds,
             patch(
                 f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)
@@ -1248,7 +1248,7 @@ class TestExportAll:
             ) as mock_proj,
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ) as mock_exp,
         ):
             from opik.cli.exports.all import export_all
@@ -1274,7 +1274,7 @@ class TestExportAll:
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1282,7 +1282,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(3, 0, 3, 1, False),
+                return_value=(3, 0, 3, 1, 0, False),
             ),
             patch(f"{_EXPORT_MODULE}.print_export_summary") as mock_summary,
         ):
@@ -1311,7 +1311,7 @@ class TestExportAll:
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
-            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1319,7 +1319,7 @@ class TestExportAll:
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
-                return_value=(0, 0, 0, 0, False),
+                return_value=(0, 0, 0, 0, 0, False),
             ),
         ):
             from opik.cli.exports.all import export_all

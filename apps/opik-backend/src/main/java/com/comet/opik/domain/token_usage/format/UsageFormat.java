@@ -25,6 +25,7 @@ interface UsageFormat {
                 .filter(variant -> variant.matches().test(providerKeys))
                 .findFirst()
                 .map(variant -> variant.toNative()
-                        .apply(new VariantInput(provider, variant.name(), combinedKeys, warnings)));
+                        .apply(new VariantInput(provider, variant.name(), combinedKeys,
+                                original.outerKeys().get("prompt_tokens"), warnings)));
     }
 }

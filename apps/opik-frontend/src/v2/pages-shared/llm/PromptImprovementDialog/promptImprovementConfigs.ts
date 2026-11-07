@@ -10,8 +10,8 @@ const BELOW_LOW: ReadonlySet<unknown> = new Set(["off", "none", "minimal"]);
 const canLowerToLow = (options: Array<{ value: string }>, current: unknown) =>
   options.some((option) => option.value === "low") && !BELOW_LOW.has(current);
 
-// Writing a prompt needs little reasoning. At the default high effort, GPT-5 Nano spent the whole
-// 4000-token default on reasoning and returned no text; at low it finished in under 1000 tokens.
+// Writing a prompt needs little reasoning. At high effort, GPT-5 Nano spent the whole 4000-token
+// default on reasoning and returned no text; at low it finished in under 1000 tokens.
 export const withReasoningAtMostLow = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: LLMPromptConfigsType,

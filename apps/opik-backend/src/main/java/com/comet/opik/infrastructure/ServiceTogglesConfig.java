@@ -31,6 +31,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
+    @NotNull boolean guardrailsValidationsEnabled;
+    @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
     @NotNull boolean alertsEnabled;
@@ -73,8 +75,6 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
-    @NotNull boolean onlineScoringTracingEnabled;
-    @JsonProperty
     @NotNull boolean annotationQueueAutomationEnabled;
     @JsonProperty
     @NotNull boolean eventBridgeAlertsEnabled;
@@ -83,7 +83,7 @@ public class ServiceTogglesConfig {
     @Min(5) @Max(100) int defaultPageSize;
 
     // Set per request by the toggles endpoint, never from config. No getter: the shared instance always holds false,
-    // so the code checks CustomChartsConfig.isEnabledFor instead.
+    // so the code checks CustomChartsConfig.isEnabled instead.
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @With
     @Getter(AccessLevel.NONE)

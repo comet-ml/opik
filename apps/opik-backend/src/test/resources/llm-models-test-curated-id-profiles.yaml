@@ -1,0 +1,19 @@
+defaults:
+  gemini:
+    profile: gemini
+    idProfiles:
+    - {match: '^gemini-1\.', profile: gemini-old}
+    - {match: '^gemini-', profile: gemini-new}
+profiles:
+  gemini:
+    temperature: {accepted: false}
+  gemini-old:
+    temperature: {accepted: true}
+  gemini-new:
+    topP: {accepted: false}
+  gemini-pinned:
+    temperature: {accepted: false}
+models:
+  gemini:
+    - id: gemini-1.5-pinned
+      profile: gemini-pinned

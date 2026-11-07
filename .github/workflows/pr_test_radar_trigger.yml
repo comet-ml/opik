@@ -30,9 +30,9 @@ name: PR Test Radar (trigger)
 # also cannot carry `continue-on-error` — GitHub rejects the file outright.)
 
 # `pull_request_target`, NOT `pull_request`. Dispatching to another repository
-# needs a PAT (GITHUB_TOKEN is scoped to this repo), and on a same-repo
+# needs a comet-ci App token (GITHUB_TOKEN is scoped to this repo), and on a same-repo
 # `pull_request` run the workflow FILE is whatever the PR says it is — so a PR
-# could edit this `run:` block and use that PAT for anything. Flagged by review as
+# could edit this file and use the App's key for anything. Flagged by review as
 # high severity, and correctly.
 #
 # `pull_request_target` runs the workflow definition from the BASE branch instead,
@@ -48,7 +48,7 @@ on:
   #
   # zizmor is right in general — pull_request_target with a checkout of the PR is
   # a well-known RCE — but for this workflow `pull_request` is the LESS safe
-  # option, since it would run a PR-editable `run:` block with a cross-repo PAT in
+  # option, since it would run a PR-editable workflow with a cross-repo App key in
   # scope. See the dangerous-triggers audit rationale:
   # https://docs.zizmor.sh/audits/#dangerous-triggers
   pull_request_target: # zizmor: ignore[dangerous-triggers]
@@ -58,6 +58,7 @@ on:
 # the radar with its own token, in the other repo.
 permissions:
   contents: read
+  pull-requests: read   # the live-state check below reads this PR
 
 concurrency:
   # A new push supersedes the previous radar dispatch for this PR, never another
@@ -82,12 +83,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # A comet-ci App token for the QA repo only: all it does there is dispatch workflows.
+      - name: Mint GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.COMET_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.COMET_CI_APP_PRIVATE_KEY }}
+          owner: comet-ml
+          repositories: comet-automation-tests
+          permission-actions: write
+
       - name: Dispatch the radar
         # Every failure path is swallowed. QA is advisory, and a dispatch problem
         # must never show up as a red mark on somebody's PR.
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          OPIK_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
@@ -116,7 +130,7 @@ jobs:
           esac
 
           if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::GH_PAT_TO_ACCESS_GITHUB_API not available — the radar was not asked"
+            echo "::warning::no comet-ci App token — the radar was not asked"
             exit 0
           fi
 
@@ -141,7 +155,7 @@ jobs:
           # radar's side effects (a label that deploys an environment, a comment)
           # should not land on either. Re-read the live state; the radar re-reads
           # it again itself before labelling.
-          STATE=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,isDraft 2>/dev/null || echo '{}')
+          STATE=$(GH_TOKEN="$OPIK_TOKEN" gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,isDraft 2>/dev/null || echo '{}')
           if [ "$(printf '%s' "$STATE" | jq -r '.isDraft // false')" = "true" ]; then
             echo "opik#${PR} is a draft now — not asking the radar"
             exit 0

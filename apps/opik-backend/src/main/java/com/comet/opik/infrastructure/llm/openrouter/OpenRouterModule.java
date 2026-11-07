@@ -5,12 +5,16 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
+import com.google.inject.multibindings.ProvidesIntoSet;
+import com.openai.core.http.HttpClient;
 import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -22,16 +26,18 @@ public class OpenRouterModule extends AbstractModule {
     @Singleton
     @Named("openrouterGenerator")
     public OpenAIClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) throws IOException {
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull HttpClient responsesApiHttpClient, @NonNull LlmHttpClientBuilders httpClientBuilders)
+            throws IOException {
         LlmProviderClientConfig customConfig = JsonUtils.readValue(
                 JsonUtils.writeValueAsBytes(config), LlmProviderClientConfig.class);
         customConfig.setOpenAiClient(new OpenAiClientConfig(config.getOpenRouterUrl()));
-        return new OpenAIClientGenerator(customConfig);
+        return new OpenAIClientGenerator(customConfig, responsesApiHttpClient, httpClientBuilders);
     }
 
-    @Provides
+    @ProvidesIntoSet
     @Singleton
-    public OpenRouterDecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
+    public DecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
         return new OpenRouterDecisionsClient(client, config);
     }

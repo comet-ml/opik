@@ -108,7 +108,7 @@ Together the first two settings give three modes:
 The Compose file reads all three from the environment, so exporting them before starting Opik is
 enough:
 
-```bash
+```bash wordWrap
 export UUID_VALIDATION_ENABLED=true
 export UUID_VALIDATION_AUDIT_ONLY=false
 export UUID_VALIDATION_WINDOW=24h
@@ -118,7 +118,7 @@ export UUID_VALIDATION_WINDOW=24h
 
 ### Helm
 
-```yaml
+```yaml wordWrap
 databaseAnalytics:
   uuidV7ValidationEnabled: true
   uuidV7ValidationAuditOnly: false
@@ -130,7 +130,7 @@ databaseAnalytics:
 Audit mode is the safe way to introduce validation on a deployment whose clients you do not fully
 control. Out-of-window ids are counted and logged, but the write still goes through:
 
-```yaml
+```yaml wordWrap
 databaseAnalytics:
   uuidV7ValidationEnabled: true
   uuidV7ValidationAuditOnly: true
@@ -172,18 +172,18 @@ client that only runs nightly will not show up in a one-hour sample.
 If legitimate traffic starts being rejected, you have three options, in order of preference:
 
 1. **Drop to audit mode** — keeps the signal, stops the 400s:
-   ```yaml
+   ```yaml wordWrap
    databaseAnalytics:
      uuidV7ValidationAuditOnly: true
    ```
 2. **Widen the window** — if the rejected ids are legitimate but just outside `24h`. The accepted
    range is `12h`–`45d`:
-   ```yaml
+   ```yaml wordWrap
    databaseAnalytics:
      uuidV7ValidationWindow: 48h
    ```
 3. **Turn the check off entirely**:
-   ```yaml
+   ```yaml wordWrap
    databaseAnalytics:
      uuidV7ValidationEnabled: false
    ```

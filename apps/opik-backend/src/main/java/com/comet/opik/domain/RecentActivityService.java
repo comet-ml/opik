@@ -8,6 +8,7 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.RecentActivity.ActivityType;
 import com.comet.opik.api.RecentActivity.RecentActivityItem;
 import com.comet.opik.api.RecentActivity.RecentActivityPage;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
@@ -212,7 +213,7 @@ public class RecentActivityService {
                 .metricType(MetricType.TRACE_COUNT)
                 .interval(TimeInterval.DAILY)
                 .intervalStart(start)
-                .traceFilters(List.of(defaultVisibilityFilter()))
+                .traceFilters(List.of(defaultVisibilityFilter(), sdkSourceFilter()))
                 .build();
 
         return projectMetricsService.getProjectMetrics(projectId, request)
@@ -234,6 +235,16 @@ public class RecentActivityService {
                 .field(TraceField.VISIBILITY_MODE)
                 .operator(Operator.EQUAL)
                 .value("default")
+                .build();
+    }
+
+    // Counts what the project's Logs page lists: playground, experiment, optimization and evaluator runs
+    // are not the user's own traffic. Legacy 'unknown' rows still match, see Source.legacyFallbackDbValue.
+    private TraceFilter sdkSourceFilter() {
+        return TraceFilter.builder()
+                .field(TraceField.SOURCE)
+                .operator(Operator.EQUAL)
+                .value(Source.SDK.getValue())
                 .build();
     }
 

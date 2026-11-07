@@ -28,7 +28,7 @@ public record DatasetItemBatch(
         @JsonView({
                 DatasetItem.View.Write.class}) @Schema(description = "If null, dataset_name must be provided") UUID datasetId,
         @JsonView({
-                DatasetItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Optional. Associates the batch with a project by name. Ignored if project_id is provided.") String projectName,
+                DatasetItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "Optional. Associates the batch with a project by name. Ignored if project_id is provided.") String projectName,
         @JsonView({
                 DatasetItem.View.Write.class}) @Schema(description = "Optional. Associates the batch with a project by ID. Takes precedence over project_name.") UUID projectId,
         @JsonView({DatasetItem.View.Write.class}) @NotNull @Size(min = 1, max = 1000) @Valid List<DatasetItem> items,

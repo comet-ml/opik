@@ -397,9 +397,9 @@ describe("the reasoning effort a playground run sends", () => {
   });
 
   it.each<OpenAiPipelineMode | undefined>([undefined, "chat_completions_api"])(
-    "sends a stored max as high when the mode is %s",
+    "sends a stored max as the model's default, medium, when the mode is %s",
     async (mode) => {
-      expect(await sentReasoningEffort(mode)).toBe("high");
+      expect(await sentReasoningEffort(mode)).toBe("medium");
     },
   );
 });
@@ -484,6 +484,33 @@ describe("the error status a failed run reports", () => {
       expect(run.errorStatus).toBe(503);
     },
   );
+
+  it("reads an error the backend answers with plain JSON and no trailing newline", async () => {
+    const message =
+      "custom_parameters.stream is set by Opik from the request and cannot be replaced";
+    const run = await runAgainst(
+      new Response(JSON.stringify({ code: 400, message }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    expect(run.errorStatus).toBe(400);
+    expect(run.opikError).toBe(message);
+  });
+
+  it("reads the last line of a stream that ends without a newline", async () => {
+    const run = await runAgainst(
+      new Response(
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "hello" } }],
+        })}`,
+        { status: 200 },
+      ),
+    );
+
+    expect(run.result).toBe("hello");
+  });
 
   it("reports no status for a run that succeeds", async () => {
     const run = await runAgainst(

@@ -1,5 +1,6 @@
 import isNumber from "lodash/isNumber";
 import modelPricing from "@/data/model_prices_and_context_window.json";
+import openRouterModelPricing from "@/data/model_prices_openrouter.json";
 import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 import { DECISION_MODELS } from "@/constants/decisionModels";
 
@@ -21,7 +22,14 @@ type ModelPricingEntry = {
 const normalizeModelName = (value: string) =>
   value.trim().toLowerCase().replace(/\./g, "-");
 
-const modelEntries = modelPricing as Record<string, ModelPricingEntry>;
+/**
+ * LiteLLM's pricing data no longer lists OpenRouter models, so they come from a file generated from OpenRouter's
+ * model list.
+ */
+const modelEntries = {
+  ...modelPricing,
+  ...openRouterModelPricing,
+} as Record<string, ModelPricingEntry>;
 
 const VISION_CAPABILITIES = new Map<string, boolean>();
 const NORMALIZED_VISION_CAPABILITIES = new Map<string, boolean>();

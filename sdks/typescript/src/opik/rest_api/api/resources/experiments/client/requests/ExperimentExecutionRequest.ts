@@ -23,7 +23,10 @@ export interface ExperimentExecutionRequest {
     datasetVersionId?: string;
     prompts: OpikApi.PromptVariant[];
     projectName?: string;
+    projectId?: string;
     datasetId: string;
     versionHash?: string;
     promptVersions?: OpikApi.PromptVersionLink[];
+    selectedRuleIds?: string[];
+    filters?: string;
 }

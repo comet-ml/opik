@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,6 +41,9 @@ class TestSuiteAssertionCounterServiceTest {
     @Mock
     private RAtomicLongReactive atomicLong;
 
+    @Mock
+    private ExperimentCancellationService cancellationService;
+
     private static final String WORKSPACE_ID = "test-workspace";
 
     private TestSuiteAssertionCounterService service;
@@ -49,7 +53,10 @@ class TestSuiteAssertionCounterServiceTest {
         var config = new ExperimentExecutionConfig();
         config.setBatchCounterTtl(Duration.hours(24));
 
-        service = new TestSuiteAssertionCounterService(redisClient, config, experimentService);
+        service = new TestSuiteAssertionCounterService(redisClient, config, experimentService,
+                cancellationService);
+        // Nothing else has written an ending in most of these, so the assertions win the claim.
+        lenient().when(cancellationService.claimFinish(anyString(), any())).thenReturn(Mono.just(true));
         when(redisClient.getAtomicLong(anyString())).thenReturn(atomicLong);
     }
 
@@ -99,8 +106,11 @@ class TestSuiteAssertionCounterServiceTest {
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
-        var expectedUpdate = ExperimentUpdate.builder().status(ExperimentStatus.COMPLETED).build();
-        verify(experimentService).update(experimentId, expectedUpdate);
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        // The stamp belongs to the item drain, not to the assertions finishing after it.
+        assertThat(captor.getValue().finished()).isFalse();
         verify(experimentService).finishExperiments(Set.of(experimentId));
     }
 
@@ -116,8 +126,11 @@ class TestSuiteAssertionCounterServiceTest {
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
-        var expectedUpdate = ExperimentUpdate.builder().status(ExperimentStatus.COMPLETED).build();
-        verify(experimentService).update(experimentId, expectedUpdate);
+        var captor = ArgumentCaptor.forClass(ExperimentUpdate.class);
+        verify(experimentService).update(eq(experimentId), captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        // The stamp belongs to the item drain, not to the assertions finishing after it.
+        assertThat(captor.getValue().finished()).isFalse();
         verify(experimentService).finishExperiments(Set.of(experimentId));
     }
 
@@ -148,6 +161,28 @@ class TestSuiteAssertionCounterServiceTest {
         assertThatThrownBy(() -> service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block())
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("update failed");
+    }
+
+    // A batch that drained with failures already wrote FAILED and holds the claim for it. The
+    // assertions landing afterwards are not the run completing, and used to overwrite that status
+    // because this path only checked whether the run had been stopped.
+    @Test
+    void decrementAndFinishIfCompleteLeavesAnEndingSomethingElseAlreadyWrote() {
+        var experimentId = UUID.randomUUID();
+
+        when(atomicLong.isExists()).thenReturn(Mono.just(true));
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
+        when(cancellationService.claimFinish(WORKSPACE_ID, experimentId)).thenReturn(Mono.just(false));
+        // Stubbed so that writing anyway fails the verify below rather than a null dereference
+        lenient().when(experimentService.update(any(UUID.class), any(ExperimentUpdate.class)))
+                .thenReturn(Mono.empty());
+        lenient().when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
+
+        verify(experimentService, never()).update(any(UUID.class), any(ExperimentUpdate.class));
+        verify(experimentService, never()).finishExperiments(any());
     }
 
     @Test

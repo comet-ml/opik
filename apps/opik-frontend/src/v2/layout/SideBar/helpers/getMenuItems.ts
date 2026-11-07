@@ -12,6 +12,7 @@ import {
   Radar,
   Rows3,
   Settings2,
+  ShieldCheck,
   Sparkles,
   UserPen,
   Brain,
@@ -22,6 +23,7 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
+import PlaygroundNavBadge from "@/v2/layout/SideBar/MenuItem/PlaygroundNavBadge";
 import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
 const getMenuItems = ({
   projectId,
@@ -165,6 +167,7 @@ const getMenuItems = ({
                 icon: Blocks,
                 label: "Prompt playground",
                 disabled: !projectPrefix,
+                badge: PlaygroundNavBadge,
               },
             ]
           : []),
@@ -290,8 +293,10 @@ export const getWorkspaceMenuItems = (): MenuItemGroup[] => {
 
 export const getWorkspaceSidebarMenuItems = ({
   canViewDashboards,
+  canViewGuardrails,
 }: {
   canViewDashboards: boolean;
+  canViewGuardrails: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -312,6 +317,17 @@ export const getWorkspaceSidebarMenuItems = ({
                 type: MENU_ITEM_TYPE.router as const,
                 icon: ChartLine,
                 label: "Dashboards",
+              },
+            ]
+          : []),
+        ...(canViewGuardrails
+          ? [
+              {
+                id: "guardrails",
+                path: "/$workspaceName/guardrails",
+                type: MENU_ITEM_TYPE.router as const,
+                icon: ShieldCheck,
+                label: "Guardrails",
               },
             ]
           : []),

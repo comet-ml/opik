@@ -2,12 +2,15 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.ModelCapabilities;
+import com.comet.opik.domain.llm.SamplingParamsNormalizer;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.AnthropicClientConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
-import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
+import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.chat.ChatModel;
@@ -27,9 +30,13 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     static final int THINKING_JUDGE_MAX_TOKENS = 5_000;
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull LlmModelRegistryService registryService;
+    private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
-    private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
-        var anthropicClientBuilder = AnthropicClient.builder();
+    private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config,
+            @NonNull HttpClientBuilder httpClientBuilder) {
+        var anthropicClientBuilder = AnthropicClient.builder()
+                .httpClientBuilder(httpClientBuilder);
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(AnthropicClientConfig::url)
                 .filter(StringUtils::isNotEmpty)
@@ -56,47 +63,51 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
-            LlmAsJudgeModelParameters modelParameters) {
-        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters());
+            LlmAsJudgeModelParameters modelParameters, HttpClientBuilder httpClientBuilder) {
+        var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters(),
+                registryService);
         if (outputConfig.isEmpty()) {
-            return newChatModelBuilder(config, modelParameters).build();
+            return newChatModelBuilder(config, modelParameters, httpClientBuilder).build();
         }
         return new AnthropicOutputConfigChatModel(outputConfig.get(),
-                customParameters -> newChatModelBuilder(config, modelParameters)
+                customParameters -> newChatModelBuilder(config, modelParameters, httpClientBuilder)
                         .customParameters(customParameters)
                         .build());
     }
 
     private AnthropicChatModel.AnthropicChatModelBuilder newChatModelBuilder(LlmProviderClientApiConfig config,
-            LlmAsJudgeModelParameters modelParameters) {
+            LlmAsJudgeModelParameters modelParameters, HttpClientBuilder httpClientBuilder) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
+                .httpClientBuilder(httpClientBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
-        Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(OpenAiClientConfig::url)
-                .filter(StringUtils::isNotBlank)
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(AnthropicClientConfig::url)
+                .filter(StringUtils::isNotEmpty)
                 .ifPresent(builder::baseUrl);
 
         if (StringUtils.isNotEmpty(config.baseUrl())) {
             builder.baseUrl(config.baseUrl());
         }
 
-        var customParameters = modelParameters.customParameters();
-        var thinking = parseThinking(customParameters);
+        Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(AnthropicClientConfig::version)
+                .filter(StringUtils::isNotBlank)
+                .ifPresent(builder::version);
 
-        // Anthropic rejects temperature with a 400 in two cases: (1) adaptive-thinking models
-        // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
-        // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
-        // API-created rules (which bypass the FE sanitizer) don't fail.
-        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
-            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        }
+        var customParameters = modelParameters.customParameters();
+        var thinking = SamplingParamsNormalizer.effortTurnsOnThinking(modelParameters.name(), customParameters)
+                ? ThinkingParams.ADAPTIVE
+                : parseThinking(customParameters);
+
+        // ParamResolver has already dropped a temperature the model or the rule's thinking refuses.
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
         applyCustomParameters(builder, customParameters, thinking, willThink(thinking, modelParameters.name()));
 
@@ -186,21 +197,34 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     private boolean willThink(ThinkingParams thinking, String modelName) {
-        return thinking.type() != null ? thinking.enabled() : ModelCapabilities.thinksByDefault(modelName);
+        return thinking.type() != null
+                ? thinking.enabled()
+                : ModelCapabilities.thinksByDefault(modelName, registryService);
     }
 
     private record ThinkingParams(boolean enabled, String type, Integer budgetTokens) {
         private static final ThinkingParams ABSENT = new ThinkingParams(false, null, null);
+        private static final ThinkingParams ADAPTIVE = new ThinkingParams(true, AnthropicEffort.ADAPTIVE, null);
     }
 
     @Override
     public AnthropicClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
-        return newAnthropicClient(config);
+        return newAnthropicClient(config, httpClientBuilders.builder());
     }
 
     @Override
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return newChatLanguageModel(config, modelParameters);
+        return newChatLanguageModel(config, modelParameters, httpClientBuilders.builder());
+    }
+
+    public AnthropicClient newClient(@NonNull LlmProviderClientApiConfig config,
+            @NonNull HttpClientBuilder httpClientBuilder) {
+        return newAnthropicClient(config, httpClientBuilder);
+    }
+
+    public ChatModel newChatModel(@NonNull LlmProviderClientApiConfig config,
+            @NonNull LlmAsJudgeModelParameters modelParameters, @NonNull HttpClientBuilder httpClientBuilder) {
+        return newChatLanguageModel(config, modelParameters, httpClientBuilder);
     }
 }

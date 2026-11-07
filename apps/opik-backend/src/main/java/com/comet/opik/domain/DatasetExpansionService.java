@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -221,7 +222,8 @@ public class DatasetExpansionService {
             log.error("Validation error during sample generation", exception);
             throw exception;
         } catch (ClientErrorException | ServerErrorException exception) {
-            log.error("LLM service error during sample generation", exception);
+            // the message can be what the provider answered
+            log.error("LLM service error during sample generation", ProviderFailures.redacted(exception));
             throw exception;
         } catch (Exception exception) {
             log.error("Failed to generate samples using LLM", exception);

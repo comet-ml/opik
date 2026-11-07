@@ -15,6 +15,7 @@ export interface AddMediaPopoverProps {
   align?: "start" | "end";
   onOpenChange?: (open: boolean) => void;
   promptVariables?: string[];
+  note?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -52,6 +53,7 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
   align = "start",
   onOpenChange,
   promptVariables = [],
+  note,
   children,
 }) => {
   const { toast } = useToast();
@@ -172,6 +174,7 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
               />
             </p>
           )}
+          {note && <p className="comet-body-xs text-light-slate">{note}</p>}
         </div>
       </PopoverContent>
     </Popover>

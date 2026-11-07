@@ -37,7 +37,7 @@ title: Observability for n8n with Opik
 
 The fastest way to get started is with Docker Compose:
 
-```bash
+```bash wordWrap
 # Clone and navigate to the example
 git clone https://github.com/comet-ml/n8n-observability.git
 cd n8n-observability/examples/docker-compose
@@ -57,7 +57,7 @@ Open http://localhost:5678, create a workflow, and see traces in your [Opik dash
 
 Create a custom Dockerfile that installs the `n8n-observability` package globally:
 
-```dockerfile
+```dockerfile wordWrap
 FROM n8nio/n8n:latest
 
 USER root
@@ -72,7 +72,7 @@ Then configure your docker-compose.yml with OTLP settings:
 
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
-        ```yaml
+        ```yaml wordWrap
         services:
           n8n:
             build: .
@@ -94,13 +94,13 @@ Then configure your docker-compose.yml with OTLP settings:
             `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
             environment variable:
 
-            ```yaml
+            ```yaml wordWrap
             OTEL_EXPORTER_OTLP_HEADERS: "Authorization=${OPIK_API_KEY},Comet-Workspace=default,projectName=my-n8n-project"
             ```
         </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
-        ```yaml
+        ```yaml wordWrap
         services:
           n8n:
             build: .
@@ -118,7 +118,7 @@ Then configure your docker-compose.yml with OTLP settings:
         ```
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```yaml
+        ```yaml wordWrap
         services:
           n8n:
             build: .
@@ -141,7 +141,7 @@ Then configure your docker-compose.yml with OTLP settings:
 
 If you're running n8n directly on your machine:
 
-```bash
+```bash wordWrap
 # Install globally
 npm install -g n8n-observability
 ```
@@ -172,7 +172,7 @@ Then set the required environment variables:
         ```
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=my-n8n-project'
         export N8N_OTEL_SERVICE_NAME=my-n8n
@@ -206,7 +206,7 @@ The following environment variables can be used to configure the integration:
 
 You can filter which nodes are traced using environment variables:
 
-```bash
+```bash wordWrap
 # Only trace specific nodes
 export N8N_OTEL_NODE_INCLUDE="OpenAI,HTTP Request"
 
@@ -244,7 +244,7 @@ Each node operation creates a span with:
 
 Check that the package is installed correctly:
 
-```bash
+```bash wordWrap
 node -e "console.log(require.resolve('n8n-observability/hooks'))"
 ```
 

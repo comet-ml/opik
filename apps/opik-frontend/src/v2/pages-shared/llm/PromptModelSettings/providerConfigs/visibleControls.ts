@@ -12,14 +12,29 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import {
+  OpenRouterParam,
+  getGeminiOrVertexListedParams,
+  getOpenRouterReasoningEffortOptions,
+  isAnthropicThinkingRequested,
   resolveEffort,
   resolveSamplingParams,
   supportsGeminiThinkingLevel,
+  supportsOpenRouterParam,
   supportsPenaltyParams,
   supportsSamplingParams,
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import { getModelParams, toParamsRoute } from "@/lib/modelParams";
+import { ModelParams } from "@/types/modelParams";
+import {
+  ANTHROPIC_PANEL,
+  GEMINI_PANEL,
+  GenericPanelPresentation,
+  getShownControls,
+  OPENAI_PANEL,
+  VERTEX_AI_PANEL,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/genericPanels";
 import { resolveSamplingPresentation } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
 export type SupportsParam = (param: ModelConfigParam) => boolean;
@@ -79,7 +94,9 @@ export const getAnthropicVisibleControls = ({
   const { thinkingEffort } = resolveEffort(model ?? "", configs);
 
   return {
-    samplingParams: supportsSamplingParams(model),
+    samplingParams:
+      supportsSamplingParams(model) &&
+      !isAnthropicThinkingRequested(model ?? "", configs),
     maxCompletionTokens: supports("maxCompletionTokens"),
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),
@@ -127,6 +144,11 @@ export const getVertexAIVisibleControls = (
     supportsVertexAIThinkingLevel(input.model),
   );
 
+export const offersOpenRouterTopP = (
+  model: PROVIDER_MODEL_TYPE | "" | undefined,
+  supports: SupportsParam,
+) => supports("topP") && supportsOpenRouterParam(model, "topP");
+
 export const getOpenRouterVisibleControls = ({
   model,
   configs,
@@ -136,24 +158,47 @@ export const getOpenRouterVisibleControls = ({
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const independent = sampling === "independent";
   const showPenalties = supportsPenaltyParams(model);
+  const shows = (param: OpenRouterParam) =>
+    supportsOpenRouterParam(model, param) && !isUndefined(configs[param]);
 
   return {
     // ExclusiveSamplingParams renders nothing when it can offer no choice and neither half is live.
     samplingParams:
       sampling === "exclusive" &&
-      (supports("topP") || !isUndefined(temperature) || !isUndefined(topP)),
+      (offersOpenRouterTopP(model, supports) ||
+        !isUndefined(temperature) ||
+        !isUndefined(topP)),
     temperature: independent && !isUndefined(temperature),
-    maxTokens: !isUndefined(configs.maxTokens),
+    maxTokens: shows("maxTokens"),
     topP: independent && supports("topP") && !isUndefined(topP),
-    topK: !isUndefined(configs.topK),
-    frequencyPenalty: showPenalties && !isUndefined(configs.frequencyPenalty),
-    presencePenalty: showPenalties && !isUndefined(configs.presencePenalty),
-    repetitionPenalty: !isUndefined(configs.repetitionPenalty),
-    minP: !isUndefined(configs.minP),
-    topA: !isUndefined(configs.topA),
+    topK: shows("topK"),
+    frequencyPenalty: showPenalties && shows("frequencyPenalty"),
+    presencePenalty: showPenalties && shows("presencePenalty"),
+    repetitionPenalty: shows("repetitionPenalty"),
+    minP: shows("minP"),
+    topA: shows("topA"),
+    reasoningEffort:
+      supports("reasoningEffort") &&
+      getOpenRouterReasoningEffortOptions(model).length > 0,
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),
   };
+};
+
+export const hasGenericControls = (
+  params: ModelParams,
+  presentation: GenericPanelPresentation,
+  configs: Record<string, unknown>,
+  unsupportedParams?: ReadonlySet<ModelConfigParam>,
+  model = "",
+): boolean => {
+  const supports = createSupports(unsupportedParams);
+  return (
+    getShownControls(params, presentation, configs, unsupportedParams, model)
+      .length > 0 ||
+    supports("throttling") ||
+    supports("maxConcurrentRequests")
+  );
 };
 
 export const hasVisibleControls = (
@@ -166,7 +211,21 @@ export const hasVisibleControls = (
   const supports = createSupports(unsupportedParams);
 
   switch (provider) {
-    case PROVIDER_TYPE.OPEN_AI:
+    case PROVIDER_TYPE.OPEN_AI: {
+      const params = getModelParams(
+        PROVIDER_TYPE.OPEN_AI,
+        model,
+        toParamsRoute(openAiPipelineMode),
+      );
+      if (params) {
+        return hasGenericControls(
+          params,
+          OPENAI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getOpenAIVisibleControls({
           model,
@@ -175,7 +234,18 @@ export const hasVisibleControls = (
           openAiPipelineMode,
         }),
       );
-    case PROVIDER_TYPE.ANTHROPIC:
+    }
+    case PROVIDER_TYPE.ANTHROPIC: {
+      const params = getModelParams(PROVIDER_TYPE.ANTHROPIC, model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          ANTHROPIC_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getAnthropicVisibleControls({
           model,
@@ -183,7 +253,18 @@ export const hasVisibleControls = (
           supports,
         }),
       );
-    case PROVIDER_TYPE.GEMINI:
+    }
+    case PROVIDER_TYPE.GEMINI: {
+      const params = getGeminiOrVertexListedParams(model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          GEMINI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getGeminiVisibleControls({
           model,
@@ -191,7 +272,18 @@ export const hasVisibleControls = (
           supports,
         }),
       );
-    case PROVIDER_TYPE.VERTEX_AI:
+    }
+    case PROVIDER_TYPE.VERTEX_AI: {
+      const params = getGeminiOrVertexListedParams(model);
+      if (params) {
+        return hasGenericControls(
+          params,
+          VERTEX_AI_PANEL,
+          configs as Record<string, unknown>,
+          unsupportedParams,
+          model,
+        );
+      }
       return isAnyControlVisible(
         getVertexAIVisibleControls({
           model,
@@ -199,6 +291,7 @@ export const hasVisibleControls = (
           supports,
         }),
       );
+    }
     case PROVIDER_TYPE.OPEN_ROUTER:
       return isAnyControlVisible(
         getOpenRouterVisibleControls({

@@ -16,6 +16,7 @@ public final class GeneralMappingRules {
     public static final String OPIK_TRACE_ID_ATTR = "opik.trace_id";
     public static final String OPIK_PARENT_SPAN_ID_ATTR = "opik.parent_span_id";
     public static final String OPIK_SPAN_ID_ATTR = "opik.span_id";
+    public static final String OPIK_PROJECT_NAME_ATTR = "opik.project_name";
     public static final String SERVER_ADDRESS_ATTR = "server.address";
 
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
@@ -49,6 +50,9 @@ public final class GeneralMappingRules {
                     .build(),
             OpenTelemetryMappingRule.builder()
                     .rule(OPIK_SPAN_ID_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
+                    .build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule(OPIK_PROJECT_NAME_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
                     .build());
 
     public static List<OpenTelemetryMappingRule> getRules() {

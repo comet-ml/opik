@@ -11,6 +11,7 @@ import {
 import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
+import GuardrailsPageGuard from "@/v2/layout/GuardrailsPageGuard";
 import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import OptimizationsPageGuard from "@/v2/layout/OptimizationsPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
@@ -30,6 +31,7 @@ import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
 import usePluginsStore from "@/store/PluginsStore";
+import RouteErrorFallback from "@/v2/layout/RouteErrorFallback/RouteErrorFallback";
 const PlaygroundPage = lazy(
   () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
 );
@@ -54,6 +56,7 @@ import AlertsPageGuard from "@/v2/layout/AlertsPageGuard";
 import PromptsPageGuard from "@/v2/layout/PromptsPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
+import GuardrailsPage from "@/v2/pages/GuardrailsPage/GuardrailsPage";
 import DatasetsPage from "@/v2/pages/DatasetsPage/DatasetsPage";
 import DatasetDetailPage from "@/v2/pages-shared/datasets/DatasetDetailPage/DatasetDetailPage";
 import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
@@ -576,6 +579,22 @@ const dashboardDetailRoute = createRoute({
   },
 });
 
+// ----------- guardrails (workspace-level)
+const guardrailsRoute = createRoute({
+  path: "/guardrails",
+  getParentRoute: () => workspaceRoute,
+  component: GuardrailsPageGuard,
+  staticData: {
+    title: "Guardrails",
+  },
+});
+
+const guardrailsPageRoute = createRoute({
+  path: "/",
+  getParentRoute: () => guardrailsRoute,
+  component: GuardrailsPage,
+});
+
 // ----------- configuration (workspace-level)
 const configurationRoute = createRoute({
   path: "/configuration",
@@ -699,6 +718,7 @@ const routeTree = rootRoute.addChildren([
 
       // Workspace-level routes
       dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
+      guardrailsRoute.addChildren([guardrailsPageRoute]),
       configurationRoute,
 
       // SDK redirects
@@ -718,6 +738,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   basepath: import.meta.env.VITE_BASE_URL || "/",
   routeTree,
+  defaultErrorComponent: RouteErrorFallback,
 });
 
 export type AppRouter = typeof router;

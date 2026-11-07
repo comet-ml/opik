@@ -23,7 +23,7 @@ After running your Strands Agents workflow with the OpenTelemetry configuration,
 
 To use the Strands Agents integration with Opik, you will need to have Strands Agents and the required OpenTelemetry packages installed:
 
-```bash
+```bash wordWrap
 pip install --upgrade "strands-agents" "strands-agents-tools" opentelemetry-sdk opentelemetry-exporter-otlp
 ```
 
@@ -80,7 +80,7 @@ configure the OpenTelemetry integration:
     If you are self-hosting Opik, you will need to set the following environment
     variables:
 
-    ```bash
+    ```bash wordWrap
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
     ```
 
@@ -88,7 +88,7 @@ configure the OpenTelemetry integration:
         To log the traces to a specific project, you can add the `projectName`
         parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
 
-        ```bash
+        ```bash wordWrap
         export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
         ```
 
@@ -97,11 +97,16 @@ configure the OpenTelemetry integration:
 
 </Tabs>
 
+<Tip>
+  If you run your agent on Amazon Bedrock AgentCore, see the [OpenTelemetry guide](/integrations/opentelemetry). It
+  shows how to send spans to CloudWatch and Opik at the same time, and why each trace needs a root span.
+</Tip>
+
 ## Using Opik with Strands Agents
 
 The example below shows how to use the Strands Agents integration with Opik:
 
-```python
+```python wordWrap
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 from strands.telemetry import StrandsTelemetry

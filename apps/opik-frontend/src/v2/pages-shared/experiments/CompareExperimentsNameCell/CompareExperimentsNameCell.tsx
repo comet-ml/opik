@@ -5,6 +5,7 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
 } from "@/shared/DataTableCells/VerticallySplitCellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/shared/ResourceLink/ResourceLink";
@@ -23,14 +24,18 @@ const CompareExperimentsNameCell: React.FC<
     const experiment = experiments.find((e) => e.id === experimentId);
 
     return (
-      <ResourceLink
-        id={experiment?.dataset_id || ""}
-        name={experiment?.name}
-        resource={RESOURCE_TYPE.experiment}
-        search={{
-          experiments: [experimentId],
-        }}
-      />
+      <TooltipWrapper content={experiment?.name}>
+        <div className="flex h-5 min-w-0 items-center">
+          <ResourceLink
+            id={experiment?.dataset_id || ""}
+            name={experiment?.name}
+            resource={RESOURCE_TYPE.experiment}
+            search={{
+              experiments: [experimentId],
+            }}
+          />
+        </div>
+      </TooltipWrapper>
     );
   };
 

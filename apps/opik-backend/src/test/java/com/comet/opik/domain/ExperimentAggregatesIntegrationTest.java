@@ -16,7 +16,9 @@ import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
@@ -437,6 +439,89 @@ class ExperimentAggregatesIntegrationTest {
 
     private record CountTestData(List<UUID> datasetIds, List<UUID> experimentIds, List<UUID> projectIds,
             List<String> scoreNames, String namePrefix) {
+    }
+
+    @Test
+    @DisplayName("A finished experiment keeps its finished_at when read back from aggregates")
+    void aggregatesCarryFinishedAtFromTheSourceRow() {
+        var project = createProject(API_KEY, TEST_WORKSPACE);
+        var dataset = createDataset(API_KEY, TEST_WORKSPACE);
+        var experiment = createExperiment(dataset, API_KEY, TEST_WORKSPACE);
+
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(),
+                List.of("score"), API_KEY, TEST_WORKSPACE);
+
+        experimentService.update(experiment.id(), ExperimentUpdate.builder().finished(true).build())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        var searchCriteria = ExperimentSearchCriteria.builder()
+                .experimentIds(Set.of(experiment.id()))
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build();
+
+        var rawExperiment = experimentService.find(1, 10, searchCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block()
+                .content()
+                .getFirst();
+
+        assertThat(rawExperiment.finishedAt())
+                .as("the source row must carry one, or this test proves nothing")
+                .isNotNull();
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        var experimentFromAggregates = experimentAggregatesService
+                .getExperimentFromAggregates(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        assertThat(experimentFromAggregates.finishedAt())
+                .as("carried from experiments, not fabricated")
+                .isEqualTo(rawExperiment.finishedAt());
+    }
+
+    // CANCELLED is written when the stop is asked for; items already with a provider still finish.
+    // The stamp says they stopped, and comes later from whoever sees the run drain.
+    @Test
+    @DisplayName("Asking for a stop writes the status without dating the end of the run")
+    void cancellingLeavesFinishedAtForTheDrainToWrite() {
+        var dataset = createDataset(API_KEY, TEST_WORKSPACE);
+        var experiment = createExperiment(dataset, API_KEY, TEST_WORKSPACE);
+
+        experimentService
+                .update(experiment.id(), ExperimentUpdate.builder().status(ExperimentStatus.CANCELLED).build())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        var updated = experimentService.find(1, 10, ExperimentSearchCriteria.builder()
+                .experimentIds(Set.of(experiment.id()))
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block()
+                .content()
+                .getFirst();
+
+        assertThat(updated.status()).isEqualTo(ExperimentStatus.CANCELLED);
+        assertThat(updated.finishedAt()).isNull();
     }
 
     @Test

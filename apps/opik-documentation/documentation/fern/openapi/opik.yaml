@@ -2262,6 +2262,8 @@ paths:
       - name: project_name
         in: query
         schema:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -3260,13 +3262,25 @@ paths:
         schema:
           minimum: 1
           type: integer
+          description: "Page size. At most 100 when experiment_ids is omitted, since\
+            \ each item then carries a result per experiment"
           format: int32
           default: 10
       - name: experiment_ids
         in: query
-        required: true
         schema:
           type: string
+          description: "JSON array of experiment IDs. Omit to include every regular\
+            \ experiment on the dataset (optimizer trial, mini-batch and mutation\
+            \ experiments are excluded); item filters are then evaluated against the\
+            \ newest version of each item that those experiments reference"
+      - name: dataset_version
+        in: query
+        schema:
+          type: string
+          description: Dataset version hash or tag. Only experiments run against this
+            version are included. Requires experiment_ids to be omitted. Returns 404
+            if the version does not exist
       - name: filters
         in: query
         schema:
@@ -3674,6 +3688,86 @@ paths:
       responses:
         "204":
           description: Tag deleted successfully
+  /v1/private/datasets/{id}/versions/hash/{versionHash}:
+    get:
+      tags:
+      - Datasets
+      summary: Get dataset version by hash
+      description: Get a specific version by its version hash
+      operationId: getDatasetVersionByHash
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dataset version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+      - Datasets
+      summary: Update dataset version
+      description: Update a dataset version's change_description and/or add new tags
+      operationId: updateDatasetVersion
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionUpdate_Public"
+      responses:
+        "200":
+          description: Version updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Not Found - Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Conflict - Tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions:
     get:
       tags:
@@ -3796,62 +3890,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
-  /v1/private/datasets/{id}/versions/hash/{versionHash}:
-    patch:
-      tags:
-      - Datasets
-      summary: Update dataset version
-      description: Update a dataset version's change_description and/or add new tags
-      operationId: updateDatasetVersion
-      parameters:
-      - name: versionHash
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DatasetVersionUpdate_Public"
-      responses:
-        "200":
-          description: Version updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DatasetVersion_Public"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-        "404":
-          description: Not Found - Version not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
-        "409":
-          description: Conflict - Tag already exists
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/environments:
     get:
       tags:
       - Environments
       summary: Find environments
       description: Find environments for the workspace. Capped at the workspace limit
-        (default 20).
+        (default 100).
       operationId: findEnvironments
       responses:
         "200":
@@ -3980,6 +4025,34 @@ paths:
           description: No Content
         "400":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/experiments/cancel:
+    put:
+      tags:
+      - Experiments
+      summary: Cancel running experiments
+      description: "Stops the given experiments: queued items are skipped and the\
+        \ experiments are marked cancelled"
+      operationId: cancelExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdsHolder"
+      responses:
+        "204":
+          description: No content
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
           content:
             application/json:
               schema:
@@ -4163,6 +4236,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ExperimentExecutionResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/items/bulk:
     put:
       tags:
@@ -4864,6 +4955,23 @@ paths:
             application/json:
               schema:
                 type: string
+  /v1/private/llm/models/profiles:
+    get:
+      tags:
+      - LLM Models
+      summary: Get LLM model profiles
+      description: "Get the params each provider's unlisted models take, keyed by\
+        \ provider"
+      operationId: getLlmModelProfiles
+      responses:
+        "200":
+          description: Params by provider
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: "#/components/schemas/ModelParams"
   /v1/private/llm-provider-key/delete:
     post:
       tags:
@@ -10145,6 +10253,16 @@ components:
             description: "Ids whose automatic run already happened, so enrolling has\
               \ no effect"
             format: uuid
+        reset_project_ids:
+          uniqueItems: true
+          type: array
+          description: "Ids whose automatic run never finished, so clearing forgot\
+            \ it and enrolling them again gives it one more free run"
+          items:
+            type: string
+            description: "Ids whose automatic run never finished, so clearing forgot\
+              \ it and enrolling them again gives it one more free run"
+            format: uuid
     Request:
       required:
       - enrolled
@@ -10386,6 +10504,8 @@ components:
           description: Project ID. Either project_id or project_name must be provided
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Either project_id or project_name must be provided
@@ -10648,6 +10768,8 @@ components:
           description: Project ID. Either project_id or project_name must be provided
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Either project_id or project_name must be provided
@@ -11053,6 +11175,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional user-defined key/value pairs, added as top-level\
+              \ keys of the alert's EventBridge event detail. Keys must not collide\
+              \ with the event's own keys."
+          description: "Optional user-defined key/value pairs, added as top-level\
+            \ keys of the alert's EventBridge event detail. Keys must not collide\
+            \ with the event's own keys."
         webhook:
           $ref: "#/components/schemas/Webhook"
         triggers:
@@ -11275,6 +11407,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional user-defined key/value pairs, added as top-level\
+              \ keys of the alert's EventBridge event detail. Keys must not collide\
+              \ with the event's own keys."
+          description: "Optional user-defined key/value pairs, added as top-level\
+            \ keys of the alert's EventBridge event detail. Keys must not collide\
+            \ with the event's own keys."
         webhook:
           $ref: "#/components/schemas/Webhook_Write"
         triggers:
@@ -11449,6 +11591,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        custom_fields:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional user-defined key/value pairs, added as top-level\
+              \ keys of the alert's EventBridge event detail. Keys must not collide\
+              \ with the event's own keys."
+          description: "Optional user-defined key/value pairs, added as top-level\
+            \ keys of the alert's EventBridge event detail. Keys must not collide\
+            \ with the event's own keys."
         webhook:
           $ref: "#/components/schemas/Webhook_Public"
         triggers:
@@ -11593,6 +11745,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView"
         reviewers:
           type: array
           readOnly: true
@@ -11622,6 +11776,26 @@ components:
           type: string
           readOnly: true
       description: List of annotation queues to create
+    AnnotationQueueAnnotatorView:
+      type: object
+      properties:
+        html:
+          maxLength: 200000
+          minLength: 0
+          type: string
+          description: A custom HTML view rendered in a sandboxed iframe instead of
+            the default trace blocks or conversation
+        kit_version:
+          maximum: 1
+          minimum: 1
+          type: integer
+          description: Version of the view kit the html was written for
+          format: int32
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: "What annotators see in the view, in one or two sentences"
     AnnotationQueueAutomation:
       type: object
       properties:
@@ -11698,6 +11872,26 @@ components:
         value:
           type: number
           format: double
+    AnnotationQueueAnnotatorView_Write:
+      type: object
+      properties:
+        html:
+          maxLength: 200000
+          minLength: 0
+          type: string
+          description: A custom HTML view rendered in a sandboxed iframe instead of
+            the default trace blocks or conversation
+        kit_version:
+          maximum: 1
+          minimum: 1
+          type: integer
+          description: Version of the view kit the html was written for
+          format: int32
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: "What annotators see in the view, in one or two sentences"
     AnnotationQueueAutomation_Write:
       type: object
       properties:
@@ -11755,6 +11949,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation_Write"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView_Write"
       description: List of annotation queues to create
     ConditionGroup_Write:
       required:
@@ -11826,6 +12022,26 @@ components:
           items:
             $ref: "#/components/schemas/AnnotationQueue_Write"
       description: Batch of annotation queues to create
+    AnnotationQueueAnnotatorView_Public:
+      type: object
+      properties:
+        html:
+          maxLength: 200000
+          minLength: 0
+          type: string
+          description: A custom HTML view rendered in a sandboxed iframe instead of
+            the default trace blocks or conversation
+        kit_version:
+          maximum: 1
+          minimum: 1
+          type: integer
+          description: Version of the view kit the html was written for
+          format: int32
+        summary:
+          maxLength: 1000
+          minLength: 0
+          type: string
+          description: "What annotators see in the view, in one or two sentences"
     AnnotationQueueAutomation_Public:
       type: object
       properties:
@@ -11911,6 +12127,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation_Public"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView_Public"
         reviewers:
           type: array
           readOnly: true
@@ -12083,6 +12301,8 @@ components:
           format: int32
         automation:
           $ref: "#/components/schemas/AnnotationQueueAutomation"
+        annotator_view:
+          $ref: "#/components/schemas/AnnotationQueueAnnotatorView"
     AssertionResultBatch:
       required:
       - assertion_results
@@ -12113,6 +12333,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -12185,6 +12407,8 @@ components:
           minLength: 1
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -12279,6 +12503,8 @@ components:
         mime_type:
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -12598,6 +12824,10 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode"
+        api:
+          type: string
+          enum:
+          - decisions
     LlmAsJudgeOutputSchema:
       required:
       - description
@@ -13055,6 +13285,10 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode_Write"
+        api:
+          type: string
+          enum:
+          - decisions
     LlmAsJudgeOutputSchema_Write:
       required:
       - description
@@ -13537,6 +13771,10 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode_Public"
+        api:
+          type: string
+          enum:
+          - decisions
     LlmAsJudgeOutputSchema_Public:
       required:
       - description
@@ -14387,6 +14625,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -14750,6 +14990,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -14870,6 +15112,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -15028,6 +15272,8 @@ components:
           description: "If null, dataset_name must be provided"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Optional. Associates the batch with a project by name. Ignored
@@ -15084,6 +15330,8 @@ components:
           format: uuid
           readOnly: true
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         input:
@@ -15264,6 +15512,8 @@ components:
           description: "If null, dataset_name must be provided"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Optional. Associates the batch with a project by name. Ignored
@@ -16849,10 +17099,24 @@ components:
           - running
           - completed
           - cancelled
+          - failed
         experiment_scores:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentScore"
+    IdsHolder:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AssertionScoreAverage:
       required:
       - name
@@ -16889,6 +17153,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -16974,6 +17240,13 @@ components:
           - running
           - completed
           - cancelled
+          - failed
+        finished_at:
+          type: string
+          description: "When the run stopped producing items. Unset while it may still\
+            \ produce more, whatever its status"
+          format: date-time
+          readOnly: true
         experiment_scores:
           type: array
           items:
@@ -17076,6 +17349,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -17114,6 +17389,7 @@ components:
           - running
           - completed
           - cancelled
+          - failed
         experiment_scores:
           type: array
           items:
@@ -17203,6 +17479,9 @@ components:
         prompt_index:
           type: integer
           format: int32
+        total_items:
+          type: integer
+          format: int32
     ExperimentExecutionRequest:
       required:
       - dataset_id
@@ -17223,6 +17502,9 @@ components:
             $ref: "#/components/schemas/PromptVariant"
         project_name:
           type: string
+        project_id:
+          type: string
+          format: uuid
         dataset_id:
           type: string
           format: uuid
@@ -17232,6 +17514,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        selected_rule_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        filters:
+          type: string
     PromptVariant:
       required:
       - messages
@@ -17347,6 +17636,8 @@ components:
             \ with the given experimentName"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "Project for traces auto-created from items that provide evaluate_task_result\
@@ -17405,6 +17696,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -17515,6 +17808,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -17706,6 +18001,8 @@ components:
             \ with the given experimentName"
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "Project for traces auto-created from items that provide evaluate_task_result\
@@ -17856,6 +18153,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -18027,6 +18326,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -18112,6 +18413,13 @@ components:
           - running
           - completed
           - cancelled
+          - failed
+        finished_at:
+          type: string
+          description: "When the run stopped producing items. Unset while it may still\
+            \ produce more, whatever its status"
+          format: date-time
+          readOnly: true
         experiment_scores:
           type: array
           items:
@@ -18262,19 +18570,6 @@ components:
           type: string
         aggregations:
           $ref: "#/components/schemas/AggregationData"
-    IdsHolder:
-      required:
-      - ids
-      type: object
-      properties:
-        ids:
-          maxItems: 1000
-          minItems: 1
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-            format: uuid
     ExperimentItemStreamRequest:
       required:
       - experiment_name
@@ -18296,6 +18591,8 @@ components:
           description: "Truncate image included in either input, output or metadata"
           default: true
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     ChunkedOutputJsonNode_Public:
@@ -18325,6 +18622,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
     BooleanFeedbackDefinition:
@@ -18933,6 +19232,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -18995,6 +19296,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -19018,6 +19321,76 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    EffortParam:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        levels:
+          type: array
+          items:
+            type: string
+        default:
+          type: string
+    FlagParam:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+    ModelParams:
+      type: object
+      properties:
+        temperature:
+          $ref: "#/components/schemas/NumberParam"
+        topP:
+          $ref: "#/components/schemas/NumberParam"
+        topK:
+          $ref: "#/components/schemas/NumberParam"
+        frequencyPenalty:
+          $ref: "#/components/schemas/NumberParam"
+        presencePenalty:
+          $ref: "#/components/schemas/NumberParam"
+        maxOutputTokens:
+          $ref: "#/components/schemas/NumberParam"
+        stop:
+          $ref: "#/components/schemas/FlagParam"
+        seed:
+          $ref: "#/components/schemas/FlagParam"
+        effort:
+          $ref: "#/components/schemas/EffortParam"
+        tools:
+          $ref: "#/components/schemas/ToolsParam"
+        samplingExclusive:
+          type: boolean
+        thinksByDefault:
+          type: boolean
+        onlyRoute:
+          type: string
+        routes:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ModelParams"
+    NumberParam:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        min:
+          type: number
+        max:
+          type: number
+        default:
+          type: number
+    ToolsParam:
+      type: object
+      properties:
+        chatCompletions:
+          type: string
+          enum:
+          - effortNoneOnly
+          - refused
+        forcedChoice:
+          $ref: "#/components/schemas/FlagParam"
     Credential_Public:
       required:
       - key
@@ -19133,8 +19506,8 @@ components:
         send_as:
           type: string
           description: "How credentials are sent: form body (default), JSON body,\
-            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
-            \ the form body)"
+            \ or basic auth (client_id/client_secret, or username/password, in an\
+            \ HTTP Basic header; remaining fields in the form body)"
           enum:
           - form
           - json
@@ -19151,7 +19524,9 @@ components:
           maxLength: 250
           minLength: 0
           type: string
-          description: Field holding the token in the reply; dot-path for nested replies
+          description: Field holding the token in the reply; dot-path for nested replies.
+            A reply that is the bare token itself (plain text or a JSON string) is
+            used as-is and needs fallback_ttl_seconds
           example: access_token
         expires_field:
           maxLength: 250
@@ -19270,8 +19645,8 @@ components:
         send_as:
           type: string
           description: "How credentials are sent: form body (default), JSON body,\
-            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
-            \ the form body)"
+            \ or basic auth (client_id/client_secret, or username/password, in an\
+            \ HTTP Basic header; remaining fields in the form body)"
           enum:
           - form
           - json
@@ -19288,7 +19663,9 @@ components:
           maxLength: 250
           minLength: 0
           type: string
-          description: Field holding the token in the reply; dot-path for nested replies
+          description: Field holding the token in the reply; dot-path for nested replies.
+            A reply that is the bare token itself (plain text or a JSON string) is
+            used as-is and needs fallback_ttl_seconds
           example: access_token
         expires_field:
           maxLength: 250
@@ -19383,8 +19760,8 @@ components:
         send_as:
           type: string
           description: "How credentials are sent: form body (default), JSON body,\
-            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
-            \ the form body)"
+            \ or basic auth (client_id/client_secret, or username/password, in an\
+            \ HTTP Basic header; remaining fields in the form body)"
           enum:
           - form
           - json
@@ -19401,7 +19778,9 @@ components:
           maxLength: 250
           minLength: 0
           type: string
-          description: Field holding the token in the reply; dot-path for nested replies
+          description: Field holding the token in the reply; dot-path for nested replies.
+            A reply that is the bare token itself (plain text or a JSON string) is
+            used as-is and needs fallback_ttl_seconds
           example: access_token
         expires_field:
           maxLength: 250
@@ -19991,6 +20370,8 @@ components:
           minLength: 1
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -20201,6 +20582,8 @@ components:
           minLength: 1
           type: string
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Project name. Creates project if it doesn't exist. Ignored
@@ -20666,7 +21049,8 @@ components:
           format: uuid
           readOnly: true
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -20737,7 +21121,8 @@ components:
       type: object
       properties:
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -20778,7 +21163,8 @@ components:
           format: uuid
           readOnly: true
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -20940,6 +21326,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags
@@ -21094,7 +21483,8 @@ components:
           format: uuid
           readOnly: true
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         visibility:
           type: string
@@ -21180,6 +21570,8 @@ components:
       type: object
       properties:
         name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
         description:
@@ -21208,6 +21600,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -21369,6 +21763,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "For project scope, specify either project_id or project_name.\
@@ -21527,6 +21923,8 @@ components:
             provided.
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If provided, scopes the prompt to the specified project. Ignored\
@@ -21721,6 +22119,8 @@ components:
           description: "If provided, resolves to the version with this sequential\
             \ number (e.g. v3); mutually exclusive with commit and environment"
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If provided, scopes the search to the specified project; prompts\
@@ -22146,7 +22546,6 @@ components:
       - guardrailsEnabled
       - ollamaProviderEnabled
       - ollieEnabled
-      - onlineScoringTracingEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -22209,8 +22608,6 @@ components:
           type: boolean
         projectHomepageEnabled:
           type: boolean
-        onlineScoringTracingEnabled:
-          type: boolean
         annotationQueueAutomationEnabled:
           type: boolean
         eventBridgeAlertsEnabled:
@@ -22252,6 +22649,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null and project_id not specified, Default Project is assumed"
@@ -22356,6 +22755,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -22522,6 +22923,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -22690,6 +23093,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -22833,6 +23238,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null and project_id not specified, Default Project is assumed"
@@ -22984,6 +23391,8 @@ components:
           type: string
           format: uuid
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -23083,6 +23492,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, project_id must be provided"
@@ -23458,6 +23869,8 @@ components:
       type: object
       properties:
         project_name:
+          maxLength: 150
+          minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
@@ -23754,6 +24167,9 @@ components:
       properties:
         field:
           type: string
+          description: "Field to group by. Tags are overlapping groups: each tag receives\
+            \ the full metric value. For cost, adding tag groups can exceed actual\
+            \ spend; use provider or model for additive span cost totals."
           enum:
           - none
           - tags

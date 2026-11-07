@@ -8,7 +8,7 @@ import { flattenObject, normalizeModelName } from "./utils";
  * Note: Following Python SDK pattern - both contents and config are logged as input
  */
 export const parseInputArgs = (
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): {
   model: string | undefined;
   input: Record<string, unknown>;
@@ -91,7 +91,7 @@ export const parseInputArgs = (
  * Returns only candidates array to match Python SDK behavior
  */
 export const parseCompletionOutput = (
-  res: unknown
+  res: unknown,
 ): Record<string, unknown> | undefined => {
   if (!res || typeof res !== "object") {
     return undefined;
@@ -119,7 +119,7 @@ export const parseCompletionOutput = (
  * Maps Gemini fields to Opik format
  */
 export const parseUsage = (
-  res: unknown
+  res: unknown,
 ): Record<string, number> | undefined => {
   if (!res || typeof res !== "object") {
     return undefined;
@@ -145,37 +145,51 @@ export const parseUsage = (
   // total_token_count → total_tokens
   const result: Record<string, number> = {};
 
-  if (
-    typeof usage.promptTokenCount === "number" ||
-    typeof usage.prompt_token_count === "number"
-  ) {
-    result.prompt_tokens = (usage.promptTokenCount ||
-      usage.prompt_token_count) as number;
+  const num = (camel: string, snake: string): number | undefined => {
+    const value = usage[camel] ?? usage[snake];
+    return typeof value === "number" ? value : undefined;
+  };
+
+  const promptTokenCount = num("promptTokenCount", "prompt_token_count");
+  const candidatesTokenCount = num(
+    "candidatesTokenCount",
+    "candidates_token_count",
+  );
+  const totalTokenCount = num("totalTokenCount", "total_token_count");
+
+  if (promptTokenCount !== undefined) {
+    // Tool-use prompt tokens are input fed back to the model (parity with the Python SDK).
+    result.prompt_tokens =
+      promptTokenCount +
+      (num("toolUsePromptTokenCount", "tool_use_prompt_token_count") ?? 0);
   }
 
-  if (
-    typeof usage.candidatesTokenCount === "number" ||
-    typeof usage.candidates_token_count === "number"
-  ) {
-    result.completion_tokens = (usage.candidatesTokenCount ||
-      usage.candidates_token_count) as number;
+  if (candidatesTokenCount !== undefined) {
+    result.completion_tokens = candidatesTokenCount;
   }
 
+  // Thinking models report thoughts outside candidatesTokenCount but inside
+  // totalTokenCount; they are billed as output (parity with the Python SDK).
+  const thoughtsTokenCount = num("thoughtsTokenCount", "thoughts_token_count");
   if (
-    typeof usage.totalTokenCount === "number" ||
-    typeof usage.total_token_count === "number"
+    thoughtsTokenCount !== undefined &&
+    totalTokenCount !==
+      (result.prompt_tokens ?? 0) + (candidatesTokenCount ?? 0)
   ) {
-    result.total_tokens = (usage.totalTokenCount ||
-      usage.total_token_count) as number;
+    result.completion_tokens = (candidatesTokenCount ?? 0) + thoughtsTokenCount;
+  }
+
+  if (totalTokenCount !== undefined) {
+    result.total_tokens = totalTokenCount;
   }
 
   // Include cached content tokens if present
-  if (
-    typeof usage.cachedContentTokenCount === "number" ||
-    typeof usage.cached_content_token_count === "number"
-  ) {
-    result.cached_content_tokens = (usage.cachedContentTokenCount ||
-      usage.cached_content_token_count) as number;
+  const cachedContentTokenCount = num(
+    "cachedContentTokenCount",
+    "cached_content_token_count",
+  );
+  if (cachedContentTokenCount !== undefined) {
+    result.cached_content_tokens = cachedContentTokenCount;
   }
 
   // Flatten original usage metadata, but exclude token detail objects
@@ -264,7 +278,7 @@ export const parseChunk = (rawChunk: unknown): ChunkResult => {
  * Extracts model version and metadata (safety ratings, finish reason, etc.)
  */
 export const parseModelDataFromResponse = (
-  res: unknown
+  res: unknown,
 ): {
   model: string | undefined;
   metadata: Record<string, unknown> | undefined;

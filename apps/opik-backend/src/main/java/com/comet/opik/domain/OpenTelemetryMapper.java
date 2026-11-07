@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
@@ -545,8 +546,21 @@ public class OpenTelemetryMapper {
                 .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_SPAN_ID_ATTR));
     }
 
+    public static Optional<String> extractOpikProjectName(List<KeyValue> attributes) {
+        return extractStringAttribute(attributes, GeneralMappingRules.OPIK_PROJECT_NAME_ATTR);
+    }
+
+    public static boolean isValidProjectName(String projectName) {
+        var stripped = projectName.strip();
+        return stripped.codePointCount(0, stripped.length()) <= Project.NAME_MAX_LENGTH;
+    }
+
     private static Optional<String> extractStringAttribute(Span otelSpan, String key) {
-        return otelSpan.getAttributesList().stream()
+        return extractStringAttribute(otelSpan.getAttributesList(), key);
+    }
+
+    private static Optional<String> extractStringAttribute(List<KeyValue> attributes, String key) {
+        return attributes.stream()
                 .filter(attr -> key.equals(attr.getKey()))
                 .map(attr -> attr.getValue().getStringValue())
                 .filter(StringUtils::isNotBlank)

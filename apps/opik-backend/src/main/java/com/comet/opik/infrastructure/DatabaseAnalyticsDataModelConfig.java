@@ -86,24 +86,18 @@ import lombok.Builder;
  * independently, so an operator has to see which of the two disagrees with its table. The same source-of-truth rule
  * holds: the probe only reports, it never re-routes.</p>
  *
- * <p>{@code spanWeeksWriteEnabled}: when {@code true}, span writes register their weekly partitions in the
- * {@code span_weeks} index ({@code SpanService.registerWeeks}). Left {@code false} at deploy time; turn it on before
- * the span weeks backfill starts, so every span written after the backfill's snapshot is indexed. Off writes
- * nothing.</p>
- *
  * <p>{@code spanWeeksBackfillEnabled}: when {@code true}, the span weeks backfill job is scheduled
  * ({@code SpanWeeksBackfillJob}): it fills {@code span_weeks} from the spans already written, one range of weeks at a
- * time. Turn it on only once {@code spanWeeksWriteEnabled} is live on every instance: the backfill covers the
- * spans written until its first run, and live registration everything after. Its tuning lives in
- * {@code spanWeeksBackfill}.</p>
+ * time. It covers the spans written before {@code span_weeks_mv}, which registers every span inserted since. Its tuning
+ * lives in {@code spanWeeksBackfill}.</p>
  *
- * <p>{@code spanWeeksReadEnabled}: when {@code true}, span reads by trace id bound {@code spans} to the weeks the
- * {@code span_weeks} index holds for those traces. Effective only while {@code spanWeeksWriteEnabled} and
- * {@code spanColumnsNonNullable} are also on: without registration new spans never reach the index, and the legacy
- * {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime} that wraps far-future ids, so a week bound there would
- * drop rows. Turn it on once the backfill logs that it is complete; before that, unindexed spans would be
- * skipped. Registration is asynchronous, so a read right after a write can miss the new spans until their week is
- * indexed.</p>
+ * <p>{@code spanWeeksReadEnabled}: when {@code true}, the spans reads keyed by traces or by a project bound
+ * {@code spans} to the weeks the {@code span_weeks} index holds for them. Effective only while
+ * {@code spanColumnsNonNullable} is also on: the legacy {@code spans} keeps {@code id_at} as a 32-bit {@code DateTime}
+ * that wraps far-future ids, so a week bound there would drop rows. {@code span_weeks_mv} registers each span's week in
+ * the spans insert itself, so a new span is indexed by the time its insert returns; older spans are indexed by the
+ * backfill, so turn this on once the backfill logs that it is complete, as unindexed spans would be skipped. Partition
+ * imports bypass the view and need a backfill of the moved range.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -114,12 +108,10 @@ public record DatabaseAnalyticsDataModelConfig(
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
         boolean tracesDistributedWrapEnabled,
         boolean spansDistributedWrapEnabled,
-        boolean spanWeeksWriteEnabled,
         boolean spanWeeksBackfillEnabled,
         boolean spanWeeksReadEnabled) {
 
     public boolean spanWeeksReadBounded() {
-        // Without registration new spans never reach the index, and the bound would hide them.
-        return spanWeeksReadEnabled && spanWeeksWriteEnabled && spanColumnsNonNullable;
+        return spanWeeksReadEnabled && spanColumnsNonNullable;
     }
 }

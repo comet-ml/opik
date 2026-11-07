@@ -15,6 +15,7 @@ import {
   useSetDatasetPage,
   useDatasetSize,
   useSetDatasetSize,
+  useSetDatasetItemsTotal,
 } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
@@ -32,6 +33,7 @@ interface PlaygroundOutputsProps {
   versionHash?: string;
   runSingle: (promptId: string) => void;
   stopSingle: (promptId: string) => void;
+  checkAgain: () => void;
 }
 
 const EMPTY_ITEMS: DatasetItem[] = [];
@@ -43,9 +45,11 @@ const PlaygroundOutputs = ({
   versionHash,
   runSingle,
   stopSingle,
+  checkAgain,
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
+  const setDatasetItemsTotal = useSetDatasetItemsTotal();
   const setDatasetSampleData = useSetDatasetSampleData();
   const filters = useDatasetFilters();
   const page = useDatasetPage();
@@ -108,10 +112,31 @@ const PlaygroundOutputs = ({
   const isExperimentMode = !!parsedDatasetId;
   const showPerPromptRunControls = promptIds.length > 1;
 
+  // Every key across the loaded rows, valued from the first row that has it: rows need not share
+  // keys, and sampling only the first row would hide the others' from the picker.
+  const datasetSample = useMemo(() => {
+    if (datasetItems.length === 0) return null;
+    return datasetItems.reduce<JsonObject>((acc, item) => {
+      Object.entries(item.data as JsonObject).forEach(([key, value]) => {
+        if (!(key in acc)) acc[key] = value;
+      });
+      return acc;
+    }, {});
+  }, [datasetItems]);
+
   useEffect(() => {
     setDatasetVariables(datasetColumns.map((c) => c.name));
-    setDatasetSampleData((datasetItems[0]?.data as JsonObject) ?? null);
-  }, [setDatasetVariables, setDatasetSampleData, datasetColumns, datasetItems]);
+    setDatasetSampleData(datasetSample);
+  }, [
+    setDatasetVariables,
+    setDatasetSampleData,
+    datasetColumns,
+    datasetSample,
+  ]);
+
+  useEffect(() => {
+    setDatasetItemsTotal(datasetItemsData ? total : null);
+  }, [setDatasetItemsTotal, datasetItemsData, total]);
 
   return (
     <div className="flex min-w-full flex-1 flex-col">
@@ -125,6 +150,7 @@ const PlaygroundOutputs = ({
             onChangeSize={setSize}
             total={total}
             isLoadingTotal={isProcessing}
+            checkAgain={checkAgain}
           />
           <div
             data-testid="playground-results-table"
@@ -148,6 +174,7 @@ const PlaygroundOutputs = ({
               />
             )}
             <PlaygroundOutputTable
+              datasetId={parsedDatasetId!}
               promptIds={promptIds}
               datasetItems={datasetItems}
               datasetColumns={datasetColumns}
@@ -173,6 +200,7 @@ const PlaygroundOutputs = ({
                   ? () => stopSingle(promptId)
                   : undefined
               }
+              onCheckAgain={checkAgain}
             />
           ))}
         </div>

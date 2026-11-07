@@ -17,7 +17,7 @@ Metrics are a fundamental component of the Opik evaluation function. They provid
 
 In Opik, a metric is a function that calculates a score based on specific inputs, such as model outputs and reference answers. All metrics in Opik extend the `BaseMetric` abstract class, which provides the core functionality for validation and tracking.
 
-```typescript
+```typescript wordWrap
 abstract class BaseMetric<GenericZodObjectType> {
   public readonly name: string;
   public readonly trackMetric: boolean;
@@ -59,7 +59,7 @@ Opik provides several built-in metrics for common evaluation scenarios:
 
 Checks if the model output exactly matches the expected output:
 
-```typescript
+```typescript wordWrap
 const exactMatch = new ExactMatch();
 // Usage requires both 'output' and 'expected' parameters
 ```
@@ -68,7 +68,7 @@ const exactMatch = new ExactMatch();
 
 Checks if the model output contains specific text:
 
-```typescript
+```typescript wordWrap
 const contains = new Contains();
 // Usage requires both 'output' and 'expected' parameters
 ```
@@ -77,7 +77,7 @@ const contains = new Contains();
 
 Checks if the model output matches a regular expression pattern:
 
-```typescript
+```typescript wordWrap
 const regexMatch = new RegexMatch();
 // Usage requires 'output' and 'pattern' parameters
 ```
@@ -86,7 +86,7 @@ const regexMatch = new RegexMatch();
 
 Checks if the output is valid JSON:
 
-```typescript
+```typescript wordWrap
 const isJson = new IsJson();
 // Usage requires 'output' parameter
 ```
@@ -97,7 +97,7 @@ const isJson = new IsJson();
 
 Each metric can be configured with a custom name and tracking option:
 
-```typescript
+```typescript wordWrap
 // Create metric with custom name
 const exactMatch = new ExactMatch("my_exact_match");
 
@@ -109,7 +109,7 @@ const regexMatch = new RegexMatch("custom_regex", false);
 
 You can use multiple metrics in a single evaluation:
 
-```typescript
+```typescript wordWrap
 const metrics = [new ExactMatch(), new Contains(), new RegexMatch()];
 
 // In your evaluation configuration
@@ -126,7 +126,7 @@ await evaluate({
 
 Each metric defines a Zod validation schema that specifies required inputs:
 
-```typescript
+```typescript wordWrap
 // ExactMatch validation schema example
 const validationSchema = z.object({
   output: z.string(), // The model output
@@ -140,7 +140,7 @@ The validation system ensures all required parameters are present before executi
 
 You can map dataset fields and task outputs to metric inputs using `scoringKeyMapping`:
 
-```typescript
+```typescript wordWrap
 await evaluate({
   dataset: myDataset,
   task: myTask,
@@ -175,7 +175,7 @@ To create a custom metric:
 
 Here's an example of a custom metric that checks if output length is within a specified range:
 
-```typescript
+```typescript wordWrap
 import z from "zod";
 import { BaseMetric } from "@opik/sdk";
 import { EvaluationScoreResult } from "@opik/sdk";
@@ -223,7 +223,7 @@ When creating custom metrics:
 
 1. **Define clear validation schemas**:
 
-   ```typescript
+   ```typescript wordWrap
    const validationSchema = z.object({
      output: z.string().min(1, "Output is required"),
      threshold: z.number().min(0).max(1),
@@ -232,7 +232,7 @@ When creating custom metrics:
 
 2. **Return meaningful reasons**:
 
-   ```typescript
+   ```typescript wordWrap
    return {
      name: this.name,
      value: score,
@@ -250,7 +250,7 @@ LLM Judge metrics use language models to evaluate the quality of LLM outputs. Th
 
 Evaluates how relevant the output is to the input question:
 
-```typescript
+```typescript wordWrap
 import { AnswerRelevance } from "opik";
 
 // Using default model (gpt-5-nano)
@@ -293,7 +293,7 @@ console.log(score.reason); // Explanation of the score
 
 Detects whether the output contains hallucinated or unfaithful information:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 
 const metric = new Hallucination();
@@ -334,7 +334,7 @@ console.log(score2.reason); // Array of reasons for the score
 
 Checks if the output contains harmful, inappropriate, or unsafe content:
 
-```typescript
+```typescript wordWrap
 import { Moderation } from "opik";
 
 const metric = new Moderation();
@@ -362,7 +362,7 @@ console.log(score.reason); // Explanation of moderation decision
 
 Evaluates how useful the output is in addressing the input:
 
-```typescript
+```typescript wordWrap
 import { Usefulness } from "opik";
 
 const metric = new Usefulness();
@@ -392,7 +392,7 @@ console.log(score.reason); // Explanation of usefulness score
 
 GEval is a task-agnostic LLM-as-a-judge metric that allows you to define custom evaluation criteria. The metric first generates a chain-of-thought (CoT) evaluation plan, then scores the output on a 0-10 scale (normalized to 0.0-1.0).
 
-```typescript
+```typescript wordWrap
 import { GEval } from "opik";
 
 const metric = new GEval({
@@ -443,7 +443,7 @@ Opik provides pre-configured GEval judges for common evaluation scenarios. Each 
 
 Evaluates whether an answer directly addresses the question:
 
-```typescript
+```typescript wordWrap
 import { QARelevanceJudge } from "opik";
 
 const judge = new QARelevanceJudge({ model: "gpt-4o" });
@@ -460,7 +460,7 @@ console.log(score.value); // High score for relevant answer
 
 Checks if a summary is faithful to the source material:
 
-```typescript
+```typescript wordWrap
 import { SummarizationConsistencyJudge } from "opik";
 
 const judge = new SummarizationConsistencyJudge();
@@ -475,7 +475,7 @@ SUMMARY: The company had strong Q4 performance with $2.5M revenue.`,
 
 Evaluates the structure and clarity of summaries:
 
-```typescript
+```typescript wordWrap
 import { SummarizationCoherenceJudge } from "opik";
 
 const judge = new SummarizationCoherenceJudge();
@@ -491,7 +491,7 @@ console.log(score.value); // Low score for incoherent summary
 
 Assesses how helpful an assistant reply is in dialogue context:
 
-```typescript
+```typescript wordWrap
 import { DialogueHelpfulnessJudge } from "opik";
 
 const judge = new DialogueHelpfulnessJudge();
@@ -508,7 +508,7 @@ const score = await judge.score({ output: transcript });
 
 Detect various forms of bias in responses:
 
-```typescript
+```typescript wordWrap
 import {
   DemographicBiasJudge,
   GenderBiasJudge,
@@ -540,7 +540,7 @@ const score3 = await politicalJudge.score({
 
 Evaluate agent task completion and tool usage:
 
-```typescript
+```typescript wordWrap
 import { AgentTaskCompletionJudge, AgentToolCorrectnessJudge } from "opik";
 
 // Task completion
@@ -560,7 +560,7 @@ const score2 = await toolJudge.score({
 
 Estimates how ambiguous a prompt is:
 
-```typescript
+```typescript wordWrap
 import { PromptUncertaintyJudge } from "opik";
 
 const judge = new PromptUncertaintyJudge();
@@ -576,7 +576,7 @@ console.log(score.value); // High score indicates high uncertainty
 
 Flags non-compliant or risky claims in regulated sectors:
 
-```typescript
+```typescript wordWrap
 import { ComplianceRiskJudge } from "opik";
 
 const judge = new ComplianceRiskJudge({ model: "gpt-4o" });
@@ -612,7 +612,7 @@ All built-in GEval judges:
 
 All LLM Judge metrics accept a `model` parameter in their constructor:
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
@@ -632,7 +632,7 @@ const metric4 = new Hallucination({ model: customModel });
 
 All LLM Judge metrics support asynchronous scoring:
 
-```typescript
+```typescript wordWrap
 import { AnswerRelevance } from "opik";
 
 const metric = new AnswerRelevance();
@@ -656,7 +656,7 @@ metric
 
 Use multiple metrics together for comprehensive evaluation:
 
-```typescript
+```typescript wordWrap
 import { AnswerRelevance, Hallucination, Moderation, Usefulness } from "opik";
 import { evaluate } from "opik";
 
@@ -676,7 +676,7 @@ await evaluate({
 
 Different metrics can use different models:
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { AnswerRelevance, Hallucination } from "opik";
@@ -704,7 +704,7 @@ await evaluate({
 
 For most use cases, use model ID strings directly:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({ model: "gpt-5-nano" });
@@ -716,7 +716,7 @@ The Opik SDK handles model configuration internally for optimal evaluation perfo
 
 Context improves evaluation accuracy:
 
-```typescript
+```typescript wordWrap
 // Better: With context
 await metric.score({
   input: "What is the capital?",
@@ -735,7 +735,7 @@ await metric.score({
 
 Match model capabilities to metric requirements:
 
-```typescript
+```typescript wordWrap
 // Complex reasoning: Use GPT-5 or Claude Sonnet
 const complexMetric = new AnswerRelevance({ model: "gpt-5" });
 
@@ -747,7 +747,7 @@ const simpleMetric = new Moderation({ model: "gpt-5-nano" });
 
 LLM calls can fail - handle errors appropriately:
 
-```typescript
+```typescript wordWrap
 try {
   const score = await metric.score({
     input: "What is TypeScript?",
@@ -764,7 +764,7 @@ try {
 
 Use the evaluate function for efficient batch processing:
 
-```typescript
+```typescript wordWrap
 // More efficient for multiple items
 await evaluate({
   dataset: myDataset,
@@ -785,7 +785,7 @@ for (const item of datasetItems) {
 
 LLM Judge metrics return structured scores with:
 
-```typescript
+```typescript wordWrap
 interface EvaluationScoreResult {
   name: string; // Metric name
   value: number; // Numerical score (0.0-1.0 typically)
@@ -795,7 +795,7 @@ interface EvaluationScoreResult {
 
 ### Example Score Results
 
-```typescript
+```typescript wordWrap
 // AnswerRelevance
 {
   name: "answer_relevance",
@@ -824,7 +824,7 @@ interface EvaluationScoreResult {
 
 All LLM Judge metrics support generation parameters in their constructor:
 
-```typescript
+```typescript wordWrap
 import { Hallucination, AnswerRelevance } from "opik";
 
 // Configure generation parameters
@@ -854,7 +854,7 @@ const score = await metric.score({
 
 For provider-specific advanced parameters, use `modelSettings`:
 
-```typescript
+```typescript wordWrap
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
@@ -872,7 +872,7 @@ const metric = new Hallucination({
 
 For provider-specific options not exposed through `modelSettings`, use `LanguageModel` instances:
 
-```typescript
+```typescript wordWrap
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";

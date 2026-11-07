@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import pydantic
-from together.types import ChatCompletionChunk
+from together.types.chat import ChatCompletionChunk
 
 from opik.integrations.together import _streamed_tool_calls
 

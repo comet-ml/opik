@@ -10,6 +10,7 @@ import com.comet.opik.api.UsageProjectsResponse.WorkspaceProjectName;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
@@ -21,11 +22,13 @@ import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.collect.Lists;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -65,6 +68,7 @@ public interface ProjectService {
     String DEFAULT_PROJECT = "Default Project";
     String DEFAULT_WORKSPACE_NAME = "default";
     String DEFAULT_WORKSPACE_ID = "0190babc-62a0-71d2-832a-0feffa4676eb";
+    String DEFAULT_ORGANIZATION_ID = "01a1a1c9-b569-7b5b-9c5c-1aa254d42e50";
     String DEFAULT_USER = "admin";
 
     Project create(Project project);
@@ -164,6 +168,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull EventBus eventBus;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -172,17 +177,34 @@ class ProjectServiceImpl implements ProjectService {
                 Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
 
+    /**
+     * Guards the {@code projects.name} column for callers that bypass request validation ({@code @Size}), e.g.
+     * OpenTelemetry. Counts code points like the column and the OpenTelemetry check, so it never
+     * rejects a name those accept; request validation counts UTF-16 units, which is stricter, never looser.
+     */
+    private static void validateProjectNameLength(String name) {
+        if (name != null && name.codePointCount(0, name.length()) > Project.NAME_MAX_LENGTH) {
+            String message = "Project name length must not exceed '%d'".formatted(Project.NAME_MAX_LENGTH);
+            throw new BadRequestException(message,
+                    Response.status(Response.Status.BAD_REQUEST).entity(new ErrorMessage(List.of(message))).build());
+        }
+    }
+
     @Override
     public Project create(@NonNull Project project) {
         UUID projectId = idGenerator.generateId();
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
+        // Stripped like trace and span creation (WorkspaceUtils.getProjectName), so both resolve to the same project.
+        // Implicit creation keeps the name its caller resolved, so its lookup and insert agree.
+        var strippedProject = project.toBuilder().name(WorkspaceUtils.stripProjectName(project)).build();
 
-        return createProject(project, projectId, userName, workspaceId);
+        return createProject(strippedProject, projectId, userName, workspaceId);
     }
 
     private Project createProject(Project project, UUID projectId, String userName, String workspaceId) {
         IdGenerator.validateVersion(projectId, "project");
+        validateProjectNameLength(project.name());
 
         var newProject = project.toBuilder()
                 .id(projectId)
@@ -226,6 +248,8 @@ class ProjectServiceImpl implements ProjectService {
     public Project update(@NonNull UUID id, @NonNull ProjectUpdate projectUpdate) {
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
+        String name = StringUtils.strip(projectUpdate.name());
+        validateProjectNameLength(name);
 
         try {
             template.inTransaction(WRITE, handle -> {
@@ -237,7 +261,7 @@ class ProjectServiceImpl implements ProjectService {
 
                 repository.update(project.id(),
                         workspaceId,
-                        projectUpdate.name(),
+                        name,
                         projectUpdate.description(),
                         projectUpdate.visibility(),
                         userName);
@@ -336,21 +360,23 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        template.inTransaction(WRITE, handle -> {
+        boolean deleted = template.inTransaction(WRITE, handle -> {
 
             var repository = handle.attach(ProjectDAO.class);
             Optional<Project> project = repository.fetch(id, workspaceId);
 
             if (project.isEmpty()) {
-                // Void return
-                return null;
+                return false;
             }
 
             repository.delete(id, workspaceId);
 
-            // Void return
-            return null;
+            return true;
         });
+
+        if (deleted) {
+            eventBus.post(new ProjectsDeleted(Set.of(id), workspaceId, userName));
+        }
     }
 
     @Override
@@ -367,6 +393,8 @@ class ProjectServiceImpl implements ProjectService {
             handle.attach(ProjectDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        eventBus.post(new ProjectsDeleted(ids, workspaceId, userName));
     }
 
     @Override
@@ -517,10 +545,7 @@ class ProjectServiceImpl implements ProjectService {
             return Mono.just(Optional.empty());
         }
 
-        return Mono.deferContextual(ctx -> Mono.fromCallable(
-                () -> Optional.of(getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
-                        projectName, ctx.get(RequestContext.USER_NAME)).id()))
-                .subscribeOn(Schedulers.boundedElastic()));
+        return getOrCreate(projectName).map(project -> Optional.of(project.id()));
     }
 
     @Override
@@ -565,7 +590,6 @@ class ProjectServiceImpl implements ProjectService {
     public Mono<Project> getOrCreate(@NonNull String projectName) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
                 .fromCallable(() -> getOrCreate(workspaceId, projectName, userName))
-                .onErrorResume(e -> handleProjectCreationError(e, projectName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
@@ -584,7 +608,16 @@ class ProjectServiceImpl implements ProjectService {
 
                     UUID projectId = idGenerator.generateId();
 
-                    project = createProject(project, projectId, userName, workspaceId);
+                    try {
+                        project = createProject(project, projectId, userName, workspaceId);
+                    } catch (EntityAlreadyExistsException conflict) {
+                        log.info("Project '{}' was created concurrently on workspaceId '{}', reading it back",
+                                projectName, workspaceId);
+                        return findByNames(workspaceId, List.of(projectName))
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> conflict);
+                    }
 
                     log.info("Created project with id '{}', name '{}' on workspaceId '{}'", projectId, projectName,
                             workspaceId);
@@ -722,6 +755,7 @@ class ProjectServiceImpl implements ProjectService {
 
     private void checkIfNeededToCreateProjects(Set<String> projectNames,
             String userName, String workspaceId) {
+        projectNames.forEach(ProjectServiceImpl::validateProjectNameLength);
 
         Map<String, Project> projectsPerLowerCaseName = ProjectService.groupByName(
                 getAllProjectsByName(workspaceId, projectNames));
@@ -756,16 +790,6 @@ class ProjectServiceImpl implements ProjectService {
 
             return null;
         });
-    }
-
-    private Mono<Project> handleProjectCreationError(Throwable exception, String projectName, String workspaceId) {
-        return switch (exception) {
-            case EntityAlreadyExistsException __ -> Mono.fromCallable(
-                    () -> findByNames(workspaceId, List.of(projectName)).stream().findFirst()
-                            .orElseThrow())
-                    .subscribeOn(Schedulers.boundedElastic());
-            default -> Mono.error(exception);
-        };
     }
 
     @Override

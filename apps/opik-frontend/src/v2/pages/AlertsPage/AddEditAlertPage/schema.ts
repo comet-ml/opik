@@ -7,6 +7,28 @@ export const HeaderSchema = z.object({
   value: z.string().min(1, { message: "Header value is required" }),
 });
 
+export const MAX_CUSTOM_FIELDS = 20;
+
+export const CustomFieldSchema = z.object({
+  // Not trimmed: the backend rejects blank keys/values but stores the rest as entered
+  key: z
+    .string()
+    .refine((key) => key.trim().length > 0, {
+      message: "Field key is required",
+    })
+    .refine((key) => key.length <= 64, {
+      message: "Field key must be at most 64 characters",
+    }),
+  value: z
+    .string()
+    .refine((value) => value.trim().length > 0, {
+      message: "Field value is required",
+    })
+    .refine((value) => value.length <= 255, {
+      message: "Field value must be at most 255 characters",
+    }),
+});
+
 export const FeedbackScoreConditionSchema = z.object({
   threshold: z.string(),
   window: z.string(),
@@ -126,18 +148,21 @@ export const TriggerSchema = z
 export const AlertFormSchema = z
   .object({
     name: z
-      .string({ required_error: "Alert name is required" })
+      .string({ error: "Alert name is required" })
       .min(1, { message: "Alert name is required" }),
-    enabled: z.boolean().default(true),
-    alertType: z.nativeEnum(ALERT_TYPE).default(ALERT_TYPE.general),
+    enabled: z.boolean(),
+    alertType: z.nativeEnum(ALERT_TYPE),
     routingKey: z.string().optional(),
     url: z
-      .string({ required_error: "Endpoint URL is required" })
+      .string({ error: "Endpoint URL is required" })
       .min(1, { message: "Endpoint URL is required" })
       .url({ message: "Please enter a valid URL" }),
     secretToken: z.string().optional(),
-    headers: z.array(HeaderSchema).default([]),
-    triggers: z.array(TriggerSchema).default([]),
+    headers: z.array(HeaderSchema),
+    customFields: z.array(CustomFieldSchema).max(MAX_CUSTOM_FIELDS, {
+      message: `At most ${MAX_CUSTOM_FIELDS} custom fields are allowed`,
+    }),
+    triggers: z.array(TriggerSchema),
   })
   .refine(
     (data) => {

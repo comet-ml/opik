@@ -13,7 +13,7 @@ The Answer Relevance metric allows you to evaluate how relevant and appropriate 
 You can use the `AnswerRelevance` metric as follows:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import AnswerRelevance
 
 metric = AnswerRelevance()
@@ -26,7 +26,7 @@ context=["France is a country in Western Europe. Its capital is Paris, which is 
 
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { AnswerRelevance } from 'opik';
 
 const metric = new AnswerRelevance();
@@ -49,7 +49,7 @@ By default, the Answer Relevance metric requires context to be provided. If you 
 If you want to evaluate answer relevance without context (evaluating only against the input question), you can disable this requirement:
 
 <CodeBlocks>
-```python title="Python" language="python"
+```python title="Python" language="python" wordWrap
 from opik.evaluation.metrics import AnswerRelevance
 
 # Allow evaluation without context
@@ -63,7 +63,7 @@ output="The capital of France is Paris." # No context parameter needed
 
 ````
 
-```typescript title="TypeScript" language="typescript"
+```typescript title="TypeScript" language="typescript" wordWrap
 import { AnswerRelevance } from 'opik';
 
 // Allow evaluation without context
@@ -84,7 +84,7 @@ Opik uses an LLM as a Judge to detect answer relevance, for this we have a promp
 
 The template uses a few-shot prompting technique to detect answer relevance. The template is as follows:
 
-```markdown
+```markdown wordWrap
 YOU ARE AN EXPERT IN NLP EVALUATION METRICS, SPECIALLY TRAINED TO ASSESS ANSWER RELEVANCE IN RESPONSES
 PROVIDED BY LANGUAGE MODELS. YOUR TASK IS TO EVALUATE THE RELEVANCE OF A GIVEN ANSWER FROM
 ANOTHER LLM BASED ON THE USER'S INPUT AND CONTEXT PROVIDED.

@@ -38,7 +38,7 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({Experiment.View.Public.class,
-                Experiment.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
+                Experiment.View.Write.class}) @Schema(description = "Project name. Creates project if it doesn't exist. Ignored when project_id is provided.") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") String projectName,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) String name,
         @Schema(implementation = JsonListString.class) @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) JsonNode metadata,
@@ -69,6 +69,8 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentStatus status,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "When the run stopped producing items. Unset while it may still produce more, whatever its status") Instant finishedAt,
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) List<@NotNull @Valid ExperimentScore> experimentScores,
         @JsonView({Experiment.View.Public.class,

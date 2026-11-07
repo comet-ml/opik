@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -103,6 +103,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const [description, setDescription] = useState("");
   const [name, setName] = useState(defaultName);
   const [changeDescription, setChangeDescription] = useState("");
+  // Not the mutations' isPending: that flips on a later tick, after a double-click's second click.
+  const [isSaving, setIsSaving] = useState(false);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -119,6 +121,10 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   );
 
   const isPending = needsFetch && isFetchPending;
+
+  useEffect(() => {
+    if (open) setIsSaving(false);
+  }, [open]);
 
   useEffect(() => {
     setPromptId(prompt?.id);
@@ -172,25 +178,33 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         ? { ...userMetadata, ...providedMetadata }
         : undefined;
 
+    const closeWhenSaved = {
+      onSuccess: () => setOpen(false),
+      onError: () => setIsSaving(false),
+    };
+
     if (isEdit) {
       if (selectedPrompt) {
         const promptType = selectedPrompt?.latest_version?.type;
 
-        newVersionMutate({
-          name: selectedPrompt?.name,
-          template,
-          changeDescription,
-          ...(finalMetadata && { metadata: finalMetadata }),
-          ...(templateStructure && { templateStructure }),
-          ...(promptType && { type: promptType }),
-          projectId: activeProjectId ?? undefined,
-          onSuccess: (data) =>
-            onSave(data, selectedPrompt?.name, selectedPrompt?.id),
-        });
-
-        setOpen(false);
+        setIsSaving(true);
+        newVersionMutate(
+          {
+            name: selectedPrompt?.name,
+            template,
+            changeDescription,
+            ...(finalMetadata && { metadata: finalMetadata }),
+            ...(templateStructure && { templateStructure }),
+            ...(promptType && { type: promptType }),
+            projectId: activeProjectId ?? undefined,
+            onSuccess: (data) =>
+              onSave(data, selectedPrompt?.name, selectedPrompt?.id),
+          },
+          closeWhenSaved,
+        );
       }
     } else {
+      setIsSaving(true);
       createMutate(
         {
           prompt: {
@@ -204,13 +218,14 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           withResponse: true,
         },
         {
+          ...closeWhenSaved,
           onSuccess: (data?: PromptWithLatestVersion) => {
             if (data?.latest_version)
               onSave(data.latest_version, data.name, data.id);
+            closeWhenSaved.onSuccess();
           },
         },
       );
-      setOpen(false);
     }
   };
 
@@ -363,9 +378,14 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           </DialogClose>
           <Button
             type="submit"
-            disabled={!isValid}
+            disabled={!isValid || isSaving}
             onClick={handleClickEditPrompt}
           >
+            {isSaving && (
+              <span className="mr-2 inline-flex animate-spin">
+                <Loader2 className="size-4" />
+              </span>
+            )}
             Save to library
           </Button>
         </DialogFooter>

@@ -17,7 +17,7 @@ are stored at microsecond precision.
   deployments have not yet done. Until then the columns are still `Nullable` and the usual `NULL`
   patterns are correct. To see which one you have, check the column types:
 
-  ```sql
+  ```sql wordWrap
   SELECT name, type FROM system.columns
   WHERE database = 'opik' AND table = 'traces' AND name IN ('end_time', 'duration', 'ttft')
   ```
@@ -96,7 +96,7 @@ ClickHouse aggregates skip `NULL`, but they treat `NaN` differently depending on
 For example, the average duration of finished traces per day. Replace `opik` with your
 `ANALYTICS_DB_DATABASE_NAME` if you changed it:
 
-```sql
+```sql wordWrap
 SELECT toDate(start_time) AS day,
        avgIf(duration, NOT isNaN(duration)) AS avg_duration_ms,
        countIf(NOT isNaN(duration))         AS finished_traces

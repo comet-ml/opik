@@ -12,6 +12,7 @@ import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
 import com.comet.opik.api.ExperimentItemBulkUpload;
@@ -84,6 +85,7 @@ import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -355,6 +357,54 @@ class ExperimentsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.EXPERIMENT_CREATE.getValue()))));
+        }
+
+        // Running creates experiment records and queues provider calls, so it asks for the same
+        // permission as creating one directly rather than the read it used to settle for.
+        @Test
+        @DisplayName("Execute experiment passes required permissions to auth endpoint")
+        void executeExperimentPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.callExecute(buildExecutionRequest(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Execute experiment returns 403 when permission is denied")
+        void executeExperimentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.EXPERIMENT_CREATE.getValue());
+
+            try (var response = experimentResourceClient.callExecute(buildExecutionRequest(), apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        private ExperimentExecutionRequest buildExecutionRequest() {
+            return ExperimentExecutionRequest.builder()
+                    .datasetId(UUID.randomUUID())
+                    .datasetName("dataset-" + UUID.randomUUID())
+                    .prompts(List.of(ExperimentExecutionRequest.PromptVariant.builder()
+                            .model("gpt-4o")
+                            .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
+                                    .role("user")
+                                    .content(TextNode.valueOf("hello"))
+                                    .build()))
+                            .build()))
+                    .build();
         }
 
         @Test
@@ -1440,6 +1490,65 @@ class ExperimentsResourceTest {
             return Stream.of(
                     Arguments.of(Operator.IS_NOT_EMPTY, true),
                     Arguments.of(Operator.IS_EMPTY, false));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when filtering by evaluation method, then find, groups and group aggregations return only matching experiments")
+        void findByFilterEvaluationMethod(Operator operator, EvaluationMethod expectedMethod) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetExperiment = generateExperiment().toBuilder()
+                    .evaluationMethod(EvaluationMethod.DATASET)
+                    .build();
+            var testSuiteExperiment = generateExperiment().toBuilder()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .build();
+            experimentResourceClient.create(datasetExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(testSuiteExperiment, apiKey, workspaceName);
+
+            var expectedExperiment = expectedMethod == EvaluationMethod.TEST_SUITE
+                    ? testSuiteExperiment
+                    : datasetExperiment;
+            var expectedDatasetId = getAndAssert(expectedExperiment.id(), expectedExperiment, workspaceName, apiKey)
+                    .datasetId()
+                    .toString();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.EVALUATION_METHOD)
+                    .operator(operator)
+                    .value(EvaluationMethod.TEST_SUITE.getValue())
+                    .build());
+            var groups = List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build());
+
+            var actualPage = experimentResourceClient.findExperiments(1, 10, null, null, null, null, false, null,
+                    null, filters, apiKey, workspaceName, HttpStatus.SC_OK);
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).extracting(Experiment::id).containsExactly(expectedExperiment.id());
+
+            var actualGroups = experimentResourceClient.findGroups(groups, Set.of(ExperimentType.REGULAR), filters,
+                    null,
+                    apiKey,
+                    workspaceName, HttpStatus.SC_OK);
+            assertThat(actualGroups.content()).containsOnlyKeys(expectedDatasetId);
+
+            var actualAggregations = experimentResourceClient.findGroupsAggregations(groups,
+                    Set.of(ExperimentType.REGULAR),
+                    filters, null,
+                    apiKey, workspaceName, HttpStatus.SC_OK);
+            assertThat(actualAggregations.content()).containsOnlyKeys(expectedDatasetId);
+            assertThat(actualAggregations.content().get(expectedDatasetId).aggregations().experimentCount())
+                    .isEqualTo(1L);
+        }
+
+        private Stream<Arguments> findByFilterEvaluationMethod() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL, EvaluationMethod.TEST_SUITE),
+                    Arguments.of(Operator.NOT_EQUAL, EvaluationMethod.DATASET));
         }
 
         @ParameterizedTest
@@ -6068,6 +6177,43 @@ class ExperimentsResourceTest {
                 assertThat(actualResponse.hasEntity()).isTrue();
                 assertThat(actualResponse.readEntity(ErrorMessage.class).getMessage())
                         .isEqualTo("Upserting experiment item with 'experiment_id' not belonging to the workspace");
+            }
+        }
+
+        // The workspace checks query the database and the id checks do not, so only an item failing
+        // both says which runs first. Without it the ordering is free to invert unnoticed: an id
+        // check reporting first reads as a malformed request rather than one aimed elsewhere.
+        @Test
+        void insertInvalidExperimentWorkspaceAndInvalidId() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            UUID experimentId = createAndAssert(generateExperiment(), API_KEY, TEST_WORKSPACE);
+
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .id(UUID.randomUUID())
+                    .build();
+
+            var request = podamFactory.manufacturePojo(ExperimentItemsBatch.class).toBuilder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build();
+
+            var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT,
+                    "Upserting experiment item with 'experiment_id' not belonging to the workspace");
+
+            try (var actualResponse = client.target(getExperimentItemsPath())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(request))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
         }
 

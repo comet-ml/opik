@@ -108,3 +108,94 @@ async def test_openai_async_responses_stream__consumer_breaks_early__no_error_lo
     responses_span = fake_backend.trace_trees[0].spans[0]
     assert responses_span.end_time is not None
     assert logging.ERROR not in _levels(aggregator_log_records)
+
+def test_aggregate__terminal_response_failed_event__returns_response():
+    fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
+        input_tokens=15,
+        output_tokens=8,
+        total_tokens=23,
+    )
+    fake_output_item = {
+        "id": "msg_failed_1",
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Generation failed midway"}],
+    }
+    fake_response = openai_responses.Response.model_construct(
+        id="resp_failed_test_1",
+        status="failed",
+        output=[fake_output_item],
+        usage=fake_usage,
+        model="gpt-4.1",
+    )
+    event = openai_responses.ResponseFailedEvent.model_construct(
+        response=fake_response,
+        sequence_number=1,
+        type="response.failed",
+    )
+
+    result = response_events_aggregator.aggregate([event])
+
+    assert result is not None
+    assert result == fake_response
+    assert result.status == "failed"
+    assert result.id == "resp_failed_test_1"
+    assert result.output == fake_response.output
+    assert len(result.output) == 1
+    assert result.output[0].id == "msg_failed_1"
+    assert result.usage is not None
+    assert result.usage.input_tokens == 15
+    assert result.usage.output_tokens == 8
+    assert result.usage.total_tokens == 23
+
+
+def test_aggregate__terminal_response_error_event_first__handles_missing_response(
+    aggregator_log_records,
+):
+    error_event = openai_responses.ResponseErrorEvent.model_construct(
+        code="server_error",
+        message="Internal server error",
+        sequence_number=1,
+        type="error",
+    )
+    fake_usage = openai_responses.response_usage.ResponseUsage.model_construct(
+        input_tokens=10,
+        output_tokens=4,
+        total_tokens=14,
+    )
+    fake_response = openai_responses.Response.model_construct(
+        id="resp_subsequent_failed",
+        status="failed",
+        output=[],
+        usage=fake_usage,
+        model="gpt-4.1",
+    )
+    failed_event = openai_responses.ResponseFailedEvent.model_construct(
+        response=fake_response,
+        sequence_number=2,
+        type="response.failed",
+    )
+
+    result = response_events_aggregator.aggregate([error_event, failed_event])
+    assert result is not None
+    assert result == fake_response
+    assert result.status == "failed"
+    assert result.id == "resp_subsequent_failed"
+    assert result.usage.total_tokens == 14
+    assert logging.ERROR not in _levels(aggregator_log_records)
+
+
+def test_aggregate__terminal_response_error_event_without_response__returns_none(
+    aggregator_log_records,
+):
+    event = openai_responses.ResponseErrorEvent.model_construct(
+        code="server_error",
+        message="Internal server error",
+        sequence_number=1,
+        type="error",
+    )
+
+    result = response_events_aggregator.aggregate([event])
+
+    assert result is None
+    assert logging.ERROR not in _levels(aggregator_log_records)
