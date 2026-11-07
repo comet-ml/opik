@@ -37,6 +37,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -782,7 +784,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     private static boolean isLeavePending(Throwable throwable) {
-        for (Throwable current = throwable; current != null; current = current.getCause()) {
+        // Identity-based visited set, so a cyclic cause chain terminates instead of looping forever
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable current = throwable; current != null && visited.add(current); current = current.getCause()) {
             if (current instanceof LeavePendingOnRetireException) {
                 return true;
             }

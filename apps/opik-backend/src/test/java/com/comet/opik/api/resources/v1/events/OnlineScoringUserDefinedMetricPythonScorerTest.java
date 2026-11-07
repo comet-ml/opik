@@ -537,13 +537,47 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
 
             assertThatThrownBy(() -> scorer.onRetired(message,
                     new InternalServerErrorException("python-backend unavailable")).block())
-                    .isInstanceOf(LeavePendingOnRetireException.class);
+                    .isInstanceOf(LeavePendingOnRetireException.class)
+                    .cause()
+                    .isExactlyInstanceOf(RuntimeException.class)
+                    .hasMessage("xadd failed");
 
             verify(onlineScorePublisher).enqueueMessage(List.of(message.toBuilder().requeueAttempt(1).build()),
                     AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
             verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
             assertThat(userFacingMessages())
                     .noneMatch(msg -> msg.contains("re-queueing") || msg.contains("dropped after"));
+        }
+
+        @Test
+        void propagatesAPermanentRequeuePublishFailureUnwrappedAndDoesNotStoreAScore() {
+            var message = sampleMessage();
+            var publishError = new IllegalStateException("invalid stream configuration");
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.error(publishError));
+
+            assertThatThrownBy(() -> scorer.onRetired(message,
+                    new InternalServerErrorException("python-backend unavailable")).block())
+                    .isNotInstanceOf(LeavePendingOnRetireException.class)
+                    .isSameAs(publishError);
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(message.toBuilder().requeueAttempt(1).build()),
+                    AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
+            assertThat(userFacingMessages())
+                    .noneMatch(msg -> msg.contains("re-queueing") || msg.contains("dropped after"));
+        }
+
+        @Test
+        void doesNotDoubleWrapAnExistingLeavePendingOnRetireException() {
+            var message = sampleMessage();
+            var publishError = new LeavePendingOnRetireException(new RuntimeException("xadd failed"));
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.error(publishError));
+
+            assertThatThrownBy(() -> scorer.onRetired(message,
+                    new InternalServerErrorException("python-backend unavailable")).block())
+                    .isSameAs(publishError);
+
+            verify(feedbackScoreService, never()).scoreBatchOfTraces(any());
         }
     }
 

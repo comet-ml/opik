@@ -191,8 +191,9 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      * {@link OnlineScoringConfig#getMaxRequeueAttempts()}. Permanent failures complete empty.
      * A fresh entry resets the delivery count so {@code pendingMessageDuration × maxRetries} remains
      * the backoff per generation. Never writes a score: a fabricated or zero value would be stored as
-     * a real result. If the replacement XADD fails, errors with
-     * {@link LeavePendingOnRetireException} so the original entry is not acked.
+     * a real result. If the replacement XADD fails with a retryable error, errors with
+     * {@link LeavePendingOnRetireException} so the original entry is not acked; a permanent publish error is
+     * propagated unchanged, so the original entry is logged and acked as usual.
      */
     protected Mono<Void> requeueIfRetryable(@NonNull OnlineScorePublisher publisher, @NonNull M message,
             @NonNull Throwable error, @NonNull Runnable onRequeue, @NonNull Runnable onDrop) {
@@ -217,7 +218,9 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                             "Re-queueing {} online-scoring message after retry exhaustion (re-queue {}/{}), workspaceId '{}', errorType '{}'",
                             type, attempt + 1, max, message.workspaceId(), ErrorMetricsResolver.errorType(error));
                 })
-                .onErrorMap(LeavePendingOnRetireException::new);
+                .onErrorMap(publishError -> !(publishError instanceof LeavePendingOnRetireException)
+                        && isRetryableException(publishError),
+                        LeavePendingOnRetireException::new);
     }
 
     protected Mono<Map<String, List<BigDecimal>>> storeScores(

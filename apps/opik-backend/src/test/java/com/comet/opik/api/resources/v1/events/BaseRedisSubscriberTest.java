@@ -418,6 +418,28 @@ class BaseRedisSubscriberTest {
         }
 
         @Test
+        void shouldRemoveRetiredMessagesWhenTheRetireHookFailsWithACyclicCauseChain() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(new TestRedisSubscriber(config, redissonClient,
+                    message -> Mono.error(new NullPointerException("Non-retryable"))) {
+                @Override
+                protected Mono<Void> onRetired(String message, Throwable error) {
+                    var first = new IllegalStateException("first");
+                    var second = new IllegalStateException("second", first);
+                    first.initCause(second);
+                    return Mono.error(first);
+                }
+            });
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // A cyclic chain without LeavePendingOnRetireException must terminate and fall back to ack-and-remove
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size());
+        }
+
+        @Test
         void shouldLeaveRetiredMessagesPendingWhenRequeuePublishFails() {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var subscriber = trackSubscriber(new TestRedisSubscriber(config, redissonClient,
