@@ -33,7 +33,7 @@ final class AnthropicUsageFormat implements UsageFormat {
                             "cache_write_tokens", "cache_creation_tokens"),
                     AnthropicUsageFormat::fromLiteLlm),
             new InputVariant("openinference",
-                    keys -> keys.has("prompt"),
+                    keys -> keys.hasAny("prompt", "completion"),
                     AnthropicUsageFormat::fromOpenInference),
             new InputVariant("totals_only",
                     keys -> keys.hasAny("prompt_tokens", "completion_tokens"),

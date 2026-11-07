@@ -103,6 +103,7 @@ export const generateSyntaxHighlighterCode = (
   const response = prettifyConfig
     ? prettifyMessage(data, {
         type: prettifyConfig.fieldType,
+        ...prettifyConfig,
       })
     : {
         message: data,
