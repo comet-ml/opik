@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import useDatasetById from "@/api/datasets/useDatasetById";
@@ -8,15 +8,14 @@ import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import DatasetItemsTab, {
   EditPanelRenderProps,
   AddPanelRenderProps,
-  AddDialogRenderProps,
   ExpansionDialogRenderProps,
 } from "@/v2/pages-shared/datasets/DatasetItemsTab/DatasetItemsTab";
 import EditTestSuiteSettingsDialog from "@/v2/pages-shared/datasets/TestSuiteComponents/EditTestSuiteSettingsDialog";
 import TestSuiteItemPanel from "@/v2/pages-shared/datasets/TestSuiteComponents/TestSuiteItemPanel/TestSuiteItemPanel";
 import AddDatasetItemPanel from "@/v2/pages-shared/datasets/DatasetItemPanel/AddDatasetItemPanel";
-import AddDatasetItemDialog from "@/v2/pages-shared/datasets/DatasetItemPanel/AddDatasetItemDialog";
 import AddTestSuiteItemPanel from "@/v2/pages-shared/datasets/TestSuiteComponents/TestSuiteItemPanel/AddTestSuiteItemPanel";
 import DatasetItemEditor from "@/v2/pages-shared/datasets/DatasetItemEditor/DatasetItemEditor";
+import { useColumnsWithDraftKeys } from "@/v2/pages-shared/datasets/DatasetItemsTab/hooks/useColumnsWithDraftKeys";
 import AddVersionDialog from "@/v2/pages-shared/datasets/VersionHistoryTab/AddVersionDialog";
 import VersionHistoryTab from "@/v2/pages-shared/datasets/VersionHistoryTab/VersionHistoryTab";
 import OverrideVersionDialog from "@/v2/pages-shared/datasets/OverrideVersionDialog";
@@ -59,6 +58,7 @@ import DatasetItemsPageHeader from "./DatasetItemsPageHeader";
 import { useState } from "react";
 
 const POLLING_INTERVAL_MS = 3000;
+const EMPTY_COLUMNS: DatasetItemColumn[] = [];
 
 function DatasetItemsPage(): React.ReactElement {
   const datasetId = useDatasetEntityIdFromURL();
@@ -199,21 +199,6 @@ function DatasetItemsPage(): React.ReactElement {
     [isTestSuite],
   );
 
-  const renderAddDialog = useMemo(
-    () =>
-      isTestSuite
-        ? undefined
-        : ({ key, datasetId: id, open, setOpen }: AddDialogRenderProps) => (
-            <AddDatasetItemDialog
-              key={key}
-              datasetId={id}
-              open={open}
-              setOpen={setOpen}
-            />
-          ),
-    [isTestSuite],
-  );
-
   const bulkAddItems = useBulkAddItems();
   const { toast } = useToast();
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
@@ -260,26 +245,22 @@ function DatasetItemsPage(): React.ReactElement {
     ],
   );
 
-  const { data: addItemsMeta } = useDatasetItemsList(
-    { datasetId, page: 1, size: 1 },
-    { enabled: canEditDatasets && !!datasetId },
+  const { data: addItemsMeta, isLoading: isAddItemColumnsLoading } =
+    useDatasetItemsList(
+      { datasetId, page: 1, size: 1 },
+      { enabled: canEditDatasets && !!datasetId },
+    );
+  const addItemColumns = useColumnsWithDraftKeys(
+    addItemsMeta?.columns ?? EMPTY_COLUMNS,
   );
-  const addItemColumns = addItemsMeta?.columns ?? [];
 
   const [openCreatePanel, setOpenCreatePanel] = useState(false);
-  const [openDialog, setOpenDialog] = useState(false);
   const [openExpansion, setOpenExpansion] = useState(false);
-  const resetDialogKeyRef = useRef(0);
 
   const handleAddItem = useCallback(() => {
     if (!dataset) return;
-    if (renderAddDialog && dataset.dataset_items_count === 0) {
-      setOpenDialog(true);
-      resetDialogKeyRef.current += 1;
-    } else {
-      setOpenCreatePanel(true);
-    }
-  }, [renderAddDialog, dataset]);
+    setOpenCreatePanel(true);
+  }, [dataset]);
 
   const handleExpand = useCallback(() => setOpenExpansion(true), []);
 
@@ -339,12 +320,7 @@ function DatasetItemsPage(): React.ReactElement {
         open: openCreatePanel,
         onClose: () => setOpenCreatePanel(false),
         columns: addItemColumns,
-      })}
-      {renderAddDialog?.({
-        key: resetDialogKeyRef.current,
-        datasetId,
-        open: openDialog,
-        setOpen: setOpenDialog,
+        isColumnsLoading: isAddItemColumnsLoading,
       })}
       {renderExpansionDialog({
         open: openExpansion,
