@@ -111,6 +111,8 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: "26"
+          cache: npm
+          cache-dependency-path: apps/opik-frontend/package-lock.json
 
       - name: Install dependencies
         if: steps.resolve.outputs.has_token == 'true'
