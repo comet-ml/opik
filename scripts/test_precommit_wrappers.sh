@@ -50,7 +50,7 @@ out=$(scripts/precommit-fe-lint.sh apps/opik-frontend/src/a.tsx apps/opik-fronte
 check "routes .tsx to oxlint"          "oxlint"          "$out"
 check "oxlint uses --max-warnings=0"   "--max-warnings=0" "$out"
 check "routes .css to stylelint"       "stylelint"       "$out"
-check "formats with prettier"          "prettier"        "$out"
+check "formats with oxfmt"             "oxfmt"           "$out"
 
 echo "precommit-ts-sdk-lint.sh:"
 out=$(scripts/precommit-ts-sdk-lint.sh sdks/typescript/src/opik/index.ts 2>&1)

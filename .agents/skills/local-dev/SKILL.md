@@ -51,7 +51,7 @@ and `--platform-build` are documented in `./scripts/dev-runner.sh --help`.
 ./scripts/dev-runner.sh --build-be   # Backend only
 ./scripts/dev-runner.sh --build-fe   # Frontend only
 ./scripts/dev-runner.sh --lint-be    # Spotless
-./scripts/dev-runner.sh --lint-fe    # oxlint + Prettier
+./scripts/dev-runner.sh --lint-fe    # oxlint + oxfmt
 ./scripts/dev-runner.sh --migrate    # DB migrations
 ```
 
