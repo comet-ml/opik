@@ -196,7 +196,9 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         claims to have succeeded.
         """
         try:
-            if self._created_span_data is None:
+            # An ended span must not be pushed: popping it would also pop the
+            # caller's span, which sits beneath it on the context.
+            if self._created_span_data is None or self._span_finished:
                 self._generator.close()
             else:
                 # The generator's `finally` runs here, so it must see its own span
@@ -274,7 +276,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         instead of being replaced by a successful one.
         """
         try:
-            if self._created_span_data is None:
+            if self._created_span_data is None or self._span_finished:
                 await self._generator.aclose()
             else:
                 with context_storage.temporary_context(
