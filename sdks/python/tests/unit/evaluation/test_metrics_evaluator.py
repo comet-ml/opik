@@ -338,9 +338,26 @@ def test_compute_metric_scores__long_invalid_value__shortened_in_reason_and_log(
         (result,) = _compute([_FixedValueMetric("m", long_value)])
 
     assert result.scoring_failed is True
-    assert result.metadata["original_value"] == repr(long_value)
-    assert len(result.reason) < 200
-    assert all(len(record.getMessage()) < 300 for record in caplog.records)
+    assert result.metadata["original_value"].startswith("'xxx")
+    assert len(result.metadata["original_value"]) < 300
+    assert len(result.reason) < 300
+    (warning,) = [r for r in caplog.records if "not a finite number" in r.message]
+    assert "Metric m returned" in warning.getMessage()
+    assert len(warning.getMessage()) < 400
+
+
+class _UnprintableValue:
+    def __repr__(self):
+        raise RuntimeError("repr failed")
+
+
+def test_compute_metric_scores__value_whose_repr_raises__still_marked_as_failed():
+    (result,) = _compute([_FixedValueMetric("m", _UnprintableValue())])
+
+    assert result.scoring_failed is True
+    assert result.value == 0.0
+    assert "_UnprintableValue" in result.metadata["original_value"]
+    assert "_UnprintableValue" in result.reason
 
 
 @pytest.mark.parametrize(

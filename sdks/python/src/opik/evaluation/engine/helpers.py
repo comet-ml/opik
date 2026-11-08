@@ -109,9 +109,10 @@ def mark_invalid_score_values_as_failed(
     rejects a whole feedback-score batch that contains NaN or infinity. So such
     a score is handled like a metric that raised: ``scoring_failed`` is set and
     the value becomes ``0.0``, so every view counts it as failed and it is not
-    uploaded. ``metadata`` keeps ``repr()`` of the original value under
-    ``original_value`` (a string, since NaN and infinity aren't valid JSON) and
-    the metric's own reason, if it gave one, under ``original_reason``.
+    uploaded. ``metadata`` keeps a ``repr()`` of the original value, capped at
+    200 characters, under ``original_value`` (a string, since NaN and infinity
+    aren't valid JSON), and the metric's own reason, if it gave one, under
+    ``original_reason``.
     """
     return [
         _invalid_value_as_failed(result)
@@ -123,24 +124,30 @@ def mark_invalid_score_values_as_failed(
     ]
 
 
+# A metric can return any object: its repr is capped, and an object whose
+# __repr__ raises is shown by its type (reprlib handles that).
+_VALUE_REPR = reprlib.Repr()
+_VALUE_REPR.maxstring = 200
+_VALUE_REPR.maxother = 200
+
+
 def _invalid_value_as_failed(
     result: score_result.ScoreResult,
 ) -> score_result.ScoreResult:
-    # A metric can return any object, so the log and the reason get a shortened repr.
-    short_value = reprlib.repr(result.value)
+    value_repr = _VALUE_REPR.repr(result.value)
     LOGGER.warning(
         "Metric %s returned a score value that is not a finite number: %s. "
         "Its score will be marked as failed.",
         result.name,
-        short_value,
+        value_repr,
     )
-    metadata = {**(result.metadata or {}), "original_value": repr(result.value)}
+    metadata = {**(result.metadata or {}), "original_value": value_repr}
     if result.reason is not None:
         metadata["original_reason"] = result.reason
     return dataclasses.replace(
         result,
         value=0.0,
-        reason=f"Score value is not a finite number: {short_value}",
+        reason=f"Score value is not a finite number: {value_repr}",
         metadata=metadata,
         scoring_failed=True,
     )
