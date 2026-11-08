@@ -3040,6 +3040,10 @@ def test_evaluate_on_dict_items__item_has_blank_id__placeholder_id_is_used(
     assert [
         test_result.score_results[0].value for test_result in result.test_results
     ] == [1.0, 1.0]
+    for test_result in result.test_results:
+        score_result = test_result.score_results[0]
+        assert score_result.name == metrics.Equals().name
+        assert score_result.scoring_failed is False
 
 
 def test_evaluate_on_dict_items__no_metrics_returns_empty(fake_backend):

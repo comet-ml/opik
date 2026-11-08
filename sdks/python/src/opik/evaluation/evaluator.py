@@ -1686,7 +1686,7 @@ def _resolve_resume_items(
 
 
 def _dict_item_id(index: int, item: Dict[str, Any]) -> Any:
-    """The item's own id when it has a non-empty one, otherwise a placeholder."""
+    """The item's own id as given, unless it is None or a blank string; then a placeholder."""
     item_id = item.get("id")
     if item_id is None or (isinstance(item_id, str) and not item_id.strip()):
         return f"temp_item_{index}"
@@ -1713,10 +1713,10 @@ def evaluate_on_dict_items(
 
     Args:
         items: List of dataset item contents (dictionaries with the data to evaluate).
-            An ``id`` key with a non-empty value, as in the dicts ``Dataset.get_items()``
-            returns, is used as the item's id; items without one, or with a ``None`` or
-            blank id, get ``temp_item_<i>``. Either way the id is part of the dict
-            passed to ``task``.
+            An ``id`` key, as in the dicts ``Dataset.get_items()`` returns, is used as the
+            item's id as given. An id that is missing, ``None`` or a blank string is
+            replaced by ``temp_item_<i>``. Either way the id is part of the dict passed
+            to ``task``.
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
