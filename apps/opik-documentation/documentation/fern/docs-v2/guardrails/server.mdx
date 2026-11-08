@@ -1,6 +1,6 @@
 ---
 title: Guardrails server
-subtitle: Install, configure, and run the backend that powers the model-based guards
+subtitle: Install, configure, and run the backend that powers custom guardrail models
 headline: Guardrails Server | Opik Documentation
 og:title: Guardrails Server - Opik
 og:description: How to install, configure, start, and call the Opik guardrails backend that runs the PII, Topic, prompt injection, and custom classifier models.
@@ -21,7 +21,7 @@ It powers these validation types:
 - **Prompt injection** — a fine-tuned classifier (a Qwen LoRA adapter) that detects prompt injection and jailbreak attempts. Its model lives in a private Hugging Face repository, so the server needs a Hugging Face token (see [Configuration](#configuration)).
 - **Custom models** — models [fine-tuned on your own labeled examples](/guardrails/custom-guardrails). Training runs on this server, and it loads the results by name from its adapters directory.
 
-The server is optional and disabled by default. You need it to run the built-in Topic, PII, or Prompt injection guardrails, or any custom model. The [LLM judge guardrail](/guardrails/guardrails#llm-judge) does not use this server: it calls the LLM provider configured in your workspace.
+The server is optional and disabled by default. The Python SDK uses it to run custom models. The SDK's PII, Topic, and Prompt injection [rules](/guardrails/guardrails) are checked by Opik itself rather than by this server, and the [LLM judge rule](/guardrails/guardrails#llm-judge) calls the LLM provider configured in your workspace.
 
 ## Installation and startup
 
@@ -190,8 +190,8 @@ The response reports an overall `validation_passed` flag plus per-validation res
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Guards" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
-    The five guard types and how to configure each one.
+  <Card title="Rules" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    The five rule types and how to configure each one.
   </Card>
   <Card title="Guardrails overview" href="/guardrails/overview" icon="fa-regular fa-circle-info">
     Understand when to use guardrails versus online evaluation.

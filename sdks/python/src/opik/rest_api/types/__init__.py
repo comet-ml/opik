@@ -477,8 +477,11 @@ from .llm_as_judge_message_role import LlmAsJudgeMessageRole
 from .llm_as_judge_message_write import LlmAsJudgeMessageWrite
 from .llm_as_judge_message_write_role import LlmAsJudgeMessageWriteRole
 from .llm_as_judge_model_parameters import LlmAsJudgeModelParameters
+from .llm_as_judge_model_parameters_api import LlmAsJudgeModelParametersApi
 from .llm_as_judge_model_parameters_public import LlmAsJudgeModelParametersPublic
+from .llm_as_judge_model_parameters_public_api import LlmAsJudgeModelParametersPublicApi
 from .llm_as_judge_model_parameters_write import LlmAsJudgeModelParametersWrite
+from .llm_as_judge_model_parameters_write_api import LlmAsJudgeModelParametersWriteApi
 from .llm_as_judge_output_schema import LlmAsJudgeOutputSchema
 from .llm_as_judge_output_schema_public import LlmAsJudgeOutputSchemaPublic
 from .llm_as_judge_output_schema_public_type import LlmAsJudgeOutputSchemaPublicType
@@ -1197,8 +1200,11 @@ __all__ = [
     "LlmAsJudgeMessageWrite",
     "LlmAsJudgeMessageWriteRole",
     "LlmAsJudgeModelParameters",
+    "LlmAsJudgeModelParametersApi",
     "LlmAsJudgeModelParametersPublic",
+    "LlmAsJudgeModelParametersPublicApi",
     "LlmAsJudgeModelParametersWrite",
+    "LlmAsJudgeModelParametersWriteApi",
     "LlmAsJudgeOutputSchema",
     "LlmAsJudgeOutputSchemaPublic",
     "LlmAsJudgeOutputSchemaPublicType",
