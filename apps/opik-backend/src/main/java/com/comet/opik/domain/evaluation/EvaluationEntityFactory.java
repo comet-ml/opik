@@ -27,6 +27,7 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -59,7 +60,10 @@ class EvaluationEntityFactory {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull @Config("responseFormatting") ResponseFormattingConfig responseFormattingConfig;
 
-    /** One {@code llm} span per LLM round-trip; carries usage + resolved model/provider for costing. */
+    /**
+     * One {@code llm} span per LLM round-trip; carries usage + resolved model/provider for costing. The model named by
+     * the response (the dated snapshot that answered) wins over the configured alias, as in {@link #decisionSpan}.
+     */
     Span llmSpan(EvaluationContext eval, ChatRequest request, ChatResponse response, Throwable error, Instant start) {
         var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
@@ -77,6 +81,9 @@ class EvaluationEntityFactory {
         if (response != null) {
             spanBuilder.output(buildResponseOutput(response))
                     .usage(LlmUsageExtractor.toUsageMap(response));
+            if (StringUtils.isNotBlank(response.modelName())) {
+                spanBuilder.model(response.modelName());
+            }
         }
         if (error != null) {
             spanBuilder.errorInfo(toErrorInfo(error));
