@@ -15,30 +15,41 @@ def _end_abandoned_stream(
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> None:
-    """End the span of a stream that was never iterated.
+    """End the span of a stream that is collected before it finishes.
 
     A generator's body, and so its ``finally``, does not run until the first
     ``next()``. The span is already popped from the decorator by the time this
     wrapper is built, so a stream that is created and then dropped would leave
-    it open for good. Registered with ``weakref.finalize`` and detached as soon
-    as the generator does run, the same way the LiteLLM integration does it.
+    it open for good. Registered with ``weakref.finalize``, the same way the
+    LiteLLM integration does it.
 
-    ``detach()`` is enough for a sync generator, which CPython closes before it
-    clears weakrefs, but not for an async one: its ``finally`` only runs when
-    the event loop awaits ``aclose()`` through the asyncgen finalizer hook,
-    which is after this has already fired. Both paths therefore share a one-shot
-    flag: whichever reaches the span first ends it and the other returns.
+    CPython clears a generator's weakrefs *before* running its close, for sync
+    and async alike, so this fires first whenever a suspended stream is
+    collected. It therefore has to report the outcome itself rather than defer
+    to the body. Skipping it for a started stream leaves nothing to end the
+    span when the body's ``finally`` never runs at all, which is what happens
+    to an async generator on an event loop closed without
+    ``shutdown_asyncgens()``.
 
-    The finalizer cannot simply be skipped once the body has started. A loop
-    that is closed without ``shutdown_asyncgens()`` never runs that ``finally``,
-    so nothing would end the span at all.
+    A started stream that is collected was abandoned part-way, so it is
+    reported as terminated early. One that never started is reported without an
+    error: nothing went wrong, it was simply dropped before it produced
+    anything. The shared one-shot flag means the body's later ``finally``, when
+    it does run, will not report a second time.
     """
     if state["finished"]:
         return
     state["finished"] = True
+    error_info: Optional[ErrorInfoDict] = (
+        error_info_collector.collect(
+            GeneratorExit("stream was abandoned before it finished")
+        )
+        if state["started"]
+        else None
+    )
     finally_callback(
         output=None,
-        error_info=None,
+        error_info=error_info,
         capture_output=True,
         generators_span_to_end=span_to_end,
         generators_trace_to_end=trace_to_end,
@@ -61,12 +72,13 @@ def wrap_sync_stream(
     """
 
     finalizer: Optional[weakref.finalize] = None
-    state: Dict[str, bool] = {"finished": False}
+    state: Dict[str, bool] = {"started": False, "finished": False}
 
     def wrapper() -> Iterator[Any]:
         accumulated_items: List[Any] = []
         error_info: Optional[ErrorInfoDict] = None
         completed = False
+        state["started"] = True
         try:
             for item in stream:
                 accumulated_items.append(item)
@@ -132,12 +144,13 @@ def wrap_async_stream(
     """Async counterpart of :func:`wrap_sync_stream`."""
 
     finalizer: Optional[weakref.finalize] = None
-    state: Dict[str, bool] = {"finished": False}
+    state: Dict[str, bool] = {"started": False, "finished": False}
 
     async def wrapper() -> AsyncIterator[Any]:
         accumulated_items: List[Any] = []
         error_info: Optional[ErrorInfoDict] = None
         completed = False
+        state["started"] = True
         try:
             async for item in stream:
                 accumulated_items.append(item)
