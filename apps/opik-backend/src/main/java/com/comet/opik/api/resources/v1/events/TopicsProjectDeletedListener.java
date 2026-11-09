@@ -37,14 +37,14 @@ public class TopicsProjectDeletedListener {
                 int runs = runDAO.deleteByProjects(event.workspaceId(), event.projectIds());
                 int runCounts = runDAO.deleteCountsByProjects(event.workspaceId(), event.projectIds());
                 if (topics + prototypes + states + runs + runCounts > 0) {
-                    log.info("Deleted the topics of deleted projects, workspace '{}', project count '{}', topics "
+                    log.info("Deleted the topic data of deleted projects, workspace '{}', project count '{}', topics "
                             + "'{}', prototypes '{}', states '{}', runs '{}', run counts '{}'", event.workspaceId(),
                             event.projectIds().size(), topics, prototypes, states, runs, runCounts);
                 }
                 return null;
             });
         } catch (RuntimeException exception) {
-            log.error("Failed to delete the topics of deleted projects, workspace '{}', project count '{}'",
+            log.error("Failed to delete the topic data of deleted projects, workspace '{}', project count '{}'",
                     event.workspaceId(), event.projectIds().size(), exception);
         }
     }
