@@ -85,9 +85,9 @@ class TopicsRebuildServiceTest {
         var windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.readWindow(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
-        when(topicDAO.findStates(any())).thenReturn(List.of());
+        when(topicDAO.findStates(any(), any())).thenReturn(List.of());
         when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
-        when(runDAO.markSaved(any(), any(), any())).thenReturn(1);
+        when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
@@ -99,7 +99,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a failed mark counts the run once, with its workspace")
     void failCountsOnce() {
-        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
 
         assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
 
@@ -114,7 +114,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a run that had already ended is not counted again")
     void alreadyEndedIsNotCounted() {
-        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(0);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(0);
 
         assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isFalse();
 
@@ -125,7 +125,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
             + "counts it once")
     void markThatThrowsCountsNothing() {
-        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any()))
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(1);
 
@@ -141,7 +141,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("an answer that cannot be read counts bad_answer, not ok, and fails the run once")
     void unreadableAnswerIsBadAnswer() {
-        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
         answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
@@ -159,7 +159,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
     void failedSaveWritesNoLabels() {
-        when(runDAO.markFailed(eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
         when(topicDAO.lockProject(anyString(), any())).thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
@@ -187,7 +187,7 @@ class TopicsRebuildServiceTest {
         assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
         assertThat(attempts).hasValue(3);
         var order = inOrder(runDAO, traceTopicsDAO);
-        order.verify(runDAO).markSaved(eq(runId), any(), any());
+        order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), any());
         order.verify(traceTopicsDAO).insert(any());
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
     }
@@ -206,7 +206,7 @@ class TopicsRebuildServiceTest {
 
         assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
         assertThat(attempts).hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
-        verify(runDAO, never()).markFailed(any(), any(), any(), any(), any());
+        verify(runDAO, never()).markFailed(any(), any(), any(), any(), any(), any());
         assertThat(meter.points("topics.runs")).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
@@ -246,7 +246,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a timeout that interrupts the run after the commit does not stop the insert, and the interrupt is "
             + "kept")
     void insertGoesOnThroughAnInterrupt() {
-        when(runDAO.markSaved(any(), any(), any())).thenAnswer(invocation -> {
+        when(runDAO.markSaved(any(), any(), any(), any())).thenAnswer(invocation -> {
             Thread.currentThread().interrupt();
             return 1;
         });
@@ -291,7 +291,7 @@ class TopicsRebuildServiceTest {
         service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
         var stats = ArgumentCaptor.forClass(String.class);
-        verify(runDAO).markSaved(eq(runId), any(), stats.capture());
+        verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
         double saved = JsonUtils.getMapper().readTree(stats.getValue()).get("other_share").asDouble();
         assertThat(meter.points("topics.run.other_share")).singleElement().satisfies(point -> {
             assertThat(point.value()).isEqualTo(saved);

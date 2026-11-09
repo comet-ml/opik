@@ -88,7 +88,7 @@ class TopicsNightlyServiceTest {
 
         when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, BROKEN_WORKSPACE_ID));
         when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of());
-        when(topicDAO.findStates(any())).thenAnswer(invocation -> invocation.<Collection<UUID>>getArgument(0)
+        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> invocation.<Collection<UUID>>getArgument(1)
                 .contains(built)
                         ? List.of(TopicProjectState.builder().projectId(built).workspaceId(WORKSPACE_ID)
                                 .build())

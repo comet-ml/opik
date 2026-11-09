@@ -72,7 +72,7 @@ public interface TopicDAO {
             UPDATE topic_project_states
             SET rebuilds = :rebuilds, first_built_at = :firstBuiltAt, last_run_id = :lastRunId,
                 last_success_at = :lastSuccessAt, window_until = :windowUntil
-            WHERE project_id = :projectId AND last_run_id <=> :expectedRunId
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND last_run_id <=> :expectedRunId
             """)
     int updateState(@BindMethods TopicProjectState state, @Bind("expectedRunId") UUID expectedRunId);
 
@@ -88,8 +88,8 @@ public interface TopicDAO {
     int deleteStatesByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
-    @SqlQuery("SELECT * FROM topic_project_states WHERE project_id IN (<projectIds>)")
-    List<TopicProjectState> findStates(
+    @SqlQuery("SELECT * FROM topic_project_states WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    List<TopicProjectState> findStates(@Bind("workspaceId") String workspaceId,
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
 
     /** Holds a shared lock on the project's row until the transaction ends, so a project delete waits for it. */

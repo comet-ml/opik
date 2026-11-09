@@ -498,9 +498,7 @@ class TopicsNightlyJobTest {
                 }));
         assertThat(topics(projectId)).isEmpty();
         assertThat(counts(projectId)).isEmpty();
-        List<TopicProjectState> states = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
-        assertThat(states).isEmpty();
+        assertThat(state(projectId)).isNull();
         assertThat(traceTopics(workspaceId, projectId)).isEmpty();
     }
 
@@ -1230,7 +1228,10 @@ class TopicsNightlyJobTest {
 
     private TopicProjectState state(UUID projectId) {
         var states = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
+                handle -> workspacesOf(handle, "topic_project_states", projectId).stream()
+                        .flatMap(workspaceId -> handle.attach(TopicDAO.class)
+                                .findStates(workspaceId, Set.of(projectId)).stream())
+                        .toList());
         return states.isEmpty() ? null : states.getFirst();
     }
 

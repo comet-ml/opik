@@ -238,7 +238,7 @@ public class TopicsNightlyService {
             throw new ConflictException("A topics run of project '%s' is in progress".formatted(projectId));
         }
         try {
-            if (hasList(projectId)) {
+            if (hasList(workspaceId, projectId)) {
                 throw new ConflictException(
                         "Project '%s' already has a topic list; the nightly job updates it".formatted(projectId));
             }
@@ -344,17 +344,16 @@ public class TopicsNightlyService {
         if (found.isEmpty()) {
             return List.of();
         }
-        var projectIds = found.stream().map(Candidate::projectId).collect(Collectors.toSet());
         var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
         return template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
             var runDAO = handle.attach(TopicRunDAO.class);
             Set<UUID> leftOut = new HashSet<>();
-            topicDAO.findStates(projectIds).forEach(state -> leftOut.add(state.projectId()));
             Set<UUID> existing = new HashSet<>();
             found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
                     Collectors.mapping(Candidate::projectId, Collectors.toSet())))
                     .forEach((workspaceId, ids) -> {
+                        topicDAO.findStates(workspaceId, ids).forEach(state -> leftOut.add(state.projectId()));
                         leftOut.addAll(runDAO.findStartedSince(workspaceId, ids, now.minus(FIRST_BUILD_RUN_GAP)));
                         leftOut.addAll(runDAO.findPausedProjectIds(workspaceId, ids, PAUSE_FAILURES, pausedSince));
                         existing.addAll(topicDAO.findExistingProjectIds(workspaceId, ids));
@@ -443,9 +442,9 @@ public class TopicsNightlyService {
     }
 
     /** Read under the project's lock, so a list built meanwhile by the night or by hand is seen. */
-    private boolean hasList(UUID projectId) {
+    private boolean hasList(String workspaceId, UUID projectId) {
         return !template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId))).isEmpty();
+                handle -> handle.attach(TopicDAO.class).findStates(workspaceId, Set.of(projectId))).isEmpty();
     }
 
     /**
@@ -456,7 +455,7 @@ public class TopicsNightlyService {
         UUID runId = null;
         try {
             // Read again under the project's lock: a run by hand may have built it since the night listed it.
-            if (hasList(candidate.projectId())) {
+            if (hasList(candidate.workspaceId(), candidate.projectId())) {
                 log.info("Topics night skipped project '{}', it got a topic list since the night listed it",
                         candidate.projectId());
                 record.decide(candidate, TopicsMetrics.DECISION_SKIP, TopicsMetrics.REASON_ALREADY_SAVED, null);
@@ -580,13 +579,8 @@ public class TopicsNightlyService {
                 record.countFailed(workspaceId, exception);
             }
         }
-        var projectIds = found.stream().map(Candidate::projectId).collect(Collectors.toSet());
-        List<TopicProjectState> states = projectIds.isEmpty()
-                ? List.of()
-                : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findStates(projectIds));
-        Set<UUID> built = states.stream().map(TopicProjectState::projectId).collect(Collectors.toSet());
+        Set<UUID> built = new HashSet<>();
         var windowUntil = new HashMap<UUID, Instant>();
-        states.forEach(state -> windowUntil.put(state.projectId(), state.windowUntil()));
         var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
         Set<UUID> paused = new HashSet<>();
         // A deleted project keeps its window vectors until ClickHouse drops them: build only projects that exist.
@@ -594,6 +588,10 @@ public class TopicsNightlyService {
         found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
                 Collectors.mapping(Candidate::projectId, Collectors.toSet())))
                 .forEach((workspaceId, ids) -> template.inTransaction(READ_ONLY, handle -> {
+                    handle.attach(TopicDAO.class).findStates(workspaceId, ids).forEach(state -> {
+                        built.add(state.projectId());
+                        windowUntil.put(state.projectId(), state.windowUntil());
+                    });
                     paused.addAll(handle.attach(TopicRunDAO.class)
                             .findPausedProjectIds(workspaceId, ids, PAUSE_FAILURES, pausedSince));
                     existing.addAll(handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids));

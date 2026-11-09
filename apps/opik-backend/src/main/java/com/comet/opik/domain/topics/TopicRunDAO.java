@@ -43,16 +43,16 @@ public interface TopicRunDAO {
 
     @SqlUpdate("""
             UPDATE topic_runs SET status = 'saved', finished_at = :finishedAt, stats = :stats
-            WHERE run_id = :runId AND status = 'running'
+            WHERE workspace_id = :workspaceId AND run_id = :runId AND status = 'running'
             """)
-    int markSaved(@Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt, @Bind("stats") String stats);
+    int markSaved(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt, @Bind("stats") String stats);
 
     @SqlUpdate("""
             UPDATE topic_runs SET status = 'failed', finished_at = :finishedAt, error_code = :errorCode,
                 error_message = :errorMessage, stats = :stats
-            WHERE run_id = :runId AND status = 'running'
+            WHERE workspace_id = :workspaceId AND run_id = :runId AND status = 'running'
             """)
-    int markFailed(@Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt,
+    int markFailed(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt,
             @Bind("errorCode") String errorCode, @Bind("errorMessage") String errorMessage,
             @Bind("stats") String stats);
 
@@ -140,8 +140,8 @@ public interface TopicRunDAO {
     List<TopicRunCount> findCountsByProject(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
-    @SqlQuery("SELECT * FROM topic_runs WHERE run_id = :runId")
-    TopicRun findById(@Bind("runId") UUID runId);
+    @SqlQuery("SELECT * FROM topic_runs WHERE workspace_id = :workspaceId AND run_id = :runId")
+    TopicRun findById(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId);
 
     @SqlQuery("""
             SELECT * FROM topic_runs

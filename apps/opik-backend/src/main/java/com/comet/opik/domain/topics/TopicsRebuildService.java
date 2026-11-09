@@ -147,7 +147,7 @@ public class TopicsRebuildService {
      */
     public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull Code code, @NonNull String message,
             String stats) {
-        int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(runId,
+        int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(workspaceId, runId,
                 Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE), stats));
         if (updated == 1) {
             metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
@@ -201,7 +201,7 @@ public class TopicsRebuildService {
 
         void build() {
             readState = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
-                    .findStates(List.of(projectId)).stream().findFirst());
+                    .findStates(workspaceId, List.of(projectId)).stream().findFirst());
             var rows = timed("window", this::readWindow);
             int n = rows.size();
             var texts = new String[n];
@@ -553,7 +553,7 @@ public class TopicsRebuildService {
                     }
                     var runDAO = handle.attach(TopicRunDAO.class);
                     runDAO.insertCounts(counts);
-                    if (runDAO.markSaved(runId, now, statsJson) != 1) {
+                    if (runDAO.markSaved(workspaceId, runId, now, statsJson) != 1) {
                         // Failed meanwhile, by its timeout: roll the save back.
                         throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
                     }
