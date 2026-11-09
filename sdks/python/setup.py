@@ -56,7 +56,7 @@ setup(
         "boto3-stubs[bedrock-runtime]>=1.34.110",
         "boto3-stubs<=1.43.125",
         "click",
-        "click<=8.5.0",
+        "click<=8.5.1",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "httpx<=0.28.1",
         "rapidfuzz>=3.0.0,<4.0.0",
