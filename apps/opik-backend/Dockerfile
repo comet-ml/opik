@@ -84,6 +84,8 @@ COPY --from=build --chown=1001:1001 /opt/opik-backend/target/*.jar ./
 # Set environment variables
 ARG OPIK_VERSION
 ENV OPIK_VERSION=${OPIK_VERSION}
+# The Vector API of topics' k-means (KMeans) for every java launch in the image: server, migrations, rebaseline
+ENV JDK_JAVA_OPTIONS="--add-modules jdk.incubator.vector"
 
 # Expose ports
 EXPOSE 8080

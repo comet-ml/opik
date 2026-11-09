@@ -406,7 +406,8 @@ function Invoke-DbMigrations {
         Write-LogInfo "Running MySQL (state DB) migrations..."
         $env:STATE_DB_DATABASE_NAME = "opik"
         
-        java -jar $jarFile db migrate config.yml
+        # The Vector API module is for topics' k-means: every backend command loads its classes at startup.
+        java --add-modules jdk.incubator.vector -jar $jarFile db migrate config.yml
         
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "MySQL migrations completed successfully"
@@ -422,7 +423,7 @@ function Invoke-DbMigrations {
         $env:ANALYTICS_DB_DATABASE_NAME = "opik"
         $env:ANALYTICS_DB_MIGRATIONS_URL = "jdbc:clickhouse://localhost:8123"
         
-        java -jar $jarFile dbAnalytics migrate config.yml
+        java --add-modules jdk.incubator.vector -jar $jarFile dbAnalytics migrate config.yml
         
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "ClickHouse migrations completed successfully"
@@ -538,7 +539,7 @@ function Start-Backend {
         }
         
         Write-LogDebug "Starting backend with JAR: $jarFile"
-        Write-LogDebug "Command: java -jar $jarFile server config.yml"
+        Write-LogDebug "Command: java --add-modules jdk.incubator.vector -jar $jarFile server config.yml"
         
         # Set environment variables for backend
         $env:CORS = "true"
@@ -554,7 +555,8 @@ function Start-Backend {
         
         $processParams = @{
             FilePath = "java"
-            ArgumentList = @("-jar", $jarFile, "server", "config.yml")
+            # The Vector API module is for topics' k-means, as the image's JDK_JAVA_OPTIONS sets it.
+            ArgumentList = @("--add-modules", "jdk.incubator.vector", "-jar", $jarFile, "server", "config.yml")
             WorkingDirectory = $script:BACKEND_DIR
             RedirectStandardOutput = $stdoutLog
             RedirectStandardError = $stderrLog

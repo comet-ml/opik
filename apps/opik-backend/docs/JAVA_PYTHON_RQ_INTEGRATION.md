@@ -45,7 +45,7 @@ python src/opik_backend/rq_worker.py
 ### Start Java Backend (Terminal 2)
 ```bash
 cd apps/opik-backend
-java -jar target/opik-backend-1.0-SNAPSHOT.jar server config.yml
+java --add-modules jdk.incubator.vector -jar target/opik-backend-1.0-SNAPSHOT.jar server config.yml
 ```
 
 ### Test Integration (Terminal 3)
@@ -259,7 +259,7 @@ Expected output:
 
 ```bash
 cd apps/opik-backend
-java -jar target/opik-backend-1.0-SNAPSHOT.jar server config.yml
+java --add-modules jdk.incubator.vector -jar target/opik-backend-1.0-SNAPSHOT.jar server config.yml
 ```
 
 ### 6. Test the Integration
