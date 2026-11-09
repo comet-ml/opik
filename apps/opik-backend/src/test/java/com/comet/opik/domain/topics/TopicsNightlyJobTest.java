@@ -507,6 +507,59 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("the trace_topics reads drop a trace whose latest row is a tombstone, and keep one whose tombstone is older")
+    void traceTopicsReadsSkipTombstones() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var tombstoned = FIXTURE.traceIds.get(0);
+        var revived = FIXTURE.traceIds.get(1);
+        var untouched = FIXTURE.traceIds.get(2);
+        var topicId = UUID.randomUUID();
+        var createdAt = Instant.parse("2026-11-01T10:00:00Z");
+        var earlier = Instant.parse("2026-11-02T00:00:00Z");
+        var later = Instant.parse("2026-11-03T00:00:00Z");
+        // The tombstone comes after the live row, so the trace is gone.
+        insertTraceTopic(workspaceId, projectId, tombstoned, createdAt, topicId, earlier, 0);
+        insertTraceTopic(workspaceId, projectId, tombstoned, createdAt, topicId, later, 1);
+        // The tombstone comes before the live row: the dedup keeps the live row, so the trace stays.
+        insertTraceTopic(workspaceId, projectId, revived, createdAt, topicId, earlier, 1);
+        insertTraceTopic(workspaceId, projectId, revived, createdAt, topicId, later, 0);
+        insertTraceTopic(workspaceId, projectId, untouched, createdAt, TraceTopic.OTHER, earlier, 0);
+
+        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block())
+                .extracting(TraceTopic::traceId)
+                .containsExactlyInAnyOrder(revived, untouched);
+        assertThat(traceTopicsDAO.countByTopic(workspaceId, projectId, createdAt, createdAt.plusSeconds(1)).block())
+                .containsExactlyInAnyOrderEntriesOf(java.util.Map.of(topicId, 1L, TraceTopic.OTHER, 1L));
+    }
+
+    /** One raw {@code trace_topics} row with its version and soft-delete marker, as no production write sets them. */
+    private void insertTraceTopic(String workspaceId, UUID projectId, UUID traceId, Instant traceCreatedAt,
+            UUID topicId, Instant lastUpdatedAt, int isDeleted) {
+        clickHouseTemplate
+                .nonTransaction(connection -> Mono
+                        .from(connection
+                                .createStatement(
+                                        """
+                                                INSERT INTO trace_topics (workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id,
+                                                    last_updated_at, is_deleted)
+                                                VALUES (:workspace_id, :project_id, :trace_id, parseDateTime64BestEffort(:trace_created_at, 6),
+                                                    :topic_id, 'night', :run_id, parseDateTime64BestEffort(:last_updated_at, 6), :is_deleted)
+                                                """)
+                                .bind("workspace_id", workspaceId)
+                                .bind("project_id", projectId.toString())
+                                .bind("trace_id", traceId.toString())
+                                .bind("trace_created_at", traceCreatedAt.toString())
+                                .bind("topic_id", topicId.toString())
+                                .bind("run_id", UUID.randomUUID().toString())
+                                .bind("last_updated_at", lastUpdatedAt.toString())
+                                .bind("is_deleted", isDeleted)
+                                .execute())
+                        .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+    }
+
+    @Test
     @DisplayName("deleting a project deletes its topics, prototypes, state, runs and run counts")
     void projectDeleted() {
         var workspaceId = enabledWorkspace();

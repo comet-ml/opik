@@ -118,7 +118,7 @@ or in Other, and a name that is a catch-all as a whole ("Other", "General Reques
 | `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
 | `topic_run_counts` | MySQL | One row per topic of a saved run, and one for Other: `traces` in the run's window and `rank` (null for Other). The topics API compares a project's last two saved runs. Kept 90 days. |
-| `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row wins. |
+| `trace_topics` | ClickHouse | One row per window trace and run: its `topic_id`, the all-zeros id for Other. The latest row by `last_updated_at` wins; a latest row with `is_deleted = 1` hides the trace. |
 
 ### Turning it on and off
 
@@ -242,13 +242,14 @@ ORDER BY size DESC;
 -- (window_from and window_until are in the run's stats)
 SELECT topic_id, count() AS traces
 FROM (
-    SELECT trace_id, topic_id
+    SELECT trace_id, topic_id, is_deleted
     FROM trace_topics
     WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
     AND trace_created_at >= '<window_from>' AND trace_created_at < '<window_until>'
-    ORDER BY trace_id, updated_at DESC
+    ORDER BY trace_id, last_updated_at DESC, run_id DESC
     LIMIT 1 BY trace_id
 )
+WHERE is_deleted = 0
 GROUP BY topic_id
 ORDER BY traces DESC;
 ```

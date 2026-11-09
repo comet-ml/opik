@@ -31,7 +31,8 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 
 /**
  * {@code trace_topics}: the topic of each trace, one row per assignment, the latest per trace wins. Writes are plain
- * batched inserts; {@code updated_at} is stamped by ClickHouse.
+ * batched inserts; {@code last_updated_at} is stamped by ClickHouse. Every read takes each trace's latest row first and
+ * then drops it when that row is a tombstone ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do.
  *
  * <p>The deletes are copies of {@link TopicVectorsDAO}'s (same keys, same partitioning), so a trace's topic goes with
  * the trace exactly as its vector does: by retention and by the trace-delete cascade.
@@ -44,32 +45,37 @@ public class TraceTopicsDAO {
     static final String TABLE = "trace_topics";
 
     /**
-     * The latest row of every trace of the project. run_id is a UUID v7 string, so on an updated_at tie its text order
-     * puts the later run first.
+     * The latest row of every trace of the project, unless that row is a tombstone. run_id is a UUID v7 string, so on a
+     * last_updated_at tie its text order puts the later run first.
      */
     private static final String FIND_BY_PROJECT = """
             SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id
-            FROM trace_topics
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
-            LIMIT 1 BY workspace_id, project_id, trace_id
+            FROM (
+                SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id, is_deleted
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, run_id DESC
+                LIMIT 1 BY workspace_id, project_id, trace_id
+            )
+            WHERE is_deleted = 0
             SETTINGS log_comment = '<log_comment>'
             """;
 
-    /** Traces per topic among the project's traces created in the window, each by its latest row. */
+    /** Traces per topic among the project's traces created in the window, each by its latest row, tombstones left out. */
     private static final String COUNT_BY_TOPIC = """
             SELECT topic_id, count() AS traces
             FROM (
-                SELECT trace_id, topic_id
+                SELECT trace_id, topic_id, is_deleted
                 FROM trace_topics
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                 AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                ORDER BY workspace_id, project_id, trace_id, updated_at DESC, run_id DESC
+                ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, run_id DESC
                 LIMIT 1 BY workspace_id, project_id, trace_id
             )
+            WHERE is_deleted = 0
             GROUP BY topic_id
             SETTINGS log_comment = '<log_comment>'
             """;
