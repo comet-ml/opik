@@ -76,6 +76,8 @@ export const LLM_MODEL_PROFILES_REST_ENDPOINT =
 export const ENVIRONMENTS_REST_ENDPOINT = "/v1/private/environments/";
 export const AI_SPEND_REST_ENDPOINT = "/v1/private/ai-spend/";
 export const AGENT_INSIGHTS_REST_ENDPOINT = "/v1/private/agent-insights/";
+export const GUARDRAIL_POLICIES_REST_ENDPOINT =
+  "/v1/private/guardrails/policies/";
 // OAuth endpoints are public (no /v1/private prefix); served by opik-backend's MCP OAuth AS.
 export const OAUTH_REST_ENDPOINT = "/oauth/";
 export const OAUTH_AUTHORIZE_CONTEXT_KEY = "oauth-authorize-context";
@@ -112,6 +114,9 @@ export const AGENT_INSIGHTS_ISSUES_KEY = "agent-insights-issues";
 export const AGENT_INSIGHTS_ISSUE_KEY = "agent-insights-issue";
 export const AGENT_INSIGHTS_JOB_KEY = "agent-insights-job";
 export const OLLIE_CREDITS_KEY = "ollie-credits";
+export const GUARDRAILS_ENABLED_KEY = "guardrails-enabled";
+export const GUARDRAIL_POLICIES_KEY = "guardrail-policies";
+export const GUARDRAIL_POLICY_KEY = "guardrail-policy";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

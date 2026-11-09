@@ -499,6 +499,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-nano-banana-2.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_OMNI_1_1_FLASH,
+      label: "google/gemini-omni-1.1-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_OMNI_1_2_FLASH,
+      label: "google/gemini-omni-1.2-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -557,6 +565,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_VL,
       label: "inclusionai/ling-3.0-flash-vl",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_TINY,
+      label: "inclusionai/ling-3.0-tiny",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_1_FLASH,
@@ -649,22 +661,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4,
       label: "microsoft/phi-4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_01,
-      label: "minimax/minimax-01",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2,
-      label: "minimax/minimax-m2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_HER,
-      label: "minimax/minimax-m2-her",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_1,
-      label: "minimax/minimax-m2.1",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_5,
@@ -1082,6 +1078,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO_BETA,
       label: "openrouter/auto-beta",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO_CODE,
+      label: "openrouter/auto-code",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,

@@ -169,7 +169,8 @@ class GuardrailValidationFailed(OpikException):
 
 class GuardrailValidationError(GuardrailValidationFailed):
     """Raised when a guardrail cannot be evaluated, for example when the guardrails
-    backend is unreachable, times out, or the LLM judge provider call fails.
+    backend is unreachable, times out, guardrails are not available in the workspace, or
+    the LLM judge provider call fails.
 
     Opik guardrails fail closed: if a check cannot be completed, validation is treated
     as failed so the protected code path does not proceed. This subclasses
@@ -185,12 +186,9 @@ class GuardrailValidationError(GuardrailValidationFailed):
 
 
 class GuardrailPolicyError(OpikException):
-    """Raised when a guardrail policy stored in the workspace cannot be turned into a
-    runtime guard, for example when it holds a guard type this SDK version does not know."""
-
-
-class GuardrailTrainingError(OpikException):
-    """Raised when training a custom guardrail fails or does not complete in time."""
+    """Raised when a guardrail cannot be built from the policies stored in the workspace:
+    a requested name is not a non-empty string or does not exist, or a policy holds a
+    rule type this SDK version does not know."""
 
 
 class OpikCloudRequestsRateLimited(OpikException):
