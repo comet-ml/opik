@@ -35,8 +35,10 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
@@ -92,6 +94,8 @@ public class TopicsRebuildService {
     /** The {@code trace_topics} insert after the commit: retries, and the first backoff (it doubles each time). */
     static final int INSERT_RETRIES = 3;
     static final Duration INSERT_BACKOFF = Duration.ofMillis(500);
+    /** Failure codes whose exceptions can carry text of Qwen's answer. */
+    private static final Set<Code> QWEN_CODES = EnumSet.of(Code.QWEN_TIMEOUT, Code.QWEN_ERROR, Code.QWEN_BAD_ANSWER);
     /** The longest the insert after the commit takes: every attempt to its stop, plus the backoffs and some slack. */
     static final Duration INSERT_BOUND = Duration.ofSeconds(READ_SECONDS * (INSERT_RETRIES + 1) + 30);
 
@@ -581,7 +585,16 @@ public class TopicsRebuildService {
         Outcome failed(Code code, Exception exception) {
             stats.set("seconds", seconds);
             var message = StringUtils.defaultIfBlank(ExceptionUtils.getMessage(exception), code.getValue());
-            log.warn("Topics run '{}' failed, project '{}', code '{}'", runId, projectId, code.getValue(), exception);
+            if (QWEN_CODES.contains(code)) {
+                // A cause of a Qwen failure can quote the answer (a Jackson parse error does): the exception types
+                // only, never their messages or stack. The answer's length and SHA-256 are logged when it arrives.
+                log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}'", runId, projectId,
+                        code.getValue(), ExceptionUtils.getThrowableList(exception).stream()
+                                .map(throwable -> throwable.getClass().getName()).toList());
+            } else {
+                log.warn("Topics run '{}' failed, project '{}', code '{}'", runId, projectId, code.getValue(),
+                        exception);
+            }
             try {
                 fail(runId, workspaceId, code, message, stats.toString());
             } catch (RuntimeException markException) {
