@@ -74,7 +74,16 @@ jobs:
               with:
                 java-version: '25'
                 distribution: 'corretto'
-                cache: maven
+
+            # Not setup-java's `cache: maven`: its key hashes every pom.xml, so it is shared with the lint
+            # workflow's spotless leg, which saves a near-empty repository first and every job here then
+            # downloads the dependencies again. This key holds what `mvn test` here actually resolves.
+            - name: Cache Maven repository
+              uses: actions/cache@v6
+              with:
+                path: ~/.m2/repository
+                key: backend-tests-maven-${{ runner.os }}-${{ hashFiles('apps/opik-backend/pom.xml') }}
+                restore-keys: backend-tests-maven-${{ runner.os }}-
 
             - name: Run ${{ matrix.name }}
               env:
