@@ -107,9 +107,7 @@ CREATE TABLE topic_run_counts
 
     PRIMARY KEY (run_id, topic_id),
     -- A project's last two saved runs, for the topics API.
-    INDEX topic_run_counts_workspace_project_saved_idx (workspace_id, project_id, saved_at),
-    -- The cleanup after topics.nightly.runsRetention.
-    INDEX topic_run_counts_saved_idx (saved_at)
+    INDEX topic_run_counts_workspace_project_saved_idx (workspace_id, project_id, saved_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
