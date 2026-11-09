@@ -72,9 +72,9 @@ done
 
 # Build JSON matrix: unit tests + N integration groups
 matrix="{\"include\":["
-matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT,\"testTimeout\":\"$UNIT_TEST_TIMEOUT\",\"forkCount\":$UNIT_FORK_COUNT}"
+matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT,\"testTimeout\":\"$UNIT_TEST_TIMEOUT\",\"forkCount\":$UNIT_FORK_COUNT,\"pullImages\":false}"
 for ((i=1; i<=NUM_GROUPS; i++)); do
-  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":$INTEGRATION_TIMEOUT,\"testTimeout\":\"$INTEGRATION_TEST_TIMEOUT\",\"forkCount\":$INTEGRATION_FORK_COUNT}"
+  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":$INTEGRATION_TIMEOUT,\"testTimeout\":\"$INTEGRATION_TEST_TIMEOUT\",\"forkCount\":$INTEGRATION_FORK_COUNT,\"pullImages\":true}"
 done
 matrix+="]}"
 echo "matrix=$matrix" >> "$GITHUB_OUTPUT"

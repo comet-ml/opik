@@ -85,6 +85,16 @@ jobs:
                 key: backend-tests-maven-${{ runner.os }}-${{ hashFiles('apps/opik-backend/pom.xml') }}
                 restore-keys: backend-tests-maven-${{ runner.os }}-
 
+            # Testcontainers would pull these when the first test class starts; pulling them while Maven
+            # compiles takes the pull off the critical path. Best effort: a failed pull is retried by
+            # Testcontainers itself.
+            - name: Pull test container images in the background
+              if: matrix.pullImages
+              run: |
+                grep -rhoE 'DockerImageName\.parse\("[^"]+"\)' src/test/java \
+                  | sed -E 's/.*\("([^"]+)"\)/\1/' | sort -u | tee "$RUNNER_TEMP/test-images.txt"
+                nohup xargs -P 0 -n 1 docker pull -q < "$RUNNER_TEMP/test-images.txt" > "$RUNNER_TEMP/image-pull.log" 2>&1 &
+
             - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
