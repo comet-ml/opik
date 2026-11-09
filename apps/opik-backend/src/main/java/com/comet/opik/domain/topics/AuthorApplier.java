@@ -26,9 +26,13 @@ public class AuthorApplier {
 
     static final Pattern CATCH_ALL = Pattern.compile("\\b(other|others|misc|miscellaneous|general|various)\\b",
             Pattern.UNICODE_CHARACTER_CLASS);
-    /** A whole name that is a catch-all: a catch-all word, with at most a generic noun after it. */
+    /**
+     * A whole name that is a catch-all: a catch-all word, with at most a generic noun after it. {@code mixed} is here
+     * and not in {@link #CATCH_ALL}: as a whole name it is a catch-all, but inside a name ("Mixed Martial Arts") it is
+     * a real word.
+     */
     static final Pattern CATCH_ALL_NAME = Pattern.compile(
-            "(other|others|misc|miscellaneous|general|various)( (requests|queries|questions|inquiries|tasks|topics|items|things|stuff))?",
+            "(other|others|misc|miscellaneous|general|various|mixed)( (requests|queries|questions|inquiries|tasks|topics|items|things|stuff))?",
             Pattern.UNICODE_CHARACTER_CLASS);
 
     public static Applied apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups, int maxTopics) {

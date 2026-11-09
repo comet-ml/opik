@@ -85,6 +85,7 @@ class TopicsAlgorithmRulesTest {
                 "General Job Search, true",
                 "Generalization Help, false",
                 "Brother Projects, false",
+                "Mixed Martial Arts, false",
                 "Daily Briefing Reports, false"})
         @DisplayName("catch-all words")
         void catchAll(String name, boolean expected) {
@@ -101,6 +102,9 @@ class TopicsAlgorithmRulesTest {
                 "'General\u00A0Questions', true",
                 "General Questions, true",
                 "Various Tasks, true",
+                "Mixed, true",
+                "Mixed Requests, true",
+                "Mixed Martial Arts, false",
                 "General Job Search, false",
                 "Other and System Events, false",
                 "Generalization Help, false",
