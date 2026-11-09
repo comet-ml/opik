@@ -34,6 +34,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -483,31 +484,35 @@ public class TopicVectorsTickService {
     /**
      * Deletes the vectors just written whose trace was deleted while they were embedded, and returns their keys. The
      * trace-delete cascade deletes the status rows before the vectors: when its vector delete ran before this insert,
-     * the status is gone by now; when it runs after, it deletes the vector itself. A failed check or delete leaves the
-     * vectors to retention.
+     * the status is gone by now; when it runs after, it deletes the vector itself. Each chunk of keys is checked on
+     * its own: a failed check or delete leaves only that chunk's vectors to retention.
      */
     private Set<TopicTraceKey> deleteVectorsOfDeletedTraces(String workspaceId, List<TopicVector> vectors,
             Instant deadline) {
         var written = vectors.stream().map(TopicVectorsTickService::key).distinct().toList();
-        try {
-            // In chunks, for the same max_query_size reason as the summary read.
-            var withStatus = Flux.fromIterable(Lists.partition(written, SUMMARY_READ_CHUNK))
-                    .concatMap(chunk -> dao.findStatusKeys(workspaceId, TASK, chunk, secondsLeft(deadline)))
-                    .collect(Collectors.toSet())
-                    .block();
-            var deleted = written.stream().filter(key -> !withStatus.contains(key))
-                    .collect(Collectors.toUnmodifiableSet());
-            if (!deleted.isEmpty()) {
-                dao.deleteByKeys(workspaceId, deleted).block();
-                log.info("Topic vectors deleted for traces deleted during the tick, workspace '{}', traces '{}'",
-                        workspaceId, deleted.size());
+        var deleted = new HashSet<TopicTraceKey>();
+        // In chunks, for the same max_query_size reason as the summary read.
+        for (var chunk : Lists.partition(written, SUMMARY_READ_CHUNK)) {
+            try {
+                var withStatus = dao.findStatusKeys(workspaceId, TASK, chunk, secondsLeft(deadline))
+                        .collect(Collectors.toSet())
+                        .block();
+                var gone = chunk.stream().filter(key -> !withStatus.contains(key))
+                        .collect(Collectors.toUnmodifiableSet());
+                if (!gone.isEmpty()) {
+                    dao.deleteByKeys(workspaceId, gone).block();
+                    deleted.addAll(gone);
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Topic vectors deleted-trace check failed, workspace '{}', traces '{}'; retention removes "
+                        + "any left", workspaceId, chunk.size(), exception);
             }
-            return deleted;
-        } catch (RuntimeException exception) {
-            log.warn("Topic vectors deleted-trace check failed, workspace '{}', rows '{}'; retention removes any left",
-                    workspaceId, vectors.size(), exception);
-            return Set.of();
         }
+        if (!deleted.isEmpty()) {
+            log.info("Topic vectors deleted for traces deleted during the tick, workspace '{}', traces '{}'",
+                    workspaceId, deleted.size());
+        }
+        return deleted;
     }
 
     private static TopicTraceKey key(TopicVectorCandidate candidate) {
