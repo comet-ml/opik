@@ -547,18 +547,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "ibm-granite/granite-4.2-8b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2,
-      label: "inception/mercury-2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2_5,
-      label: "inception/mercury-2.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_3,
-      label: "inception/mercury-3",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH,
       label: "inclusionai/ling-3.0-flash",
     },
@@ -593,6 +581,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_24B_A2B,
       label: "liquid/lfm-2.5-24b-a2b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_3_1_7B,
+      label: "liquid/lfm-3-1.7b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_3_1_7B_FREE,
+      label: "liquid/lfm-3-1.7b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MANCER_WEAVER,

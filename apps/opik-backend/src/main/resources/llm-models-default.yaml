@@ -739,7 +739,7 @@ openrouter:
     label: "deepseek/deepseek-chat"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16000}, stop: {accepted: true}, effort: {accepted: false}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "deepseek/deepseek-chat-v3-0324"
     label: "deepseek/deepseek-chat-v3-0324"
     structuredOutput: true
@@ -812,7 +812,7 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 393216}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "dots-studio/dots-3-note-preview:free"
     label: "dots-studio/dots-3-note-preview:free"
     structuredOutput: true
@@ -1015,24 +1015,6 @@ openrouter:
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [high, low, none]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high], default: high}}
-  - id: "inception/mercury-2"
-    label: "inception/mercury-2"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature]
-    reasoningEfforts: [high, medium, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 50000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
-  - id: "inception/mercury-2.5"
-    label: "inception/mercury-2.5"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature]
-    reasoningEfforts: [high, medium, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
-  - id: "inception/mercury-3"
-    label: "inception/mercury-3"
-    structuredOutput: true
-    supportedParameters: [max_tokens, reasoning, reasoning_effort, temperature]
-    reasoningEfforts: [high, medium, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
   - id: "inclusionai/ling-3.0-flash"
     label: "inclusionai/ling-3.0-flash"
     structuredOutput: true
@@ -1077,6 +1059,14 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
+  - id: "liquid/lfm-3-1.7b"
+    label: "liquid/lfm-3-1.7b"
+    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
+  - id: "liquid/lfm-3-1.7b:free"
+    label: "liquid/lfm-3-1.7b:free"
+    supportedParameters: [frequency_penalty, max_completion_tokens, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: true}}
   - id: "mancer/weaver"
     label: "mancer/weaver"
     structuredOutput: true
@@ -1090,7 +1080,7 @@ openrouter:
     label: "meta-llama/llama-3.1-8b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}, effort: {accepted: false}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "meta-llama/llama-3.2-1b-instruct"
     label: "meta-llama/llama-3.2-1b-instruct"
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
@@ -1099,7 +1089,7 @@ openrouter:
     label: "meta-llama/llama-3.2-3b-instruct"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 72000}, stop: {accepted: true}, effort: {accepted: false}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "meta-llama/llama-3.3-70b-instruct"
     label: "meta-llama/llama-3.3-70b-instruct"
     structuredOutput: true
@@ -1172,7 +1162,7 @@ openrouter:
     label: "minimax/minimax-m2.5"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 32768}, stop: {accepted: true}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 58982}, stop: {accepted: true}}
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
     structuredOutput: true
@@ -1319,7 +1309,7 @@ openrouter:
     label: "moonshotai/kimi-k2.5"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}}
   - id: "moonshotai/kimi-k2.6"
     label: "moonshotai/kimi-k2.6"
     structuredOutput: true
@@ -1383,7 +1373,7 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [medium, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 262144}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium], default: medium}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium], default: medium}}
   - id: "nvidia/nemotron-3-ultra-550b-a55b"
     label: "nvidia/nemotron-3-ultra-550b-a55b"
     structuredOutput: true
@@ -1915,7 +1905,7 @@ openrouter:
     label: "qwen/qwen3.5-397b-a17b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 64000}, stop: {accepted: true}}
   - id: "qwen/qwen3.5-9b"
     label: "qwen/qwen3.5-9b"
     structuredOutput: true
@@ -1940,7 +1930,7 @@ openrouter:
     label: "qwen/qwen3.6-27b"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 81920}, stop: {accepted: true}}
   - id: "qwen/qwen3.6-35b-a3b"
     label: "qwen/qwen3.6-35b-a3b"
     structuredOutput: true
@@ -2333,7 +2323,7 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943717}, stop: {accepted: true}, effort: {accepted: true, levels: [low, high, max], default: max}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [low, high, max], default: max}}
   - id: "z-ai/glm-5.3-flashx"
     label: "z-ai/glm-5.3-flashx"
     structuredOutput: true
@@ -2626,6 +2616,9 @@ openrouter:
   - id: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash-0731:batch"
     structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, low, none]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 384000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "deepseek/deepseek-v4-flash-0731:free"
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-vision-exp:batch"
@@ -2633,11 +2626,15 @@ openrouter:
   - id: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro-0813:batch"
     structuredOutput: true
+  - id: "deepseek/deepseek-v4.1-flash-1017:batch"
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, low, none]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "deepseek/deepseek-v4.1-flash:batch"
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: high}}
   - id: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
   - id: "google/gemini-2.0-flash-001"
@@ -2722,7 +2719,16 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117900}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "ibm-granite/granite-4.1-8b"
   - id: "inception/mercury"
+  - id: "inception/mercury-2"
+    structuredOutput: true
+    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 50000}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
+  - id: "inception/mercury-2.5"
+    structuredOutput: true
+    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 65536}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
   - id: "inception/mercury-2.5-preview"
+  - id: "inception/mercury-3"
+    structuredOutput: true
+    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, high], default: medium}}
   - id: "inception/mercury-coder"
   - id: "inclusionai/ling-2.6-1t"
   - id: "inclusionai/ling-2.6-1t:free"
@@ -2779,6 +2785,9 @@ openrouter:
   - id: "meta-llama/llama-guard-4-12b:free"
   - id: "meta/muse-glimmer-30b:batch"
     structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [xhigh, high, medium, low]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: true, levels: [low, medium, high, xhigh], default: medium}}
   - id: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
   - id: "microsoft/phi-3-medium-128k-instruct"
@@ -2808,6 +2817,8 @@ openrouter:
     structuredOutput: true
   - id: "minimax/minimax-m3:batch"
     structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 512000}, stop: {accepted: true}}
   - id: "minimax/minimax-m3:free"
     structuredOutput: true
   - id: "mistralai/codestral-2501"
@@ -2874,8 +2885,14 @@ openrouter:
     structuredOutput: true
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
     reasoningEfforts: [max, high, low, none]
-    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 16384}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, high, max], default: max}}
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
+  - id: "morph/morph-v3-fast:batch"
+    supportedParameters: [max_tokens, temperature]
+    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 38000}, stop: {accepted: true}, effort: {accepted: false}}
+  - id: "morph/morph-v3-large:batch"
+    supportedParameters: [max_tokens, temperature]
+    params: {temperature: {accepted: true}, topP: {accepted: false}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}, effort: {accepted: false}}
   - id: "neversleep/llama-3.1-lumimaid-8b"
   - id: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
@@ -2909,7 +2926,6 @@ openrouter:
     supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, repetition_penalty, temperature, top_k, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 117964}, stop: {accepted: true}}
   - id: "nvidia/nemotron-3.5-content-safety:free"
-    supportedParameters: [max_tokens, reasoning, temperature, top_p]
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: false}, presencePenalty: {accepted: false}, maxOutputTokens: {accepted: true, max: 8192}, stop: {accepted: false}}
   - id: "nvidia/nemotron-nano-12b-v2-vl"
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
@@ -3270,6 +3286,10 @@ openrouter:
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 131072}, stop: {accepted: true}}
   - id: "qwen/qwen3.8-2.4t-a95b:batch"
     structuredOutput: true
+  - id: "qwen/qwen3.8-27b:batch"
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [xhigh, medium, low, none]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 235929}, stop: {accepted: true}, effort: {accepted: true, levels: [none, low, medium, xhigh], default: xhigh}}
   - id: "qwen/qwen3.8-27b:free"
     structuredOutput: true
   - id: "qwen/qwen3.8-max"
@@ -3298,6 +3318,9 @@ openrouter:
   - id: "thedrummer/anubis-70b-v1.1"
   - id: "thedrummer/rocinante-12b"
   - id: "thinkingmachines/inkling-small:batch"
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [max, high, medium, low, minimal, none]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 262144}, stop: {accepted: true}, effort: {accepted: true, levels: [none, minimal, low, medium, high, max], default: high}}
   - id: "thinkingmachines/inkling-small:free"
     params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: false}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 262144}, stop: {accepted: true}, effort: {accepted: true, levels: [none, minimal, low, medium, high, max], default: high}}
   - id: "thinkingmachines/inkling:batch"
@@ -3349,6 +3372,9 @@ openrouter:
   - id: "z-ai/glm-4.6:exacto"
   - id: "z-ai/glm-5.2:batch"
     structuredOutput: true
+    supportedParameters: [frequency_penalty, max_tokens, min_p, presence_penalty, reasoning, reasoning_effort, repetition_penalty, temperature, top_k, top_p]
+    reasoningEfforts: [xhigh, high, none]
+    params: {temperature: {accepted: true}, topP: {accepted: true}, topK: {accepted: true}, frequencyPenalty: {accepted: true}, presencePenalty: {accepted: true}, maxOutputTokens: {accepted: true, max: 943718}, stop: {accepted: true}, effort: {accepted: true, levels: [none, high, xhigh], default: high}}
   - id: "z-ai/glm-5.2:free"
     structuredOutput: true
   - id: "z-ai/glm-5.3-flash:batch"
