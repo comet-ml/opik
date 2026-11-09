@@ -4,7 +4,8 @@
 
 -- One row per topic a project's nightly run created. An id is never reused: a renamed or merged topic keeps its id, a
 -- retired one keeps its row with retired_at set. low_nights is the lifecycle streak of the nightly update (stage 2b);
--- the first build writes it as 0. size is the topic's count in the last saved night's window.
+-- the first build writes it as 0. size is the topic's count in the last saved night's window. revived_at is the last
+-- night a retired topic came back live with its id (the nightly update, OPIK-8988); the first build leaves it null.
 CREATE TABLE topics
 (
     id             CHAR(36)      NOT NULL,
@@ -15,6 +16,7 @@ CREATE TABLE topics
     born           DATE          NOT NULL,
     retired_at     DATE          NULL,
     retired_reason VARCHAR(64)   NULL,
+    revived_at     DATE          NULL,
     low_nights     INT           NOT NULL DEFAULT 0,
     size           INT           NOT NULL DEFAULT 0,
     created_at     TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -30,19 +32,19 @@ CREATE TABLE topics
 -- The prototype vectors traces are assigned by: several per topic, and the known-Other ones (topic_id null). vector is
 -- 384 little-endian float32 values (1,536 bytes) of unit length. A run replaces a project's whole set in its save
 -- transaction, so readers always see one run's set. position is the prototype's index in the set: assignment breaks a
--- tie between two prototypes by the lower index, so readers order by it.
+-- tie between two prototypes by the lower index, so readers order by it, and it is the key within the project: the
+-- primary key is the read and delete order, so the set needs no second index. vector is VARBINARY, not BLOB, so InnoDB
+-- keeps it in the row; a vector of another length fails the insert.
 CREATE TABLE topic_prototypes
 (
-    id           CHAR(36)     NOT NULL,
-    workspace_id VARCHAR(150) NOT NULL,
-    project_id   CHAR(36)     NOT NULL,
-    position     INT          NOT NULL,
-    topic_id     CHAR(36)     NULL,
-    vector       BLOB         NOT NULL,
-    created_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    workspace_id VARCHAR(150)    NOT NULL,
+    project_id   CHAR(36)        NOT NULL,
+    position     INT             NOT NULL,
+    topic_id     CHAR(36)        NULL,
+    vector       VARBINARY(1536) NOT NULL,
+    created_at   TIMESTAMP(6)    NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-    PRIMARY KEY (id),
-    INDEX topic_prototypes_workspace_project_idx (workspace_id, project_id)
+    PRIMARY KEY (workspace_id, project_id, position)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -60,7 +62,7 @@ CREATE TABLE topic_project_states
     window_until    TIMESTAMP(6) NULL,
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
-    PRIMARY KEY (project_id)
+    PRIMARY KEY (workspace_id, project_id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -84,8 +86,10 @@ CREATE TABLE topic_runs
     PRIMARY KEY (run_id),
     -- A project's runs: the pause, the first-build candidates and the runbook.
     INDEX topic_runs_workspace_project_started_idx (workspace_id, project_id, started_at),
-    -- The housekeeping across all workspaces: abandoned runs and the 90-day cleanup.
-    INDEX topic_runs_started_idx (started_at)
+    -- The 90-day cleanup across all workspaces.
+    INDEX topic_runs_started_idx (started_at),
+    -- The housekeeping's abandoned runs: its FOR UPDATE read locks only the running rows, not every older run.
+    INDEX topic_runs_status_started_idx (status, started_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

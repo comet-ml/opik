@@ -44,8 +44,8 @@ public interface TopicDAO {
     int deletePrototypes(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     @SqlBatch("""
-            INSERT INTO topic_prototypes (id, workspace_id, project_id, position, topic_id, vector)
-            VALUES (:id, :workspaceId, :projectId, :position, :topicId, :vector)
+            INSERT INTO topic_prototypes (workspace_id, project_id, position, topic_id, vector)
+            VALUES (:workspaceId, :projectId, :position, :topicId, :vector)
             """)
     void insertPrototypes(@BindMethods List<TopicPrototype> prototypes);
 

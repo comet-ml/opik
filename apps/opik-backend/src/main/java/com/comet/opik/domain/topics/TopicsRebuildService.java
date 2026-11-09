@@ -417,7 +417,6 @@ public class TopicsRebuildService {
 
         private TopicPrototype prototype(int position, UUID topicId, float[] vector) {
             return TopicPrototype.builder()
-                    .id(idGenerator.generateId())
                     .workspaceId(workspaceId)
                     .projectId(projectId)
                     .position(position)

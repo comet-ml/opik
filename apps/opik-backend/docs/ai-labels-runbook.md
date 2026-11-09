@@ -292,9 +292,9 @@ To build a project that already has a list again (for example after a bad first 
 
 ```sql
 -- MySQL: forget a project's list, so the next night (or the endpoint) builds it again
-DELETE FROM topics WHERE project_id = '<project_id>';
-DELETE FROM topic_prototypes WHERE project_id = '<project_id>';
-DELETE FROM topic_project_states WHERE project_id = '<project_id>';
+DELETE FROM topics WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
+DELETE FROM topic_prototypes WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
+DELETE FROM topic_project_states WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
 ```
 
 ### First builds during the day

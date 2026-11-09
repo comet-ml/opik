@@ -16,7 +16,6 @@ import java.util.UUID;
  */
 @Builder(toBuilder = true)
 public record TopicPrototype(
-        @NonNull UUID id,
         @NonNull String workspaceId,
         @NonNull UUID projectId,
         int position,
