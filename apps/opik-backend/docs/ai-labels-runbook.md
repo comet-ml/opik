@@ -181,8 +181,9 @@ flowchart TD
 Every record write after the start is best-effort: a failed one is logged and the night goes on (see "What to watch").
 
 - Every pod fires the job on the cron. The first to take the Redis lock `topics:nightly:lock` runs the night and keeps
-  the lock until it expires (budget + project timeout + 5 minutes), so no other pod runs the same night. If that pod
-  dies during the night (a deploy), the rest of the night waits for the next night: the cron does not fire again, and
+  the lock until it expires (budget + project timeout + 8.5 minutes for the last run's `trace_topics` insert + 5
+  minutes), so no other pod runs the same night. If that pod dies during the night (a deploy), the rest of the night
+  waits for the next night: the cron does not fire again, and
   the night endpoint answers `409` until the lock expires. To finish the night sooner, delete the Redis key
   `topics:nightly:lock` and call the night endpoint (see "Running by hand").
 - The night first fails runs left `running` by an earlier night (`error_code = 'abandoned'`), and deletes runs and
@@ -317,7 +318,8 @@ at tomorrow's start, so it holds today's traces so far.
 - Every pod fires the job every interval, each at its own second. Two Redis locks make that one run per interval
   across the cluster:
   - `topics:first_build:leader` is held for the run and released when it ends, so two runs never overlap. Its lease is
-    budget + project timeout + 5 minutes. It matters only when the pod dies mid-run.
+    budget + project timeout + 8.5 minutes (the last run's `trace_topics` insert) + 5 minutes. It matters only when the
+    pod dies mid-run.
   - `topics:first_build:run` is taken by the leader before it runs and never released. It expires one interval (less
     up to 1s for trigger jitter) after the run started, so a pod that fires sooner skips.
 - A run counts each opted-in workspace's projects in tomorrow's window, with the night's count query and guards. It
@@ -327,8 +329,9 @@ at tomorrow's start, so it holds today's traces so far.
   locks (`topics:by_hand`, `topics:project:<project_id>`) and timeout, and the same `topic_runs` row. It waits for each
   run before it starts the next one.
 - The night: a run is skipped while the night holds `topics:nightly:lock` (from 02:00 UTC for the night's budget +
-  project timeout + 5 minutes). The job reads the lock and never takes it. A run going on when the night starts
-  finishes its current project and starts no other. A list the job saved is for tomorrow's night, so that night skips
+  project timeout + 8.5 minutes + 5 minutes). The job reads the lock and never takes it. A run going on when the
+  night starts finishes its current project and starts no other. A list the job saved is for tomorrow's night, so
+  that night skips
   the project as `already_saved`.
 - A failed run is not retried by the job for 24 hours: the night takes the project, and the pause after 3 failed runs
   applies.
