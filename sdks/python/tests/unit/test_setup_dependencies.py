@@ -44,6 +44,33 @@ def _is_cooldown_cap(requirement: Requirement) -> bool:
     return len(specifiers) == 1 and specifiers[0].operator == "<="
 
 
+# Maintained by hand, independently of setup.py, so that deleting a cap (or the
+# whole extra) fails a test. Update it when a library is added to or removed from
+# the SDK's direct dependencies.
+EXPECTED_CAPPED_LIBRARIES = {
+    "boto3-stubs",
+    "click",
+    "httpx",
+    "jinja2",
+    "litellm",
+    "openai",
+    "orjson",
+    "pydantic",
+    "pydantic-settings",
+    "pytest",
+    "rapidfuzz",
+    "rich",
+    "sentry-sdk",
+    "tenacity",
+    "tqdm",
+    "tree-sitter",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "uuid6",
+    "watchfiles",
+}
+
+
 def test_install_requires__has_no_cooldown_caps():
     caps = [str(r) for r in _install_requires() if _is_cooldown_cap(r)]
 
@@ -60,6 +87,15 @@ def test_cooldown_extra__only_contains_cooldown_caps():
 
     assert not_caps == [], (
         f"Only `name<=X` caps belong in the cooldown extra: {not_caps}"
+    )
+
+
+def test_cooldown_extra__caps_exactly_the_expected_libraries():
+    capped = {canonicalize_name(r.name) for r in _extras_require()["cooldown"]}
+
+    assert capped == EXPECTED_CAPPED_LIBRARIES, (
+        f"missing caps: {sorted(EXPECTED_CAPPED_LIBRARIES - capped)}, "
+        f"unexpected caps: {sorted(capped - EXPECTED_CAPPED_LIBRARIES)}"
     )
 
 
