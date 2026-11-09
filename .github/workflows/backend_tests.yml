@@ -88,14 +88,18 @@ jobs:
             - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
+                TESTS: ${{ matrix.tests }}
+                TEST_TIMEOUT: ${{ matrix.testTimeout }}
+                FORK_COUNT: ${{ matrix.forkCount }}
               run: >-
                 mvn clean test
                 -Dspotless.skip=true
                 -Dresolve.skip=true
-                -Dtest="${{ matrix.tests }}"
+                -Dtest="$TESTS"
+                -DforkCount="$FORK_COUNT"
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
-                -Djunit.jupiter.execution.timeout.testable.method.default="${{ matrix.testTimeout }}"
+                -Djunit.jupiter.execution.timeout.testable.method.default="$TEST_TIMEOUT"
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2

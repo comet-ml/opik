@@ -10,6 +10,10 @@ INTEGRATION_TIMEOUT=20
 # or the job is cancelled before Surefire can name the offending test.
 UNIT_TEST_TIMEOUT=2m
 INTEGRATION_TEST_TIMEOUT=4m
+# Surefire JVMs per job. Unit classes share nothing outside their JVM, so they spread over the runner's
+# 4 vCPUs. Integration classes stay in one JVM so they keep reusing its containers.
+UNIT_FORK_COUNT=4
+INTEGRATION_FORK_COUNT=1
 TEST_DIR="src/test/java"
 PATTERN="DropwizardAppExtensionProvider\|MySQLContainer\|ClickHouseContainer\|RedisContainer\|MinIOContainer"
 
@@ -68,9 +72,9 @@ done
 
 # Build JSON matrix: unit tests + N integration groups
 matrix="{\"include\":["
-matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT,\"testTimeout\":\"$UNIT_TEST_TIMEOUT\"}"
+matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT,\"testTimeout\":\"$UNIT_TEST_TIMEOUT\",\"forkCount\":$UNIT_FORK_COUNT}"
 for ((i=1; i<=NUM_GROUPS; i++)); do
-  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":$INTEGRATION_TIMEOUT,\"testTimeout\":\"$INTEGRATION_TEST_TIMEOUT\"}"
+  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":$INTEGRATION_TIMEOUT,\"testTimeout\":\"$INTEGRATION_TEST_TIMEOUT\",\"forkCount\":$INTEGRATION_FORK_COUNT}"
 done
 matrix+="]}"
 echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
