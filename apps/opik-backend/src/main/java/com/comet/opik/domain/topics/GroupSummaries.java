@@ -111,6 +111,8 @@ public class GroupSummaries {
             members.get(labels[i]).add(i);
         }
         var out = new ArrayList<List<String>>(k);
+        // One array for all groups: a group's sort reads only its own members' scores, which it writes first.
+        var sims = new double[n];
         for (int j = 0; j < k; j++) {
             var idx = members.get(j);
             if (idx.isEmpty()) {
@@ -119,7 +121,6 @@ public class GroupSummaries {
             }
             var examples = new ArrayList<String>(frequent + extra);
             var counts = new TreeMap<String, Integer>(TopicText.CODE_POINT_ORDER);
-            var sims = new double[n];
             for (int i : idx) {
                 counts.merge(texts[i], 1, Integer::sum);
                 sims[i] = dot(vectors, i, centres, j, dimensions);
