@@ -1,10 +1,13 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.util.concurrent.Uninterruptibles;
+import jakarta.ws.rs.ServiceUnavailableException;
+import jakarta.ws.rs.core.HttpHeaders;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -179,6 +183,47 @@ class TopicsNightlyServiceTest {
         verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.TIMEOUT), anyString(),
                 isNull());
         assertThat(events).containsExactly("insert done", "unlock");
+    }
+
+    @Test
+    @DisplayName("a run by hand answers 503 with Retry-After when Redis fails, and 409 only when the lock is held")
+    void byHandLockUnavailable() {
+        when(workspaceService.isEligible(WORKSPACE_ID)).thenReturn(true);
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(started), any(), any(), anyLong()))
+                .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(started, 140)));
+        when(lockService.lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any()))
+                .thenReturn(Mono.error(new IllegalStateException("Redis down")));
+
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
+                .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> {
+                    assertThat(exception.getResponse().getStatus()).isEqualTo(503);
+                    assertThat(exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
+                            .isEqualTo(String.valueOf(TopicsNightlyService.LOCK_RETRY_AFTER_SECONDS));
+                });
+
+        // The project's lock fails after the by-hand lock was taken: that one is released.
+        when(lockService.lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any())).thenReturn(Mono.just(true));
+        when(lockService.lockUsingToken(eq(TopicsNightlyService.projectLock(started)), any()))
+                .thenReturn(Mono.error(new IllegalStateException("Redis down")));
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
+                .isInstanceOf(ServiceUnavailableException.class);
+        verify(lockService).unlockUsingToken(TopicsNightlyService.BY_HAND_LOCK);
+
+        when(lockService.lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any())).thenReturn(Mono.just(false));
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    @DisplayName("a night started by hand answers 503 with Retry-After when Redis fails")
+    void nightLockUnavailable() {
+        when(lockService.bestEffortLock(eq(TopicsNightlyService.NIGHT_LOCK), any(), any(), any(), any(),
+                anyBoolean())).thenReturn(Mono.error(new IllegalStateException("Redis down")));
+
+        assertThatThrownBy(() -> service.runNightNow(NIGHT))
+                .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
+                        exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
+                        .isEqualTo(String.valueOf(TopicsNightlyService.LOCK_RETRY_AFTER_SECONDS)));
     }
 
     @Test

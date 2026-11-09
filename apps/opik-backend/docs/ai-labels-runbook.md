@@ -265,7 +265,9 @@ Search the logs for `Topics run '<run_id>'`.
 ### Running by hand
 
 Two internal endpoints start work now instead of waiting for the night. Call them from inside the cluster. Both answer
-`501` when `TOPICS_ENABLED` is off and `409` when `TOPICS_NIGHTLY_ENABLED` is off. Both take `&night=yyyy-MM-dd`
+`501` when `TOPICS_ENABLED` is off and `409` when `TOPICS_NIGHTLY_ENABLED` is off. Both answer `503` with
+`Retry-After: 30` when Redis fails or does not answer within 10s while they take a lock; `409` means a lock is
+really held. Both take `&night=yyyy-MM-dd`
 (`?night=` for the night endpoint): the night is today (UTC) by default, so the window ends at today's start. `night`
 is at most tomorrow, whose window holds today's traces so far, and at least 365 days ago.
 

@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ServiceUnavailableException;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -81,6 +82,8 @@ public class TopicsNightlyService {
 
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
+    /** The {@code Retry-After} of a 503 when Redis fails or hangs while an endpoint takes a lock. */
+    static final long LOCK_RETRY_AFTER_SECONDS = 30;
 
     /** ClickHouse {@code max_execution_time} of one window count: a workspace's, or one project's by hand. */
     private static final long COUNT_SECONDS = 60;
@@ -223,6 +226,8 @@ public class TopicsNightlyService {
      * @throws ConflictException when the nightly job is off, the workspace is not opted in, the window is too small, a
      *                           run of the project or another run by hand is in progress, or the project already has a
      *                           topic list (a list is built once; the night updates it)
+     * @throws ServiceUnavailableException when Redis fails or does not answer while the run takes its locks, with a
+     *                                     {@code Retry-After}
      */
     public UUID runNow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
         return startByHand(workspaceId, projectId, night).runId();
@@ -235,10 +240,17 @@ public class TopicsNightlyService {
             throw new ConflictException("Project '%s' has '%d' vectors in the window of night '%s', the minimum is '%d'"
                     .formatted(projectId, vectors, night, config.getNightly().getMinVectors()));
         }
-        if (!lock(BY_HAND_LOCK, projectLease())) {
+        if (!lockByHand(BY_HAND_LOCK)) {
             throw new ConflictException("Another topics run started by hand is in progress");
         }
-        if (!lockProject(projectId)) {
+        boolean projectLocked;
+        try {
+            projectLocked = lockByHand(projectLock(projectId));
+        } catch (RuntimeException exception) {
+            unlock(BY_HAND_LOCK);
+            throw exception;
+        }
+        if (!projectLocked) {
             unlock(BY_HAND_LOCK);
             throw new ConflictException("A topics run of project '%s' is in progress".formatted(projectId));
         }
@@ -386,7 +398,9 @@ public class TopicsNightlyService {
      * Runs the whole night {@code night} now, in the background, as the scheduled job would, under the same night lock;
      * the lock is released when the night ends. False when a night is in progress (this one or the scheduled one).
      *
-     * @throws ConflictException when the nightly job is off
+     * @throws ConflictException           when the nightly job is off
+     * @throws ServiceUnavailableException when Redis fails or does not answer within {@link #LOCK_WAIT}, with a
+     *                                     {@code Retry-After}
      */
     public boolean runNightNow(@NonNull LocalDate night) {
         if (!config.getNightly().isEnabled()) {
@@ -408,16 +422,18 @@ public class TopicsNightlyService {
                         __ -> {
                         },
                         error -> {
-                            started.complete(false);
+                            // Before the night starts, the error is the lock's: Redis failed.
+                            started.completeExceptionally(error);
                             log.error("Topics night '{}' started by hand failed", night, error);
                         });
         try {
             return started.get(LOCK_WAIT.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return false;
+            throw lockUnavailable(NIGHT_LOCK);
         } catch (ExecutionException | TimeoutException exception) {
-            return false;
+            log.warn("Topics lock unavailable, lock '{}'", NIGHT_LOCK.key(), exception);
+            throw lockUnavailable(NIGHT_LOCK);
         }
     }
 
@@ -559,11 +575,34 @@ public class TopicsNightlyService {
 
     private boolean lock(Lock lock, Duration lease) {
         try {
-            return Boolean.TRUE.equals(lockService.lockUsingToken(lock, lease).block());
+            return takeLock(lock, lease);
         } catch (RuntimeException exception) {
             log.warn("Topics lock unavailable, lock '{}'", lock.key(), exception);
             return false;
         }
+    }
+
+    /**
+     * A lock of a run by hand, for {@link #projectLease()}. False only when another holder has it: Redis failing or not
+     * answering within {@link #LOCK_WAIT} throws a 503 with a {@code Retry-After}, not a 409.
+     */
+    private boolean lockByHand(Lock lock) {
+        try {
+            return takeLock(lock, projectLease());
+        } catch (RuntimeException exception) {
+            log.warn("Topics lock unavailable, lock '{}'", lock.key(), exception);
+            throw lockUnavailable(lock);
+        }
+    }
+
+    /** Throws when Redis fails, or does not answer within {@link #LOCK_WAIT}. */
+    private boolean takeLock(Lock lock, Duration lease) {
+        return Boolean.TRUE.equals(lockService.lockUsingToken(lock, lease).block(LOCK_WAIT));
+    }
+
+    private static ServiceUnavailableException lockUnavailable(Lock lock) {
+        return new ServiceUnavailableException(
+                "The topics lock '%s' is unavailable, retry later".formatted(lock.key()), LOCK_RETRY_AFTER_SECONDS);
     }
 
     private void unlock(Lock lock) {

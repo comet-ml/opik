@@ -53,6 +53,7 @@ public class TopicsResource {
             @ApiResponse(responseCode = "202", description = "The run started"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
             @ApiResponse(responseCode = "409", description = "The nightly job is off, the workspace is not opted in, the window is too small, a run is in progress, or the project has a list"),
+            @ApiResponse(responseCode = "503", description = "Redis failed or did not answer while the run took its locks; retry after the Retry-After delay"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProject(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
@@ -70,6 +71,7 @@ public class TopicsResource {
             @ApiResponse(responseCode = "202", description = "The night started"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
             @ApiResponse(responseCode = "409", description = "The nightly job is off, or a night is in progress"),
+            @ApiResponse(responseCode = "503", description = "Redis failed or did not answer while the night took its lock; retry after the Retry-After delay"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runNight(@QueryParam("night") String night) {
         if (!config.isEnabled()) {
