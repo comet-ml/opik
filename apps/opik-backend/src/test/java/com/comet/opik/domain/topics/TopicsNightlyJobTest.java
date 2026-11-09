@@ -994,6 +994,51 @@ class TopicsNightlyJobTest {
                 .containsExactlyInAnyOrderElementsOf(FIXTURE.traceIds.subList(deleted.size(), BUILT));
     }
 
+    @Test
+    @DisplayName("the window reads drop a vector whose latest row is a tombstone, and keep one whose tombstone is older")
+    void tombstonedVectorsAreNotRead() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        seed(workspaceId, projectId, 0, BUILT);
+        var tombstoned = FIXTURE.traceIds.subList(0, 10);
+        var revived = FIXTURE.traceIds.subList(10, 20);
+        // The tombstone comes after the live row, so the key is gone.
+        insertVectorTombstones(workspaceId, projectId, tombstoned, 3_600);
+        // The tombstone comes before the live row: the dedup keeps the live row, so the key stays.
+        insertVectorTombstones(workspaceId, projectId, revived, -3_600);
+
+        var to = night().atStartOfDay(ZoneOffset.UTC).toInstant();
+        var from = night().minusDays(opikConfig.getTopics().getNightly().getWindowDays())
+                .atStartOfDay(ZoneOffset.UTC).toInstant();
+        assertThat(windowDAO.countByProject(workspaceId, projectId, from, to, 60).collectList().block())
+                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - tombstoned.size()));
+        assertThat(windowDAO.readWindow(workspaceId, projectId, from, to, BUILT, 60).collectList().block())
+                .extracting(TopicWindowRow::traceId)
+                .containsExactlyInAnyOrderElementsOf(FIXTURE.traceIds.subList(tombstoned.size(), BUILT));
+    }
+
+    /**
+     * A tombstone ({@code is_deleted = 1}) for each of the traces' vector rows, stamped {@code offsetSeconds} from now,
+     * as no production write sets one yet.
+     */
+    private void insertVectorTombstones(String workspaceId, UUID projectId, List<UUID> traceIds, int offsetSeconds) {
+        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO topic_vectors (workspace_id, project_id, trace_id, trace_created_at, task_version,
+                    embed_model, embed_dimensions, text, vector, last_updated_at, is_deleted)
+                SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, embed_model,
+                    embed_dimensions, text, vector, addSeconds(now64(6), :offset_seconds), 1
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN :trace_ids
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
+                .bind("offset_seconds", offsetSeconds)
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+    }
+
     /**
      * Runs the first-build job's run until it has built the project: a run stops at the first project that cannot
      * start, as when a run by hand or a night of an earlier test still holds its lock for a moment.

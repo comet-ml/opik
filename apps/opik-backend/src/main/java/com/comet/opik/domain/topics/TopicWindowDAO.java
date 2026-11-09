@@ -25,31 +25,47 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicWindowDAO {
 
+    /**
+     * Each (trace, task version) key counts by its latest row, and a key whose latest row is a tombstone
+     * ({@code is_deleted = 1}) is left out, as {@code traces_local_v2} reads do. A trace counts once.
+     */
     private static final String COUNT_BY_PROJECT = """
             SELECT project_id, uniqExact(trace_id) AS traces
-            FROM topic_vectors
-            WHERE workspace_id = :workspace_id
-            <if(project_id)> AND project_id = :project_id <endif>
-            AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-            AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+            FROM (
+                SELECT project_id, trace_id, task_version, argMax(is_deleted, last_updated_at) AS deleted
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id
+                <if(project_id)> AND project_id = :project_id <endif>
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                GROUP BY project_id, trace_id, task_version
+            )
+            WHERE deleted = 0
             GROUP BY project_id
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, priority = 100, log_comment = '<log_comment>'
             """;
 
     /**
-     * The newest {@code :limit} traces of the window, each with its highest task version's text and vector. The keys
-     * are chosen first, without the vector and text columns, so a large window reads those only for the traces kept.
-     * The caller orders the rows by time.
+     * The newest {@code :limit} traces of the window, each with its highest live task version's text and vector. A key
+     * whose latest row is a tombstone is left out first, as in {@link #COUNT_BY_PROJECT}. The keys are chosen without
+     * the vector and text columns, so a large window reads those only for the traces kept. The caller orders the rows
+     * by time.
      */
     private static final String READ_WINDOW = """
             WITH keys AS (
-                SELECT trace_id, max(task_version) AS task_version, max(trace_created_at) AS created_at
-                FROM topic_vectors
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                SELECT trace_id, max(task_version) AS task_version, max(created_at) AS created_at
+                FROM (
+                    SELECT trace_id, task_version, max(trace_created_at) AS created_at,
+                        argMax(is_deleted, last_updated_at) AS deleted
+                    FROM topic_vectors
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                    AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    GROUP BY trace_id, task_version
+                )
+                WHERE deleted = 0
                 GROUP BY trace_id
                 ORDER BY created_at DESC, trace_id DESC
                 LIMIT :limit
@@ -61,7 +77,8 @@ public class TopicWindowDAO {
             AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
             AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
             AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM keys)
-            ORDER BY trace_id, updated_at DESC
+            AND is_deleted = 0
+            ORDER BY trace_id, last_updated_at DESC
             LIMIT 1 BY trace_id
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, log_comment = '<log_comment>'
