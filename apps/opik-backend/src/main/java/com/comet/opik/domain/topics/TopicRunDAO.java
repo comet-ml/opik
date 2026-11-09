@@ -116,8 +116,15 @@ public interface TopicRunDAO {
     int deleteCountsByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
-    @SqlUpdate("DELETE FROM topic_run_counts WHERE saved_at < :before")
-    int deleteCountsSavedBefore(@Bind("before") Instant before);
+    /**
+     * The counts of the runs {@link #deleteStartedBefore} deletes, by the same {@code started_at} cut, so no count
+     * outlives its run. Call it first, in the same transaction.
+     */
+    @SqlUpdate("""
+            DELETE FROM topic_run_counts
+            WHERE run_id IN (SELECT run_id FROM topic_runs WHERE started_at < :before)
+            """)
+    int deleteCountsOfRunsStartedBefore(@Bind("before") Instant before);
 
     /** A project's counts, oldest run first; in a run, by rank, Other last. */
     @SqlQuery("""

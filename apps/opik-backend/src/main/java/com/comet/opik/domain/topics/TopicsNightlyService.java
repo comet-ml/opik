@@ -641,8 +641,9 @@ public class TopicsNightlyService {
                 var startedBefore = start.minus(projectLease());
                 var workspaceIds = runs.findAbandonedWorkspaceIds(startedBefore);
                 int failed = runs.failAbandoned(startedBefore, Instant.now());
+                // The counts first, by their runs' start: a run saved after the cut would leave its counts behind.
+                int deletedCounts = runs.deleteCountsOfRunsStartedBefore(start.minus(retention));
                 int deleted = runs.deleteStartedBefore(start.minus(retention));
-                int deletedCounts = runs.deleteCountsSavedBefore(start.minus(retention));
                 if (failed > 0 || deleted > 0 || deletedCounts > 0) {
                     log.info("Topics night housekeeping, abandoned runs failed '{}', old runs deleted '{}', old run "
                             + "counts deleted '{}'", failed, deleted, deletedCounts);

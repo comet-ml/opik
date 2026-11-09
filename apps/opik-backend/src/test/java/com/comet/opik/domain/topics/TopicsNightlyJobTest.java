@@ -835,22 +835,43 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("housekeeping deletes run counts saved before the runs retention, and keeps newer ones")
+    @DisplayName("housekeeping deletes the runs started before the runs retention with their counts, a run saved after "
+            + "the cut included, and keeps newer ones")
     void housekeepingDeletesOldRunCounts() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
+        var cut = Instant.now().minus(Duration.ofDays(90));
         var old = UUID.randomUUID();
+        // Started just before the cut and saved just after it: its counts must go with the run.
+        var acrossTheCut = UUID.randomUUID();
         var recent = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicRunDAO.class).insertCounts(List.of(
-                    otherCount(old, workspaceId, projectId, Instant.now().minus(Duration.ofDays(91))),
+            var runDAO = handle.attach(TopicRunDAO.class);
+            runDAO.insert(savedRun(old, workspaceId, projectId, cut.minus(Duration.ofDays(1))));
+            runDAO.insert(savedRun(acrossTheCut, workspaceId, projectId, cut.minus(Duration.ofMinutes(1))));
+            runDAO.insert(savedRun(recent, workspaceId, projectId, Instant.now().minus(Duration.ofDays(1))));
+            runDAO.insertCounts(List.of(
+                    otherCount(old, workspaceId, projectId, cut.minus(Duration.ofDays(1))),
+                    otherCount(acrossTheCut, workspaceId, projectId, cut.plus(Duration.ofMinutes(1))),
                     otherCount(recent, workspaceId, projectId, Instant.now().minus(Duration.ofDays(1)))));
             return null;
         });
 
         nightlyService.runNight(Instant.now());
 
+        assertThat(runs(projectId)).extracting(TopicRun::runId).containsExactly(recent);
         assertThat(counts(projectId)).extracting(TopicRunCount::runId).containsExactly(recent);
+    }
+
+    private static TopicRun savedRun(UUID runId, String workspaceId, UUID projectId, Instant startedAt) {
+        return TopicRun.builder()
+                .runId(runId)
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .mode(TopicRun.Mode.FIRST_BUILD)
+                .status(TopicRun.Status.SAVED)
+                .startedAt(startedAt)
+                .build();
     }
 
     @Test
