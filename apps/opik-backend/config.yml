@@ -2503,8 +2503,8 @@ aiLabels:
   #  Description: Directory of task YAML to load instead of the bundled tasks
   tasksDir: ${AI_LABELS_TASKS_DIR:-}
   inference:
-    #  Description: opik-inference base URL. Required when enabled. When enabled, https, or http only to localhost or a
-    #  loopback address; the backend then refuses to start with any other URL
+    #  Description: opik-inference base URL. Required when enabled. Whenever set, even with ai-labels off (guardrails use
+    #  it too): https, or http only to localhost or a loopback address; the backend refuses to start with any other URL
     url: ${AI_LABELS_INFERENCE_URL:-}
     #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
     credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}

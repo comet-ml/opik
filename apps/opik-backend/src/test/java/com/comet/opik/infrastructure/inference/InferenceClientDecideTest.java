@@ -383,6 +383,21 @@ class InferenceClientDecideTest {
         wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
     }
 
+    @Test
+    void twoCallsReuseOneConnection() throws IOException {
+        try (var keepAlive = new KeepAliveServer(SUCCESS_BODY)) {
+            var reusing = new InferenceClient(TestHttpClientUtils.client(), config(keepAlive.url()));
+
+            reusing.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block();
+            reusing.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block();
+
+            // Every call closes its response without draining it (the over-cap guard), but a body read to its end
+            // has already given its connection back, so the second call reuses it.
+            assertThat(keepAlive.requests()).isEqualTo(2);
+            assertThat(keepAlive.connections()).isEqualTo(1);
+        }
+    }
+
     private AiLabelsConfig config(String url) {
         var newConfig = TestConfigUtils.loadConfigTest().getAiLabels();
         newConfig.getInference().setUrl(url);

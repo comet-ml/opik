@@ -360,8 +360,9 @@ class InferenceClientTest {
                     });
             var elapsed = Duration.ofNanos(System.nanoTime() - started);
 
-            // Each attempt ends at the cap, though the body never does and keeps the read timeout from firing.
-            assertThat(endless.connections()).isEqualTo(InferenceClient.MAX_RETRIES + 1);
+            // One attempt, ended at the cap: the same request would only get the same body again, so it is not
+            // retried, though the body never ends and keeps the read timeout from firing.
+            assertThat(endless.connections()).isEqualTo(1);
             assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
         }
     }
