@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -150,14 +151,20 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
-    @DisplayName("a run whose timeout comes after its save counts as saved, not failed")
+    @DisplayName("a run whose timeout comes after its save counts as saved, and keeps its lock until its insert ends")
     void timeoutAfterSaveIsSaved() {
         var runId = UUID.randomUUID();
+        var events = Collections.synchronizedList(new ArrayList<String>());
+        when(lockService.unlockUsingToken(TopicsNightlyService.projectLock(started))).thenAnswer(invocation -> {
+            events.add("unlock");
+            return Mono.empty();
+        });
         config.getNightly().setProjectTimeout(io.dropwizard.util.Duration.milliseconds(200));
         when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
         // The commit is done; the trace_topics insert outlasts the timeout and goes on through the interrupt.
         doAnswer(invocation -> {
             Uninterruptibles.sleepUninterruptibly(Duration.ofMillis(600));
+            events.add("insert done");
             return TopicsRebuildService.Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
         }).when(rebuildService).firstBuild(eq(runId), anyString(), any(), any());
         when(rebuildService.fail(any(), anyString(), any(), anyString(), any())).thenReturn(false);
@@ -171,6 +178,7 @@ class TopicsNightlyServiceTest {
         assertThat(result.failed()).isZero();
         verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.TIMEOUT), anyString(),
                 isNull());
+        assertThat(events).containsExactly("insert done", "unlock");
     }
 
     @Test

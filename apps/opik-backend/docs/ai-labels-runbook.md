@@ -206,7 +206,9 @@ A run saves in this order: one MySQL transaction (state, topics, prototypes, run
 `trace_topics` insert, retried up to 3 times; each attempt stops after 120s. If the insert still fails, the run stays
 saved and an ERROR names it (`saved, but its trace_topics insert failed`); the window's traces keep the topics they had
 (none, after a first build) until a later saved run writes the window again. To write them now, forget the project's
-list and build it again (see "Running by hand").
+list and build it again (see "Running by hand"). A timeout that comes after the MySQL commit finds the run saved: it
+logs a WARN (`saved, ... but its trace_topics insert outlasted the stop`), the run counts as saved, and the project's
+locks are held until the insert ends (at most about 8.5 minutes; the lock leases cover it).
 
 | `error_code` | Meaning |
 |---|---|

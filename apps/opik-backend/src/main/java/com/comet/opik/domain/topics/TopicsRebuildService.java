@@ -92,6 +92,8 @@ public class TopicsRebuildService {
     /** The {@code trace_topics} insert after the commit: retries, and the first backoff (it doubles each time). */
     static final int INSERT_RETRIES = 3;
     static final Duration INSERT_BACKOFF = Duration.ofMillis(500);
+    /** The longest the insert after the commit takes: every attempt to its stop, plus the backoffs and some slack. */
+    static final Duration INSERT_BOUND = Duration.ofSeconds(READ_SECONDS * (INSERT_RETRIES + 1) + 30);
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;

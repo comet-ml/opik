@@ -127,15 +127,20 @@ public class TopicsNightlyService {
      * How long the night's lock must last: a project may start just before the budget ends and run its whole timeout.
      */
     public Duration lease() {
-        var nightly = config.getNightly();
-        return nightly.getBudget().toJavaDuration().plus(nightly.getProjectTimeout().toJavaDuration())
-                .plus(LEASE_SLACK);
+        return config.getNightly().getBudget().toJavaDuration().plus(runLimit()).plus(LEASE_SLACK);
     }
 
     /** How long the first-build job's lock must last, as the night's: its budget, then one whole project timeout. */
     public Duration firstBuildLease() {
-        return config.getFirstBuild().getBudget().toJavaDuration()
-                .plus(config.getNightly().getProjectTimeout().toJavaDuration()).plus(LEASE_SLACK);
+        return config.getFirstBuild().getBudget().toJavaDuration().plus(runLimit()).plus(LEASE_SLACK);
+    }
+
+    /**
+     * The longest one run holds its locks: its timeout, then the trace_topics insert of a run that saved just before
+     * it ({@link #stop} waits for that insert).
+     */
+    private Duration runLimit() {
+        return config.getNightly().getProjectTimeout().toJavaDuration().plus(TopicsRebuildService.INSERT_BOUND);
     }
 
     /**
@@ -498,7 +503,9 @@ public class TopicsNightlyService {
 
     /**
      * Fails the run first, so a save racing the interrupt finds it ended and rolls back. True when the run had saved
-     * already: the stop came after its MySQL commit, while its trace_topics insert went on. Such a run counts as saved.
+     * already: the stop came after its MySQL commit, while its trace_topics insert went on. Such a run counts as saved,
+     * and its insert is waited for (it ends within {@link TopicsRebuildService#INSERT_BOUND}), so the project's locks
+     * are released only after it.
      */
     private boolean stop(UUID runId, Candidate candidate, Future<?> future, Code code, String message) {
         boolean saved = false;
@@ -513,8 +520,22 @@ public class TopicsNightlyService {
         } catch (RuntimeException exception) {
             log.error("Topics run '{}' could not be marked failed", runId, exception);
         }
+        if (saved) {
+            awaitInsert(future);
+        }
         future.cancel(true);
         return saved;
+    }
+
+    /** Waits for a saved run's insert. An interrupted job does not wait: it is shutting down. */
+    private void awaitInsert(Future<?> future) {
+        try {
+            future.get(TopicsRebuildService.INSERT_BOUND.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException exception) {
+            // The insert logs its own failure; the run stays saved.
+        }
     }
 
     /** Whether the run's row says saved. A run that failed on its own logged its failure already. */
@@ -554,7 +575,7 @@ public class TopicsNightlyService {
     }
 
     private Duration projectLease() {
-        return config.getNightly().getProjectTimeout().toJavaDuration().plus(LEASE_SLACK);
+        return runLimit().plus(LEASE_SLACK);
     }
 
     static Lock projectLock(UUID projectId) {
