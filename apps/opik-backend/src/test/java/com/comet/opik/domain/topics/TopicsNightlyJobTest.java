@@ -257,10 +257,10 @@ class TopicsNightlyJobTest {
             assertThat(saved.finishedAt()).isNotNull();
             var stats = json(saved.stats());
             assertThat(stats.path("vectors").asInt()).isEqualTo(BUILT);
-            assertThat(stats.path("k").asInt())
-                    .isEqualTo(TopicsRebuildService.groups(stats.path("unique_texts").asInt()));
-            assertThat(stats.path("author_examples").asInt())
-                    .isEqualTo(TopicsRebuildService.authorExamples(stats.path("k").asInt()));
+            // The fixture's first 120 traces hold 91 unique texts: k = max(30, 91 / 30) = 30, round(250 / 30) = 8.
+            assertThat(stats.path("unique_texts").asInt()).isEqualTo(91);
+            assertThat(stats.path("k").asInt()).isEqualTo(30);
+            assertThat(stats.path("author_examples").asInt()).isEqualTo(8);
             assertThat(stats.path("seed").asInt()).isZero();
             assertThat(stats.path("provisional").asBoolean()).isTrue();
             assertThat(stats.path("qwen_calls").asInt()).isEqualTo(1);
