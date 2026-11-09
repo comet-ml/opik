@@ -89,11 +89,12 @@ class TopicsNightlyServiceTest {
 
         when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, BROKEN_WORKSPACE_ID));
         when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of());
-        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> invocation.<Collection<UUID>>getArgument(1)
-                .contains(built)
-                        ? List.of(TopicProjectState.builder().projectId(built).workspaceId(WORKSPACE_ID)
-                                .build())
-                        : List.of());
+        when(topicDAO.findStates(eq(WORKSPACE_ID), any()))
+                .thenAnswer(invocation -> invocation.<Collection<UUID>>getArgument(1)
+                        .contains(built)
+                                ? List.of(TopicProjectState.builder().projectId(built).workspaceId(WORKSPACE_ID)
+                                        .build())
+                                : List.of());
         when(topicDAO.findExistingProjectIds(eq(WORKSPACE_ID), any())).thenAnswer(invocation -> {
             var ids = new HashSet<>(invocation.<Collection<UUID>>getArgument(1));
             ids.remove(deleted);
@@ -131,8 +132,8 @@ class TopicsNightlyServiceTest {
     void buildThatThrowsIsInternal() {
         var runId = UUID.randomUUID();
         when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
-        when(rebuildService.firstBuild(eq(runId), anyString(), any(), any()))
-                .thenThrow(new IllegalStateException("a bug in the build"));
+        doThrow(new IllegalStateException("a bug in the build"))
+                .when(rebuildService).firstBuild(eq(runId), anyString(), any(), any());
         when(rebuildService.fail(any(), anyString(), any(), anyString(), any())).thenReturn(true);
 
         var result = service.runNight(START);
