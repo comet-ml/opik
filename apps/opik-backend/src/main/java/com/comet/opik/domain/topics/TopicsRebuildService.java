@@ -528,10 +528,10 @@ public class TopicsRebuildService {
                         .build());
             }
             var statsJson = stats.toString();
-            long other = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
+            long otherTraceCount = traceTopics.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
             try {
                 var now = Instant.now();
-                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, topics, other, now);
+                var counts = TopicRanking.runCounts(runId, workspaceId, projectId, topics, otherTraceCount, now);
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
                     // First, so a run that saved this project meanwhile fails the save before anything else.
