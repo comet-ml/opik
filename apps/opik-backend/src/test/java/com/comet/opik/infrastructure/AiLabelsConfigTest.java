@@ -67,14 +67,17 @@ class AiLabelsConfigTest {
                 arguments("another scheme", true, "ftp://opik-inference.example.com", false),
                 arguments("no host", true, "https:///v1", false),
                 arguments("not a URL", true, "https://opik inference", false),
-                // Off, the URL is not checked, so an install with ai-labels off starts after an upgrade.
-                arguments("off, http to a cluster service", false, "http://opik-inference.inference.svc:8000", true),
-                arguments("off, not a URL", false, "https://opik inference", true));
+                // Off, a set URL is still checked: the guardrails decide calls use it under their own toggle.
+                arguments("off, unset", false, null, true),
+                arguments("off, https", false, URL, true),
+                arguments("off, http to localhost", false, "http://localhost:8080", true),
+                arguments("off, http to a cluster service", false, "http://opik-inference.inference.svc:8000", false),
+                arguments("off, not a URL", false, "https://opik inference", false));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("inferenceUrls")
-    void inferenceUrlIsHttpsOrHttpToLocalhostWhenEnabled(String description, boolean enabled, String url,
+    void inferenceUrlIsHttpsOrHttpToLocalhostWheneverSet(String description, boolean enabled, String url,
             boolean valid) {
         var config = TestConfigUtils.loadConfigTest().getAiLabels();
         config.setEnabled(enabled);
