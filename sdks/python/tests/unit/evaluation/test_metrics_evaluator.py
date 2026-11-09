@@ -329,21 +329,33 @@ def test_compute_metric_scores__value_not_a_finite_number__keeps_the_metric_reas
     assert result.metadata == {"original_value": "nan", "original_reason": "ok"}
 
 
-def test_compute_metric_scores__long_invalid_value__shortened_in_reason_and_log(
-    caplog,
-):
-    long_value = "x" * 10_000
+class _LongReprValue:
+    def __repr__(self):
+        return "_LongReprValue(" + "y" * 10_000 + ")"
 
+
+@pytest.mark.parametrize(
+    "long_value, expected_start",
+    [("x" * 10_000, "'xxx"), (_LongReprValue(), "_LongReprValue(yyy")],
+    ids=["string", "object-with-long-repr"],
+)
+def test_compute_metric_scores__long_invalid_value__capped_at_200_characters(
+    caplog, long_value, expected_start
+):
     with caplog.at_level(logging.WARNING):
         (result,) = _compute([_FixedValueMetric("m", long_value)])
 
+    value_repr = result.metadata["original_value"]
     assert result.scoring_failed is True
-    assert result.metadata["original_value"].startswith("'xxx")
-    assert len(result.metadata["original_value"]) < 300
-    assert len(result.reason) < 300
+    assert value_repr.startswith(expected_start)
+    assert "..." in value_repr
+    assert len(value_repr) == 200
+    assert result.reason == f"Score value is not a finite number: {value_repr}"
     (warning,) = [r for r in caplog.records if "not a finite number" in r.message]
-    assert "Metric m returned" in warning.getMessage()
-    assert len(warning.getMessage()) < 400
+    assert warning.getMessage() == (
+        f"Metric m returned a score value that is not a finite number: "
+        f"{value_repr}. Its score will be marked as failed."
+    )
 
 
 class _UnprintableValue:
