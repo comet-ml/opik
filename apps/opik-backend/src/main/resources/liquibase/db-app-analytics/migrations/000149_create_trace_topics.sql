@@ -9,8 +9,12 @@
 --   * last_updated_at is the ReplacingMergeTree version, set by ClickHouse at insert.
 --   * is_deleted is the ReplacingMergeTree soft-delete marker. Nothing sets it today: deletes are lightweight DELETEs.
 --     It is in the engine now because engine parameters cannot be added by ALTER.
---   * Readers dedupe explicitly (LIMIT 1 BY the sort key, latest last_updated_at, then run_id) and then drop a row
+--   * Readers dedupe explicitly (LIMIT 1 BY trace, latest last_updated_at, then run_id) and then drop a row
 --     whose latest version has is_deleted = 1.
+--   * source is in the sort key, after trace_id: a merge collapses night rows only with night rows and arrival rows
+--     only with arrival rows. An arrival row written after a night (a relabel) so cannot merge away the night row a
+--     read by run_id looks for. A trace keeps at most two rows after merges; the "latest per trace" readers dedupe by
+--     trace, not by the sort key, so they read the same answer either way.
 --   * id_at and the partition key are topic_vectors' (000148), so retention and the trace-delete cascade prune the same
 --     weekly partitions as for the trace. No TTL: a row lives exactly as long as its trace.
 --   * idx_trace_created_at: trace_created_at never changes for a key, so a minmax index on it is safe before dedup;
@@ -33,7 +37,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.trace_topics ON CLUSTER
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/trace_topics',
     '{replica}', last_updated_at, is_deleted)
 PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-ORDER BY (workspace_id, project_id, trace_id)
+ORDER BY (workspace_id, project_id, trace_id, source)
 SETTINGS index_granularity = 8192;
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.trace_topics ON CLUSTER '{cluster}' SYNC;
