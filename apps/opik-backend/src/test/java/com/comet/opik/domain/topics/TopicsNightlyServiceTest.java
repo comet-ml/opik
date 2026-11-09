@@ -45,6 +45,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -191,8 +192,8 @@ class TopicsNightlyServiceTest {
         when(workspaceService.isEligible(WORKSPACE_ID)).thenReturn(true);
         when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(started), any(), any(), anyLong()))
                 .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(started, 140)));
-        when(lockService.lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any()))
-                .thenReturn(Mono.error(new IllegalStateException("Redis down")));
+        doReturn(Mono.error(new IllegalStateException("Redis down"))).when(lockService)
+                .lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any());
 
         assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> {
@@ -202,14 +203,14 @@ class TopicsNightlyServiceTest {
                 });
 
         // The project's lock fails after the by-hand lock was taken: that one is released.
-        when(lockService.lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any())).thenReturn(Mono.just(true));
-        when(lockService.lockUsingToken(eq(TopicsNightlyService.projectLock(started)), any()))
-                .thenReturn(Mono.error(new IllegalStateException("Redis down")));
+        doReturn(Mono.just(true)).when(lockService).lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any());
+        doReturn(Mono.error(new IllegalStateException("Redis down"))).when(lockService)
+                .lockUsingToken(eq(TopicsNightlyService.projectLock(started)), any());
         assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
                 .isInstanceOf(ServiceUnavailableException.class);
         verify(lockService).unlockUsingToken(TopicsNightlyService.BY_HAND_LOCK);
 
-        when(lockService.lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any())).thenReturn(Mono.just(false));
+        doReturn(Mono.just(false)).when(lockService).lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any());
         assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
                 .isInstanceOf(ConflictException.class);
     }
