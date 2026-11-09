@@ -86,18 +86,23 @@ public interface TopicRunDAO {
                 SELECT project_id, status, started_at,
                     ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY started_at DESC, run_id DESC) AS recency
                 FROM topic_runs
-                WHERE project_id IN (<projectIds>)
+                WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
             ) latest
             WHERE recency <= :failures
             GROUP BY project_id
             HAVING COUNT(*) = :failures AND SUM(status = 'failed') = :failures AND MAX(started_at) >= :since
             """)
-    Set<UUID> findPausedProjectIds(@BindList("projectIds") Collection<UUID> projectIds,
+    Set<UUID> findPausedProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds,
             @Bind("failures") int failures, @Bind("since") Instant since);
 
     /** Of {@code projectIds}, those with a run started at or after {@code since}, whatever its status. */
-    @SqlQuery("SELECT DISTINCT project_id FROM topic_runs WHERE project_id IN (<projectIds>) AND started_at >= :since")
-    Set<UUID> findStartedSince(@BindList("projectIds") Collection<UUID> projectIds, @Bind("since") Instant since);
+    @SqlQuery("""
+            SELECT DISTINCT project_id FROM topic_runs
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND started_at >= :since
+            """)
+    Set<UUID> findStartedSince(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds, @Bind("since") Instant since);
 
     @SqlUpdate("DELETE FROM topic_runs WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
@@ -128,16 +133,22 @@ public interface TopicRunDAO {
 
     /** A project's counts, oldest run first; in a run, by rank, Other last. */
     @SqlQuery("""
-            SELECT * FROM topic_run_counts WHERE project_id = :projectId
+            SELECT * FROM topic_run_counts
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
             ORDER BY saved_at, run_id, `rank` IS NULL, `rank`
             """)
-    List<TopicRunCount> findCountsByProject(@Bind("projectId") UUID projectId);
+    List<TopicRunCount> findCountsByProject(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
 
     @SqlQuery("SELECT * FROM topic_runs WHERE run_id = :runId")
     TopicRun findById(@Bind("runId") UUID runId);
 
-    @SqlQuery("SELECT * FROM topic_runs WHERE project_id = :projectId ORDER BY started_at, run_id")
-    List<TopicRun> findByProject(@Bind("projectId") UUID projectId);
+    @SqlQuery("""
+            SELECT * FROM topic_runs
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            ORDER BY started_at, run_id
+            """)
+    List<TopicRun> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     class ModeMapper extends AbstractEnumColumnMapper<TopicRun.Mode> {
         public ModeMapper() {

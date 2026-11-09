@@ -292,7 +292,7 @@ class TopicsNightlyServiceTest {
     @DisplayName("a project whose last 3 runs failed since 7 nights before the night is skipped as paused, and no run "
             + "starts")
     void paused() {
-        when(runDAO.findPausedProjectIds(any(), anyInt(), any())).thenReturn(Set.of(started));
+        when(runDAO.findPausedProjectIds(any(), any(), anyInt(), any())).thenReturn(Set.of(started));
 
         var result = service.runNight(START);
 
@@ -304,7 +304,7 @@ class TopicsNightlyServiceTest {
         assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
                 .extracting(TopicNightProject::decision, TopicNightProject::reason)
                 .containsExactly(tuple("skip", "paused"));
-        verify(runDAO).findPausedProjectIds(any(), eq(3), eq(Instant.parse("2026-10-26T00:00:00Z")));
+        verify(runDAO).findPausedProjectIds(eq(WORKSPACE_ID), any(), eq(3), eq(Instant.parse("2026-10-26T00:00:00Z")));
     }
 
     @Test
@@ -353,8 +353,8 @@ class TopicsNightlyServiceTest {
                 .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(otherWorkspace, 300)));
         when(topicDAO.findExistingProjectIds(eq(otherWorkspaceId), any()))
                 .thenAnswer(invocation -> Set.copyOf(invocation.<Collection<UUID>>getArgument(1)));
-        when(runDAO.findStartedSince(any(), any())).thenReturn(Set.of(recent));
-        when(runDAO.findPausedProjectIds(any(), anyInt(), any())).thenReturn(Set.of(paused));
+        when(runDAO.findStartedSince(any(), any(), any())).thenReturn(Set.of(recent));
+        when(runDAO.findPausedProjectIds(any(), any(), anyInt(), any())).thenReturn(Set.of(paused));
         var tomorrow = NIGHT.plusDays(1);
 
         var candidates = service.firstBuildCandidates(tomorrow, START);
@@ -368,8 +368,8 @@ class TopicsNightlyServiceTest {
                         tuple(WORKSPACE_ID, tiedHigh, 100L));
         verify(windowDAO).countByProject(eq(WORKSPACE_ID), isNull(), eq(Instant.parse("2026-10-04T00:00:00Z")),
                 eq(Instant.parse("2026-11-03T00:00:00Z")), anyLong());
-        verify(runDAO).findStartedSince(any(), eq(START.minus(Duration.ofHours(24))));
-        verify(runDAO).findPausedProjectIds(any(), eq(3), eq(Instant.parse("2026-10-27T00:00:00Z")));
+        verify(runDAO).findStartedSince(eq(WORKSPACE_ID), any(), eq(START.minus(Duration.ofHours(24))));
+        verify(runDAO).findPausedProjectIds(eq(WORKSPACE_ID), any(), eq(3), eq(Instant.parse("2026-10-27T00:00:00Z")));
         verify(nightDAO, never()).insertProjects(any());
     }
 

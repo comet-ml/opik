@@ -547,7 +547,7 @@ public class TopicsRebuildService {
                     if (!topics.isEmpty()) {
                         topicDAO.insertTopics(topics);
                     }
-                    topicDAO.deletePrototypes(projectId);
+                    topicDAO.deletePrototypes(workspaceId, projectId);
                     if (!prototypes.isEmpty()) {
                         topicDAO.insertPrototypes(prototypes);
                     }

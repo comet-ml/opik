@@ -1120,20 +1120,39 @@ class TopicsNightlyJobTest {
     }
 
     private List<TopicRun> runs(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class).findByProject(projectId));
+        return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_runs", projectId).stream()
+                .flatMap(workspaceId -> handle.attach(TopicRunDAO.class).findByProject(workspaceId, projectId).stream())
+                .toList());
     }
 
     private List<Topic> topics(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findLive(projectId));
+        return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topics", projectId).stream()
+                .flatMap(workspaceId -> handle.attach(TopicDAO.class).findLive(workspaceId, projectId).stream())
+                .toList());
     }
 
     private List<TopicRunCount> counts(UUID projectId) {
-        return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicRunDAO.class).findCountsByProject(projectId));
+        return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_run_counts", projectId).stream()
+                .flatMap(workspaceId -> handle.attach(TopicRunDAO.class).findCountsByProject(workspaceId, projectId)
+                        .stream())
+                .toList());
     }
 
     private List<TopicPrototype> prototypes(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class).findPrototypes(projectId));
+        return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_prototypes", projectId).stream()
+                .flatMap(workspaceId -> handle.attach(TopicDAO.class).findPrototypes(workspaceId, projectId).stream())
+                .toList());
+    }
+
+    /**
+     * The workspaces of the project's rows in {@code table}, so the helpers above read every row of the project through
+     * the workspace-scoped reads: a row written under another workspace still shows.
+     */
+    private static List<String> workspacesOf(org.jdbi.v3.core.Handle handle, String table, UUID projectId) {
+        return handle.createQuery("SELECT DISTINCT workspace_id FROM " + table + " WHERE project_id = :projectId")
+                .bind("projectId", projectId.toString())
+                .mapTo(String.class)
+                .list();
     }
 
     private TopicProjectState state(UUID projectId) {

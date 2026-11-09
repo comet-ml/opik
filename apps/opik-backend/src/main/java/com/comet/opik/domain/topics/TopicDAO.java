@@ -35,13 +35,13 @@ public interface TopicDAO {
 
     @SqlQuery("""
             SELECT * FROM topics
-            WHERE project_id = :projectId AND retired_at IS NULL
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND retired_at IS NULL
             ORDER BY born, id
             """)
-    List<Topic> findLive(@Bind("projectId") UUID projectId);
+    List<Topic> findLive(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
-    @SqlUpdate("DELETE FROM topic_prototypes WHERE project_id = :projectId")
-    int deletePrototypes(@Bind("projectId") UUID projectId);
+    @SqlUpdate("DELETE FROM topic_prototypes WHERE workspace_id = :workspaceId AND project_id = :projectId")
+    int deletePrototypes(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     @SqlBatch("""
             INSERT INTO topic_prototypes (id, workspace_id, project_id, position, topic_id, vector)
@@ -49,8 +49,12 @@ public interface TopicDAO {
             """)
     void insertPrototypes(@BindMethods List<TopicPrototype> prototypes);
 
-    @SqlQuery("SELECT * FROM topic_prototypes WHERE project_id = :projectId ORDER BY position")
-    List<TopicPrototype> findPrototypes(@Bind("projectId") UUID projectId);
+    @SqlQuery("""
+            SELECT * FROM topic_prototypes
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            ORDER BY position
+            """)
+    List<TopicPrototype> findPrototypes(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     /** The first save of a project: a second run that saved meanwhile fails it on the primary key. */
     @SqlUpdate("""

@@ -351,12 +351,14 @@ public class TopicsNightlyService {
             var runDAO = handle.attach(TopicRunDAO.class);
             Set<UUID> leftOut = new HashSet<>();
             topicDAO.findStates(projectIds).forEach(state -> leftOut.add(state.projectId()));
-            leftOut.addAll(runDAO.findStartedSince(projectIds, now.minus(FIRST_BUILD_RUN_GAP)));
-            leftOut.addAll(runDAO.findPausedProjectIds(projectIds, PAUSE_FAILURES, pausedSince));
             Set<UUID> existing = new HashSet<>();
             found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
                     Collectors.mapping(Candidate::projectId, Collectors.toSet())))
-                    .forEach((workspaceId, ids) -> existing.addAll(topicDAO.findExistingProjectIds(workspaceId, ids)));
+                    .forEach((workspaceId, ids) -> {
+                        leftOut.addAll(runDAO.findStartedSince(workspaceId, ids, now.minus(FIRST_BUILD_RUN_GAP)));
+                        leftOut.addAll(runDAO.findPausedProjectIds(workspaceId, ids, PAUSE_FAILURES, pausedSince));
+                        existing.addAll(topicDAO.findExistingProjectIds(workspaceId, ids));
+                    });
             return found.stream()
                     .filter(candidate -> existing.contains(candidate.projectId())
                             && !leftOut.contains(candidate.projectId()))
@@ -586,16 +588,17 @@ public class TopicsNightlyService {
         var windowUntil = new HashMap<UUID, Instant>();
         states.forEach(state -> windowUntil.put(state.projectId(), state.windowUntil()));
         var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
-        Set<UUID> paused = projectIds.isEmpty()
-                ? Set.of()
-                : template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class)
-                        .findPausedProjectIds(projectIds, PAUSE_FAILURES, pausedSince));
+        Set<UUID> paused = new HashSet<>();
         // A deleted project keeps its window vectors until ClickHouse drops them: build only projects that exist.
         Set<UUID> existing = new HashSet<>();
         found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
                 Collectors.mapping(Candidate::projectId, Collectors.toSet())))
-                .forEach((workspaceId, ids) -> existing.addAll(template.inTransaction(READ_ONLY,
-                        handle -> handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids))));
+                .forEach((workspaceId, ids) -> template.inTransaction(READ_ONLY, handle -> {
+                    paused.addAll(handle.attach(TopicRunDAO.class)
+                            .findPausedProjectIds(workspaceId, ids, PAUSE_FAILURES, pausedSince));
+                    existing.addAll(handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids));
+                    return null;
+                }));
         for (var candidate : found) {
             if (!existing.contains(candidate.projectId())) {
                 skipped.add(new Skipped(candidate, TopicsMetrics.REASON_DELETED));

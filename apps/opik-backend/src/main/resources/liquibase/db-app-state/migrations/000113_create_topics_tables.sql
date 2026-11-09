@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000114_create_topics_tables
+--changeset yaroslavb:000113_create_topics_tables
 --comment: Create topics, topic_prototypes, topic_project_states, topic_runs, topic_run_counts, topic_nights and topic_night_projects: a project's topic list, the nightly runs that build it, each saved run's counts, and what each night decided (OPIK-8987)
 
 -- One row per topic a project's nightly run created. An id is never reused: a renamed or merged topic keeps its id, a
@@ -18,11 +18,11 @@ CREATE TABLE topics
     low_nights     INT           NOT NULL DEFAULT 0,
     size           INT           NOT NULL DEFAULT 0,
     created_at     TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-    updated_at     TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (id),
     -- A project's live topics: the nightly run's read and the topics API.
-    INDEX topics_project_retired_idx (project_id, retired_at)
+    INDEX topics_workspace_project_retired_idx (workspace_id, project_id, retired_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -42,7 +42,7 @@ CREATE TABLE topic_prototypes
     created_at   TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (id),
-    INDEX topic_prototypes_project_idx (project_id)
+    INDEX topic_prototypes_workspace_project_idx (workspace_id, project_id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -58,7 +58,7 @@ CREATE TABLE topic_project_states
     last_run_id     CHAR(36)     NULL,
     last_success_at TIMESTAMP(6) NULL,
     window_until    TIMESTAMP(6) NULL,
-    updated_at      TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (project_id)
 ) ENGINE = InnoDB
@@ -82,8 +82,9 @@ CREATE TABLE topic_runs
     stats         JSON                                       NULL,
 
     PRIMARY KEY (run_id),
-    -- A project's runs for the runbook, and the 90-day cleanup.
-    INDEX topic_runs_project_started_idx (project_id, started_at),
+    -- A project's runs: the pause, the first-build candidates and the runbook.
+    INDEX topic_runs_workspace_project_started_idx (workspace_id, project_id, started_at),
+    -- The housekeeping across all workspaces: abandoned runs and the 90-day cleanup.
     INDEX topic_runs_started_idx (started_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
@@ -93,7 +94,7 @@ CREATE TABLE topic_runs
 -- counts, which the topics API compares between a project's last two saved runs. traces is the topic's count in the
 -- run's window; rank is its 1-based rank in the run, null for Other. A share is traces over the sum of the run's rows,
 -- as every window trace gets a topic or Other. The save transaction writes them, so a failed run has none. Rows are
--- deleted with the runs, by saved_at.
+-- deleted with their runs, by the runs' started_at.
 CREATE TABLE topic_run_counts
 (
     run_id       CHAR(36)     NOT NULL,
@@ -106,7 +107,7 @@ CREATE TABLE topic_run_counts
 
     PRIMARY KEY (run_id, topic_id),
     -- A project's last two saved runs, for the topics API.
-    INDEX topic_run_counts_project_saved_idx (project_id, saved_at),
+    INDEX topic_run_counts_workspace_project_saved_idx (workspace_id, project_id, saved_at),
     -- The cleanup after topics.nightly.runsRetention.
     INDEX topic_run_counts_saved_idx (saved_at)
 ) ENGINE = InnoDB
