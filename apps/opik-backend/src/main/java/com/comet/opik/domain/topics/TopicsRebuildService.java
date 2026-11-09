@@ -212,22 +212,14 @@ public class TopicsRebuildService {
         void build() {
             readState = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
                     .findStates(workspaceId, List.of(projectId)).stream().findFirst());
-            var rows = timed("window", this::readWindow);
-            int n = rows.size();
-            var texts = new String[n];
-            var vectors = new float[n * DIMENSIONS];
-            var recent = new boolean[n];
-            var recentFrom = night.minusDays(RECENT_DAYS).atStartOfDay(ZoneOffset.UTC).toInstant();
-            var versions = new TreeMap<Long, Integer>();
-            for (int i = 0; i < n; i++) {
-                var row = rows.get(i);
-                texts[i] = row.text();
-                System.arraycopy(row.vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
-                recent[i] = !row.traceCreatedAt().isBefore(recentFrom);
-                versions.merge(row.taskVersion(), 1, Integer::sum);
-            }
+            var window = flatten(timed("window", this::readWindow));
+            int n = window.texts().length;
+            var texts = window.texts();
+            var vectors = window.vectors();
+            var recent = window.recent();
             var versionShares = stats.putObject("task_version_shares");
-            versions.forEach((version, count) -> versionShares.put(String.valueOf(version), (double) count / n));
+            window.versions().forEach((version, count) -> versionShares.put(String.valueOf(version),
+                    (double) count / n));
 
             var merged = IntentMerger.merge(texts, vectors, DIMENSIONS);
             int unique = merged.size();
@@ -283,9 +275,32 @@ public class TopicsRebuildService {
                     n, unique, k, seed, topics.stream().map(Topic::size).toList(),
                     TopicText.fixed((double) other / n, 3), seconds);
             timed("save", () -> {
-                save(rows, assigned.labels(), topics, prototypes);
+                save(window.traces(), assigned.labels(), topics, prototypes);
                 return null;
             });
+        }
+
+        /**
+         * The window as flat arrays, in the rows' order. The rows' own vectors are not kept: once this returns, only
+         * the flat copy holds them, so the build does not carry two copies of the window.
+         */
+        private Window flatten(List<TopicWindowRow> rows) {
+            int n = rows.size();
+            var texts = new String[n];
+            var vectors = new float[n * DIMENSIONS];
+            var recent = new boolean[n];
+            var traces = new ArrayList<WindowTrace>(n);
+            var recentFrom = night.minusDays(RECENT_DAYS).atStartOfDay(ZoneOffset.UTC).toInstant();
+            var versions = new TreeMap<Long, Integer>();
+            for (int i = 0; i < n; i++) {
+                var row = rows.get(i);
+                texts[i] = row.text();
+                System.arraycopy(row.vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
+                recent[i] = !row.traceCreatedAt().isBefore(recentFrom);
+                versions.merge(row.taskVersion(), 1, Integer::sum);
+                traces.add(new WindowTrace(row.traceId(), row.traceCreatedAt()));
+            }
+            return new Window(texts, vectors, recent, traces, versions);
         }
 
         private List<TopicWindowRow> readWindow() {
@@ -521,15 +536,15 @@ public class TopicsRebuildService {
             return new TopicsRunException(Code.SAVE, "another run saved this project meanwhile", cause);
         }
 
-        private void save(List<TopicWindowRow> rows, int[] labels, List<Topic> topics,
+        private void save(List<WindowTrace> traces, int[] labels, List<Topic> topics,
                 List<TopicPrototype> prototypes) {
-            var traceTopics = new ArrayList<TraceTopic>(rows.size());
-            for (int i = 0; i < rows.size(); i++) {
+            var traceTopics = new ArrayList<TraceTopic>(traces.size());
+            for (int i = 0; i < traces.size(); i++) {
                 traceTopics.add(TraceTopic.builder()
                         .workspaceId(workspaceId)
                         .projectId(projectId)
-                        .traceId(rows.get(i).traceId())
-                        .traceCreatedAt(rows.get(i).traceCreatedAt())
+                        .traceId(traces.get(i).traceId())
+                        .traceCreatedAt(traces.get(i).traceCreatedAt())
                         .topicId(labels[i] == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
                         .source(TraceTopic.Source.NIGHT)
                         .runId(runId.toString())
@@ -623,6 +638,15 @@ public class TopicsRebuildService {
     /** The assignment, and the prototypes it was built from: the gated known-Other ones are saved too. */
     private record Assigned(PrototypeAssigner assigner, int[] labels, List<float[]> topicPrototypes,
             List<Integer> owners, List<float[]> otherPrototypes) {
+    }
+
+    /** The window as the build reads it: per trace, in time order, its text, vector and whether it is recent. */
+    private record Window(String[] texts, float[] vectors, boolean[] recent, List<WindowTrace> traces,
+            TreeMap<Long, Integer> versions) {
+    }
+
+    /** What the save reads of a window trace. */
+    private record WindowTrace(UUID traceId, Instant traceCreatedAt) {
     }
 
     /** Lets a prompt or an answer be matched across logs (opik-inference's included) without logging its text. */
