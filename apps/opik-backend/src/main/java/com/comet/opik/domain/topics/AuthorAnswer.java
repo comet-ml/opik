@@ -34,7 +34,9 @@ public record AuthorAnswer(@NonNull List<Topic> topics, @NonNull List<Integer> o
             try {
                 node = InferenceJson.MAPPER.readTree(matcher.find() ? matcher.group() : text);
             } catch (IOException exception) {
-                throw bad("the answer is not JSON", exception);
+                // Not the cause: a Jackson message quotes the answer, which holds users' trace text.
+                throw bad("the answer is not JSON, error '%s', chars '%s'"
+                        .formatted(exception.getClass().getSimpleName(), text.length()), null);
             }
         }
         if (node == null || !node.isObject()) {

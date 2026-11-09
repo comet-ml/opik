@@ -167,6 +167,18 @@ class TopicsAlgorithmRulesTest {
                     .isInstanceOfSatisfying(TopicsRunException.class,
                             exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
         }
+
+        @Test
+        @DisplayName("an answer that is not JSON fails without its text: no Jackson cause, the error type and length")
+        void notJsonKeepsNoText() {
+            var text = "{\"topics\": [user-secret-text]}";
+            assertThatThrownBy(() -> AuthorAnswer.parse(TextNode.valueOf(text)))
+                    .isInstanceOfSatisfying(TopicsRunException.class, exception -> {
+                        assertThat(exception.getCause()).isNull();
+                        assertThat(exception.getMessage()).doesNotContain("user-secret-text")
+                                .contains("JsonParseException").contains("chars '%s'".formatted(text.length()));
+                    });
+        }
     }
 
     @Nested
