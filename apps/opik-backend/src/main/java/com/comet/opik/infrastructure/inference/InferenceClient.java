@@ -4,6 +4,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
 import com.comet.opik.infrastructure.http.HttpModule;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.dropwizard.client.JerseyClientConfiguration;
@@ -27,6 +29,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -54,6 +57,10 @@ import java.util.function.Function;
  * usual retries. A call cut off at its deadline frees its caller, but its thread reads on until the response ends and
  * keeps its slot until then, so a slow service ties up decide's slots, never the shared client.
  * <p>
+ * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body,
+ * success or error, is read up to {@code aiLabels.inference.maxResponseBytes}; a longer one fails the call the same
+ * way, and its connection is closed without reading the rest.
+ * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
 @Slf4j
@@ -76,6 +83,15 @@ public class InferenceClient {
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
     private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
+
+    /**
+     * A relaxed guard checks no address or scheme: opik-inference is an internal service. It is set on every request
+     * only so that closing the response ends its connection instead of reading the rest of the body, see
+     * {@code DestinationGuardJerseyClientBuilder}; a body read to its end keeps its connection for reuse.
+     */
+    private static final DestinationGuard CLOSE_WITHOUT_DRAINING = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .build();
 
     private final @NonNull Client client;
     private final @NonNull AiLabelsConfig config;
@@ -269,6 +285,8 @@ public class InferenceClient {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + inference.getCredential())
                     // opik-inference never redirects, and following one would send the credential where it points.
                     .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                    // A body over the cap could otherwise keep the read going as long as the service sends it.
+                    .property(DestinationGuardDnsResolver.PROPERTY, CLOSE_WITHOUT_DRAINING)
                     .property(ClientProperties.CONNECT_TIMEOUT,
                             timeoutMillis(inference.getConnectTimeout().toJavaDuration(), left))
                     .property(ClientProperties.READ_TIMEOUT, timeoutMillis(call.readTimeout(), left));
@@ -312,12 +330,13 @@ public class InferenceClient {
     private <T> T read(Call<T> call, Response response) {
         try (response) {
             var status = response.getStatus();
-            byte[] body;
-            try {
-                body = response.hasEntity() ? response.readEntity(byte[].class) : new byte[0];
-            } catch (ProcessingException exception) {
-                // A connection reset or truncated body after the headers: as retryable as one before them.
-                throw InferenceException.transport(exception);
+            var maxBytes = config.getInference().getMaxResponseBytes();
+            var body = readBody(response, maxBytes);
+            if (body.length > maxBytes) {
+                // Not retryable: the same request would only get the same body again.
+                throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
+                        new IllegalStateException("response body exceeds aiLabels.inference.maxResponseBytes '%d'"
+                                .formatted(maxBytes)));
             }
             if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
                 // Redirects are not followed, and the same request would only be redirected again.
@@ -338,6 +357,26 @@ public class InferenceClient {
                 throw InferenceException.upstreamError(status, null, null);
             }
             return value;
+        }
+    }
+
+    /**
+     * The body, read up to one byte past {@code maxBytes}, so a longer one is seen without holding more of it, as
+     * {@code WebhookHttpClient} reads a response. Closing the stream of a longer one ends its connection, see
+     * {@link #CLOSE_WITHOUT_DRAINING}, so the rest is never read.
+     */
+    private static byte[] readBody(Response response, long maxBytes) {
+        try {
+            // hasEntity reads ahead, so it can fail like the read itself.
+            if (!response.hasEntity()) {
+                return new byte[0];
+            }
+            try (var body = response.readEntity(InputStream.class)) {
+                return body.readNBytes(Math.toIntExact(maxBytes + 1));
+            }
+        } catch (IOException | ProcessingException exception) {
+            // A connection reset or truncated body after the headers: as retryable as one before them.
+            throw InferenceException.transport(exception);
         }
     }
 

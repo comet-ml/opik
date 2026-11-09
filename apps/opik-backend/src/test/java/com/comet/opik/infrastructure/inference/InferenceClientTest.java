@@ -24,17 +24,23 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -54,6 +60,8 @@ class InferenceClientTest {
     private static final String JOB_ID = "job-7d3f";
     private static final String JOB_PATH = "/v1/batch/jobs/" + JOB_ID;
     private static final String STATUS_PATH = "/v1/batch/jobs/status";
+    private static final int JOB_VIEW_BYTES = InferenceContract.resourceText("job-view-no-results.json")
+            .getBytes(StandardCharsets.UTF_8).length;
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
 
     private WireMockServer server;
@@ -271,6 +279,92 @@ class InferenceClientTest {
                 .hasSize(InferenceClient.MAX_RETRIES + 1);
     }
 
+    @Test
+    void redirectOfAGetIsNotFollowed() {
+        var elsewhere = "/elsewhere";
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(
+                aResponse().withStatus(302).withHeader("Location", server.baseUrl() + elsewhere)));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(jobView()));
+
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(302);
+                });
+        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
+    }
+
+    @Test
+    void redirectOfAPostIsNotFollowed() {
+        var elsewhere = "/elsewhere";
+        server.stubFor(post(urlEqualTo(DECIDE_PATH)).willReturn(
+                aResponse().withStatus(307).withHeader("Location", server.baseUrl() + elsewhere)));
+        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(accepted()));
+
+        assertThatThrownBy(() -> client.submitDecide(decideRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(307);
+                });
+        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
+    }
+
+    @Test
+    void responseBodyOfExactlyTheCapIsRead() {
+        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(JOB_VIEW_BYTES));
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView()));
+
+        assertThat(client.getJob(JOB_ID, 0, false, later()).block().status()).isEqualTo(JobStatus.RUNNING);
+    }
+
+    static Stream<Arguments> bodiesOverTheCap() {
+        return Stream.of(arguments(200, InferenceContract.resourceText("job-view-no-results.json")),
+                arguments(503, "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}"));
+    }
+
+    @ParameterizedTest(name = "status {0}")
+    @MethodSource("bodiesOverTheCap")
+    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body) {
+        client = new InferenceClient(TestHttpClientUtils.client(),
+                maxResponseBytes(body.getBytes(StandardCharsets.UTF_8).length - 1));
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", "application/json")
+                .withBody(body)));
+
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block())
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    // An error body over the cap is not parsed either: its code would be overloaded.
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getHttpStatus()).isEqualTo(status);
+                    assertThat(exception.getCause()).hasMessageContaining("maxResponseBytes");
+                });
+        // Not retried: the same request would only get the same body again.
+        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH)))).hasSize(1);
+    }
+
+    @Test
+    void responseBodyOverTheCapIsNotReadToItsEnd() throws IOException {
+        try (var endless = new EndlessBodyServer()) {
+            var config = maxResponseBytes(1024);
+            config.getInference().setUrl(endless.url());
+            client = new InferenceClient(TestHttpClientUtils.client(), config);
+
+            var started = System.nanoTime();
+            // Bounded, so a call that reads the body to its end fails here instead of never returning.
+            assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block(Duration.ofSeconds(10)))
+                    .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                        assertThat(exception.getCode()).isEqualTo("upstream_error");
+                        assertThat(exception.getCause()).hasMessageContaining("maxResponseBytes");
+                    });
+            var elapsed = Duration.ofNanos(System.nanoTime() - started);
+
+            // One attempt, ended at the cap: the same request would only get the same body again, so it is not
+            // retried, though the body never ends and keeps the read timeout from firing.
+            assertThat(endless.connections()).isEqualTo(1);
+            assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
+        }
+    }
+
     @ParameterizedTest
     @EnumSource(value = UnknownCode.class)
     void unknownCodeFollowsTheEnvelopesRetryableFlag(UnknownCode unknown) {
@@ -455,6 +549,12 @@ class InferenceClientTest {
         }
     }
 
+    private AiLabelsConfig maxResponseBytes(long maxResponseBytes) {
+        var config = config(Duration.ofSeconds(5), 1024 * 1024);
+        config.getInference().setMaxResponseBytes(maxResponseBytes);
+        return config;
+    }
+
     private static ResponseDefinitionBuilder accepted() {
         return aResponse().withStatus(202)
                 .withHeader("Content-Type", "application/json")
@@ -486,6 +586,62 @@ class InferenceClientTest {
                                 .build()))
                         .build()))
                 .build();
+    }
+
+    private static final class EndlessBodyServer implements AutoCloseable {
+
+        private static final byte[] HEADERS = ("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                + "Transfer-Encoding: chunked\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+        private static final byte[] CHUNK = ("2000\r\n" + " ".repeat(0x2000) + "\r\n")
+                .getBytes(StandardCharsets.US_ASCII);
+
+        private final ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
+        private final List<Socket> accepted = new CopyOnWriteArrayList<>();
+
+        EndlessBodyServer() throws IOException {
+            Thread.ofVirtual().start(this::accept);
+        }
+
+        String url() {
+            return "http://%s:%d".formatted(serverSocket.getInetAddress().getHostAddress(),
+                    serverSocket.getLocalPort());
+        }
+
+        int connections() {
+            return accepted.size();
+        }
+
+        private void accept() {
+            while (true) {
+                try {
+                    var socket = serverSocket.accept();
+                    accepted.add(socket);
+                    Thread.ofVirtual().start(() -> writeForever(socket));
+                } catch (IOException exception) {
+                    // closed
+                    return;
+                }
+            }
+        }
+
+        private static void writeForever(Socket socket) {
+            try (var output = socket.getOutputStream()) {
+                output.write(HEADERS);
+                while (true) {
+                    output.write(CHUNK);
+                }
+            } catch (IOException exception) {
+                // the client closed the connection
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            serverSocket.close();
+            for (var socket : accepted) {
+                socket.close();
+            }
+        }
     }
 
     private static BatchGenerateRequest generateRequest(int items, int contentLength) {

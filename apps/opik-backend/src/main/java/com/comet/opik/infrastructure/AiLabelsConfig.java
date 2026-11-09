@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.net.InetAddresses;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
@@ -14,6 +15,8 @@ import lombok.Data;
 import lombok.ToString;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -178,6 +181,18 @@ public class AiLabelsConfig {
                 && StringUtils.isNotBlank(inference.getCredential()));
     }
 
+    /**
+     * The credential and the traces go with every call, so never in clear over a network: https, or http only to this
+     * host ({@code localhost} or a loopback address, for tests and a local runner). Checked whenever the URL is set,
+     * whether ai-labels is on or not: the guardrails decide calls send the same credential to the same URL under their
+     * own toggle. A blank URL passes.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) must be an https URL, or an http URL to localhost")
+    public boolean isInferenceUrlSecure() {
+        return inference == null || inference.isUrlSecure();
+    }
+
     @JsonIgnore
     @AssertTrue(message = "aiLabels.tickBudget must be shorter than aiLabels.tickInterval") public boolean isTickBudgetValid() {
         return tickBudget == null || tickInterval == null
@@ -232,6 +247,43 @@ public class AiLabelsConfig {
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration decideTimeToLive = Duration.minutes(5);
+
+        /**
+         * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
+         * largest expected body, a page of job results, is a few MiB. Every call in flight
+         * can hold up to this much heap, so it is capped at 64 MiB, twice the default.
+         */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
+
+        /**
+         * https, or http to {@code localhost} or a loopback address; see {@link AiLabelsConfig#isInferenceUrlSecure()}.
+         * Unset passes here: {@link AiLabelsConfig#isInferenceConfigured()} requires it when ai-labels is on.
+         */
+        @JsonIgnore
+        public boolean isUrlSecure() {
+            if (StringUtils.isBlank(url)) {
+                return true;
+            }
+            URI uri;
+            try {
+                uri = new URI(url);
+            } catch (URISyntaxException exception) {
+                return false;
+            }
+            var host = uri.getHost();
+            if (host == null) {
+                return false;
+            }
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    || ("http".equalsIgnoreCase(uri.getScheme()) && isLoopback(host));
+        }
+
+        /** Never resolves the name: only {@code localhost} itself and loopback address literals count. */
+        private static boolean isLoopback(String host) {
+            return "localhost".equalsIgnoreCase(host)
+                    || (InetAddresses.isUriInetAddress(host) && InetAddresses.forUriString(host).isLoopbackAddress());
+        }
     }
 
     @Data
