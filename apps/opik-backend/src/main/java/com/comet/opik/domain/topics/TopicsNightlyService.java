@@ -484,31 +484,44 @@ public class TopicsNightlyService {
         try {
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicRun.Status.SAVED;
         } catch (TimeoutException exception) {
-            stop(runId, candidate, future, Code.TIMEOUT, "the run outlasted topics.nightly.projectTimeout '%s'"
+            return stop(runId, candidate, future, Code.TIMEOUT, "the run outlasted topics.nightly.projectTimeout '%s'"
                     .formatted(timeout));
-            return false;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            stop(runId, candidate, future, Code.TIMEOUT, "the nightly job was interrupted");
-            return false;
+            return stop(runId, candidate, future, Code.TIMEOUT, "the nightly job was interrupted");
         } catch (ExecutionException exception) {
             // firstBuild records its own failures; this is a bug in it.
             log.error("Topics run '{}' threw, project '{}'", runId, candidate.projectId(), exception.getCause());
-            stop(runId, candidate, future, Code.INTERNAL, String.valueOf(exception.getCause()));
-            return false;
+            return stop(runId, candidate, future, Code.INTERNAL, String.valueOf(exception.getCause()));
         }
     }
 
-    /** Fails the run first, so a save racing the interrupt finds it ended and rolls back. */
-    private void stop(UUID runId, Candidate candidate, Future<?> future, Code code, String message) {
+    /**
+     * Fails the run first, so a save racing the interrupt finds it ended and rolls back. True when the run had saved
+     * already: the stop came after its MySQL commit, while its trace_topics insert went on. Such a run counts as saved.
+     */
+    private boolean stop(UUID runId, Candidate candidate, Future<?> future, Code code, String message) {
+        boolean saved = false;
         try {
             if (rebuildService.fail(runId, candidate.workspaceId(), code, message, null)) {
                 log.warn("Topics run '{}' failed, code '{}': {}", runId, code.getValue(), message);
+            } else if (savedRun(runId, candidate.workspaceId())) {
+                saved = true;
+                log.warn("Topics run '{}' saved, project '{}', but its trace_topics insert outlasted the stop: {}",
+                        runId, candidate.projectId(), message);
             }
         } catch (RuntimeException exception) {
             log.error("Topics run '{}' could not be marked failed", runId, exception);
         }
         future.cancel(true);
+        return saved;
+    }
+
+    /** Whether the run's row says saved. A run that failed on its own logged its failure already. */
+    private boolean savedRun(UUID runId, String workspaceId) {
+        var run = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicRunDAO.class).findById(workspaceId, runId));
+        return run != null && run.status() == TopicRun.Status.SAVED;
     }
 
     /**

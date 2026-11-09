@@ -2,7 +2,9 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.google.common.util.concurrent.Uninterruptibles;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +39,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -70,6 +73,7 @@ class TopicsNightlyServiceTest {
     private TopicWindowDAO windowDAO;
     private TopicsRebuildService rebuildService;
     private LockService lockService;
+    private TopicsConfig config;
     private TopicsNightlyService service;
 
     @BeforeEach
@@ -123,7 +127,8 @@ class TopicsNightlyServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
 
-        service = new TopicsNightlyService(TestConfigUtils.loadConfigTest().getTopics(), template, workspaceService,
+        config = TestConfigUtils.loadConfigTest().getTopics();
+        service = new TopicsNightlyService(config, template, workspaceService,
                 windowDAO, rebuildService, new TopicsMetrics(meter.meter), lockService, idGenerator);
     }
 
@@ -142,6 +147,30 @@ class TopicsNightlyServiceTest {
         assertThat(result.failed()).isEqualTo(1);
         verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.INTERNAL),
                 contains("a bug in the build"), isNull());
+    }
+
+    @Test
+    @DisplayName("a run whose timeout comes after its save counts as saved, not failed")
+    void timeoutAfterSaveIsSaved() {
+        var runId = UUID.randomUUID();
+        config.getNightly().setProjectTimeout(io.dropwizard.util.Duration.milliseconds(200));
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
+        // The commit is done; the trace_topics insert outlasts the timeout and goes on through the interrupt.
+        doAnswer(invocation -> {
+            Uninterruptibles.sleepUninterruptibly(Duration.ofMillis(600));
+            return TopicsRebuildService.Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
+        }).when(rebuildService).firstBuild(eq(runId), anyString(), any(), any());
+        when(rebuildService.fail(any(), anyString(), any(), anyString(), any())).thenReturn(false);
+        when(runDAO.findById(WORKSPACE_ID, runId)).thenReturn(TopicRun.builder().runId(runId)
+                .workspaceId(WORKSPACE_ID).projectId(started).mode(TopicRun.Mode.FIRST_BUILD)
+                .status(TopicRun.Status.SAVED).startedAt(START).build());
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(result.failed()).isZero();
+        verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.TIMEOUT), anyString(),
+                isNull());
     }
 
     @Test
