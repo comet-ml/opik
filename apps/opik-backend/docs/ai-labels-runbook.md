@@ -212,7 +212,7 @@ list and build it again (see "Running by hand").
 |---|---|
 | `qwen_timeout` | The Qwen call ran out of `TOPICS_NIGHTLY_QWEN_DEADLINE`. |
 | `qwen_error` | The Qwen call failed after its 2 retries, or with a 4xx. `error_message` has the code and HTTP status. |
-| `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema: opik-inference answers `schema_violation` for a cut or off-schema answer, which is not retried. The answer is in the DEBUG logs. |
+| `qwen_bad_answer` | Qwen's answer has no JSON object, or breaks the schema: opik-inference answers `schema_violation` for a cut or off-schema answer, which is not retried. The run logs the answer's length and SHA-256, not its text. |
 | `window_read` | The ClickHouse window read failed (it stops after 120s, or after `TOPICS_NIGHTLY_PROJECT_TIMEOUT` if shorter), or the window had no usable vector. |
 | `invariant` | A check before the save failed: more than 10 topics, a blank name or one that is a catch-all as a whole, a prototype not of unit length, a trace not labelled once. |
 | `timeout` | The run outlasted `TOPICS_NIGHTLY_PROJECT_TIMEOUT`, or the job was interrupted. |
@@ -256,7 +256,8 @@ ORDER BY traces DESC;
 
 Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, unique texts, k, seed,
 the topics with their sizes, the Other share and the phase timings. The author prompt and Qwen's raw answer hold
-trace-derived text, so they are logged at DEBUG only (logger `com.comet.opik.domain.topics.TopicsRebuildService`).
+users' trace text, so no log level prints them: the run logs their length, the prompt's group count and a SHA-256 of
+each, which matches the same prompt or answer across runs.
 Search the logs for `Topics run '<run_id>'`.
 
 ### Running by hand

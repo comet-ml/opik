@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.Uninterruptibles;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -26,6 +27,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Duration;
 import java.time.Instant;
@@ -147,8 +149,10 @@ public class TopicsRebuildService {
      */
     public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull Code code, @NonNull String message,
             String stats) {
-        int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(workspaceId, runId,
-                Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE), stats));
+        int updated = template.inTransaction(WRITE,
+                handle -> handle.attach(TopicRunDAO.class).markFailed(workspaceId, runId,
+                        Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE),
+                        stats));
         if (updated == 1) {
             metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
         }
@@ -247,8 +251,9 @@ public class TopicsRebuildService {
             var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
                     Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
             var prompt = TopicPrompts.author(groups, MAX_TOPICS, examples);
-            // The prompt and the answer hold trace-derived text: DEBUG only, never in production logs by default.
-            log.debug("Topics run '{}' author prompt, project '{}':\n{}", runId, projectId, prompt);
+            // The prompt holds users' trace text: the log gets its size and hash only, never the text.
+            log.info("Topics run '{}' author prompt, project '{}', groups '{}', examples per group '{}', chars '{}', "
+                    + "sha256 '{}'", runId, projectId, groups.size(), perGroup, prompt.length(), sha256(prompt));
             var answer = timed("qwen", () -> author(prompt));
             var applied = AuthorApplier.apply(answer, groups, MAX_TOPICS);
 
@@ -271,10 +276,6 @@ public class TopicsRebuildService {
                     + "k '{}', seed '{}', topic sizes '{}', Other share '{}', seconds '{}'", runId, projectId, from, to,
                     n, unique, k, seed, topics.stream().map(Topic::size).toList(),
                     TopicText.fixed((double) other / n, 3), seconds);
-            // Topic names come from trace text: DEBUG only.
-            log.debug("Topics run '{}' topics, project '{}': '{}'", runId, projectId,
-                    topics.stream().map(topic -> topic.name() + " (" + topic.size() + ")").toList());
-
             timed("save", () -> {
                 save(rows, assigned.labels(), topics, prototypes);
                 return null;
@@ -345,8 +346,10 @@ public class TopicsRebuildService {
             log.info("Topics run '{}' author answer, project '{}', input tokens '{}', output tokens '{}', cache hit "
                     + "'{}'", runId, projectId, response.usage().inputTokens(), response.usage().outputTokens(),
                     response.cacheHit());
-            log.debug("Topics run '{}' author answer, project '{}':\n{}", runId, projectId,
-                    output == null ? "null" : InferenceJson.canonical(output));
+            // The answer names topics from users' trace text: the log gets its size and hash only, never the text.
+            var canonical = output == null ? "null" : InferenceJson.canonical(output);
+            log.info("Topics run '{}' author answer body, project '{}', chars '{}', sha256 '{}'", runId, projectId,
+                    canonical.length(), sha256(canonical));
             stats.put("qwen_input_tokens", response.usage().inputTokens());
             stats.put("qwen_output_tokens", response.usage().outputTokens());
             stats.put("qwen_cache_hit", response.cacheHit());
@@ -605,6 +608,11 @@ public class TopicsRebuildService {
     /** The assignment, and the prototypes it was built from: the gated known-Other ones are saved too. */
     private record Assigned(PrototypeAssigner assigner, int[] labels, List<float[]> topicPrototypes,
             List<Integer> owners, List<float[]> otherPrototypes) {
+    }
+
+    /** Lets a prompt or an answer be matched across logs (opik-inference's included) without logging its text. */
+    private static String sha256(String text) {
+        return Hashing.sha256().hashString(text, StandardCharsets.UTF_8).toString();
     }
 
     private static float[] centre(float[] centres, int group) {
