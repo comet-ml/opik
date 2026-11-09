@@ -47,13 +47,14 @@ public class GroupSummaries {
             }
         }
         var out = new ArrayList<GroupSummary>(k);
+        // One array for all groups: a group's sort reads only its own members' scores, which it writes first.
+        var sims = new double[n];
         for (int j = 0; j < k; j++) {
             var idx = members.get(j);
             if (idx.isEmpty()) {
                 out.add(GroupSummary.builder().group(j).examples(List.of()).build());
                 continue;
             }
-            var sims = new double[n];
             double simSum = 0;
             int recentMembers = 0;
             var counts = new TreeMap<String, Integer>(TopicText.CODE_POINT_ORDER);

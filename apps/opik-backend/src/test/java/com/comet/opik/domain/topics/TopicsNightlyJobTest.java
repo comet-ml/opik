@@ -23,7 +23,9 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
 import jakarta.ws.rs.client.Entity;
@@ -360,6 +362,49 @@ class TopicsNightlyJobTest {
         assertThat(again.skipped()).isGreaterThanOrEqualTo(1);
         assertThat(runs(built)).hasSize(1);
         assertThat(topics(built)).hasSameSizeAs(topics);
+    }
+
+    @Test
+    @DisplayName("a run that outlasts projectTimeout fails with timeout and writes nothing; the night's next project "
+            + "still runs")
+    void projectTimeout() {
+        var workspaceId = enabledWorkspace();
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        seed(workspaceId, first, 0, BUILT);
+        seed(workspaceId, second, 0, BUILT);
+        // The night's first Qwen call answers after the project timeout; every later call answers at once.
+        stubAnswerInScenario(FIXTURE.answer, 4_000, Scenario.STARTED, "answered");
+        stubAnswerInScenario(FIXTURE.answer, 0, "answered", "answered");
+        var nightly = opikConfig.getTopics().getNightly();
+        var projectTimeout = nightly.getProjectTimeout();
+        nightly.setProjectTimeout(io.dropwizard.util.Duration.seconds(2));
+        TopicsNightlyService.NightResult result;
+        try {
+            result = nightlyService.runNight(start());
+        } finally {
+            nightly.setProjectTimeout(projectTimeout);
+        }
+
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(result.failed()).isEqualTo(1);
+        var timedOut = runs(first).getFirst().status() == TopicRun.Status.FAILED ? first : second;
+        var saved = timedOut.equals(first) ? second : first;
+        assertThat(runs(saved)).singleElement().extracting(TopicRun::status).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(topics(saved)).isNotEmpty();
+        // The interrupted build may still get its slow answer: past it, a save that raced the timeout would show.
+        Awaitility.await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(runs(timedOut)).singleElement().satisfies(run -> {
+                assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
+                assertThat(run.errorCode()).isEqualTo("timeout");
+                assertThat(run.errorMessage()).contains("projectTimeout");
+            });
+            assertThat(topics(timedOut)).isEmpty();
+            assertThat(prototypes(timedOut)).isEmpty();
+            assertThat(state(timedOut)).isNull();
+            assertThat(counts(timedOut)).isEmpty();
+            assertThat(traceTopics(workspaceId, timedOut)).isEmpty();
+        });
     }
 
     @Test
@@ -1178,16 +1223,26 @@ class TopicsNightlyJobTest {
     }
 
     private void stubAnswer(JsonNode output, int delayMillis) {
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(answer(output, delayMillis)));
+    }
+
+    /** As {@link #stubAnswer(JsonNode, int)}, matched only in the scenario's {@code state}, which it then moves on. */
+    private void stubAnswerInScenario(JsonNode output, int delayMillis, String state, String nextState) {
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).inScenario("answers").whenScenarioStateIs(state)
+                .willSetStateTo(nextState).willReturn(answer(output, delayMillis)));
+    }
+
+    private ResponseDefinitionBuilder answer(JsonNode output, int delayMillis) {
         ObjectNode body = InferenceJson.MAPPER.createObjectNode();
         body.put("request_id", "r-1");
         body.putObject("usage").put("input_tokens", 1_000).put("output_tokens", 200);
         body.put("cache_hit", false);
         body.put("latency_ms", 1_500);
         body.putObject("result").set("output", output);
-        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(200)
+        return aResponse().withStatus(200)
                 .withHeader("Content-Type", "application/json")
                 .withFixedDelay(delayMillis)
-                .withBody(body.toString())));
+                .withBody(body.toString());
     }
 
     private List<TopicRun> runs(UUID projectId) {

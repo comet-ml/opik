@@ -67,6 +67,7 @@ class TopicsRebuildServiceTest {
     private TopicDAO topicDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private InferenceClient client;
+    private TopicWindowDAO windowDAO;
     private TopicsRebuildService service;
 
     @BeforeEach
@@ -82,7 +83,7 @@ class TopicsRebuildServiceTest {
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
-        var windowDAO = mock(TopicWindowDAO.class);
+        windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.readWindow(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
         when(topicDAO.findStates(any(), any())).thenReturn(List.of());
@@ -154,6 +155,25 @@ class TopicsRebuildServiceTest {
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "qwen_bad_answer")).isEqualTo(1);
         assertThat(meter.points("topics.run.duration_seconds"))
                 .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
+    }
+
+    @Test
+    @DisplayName("a window read that trips a ClickHouse guard fails the run with window_read, before Qwen and the save")
+    void windowReadGuardHit() {
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(windowDAO.readWindow(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
+                .thenReturn(Flux.error(new IllegalStateException(
+                        "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded")));
+
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.FAILED);
+        assertThat(outcome.errorCode()).isEqualTo("window_read");
+        verify(runDAO).markFailed(eq(WORKSPACE_ID), eq(runId), any(), eq("window_read"), anyString(), any());
+        verify(client, never()).generate(any(), any());
+        verify(topicDAO, never()).insertTopics(any());
+        verify(traceTopicsDAO, never()).insert(any());
+        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "window_read")).isEqualTo(1);
     }
 
     @Test

@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
@@ -123,6 +124,23 @@ class TopicsNightlyServiceTest {
 
         service = new TopicsNightlyService(TestConfigUtils.loadConfigTest().getTopics(), template, workspaceService,
                 windowDAO, rebuildService, new TopicsMetrics(meter.meter), lockService, idGenerator);
+    }
+
+    @Test
+    @DisplayName("a build that throws fails its run with internal, and the night counts it failed")
+    void buildThatThrowsIsInternal() {
+        var runId = UUID.randomUUID();
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
+        when(rebuildService.firstBuild(eq(runId), anyString(), any(), any()))
+                .thenThrow(new IllegalStateException("a bug in the build"));
+        when(rebuildService.fail(any(), anyString(), any(), anyString(), any())).thenReturn(true);
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isZero();
+        assertThat(result.failed()).isEqualTo(1);
+        verify(rebuildService).fail(eq(runId), eq(WORKSPACE_ID), eq(TopicsRunException.Code.INTERNAL),
+                contains("a bug in the build"), isNull());
     }
 
     @Test
