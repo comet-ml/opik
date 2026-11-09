@@ -734,6 +734,30 @@ class TopicVectorsTickTest {
         }
 
         @Test
+        @DisplayName("a vector whose latest row is a tombstone does not count: the window read finds its trace again, "
+                + "and a newer live row hides it once more")
+        void tombstonedVector() {
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projectId = ID_GENERATOR.generateId();
+            var traceId = ID_GENERATOR.generateId();
+            labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 3))).block();
+            statusDAO.insert(List.of(doneStatus(workspaceId, projectId, traceId, 3))).block();
+            vectorsDAO.insert(List.of(vector(workspaceId, projectId, traceId, 3))).block();
+            var lower = Instant.now().minus(1, ChronoUnit.HOURS);
+            assertThat(findUnvectored(workspaceId, lower)).isEmpty();
+
+            insertTombstone(workspaceId, traceId, 3);
+
+            assertCandidates(findUnvectored(workspaceId, lower), candidate(workspaceId, projectId, traceId, 3));
+            assertThat(vectors(workspaceId, List.of(traceId))).isEmpty();
+
+            vectorsDAO.insert(List.of(vector(workspaceId, projectId, traceId, 3))).block();
+
+            assertThat(findUnvectored(workspaceId, lower)).isEmpty();
+            assertThat(vectors(workspaceId, List.of(traceId))).hasSize(1);
+        }
+
+        @Test
         @DisplayName("the trace_created_at bound drops older traces from both sides alike, so the anti-join stays exact")
         void createdAtBound() {
             var workspaceId = ID_GENERATOR.generateId().toString();
@@ -1202,17 +1226,21 @@ class TopicVectorsTickTest {
         return TopicVectorsTickService.normalize(rawVector(text)).orElseThrow();
     }
 
-    /** The workspace's vectors of {@code traceIds}: the latest row of each (project, trace, task version). */
+    /** The workspace's vectors of {@code traceIds}: the latest row of each (project, trace, task version), unless deleted. */
     private List<TopicVector> vectors(String workspaceId, Collection<UUID> traceIds) {
         return templateAsync.nonTransaction(connection -> reactor.core.publisher.Flux
                 .from(connection.createStatement("""
                         SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, embed_model,
                             embed_dimensions, text, vector
-                        FROM topic_vectors
-                        WHERE workspace_id = :workspace_id
-                        AND trace_id IN :trace_ids
-                        ORDER BY workspace_id, project_id, trace_id, task_version, updated_at DESC
-                        LIMIT 1 BY workspace_id, project_id, trace_id, task_version
+                        FROM (
+                            SELECT *
+                            FROM topic_vectors
+                            WHERE workspace_id = :workspace_id
+                            AND trace_id IN :trace_ids
+                            ORDER BY workspace_id, project_id, trace_id, task_version, last_updated_at DESC
+                            LIMIT 1 BY workspace_id, project_id, trace_id, task_version
+                        )
+                        WHERE is_deleted = 0
                         """)
                         .bind("workspace_id", workspaceId)
                         .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
@@ -1278,6 +1306,19 @@ class TopicVectorsTickTest {
                 "trace_id", traceId.toString(), "workspace_id", workspaceId));
     }
 
+    /** A copy of the key's row with {@code is_deleted = 1}; ClickHouse stamps a later {@code last_updated_at}. */
+    private void insertTombstone(String workspaceId, UUID traceId, int taskVersion) {
+        execute("""
+                INSERT INTO topic_vectors (workspace_id, project_id, trace_id, trace_created_at, task_version,
+                    embed_model, embed_dimensions, text, vector, is_deleted)
+                SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, embed_model,
+                    embed_dimensions, text, vector, 1
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id AND trace_id = :trace_id AND task_version = :task_version
+                LIMIT 1
+                """, Map.of("workspace_id", workspaceId, "trace_id", traceId.toString(), "task_version", taskVersion));
+    }
+
     private void execute(String sql, Map<String, Object> parameters) {
         templateAsync.nonTransaction(connection -> {
             var statement = connection.createStatement(sql);
@@ -1302,9 +1343,10 @@ class TopicVectorsTickTest {
         return templateAsync.nonTransaction(connection -> Mono
                 .from(connection.createStatement("""
                         SELECT count() AS cnt FROM (
-                            SELECT trace_id FROM topic_vectors WHERE workspace_id = :workspace_id
-                            ORDER BY workspace_id, project_id, trace_id, task_version, updated_at DESC
+                            SELECT trace_id, is_deleted FROM topic_vectors WHERE workspace_id = :workspace_id
+                            ORDER BY workspace_id, project_id, trace_id, task_version, last_updated_at DESC
                             LIMIT 1 BY workspace_id, project_id, trace_id, task_version)
+                        WHERE is_deleted = 0
                         """)
                         .bind("workspace_id", workspaceId)
                         .execute())

@@ -183,13 +183,14 @@ public class AiLabelsConfig {
 
     /**
      * The credential and the traces go with every call, so never in clear over a network: https, or http only to this
-     * host ({@code localhost} or a loopback address, for tests and a local runner). Checked only when ai-labels is on,
-     * so an install with it off starts whatever the URL.
+     * host ({@code localhost} or a loopback address, for tests and a local runner). Checked whenever the URL is set,
+     * whether ai-labels is on or not: the guardrails decide calls send the same credential to the same URL under their
+     * own toggle. A blank URL passes.
      */
     @JsonIgnore
-    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) must be an https URL, or an http URL to localhost, when aiLabels.enabled (AI_LABELS_ENABLED) is true")
+    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) must be an https URL, or an http URL to localhost")
     public boolean isInferenceUrlSecure() {
-        return !enabled || inference == null || inference.isUrlSecure();
+        return inference == null || inference.isUrlSecure();
     }
 
     @JsonIgnore

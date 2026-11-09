@@ -727,6 +727,47 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
+        @DisplayName("a failed read of a later chunk of the deleted-trace check keeps the deletes of the chunk before "
+                + "it, and keeps only its own vectors as written")
+        void laterDeletedTraceCheckChunkFailure() {
+            var candidates = IntStream.range(0, 1_001)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1_001 - i)))
+                    .toList();
+            var deleted = candidates.get(500);
+            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, config.getVectors().getMaxTracesPerTick(),
+                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
+            stubSummaries(WORKSPACE_ID, candidates.subList(0, 1_000), candidate -> "intent of " + candidate.traceId(),
+                    BUDGET_SECONDS);
+            stubSummaries(WORKSPACE_ID, candidates.subList(1_000, 1_001),
+                    candidate -> "intent of " + candidate.traceId(), BUDGET_SECONDS);
+            var first = keys(candidates.subList(0, 1_000));
+            var last = keys(candidates.subList(1_000, 1_001));
+            when(dao.findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, first, BUDGET_SECONDS))
+                    .thenReturn(Flux.fromIterable(first).filter(traceKey -> !traceKey.equals(key(deleted))));
+            when(dao.findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, last, BUDGET_SECONDS))
+                    .thenReturn(Flux.error(new IllegalStateException("down")));
+            when(dao.deleteByKeys(WORKSPACE_ID, Set.of(key(deleted)))).thenReturn(Mono.empty());
+
+            var result = service.tick(NOW);
+
+            assertThat(inserted).hasSize(1_001);
+            verify(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, first, BUDGET_SECONDS);
+            verify(dao).findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, last, BUDGET_SECONDS);
+            verify(dao).deleteByKeys(WORKSPACE_ID, Set.of(key(deleted)));
+            verify(dao, never()).deleteByKeys(WORKSPACE_ID, Set.copyOf(last));
+            assertThat(result.written()).isEqualTo(1_000);
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.TRACE_DELETED, 1));
+            var writtenCounter = meter.counter("topics.vectors.written");
+            verify(writtenCounter).add(1_000, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(writtenCounter);
+            var skippedCounter = meter.counter("topics.vectors.skipped");
+            verify(skippedCounter)
+                    .add(1, workspace(WORKSPACE_ID).put(stringKey("reason"), TopicVectorsTickService.TRACE_DELETED)
+                            .build());
+            verifyNoMoreInteractions(skippedCounter);
+        }
+
+        @Test
         @DisplayName("a trace id reused in another project counts as missed only for the project whose row the short "
                 + "window missed")
         void missedKeyedByProject() {
