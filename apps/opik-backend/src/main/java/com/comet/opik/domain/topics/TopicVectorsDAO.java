@@ -29,8 +29,9 @@ import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 
 /**
- * {@code topic_vectors}: one row per (trace, task version). Writes are plain batched inserts; {@code updated_at} is
- * stamped by ClickHouse. It reads ai-labels' {@code ai_label_status} and {@code ai_labels} and never writes them.
+ * {@code topic_vectors}: one row per (trace, task version). Writes are plain batched inserts; {@code last_updated_at}
+ * is stamped by ClickHouse. Reads drop a key whose latest row has {@code is_deleted = 1}. It reads ai-labels'
+ * {@code ai_label_status} and {@code ai_labels} and never writes them.
  *
  * <p>The deletes are {@link AiLabelTableDeletes}' (same keys, same partitioning), so the vectors go with their traces
  * exactly as the labels do: by retention and by the trace-delete cascade.
@@ -60,7 +61,8 @@ public class TopicVectorsDAO {
      * {@code id_at} is the id's time cut to whole seconds, so the bound is cut the same way: at the id's millisecond time,
      * the oldest trace's own row would fall under it. A tie on {@code updated_at} takes the higher task version, then the
      * greater output, so the pick doesn't change between runs. The {@code topic_vectors} side takes the same bound: the
-     * keys it is compared with come from {@code done}.
+     * keys it is compared with come from {@code done}. A key there counts only when its latest row is not a tombstone
+     * ({@code is_deleted = 0} after the dedup), so a soft-deleted vector is made again while its trace is still done.
      *
      * <p>{@code done} itself has no {@code id_at} bound: the ai-labels sweep selects traces by {@code created_at}, and a
      * trace whose id carries an older time (an import, a client-made id) still gets a status, so a bound derived from the
@@ -111,10 +113,16 @@ public class TopicVectorsDAO {
             WHERE (project_id, trace_id, task_version) IN (SELECT project_id, trace_id, task_version FROM usable)
             AND (project_id, trace_id, task_version) NOT IN (
                 SELECT project_id, trace_id, task_version
-                FROM topic_vectors
-                WHERE workspace_id = :workspace_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
-                AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
+                FROM (
+                    SELECT workspace_id, project_id, trace_id, task_version, is_deleted
+                    FROM topic_vectors
+                    WHERE workspace_id = :workspace_id
+                    AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
+                    AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
+                    ORDER BY workspace_id, project_id, trace_id, task_version, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, trace_id, task_version
+                )
+                WHERE is_deleted = 0
             )
             ORDER BY updated_at, trace_id
             LIMIT :limit
