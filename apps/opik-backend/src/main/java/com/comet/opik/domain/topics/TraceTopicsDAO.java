@@ -6,7 +6,6 @@ import com.comet.opik.utils.WeeklyPartitions;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -16,7 +15,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -31,8 +29,9 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 
 /**
  * {@code trace_topics}: the topic of each trace, one row per assignment, the latest per trace wins. Writes are plain
- * batched inserts; {@code last_updated_at} is stamped by ClickHouse. Every read takes each trace's latest row first and
- * then drops it when that row is a tombstone ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do.
+ * batched inserts; {@code last_updated_at} is stamped by ClickHouse. A reader takes each trace's latest row first and
+ * then drops it when that row is a tombstone ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do. This
+ * PR has no reader: the read API and topic on arrival add theirs.
  *
  * <p>The deletes are copies of {@link TopicVectorsDAO}'s (same keys, same partitioning), so a trace's topic goes with
  * the trace exactly as its vector does: by retention and by the trace-delete cascade.
@@ -43,42 +42,6 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 public class TraceTopicsDAO {
 
     static final String TABLE = "trace_topics";
-
-    /**
-     * The latest row of every trace of the project, unless that row is a tombstone. run_id is a UUID v7 string, so on a
-     * last_updated_at tie its text order puts the later run first.
-     */
-    private static final String FIND_BY_PROJECT = """
-            SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id
-            FROM (
-                SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id, is_deleted
-                FROM trace_topics
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, run_id DESC
-                LIMIT 1 BY workspace_id, project_id, trace_id
-            )
-            WHERE is_deleted = 0
-            SETTINGS log_comment = '<log_comment>'
-            """;
-
-    /** Traces per topic among the project's traces created in the window, each by its latest row, tombstones left out. */
-    private static final String COUNT_BY_TOPIC = """
-            SELECT topic_id, count() AS traces
-            FROM (
-                SELECT trace_id, topic_id, is_deleted
-                FROM trace_topics
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, run_id DESC
-                LIMIT 1 BY workspace_id, project_id, trace_id
-            )
-            WHERE is_deleted = 0
-            GROUP BY topic_id
-            SETTINGS log_comment = '<log_comment>'
-            """;
 
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM trace_topics
@@ -153,35 +116,6 @@ public class TraceTopicsDAO {
                     node.put("run_id", row.runId());
                     return node;
                 });
-    }
-
-    public Flux<TraceTopic> findByProject(@NonNull String workspaceId, @NonNull UUID projectId) {
-        var template = getSTWithLogComment(FIND_BY_PROJECT, "topics:find_trace_topics", workspaceId, null,
-                "project_id=%s".formatted(projectId));
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("project_id", projectId.toString())
-                        .execute())
-                .flatMap(result -> result.map((row, metadata) -> toTraceTopic(row)));
-    }
-
-    /** Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. */
-    public Mono<Map<UUID, Long>> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Instant from, @NonNull Instant to) {
-        var template = getSTWithLogComment(COUNT_BY_TOPIC, "topics:count_by_topic", workspaceId, null,
-                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to));
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("project_id", projectId.toString())
-                        .bind("from_micros", toEpochMicros(from))
-                        .bind("to_micros", toEpochMicros(to))
-                        .execute())
-                .flatMap(result -> result.map((row, metadata) -> Map.entry(
-                        UUID.fromString(row.get("topic_id", String.class)),
-                        ((Number) row.get("traces", Object.class)).longValue())))
-                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
@@ -270,19 +204,4 @@ public class TraceTopicsDAO {
                 .then();
     }
 
-    private static TraceTopic toTraceTopic(Row row) {
-        return TraceTopic.builder()
-                .workspaceId(row.get("workspace_id", String.class))
-                .projectId(UUID.fromString(row.get("project_id", String.class)))
-                .traceId(UUID.fromString(row.get("trace_id", String.class)))
-                .traceCreatedAt(row.get("trace_created_at", Instant.class))
-                .topicId(UUID.fromString(row.get("topic_id", String.class)))
-                .source(TraceTopic.Source.valueOf(row.get("source", String.class).toUpperCase()))
-                .runId(row.get("run_id", String.class))
-                .build();
-    }
-
-    private static long toEpochMicros(Instant instant) {
-        return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
-    }
 }

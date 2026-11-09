@@ -150,7 +150,6 @@ class TopicsNightlyJobTest {
     private TopicsNightlyService nightlyService;
     private TopicVectorsDAO vectorsDAO;
     private TopicWindowDAO windowDAO;
-    private TraceTopicsDAO traceTopicsDAO;
     private TopicsProjectDeletedListener projectDeletedListener;
     private GuiceJobManager jobManager;
     private LockService lockService;
@@ -161,7 +160,7 @@ class TopicsNightlyJobTest {
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
             @Jit TopicsNightlyService nightlyService, @Jit TopicVectorsDAO vectorsDAO, @Jit TopicWindowDAO windowDAO,
-            @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicsProjectDeletedListener projectDeletedListener) {
+            @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.client = client;
         this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
@@ -172,7 +171,6 @@ class TopicsNightlyJobTest {
         this.nightlyService = nightlyService;
         this.vectorsDAO = vectorsDAO;
         this.windowDAO = windowDAO;
-        this.traceTopicsDAO = traceTopicsDAO;
         this.projectDeletedListener = projectDeletedListener;
     }
 
@@ -304,7 +302,7 @@ class TopicsNightlyJobTest {
         assertThat(prototypes.stream().filter(prototype -> prototype.topicId() == null))
                 .hasSize(json(run.getFirst().stats()).path("other_groups").asInt());
 
-        var traceTopics = traceTopicsDAO.findByProject(workspaceId, built).collectList().block();
+        var traceTopics = traceTopics(workspaceId, built);
         assertThat(traceTopics).hasSize(BUILT);
         assertThat(traceTopics).extracting(TraceTopic::traceId)
                 .containsExactlyInAnyOrderElementsOf(FIXTURE.traceIds.subList(0, BUILT));
@@ -472,7 +470,7 @@ class TopicsNightlyJobTest {
         assertThat(topics(projectId)).isEmpty();
         assertThat(counts(projectId)).isEmpty();
         assertThat(state(projectId).lastRunId()).isEqualTo(other);
-        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+        assertThat(traceTopics(workspaceId, projectId)).isEmpty();
     }
 
     @Test
@@ -503,11 +501,11 @@ class TopicsNightlyJobTest {
         List<TopicProjectState> states = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(TopicDAO.class).findStates(Set.of(projectId)));
         assertThat(states).isEmpty();
-        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+        assertThat(traceTopics(workspaceId, projectId)).isEmpty();
     }
 
     @Test
-    @DisplayName("the trace_topics reads drop a trace whose latest row is a tombstone, and keep one whose tombstone is older")
+    @DisplayName("a trace_topics read drops a trace whose latest row is a tombstone, and keeps one whose tombstone is older")
     void traceTopicsReadsSkipTombstones() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -526,11 +524,41 @@ class TopicsNightlyJobTest {
         insertTraceTopic(workspaceId, projectId, revived, createdAt, topicId, later, 0);
         insertTraceTopic(workspaceId, projectId, untouched, createdAt, TraceTopic.OTHER, earlier, 0);
 
-        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block())
-                .extracting(TraceTopic::traceId)
-                .containsExactlyInAnyOrder(revived, untouched);
-        assertThat(traceTopicsDAO.countByTopic(workspaceId, projectId, createdAt, createdAt.plusSeconds(1)).block())
-                .containsExactlyInAnyOrderEntriesOf(java.util.Map.of(topicId, 1L, TraceTopic.OTHER, 1L));
+        assertThat(traceTopics(workspaceId, projectId))
+                .extracting(TraceTopic::traceId, TraceTopic::topicId)
+                .containsExactlyInAnyOrder(tuple(revived, topicId), tuple(untouched, TraceTopic.OTHER));
+    }
+
+    /**
+     * The latest row of every trace of the project, unless that row is a tombstone: the read shape every
+     * {@code trace_topics} reader uses. run_id is a UUID v7 string, so on a last_updated_at tie the later run wins.
+     */
+    private List<TraceTopic> traceTopics(String workspaceId, UUID projectId) {
+        return clickHouseTemplate.nonTransaction(connection -> Flux.from(connection.createStatement("""
+                SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id
+                FROM (
+                    SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id, is_deleted
+                    FROM trace_topics
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, run_id DESC
+                    LIMIT 1 BY workspace_id, project_id, trace_id
+                )
+                WHERE is_deleted = 0
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .execute())
+                .flatMap(result -> result.map((row, metadata) -> TraceTopic.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
+                        .traceCreatedAt(row.get("trace_created_at", Instant.class))
+                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
+                        .source(TraceTopic.Source.valueOf(row.get("source", String.class).toUpperCase()))
+                        .runId(row.get("run_id", String.class))
+                        .build()))
+                .collectList())
+                .block();
     }
 
     /** One raw {@code trace_topics} row with its version and soft-delete marker, as no production write sets them. */
@@ -988,7 +1016,7 @@ class TopicsNightlyJobTest {
         assertThat(prototypes(projectId)).isEmpty();
         assertThat(state(projectId)).isNull();
         assertThat(counts(projectId)).isEmpty();
-        assertThat(traceTopicsDAO.findByProject(workspaceId, projectId).collectList().block()).isEmpty();
+        assertThat(traceTopics(workspaceId, projectId)).isEmpty();
     }
 
     /** A finished run of the project, started at 02:00 UTC {@code daysAgo} days before today. */
