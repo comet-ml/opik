@@ -178,10 +178,10 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("texts per group: round(250 / k), from 5 to 10")
         void budget() {
-            assertThat(TopicsRebuildService.authorExamples(50)).isEqualTo(5);
-            assertThat(TopicsRebuildService.authorExamples(35)).isEqualTo(7);
-            assertThat(TopicsRebuildService.authorExamples(30)).isEqualTo(8);
-            assertThat(TopicsRebuildService.authorExamples(15)).isEqualTo(10);
+            assertThat(TopicsRebuildService.authorExampleCount(50)).isEqualTo(5);
+            assertThat(TopicsRebuildService.authorExampleCount(35)).isEqualTo(7);
+            assertThat(TopicsRebuildService.authorExampleCount(30)).isEqualTo(8);
+            assertThat(TopicsRebuildService.authorExampleCount(15)).isEqualTo(10);
         }
 
         @Test

@@ -117,8 +117,8 @@ public class TopicsRebuildService {
         return Math.min(READ_SECONDS, nightly.getProjectTimeout().toSeconds());
     }
 
-    /** The author's texts per group for {@code k} groups. */
-    static int authorExamples(int k) {
+    /** How many texts the author sees per group for {@code k} groups. */
+    static int authorExampleCount(int k) {
         return Math.min(AUTHOR_MAX, Math.max(AUTHOR_MIN, (int) Math.round((double) AUTHOR_BUDGET / k)));
     }
 
@@ -242,7 +242,7 @@ public class TopicsRebuildService {
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
             var groups = GroupSummaries.summarize(texts, vectors, groupOf, fit.centres(), recent, DIMENSIONS);
-            int perGroup = authorExamples(k);
+            int perGroup = authorExampleCount(k);
             stats.put("author_examples", perGroup);
             var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
                     Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
