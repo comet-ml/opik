@@ -7,6 +7,7 @@ on:
       - "apps/opik-backend/**"
       - ".github/workflows/backend_tests.yml"
       - ".github/scripts/discover-backend-tests.sh"
+      - ".github/scripts/backend-test-timings.tsv"
   push:
     branches:
       - 'main'
@@ -14,6 +15,7 @@ on:
       - "apps/opik-backend/**"
       - ".github/workflows/backend_tests.yml"
       - ".github/scripts/discover-backend-tests.sh"
+      - ".github/scripts/backend-test-timings.tsv"
 
   workflow_dispatch:
 
@@ -110,6 +112,17 @@ jobs:
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
                 -Djunit.jupiter.execution.timeout.testable.method.default="$TEST_TIMEOUT"
+
+            # The per-class times in these reports refresh backend-test-timings.tsv, which balances the
+            # integration groups: .github/scripts/update-backend-test-timings.sh <run id>
+            - name: Upload test reports
+              uses: actions/upload-artifact@v7
+              if: always()
+              with:
+                name: backend-test-reports-${{ matrix.id }}
+                path: apps/opik-backend/target/surefire-reports/TEST-*.xml
+                retention-days: 14
+                if-no-files-found: ignore
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2
