@@ -207,7 +207,7 @@ tests:
     asserts:
       - matchRegex:
           path: data.REDIS_URL
-          pattern: ^redis://:.+@opik-redis-master:6379/$
+          pattern: ^redis://:.+@opik-redis-master:6379/$ # betterleaks:allow — regex, not a password
 
   - it: REDIS_URL is not rendered when the bundled Redis is disabled
     set:
@@ -232,11 +232,11 @@ tests:
 
   - it: the bundled Redis password is percent-encoded in REDIS_URL
     set:
-      redis.auth.password: "a b+c@d"
+      redis.auth.password: "a b+c@d" # betterleaks:allow — fake test password
     documentSelector:
       path: metadata.name
       value: opik-backend
     asserts:
       - equal:
           path: data.REDIS_URL
-          value: redis://:a%20b%2Bc%40d@opik-redis-master:6379/
+          value: redis://:a%20b%2Bc%40d@opik-redis-master:6379/ # betterleaks:allow — fake test password
