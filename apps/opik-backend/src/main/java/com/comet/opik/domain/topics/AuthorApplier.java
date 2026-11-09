@@ -120,11 +120,11 @@ public class AuthorApplier {
     }
 
     /**
-     * The name is a catch-all as a whole ({@link #CATCH_ALL_NAME}), stripped and case-folded: "Other Requests" is,
-     * "General Job Search" is not.
+     * The name is a catch-all as a whole ({@link #CATCH_ALL_NAME}), normalised as {@link #nameKey}: "Other Requests"
+     * is, with any run of spaces, tabs or no-break spaces inside; "General Job Search" is not.
      */
     public static boolean isCatchAllName(@NonNull String name) {
-        return CATCH_ALL_NAME.matcher(TopicText.pythonStrip(name).toLowerCase(Locale.ROOT)).matches();
+        return CATCH_ALL_NAME.matcher(nameKey(name)).matches();
     }
 
     /** As the stand: every listed valid id counts, a repeated one each time. */
