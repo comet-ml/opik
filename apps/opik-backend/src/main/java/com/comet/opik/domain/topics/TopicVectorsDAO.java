@@ -59,7 +59,21 @@ public class TopicVectorsDAO {
      * from the {@code id_at} of {@code done}'s oldest trace id on, so it skips the older partitions and granules.
      * {@code id_at} is the id's time cut to whole seconds, so the bound is cut the same way: at the id's millisecond time,
      * the oldest trace's own row would fall under it. A tie on {@code updated_at} takes the higher task version, then the
-     * greater output, so the pick doesn't change between runs.
+     * greater output, so the pick doesn't change between runs. The {@code topic_vectors} side takes the same bound: the
+     * keys it is compared with come from {@code done}.
+     *
+     * <p>{@code done} itself has no {@code id_at} bound: the ai-labels sweep selects traces by {@code created_at}, and a
+     * trace whose id carries an older time (an import, a client-made id) still gets a status, so a bound derived from the
+     * window would drop it. For the same reason the {@code id_at} bound above depends on the data: one such trace in
+     * {@code done} widens the output and vector reads back to its week.
+     *
+     * <p>ClickHouse does not materialize a CTE, so {@code done} is read three times: for the {@code id_at} bound (a scalar,
+     * computed once and reused by both sides), for the {@code IN} set and for the outer {@code FROM}. Measured on
+     * ClickHouse 26.3 with the real DDL and a synthetic 2.7M-trace workspace with 180 days of history, the 24h window
+     * reads 1.1M rows, about 300k per {@code done} read; without the {@code id_at} bound the output read alone costs more
+     * than the third read saves. Reading {@code done} once into Java and binding its keys back in 1,000-key chunks read
+     * more (1.8M rows in 16 queries for 24h, 17M rows in 101 queries for 7d), because each chunk's ids are spread over the
+     * workspace's granules.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -100,6 +114,7 @@ public class TopicVectorsDAO {
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
                 AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
+                AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
             )
             ORDER BY updated_at, trace_id
             LIMIT :limit
