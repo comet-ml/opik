@@ -29,9 +29,6 @@ else
     echo "Skipping download of the Open Telemetry Java Agent"
 fi
 
-# The Vector API of topics' k-means (KMeans): an incubator module, resolved only when asked for
-JAVA_OPTS="$JAVA_OPTS --add-modules jdk.incubator.vector"
-
 # Check if ENABLE_VIRTUAL_THREADS is set to true
 if [ "$ENABLE_VIRTUAL_THREADS" = "true" ]; then
     echo "Enabling virtual threads"
