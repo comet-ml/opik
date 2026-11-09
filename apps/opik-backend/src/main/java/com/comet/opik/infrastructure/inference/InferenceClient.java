@@ -420,8 +420,8 @@ public class InferenceClient {
             var maxBytes = config.getInference().getMaxResponseBytes();
             var body = readBody(response, maxBytes);
             if (body.length > maxBytes) {
-                throw InferenceException.upstreamError(status,
-                        InferenceException.parseRetryAfter(response.getHeaderString(HttpHeaders.RETRY_AFTER)),
+                // Not retryable: the same request would only get the same body again.
+                throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
                         new IllegalStateException("response body exceeds aiLabels.inference.maxResponseBytes '%d'"
                                 .formatted(maxBytes)));
             }

@@ -826,7 +826,7 @@ class TopicVectorsTickTest {
             var unicodeBlank = ID_GENERATOR.generateId();
             var usable = ID_GENERATOR.generateId();
             labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, blank, 1, "   "),
-                    outputLabel(workspaceId, projectId, unicodeBlank, 1, "\u2003\u3000\u2028"),
+                    outputLabel(workspaceId, projectId, unicodeBlank, 1, "\u2003\u3000\u2028\u00A0\u2007\u202F\u0085"),
                     outputLabel(workspaceId, projectId, otherVersion, 2),
                     outputLabel(workspaceId, projectId, usable, 1))).block();
             var oldest = Instant.now().minus(30, ChronoUnit.MINUTES);
@@ -885,6 +885,25 @@ class TopicVectorsTickTest {
                                     vector(workspaceId, otherProjectId, deleted, 1))));
             assertVectors(vectors(otherWorkspaceId, List.of(deleted)),
                     List.of(vector(otherWorkspaceId, projectId, deleted, 1)));
+            // Scoped to the trace's partition, so the mutation does not visit every part.
+            assertThat(partitionScopedDeletes(workspaceId)).isPositive();
+        }
+
+        private long partitionScopedDeletes(String workspaceId) {
+            return templateAsync.nonTransaction(connection -> Mono
+                    .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(Mono.from(connection.createStatement("""
+                            SELECT count() AS cnt
+                            FROM system.query_log
+                            WHERE type = 'QueryFinish'
+                            AND log_comment LIKE concat('topics:delete_vectors_by_trace_ids:', :workspace_id, ':%')
+                            AND query LIKE '%IN PARTITION%'
+                            """)
+                            .bind("workspace_id", workspaceId)
+                            .execute()))
+                    .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
+                    .block();
         }
 
         @Test

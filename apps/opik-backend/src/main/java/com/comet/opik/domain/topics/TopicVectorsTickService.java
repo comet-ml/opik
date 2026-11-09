@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.inference.EmbedRequest;
 import com.comet.opik.infrastructure.inference.EmbedResponse;
 import com.comet.opik.infrastructure.inference.EmbedResult;
 import com.comet.opik.infrastructure.inference.InferenceClient;
+import com.comet.opik.infrastructure.inference.InferenceErrorCode;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
@@ -24,6 +25,7 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -184,6 +186,10 @@ public class TopicVectorsTickService {
     static final int SUMMARY_READ_CHUNK = 1_000;
 
     private record Pending(TopicVectorCandidate candidate, String text) {
+    }
+
+    /** What one chunk's embed calls made, and whether the workspace must not be called again this tick. */
+    private record Embedded(List<TopicVector> vectors, boolean backOff) {
     }
 
     @Inject
@@ -371,6 +377,7 @@ public class TopicVectorsTickService {
                 found.addAll(candidates);
                 complete = complete && candidates.size() < limit;
             } catch (RuntimeException exception) {
+                rethrowIfInterrupted(exception);
                 complete = false;
                 countReadFailure("find", workspaceId, tally, exception);
                 log.warn("Topic vectors window read failed, workspace '{}'; reading it again next tick", workspaceId,
@@ -409,6 +416,7 @@ public class TopicVectorsTickService {
                         .collectMap(TopicVectorsTickService::key, Function.identity())
                         .block();
             } catch (RuntimeException exception) {
+                rethrowIfInterrupted(exception);
                 tally.cut(workspaceId, READ_FAILED, group.size());
                 countReadFailure("summaries", workspaceId, tally, exception);
                 log.warn("Topic vectors summary read failed, workspace '{}', traces '{}'; reading it again next tick",
@@ -440,18 +448,9 @@ public class TopicVectorsTickService {
                     tally.cut(workspaceId, OVER_BUDGET, chunk.size());
                     continue;
                 }
-                List<TopicVector> vectors;
-                try {
-                    vectors = embed(workspaceId, chunk, tally);
-                } catch (InferenceException exception) {
-                    tally.skip(workspaceId, EMBED_FAILED, chunk.size());
-                    backOff = backsOff(exception);
-                    tally.cut = tally.cut || backOff;
-                    log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}', back off '{}'",
-                            workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), backOff,
-                            exception);
-                    continue;
-                }
+                var embedded = embedChunk(workspaceId, chunk, deadline, tally);
+                backOff = embedded.backOff();
+                var vectors = embedded.vectors();
                 try {
                     dao.insert(vectors).block();
                 } catch (RuntimeException exception) {
@@ -515,6 +514,69 @@ public class TopicVectorsTickService {
         return deleted;
     }
 
+    /**
+     * One chunk's embed call. When the service rejects the call with a non-retryable 4xx, an input in it is bad (one
+     * opik-inference refuses), so the chunk is halved and each half is tried, down to single inputs: a bad input costs
+     * only itself, at about two calls per halving (17 calls for one bad input in 256). Halving stops at a back-off or
+     * when the tick has no time for another call.
+     */
+    private Embedded embedChunk(String workspaceId, List<Pending> chunk, Instant deadline, Tally tally) {
+        try {
+            return new Embedded(embed(workspaceId, chunk, tally), false);
+        } catch (InferenceException exception) {
+            boolean backOff = backsOff(exception);
+            if (!backOff && isRejectedInput(exception) && chunk.size() > 1) {
+                log.info("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'; trying "
+                        + "each half", workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size());
+                var vectors = new ArrayList<TopicVector>();
+                int half = chunk.size() / 2;
+                for (var part : List.of(chunk.subList(0, half), chunk.subList(half, chunk.size()))) {
+                    if (backOff) {
+                        tally.skip(workspaceId, EMBED_FAILED, part.size());
+                        continue;
+                    }
+                    if (!hasTimeForChunk(deadline)) {
+                        tally.cut(workspaceId, OVER_BUDGET, part.size());
+                        continue;
+                    }
+                    var embedded = embedChunk(workspaceId, part, deadline, tally);
+                    vectors.addAll(embedded.vectors());
+                    backOff = embedded.backOff();
+                }
+                return new Embedded(vectors, backOff);
+            }
+            tally.skip(workspaceId, EMBED_FAILED, chunk.size());
+            tally.cut = tally.cut || backOff;
+            log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}', back off '{}'",
+                    workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), backOff, exception);
+            return new Embedded(List.of(), backOff);
+        }
+    }
+
+    /** A non-retryable 4xx other than 429: the service refused what was sent, so sending less may pass. */
+    static boolean isRejectedInput(@NonNull InferenceException exception) {
+        int status = exception.getHttpStatus();
+        return !exception.isRetryable() && status >= 400 && status < 500 && status != 429;
+    }
+
+    /**
+     * Shutdown disposes the tick, which interrupts its thread; {@code block()} then throws with the
+     * {@link InterruptedException} as the cause. The tick must stop there instead of going on to the next workspace.
+     */
+    private static void rethrowIfInterrupted(RuntimeException exception) {
+        if (Exceptions.unwrap(exception) instanceof InterruptedException || Thread.currentThread().isInterrupted()) {
+            Thread.currentThread().interrupt();
+            throw exception;
+        }
+    }
+
+    /** The service's error code as a metric attribute, from the known set only, so the attribute stays bounded. */
+    static String metricCode(String code) {
+        boolean known = InferenceErrorCode.find(code).isPresent() || InferenceException.OUT_OF_TIME.equals(code)
+                || InferenceException.CLIENT_BUSY.equals(code);
+        return known ? code : "unknown";
+    }
+
     private static TopicTraceKey key(TopicVectorCandidate candidate) {
         return TopicTraceKey.builder().projectId(candidate.projectId()).traceId(candidate.traceId()).build();
     }
@@ -563,10 +625,10 @@ public class TopicVectorsTickService {
             response = client.embed(request, callDeadline).block();
         } catch (InferenceException exception) {
             embedDuration.record((System.nanoTime() - started) / 1e9,
-                    tally.workspace(workspaceId).put(stringKey("outcome"), exception.getCode()).build());
+                    tally.workspace(workspaceId).put(stringKey("outcome"), metricCode(exception.getCode())).build());
             embedFailures.add(1, tally.workspace(workspaceId)
                     .put(longKey("http_status"), (long) exception.getHttpStatus())
-                    .put(stringKey("code"), exception.getCode())
+                    .put(stringKey("code"), metricCode(exception.getCode()))
                     .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(exception))
                     .build());
             throw exception;
@@ -637,10 +699,19 @@ public class TopicVectorsTickService {
      * @param summary the trace's latest output row, or {@code null} when the summary read found none
      */
     static Optional<String> summaryText(@NonNull TopicVectorCandidate candidate, @Nullable TopicSummary summary) {
-        if (summary == null || summary.taskVersion() != candidate.taskVersion() || summary.summary().isBlank()) {
+        if (summary == null || summary.taskVersion() != candidate.taskVersion() || isBlankForEmbed(summary.summary())) {
             return Optional.empty();
         }
         return Optional.of(summary.summary());
+    }
+
+    /**
+     * Blank as opik-inference counts it: Python's {@code str.strip()} leaves nothing. That is Java's whitespace plus
+     * the Unicode space separators Java leaves out (the no-break spaces U+00A0, U+2007, U+202F) and U+0085. The
+     * service rejects such an input with a non-retryable 4xx. {@code TopicVectorsDAO.NON_BLANK} is the same rule.
+     */
+    static boolean isBlankForEmbed(@NonNull String text) {
+        return text.codePoints().allMatch(cp -> Character.isWhitespace(cp) || Character.isSpaceChar(cp) || cp == 0x85);
     }
 
     /** Scaled to length 1, so the nightly job's dot product is the cosine; empty for a zero or non-finite vector. */

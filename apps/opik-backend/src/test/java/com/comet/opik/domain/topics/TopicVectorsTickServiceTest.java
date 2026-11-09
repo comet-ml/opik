@@ -175,6 +175,10 @@ class TopicVectorsTickServiceTest {
             assertThat(TopicVectorsTickService.summaryText(candidate, summary(candidate, 2, ""))).isEmpty();
             assertThat(TopicVectorsTickService.summaryText(candidate, summary(candidate, 2, "  "))).isEmpty();
             assertThat(TopicVectorsTickService.summaryText(candidate, summary(candidate, 2, " \n\t "))).isEmpty();
+            // Blank to opik-inference (Python's str.strip()), though not to String.isBlank().
+            assertThat(
+                    TopicVectorsTickService.summaryText(candidate, summary(candidate, 2, "\u00A0\u2007\u202F\u0085")))
+                    .isEmpty();
             assertThat(TopicVectorsTickService.summaryText(candidate, null)).isEmpty();
             assertThat(TopicVectorsTickService.summaryText(candidate, summary(candidate, 1, "older text")))
                     .isEmpty();
@@ -443,6 +447,127 @@ class TopicVectorsTickServiceTest {
             verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
             verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
                     Duration.ofDays(1));
+        }
+
+        @Test
+        @DisplayName("a summary that only the service counts as blank (no-break spaces, U+0085) is skipped as "
+                + "missing_summary and never sent")
+        void serviceBlankSummary() {
+            var candidates = IntStream.range(0, 3)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(10 - i)))
+                    .toList();
+            var blank = candidates.get(1);
+            stub(candidates,
+                    candidate -> candidate == blank ? "\u00A0\u2007 \u202F\u0085" : "intent " + candidate.traceId());
+
+            var result = service.tick(NOW);
+
+            assertThat(requests).singleElement().satisfies(request -> assertThat(request.inputs())
+                    .containsExactly("intent " + candidates.get(0).traceId(), "intent " + candidates.get(2).traceId()));
+            assertThat(result.written()).isEqualTo(2);
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.MISSING_SUMMARY, 1));
+        }
+
+        @Test
+        @DisplayName("a non-retryable 4xx halves the chunk until the rejected input is alone: it alone is embed_failed, "
+                + "the rest are written")
+        void rejectedInputCostsOnlyItself() {
+            var candidates = IntStream.range(0, 5)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(10 - i)))
+                    .toList();
+            var bad = candidates.get(3);
+            stub(candidates, candidate -> candidate == bad ? "rejected" : "intent " + candidate.traceId());
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                requests.add(request);
+                return request.inputs().contains("rejected")
+                        ? Mono.error(inferenceException(400, "invalid_request", false))
+                        : Mono.just(embedded(request.inputs()));
+            });
+
+            var result = service.tick(NOW);
+
+            // 5 -> 2 + 3 (rejected) -> 1 + 2 (rejected) -> 1 (rejected) + 1.
+            assertThat(requests).extracting(request -> request.inputs().size()).containsExactly(5, 2, 3, 1, 2, 1, 1);
+            assertThat(inserted).extracting(TopicVector::traceId)
+                    .containsExactlyInAnyOrderElementsOf(candidates.stream().filter(candidate -> candidate != bad)
+                            .map(TopicVectorCandidate::traceId).toList());
+            assertThat(result.written()).isEqualTo(4);
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 1));
+        }
+
+        @Test
+        @DisplayName("a 4xx that is retryable, or a 429, is not halved: the workspace backs off")
+        void retryableOrThrottledIsNotHalved() {
+            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(400, "invalid_request", false)))
+                    .isTrue();
+            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(413, "input_too_long", false)))
+                    .isTrue();
+            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(429, "quota_exceeded", true)))
+                    .isFalse();
+            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(409, "something_new", true)))
+                    .isFalse();
+            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(503, "overloaded", true)))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("an interrupt during a window read stops the tick: the next workspace is not read")
+        void interruptStopsTheTick() {
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("first", "second"));
+            when(findUnvectored(dao, "first", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS))
+                    .thenReturn(Flux.error(reactor.core.Exceptions.propagate(new InterruptedException())));
+
+            try {
+                assertThatThrownBy(() -> service.tick(NOW))
+                        .satisfies(error -> assertThat(reactor.core.Exceptions.unwrap(error))
+                                .isInstanceOf(InterruptedException.class));
+                assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            } finally {
+                Thread.interrupted();
+            }
+            findUnvectored(verify(dao, never()), "second", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS);
+        }
+
+        @Test
+        @DisplayName("a failed insert is skipped as insert_failed, keeps the long-window pass on, and the next "
+                + "workspace still runs")
+        void insertFailure() {
+            longWindowDue();
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("failing", "healthy"));
+            var failing = candidate("failing", NOW.minusSeconds(10));
+            var healthy = candidate("healthy", NOW.minusSeconds(10));
+            when(findUnvectored(dao, "failing", NOW, LONG_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(failing));
+            when(findUnvectored(dao, "healthy", NOW, LONG_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(healthy));
+            stubSummaries("failing", List.of(failing), candidate -> "failing text", BUDGET_SECONDS);
+            stubSummaries("healthy", List.of(healthy), candidate -> "healthy text", BUDGET_SECONDS);
+            when(dao.insert(anyList())).thenAnswer(invocation -> {
+                List<TopicVector> rows = invocation.getArgument(0);
+                if (rows.getFirst().workspaceId().equals("failing")) {
+                    return Mono.error(new IllegalStateException("insert down"));
+                }
+                inserted.addAll(rows);
+                return Mono.just((long) rows.size());
+            });
+
+            var result = service.tick(NOW);
+
+            assertThat(inserted).extracting(TopicVector::traceId).containsExactly(healthy.traceId());
+            assertThat(result.written()).isEqualTo(1);
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INSERT_FAILED, 1));
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
+            verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
+                    Duration.ofDays(1));
+        }
+
+        @Test
+        @DisplayName("embed error codes become metric attributes from the known set only; anything else is unknown")
+        void metricCode() {
+            assertThat(TopicVectorsTickService.metricCode("quota_exceeded")).isEqualTo("quota_exceeded");
+            assertThat(TopicVectorsTickService.metricCode("out_of_time")).isEqualTo("out_of_time");
+            assertThat(TopicVectorsTickService.metricCode("client_busy")).isEqualTo("client_busy");
+            assertThat(TopicVectorsTickService.metricCode("something_new")).isEqualTo("unknown");
+            assertThat(TopicVectorsTickService.metricCode(null)).isEqualTo("unknown");
         }
 
         @Test
@@ -1149,16 +1274,25 @@ class TopicVectorsTickServiceTest {
         return TopicsWorkspaceNames.builder(workspaceId, "name-" + workspaceId);
     }
 
+    /** Every char Python's {@code str.isspace()} is true for, so {@code str.strip()} removes: opik-inference's rule. */
+    private static final java.util.Set<Integer> PYTHON_SPACE = java.util.stream.Stream.of(
+            IntStream.rangeClosed(0x09, 0x0D), IntStream.rangeClosed(0x1C, 0x20), IntStream.of(0x85, 0xA0, 0x1680),
+            IntStream.rangeClosed(0x2000, 0x200A), IntStream.of(0x2028, 0x2029, 0x202F, 0x205F, 0x3000))
+            .flatMap(IntStream::boxed).collect(java.util.stream.Collectors.toUnmodifiableSet());
+
     @Test
-    @DisplayName("the window read's non-blank pattern agrees with String.isBlank on every single char")
-    void nonBlankPatternMatchesIsBlank() {
+    @DisplayName("the window read's non-blank pattern and isBlankForEmbed agree with Python's str.strip() on every "
+            + "single char")
+    void blankRuleMatchesPythonStrip() {
         var pattern = java.util.regex.Pattern.compile(TopicVectorsDAO.NON_BLANK);
         for (int c = 0; c <= Character.MAX_VALUE; c++) {
-            var text = String.valueOf((char) c);
             if (Character.isSurrogate((char) c)) {
                 continue;
             }
-            assertThat(pattern.matcher(text).find()).as("U+%04X", c).isEqualTo(!text.isBlank());
+            var text = String.valueOf((char) c);
+            boolean blank = PYTHON_SPACE.contains(c);
+            assertThat(TopicVectorsTickService.isBlankForEmbed(text)).as("U+%04X", c).isEqualTo(blank);
+            assertThat(pattern.matcher(text).find()).as("U+%04X", c).isEqualTo(!blank);
         }
     }
 }

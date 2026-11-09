@@ -254,7 +254,7 @@ public class AiLabelsConfig {
          * can hold up to this much heap, so it is capped at 64 MiB, twice the default.
          */
         @JsonProperty
-        @Min(1) @Max(64L * 1024 * 1024) private long maxResponseBytes;
+        @Min(1) @Max(64L * 1024 * 1024) private long maxResponseBytes = 32L * 1024 * 1024;
 
         /**
          * https, or http to {@code localhost} or a loopback address; see {@link AiLabelsConfig#isInferenceUrlSecure()}.

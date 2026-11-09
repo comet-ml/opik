@@ -1,16 +1,19 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.ailabels.AiLabelTableDeletes;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.WeeklyPartitions;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,17 +28,21 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
+import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
  * {@code topic_vectors}: one row per (trace, task version). Writes are plain batched inserts; {@code last_updated_at}
  * is stamped by ClickHouse. Reads drop a key whose latest row has {@code is_deleted = 1}. It reads ai-labels'
  * {@code ai_label_status} and {@code ai_labels} and never writes them.
  *
- * <p>The deletes are {@link AiLabelTableDeletes}' (same keys, same partitioning), so the vectors go with their traces
- * exactly as the labels do: by retention and by the trace-delete cascade.
+ * <p>The deletes are this DAO's own, in {@code TraceDAO}'s shape on {@code trace_id}: the table has the trace's weekly
+ * partition, so the vectors go with their traces, by retention and by the trace-delete cascade.
  */
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicVectorsDAO {
@@ -131,12 +138,13 @@ public class TopicVectorsDAO {
             """;
 
     /**
-     * RE2 for "not {@link String#isBlank()}": a character that is not {@link Character#isWhitespace(char)}. That is
-     * anything outside the ASCII controls tab to carriage return and file to unit separator and outside Unicode
-     * separators ({@code \p{Z}}), except the no-break spaces, which Java does not count as whitespace. Bound as a
-     * parameter so the backslashes need no escaping in the template.
+     * RE2 for "not blank" as opik-inference counts it: a character that Python's {@code str.strip()} keeps. That is
+     * anything outside the ASCII controls tab to carriage return and file to unit separator, U+0085 and the Unicode
+     * separators ({@code \p{Z}}, the no-break spaces included). The service rejects an input that strips to nothing,
+     * so such a summary must never reach an embed call. {@code TopicVectorsTickService.isBlankForEmbed} is the same rule.
+     * Bound as a parameter so the backslashes need no escaping in the template.
      */
-    static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\p{Z}]|[\\x{A0}\\x{2007}\\x{202F}]";
+    static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\x{85}\\p{Z}]";
 
     /**
      * The summary read: each trace's latest output row, its text extracted in SQL exactly as stored. The (project,
@@ -172,9 +180,73 @@ public class TopicVectorsDAO {
                 max_execution_time = <max_execution_time>, priority = 100, log_comment = '<log_comment>'
             """;
 
+    /**
+     * {@code TraceDAO.DELETE_FOR_RETENTION} on {@code trace_id}. The week bounds are the partition expression, so the
+     * sweep prunes to the partitions in range; they never exclude a row the id range would delete. Traces linked to
+     * experiments survive retention, so their vectors do too.
+     */
+    private static final String DELETE_FOR_RETENTION = """
+            DELETE FROM topic_vectors
+            WHERE workspace_id IN :workspace_ids
+            AND trace_id >= :lower_bound
+            AND trace_id \\< :cutoff_id
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                >= (toDate32(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'), 1)))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                \\< addWeeks(toDate32(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC'), 1)), 1)
+            AND trace_id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids
+                AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    /**
+     * {@code TraceDAO.DELETE_FOR_RETENTION_BOUNDED} on {@code trace_id}: each workspace carries its own floor, and the
+     * week bounds use the global {@code :min_lower_bound}, which is at or below every floor.
+     */
+    private static final String DELETE_FOR_RETENTION_BOUNDED = """
+            DELETE FROM topic_vectors
+            WHERE (
+                <items:{item |
+                    (workspace_id = :ws_<item.index> AND trace_id >= :lb_<item.index> AND trace_id \\< :cutoff_id)
+                    <if(item.hasNext)>OR<endif>
+                }>
+            )
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                >= (toDate32(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'), 1)))
+            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                \\< addWeeks(toDate32(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC'), 1)), 1)
+            AND trace_id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids_flat
+                AND trace_id >= :min_lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    /**
+     * {@code IN PARTITION} scopes the parts the mutation is registered against, as in {@code TraceDAO}'s delete: a
+     * {@code WHERE} cannot. {@code <partition>} is interpolated because {@code IN PARTITION} takes no bound parameter;
+     * it is always a {@code long} from {@link WeeklyPartitions}.
+     */
+    private static final String DELETE_BY_TRACE_IDS = """
+            DELETE FROM topic_vectors
+            <if(partition)>IN PARTITION <partition><endif>
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND trace_id IN :trace_ids
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
-    private final @NonNull AiLabelTableDeletes deletes;
     private final @NonNull @Config("topics") TopicsConfig config;
 
     public Mono<Long> insert(List<TopicVector> rows) {
@@ -258,7 +330,10 @@ public class TopicVectorsDAO {
         }
         var find = config.getVectors().getFind();
         // id_at is derived from the UUIDv7 trace id, so the oldest id bounds the partitions read.
-        long minIdAtSeconds = keys.stream().mapToLong(key -> key.traceId().getMostSignificantBits() >>> 16).min()
+        // A non-v7 id has no time in it; UUIDv7ToDateTime gives it 1970, so its bound is 0 as well.
+        long minIdAtSeconds = keys.stream()
+                .mapToLong(key -> key.traceId().version() == 7 ? key.traceId().getMostSignificantBits() >>> 16 : 0)
+                .min()
                 .orElseThrow() / 1000;
         var template = getSTWithLogComment(query, queryName, workspaceId, null, "keys=%d".formatted(keys.size()))
                 .add("max_rows_to_read", find.getMaxRowsToRead())
@@ -279,17 +354,81 @@ public class TopicVectorsDAO {
 
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
-        return deletes.deleteForRetention(TABLE, workspaceIds, cutoffId, lowerBound);
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(workspaceIds),
+                "Argument 'workspaceIds' must not be empty");
+        log.info("Retention delete topic vectors, workspaces '{}', cutoffId '{}', lowerBound '{}'",
+                workspaceIds.size(), cutoffId, lowerBound);
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "topics:retention_delete_vectors", null, "",
+                "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
+                        lowerBound));
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> Mono.from(connection.createStatement(template.render())
+                        .bind("workspace_ids", workspaceIds.toArray(String[]::new))
+                        .bind("cutoff_id", cutoffId)
+                        .bind("lower_bound", lowerBound)
+                        .execute()))
+                .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
 
     public Mono<Long> deleteForRetentionBounded(@NonNull Map<String, UUID> workspaceMinIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
-        return deletes.deleteForRetentionBounded(TABLE, workspaceMinIds, cutoffId, lowerBound);
+        Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
+        log.info("Retention delete topic vectors (bounded), workspaces '{}', cutoffId '{}'", workspaceMinIds.size(),
+                cutoffId);
+        var entries = List.copyOf(workspaceMinIds.entrySet());
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "topics:retention_delete_vectors_bounded",
+                null, "", "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(),
+                        cutoffId, lowerBound))
+                .add("items", getQueryItemPlaceHolder(entries.size()));
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("cutoff_id", cutoffId)
+                            .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
+                            .bind("min_lower_bound", lowerBound);
+                    for (int i = 0; i < entries.size(); i++) {
+                        statement.bind("ws_" + i, entries.get(i).getKey());
+                        statement.bind("lb_" + i, entries.get(i).getValue());
+                    }
+                    return Mono.from(statement.execute());
+                })
+                .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
 
-    /** The trace-delete cascade; workspace from the reactive context. */
+    /**
+     * The trace-delete cascade; workspace from the reactive context. One statement per batch and weekly partition, or
+     * one unscoped statement per batch when a trace id's partition cannot be derived exactly.
+     */
     public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
-        return deletes.deleteByTraceIds(TABLE, traceIds, projectId);
+        if (traceIds.isEmpty()) {
+            return Mono.empty();
+        }
+        return makeMonoContextAware((userName, workspaceId) -> Flux
+                .fromIterable(Lists.partition(List.copyOf(traceIds), ANALYTICS_DELETE_BATCH_SIZE))
+                .concatMap(batch -> WeeklyPartitions.groupByPartition(batch)
+                        .map(grouped -> Flux.fromIterable(grouped.entrySet())
+                                .concatMap(entry -> deleteByTraceIds(entry.getValue(), entry.getKey(), projectId,
+                                        workspaceId, userName)))
+                        .orElseGet(() -> Flux.from(deleteByTraceIds(batch, null, projectId, workspaceId, userName))))
+                .then());
+    }
+
+    private Mono<Void> deleteByTraceIds(Collection<UUID> traceIds, Long partition, UUID projectId, String workspaceId,
+            String userName) {
+        var ids = traceIds.stream().map(UUID::toString).toArray(String[]::new);
+        var template = getSTWithLogComment(DELETE_BY_TRACE_IDS, "topics:delete_vectors_by_trace_ids", workspaceId,
+                userName, "trace_ids=%s, partition=%s".formatted(ids.length, partition));
+        if (partition != null) {
+            template.add("partition", partition);
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> Mono.from(connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("trace_ids", ids)
+                        .execute()))
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then();
     }
 
     /** The vectors of {@code keys}, as the system user: the tick's own deletes, outside any request. */
