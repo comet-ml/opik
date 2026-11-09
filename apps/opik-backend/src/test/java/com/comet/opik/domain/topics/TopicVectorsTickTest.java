@@ -817,7 +817,7 @@ class TopicVectorsTickTest {
             var unicodeBlank = ID_GENERATOR.generateId();
             var usable = ID_GENERATOR.generateId();
             labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, blank, 1, "   "),
-                    outputLabel(workspaceId, projectId, unicodeBlank, 1, "\u2003\u3000\u2028"),
+                    outputLabel(workspaceId, projectId, unicodeBlank, 1, "\u2003\u3000\u2028\u00A0\u2007\u202F\u0085"),
                     outputLabel(workspaceId, projectId, otherVersion, 2),
                     outputLabel(workspaceId, projectId, usable, 1))).block();
             var oldest = Instant.now().minus(30, ChronoUnit.MINUTES);

@@ -138,12 +138,13 @@ public class TopicVectorsDAO {
             """;
 
     /**
-     * RE2 for "not {@link String#isBlank()}": a character that is not {@link Character#isWhitespace(char)}. That is
-     * anything outside the ASCII controls tab to carriage return and file to unit separator and outside Unicode
-     * separators ({@code \p{Z}}), except the no-break spaces, which Java does not count as whitespace. Bound as a
-     * parameter so the backslashes need no escaping in the template.
+     * RE2 for "not blank" as opik-inference counts it: a character that Python's {@code str.strip()} keeps. That is
+     * anything outside the ASCII controls tab to carriage return and file to unit separator, U+0085 and the Unicode
+     * separators ({@code \p{Z}}, the no-break spaces included). The service rejects an input that strips to nothing,
+     * so such a summary must never reach an embed call. {@code TopicVectorsTickService.isBlankForEmbed} is the same rule.
+     * Bound as a parameter so the backslashes need no escaping in the template.
      */
-    static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\p{Z}]|[\\x{A0}\\x{2007}\\x{202F}]";
+    static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\x{85}\\p{Z}]";
 
     /**
      * The summary read: each trace's latest output row, its text extracted in SQL exactly as stored. The (project,
@@ -329,7 +330,10 @@ public class TopicVectorsDAO {
         }
         var find = config.getVectors().getFind();
         // id_at is derived from the UUIDv7 trace id, so the oldest id bounds the partitions read.
-        long minIdAtSeconds = keys.stream().mapToLong(key -> key.traceId().getMostSignificantBits() >>> 16).min()
+        // A non-v7 id has no time in it; UUIDv7ToDateTime gives it 1970, so its bound is 0 as well.
+        long minIdAtSeconds = keys.stream()
+                .mapToLong(key -> key.traceId().version() == 7 ? key.traceId().getMostSignificantBits() >>> 16 : 0)
+                .min()
                 .orElseThrow() / 1000;
         var template = getSTWithLogComment(query, queryName, workspaceId, null, "keys=%d".formatted(keys.size()))
                 .add("max_rows_to_read", find.getMaxRowsToRead())
