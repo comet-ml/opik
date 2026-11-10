@@ -54,7 +54,7 @@ setup(
         #   that fixes a published advisory.
         # - A library without a cap always gets its newest release.
         "boto3-stubs[bedrock-runtime]>=1.34.110",
-        "boto3-stubs<=1.43.125",
+        "boto3-stubs<=1.43.126",
         "click",
         "click<=8.5.1",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
@@ -88,7 +88,7 @@ setup(
         #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
         "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
-        "litellm<=1.108.1",
+        "litellm<=1.108.2",
         "openai",
         "openai<=3.46.0",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
