@@ -22,7 +22,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -319,7 +318,7 @@ class InferenceClientTest {
         client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(EMBEDDED_BODY.length()));
         server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
 
-        assertThat(client.embed(embedRequest(), later()).block().result().dimensions()).isEqualTo(2);
+        assertThat(client.embed(embedRequest(), later()).block().result().embeddings()).hasSize(2);
     }
 
     static Stream<Arguments> bodiesOverTheCap() {
@@ -518,7 +517,6 @@ class InferenceClientTest {
 
         assertThat(response.result()).isEqualTo(EmbedResult.builder()
                 .embeddings(List.of(List.of(0.6f, 0.8f), List.of(1.0f, 0.0f)))
-                .dimensions(2)
                 .build());
         var sent = single(postRequestedFor(urlEqualTo(EMBED_PATH)));
         assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer " + CREDENTIAL);
@@ -577,30 +575,18 @@ class InferenceClientTest {
     }
 
     @Test
-    void embedDeadlineIsTheSmallestOfTheCallersTheTimeLeftAndTheMaximum() {
+    void embedDeadlineIsTheTimeLeftAtMostTheMaximum() {
         server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
 
-        client.embed(embedRequest().toBuilder().deadlineMs(2_000L).build(), later()).block();
-        client.embed(embedRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(5)).block();
-        client.embed(embedRequest().toBuilder().deadlineMs(120_000L).build(), Instant.now().plusSeconds(600))
-                .block();
+        client.embed(embedRequest(), Instant.now().plusSeconds(5)).block();
+        client.embed(embedRequest(), Instant.now().plusSeconds(600)).block();
 
         var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH))).stream()
                 .map(request -> json(request).path("deadline_ms").asLong())
                 .toList();
-        assertThat(sent).hasSize(3);
-        assertThat(sent.get(0)).isEqualTo(2_000L);
-        assertThat(sent.get(1)).isBetween(1L, 5_000L);
-        assertThat(sent.get(2)).isEqualTo(InferenceClient.MAX_EMBED_DEADLINE.toMillis());
-    }
-
-    @ParameterizedTest(name = "deadline_ms {0}")
-    @ValueSource(longs = {0L, -1L})
-    void embedRejectsANonPositiveDeadline(long deadlineMs) {
-        var request = embedRequest().toBuilder().deadlineMs(deadlineMs).build();
-
-        assertThatThrownBy(() -> client.embed(request, later())).isExactlyInstanceOf(IllegalArgumentException.class);
-        assertThat(server.getAllServeEvents()).isEmpty();
+        assertThat(sent).hasSize(2);
+        assertThat(sent.get(0)).isBetween(1L, 5_000L);
+        assertThat(sent.get(1)).isEqualTo(InferenceClient.MAX_EMBED_DEADLINE.toMillis());
     }
 
     @Test

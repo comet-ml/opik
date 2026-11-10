@@ -306,7 +306,7 @@ class TopicVectorsTickServiceTest {
             embeddings.add(withNull);
             embeddings.add(vectorOf("intent of " + normal.traceId()));
             answerEmbed(embedRequest(WORKSPACE_ID, texts), EmbedResponse.builder()
-                    .result(EmbedResult.builder().embeddings(embeddings).dimensions(384).build())
+                    .result(EmbedResult.builder().embeddings(embeddings).build())
                     .build());
 
             var result = service.tick(NOW);
@@ -328,7 +328,7 @@ class TopicVectorsTickServiceTest {
             var first = embedRequest(WORKSPACE_ID, texts.subList(0, 2));
             var second = embedRequest(WORKSPACE_ID, texts.subList(2, 4));
             answerEmbed(first, EmbedResponse.builder()
-                    .result(EmbedResult.builder().embeddings(null).dimensions(384).build())
+                    .result(EmbedResult.builder().embeddings(null).build())
                     .build());
 
             var result = service.tick(NOW);
@@ -1151,7 +1151,6 @@ class TopicVectorsTickServiceTest {
         return EmbedResponse.builder()
                 .result(EmbedResult.builder()
                         .embeddings(inputs.stream().map(TopicVectorsTickServiceTest::vectorOf).toList())
-                        .dimensions(384)
                         .build())
                 .build();
     }
