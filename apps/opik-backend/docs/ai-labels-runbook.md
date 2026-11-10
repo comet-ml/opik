@@ -113,7 +113,7 @@ or in Other, and a name that is a catch-all as a whole ("Other", "General Reques
 
 | Table | Database | What |
 |---|---|---|
-| `topics` | MySQL | One row per topic: name, definition, `born` (the night), `size` (window traces). |
+| `topics` | MySQL | One row per topic: name, definition, `born` (the night, or the day of the run if the night is later: the first-build job runs for tomorrow's night), `size` (window traces). |
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
 | `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |

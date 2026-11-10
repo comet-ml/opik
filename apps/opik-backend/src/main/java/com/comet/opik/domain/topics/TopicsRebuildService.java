@@ -191,6 +191,11 @@ public class TopicsRebuildService {
         private final String workspaceId;
         private final UUID projectId;
         private final LocalDate night;
+        /**
+         * The topics' {@code born}: the night, but never after the UTC day the run started. The first-build job runs
+         * for tomorrow's night (its window holds today's traces), and its topics are born today, not tomorrow.
+         */
+        private final LocalDate born;
         private final Instant from;
         private final Instant to;
         private final ObjectNode stats = JsonUtils.createObjectNode();
@@ -203,6 +208,8 @@ public class TopicsRebuildService {
             this.workspaceId = workspaceId;
             this.projectId = projectId;
             this.night = night;
+            var started = LocalDate.now(ZoneOffset.UTC);
+            this.born = night.isAfter(started) ? started : night;
             this.to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
             this.from = night.minusDays(config.getNightly().getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
             stats.put("window_from", from.toString());
@@ -415,7 +422,7 @@ public class TopicsRebuildService {
                         .projectId(projectId)
                         .name(topic.name())
                         .definition(topic.definition())
-                        .born(night)
+                        .born(born)
                         .size(sizes[t])
                         .build());
             }
@@ -458,8 +465,9 @@ public class TopicsRebuildService {
                 if (StringUtils.isBlank(topic.name()) || AuthorApplier.isCatchAllName(topic.name())) {
                     throw invariant("topic '%s' has a blank or catch-all name".formatted(topics.indexOf(topic)));
                 }
-                if (!topic.born().equals(night)) {
-                    throw invariant("topic '%s' born '%s', not tonight".formatted(topics.indexOf(topic), topic.born()));
+                if (!topic.born().equals(born)) {
+                    throw invariant("topic '%s' born '%s', not '%s'".formatted(topics.indexOf(topic), topic.born(),
+                            born));
                 }
             }
             for (var prototype : prototypes) {

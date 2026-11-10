@@ -867,8 +867,8 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("the first-build job builds a project with minVectors in tomorrow's window, for tomorrow; it skips one "
-            + "with a list, with a run in the last 24 h, paused, or under minVectors")
+    @DisplayName("the first-build job builds a project with minVectors in tomorrow's window, for tomorrow, its topics "
+            + "born today; it skips one with a list, with a run in the last 24 h, paused, or under minVectors")
     void firstBuildsByDay() {
         var workspaceId = enabledWorkspace();
         var tomorrow = LocalDate.now(ZoneOffset.UTC).plusDays(1);
@@ -910,7 +910,10 @@ class TopicsNightlyJobTest {
             assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED);
             assertThat(json(run.stats()).path("vectors").asInt()).isEqualTo(BUILT);
         });
-        assertThat(topics(built)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(tomorrow));
+        // The run is for tomorrow's night, but its topics are born today (UTC), never in the future.
+        var today = LocalDate.now(ZoneOffset.UTC);
+        assertThat(topics(built)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born()).isEqualTo(today));
+        assertThat(topics(built)).allSatisfy(topic -> assertThat(topic.born()).isBeforeOrEqualTo(today));
         assertThat(state(built).windowUntil()).isEqualTo(tomorrowStart);
         assertThat(runs(withList)).isEmpty();
         assertThat(runs(recentRun)).hasSize(1);
