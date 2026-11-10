@@ -990,8 +990,8 @@ start_backend() {
     log_debug "Starting backend with JAR: $JAR_FILE"
     log_debug "Command: java --add-modules jdk.incubator.vector -jar $JAR_FILE server config.yml"
 
-    # Start backend in background using the JAR file. The Vector API module is for topics' k-means, as in
-    # entrypoint.sh.
+    # Start backend in background using the JAR file. The Vector API module is for topics' k-means, as the
+    # image's JDK_JAVA_OPTIONS sets it.
     nohup java --add-modules jdk.incubator.vector -jar "$JAR_FILE" \
         server config.yml \
         > "$BACKEND_LOG_FILE" 2>&1 &

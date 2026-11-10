@@ -555,7 +555,7 @@ function Start-Backend {
         
         $processParams = @{
             FilePath = "java"
-            # The Vector API module is for topics' k-means, as in entrypoint.sh.
+            # The Vector API module is for topics' k-means, as the image's JDK_JAVA_OPTIONS sets it.
             ArgumentList = @("--add-modules", "jdk.incubator.vector", "-jar", $jarFile, "server", "config.yml")
             WorkingDirectory = $script:BACKEND_DIR
             RedirectStandardOutput = $stdoutLog
