@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OpikCallbackHandler } from "../src/OpikCallbackHandler";
 import type { Opik, Trace, Span } from "opik";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import type { ChatGeneration } from "@langchain/core/outputs";
 
 // Mock the opik module
 vi.mock("opik", () => ({
@@ -306,6 +308,70 @@ describe("OpikCallbackHandler", () => {
         metadata: undefined,
         endTime: expect.any(Date),
       });
+    });
+  });
+
+  describe("handleLLMEnd", () => {
+    const llm = {
+      lc: 1 as const,
+      type: "not_implemented" as const,
+      id: ["langchain", "chat_models", "anthropic", "ChatAnthropic"],
+    };
+
+    beforeEach(() => {
+      handler = new OpikCallbackHandler({ client: mockOpikClient });
+    });
+
+    it("should log usage of a chat model that only reports usage_metadata", async () => {
+      const mockTrace = createMockTrace();
+      const mockSpan = createMockSpan();
+      (mockTrace.span as ReturnType<typeof vi.fn>).mockReturnValue(mockSpan);
+      (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTrace
+      );
+
+      const runId = "run-llm";
+      await handler.handleChatModelStart(
+        llm,
+        [[new HumanMessage("Hi")]],
+        runId
+      );
+
+      // What ChatAnthropic.invoke() returns: the raw API usage in llmOutput,
+      // no tokenUsage, and the call's usage on the message.
+      const generations: ChatGeneration[][] = [
+        [
+          {
+            text: "Hello",
+            message: new AIMessage({
+              content: "Hello",
+              usage_metadata: {
+                input_tokens: 12,
+                output_tokens: 5,
+                total_tokens: 17,
+              },
+            }),
+          },
+        ],
+      ];
+      await handler.handleLLMEnd(
+        {
+          generations,
+          llmOutput: {
+            id: "msg_1",
+            model: "claude-sonnet-4-5",
+            stop_reason: "end_turn",
+            usage: { input_tokens: 12, output_tokens: 5 },
+          },
+        },
+        runId
+      );
+
+      expect(mockSpan.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+        })
+      );
     });
   });
 

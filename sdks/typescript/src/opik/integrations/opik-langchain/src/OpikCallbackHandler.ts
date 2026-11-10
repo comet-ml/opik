@@ -21,6 +21,7 @@ import {
   outputFromGenerations,
   outputFromToolOutput,
   safeParseSerializedJson,
+  usageFromLLMResult,
 } from "./utils";
 import { RunnableConfig } from "@langchain/core/runnables";
 import { ChatResult, LLMResult } from "@langchain/core/outputs";
@@ -303,17 +304,10 @@ export class OpikCallbackHandler
     logger.debug(`handleLLMEnd runId - ${runId}, parentRunId ${parentRunId}`);
     const { llmOutput, generations, ...metadata } = output;
 
-    const tokenUsage =
-      llmOutput?.tokenUsage || llmOutput?.estimatedTokens || {};
-
     this.endTracing({
       runId,
       output: outputFromGenerations(generations),
-      usage: {
-        prompt_tokens: tokenUsage.promptTokens,
-        completion_tokens: tokenUsage.completionTokens,
-        total_tokens: tokenUsage.totalTokens,
-      },
+      usage: usageFromLLMResult(generations, llmOutput),
       tags,
       metadata,
     });
