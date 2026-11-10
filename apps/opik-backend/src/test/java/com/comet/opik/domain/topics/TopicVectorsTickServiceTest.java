@@ -317,6 +317,31 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
+        @DisplayName("a vector shorter or longer than 384 costs only its own trace, the rest of the chunk is written")
+        void wrongLengthVector() {
+            var shorter = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(3));
+            var longer = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2));
+            var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
+            var candidates = List.of(shorter, longer, normal);
+            stub(candidates, candidate -> "intent of " + candidate.traceId());
+            var texts = candidates.stream().map(candidate -> "intent of " + candidate.traceId()).toList();
+            var full = vectorOf("x");
+            var embeddings = List.of(full.subList(0, TopicVectorsTickService.EMBED_DIMENSIONS - 1),
+                    Stream.concat(full.stream(), full.stream()).toList(),
+                    vectorOf("intent of " + normal.traceId()));
+            answerEmbed(embedRequest(WORKSPACE_ID, texts), EmbedResponse.builder()
+                    .result(EmbedResult.builder().embeddings(embeddings).build())
+                    .build());
+
+            var result = service.tick(NOW);
+
+            assertThat(embeddings).extracting(List::size).containsExactly(383, 768, 384);
+            assertThat(inserted).extracting(TopicVector::traceId).containsExactly(normal.traceId());
+            assertThat(result.written()).isOne();
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
+        }
+
+        @Test
         @DisplayName("a response without embeddings counts its whole chunk as invalid, and the next chunk still runs")
         void nullEmbeddingsList() {
             config.getVectors().setEmbedBatchSize(2);
