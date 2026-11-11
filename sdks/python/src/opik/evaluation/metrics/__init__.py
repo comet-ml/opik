@@ -32,6 +32,7 @@ from .heuristics.equals import Equals
 from .heuristics.gleu import GLEU
 from .heuristics.chrf import ChrF
 from .heuristics.is_json import IsJson
+from .heuristics.json_schema_match import JsonSchemaMatch
 from .heuristics.distribution_metrics import (
     JSDivergence,
     JSDistance,
@@ -112,6 +113,7 @@ __all__ = [
     "GenderBiasJudge",
     "Hallucination",
     "IsJson",
+    "JsonSchemaMatch",
     "JSDivergence",
     "JSDistance",
     "KLDivergence",

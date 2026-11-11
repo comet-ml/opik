@@ -1,0 +1,175 @@
+import pydantic
+import pytest
+
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.heuristics import json_schema_match
+from opik.exceptions import MetricComputationError
+
+
+INVOICE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "invoice_id": {"type": "string"},
+        "total": {"type": "number", "minimum": 0},
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"amount": {"type": "number"}},
+                "required": ["amount"],
+            },
+        },
+    },
+    "required": ["invoice_id", "total"],
+    "additionalProperties": False,
+}
+
+
+class Invoice(pydantic.BaseModel):
+    invoice_id: str
+    total: float
+
+
+def _metric(**kwargs) -> json_schema_match.JsonSchemaMatch:
+    return json_schema_match.JsonSchemaMatch(track=False, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        '{"invoice_id": "A-1", "total": 42.5}',
+        '{"invoice_id": "A-1", "total": 0, "items": [{"amount": 1}]}',
+        {"invoice_id": "A-1", "total": 42.5},
+    ],
+)
+def test_json_schema_match__valid_output__returns_score_one(output) -> None:
+    result = _metric(schema=INVOICE_SCHEMA).score(output=output)
+
+    assert isinstance(result, score_result.ScoreResult)
+    assert result.name == "json_schema_match_metric"
+    assert result.value == 1.0
+    assert result.reason is None
+    assert result.scoring_failed is False
+
+
+@pytest.mark.parametrize(
+    "output, expected_path",
+    [
+        ('{"invoice_id": "A-1", "total": "42.5"}', "$.total"),
+        ('{"invoice_id": "A-1", "total": -1}', "$.total"),
+        ('{"invoice_id": "A-1"}', "$"),
+        ('{"invoice_id": "A-1", "total": 1, "extra": true}', "$"),
+        (
+            '{"invoice_id": "A-1", "total": 1, "items": [{}, {"amount": "x"}]}',
+            "$.items[0]",
+        ),
+        ("[]", "$"),
+    ],
+)
+def test_json_schema_match__schema_violation__returns_score_zero_with_path(
+    output, expected_path
+) -> None:
+    result = _metric(schema=INVOICE_SCHEMA).score(output=output)
+
+    assert result.value == 0.0
+    assert result.scoring_failed is False
+    assert result.metadata["valid_json"] is True
+    assert expected_path in [error["path"] for error in result.metadata["errors"]]
+    assert expected_path in result.reason
+
+
+def test_json_schema_match__all_violations_reported__in_metadata() -> None:
+    output = '{"total": "x", "items": [{"amount": "a"}, {"amount": "b"}], "z": 1}'
+
+    result = _metric(schema=INVOICE_SCHEMA).score(output=output)
+
+    paths = [error["path"] for error in result.metadata["errors"]]
+    assert "$.total" in paths
+    assert "$.items[0].amount" in paths
+    assert "$.items[1].amount" in paths
+    assert result.reason.startswith(
+        f"Output does not match the schema ({len(paths)} errors)"
+    )
+
+
+@pytest.mark.parametrize(
+    "output",
+    ["not json", '{"invoice_id": "A-1", "total": NaN}', '{"total": 1', ""],
+)
+def test_json_schema_match__output_not_json__returns_score_zero(output) -> None:
+    result = _metric(schema=INVOICE_SCHEMA).score(output=output)
+
+    assert result.value == 0.0
+    assert result.scoring_failed is False
+    assert result.metadata["valid_json"] is False
+    assert result.reason.startswith("Output is not valid JSON")
+
+
+def test_json_schema_match__schema_passed_to_score__overrides_default() -> None:
+    metric = _metric(schema={"type": "string"})
+
+    result = metric.score(
+        output='{"invoice_id": "A-1", "total": 1}', schema=INVOICE_SCHEMA
+    )
+
+    assert result.value == 1.0
+
+
+def test_json_schema_match__schema_as_json_string__is_parsed() -> None:
+    result = _metric(schema='{"type": "integer"}').score(output="7")
+
+    assert result.value == 1.0
+
+
+def test_json_schema_match__pydantic_model_schema__is_used() -> None:
+    metric = _metric(schema=Invoice)
+
+    assert metric.score(output='{"invoice_id": "A-1", "total": 3}').value == 1.0
+    assert metric.score(output='{"invoice_id": "A-1"}').value == 0.0
+
+
+def test_json_schema_match__no_schema__raises() -> None:
+    with pytest.raises(MetricComputationError, match="no schema provided"):
+        _metric().score(output="{}")
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [{"type": "no-such-type"}, {"minimum": "zero"}, "{not json", 42],
+)
+def test_json_schema_match__invalid_schema__raises_instead_of_scoring_zero(
+    schema,
+) -> None:
+    with pytest.raises(MetricComputationError):
+        _metric(schema=schema)
+    with pytest.raises(MetricComputationError):
+        _metric().score(output="{}", schema=schema)
+
+
+def test_json_schema_match__format__ignored_unless_check_formats() -> None:
+    schema = {"type": "string", "format": "date"}
+
+    assert _metric(schema=schema).score(output='"not-a-date"').value == 1.0
+    assert (
+        _metric(schema=schema, check_formats=True).score(output='"not-a-date"').value
+        == 0.0
+    )
+    assert (
+        _metric(schema=schema, check_formats=True).score(output='"2026-11-11"').value
+        == 1.0
+    )
+
+
+def test_json_schema_match__draft_selected_from_dollar_schema() -> None:
+    # Draft 4 uses a boolean exclusiveMaximum; Draft 2020-12 rejects that form.
+    schema = {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "number",
+        "maximum": 10,
+        "exclusiveMaximum": True,
+    }
+
+    metric = _metric(schema=schema)
+
+    assert metric.score(output="9").value == 1.0
+    assert metric.score(output="10").value == 0.0
