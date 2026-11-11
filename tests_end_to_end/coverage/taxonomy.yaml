@@ -1595,6 +1595,47 @@ areas:
       projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
       project-home:  { covered: false, state: default }
 
+  # Workspace-level guardrail POLICIES: the Guardrails entry in the workspace
+  # sidebar (getWorkspaceSidebarMenuItems), and the docs' own "Guardrails"
+  # section (fern/docs.yml -> Overview / Policies / Rules).
+  #
+  # NOT the same surface as traces.set-guardrail / traces.guardrail-results.
+  # Those are per-trace, sit behind the `guardrails_enabled` toggle (default
+  # ON) and stay with `traces`. This page is behind a DIFFERENT toggle,
+  # `guardrails_validations_enabled` (default OFF in
+  # feature-toggles-provider.tsx) — and is NOT cloud_only: the comet plugin's
+  # getGuardrailsEnabled only narrows the toggle to an organization where the
+  # plugin is present, and without it the toggle alone decides
+  # (useGuardrailsEnabled.ts).
+  #
+  # A policy has no route of its own — it opens in GuardrailPolicyPanel over
+  # the list with its id in the `policy` query param — so there is one route
+  # here and the panel's three modes are three keys.
+  #
+  # Permission gating (canConfigureWorkspaceSettings hides Create, the select
+  # column and the row menu, and makes the panel read-only) is deliberately
+  # NOT a key here: workspace-roles owns "does the role gate the right thing".
+  guardrails:
+    label: Guardrails
+    nav_group: Workspace
+    routes: ["/$workspaceName/guardrails"]
+    specs: []
+    capabilities:
+      list-policies:          { covered: false, note: "GuardrailsPage's DataTable over useGuardrailPoliciesList: the declared columns, sorting restricted to the server's own `sortable_by`, and pagination" }
+      create-policy:          { covered: false, note: "GuardrailPolicyPanel mode=create" }
+      edit-policy:            { covered: false, note: "GuardrailPolicyPanel mode=edit, reached by a row click or the row menu's Edit. Also the rename warning and the created/updated-by footer, which exist in this mode only" }
+      duplicate-policy:       { covered: false, note: "GuardrailPolicyPanel mode=duplicate — buildCopyName walking '(copy)', '(copy 2)' past the names already on the page" }
+      delete-policy:          { covered: false, note: "the row menu and the bulk actions panel, both through useGuardrailPolicyBatchDeleteMutation — one endpoint, two entry points, each with its own confirm dialog" }
+      search-policies:        { covered: false, note: "SearchInput feeding the list request's `search`, not a client-side filter" }
+      configure-columns:      { covered: false, note: "ColumnsButton — selection, order and width, persisted under this page's own guardrail-policies-* localStorage keys" }
+      execution-scope:        { covered: false, note: "ON_REQUEST vs GLOBAL: the panel's radio group and the list's Execution scope tag column" }
+      rule-pii-entities:      { covered: false, note: "RuleConfig.PIIEntities — the offered entity classes, and an entity written through the API that the form does not offer being kept rather than dropped on save" }
+      rule-restricted-topics: { covered: false, note: "RuleConfig.TopicsList — the restricted and allowed lists, comma or Enter to commit a topic, Backspace back into the last one" }
+      rule-prompt-injection:  { covered: false, note: "the third GuardrailTypes rule; a toggle with no configuration of its own, which is why it is not folded in with the other two" }
+      policy-validation:      { covered: false, note: "the refusals, in schema.ts and useGuardrailPolicyForm: no rule switched on, PII with no entity, a topic in both lists, a blank name, and a 409 put inline on the name field rather than in a toast" }
+      policy-code-snippet:    { covered: false, note: "GuardrailPolicyCodeSection's Python snippet, named after the policy. Its Guardrail.from_stored_policies is not in a released SDK yet ('Requires an upcoming release'), so this is the UI half only" }
+      policy-deep-link:       { covered: false, note: "the `policy` query param: a link opens that policy, looked up by id when it is not on the current page, and an id that fails to load is dropped from the URL with a toast rather than leaving a panel that never opens" }
+
   configuration:
     label: Configuration
     nav_group: Workspace
