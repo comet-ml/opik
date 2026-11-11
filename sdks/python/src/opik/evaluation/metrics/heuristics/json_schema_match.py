@@ -1,7 +1,7 @@
+import functools
 import itertools
 import json
-import math
-from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Type, Union
 
 import pydantic
 
@@ -15,6 +15,8 @@ except ImportError:
 
 
 SchemaType = Union[Dict[str, Any], str, Type[pydantic.BaseModel]]
+# A JSON Schema is an object or, since Draft 6, a boolean.
+ResolvedSchema = Union[Dict[str, Any], bool]
 
 _MAX_ERRORS_IN_REASON = 5
 # At most this many violations are kept, so a huge invalid output cannot
@@ -27,7 +29,7 @@ def _reject_non_standard_constant(constant: str) -> None:
     raise ValueError(f"{constant} is not valid JSON")
 
 
-def _resolve_schema(schema: SchemaType) -> Dict[str, Any]:
+def _resolve_schema(schema: SchemaType) -> ResolvedSchema:
     if isinstance(schema, type) and issubclass(schema, pydantic.BaseModel):
         return schema.model_json_schema()
     if isinstance(schema, str):
@@ -42,10 +44,11 @@ def _resolve_schema(schema: SchemaType) -> Dict[str, Any]:
             "JsonSchemaMatch: the schema must be a dict, a JSON string or a "
             f"pydantic model class, got {type(schema).__name__}"
         )
-    return schema  # type: ignore[return-value]
+    return schema
 
 
-def _known_meta_schema_ids() -> set:
+@functools.lru_cache(maxsize=1)
+def _known_meta_schema_ids() -> FrozenSet[str]:
     ids = set()
     for validator_class in (
         jsonschema.Draft3Validator,
@@ -58,7 +61,7 @@ def _known_meta_schema_ids() -> set:
         meta_schema = validator_class.META_SCHEMA
         meta_schema_id = meta_schema.get("$id", meta_schema.get("id", ""))
         ids.add(_strip_empty_fragment(meta_schema_id))
-    return ids
+    return frozenset(ids)
 
 
 def _strip_empty_fragment(uri: str) -> str:
@@ -85,53 +88,35 @@ def _validator_class_for(schema: Any) -> Any:
     )
 
 
-def _find_non_finite_number(value: Any) -> Optional[str]:
-    """Return the path of the first NaN/Infinity in a parsed value, if any.
+def _to_json_value(output: Any) -> Any:
+    """Return ``output`` as a JSON value, or raise ``ValueError``.
 
-    Dict keys are checked as well as values. The walk is iterative, so a deeply
-    nested value cannot raise ``RecursionError``, and a container that contains
-    itself is visited once. Paths are kept as parent links and only built into
-    a list for the value that is reported.
+    A string is parsed as JSON. Any other value goes through a JSON round trip,
+    so it is held to the same rules as a string: ``NaN``/``Infinity`` (also as
+    dict keys), circular references and values JSON cannot represent are
+    rejected, and tuples become lists. Nesting too deep for the ``json`` module
+    is reported the same way instead of escaping as ``RecursionError``.
     """
-    # Each entry is (value, path link); a path link is (parent link, key) or None.
-    stack: List[Tuple[Any, Any]] = [(value, None)]
-    seen: Set[int] = set()
-    while stack:
-        current, link = stack.pop()
-        if isinstance(current, float) and not math.isfinite(current):
-            return _format_path(_unlink(link))
-        if isinstance(current, (dict, list, tuple)):
-            if id(current) in seen:
-                continue
-            seen.add(id(current))
-        if isinstance(current, dict):
-            children = []
-            for key, item in current.items():
-                if isinstance(key, float) and not math.isfinite(key):
-                    return f"{_format_path(_unlink(link))} (key {key!r})"
-                children.append((item, (link, key)))
-            stack.extend(reversed(children))
-        elif isinstance(current, (list, tuple)):
-            stack.extend(
-                (item, (link, index))
-                for index, item in reversed(list(enumerate(current)))
-            )
-    return None
-
-
-def _unlink(link: Any) -> List[Any]:
-    path: List[Any] = []
-    while link is not None:
-        link, key = link
-        path.append(key)
-    path.reverse()
-    return path
+    try:
+        if isinstance(output, (str, bytes, bytearray)):
+            return json.loads(output, parse_constant=_reject_non_standard_constant)
+        return json.loads(json.dumps(output, allow_nan=False))
+    except RecursionError as exception:
+        raise ValueError("it is nested too deeply to check") from exception
+    except TypeError as exception:
+        raise ValueError(str(exception)) from exception
 
 
 def _format_path(path: Any) -> str:
+    """Format a JSON path; keys that are not plain identifiers are quoted."""
     result = "$"
     for part in path:
-        result += f"[{part}]" if isinstance(part, int) else f".{part}"
+        if isinstance(part, int):
+            result += f"[{part}]"
+        elif isinstance(part, str) and part.isidentifier():
+            result += f".{part}"
+        else:
+            result += f"[{json.dumps(part)}]"
     return result
 
 
@@ -150,8 +135,9 @@ class JsonSchemaMatch(base_metric.BaseMetric):
     The score is 1.0 when the output is valid and 0.0 otherwise. On failure the
     reason lists the first violations with their JSON paths, and ``metadata``
     holds up to 100 of them (``metadata["truncated"]`` is True when there were
-    more). An already-parsed output containing ``NaN`` or ``Infinity`` scores 0.0,
-    the same as a string containing them.
+    more). An already-parsed output is held to the same JSON rules as a string:
+    ``NaN``, ``Infinity``, circular references and values JSON cannot represent
+    score 0.0.
 
     A missing or invalid schema (including an unsupported ``$schema`` or an
     unresolvable ``$ref``) raises ``MetricComputationError`` instead of
@@ -206,7 +192,7 @@ class JsonSchemaMatch(base_metric.BaseMetric):
         if self._schema is not None:
             self._check_schema(self._schema)
 
-    def _check_schema(self, schema: Dict[str, Any]) -> None:
+    def _check_schema(self, schema: ResolvedSchema) -> None:
         validator_class = _validator_class_for(schema)
         try:
             validator_class.check_schema(schema)
@@ -235,8 +221,9 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                 0.0 otherwise, with the violations in ``reason`` and ``metadata``.
 
         Raises:
-            MetricComputationError: If no schema is available or the schema is
-                not a valid JSON Schema.
+            MetricComputationError: If no schema is available, or the schema is
+                not a valid JSON Schema, names an unsupported ``$schema`` or
+                cannot be applied (for example an unresolvable ``$ref``).
         """
         if schema is not None:
             resolved_schema = _resolve_schema(schema)
@@ -249,20 +236,10 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                 "constructor or to `score()`."
             )
 
-        if isinstance(output, (str, bytes, bytearray)):
-            try:
-                instance = json.loads(
-                    output, parse_constant=_reject_non_standard_constant
-                )
-            except ValueError as exception:
-                return self._not_json_result(str(exception))
-        else:
-            instance = output
-            non_finite_path = _find_non_finite_number(instance)
-            if non_finite_path is not None:
-                return self._not_json_result(
-                    f"{non_finite_path} is NaN or Infinity, which JSON cannot represent"
-                )
+        try:
+            instance = _to_json_value(output)
+        except ValueError as exception:
+            return self._not_json_result(str(exception))
 
         validator_class = _validator_class_for(resolved_schema)
         format_checker = validator_class.FORMAT_CHECKER if self._check_formats else None
@@ -276,13 +253,16 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                 )
             )
         except Exception as exception:
-            # For example an unresolvable "$ref": a problem with the schema,
-            # not with the output.
+            # For example an unresolvable "$ref", or a recursive schema that
+            # exceeds the recursion limit: the schema cannot be applied, which
+            # must not be reported as a fault of the output.
             raise MetricComputationError(
                 f"JsonSchemaMatch: the schema could not be applied: {exception}"
             ) from exception
 
         truncated = len(collected) > _MAX_ERRORS_COLLECTED
+        # Sorted by path so the report reads top-down; the collected subset is
+        # itself deterministic, since validation order is.
         errors: List[Dict[str, str]] = [
             {"path": _format_path(error.absolute_path), "message": error.message}
             for error in sorted(

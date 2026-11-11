@@ -110,54 +110,69 @@ def test_json_schema_match__many_violations__collection_is_capped() -> None:
 
 
 @pytest.mark.parametrize(
-    "output, expected_path",
+    "output",
     [
-        (float("nan"), "$"),
-        (float("inf"), "$"),
-        ({"invoice_id": "A-1", "total": float("-inf")}, "$.total"),
-        (
-            {"invoice_id": "A-1", "total": 1, "items": [{"amount": float("nan")}]},
-            "$.items[0].amount",
-        ),
-        ({"a": [1, (2, float("inf"))]}, "$.a[1][1]"),
-        ({float("nan"): "value"}, "$ (key nan)"),
+        float("nan"),
+        float("inf"),
+        {"invoice_id": "A-1", "total": float("-inf")},
+        {"invoice_id": "A-1", "total": 1, "items": [{"amount": float("nan")}]},
+        {"a": [1, (2, float("inf"))]},
+        {float("nan"): "value"},
     ],
 )
 def test_json_schema_match__parsed_output_with_nan_or_infinity__returns_score_zero(
-    output, expected_path
+    output,
 ) -> None:
-    schema = {"type": ["number", "object"]}
-
-    result = _metric(schema=schema).score(output=output)
+    result = _metric(schema={"type": ["number", "object"]}).score(output=output)
 
     assert result.value == 0.0
     assert result.metadata["valid_json"] is False
-    assert result.reason == (
-        f"Output is not valid JSON: {expected_path} is NaN or Infinity, "
-        "which JSON cannot represent"
-    )
+    assert "Out of range float values are not JSON compliant" in result.reason
 
 
-def test_json_schema_match__deeply_nested_parsed_output__returns_a_score() -> None:
-    output: list = []
-    current = output
-    for _ in range(50_000):
-        child: list = []
-        current.append(child)
-        current = child
-
-    result = _metric(schema={"type": "array"}).score(output=output)
-
-    assert result.value == 1.0
-
-
-def test_json_schema_match__self_referencing_output__does_not_loop() -> None:
+def test_json_schema_match__circular_output__returns_score_zero() -> None:
     output: dict = {"total": 1}
     output["self"] = output
 
     result = _metric(schema={"type": "object"}).score(output=output)
 
-    assert result.value == 1.0
+    assert result.value == 0.0
+    assert result.metadata["valid_json"] is False
+    assert "Circular reference" in result.reason
+
+
+def test_json_schema_match__unserializable_output__returns_score_zero() -> None:
+    result = _metric(schema={}).score(output={"when": object()})
+
+    assert result.value == 0.0
+    assert result.metadata["valid_json"] is False
+    assert "not JSON serializable" in result.reason
+
+
+@pytest.mark.parametrize(
+    "output",
+    ["[" * 100_000 + "]" * 100_000, "nested-list"],
+)
+def test_json_schema_match__too_deeply_nested_output__returns_score_zero(
+    output,
+) -> None:
+    if output == "nested-list":
+        output = current = []
+        for _ in range(100_000):
+            child: list = []
+            current.append(child)
+            current = child
+
+    result = _metric(schema={"type": "array"}).score(output=output)
+
+    assert result.value == 0.0
+    assert result.reason == "Output is not valid JSON: it is nested too deeply to check"
+
+
+def test_json_schema_match__tuple_output__is_checked_as_array() -> None:
+    schema = {"type": "array", "items": {"type": "integer"}}
+
+    assert _metric(schema=schema).score(output=(1, 2, 3)).value == 1.0
 
 
 @pytest.mark.parametrize(
@@ -271,3 +286,20 @@ def test_json_schema_match__known_dollar_schema__is_accepted(dialect) -> None:
     metric = _metric(schema={"$schema": dialect, "type": "integer"})
 
     assert metric.score(output="3").value == 1.0
+
+
+def test_json_schema_match__keys_that_are_not_identifiers__are_quoted_in_paths() -> (
+    None
+):
+    schema = {
+        "type": "object",
+        "properties": {
+            "unit.price": {"type": "number"},
+            "line items": {"type": "array"},
+        },
+    }
+
+    result = _metric(schema=schema).score(output={"unit.price": "x", "line items": 1})
+
+    paths = sorted(error["path"] for error in result.metadata["errors"])
+    assert paths == ['$["line items"]', '$["unit.price"]']
