@@ -1,6 +1,7 @@
 import asyncio
 import gc
 import json
+import time
 import weakref
 
 import httpx
@@ -358,6 +359,28 @@ def test_extract_metadata_from_client__credentials_in_base_url__stripped():
     assert "abc" not in metadata["base_url"]
 
 
+async def _settled_finalizations(calls, timeout=5.0, settle=0.1):
+    """Wait for a finalization to land, then keep giving the loop turns.
+
+    The asyncgen finalizer hook schedules ``aclose()`` on the loop, so how many
+    turns the generator's own ``finally`` needs is up to the scheduler. Poll for
+    the first call rather than sleeping a fixed number of times, then go on
+    pumping the loop: a duplicate report would arrive on a later turn, and that
+    is what these tests are checking for.
+    """
+    deadline = time.monotonic() + timeout
+    while not calls:
+        gc.collect()
+        await asyncio.sleep(0.005)
+        if time.monotonic() > deadline:
+            raise AssertionError(f"no finalization within {timeout}s")
+    settle_until = time.monotonic() + settle
+    while time.monotonic() < settle_until:
+        gc.collect()
+        await asyncio.sleep(0.005)
+    return calls
+
+
 def _collect_finalizations(wrap, advance):
     """Drive an async stream through `wrap`, optionally advancing it, then drop it.
 
@@ -398,12 +421,7 @@ def _collect_finalizations(wrap, advance):
         if advance:
             await generator.__anext__()
         del generator
-        for _ in range(5):
-            gc.collect()
-            # the asyncgen finalizer hook schedules aclose() on the loop, so the
-            # generator's own `finally` only runs once the loop gets a turn.
-            await asyncio.sleep(0.02)
-        return calls
+        return await _settled_finalizations(calls)
 
     return asyncio.run(drive())
 
@@ -537,10 +555,7 @@ def _finalizations_through_reference_cycle(wrap):
         cycle["self"] = cycle
         cycle["generator"] = generator
         del generator, cycle
-        for _ in range(5):
-            gc.collect()
-            await asyncio.sleep(0.02)
-        return calls
+        return await _settled_finalizations(calls)
 
     return asyncio.run(drive())
 
