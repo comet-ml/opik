@@ -118,6 +118,14 @@ public class TopicsConfig {
         @Min(1) @Max(256) private int embedBatchSize;
 
         /**
+         * Embed calls in flight at a time, within one workspace's or project's read. The embed pool computes one call
+         * at a time per replica, so this should equal its replica count: more only makes each call wait longer, toward
+         * {@code embedTimeout}. At most 4: the service's queue holds 4 full calls and answers a fifth with a 429.
+         */
+        @JsonProperty
+        @Min(1) @Max(4) private int embedConcurrency = 1;
+
+        /**
          * Each embed call's deadline. A chunk starts only with at least this much of the tick budget left, so a call
          * that starts always gets all of it. Must be under {@code tickBudget}.
          */

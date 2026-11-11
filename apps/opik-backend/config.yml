@@ -2685,6 +2685,11 @@ topics:
     #  Default: 256 (the most /v1/embed takes)
     #  Description: Texts per embed call
     embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
+    #  Default: 1
+    #  Description: Embed calls in flight at a time, within one workspace's or project's read. Set it to the embed
+    #  pool's replica count: the pool computes one call at a time per replica, so more only makes each call wait
+    #  longer, toward embedTimeout. Never above 4: the service's queue holds 4 full calls and answers a fifth with 429
+    embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
     #  Default: 10s
     #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
     #  tickBudget, at most 60s

@@ -508,6 +508,26 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("with two embed calls in flight, every chunk's vectors are written, each with its own trace")
+    void embedConcurrency() {
+        config().setEmbedBatchSize(2);
+        config().setEmbedConcurrency(2);
+        try {
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var traceIds = labelTraces(workspaceId, projectId, 9, 1);
+
+            var result = tickService.tick(Instant.now());
+
+            assertThat(result.written()).isEqualTo(9);
+            assertThat(embedStub.callsFor(workspaceId)).isEqualTo(5);
+            assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        } finally {
+            config().setEmbedConcurrency(1);
+        }
+    }
+
+    @Test
     @DisplayName("a 429 on the second chunk: the first chunk is written, the next tick completes the second")
     void throttledSecondChunk() {
         config().setEmbedBatchSize(10);
