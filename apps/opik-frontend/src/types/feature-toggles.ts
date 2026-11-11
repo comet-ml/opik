@@ -5,6 +5,7 @@ export type FeatureToggles = Record<FeatureToggleKeys, boolean> & {
 export enum FeatureToggleKeys {
   PYTHON_EVALUATOR_ENABLED = "python_evaluator_enabled",
   GUARDRAILS_ENABLED = "guardrails_enabled",
+  GUARDRAILS_VALIDATIONS_ENABLED = "guardrails_validations_enabled",
   TOGGLE_OPIK_AI_ENABLED = "opik_aienabled",
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
   EXPORT_ENABLED = "export_enabled",

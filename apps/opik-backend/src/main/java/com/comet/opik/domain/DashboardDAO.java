@@ -37,15 +37,14 @@ import java.util.UUID;
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
 
-    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, project_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
+    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, project_id, name, description, config, type, scope, created_by, last_updated_by) "
             +
-            "VALUES (:dashboard.id, :workspaceId, :dashboard.projectId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
+            "VALUES (:dashboard.id, :workspaceId, :dashboard.projectId, :dashboard.name, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
     void save(@BindMethods("dashboard") Dashboard dashboard, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE dashboards SET
                 name = COALESCE(:dashboard.name, name),
-                slug = COALESCE(:slug, slug),
                 description = COALESCE(:dashboard.description, description),
                 config = COALESCE(:dashboard.config, config),
                 type = COALESCE(:dashboard.type, type),
@@ -58,7 +57,6 @@ public interface DashboardDAO {
     int update(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
             @BindMethods("dashboard") DashboardUpdate dashboard,
-            @Bind("slug") String slug,
             @Bind("lastUpdatedBy") String lastUpdatedBy,
             @Define("scope") @Bind("scope") String scope);
 
@@ -164,9 +162,6 @@ public interface DashboardDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dashboard> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
-
-    @SqlQuery("SELECT COUNT(*) FROM dashboards WHERE workspace_id = :workspaceId AND slug LIKE concat(:slugPrefix, '%')")
-    long countBySlugPrefix(@Bind("workspaceId") String workspaceId, @Bind("slugPrefix") String slugPrefix);
 
     @SqlUpdate("""
             DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId

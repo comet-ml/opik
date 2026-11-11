@@ -327,7 +327,7 @@ Unlike `evaluate()`, `evaluate_prompt()`, and `evaluate_experiment()`, this meth
    ├─► For each thread:
    │   └─► client.search_traces(thread_id=thread.id)
    ├─► Pulls actual conversation traces that already exist
-   └─► Limit: max_traces_per_thread (default: 1000)
+   └─► Limit: max_traces_per_thread (default: 1000), warns when the limit is reached
 
 3. Convert traces to conversation format
    ├─► For each trace (represents one conversation turn):
