@@ -101,6 +101,7 @@ public class TopicsNightlyService {
     private final @NonNull TopicWindowDAO windowDAO;
     private final @NonNull TopicsRebuildService rebuildService;
     private final @NonNull TopicsMetrics metrics;
+    private final @NonNull TopicsBackfillGate backfillGate;
     private final @NonNull LockService lockService;
     private final @NonNull IdGenerator idGenerator;
 
@@ -173,6 +174,8 @@ public class TopicsNightlyService {
         housekeeping(began);
         var candidates = new ArrayList<Candidate>();
         int skipped = eligible(night, candidates, record);
+        var gate = backfillGate.read(candidates.stream().map(Candidate::workspaceId).collect(Collectors.toSet()),
+                began);
         log.info("Topics night '{}' started, projects to build '{}', skipped '{}'", night, candidates.size(),
                 skipped);
 
@@ -197,7 +200,7 @@ public class TopicsNightlyService {
                     continue;
                 }
                 try {
-                    switch (runOne(executor, candidate, night, record)) {
+                    switch (runOne(executor, candidate, night, record, gate)) {
                         case SAVED -> saved++;
                         case FAILED -> failed++;
                         case SKIPPED -> skipped++;
@@ -221,19 +224,23 @@ public class TopicsNightlyService {
      * Starts the project's first build now, outside the night, and returns its run id. The run goes on in the background
      * with the same timeout, and its outcome is its {@code topic_runs} row. The window is the one of {@code night}: it
      * ends at that day's start (UTC). The night's rules apply: the workspace must be opted in to topics, the window must
-     * hold {@code minVectors} vectors of the project, and only one run by hand goes at a time across the cluster.
+     * hold {@code minVectors} vectors of the project, and only one run by hand goes at a time across the cluster. The
+     * project's vectors backfill must have drained ({@link TopicsBackfillGate}), unless {@code ignoreBackfill}: the
+     * operator's way to build a project whose backfill cannot drain.
      *
      * @throws ConflictException when the nightly job is off, the workspace is not opted in, the window is too small, a
-     *                           run of the project or another run by hand is in progress, or the project already has a
-     *                           topic list (a list is built once; the night updates it)
+     *                           run of the project or another run by hand is in progress, the project already has a
+     *                           topic list (a list is built once; the night updates it), or its vectors backfill has
+     *                           not drained and {@code ignoreBackfill} is false
      * @throws ServiceUnavailableException when Redis fails or does not answer while the run takes its locks, with a
      *                                     {@code Retry-After}
      */
-    public UUID runNow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night) {
-        return startByHand(workspaceId, projectId, night).runId();
+    public UUID runNow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull LocalDate night,
+            boolean ignoreBackfill) {
+        return startByHand(workspaceId, projectId, night, ignoreBackfill).runId();
     }
 
-    private ByHandRun startByHand(String workspaceId, UUID projectId, LocalDate night) {
+    private ByHandRun startByHand(String workspaceId, UUID projectId, LocalDate night, boolean ignoreBackfill) {
         checkByHand(workspaceId);
         long vectors = windowVectors(workspaceId, projectId, night);
         if (vectors < config.getNightly().getMinVectors()) {
@@ -258,6 +265,13 @@ public class TopicsNightlyService {
             if (hasList(workspaceId, projectId)) {
                 throw new ConflictException(
                         "Project '%s' already has a topic list; the nightly job updates it".formatted(projectId));
+            }
+            if (!ignoreBackfill) {
+                var state = backfillGate.read(List.of(workspaceId), Instant.now()).state(workspaceId, projectId);
+                if (!state.isOpen()) {
+                    throw new ConflictException(("Project '%s' waits for its vectors backfill to drain, gate '%s'; "
+                            + "ignore_backfill=true builds it anyway").formatted(projectId, state.getValue()));
+                }
             }
             UUID runId;
             try {
@@ -295,10 +309,10 @@ public class TopicsNightlyService {
     /**
      * The first-build job's run: builds, one at a time and in {@link #firstBuildCandidates} order, the list of each
      * project that has none yet, for tomorrow's night (UTC), so its window holds today's traces so far. Each goes
-     * through the run by hand ({@link #runNow}) under its usual locks, and is waited for. Skipped while the night holds
-     * its lock. No project starts once the night takes the lock or {@code topics.firstBuild.budget} is used, nor after
-     * one that cannot start: the next run reads the projects again. A failed run is left to the night: the project is
-     * out of this job for {@link #FIRST_BUILD_RUN_GAP}.
+     * through the run by hand ({@link #runNow}) under its usual locks, the backfill gate included, and is waited for.
+     * Skipped while the night holds its lock. No project starts once the night takes the lock or
+     * {@code topics.firstBuild.budget} is used, nor after one that cannot start: the next run reads the projects again.
+     * A failed run is left to the night: the project is out of this job for {@link #FIRST_BUILD_RUN_GAP}.
      */
     public void runFirstBuilds(@NonNull Instant start) {
         if (nightRunning()) {
@@ -317,7 +331,7 @@ public class TopicsNightlyService {
                 break;
             }
             try {
-                if (startByHand(candidate.workspaceId(), candidate.projectId(), night).saved().join()) {
+                if (startByHand(candidate.workspaceId(), candidate.projectId(), night, false).saved().join()) {
                     saved++;
                 } else {
                     failed++;
@@ -340,15 +354,17 @@ public class TopicsNightlyService {
     /**
      * The first-build job's projects for {@code night}, the most vectors first: those of the opted-in workspaces whose
      * window holds at least {@code minVectors} vectors, that exist, have no list, are not paused (as the night counts
-     * it) and had no run started in the {@link #FIRST_BUILD_RUN_GAP} before {@code now}. A workspace whose count read
-     * fails is left for the next run.
+     * it), had no run started in the {@link #FIRST_BUILD_RUN_GAP} before {@code now}, and whose vectors backfill has
+     * drained ({@link TopicsBackfillGate}, read once for all of them). A workspace whose count read fails is left for
+     * the next run.
      */
     List<Candidate> firstBuildCandidates(@NonNull LocalDate night, @NonNull Instant now) {
         var nightly = config.getNightly();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(nightly.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
         var found = new ArrayList<Candidate>();
-        for (var workspaceId : workspaceService.eligibleWorkspaceIds()) {
+        var workspaceIds = workspaceService.eligibleWorkspaceIds();
+        for (var workspaceId : workspaceIds) {
             try {
                 windowDAO.countByProject(workspaceId, null, from, to, COUNT_SECONDS).collectList().block().stream()
                         .filter(count -> count.traces() >= nightly.getMinVectors())
@@ -359,10 +375,11 @@ public class TopicsNightlyService {
             }
         }
         if (found.isEmpty()) {
+            metrics.firstBuildWaits(longestWaits(workspaceIds, Map.of()), firstBuildWaitsKept());
             return List.of();
         }
         var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
-        return template.inTransaction(READ_ONLY, handle -> {
+        var listed = template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
             var runDAO = handle.attach(TopicRunDAO.class);
             Set<UUID> leftOut = new HashSet<>();
@@ -382,6 +399,55 @@ public class TopicsNightlyService {
                             .thenComparing(Candidate::projectId))
                     .toList();
         });
+        return drained(listed, workspaceIds, now);
+    }
+
+    /**
+     * Those of {@code listed} whose backfill gate is open. Each project is counted by its gate state; the longest wait
+     * of each workspace's waiting projects goes to the gauge, 0 for a workspace with none; and a workspace with
+     * projects that wait past {@code backfillMaxWait} is logged once.
+     */
+    private List<Candidate> drained(List<Candidate> listed, List<String> workspaceIds, Instant now) {
+        var gate = backfillGate.read(listed.stream().map(Candidate::workspaceId).collect(Collectors.toSet()), now);
+        var open = new ArrayList<Candidate>();
+        var longest = new HashMap<String, Duration>();
+        var overdue = new HashMap<String, Integer>();
+        for (var candidate : listed) {
+            var state = gate.state(candidate.workspaceId(), candidate.projectId());
+            metrics.firstBuildGate(candidate.workspaceId(), state);
+            if (state.isOpen()) {
+                open.add(candidate);
+                continue;
+            }
+            longest.merge(candidate.workspaceId(), gate.waited(candidate.workspaceId(), candidate.projectId()),
+                    (a, b) -> a.compareTo(b) >= 0 ? a : b);
+            if (state == TopicsBackfillGate.State.TIMED_OUT_WAITING) {
+                overdue.merge(candidate.workspaceId(), 1, Integer::sum);
+            }
+        }
+        overdue.forEach((workspaceId, projects) -> log.warn(
+                "Topics first builds wait for the vectors backfill past topics.firstBuild.backfillMaxWait '{}' with "
+                        + "under 99% of the traces embedded, workspace '{}', projects '{}', longest wait seconds '{}'",
+                config.getFirstBuild().getBackfillMaxWait(), workspaceId, projects,
+                longest.get(workspaceId).toSeconds()));
+        if (open.size() < listed.size()) {
+            log.info("Topics first builds left out '{}' of '{}' projects, their vectors backfill has not drained",
+                    listed.size() - open.size(), listed.size());
+        }
+        metrics.firstBuildWaits(longestWaits(workspaceIds, longest), firstBuildWaitsKept());
+        return List.copyOf(open);
+    }
+
+    /** Every workspace's longest wait, 0 with no waiting project, so a wait that ended is seen to end. */
+    private static Map<String, Duration> longestWaits(List<String> workspaceIds, Map<String, Duration> longest) {
+        var waits = new TreeMap<String, Duration>();
+        workspaceIds.forEach(workspaceId -> waits.put(workspaceId, longest.getOrDefault(workspaceId, Duration.ZERO)));
+        return waits;
+    }
+
+    /** The gauge keeps a run's waits for two intervals: a pod that no longer runs the job stops publishing them. */
+    private Duration firstBuildWaitsKept() {
+        return config.getFirstBuild().getInterval().toJavaDuration().multipliedBy(2);
     }
 
     /** Whether a night holds its lock now, read without taking it. Unknown (Redis failed) counts as held. */
@@ -469,10 +535,13 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Builds the project under its lock. A run that cannot start (its read or its {@code topic_runs} insert fails) has
-     * no row to fail, so it is counted here, as {@code start_failed}.
+     * Builds the project under its lock, unless its vectors backfill has not drained ({@link TopicsBackfillGate}): it
+     * is then skipped as {@code backfill}, and built by the first-build job or a later night. A run that cannot start
+     * (its read or its {@code topic_runs} insert fails) has no row to fail, so it is counted here, as
+     * {@code start_failed}.
      */
-    private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night, NightRecord record) {
+    private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night, NightRecord record,
+            TopicsBackfillGate.Gate gate) {
         UUID runId = null;
         try {
             // Read again under the project's lock: a run by hand may have built it since the night listed it.
@@ -480,6 +549,13 @@ public class TopicsNightlyService {
                 log.info("Topics night skipped project '{}', it got a topic list since the night listed it",
                         candidate.projectId());
                 record.decide(candidate, TopicsMetrics.DECISION_SKIP, TopicsMetrics.REASON_ALREADY_SAVED, null);
+                return Outcome.SKIPPED;
+            }
+            var state = gate.state(candidate.workspaceId(), candidate.projectId());
+            if (!state.isOpen()) {
+                log.info("Topics night skipped project '{}', its vectors backfill has not drained, gate '{}'",
+                        candidate.projectId(), state.getValue());
+                record.decide(candidate, TopicsMetrics.DECISION_SKIP, TopicsMetrics.REASON_BACKFILL, null);
                 return Outcome.SKIPPED;
             }
             runId = rebuildService.startRun(candidate.workspaceId(), candidate.projectId(),

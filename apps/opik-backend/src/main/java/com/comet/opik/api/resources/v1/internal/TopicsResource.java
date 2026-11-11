@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -49,19 +50,24 @@ public class TopicsResource {
 
     @POST
     @Path("/projects/{projectId}/run")
-    @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Starts the project's first build for the night (default today, UTC; at most tomorrow, at least 365 days ago) in the background and returns its run id; the run's outcome is its topic_runs row. The night's rules apply: the workspace is opted in to topics, the window holds topics.nightly.minVectors vectors of the project, one run by hand at a time.", responses = {
+    @Operation(operationId = "runProjectTopics", summary = "Run a project's topics now", description = "Starts the project's first build for the night (default today, UTC; at most tomorrow, at least 365 days ago) in the background and returns its run id; the run's outcome is its topic_runs row. The night's rules apply: the workspace is opted in to topics, the window holds topics.nightly.minVectors vectors of the project, one run by hand at a time, and the project's vectors backfill has drained. ignore_backfill=true builds a project whose backfill has not drained, from the vectors it has so far.", responses = {
             @ApiResponse(responseCode = "202", description = "The run started"),
             @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
-            @ApiResponse(responseCode = "409", description = "The nightly job is off, the workspace is not opted in, the window is too small, a run is in progress, or the project has a list"),
+            @ApiResponse(responseCode = "409", description = "The nightly job is off, the workspace is not opted in, the window is too small, a run is in progress, the project has a list, or its vectors backfill has not drained"),
             @ApiResponse(responseCode = "503", description = "Redis failed or did not answer while the run took its locks; retry after the Retry-After delay"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
     public Response runProject(@PathParam("projectId") UUID projectId,
             @QueryParam("workspace_id") @NotBlank String workspaceId,
-            @QueryParam("night") String night) {
+            @QueryParam("night") String night,
+            @QueryParam("ignore_backfill") @DefaultValue("false") boolean ignoreBackfill) {
         if (!config.isEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
-        var runId = nightlyService.runNow(workspaceId, projectId, night(night));
+        if (ignoreBackfill) {
+            log.warn("Topics run by hand ignores the vectors backfill gate, workspace '{}', project '{}'", workspaceId,
+                    projectId);
+        }
+        var runId = nightlyService.runNow(workspaceId, projectId, night(night), ignoreBackfill);
         return Response.accepted(Map.of("run_id", runId)).build();
     }
 

@@ -2749,6 +2749,11 @@ topics:
     #  Default: 9m
     #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
     budget: ${TOPICS_FIRST_BUILD_BUDGET:-9m}
+    #  Default: 72h
+    #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the
+    #  backfill has run for longer than this, the list is built anyway when at least 99 percent of the backfill's traces
+    #  have a vector; with fewer it keeps waiting, and topics.first_build.gate counts it as timed_out_waiting. At most 30d
+    backfillMaxWait: ${TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT:-72h}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.

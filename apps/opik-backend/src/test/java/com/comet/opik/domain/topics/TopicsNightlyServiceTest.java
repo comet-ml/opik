@@ -1,11 +1,16 @@
 package com.comet.opik.domain.topics;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.util.concurrent.Uninterruptibles;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.core.HttpHeaders;
 import org.jdbi.v3.core.Handle;
@@ -13,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -76,6 +82,8 @@ class TopicsNightlyServiceTest {
     private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
     private TopicNightDAO nightDAO;
+    private TopicVectorBackfillDAO backfillDAO;
+    private final List<TopicVectorBackfill> backfills = new ArrayList<>();
     private TopicWindowDAO windowDAO;
     private TopicsRebuildService rebuildService;
     private LockService lockService;
@@ -93,6 +101,14 @@ class TopicsNightlyServiceTest {
         when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         when(handle.attach(TopicNightDAO.class)).thenReturn(nightDAO);
+        // The vectors tick has seen both workspaces and found no backlog: one drained row each, of another project,
+        // so a project with no row of its own is open, as before the gate.
+        backfillDAO = mock(TopicVectorBackfillDAO.class);
+        when(handle.attach(TopicVectorBackfillDAO.class)).thenReturn(backfillDAO);
+        backfills.add(backfill(WORKSPACE_ID, UUID.randomUUID()).drainedAt(Instant.now()).build());
+        backfills.add(backfill("ws-2", UUID.randomUUID()).drainedAt(Instant.now()).build());
+        when(backfillDAO.findByWorkspaceIds(any())).thenAnswer(invocation -> backfills.stream()
+                .filter(row -> invocation.<Collection<String>>getArgument(0).contains(row.workspaceId())).toList());
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
@@ -135,7 +151,8 @@ class TopicsNightlyServiceTest {
 
         config = TestConfigUtils.loadConfigTest().getTopics();
         service = new TopicsNightlyService(config, template, workspaceService,
-                windowDAO, rebuildService, new TopicsMetrics(meter.meter), lockService, idGenerator);
+                windowDAO, rebuildService, new TopicsMetrics(meter.meter), new TopicsBackfillGate(config, template),
+                lockService, idGenerator);
     }
 
     @Test
@@ -195,7 +212,7 @@ class TopicsNightlyServiceTest {
         doReturn(Mono.error(new IllegalStateException("Redis down"))).when(lockService)
                 .lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any());
 
-        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT, false))
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> {
                     assertThat(exception.getResponse().getStatus()).isEqualTo(503);
                     assertThat(exception.getResponse().getHeaderString(HttpHeaders.RETRY_AFTER))
@@ -206,12 +223,12 @@ class TopicsNightlyServiceTest {
         doReturn(Mono.just(true)).when(lockService).lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any());
         doReturn(Mono.error(new IllegalStateException("Redis down"))).when(lockService)
                 .lockUsingToken(eq(TopicsNightlyService.projectLock(started)), any());
-        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT, false))
                 .isInstanceOf(ServiceUnavailableException.class);
         verify(lockService).unlockUsingToken(TopicsNightlyService.BY_HAND_LOCK);
 
         doReturn(Mono.just(false)).when(lockService).lockUsingToken(eq(TopicsNightlyService.BY_HAND_LOCK), any());
-        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT))
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT, false))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -484,6 +501,181 @@ class TopicsNightlyServiceTest {
 
         verify(workspaceService, never()).eligibleWorkspaceIds();
         verify(rebuildService, never()).startRun(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("first builds: a project whose vectors backfill has not drained is left out, another project of the "
+            + "same workspace with a drained row is listed; once its row drains it is listed too")
+    void firstBuildCandidatesWaitForTheBackfill() {
+        var waiting = UUID.randomUUID();
+        var drained = UUID.randomUUID();
+        var noRow = UUID.randomUUID();
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), isNull(), any(), any(), anyLong())).thenReturn(Flux.just(
+                new TopicWindowDAO.ProjectCount(waiting, 2300),
+                new TopicWindowDAO.ProjectCount(drained, 400),
+                new TopicWindowDAO.ProjectCount(noRow, 150)));
+        backfills.add(backfill(WORKSPACE_ID, waiting).startedAt(START.minus(Duration.ofHours(5)))
+                .tracesTotal(90_000).tracesDone(2300).build());
+        backfills.add(backfill(WORKSPACE_ID, drained).drainedAt(START).build());
+
+        assertThat(service.firstBuildCandidates(NIGHT.plusDays(1), START))
+                .extracting(TopicsNightlyService.Candidate::projectId).containsExactly(drained, noRow);
+        assertThat(meter.sum("topics.first_build.gate", "outcome", "waiting", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(1);
+        assertThat(meter.sum("topics.first_build.gate", "outcome", "open", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(2);
+        assertThat(meter.observe("topics.first_build.gate.longest_wait_seconds")).singleElement()
+                .satisfies(point -> {
+                    assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+                    assertThat(point.value()).isEqualTo(Duration.ofHours(5).toSeconds());
+                });
+        verify(backfillDAO).findByWorkspaceIds(any());
+
+        backfills.removeIf(row -> row.projectId().equals(waiting));
+        backfills.add(backfill(WORKSPACE_ID, waiting).drainedAt(START).tracesTotal(90_000).tracesDone(88_000)
+                .build());
+
+        assertThat(service.firstBuildCandidates(NIGHT.plusDays(1), START))
+                .extracting(TopicsNightlyService.Candidate::projectId).containsExactly(waiting, drained, noRow);
+        assertThat(meter.observe("topics.first_build.gate.longest_wait_seconds")).singleElement()
+                .satisfies(point -> assertThat(point.value()).isZero());
+    }
+
+    @Test
+    @DisplayName("first builds: past backfillMaxWait a project with 99% of its traces embedded is listed as "
+            + "timed_out_open; one with fewer keeps waiting, is counted timed_out_waiting and warned about once per "
+            + "workspace")
+    void firstBuildCandidatesPastTheMaxWait() {
+        var nearlyDone = UUID.randomUUID();
+        var stuck = UUID.randomUUID();
+        var stuckToo = UUID.randomUUID();
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), isNull(), any(), any(), anyLong())).thenReturn(Flux.just(
+                new TopicWindowDAO.ProjectCount(nearlyDone, 990),
+                new TopicWindowDAO.ProjectCount(stuck, 500),
+                new TopicWindowDAO.ProjectCount(stuckToo, 300)));
+        backfills.add(backfill(WORKSPACE_ID, nearlyDone).startedAt(START.minus(Duration.ofHours(80)))
+                .tracesTotal(1000).tracesDone(990).build());
+        backfills.add(backfill(WORKSPACE_ID, stuck).startedAt(START.minus(Duration.ofHours(90)))
+                .tracesTotal(1000).tracesDone(500).build());
+        backfills.add(backfill(WORKSPACE_ID, stuckToo).startedAt(START.minus(Duration.ofHours(75))).build());
+        var appender = new ListAppender<ILoggingEvent>();
+        var logger = (Logger) LoggerFactory.getLogger(TopicsNightlyService.class);
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertThat(service.firstBuildCandidates(NIGHT.plusDays(1), START))
+                    .extracting(TopicsNightlyService.Candidate::projectId).containsExactly(nearlyDone);
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        assertThat(meter.sum("topics.first_build.gate", "outcome", "timed_out_open")).isEqualTo(1);
+        assertThat(meter.sum("topics.first_build.gate", "outcome", "timed_out_waiting")).isEqualTo(2);
+        assertThat(appender.list).filteredOn(event -> event.getLevel() == Level.WARN)
+                .singleElement().satisfies(event -> assertThat(event.getFormattedMessage())
+                        .contains("workspace '" + WORKSPACE_ID + "'", "projects '2'",
+                                "longest wait seconds '" + Duration.ofHours(90).toSeconds() + "'"));
+        assertThat(meter.observe("topics.first_build.gate.longest_wait_seconds")).singleElement()
+                .satisfies(point -> assertThat(point.value()).isEqualTo(Duration.ofHours(90).toSeconds()));
+    }
+
+    @Test
+    @DisplayName("first builds: a workspace the vectors tick has not seen yet (no backfill row) has no candidate")
+    void firstBuildCandidatesOfAnUnseenWorkspaceWait() {
+        backfills.clear();
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+
+        assertThat(service.firstBuildCandidates(NIGHT.plusDays(1), START)).isEmpty();
+        assertThat(meter.sum("topics.first_build.gate", "outcome", "waiting")).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a first-build run builds the drained projects after a gated one: the gated project starts no run "
+            + "and does not stop the run")
+    void firstBuildsRunPastAGatedProject() {
+        var gated = UUID.randomUUID();
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+        when(workspaceService.isEligible(WORKSPACE_ID)).thenReturn(true);
+        when(lockService.isLocked(TopicsNightlyService.NIGHT_LOCK)).thenReturn(Mono.just(false));
+        // The gated project has the most vectors, so it would go first.
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), isNull(), any(), any(), anyLong())).thenReturn(Flux.just(
+                new TopicWindowDAO.ProjectCount(gated, 5000),
+                new TopicWindowDAO.ProjectCount(started, 140)));
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(started), any(), any(), anyLong()))
+                .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(started, 140)));
+        backfills.add(backfill(WORKSPACE_ID, gated).build());
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(UUID.randomUUID());
+
+        service.runFirstBuilds(Instant.now());
+
+        verify(rebuildService).startRun(eq(WORKSPACE_ID), eq(started), eq(TopicRun.Mode.FIRST_BUILD));
+        verify(rebuildService, never()).startRun(any(), eq(gated), any());
+        verify(windowDAO, never()).countByProject(any(), eq(gated), any(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("the night skips a first build whose vectors backfill has not drained, with reason backfill, and "
+            + "still builds the other projects")
+    void nightSkipsAFirstBuildThatWaitsForTheBackfill() {
+        var gated = UUID.randomUUID();
+        var runId = UUID.randomUUID();
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), isNull(), any(), any(), anyLong())).thenReturn(Flux.just(
+                new TopicWindowDAO.ProjectCount(gated, 5000),
+                new TopicWindowDAO.ProjectCount(started, 140)));
+        backfills.add(backfill(WORKSPACE_ID, gated).build());
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(1);
+        verify(rebuildService, never()).startRun(any(), eq(gated), any());
+        assertThat(meter.sum("topics.nightly.projects", "decision", "skip", "reason", "backfill", "workspace_id",
+                WORKSPACE_ID)).isEqualTo(1);
+        assertThat(rows()).filteredOn(row -> row.projectId() != null)
+                .extracting(TopicNightProject::projectId, TopicNightProject::decision, TopicNightProject::reason,
+                        TopicNightProject::runId)
+                .containsExactlyInAnyOrder(
+                        tuple(gated, "skip", "backfill", null),
+                        tuple(started, "first_build", null, runId));
+        // One gate read for the night, and the gated project's lock is released.
+        verify(backfillDAO).findByWorkspaceIds(any());
+        verify(lockService).unlockUsingToken(TopicsNightlyService.projectLock(gated));
+    }
+
+    @Test
+    @DisplayName("a run by hand conflicts while the project's vectors backfill has not drained, releases its locks, "
+            + "and starts with ignoreBackfill")
+    void byHandWaitsForTheBackfillUnlessTold() {
+        var runId = UUID.randomUUID();
+        when(workspaceService.isEligible(WORKSPACE_ID)).thenReturn(true);
+        when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(started), any(), any(), anyLong()))
+                .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(started, 140)));
+        backfills.add(backfill(WORKSPACE_ID, started).build());
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
+
+        assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT, false))
+                .isInstanceOfSatisfying(ConflictException.class, exception -> assertThat(
+                        ((ErrorMessage) exception.getResponse().getEntity()).getMessage())
+                        .contains("vectors backfill", "gate 'waiting'", "ignore_backfill=true"));
+        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(lockService).unlockUsingToken(TopicsNightlyService.projectLock(started));
+        verify(lockService).unlockUsingToken(TopicsNightlyService.BY_HAND_LOCK);
+
+        assertThat(service.runNow(WORKSPACE_ID, started, NIGHT, true)).isEqualTo(runId);
+        verify(backfillDAO).findByWorkspaceIds(any());
+    }
+
+    /** A backfill row started and checked now, not drained, nothing counted. */
+    private static TopicVectorBackfill.TopicVectorBackfillBuilder backfill(String workspaceId, UUID projectId) {
+        return TopicVectorBackfill.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .startedAt(Instant.now())
+                .checkedAt(Instant.now())
+                .lastDoneAt(Instant.now());
     }
 
     @SuppressWarnings("unchecked")

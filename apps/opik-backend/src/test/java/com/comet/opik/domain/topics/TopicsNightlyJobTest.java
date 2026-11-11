@@ -349,6 +349,53 @@ class TopicsNightlyJobTest {
     }
 
     @Test
+    @DisplayName("a project whose vectors backfill has not drained is built neither by the first-build job nor by "
+            + "hand (409), while another project of the workspace is; ignore_backfill=true builds it by hand, and "
+            + "once its row drains the job does")
+    void firstBuildWaitsForTheBackfill() {
+        var workspaceId = enabledWorkspace();
+        var waiting = UUID.randomUUID();
+        var byHand = UUID.randomUUID();
+        var drained = UUID.randomUUID();
+        // The first-build job's night is tomorrow; the runs by hand take the same night.
+        var tomorrow = LocalDate.now(ZoneOffset.UTC).plusDays(1);
+        var tomorrowStart = tomorrow.atStartOfDay(ZoneOffset.UTC).toInstant();
+        data.seed(workspaceId, waiting, 0, BUILT, tomorrowStart);
+        data.seed(workspaceId, byHand, 0, BUILT, tomorrowStart);
+        data.seed(workspaceId, drained, 0, BUILT, tomorrowStart);
+        backfill(workspaceId, waiting, false);
+        backfill(workspaceId, byHand, false);
+        backfill(workspaceId, drained, true);
+        stubAnswer(FIXTURE.answer);
+
+        runFirstBuildsUntilBuilt(drained);
+
+        assertThat(data.runs(waiting)).isEmpty();
+        assertThat(data.runs(byHand)).isEmpty();
+        try (var response = rebuild(workspaceId, byHand, tomorrow.toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+            assertThat(response.readEntity(String.class)).contains("vectors backfill");
+        }
+        assertThat(data.runs(byHand)).isEmpty();
+        try (var response = rebuild(workspaceId, byHand, tomorrow.toString(), true)) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.runs(byHand))
+                .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
+        assertThat(data.runs(waiting)).isEmpty();
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicVectorBackfillDAO.class).record(List.of(TopicVectorBackfill.Progress.builder()
+                    .workspaceId(workspaceId).projectId(waiting).drainedAt(Instant.now()).build()));
+            return null;
+        });
+        runFirstBuildsUntilBuilt(waiting);
+
+        assertThat(data.runs(waiting)).singleElement()
+                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED));
+    }
+
+    @Test
     @DisplayName("the internal endpoint builds the window of the night it is given")
     void rebuildByHandForANight() {
         var workspaceId = enabledWorkspace();
@@ -702,13 +749,33 @@ class TopicsNightlyJobTest {
         return LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
     }
 
+    /**
+     * Opted in to both, and seen by the vectors tick with no backlog: one drained backfill row, of another project,
+     * so the first build of a project with no row of its own does not wait.
+     */
     private String enabledWorkspace() {
         var workspaceId = aiLabelsOnlyWorkspace();
         var topics = opikConfig.getTopics();
         var listed = new TreeSet<>(topics.enabledWorkspaceIds());
         listed.add(workspaceId);
         topics.setEnabledWorkspaces(String.join(",", listed));
+        backfill(workspaceId, UUID.randomUUID(), true);
         return workspaceId;
+    }
+
+    /** The project's {@code topic_vector_backfills} row as the vectors tick writes it, started now. */
+    private void backfill(String workspaceId, UUID projectId, boolean drained) {
+        var now = Instant.now();
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicVectorBackfillDAO.class);
+            dao.start(List.of(TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(projectId)
+                    .startedAt(now).checkedAt(now).lastDoneAt(now).build()));
+            if (drained) {
+                dao.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId)
+                        .projectId(projectId).drainedAt(now).build()));
+            }
+            return null;
+        });
     }
 
     /**
@@ -736,8 +803,15 @@ class TopicsNightlyJobTest {
     }
 
     private Response rebuild(String workspaceId, UUID projectId, String night) {
+        return rebuild(workspaceId, projectId, night, false);
+    }
+
+    private Response rebuild(String workspaceId, UUID projectId, String night, boolean ignoreBackfill) {
         var target = client.target("%s/v1/internal/topics/projects/%s/run".formatted(baseUrl, projectId))
                 .queryParam("workspace_id", workspaceId);
+        if (ignoreBackfill) {
+            target = target.queryParam("ignore_backfill", true);
+        }
         return (night == null ? target : target.queryParam("night", night))
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(""));

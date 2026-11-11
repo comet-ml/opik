@@ -155,6 +155,15 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.DAYS)
         private Duration budget;
 
+        /**
+         * A project's first build waits for its vectors backfill to drain. Past this long since the backfill started,
+         * it is built anyway once at least 99% of the backfill's traces have a vector; with fewer it keeps waiting.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 30, unit = TimeUnit.DAYS)
+        private Duration backfillMaxWait;
+
         @JsonIgnore
         @AssertTrue(message = "topics.firstBuild.budget must be shorter than topics.firstBuild.interval") public boolean isBudgetValid() {
             return budget == null || interval == null || budget.toMilliseconds() < interval.toMilliseconds();

@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -12,6 +13,9 @@ import lombok.NonNull;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -28,14 +32,18 @@ public class TopicsMetrics {
     static final String DECISION_NOT_REACHED = "not_reached";
 
     /**
-     * Why a project was skipped: under {@code minVectors}, deleted, its lock held, its list already saved, or paused
-     * after its last runs failed.
+     * Why a project was skipped: under {@code minVectors}, deleted, its lock held, its list already saved, paused
+     * after its last runs failed, or its vectors backfill not drained yet.
      */
     static final String REASON_SMALL = "small";
     static final String REASON_DELETED = "deleted";
     static final String REASON_LOCKED = "locked";
     static final String REASON_ALREADY_SAVED = "already_saved";
     static final String REASON_PAUSED = "paused";
+    static final String REASON_BACKFILL = "backfill";
+
+    static final String FIRST_BUILD_GATE = "topics.first_build.gate";
+    static final String FIRST_BUILD_LONGEST_WAIT = "topics.first_build.gate.longest_wait_seconds";
 
     /** The run could not start: its {@code topic_runs} insert, or the read before it, failed. */
     static final String ERROR_START_FAILED = "start_failed";
@@ -59,6 +67,12 @@ public class TopicsMetrics {
     private final DoubleHistogram budgetUsed;
     private final LongCounter countFailures;
     private final DoubleHistogram otherShare;
+    private final LongCounter firstBuildGate;
+    private volatile FirstBuildWaits firstBuildWaits;
+
+    /** One first-build run's longest waits, with the workspace names resolved when the run set them. */
+    private record FirstBuildWaits(@NonNull Instant until, @NonNull Map<Attributes, Long> seconds) {
+    }
 
     @Inject
     public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
@@ -75,8 +89,8 @@ public class TopicsMetrics {
         this.projects = meter.counterBuilder("topics.nightly.projects")
                 .setDescription("Projects the nightly job looked at, by decision: skip (by reason: small, under "
                         + "minVectors; deleted; locked, held by a run started by hand; already_saved, a list already "
-                        + "built; paused, its last 3 runs failed within 7 nights), first_build, not_reached (the "
-                        + "night's budget ran out)")
+                        + "built; paused, its last 3 runs failed within 7 nights; backfill, its vectors backfill has "
+                        + "not drained), first_build, not_reached (the night's budget ran out)")
                 .build();
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
@@ -98,6 +112,22 @@ public class TopicsMetrics {
                 .setDescription("Workspaces whose window count read failed, by error_type: the night skips all "
                         + "their projects")
                 .build();
+        this.firstBuildGate = meter.counterBuilder(FIRST_BUILD_GATE)
+                .setDescription("Projects each first-build run listed, by the outcome of the vectors backfill gate: "
+                        + "open (the project's backfill drained), waiting, timed_out_open (the backfill ran past "
+                        + "topics.firstBuild.backfillMaxWait and at least 99% of its traces have a vector, so the "
+                        + "list is built) or timed_out_waiting (past it with fewer: the project keeps waiting)")
+                .build();
+        meter.gaugeBuilder(FIRST_BUILD_LONGEST_WAIT).ofLongs().setUnit("s")
+                .setDescription("Per workspace, how long the oldest vectors backfill a first build waits for has run, "
+                        + "as the last first-build run on this pod saw it; 0 with no waiting project. Published for "
+                        + "two first-build intervals after a run: aggregate with max")
+                .buildWithCallback(measurement -> {
+                    var waits = firstBuildWaits;
+                    if (waits != null && Instant.now().isBefore(waits.until())) {
+                        waits.seconds().forEach((attributes, seconds) -> measurement.record(seconds, attributes));
+                    }
+                });
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's window traces labelled Other, the stats.other_share of its "
@@ -141,6 +171,17 @@ public class TopicsMetrics {
 
     void otherShare(@NonNull String workspaceId, double share) {
         otherShare.record(share, names.of(workspaceId));
+    }
+
+    void firstBuildGate(@NonNull String workspaceId, @NonNull TopicsBackfillGate.State state) {
+        firstBuildGate.add(1, names.builder(workspaceId).put(OUTCOME, state.getValue()).build());
+    }
+
+    /** A first-build run's longest wait per workspace, published for {@code kept} from now. */
+    void firstBuildWaits(@NonNull Map<String, Duration> longest, @NonNull Duration kept) {
+        var seconds = new LinkedHashMap<Attributes, Long>();
+        longest.forEach((workspaceId, wait) -> seconds.put(names.of(workspaceId), wait.toSeconds()));
+        firstBuildWaits = new FirstBuildWaits(Instant.now().plus(kept), seconds);
     }
 
     void budgetUsed(@NonNull Duration duration) {

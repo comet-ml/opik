@@ -1120,6 +1120,11 @@ topics:
     #  Default: 9m
     #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
     budget: 9m
+    #  Default: 72h
+    #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the
+    #  backfill has run for longer than this, the list is built anyway when at least 99 percent of the backfill's traces
+    #  have a vector; with fewer it keeps waiting, and topics.first_build.gate counts it as timed_out_waiting. At most 30d
+    backfillMaxWait: 72h
 
 # Python evaluator configuration
 pythonEvaluator:
