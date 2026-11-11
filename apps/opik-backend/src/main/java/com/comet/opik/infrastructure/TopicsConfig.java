@@ -21,11 +21,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * Topics: groups traces by the intent ai-labels summarizes. Step 1 only stores a bge-small vector of every summary, for
- * the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for. Off by default, and deliberately not a
- * service toggle. Needs ai-labels on, and calls the same opik-inference deployment with the same credential
- * ({@code aiLabels.inference}); see {@code OpikConfiguration#isTopicsAiLabelsEnabled}. The defaults are in
- * {@code config.yml}.
+ * Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every summary,
+ * for the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for; the nightly job builds each project's
+ * topic list from them. Off by default, and deliberately not a service toggle. Needs ai-labels on, and calls the same
+ * opik-inference deployment with the same credential ({@code aiLabels.inference}); see
+ * {@code OpikConfiguration#isTopicsAiLabelsEnabled}. The defaults are in {@code config.yml}.
  */
 @Data
 public class TopicsConfig {
@@ -49,6 +49,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
+
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
      * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
@@ -59,6 +62,40 @@ public class TopicsConfig {
                 .map(String::strip)
                 .filter(workspaceId -> !workspaceId.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * The nightly job: builds a project's topic list from its window of vectors. Stage 2a builds a project that has no
+     * list yet (the first build); a project with one is skipped until the nightly update exists.
+     */
+    @Data
+    public static class NightlyConfig {
+
+        /** One project's run is stopped and failed with {@code timeout} after this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 2, unit = TimeUnit.HOURS)
+        private Duration projectTimeout;
+
+        /** The window: this many whole UTC days before the night. */
+        @JsonProperty
+        @Min(1) @Max(90) private int windowDays;
+
+        /** A larger window keeps its newest traces. */
+        @JsonProperty
+        @Min(100) @Max(100_000) private int maxVectors;
+
+        /** The deadline of the Qwen call that names the groups. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration qwenDeadline;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.qwenDeadline must be shorter than topics.nightly.projectTimeout") public boolean isQwenDeadlineValid() {
+            return qwenDeadline == null || projectTimeout == null
+                    || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
     }
 
     @Data

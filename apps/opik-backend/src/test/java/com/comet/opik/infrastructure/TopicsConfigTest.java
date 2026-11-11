@@ -113,4 +113,32 @@ class TopicsConfigTest {
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
+
+    static Stream<Arguments> nightlySettings() {
+        return Stream.of(
+                arguments("config-test.yml", nightly(nightly -> {
+                }), List.of()),
+                arguments("Qwen deadline equal to the project timeout", nightly(nightly -> {
+                    nightly.setProjectTimeout(Duration.minutes(2));
+                    nightly.setQwenDeadline(Duration.minutes(2));
+                }), List.of("qwenDeadlineValid")));
+    }
+
+    private static Consumer<TopicsConfig.NightlyConfig> nightly(Consumer<TopicsConfig.NightlyConfig> change) {
+        return change;
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("nightlySettings")
+    void nightlyCrossFieldRules(String description, Consumer<TopicsConfig.NightlyConfig> change,
+            List<String> expectedViolations) {
+        var nightly = TestConfigUtils.loadConfigTest().getTopics().getNightly();
+        change.accept(nightly);
+
+        var violations = VALIDATOR.validate(nightly).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
 }

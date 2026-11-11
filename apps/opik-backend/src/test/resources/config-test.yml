@@ -1069,6 +1069,19 @@ topics:
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
       #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
       createdAtSlack: 1d
+  nightly:
+    #  Default: 15m
+    #  Description: One project's run is stopped and failed with timeout after this. Under budget
+    projectTimeout: 15m
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the night
+    windowDays: 30
+    #  Default: 100000
+    #  Description: A larger window keeps its newest traces
+    maxVectors: 100000
+    #  Default: 120s
+    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
+    qwenDeadline: 120s
 
 # Python evaluator configuration
 pythonEvaluator:
