@@ -186,24 +186,6 @@ class TopicsAlgorithmRulesTest {
     class Prompt {
 
         @Test
-        @DisplayName("fine groups: one per 30 unique texts, at least 30, at most 50 or the unique texts")
-        void groups() {
-            assertThat(TopicsRebuildService.groups(1068)).isEqualTo(35);
-            assertThat(TopicsRebuildService.groups(481)).isEqualTo(30);
-            assertThat(TopicsRebuildService.groups(4622)).isEqualTo(50);
-            assertThat(TopicsRebuildService.groups(20)).isEqualTo(20);
-        }
-
-        @Test
-        @DisplayName("texts per group: round(250 / k), from 5 to 10")
-        void budget() {
-            assertThat(TopicsRebuildService.authorExampleCount(50)).isEqualTo(5);
-            assertThat(TopicsRebuildService.authorExampleCount(35)).isEqualTo(7);
-            assertThat(TopicsRebuildService.authorExampleCount(30)).isEqualTo(8);
-            assertThat(TopicsRebuildService.authorExampleCount(15)).isEqualTo(10);
-        }
-
-        @Test
         @DisplayName("examples: the most frequent texts, then the ones nearest the centre, no repeats")
         void examples() {
             String[] texts = {"a", "a", "a", "b", "c", "d", "e"};

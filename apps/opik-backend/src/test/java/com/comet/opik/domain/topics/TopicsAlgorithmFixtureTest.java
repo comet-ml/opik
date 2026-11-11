@@ -49,7 +49,7 @@ class TopicsAlgorithmFixtureTest {
             assertThat(Arrays.copyOfRange(merged.vectors(), u * D, (u + 1) * D))
                     .containsExactly(Arrays.copyOfRange(fixture.vectors, first * D, (first + 1) * D));
         }
-        // The stand grouped this window into 15; the first build now makes finer groups (TopicsRebuildService.groups).
+        // The stand grouped this window into 15; the first build that runs this algorithm makes finer groups.
         assertThat(fixture.k()).isEqualTo(15);
     }
 
