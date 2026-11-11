@@ -121,15 +121,15 @@ We provide multiple ways to develop the backend. Choose the approach that best f
         3. **Run database migrations:**
            ```bash wordWrap
            # MySQL migrations
-           java -jar target/opik-backend-*.jar db migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target/opik-backend-*.jar db migrate config.yml
 
            # ClickHouse migrations
-           java -jar target/opik-backend-*.jar dbAnalytics migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target/opik-backend-*.jar dbAnalytics migrate config.yml
            ```
 
         4. **Start the backend:**
            ```bash wordWrap
-           java -jar target/opik-backend-*.jar server config.yml
+           java --add-modules jdk.incubator.vector -jar target/opik-backend-*.jar server config.yml
            ```
       </Tab>
       <Tab title="Windows">
@@ -147,15 +147,15 @@ We provide multiple ways to develop the backend. Choose the approach that best f
         3. **Run database migrations:**
            ```powershell wordWrap
            # MySQL migrations
-           java -jar target\opik-backend-*.jar db migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target\opik-backend-*.jar db migrate config.yml
 
            # ClickHouse migrations
-           java -jar target\opik-backend-*.jar dbAnalytics migrate config.yml
+           java --add-modules jdk.incubator.vector -jar target\opik-backend-*.jar dbAnalytics migrate config.yml
            ```
 
         4. **Start the backend:**
            ```powershell wordWrap
-           java -jar target\opik-backend-*.jar server config.yml
+           java --add-modules jdk.incubator.vector -jar target\opik-backend-*.jar server config.yml
            ```
       </Tab>
     </Tabs>
@@ -257,12 +257,12 @@ After implementing your changes, ensuring tests pass, and code is formatted, com
       <Tab value="Manual Execution" title="Manual Execution">
         To run DDL migrations manually (replace `{project.pom.version}` and `{database}` as needed):
 
-        - **Check pending migrations:** `java -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
-        - **Run migrations:** `java -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
-        - **Create schema tag:** `java -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
+        - **Check pending migrations:** `java --add-modules jdk.incubator.vector -jar target/opik-backend-{project.pom.version}.jar {database} status config.yml`
+        - **Run migrations:** `java --add-modules jdk.incubator.vector -jar target/opik-backend-{project.pom.version}.jar {database} migrate config.yml`
+        - **Create schema tag:** `java --add-modules jdk.incubator.vector -jar target/opik-backend-{project.pom.version}.jar {database} tag config.yml {tag_name}`
         - **Rollback migrations:** 
-          - `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1`
-          - OR `java -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --tag {tag_name}`
+          - `java --add-modules jdk.incubator.vector -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --count 1`
+          - OR `java --add-modules jdk.incubator.vector -jar target/opik-backend-{project.pom.version}.jar {database} rollback config.yml --tag {tag_name}`
 
         Where `{database}` is either `db` (for MySQL) or `dbAnalytics` (for ClickHouse).
       </Tab>

@@ -660,6 +660,11 @@
                     <compilerArgument>-parameters</compilerArgument>
                     <parameters>true</parameters>
                     <testCompilerArgument>-parameters</testCompilerArgument>
+                    <compilerArgs>
+                        <!-- The Vector API of topics' k-means (KMeans); the JVM needs it too: the image's JDK_JAVA_OPTIONS. -->
+                        <arg>--add-modules</arg>
+                        <arg>jdk.incubator.vector</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -677,6 +682,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>--add-modules jdk.incubator.vector</argLine>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
