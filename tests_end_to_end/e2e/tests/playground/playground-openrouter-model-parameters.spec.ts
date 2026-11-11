@@ -197,48 +197,41 @@ test.describe(
           );
         });
 
-        const secondPanel = await test.step(
-          'Set Max tokens to 0 and type a fractional Top K',
+        await test.step(
+          `Set Max tokens to 0, with no control ${MODEL} does not list on OpenRouter`,
           async () => {
             await playground.openModelParameters(0);
             await commitSliderInput(playground, 'maxTokens', '0');
             await expect(playground.sliderInput('maxTokens')).toHaveValue('0');
-            await commitSliderInput(playground, 'topK', '7.5');
-            const shown = {
-              topK: Number(await playground.sliderInput('topK').inputValue()),
-            };
+            for (const controlId of ['topK', 'minP', 'topA', 'repetitionPenalty']) {
+              await expect(
+                playground.sliderInput(controlId),
+                `${MODEL} has no ${controlId} in OpenRouter's supported_parameters`,
+              ).toHaveCount(0);
+            }
             await playground.closeModelParameters();
-            return shown;
           },
         );
 
-        await test.step('With Max tokens at 0, the body has no max_tokens', async () => {
-          const body = await nextCompletionBody(page, () => playground.clickRun());
-          const customParameters = (body.custom_parameters ?? {}) as Record<string, unknown>;
+        await test.step(
+          'With Max tokens at 0, the body has no max_tokens and no custom_parameters',
+          async () => {
+            const body = await nextCompletionBody(page, () => playground.clickRun());
 
-          expect(
-            Object.keys(body),
-            '0 means no limit, so it is dropped, not sent as max_tokens: 0',
-          ).not.toContain('max_tokens');
-          expect(body.temperature, 'Temperature is unchanged by the second edit').toBe(
-            firstPanel.temperature,
-          );
-          // The Top K input keeps a typed fraction on screen (QA radar on #8603), so
-          // the integer guarantee lives in the request builder. Comparing against the
-          // rounded display stays true if the input later snaps to whole numbers.
-          expect(
-            Number.isInteger(customParameters.top_k),
-            `top_k is an integer, got ${customParameters.top_k}`,
-          ).toBe(true);
-          expect(
-            customParameters.top_k,
-            'top_k travels in custom_parameters, which the backend forwards to OpenRouter',
-          ).toBe(Math.round(secondPanel.topK));
-          expect(
-            Object.keys(body),
-            'no flat top_k — the backend proxy drops unknown top-level fields',
-          ).not.toContain('top_k');
-        });
+            expect(
+              Object.keys(body),
+              '0 means no limit, so it is dropped, not sent as max_tokens: 0',
+            ).not.toContain('max_tokens');
+            expect(body.temperature, 'Temperature is unchanged by the second edit').toBe(
+              firstPanel.temperature,
+            );
+            expect(
+              Object.keys(body),
+              'none of top_k, min_p, top_a, repetition_penalty is sent, so nothing is nested',
+            ).not.toContain('custom_parameters');
+            expect(Object.keys(body), 'and nothing is sent flat either').not.toContain('top_k');
+          },
+        );
       },
     );
   },

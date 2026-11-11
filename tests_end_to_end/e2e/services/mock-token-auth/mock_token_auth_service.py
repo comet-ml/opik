@@ -9,6 +9,11 @@ One process, two roles:
                               Returns {access_token, token_type, expires_in}.
                               A credential row "scope: ttl:<N>" overrides the
                               token lifetime for that request only.
+  POST /service-account/token Service-account token endpoint (OPIK-8732 shape).
+                              Requires HTTP Basic (SA_USERNAME/SA_PASSWORD) and
+                              an empty body (400 otherwise); replies with the bare
+                              token as text/plain and no lifetime, so callers need
+                              a fallback one.
   POST /v1/chat/completions   OpenAI-compatible gateway (sync + SSE streaming).
                               Accepts only bearers this process issued (or the
                               static API key), so a missing/stale bearer fails
@@ -27,6 +32,15 @@ Test hooks:
                               it. Scoped per model so one provider can serve a
                               different status per model name, which is how a
                               spec compares two statuses over one trace.
+                              Optional "envelope" picks the ERROR BODY SHAPE:
+                              "documented" (default) nests the message under
+                              `error` with an OpenAI-documented `type`, which is
+                              what the backend's allowlist keeps; "bare" puts it
+                              at the top level with no `error` key at all, which
+                              is the common gateway shape the allowlist drops.
+                              Optional "message" sets the text, so a spec can
+                              assert on a marker of its own rather than on a
+                              string this file owns.
 
 Spawned automatically by the suite's `webServer` config; run by hand with
     python3 mock_token_auth_service.py --port 9878 --ttl 3600
@@ -44,11 +58,25 @@ from urllib.parse import parse_qs
 
 CLIENT_ID = "opik-test"
 CLIENT_SECRET = "opik-secret"
+SA_USERNAME = "opik-service-account"
+SA_PASSWORD = "opik-sa-password"  # betterleaks:allow — fixed credential of this local mock service
 STATIC_API_KEY = "mock-static-key"  # accepted as a bearer, for the static-auth provider entry
 
 TTL_SECONDS = 3600
 ISSUED_TOKENS = {}  # token -> expiry epoch seconds
 FORCED_CHAT_STATUS = {}  # model name -> HTTP status the gateway must answer for it
+# model name -> {"envelope": "documented"|"bare", "message": str|None}. Only read when
+# the model also has a forced status; the shape of a FAILURE body is meaningless without
+# one. Kept in its own map so clearing a status clears the shape with it.
+FORCED_CHAT_ERROR_SHAPE = {}
+
+# An OpenAI-documented `error.type`. The backend's allowlist
+# (ProviderErrorMessageValidator.DocumentedErrors.OPENAI) keys on exactly this value, and
+# a message arriving under it is the one case where the provider's own text reaches the
+# caller. Hard-coded rather than configurable: a spec asking for a "documented" envelope
+# is asking for one the allowlist actually documents, and letting it pass an arbitrary
+# type would let a typo quietly produce the undocumented case instead.
+DOCUMENTED_ERROR_TYPE = "invalid_request_error"
 STATS = Counter()
 
 
@@ -104,6 +132,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if self.path == "/oauth/token":
             self._handle_token(raw_body)
+        elif self.path == "/service-account/token":
+            self._handle_service_account_token(raw_body)
         elif self.path == "/revoke":
             count = len(ISSUED_TOKENS)
             ISSUED_TOKENS.clear()
@@ -163,6 +193,34 @@ class Handler(BaseHTTPRequestHandler):
             **({"scope": scope} if scope else {}),
         })
 
+    def _handle_service_account_token(self, raw_body):
+        if raw_body:
+            STATS["token_refused"] += 1
+            log("service-account token request REFUSED: unexpected request body")
+            self._reply(400, {"error": "unexpected_body"})
+            return
+        auth = self.headers.get("Authorization") or ""
+        try:
+            username, password = base64.b64decode(auth.removeprefix("Basic ")).decode().split(":", 1)
+        except Exception:
+            username, password = None, None
+        if not auth.startswith("Basic ") or (username, password) != (SA_USERNAME, SA_PASSWORD):
+            STATS["token_refused"] += 1
+            log("service-account token request REFUSED: bad or missing HTTP Basic credentials")
+            self._reply(401, {"error": "invalid_credentials"})
+            return
+
+        token = secrets.token_urlsafe(24)
+        ISSUED_TOKENS[token] = time.time() + TTL_SECONDS
+        STATS["tokens_issued"] += 1
+        log(f"service-account token ISSUED as plain text: ...{token[-8:]}")
+        body = token.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _handle_chat_status(self, raw_body):
         """Register (or clear) the HTTP status the gateway must answer for one model.
 
@@ -181,14 +239,30 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(400, {"error": "model_required"})
             return
 
+        # Absent rather than defaulted: a caller that asked for no shape gets the
+        # legacy body below unchanged, so adding this hook cannot move any
+        # existing spec's ground.
+        envelope = request.get("envelope")
+        if envelope is not None and envelope not in ("documented", "bare"):
+            self._reply(400, {"error": "envelope_must_be_documented_or_bare"})
+            return
+
         status = request.get("status")
         if status is None:
             FORCED_CHAT_STATUS.pop(model, None)
+            FORCED_CHAT_ERROR_SHAPE.pop(model, None)
             log(f"chat status hook CLEARED for model={model}")
         else:
             FORCED_CHAT_STATUS[model] = int(status)
-            log(f"chat status hook SET model={model} -> HTTP {status}")
-        self._reply(200, {"model": model, "status": status})
+            if envelope is None:
+                FORCED_CHAT_ERROR_SHAPE.pop(model, None)
+            else:
+                FORCED_CHAT_ERROR_SHAPE[model] = {
+                    "envelope": envelope,
+                    "message": request.get("message"),
+                }
+            log(f"chat status hook SET model={model} -> HTTP {status} (envelope={envelope})")
+        self._reply(200, {"model": model, "status": status, "envelope": envelope})
 
     def _handle_chat(self, raw_body):
         try:
@@ -237,12 +311,40 @@ class Handler(BaseHTTPRequestHandler):
         forced_status = FORCED_CHAT_STATUS.get(model)
         if forced_status is not None:
             count(f"chat_forced_{forced_status}")
-            log(f"chat request FORCED to HTTP {forced_status} (model={model})")
-            self._reply(forced_status, {"error": {
-                "message": f"mock gateway forced HTTP {forced_status} for model '{model}'",
-                "type": "mock_forced_status",
-                "code": forced_status,
-            }})
+            shape = FORCED_CHAT_ERROR_SHAPE.get(model)
+            if shape is None:
+                # The shape every caller got before the envelope hook existed:
+                # an `error` object whose `type` is NOT one the backend
+                # documents, so the message is dropped. Left exactly as it was
+                # so a spec that only forces a status keeps its ground.
+                log(f"chat request FORCED to HTTP {forced_status} (model={model})")
+                self._reply(forced_status, {"error": {
+                    "message": f"mock gateway forced HTTP {forced_status} for model '{model}'",
+                    "type": "mock_forced_status",
+                    "code": forced_status,
+                }})
+                return
+
+            envelope = shape["envelope"]
+            message = shape.get("message") or (
+                f"mock gateway forced HTTP {forced_status} for model '{model}'"
+            )
+            log(f"chat request FORCED to HTTP {forced_status} (model={model}, {envelope})")
+            if envelope == "bare":
+                # No `error` key at all, which is what a great many real gateways
+                # answer (GitHub's API among them). The backend cannot parse this
+                # into a provider error envelope, so the caller gets the wire
+                # status with a generic message in place of the text below.
+                self._reply(forced_status, {"message": message, "status": str(forced_status)})
+            else:
+                # Nested under `error` with an allowlisted `type`, and NO `code`:
+                # CustomLlmErrorMessage maps the status from `code` alone and
+                # falls back to 400, so leaving it out keeps the mapped status a
+                # property of the shape rather than of this file's default.
+                self._reply(forced_status, {"error": {
+                    "message": message,
+                    "type": DOCUMENTED_ERROR_TYPE,
+                }})
             return
 
         content = json.dumps(synthesize_reply(request))

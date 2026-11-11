@@ -9,6 +9,10 @@ logging:
   loggers:
     com.comet: DEBUG
     com.comet.opik.infrastructure.llm: INFO
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -173,35 +177,15 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: false
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: false
   #  Default: false
-  #  Description: Bound span reads by trace id to the weeks the span_weeks index holds for those traces. Effective only
-  #   while spanWeeksWriteEnabled and spanColumnsNonNullable are also true (without registration new spans never
-  #   reach the index; the legacy spans id_at wraps far-future ids). Turn true once the span
-  #   weeks backfill logs that it is complete; before that, spans it has not indexed yet would be skipped. Registration
-  #   is asynchronous, so a read right after a write can miss the new spans until their week is indexed.
+  #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
+  #   them. Effective only while spanColumnsNonNullable is also true (the legacy spans id_at wraps far-future ids). New
+  #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
+  #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: false
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: 3
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: 200ms
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: 2s
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -382,6 +366,48 @@ redis:
   #  Default: 1s
   #  Description: Timeout for the Redis health check ping
   healthCheckTimeout: 1s
+  # Redis Sentinel configuration (optional)
+  # When enabled, singleNodeUrl is the seed sentinel, with its port (usually 26379), instead of a Redis data node: its
+  # scheme selects TLS for every sentinel, and its credentials and database number apply to the master data nodes.
+  # Redisson discovers the master through the sentinels and follows it on failover. The Python backend reads the same
+  # variables. Cannot be combined with awsIamAuth: ElastiCache and MemoryDB offer no Sentinel.
+  sentinel:
+    # Default: false
+    # Description: Enable Redis Sentinel master discovery
+    enabled: false
+    # Description: Name of the master group monitored by the sentinels. Required when enabled
+    masterName: ''
+    # Description: Comma separated extra seed sentinels, e.g. redis://sentinel-1:26379,redis://sentinel-2:26379. They
+    # must use the scheme of singleNodeUrl, include a port and carry no credentials. The seed from singleNodeUrl is
+    # always included
+    nodes: ''
+    # Description: Username for the sentinel nodes themselves, if they enforce ACLs
+    username: ''
+    # Description: Password for the sentinel nodes themselves, if they require auth
+    password: ''
+    # Default: 3
+    # Description: Times a failed command is retried, e.g. while a failover is in progress. Between 0 and 20
+    retryAttempts: 3
+    # Default: 500ms
+    # Description: Base of the full-jitter backoff between retries: each waits a random time up to
+    # min(base * 2^attempt, cap). At least 1ms
+    retryBackoffBase: 500ms
+    # Default: 2s
+    # Description: Longest wait between retries. At least retryBackoffBase and at most 5m
+    retryBackoffCap: 2s
+    # Default: true
+    # Description: Require the sentinels to report at least two of them, as a production quorum needs. Set to false to
+    # allow a single sentinel, e.g. in development setups
+    checkSentinelsList: true
+    # Default: 10s
+    # Description: Timeout for establishing connections. Between 100ms and 5m
+    connectTimeout: 10s
+    # Default: 5s
+    # Description: Timeout for command responses. Between 100ms and 5m
+    timeout: 5s
+    # Default: 2s
+    # Description: How often the sentinels are polled for topology changes. Between 100ms and 5m
+    scanInterval: 2s
 
 openTelemetry:
   # Default: 3h
@@ -450,6 +476,13 @@ mcpOAuth:
   # Default: PT0.1S
   # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
   scrubLockWaitTime: PT0.1S
+
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: true
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -735,6 +768,9 @@ llmProviderTokenAuth:
 
 # LLM providers client configuration
 llmProviderClient:
+  # Default: 3
+  # Description: Max amount of attempts to reach the LLM provider before giving up
+  maxAttempts: 2
   # Default: 60s
   # Description: Call timeout for LLM providers
   callTimeout: 60s
@@ -744,6 +780,73 @@ llmProviderClient:
   # Default: false
   # Description: Whether or not to log responses
   logResponses: false
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: provider base URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions, for deployments whose providers run on internal networks
+  # Description: Destination policy for user-configured LLM provider base URLs
+  # Tests point providers at local mock servers
+  destinationGuard: relaxed
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https, as self-hosted model servers commonly run without TLS
+  #   - https_only: https only
+  # Description: Schemes allowed for user-configured LLM provider base URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: strict
+  # Values: ['strict', 'relaxed']
+  #   - strict: media URLs must be http(s) and resolve only to public addresses
+  #   - relaxed: no destination restrictions
+  # Description: Destination policy for media URLs in a caller's message or in trace data: the HEAD request that
+  #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
+  #   that Gemini and Vertex AI receive as inline data
+  videoUrlDestinationGuard: strict
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: plaintext_or_tls
+  # Default: 30s
+  # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
+  #   connecting included; at most 2m
+  mediaDownloadTimeout: 30s
+  # Default: 20MB
+  # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
+  #   20 MB of inline data; at most 100MB
+  mediaDownloadMaxSize: 20MB
+  # Default: 300
+  # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
+  providerErrorMessageMaxLength: 300
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: 64KB
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a
+  #   stream waits for its headers up to the longer of this and readTimeout, a call that isn't one up to readTimeout
+  #   only. Above the 90s ingress idle timeout, as models that reason before answering can be silent for a while;
+  #   between 1s and 10m
+  streamReadTimeout: 120s
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
+  httpClientMaxThreads: 1024
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 5m
+  httpClientThreadKeepAlive: 60s
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
+  httpClientMaxRequests: 1024
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: 1024
   openAiClient:
     # See demo endpoint Langchain4j documentation: https://docs.langchain4j.dev/get-started
     # Not https but only used for testing purposes. It's fine as long as not sensitive data is sent.
@@ -772,6 +875,11 @@ llmProviderClient:
       global: https://aiplatform.googleapis.com
       eu: https://aiplatform.eu.rep.googleapis.com
       us: https://aiplatform.us.rep.googleapis.com
+    # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
+    # and the key file is user-supplied, so any other value is refused.
+    tokenUris:
+      - https://oauth2.googleapis.com/token
+      - https://accounts.google.com/o/oauth2/token
 
 # Configuration for cache manager
 cacheManager:
@@ -800,6 +908,18 @@ clickHouseLogAppender:
   # Default: PT0.500S or 500ms
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
+
+  # Default: 10
+  # Description: Number of batches the log queue holds (batchSize * maxQueuedBatches logs). Past it, new logs are dropped
+  maxQueuedBatches: 10
+
+  # Default: PT5S or 5s
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
+  shutdownTimeout: PT5S
+
+  # Default: PT1M or 1 minute
+  # Description: Upper bound on one log insert; past it the insert is abandoned so later flushes can run (max PT10M)
+  insertTimeout: PT1M
 
 workspaceSettings:
   # Default: 50
@@ -874,6 +994,17 @@ attachmentsConfig:
   # For tests, use 5KB (same as local dev default)
   stripMinSize: 5000
 
+workspaceFeatures:
+  # Off in tests, like the auth cache: a test that needs it turns it on.
+  cacheTtl: 0s
+
+aiLabels:
+  inference:
+    # The synchronous decide calls guardrail checks make, on a client of their own.
+    maxConcurrentDecides: 256
+    decideKeepAlive: 30s
+    decideTimeToLive: 5m
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
@@ -946,6 +1077,9 @@ serviceToggles:
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
   # Default: false
+  # Description: Whether or not the backend runs guardrails itself
+  guardrailsValidationsEnabled: "false"
+  # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
   # Default: true
@@ -1010,9 +1144,6 @@ serviceToggles:
   # Default: false
   # Description: Whether Agent Insights project guidance is enabled, effective only while Agent Insights is active.
   agentInsightsGuidanceEnabled: "false"
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
-  onlineScoringTracingEnabled: "true"
   # Default: true, matched here so the test application boots the feature the way a deployment does:
   #   the score listener registered, the Redis buffer flush job scheduled and the routing consumer
   #   started. Unlike the other scheduled jobs this configuration switches off, this one cannot be
@@ -1217,6 +1348,15 @@ webhook:
   # Default: relaxed
   # Description: Outbound destination policy for webhook URLs; tests target local mock servers
   destinationGuard: "relaxed"
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: plaintext_or_tls
+  # Default: 512B
+  # Description: Maximum bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: 512B
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10

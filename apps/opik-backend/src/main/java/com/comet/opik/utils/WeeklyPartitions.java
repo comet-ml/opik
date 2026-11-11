@@ -23,7 +23,8 @@ import java.util.stream.Collectors;
  * can name its own partitions instead of being planned against every part of the table. {@link #groupByPartition}
  * groups ids by the partition each belongs to, for a caller emitting one statement per partition (OPIK-8230) that
  * must bind only the ids belonging to it; {@link #weeksOf} returns just the values, for a read that carries them as
- * one {@code IN} list inside a single statement (OPIK-8332).
+ * one {@code IN} list inside a single statement (OPIK-8332); {@link #weekOf} returns the value of one instant's week,
+ * for a read bounded by a time window.
  *
  * <p>Mirrors the partition expression of {@code traces_local_v2} / {@code spans_local_v2} exactly —
  * {@code PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))}, where {@code id_at} is
@@ -194,6 +195,15 @@ public class WeeklyPartitions {
         }
         long epochMilli = Math.min(id.getMostSignificantBits() >>> 16, ID_AT_CEILING - 1);
         return weeklyPartitionOf(epochMilli / 1_000L);
+    }
+
+    /**
+     * The weekly partition value of the week holding {@code instant}, for a bound on a time window rather than on a
+     * set of ids. Unlike {@link #weeksOf}, total and single-valued: the instants it serves are near the present, long
+     * before 2106, where both {@code id_at} types agree.
+     */
+    public static long weekOf(@NonNull Instant instant) {
+        return weeklyPartitionOf(instant.getEpochSecond());
     }
 
     /**

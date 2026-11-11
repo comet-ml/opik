@@ -11,6 +11,7 @@ import java.util.Optional;
 public enum ExperimentsComparisonValidKnownField implements Field {
 
     ID(ID_QUERY_PARAM, FieldType.STRING_EXACT),
+    TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     SOURCE(SOURCE_QUERY_PARAM, FieldType.STRING),
     TRACE_ID(TRACE_ID_QUERY_PARAM, FieldType.STRING_EXACT),
     SPAN_ID(SPAN_ID_QUERY_PARAM, FieldType.STRING_EXACT),

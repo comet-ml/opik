@@ -4,6 +4,8 @@ import com.comet.opik.api.ChunkedResponseHandler;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.PartialResponse;
+import dev.langchain4j.model.chat.response.PartialResponseContext;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.output.TokenUsage;
@@ -47,6 +49,12 @@ public class LoggingChunkedResponseHandler
     public void onPartialResponse(String s) {
         logger.appendContent(s);
         delegate.onPartialResponse(s);
+    }
+
+    @Override
+    public void onPartialResponse(@NonNull PartialResponse partialResponse, @NonNull PartialResponseContext context) {
+        logger.appendContent(partialResponse.text());
+        delegate.onPartialResponse(partialResponse, context);
     }
 
     @Override

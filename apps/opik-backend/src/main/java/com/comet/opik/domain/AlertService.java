@@ -15,11 +15,14 @@ import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.api.sorting.SortingFactoryAlerts;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.alerts.AlertEventBridgePublisher;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.uuid.Generators;
 import com.google.inject.ImplementedBy;
@@ -271,6 +274,7 @@ class AlertServiceImpl implements AlertService {
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
         validateThresholdConfigs(alert);
+        validateCustomFields(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -291,6 +295,7 @@ class AlertServiceImpl implements AlertService {
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
         validateThresholdConfigs(alert);
+        validateCustomFields(alert);
 
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
@@ -405,8 +410,9 @@ class AlertServiceImpl implements AlertService {
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(responseBody -> {
-                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}', response='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(), responseBody);
+                    // the reply is returned to the caller, never logged
+                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
+                            event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()));
 
                     return WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.SUCCESS)
@@ -416,8 +422,9 @@ class AlertServiceImpl implements AlertService {
                             .build();
                 })
                 .onErrorResume(throwable -> {
-                    log.error("Failed to send webhook: id='{}', type='{}', url='{}', error='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage(), throwable);
+                    log.error("Failed to send webhook: id='{}', type='{}', url='{}', error type '{}'",
+                            event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()),
+                            ProviderFailures.rootType(throwable));
 
                     // Extract status code from RetryableHttpException if available
                     int statusCode = (throwable instanceof RetryUtils.RetryableHttpException rhe)
@@ -645,6 +652,21 @@ class AlertServiceImpl implements AlertService {
             throw new BadRequestException(
                     "Config value for key '%s' in trigger config of type '%s' must be a positive number of seconds, got '%d'"
                             .formatted(WINDOW_CONFIG_KEY, type.getValue(), windowSeconds));
+        }
+    }
+
+    private static void validateCustomFields(Alert alert) {
+        if (alert.customFields() == null) {
+            return;
+        }
+        List<String> reservedKeys = alert.customFields().keySet().stream()
+                .filter(AlertEventBridgePublisher.RESERVED_CUSTOM_FIELD_KEYS::contains)
+                .sorted()
+                .toList();
+        if (!reservedKeys.isEmpty()) {
+            throw new BadRequestException(
+                    "'custom_fields' keys %s are reserved by the alert event payload, use different keys"
+                            .formatted(reservedKeys));
         }
     }
 

@@ -260,9 +260,68 @@ Each run creates a separate experiment in Opik, making it easy to compare result
   ```
 </CodeBlocks>
 
+## How assertions are judged
+
+An LLM judge reads each run's `input` and `output` and decides whether every assertion holds. Which
+model acts as the judge depends on where you run the suite.
+
+**From the SDK** (`opik.run_tests` / `runTests`), the judge runs in your own process with your own
+provider credentials:
+
+- The default judge model is `gpt-5-nano`, so `OPENAI_API_KEY` must be set.
+- Pass `model` to use another model.
+  - **Python:** any [LiteLLM model name](https://docs.litellm.ai/docs/providers) works, for example
+    `claude-haiku-4-5`, `bedrock/...` or `azure/...`.
+  - **TypeScript:** OpenAI (`gpt-*`, `o1*`, `o3*`, `chatgpt-*`, with `OPENAI_API_KEY`), Anthropic
+    (`claude-*`, with `ANTHROPIC_API_KEY`) or Google Gemini (`gemini-*`, `gemma-*`, with
+    `GOOGLE_API_KEY`) model IDs.
+- To check tool calls and intermediate steps, the judge can open the trace's spans with tools
+  (agentic judging). Under the default `scoring_tool_strategy="auto"`, this happens only for models
+  Opik has profiled for it, such as `gpt-5-mini`, `gpt-4o`, `claude-haiku-4-5` and the Claude Opus
+  models. The default `gpt-5-nano` judges in a single call from `input` and `output`. To judge
+  assertions about intermediate steps, pass one of those models, or set
+  `scoring_tool_strategy="always"`.
+- In Python, the profiled models are matched by their plain names. A provider-prefixed name such as
+  `anthropic/claude-haiku-4-5`, `bedrock/...` or `azure/...` judges in a single call under `"auto"`,
+  so pass `scoring_tool_strategy="always"` with it when assertions need the intermediate steps.
+
+<CodeBlocks>
+  ```python title="Python" wordWrap
+  result = opik.run_tests(
+      test_suite=suite,
+      task=make_task(PROMPT_V2),
+      model="claude-haiku-4-5",
+  )
+  ```
+
+  ```ts title="Typescript" wordWrap
+  const result = await runTests({
+    testSuite: suite,
+    task: makeTask(PROMPT_V2),
+    model: "claude-haiku-4-5",
+  });
+  ```
+</CodeBlocks>
+
+**From the Prompt Playground**, Opik runs the judge for you and picks the model from the AI providers
+configured in your workspace, using the first one found in this order:
+
+| Configured provider | Judge model |
+|---|---|
+| Anthropic | `claude-haiku-4-5` |
+| OpenAI | `gpt-4o-mini` |
+| Gemini | `gemini-2.0-flash` |
+| Vertex AI | `gemini-2.5-flash` |
+
+If none of these providers is configured, the judge uses the same model as the prompt you are
+testing. In the Playground the judge always inspects the trace with tools, so the model must support
+tool calling. With providers that do not (for example a custom OpenAI-compatible endpoint or
+Ollama), the judge falls back to a single call, and assertions about intermediate steps cannot be
+checked.
+
 ## Execution policies
 
-Execution policies control how many times each item is run and how many must pass. This is useful for handling non-deterministic LLM outputs.
+Execution policies control how many times each item is run and how many must pass. This is useful for handling non-deterministic LLM outputs. By default, each item runs once and must pass once (`runs_per_item: 1`, `pass_threshold: 1`); the examples on this page raise both.
 
 <CodeBlocks>
   ```python title="Python" wordWrap

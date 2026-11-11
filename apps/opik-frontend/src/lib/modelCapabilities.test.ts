@@ -75,6 +75,8 @@ describe("getMaxOutputTokens", () => {
     [PROVIDER_MODEL_TYPE.GPT_4, 4096],
     [PROVIDER_MODEL_TYPE.GPT_O3, 100000],
     [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5, 64000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_5_5, 128000],
+    [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5_5, 128000],
     [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6, 128000],
     [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6, 128000],
   ])("reads the limit of %s from the pricing data", (model, limit) => {
@@ -103,8 +105,9 @@ describe("getOpenRouterMaxOutputTokens", () => {
     },
     {
       reads: "the base model's row for a variant without its own",
-      model: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_70B_FREE,
-      limit: 7372,
+      model:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
+      limit: 8192,
     },
     {
       reads: "no other provider's row",

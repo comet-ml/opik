@@ -15,6 +15,10 @@ import java.util.stream.Stream;
  * normalization tests, the invariants, the round trip and the check that no variant is left without a case. Numbers
  * come from the SDK's {@code llm_usage} tests and from production samples where noted. Every case is consistent usage:
  * contradictions such as an input below its own cache are tested where the warning is.
+ * <p>
+ * Every span's cost is computed from the native record its usage normalizes to, so these cases guard what spans are
+ * billed: add a case for each new variant and each bug found, and never remove one. When a fix shows a case expected
+ * the wrong record, correct that case in the same change and say why.
  */
 public final class UsageCases {
 
@@ -49,6 +53,19 @@ public final class UsageCases {
                                 "cache_creation.ephemeral_1h_input_tokens", 200),
                         anthropic("anthropic_native").inputTokens(100).cacheReadInputTokens(20)
                                 .cacheCreation5mInputTokens(100).cacheCreation1hInputTokens(200).outputTokens(10)
+                                .build()),
+                new UsageCase("Anthropic through flat OTel with the TTL split flattened by underscores", "anthropic",
+                        usage("input_tokens", 12, "output_tokens", 7, "cache_creation_input_tokens", 1024,
+                                "cache_creation_ephemeral_1h_input_tokens", 256, "cache_read_input_tokens", 4096),
+                        anthropic("anthropic_native").inputTokens(12).cacheReadInputTokens(4096)
+                                .cacheCreation5mInputTokens(768).cacheCreation1hInputTokens(256).outputTokens(7)
+                                .build()),
+                new UsageCase("Anthropic in Converse's names with the TTL split in cacheDetails", "anthropic",
+                        usage("inputTokens", 200, "outputTokens", 100, "cacheWriteInputTokens", 50,
+                                "cacheReadInputTokens", 30, "cacheDetails.1h.inputTokens", 20,
+                                "cacheDetails.5m.inputTokens", 30),
+                        anthropic("anthropic_native").inputTokens(200).cacheReadInputTokens(30)
+                                .cacheCreation5mInputTokens(30).cacheCreation1hInputTokens(20).outputTokens(100)
                                 .build()),
                 new UsageCase("Anthropic native in camelCase", "anthropic",
                         usage("inputTokens", 200, "outputTokens", 100, "cacheReadInputTokens", 30),
@@ -116,6 +133,16 @@ public final class UsageCases {
                         anthropic("litellm").inputTokens(1000).cacheReadInputTokens(1000)
                                 .cacheCreation5mInputTokens(1000)
                                 .cacheCreation1hInputTokens(2000).outputTokens(100).build()),
+                new UsageCase("Anthropic through LiteLLM 1.82 with cache writes split by TTL in the prompt's details",
+                        "anthropic",
+                        usage("prompt_tokens", 5000, "completion_tokens", 100, "cache_read_input_tokens", 1000,
+                                "cache_creation_input_tokens", 3000, "prompt_tokens_details.cached_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_tokens", 3000,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 2000),
+                        anthropic("litellm").inputTokens(1000).cacheReadInputTokens(1000)
+                                .cacheCreation5mInputTokens(1000)
+                                .cacheCreation1hInputTokens(2000).outputTokens(100).build()),
                 new UsageCase("Anthropic through OpenInference", "anthropic",
                         usage("llm.token_count.prompt", 12000, "llm.token_count.completion", 500,
                                 "llm.token_count.total", 12500, "llm.token_count.prompt_details.cache_read", 10000),
@@ -173,6 +200,23 @@ public final class UsageCases {
                                 "input_tokens_details.cached_tokens", 500, "output_tokens_details.reasoning_tokens", 0),
                         openAi("responses").promptTokens(1500).cachedTokens(500).completionTokens(300)
                                 .totalTokens(1800).build()),
+                new UsageCase("Responses API with Claude's cache writes split by TTL", "openrouter",
+                        usage("input_tokens", 1500, "output_tokens", 300, "total_tokens", 1800,
+                                "input_tokens_details.cached_tokens", 200, "cache_creation_input_tokens", 300,
+                                "cache_creation.ephemeral_5m_input_tokens", 100,
+                                "cache_creation.ephemeral_1h_input_tokens", 200),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("responses").promptTokens(1500)
+                                .cachedTokens(200).cacheWriteTokens(300).cacheWrite1hTokens(200)
+                                .completionTokens(300).totalTokens(1800).build()),
+                new UsageCase("Responses API with Claude's cache writes split by TTL and no total of them",
+                        "openrouter",
+                        usage("input_tokens", 1500, "output_tokens", 300, "total_tokens", 1800,
+                                "input_tokens_details.cached_tokens", 200,
+                                "cache_creation.ephemeral_5m_input_tokens", 100,
+                                "cache_creation.ephemeral_1h_input_tokens", 200),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("responses").promptTokens(1500)
+                                .cachedTokens(200).cacheWriteTokens(300).cacheWrite1hTokens(200)
+                                .completionTokens(300).totalTokens(1800).build()),
                 new UsageCase("OpenAI through flat OTel", "openai",
                         usage("gen_ai.usage.input_tokens", 12000, "gen_ai.usage.output_tokens", 500,
                                 "gen_ai.usage.cache_read_input_tokens", 10000),
@@ -211,7 +255,16 @@ public final class UsageCases {
                 new UsageCase("Azure OpenAI", "azure",
                         usage("prompt_tokens", 40, "completion_tokens", 2, "total_tokens", 42),
                         OpenAiNativeUsage.builder().provider("azure").variant("chat_completions").promptTokens(40)
-                                .completionTokens(2).totalTokens(42).build()));
+                                .completionTokens(2).totalTokens(42).build()),
+                new UsageCase("Claude through OpenRouter, LiteLLM's cache writes split by TTL", "openrouter",
+                        usage("prompt_tokens", 1000, "completion_tokens", 100, "total_tokens", 1100,
+                                "prompt_tokens_details.cached_tokens", 200,
+                                "prompt_tokens_details.cache_creation_tokens", 50,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 30,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 20),
+                        OpenAiNativeUsage.builder().provider("openrouter").variant("chat_completions")
+                                .promptTokens(1000).cachedTokens(200).cacheWriteTokens(50).cacheWrite1hTokens(20)
+                                .completionTokens(100).totalTokens(1100).build()));
     }
 
     public static Stream<UsageCase> gemini() {
@@ -306,6 +359,22 @@ public final class UsageCases {
                                 "cache_creation_input_tokens", 1000),
                         bedrock("litellm").inputTokens(200).cacheReadInputTokens(4000).cacheWriteInputTokens(1000)
                                 .outputTokens(100).build()),
+                new UsageCase("Bedrock through LiteLLM with cache writes split by TTL", "bedrock",
+                        usage("prompt_tokens", 200, "completion_tokens", 100, "cache_read_input_tokens", 4000,
+                                "cache_creation_input_tokens", 1000,
+                                "cache_creation_token_details.ephemeral_5m_input_tokens", 400,
+                                "cache_creation_token_details.ephemeral_1h_input_tokens", 600),
+                        bedrock("litellm").inputTokens(200).cacheReadInputTokens(4000).cacheWriteInputTokens(1000)
+                                .cacheWrite1hInputTokens(600).outputTokens(100).build()),
+                new UsageCase("Bedrock through LiteLLM 1.82, the cache and its TTL split in the prompt's details",
+                        "bedrock",
+                        usage("prompt_tokens", 5200, "completion_tokens", 100, "cache_read_input_tokens", 4000,
+                                "cache_creation_input_tokens", 1000, "prompt_tokens_details.cached_tokens", 4000,
+                                "prompt_tokens_details.cache_creation_tokens", 1000,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_5m_input_tokens", 400,
+                                "prompt_tokens_details.cache_creation_token_details.ephemeral_1h_input_tokens", 600),
+                        bedrock("litellm").inputTokens(200).cacheReadInputTokens(4000).cacheWriteInputTokens(1000)
+                                .cacheWrite1hInputTokens(600).outputTokens(100).build()),
                 new UsageCase("Bedrock InvokeModel with a Mistral body", "bedrock",
                         usage("prompt_tokens", 10, "completion_tokens", 20, "total_tokens", 30),
                         bedrock("totals_only").inputTokens(10).outputTokens(20).build()),
@@ -318,7 +387,26 @@ public final class UsageCases {
                 new UsageCase("Bedrock under LiteLLM's Converse provider", "bedrock_converse",
                         usage("inputTokens", 9, "outputTokens", 1),
                         BedrockConverseNativeUsage.builder().provider("bedrock_converse").variant("converse")
-                                .inputTokens(9).outputTokens(1).build()));
+                                .inputTokens(9).outputTokens(1).build()),
+                new UsageCase("Bedrock InvokeModel with a Claude body splitting cache writes by TTL", "bedrock",
+                        usage("input_tokens", 12, "output_tokens", 7, "cache_creation_input_tokens", 1024,
+                                "cache_creation.ephemeral_5m_input_tokens", 768,
+                                "cache_creation.ephemeral_1h_input_tokens", 256, "cache_read_input_tokens", 4096),
+                        bedrock("converse").inputTokens(12).cacheReadInputTokens(4096).cacheWriteInputTokens(1024)
+                                .cacheWrite1hInputTokens(256).outputTokens(7).build()),
+                new UsageCase("Bedrock with Claude's TTL split flattened by underscores", "bedrock",
+                        usage("input_tokens", 12, "output_tokens", 7, "cache_creation_input_tokens", 1024,
+                                "cache_creation_ephemeral_1h_input_tokens", 256, "cache_read_input_tokens", 4096),
+                        bedrock("converse").inputTokens(12).cacheReadInputTokens(4096).cacheWriteInputTokens(1024)
+                                .cacheWrite1hInputTokens(256).outputTokens(7).build()),
+                new UsageCase("Bedrock Converse cache writes by TTL, as the SDK logs cacheDetails", "bedrock",
+                        usage("prompt_tokens", 280, "completion_tokens", 100, "total_tokens", 380,
+                                "original_usage.inputTokens", 200, "original_usage.outputTokens", 100,
+                                "original_usage.cacheWriteInputTokens", 50, "original_usage.cacheReadInputTokens", 30,
+                                "original_usage.cacheDetails.1h.inputTokens", 20,
+                                "original_usage.cacheDetails.5m.inputTokens", 30),
+                        bedrock("converse").inputTokens(200).cacheReadInputTokens(30).cacheWriteInputTokens(50)
+                                .cacheWrite1hInputTokens(20).outputTokens(100).build()));
     }
 
     public static Map<String, Integer> usage(Object... keysAndValues) {

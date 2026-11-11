@@ -55,7 +55,7 @@ describe("useModelSelection", () => {
       defaultModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
       defaultProvider: PROVIDER_TYPE.OPEN_AI,
       expectedModel: PROVIDER_MODEL_TYPE.GPT_5_NANO,
-      expectedConfigs: { maxCompletionTokens: 4000, reasoningEffort: "high" },
+      expectedConfigs: { maxCompletionTokens: 4000, reasoningEffort: "medium" },
     },
     {
       name: "a picked model",

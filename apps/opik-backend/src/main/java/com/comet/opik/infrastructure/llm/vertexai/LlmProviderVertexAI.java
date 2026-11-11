@@ -2,9 +2,14 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator.DocumentedErrors;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.utils.ClientDisconnectedException;
+import com.google.genai.errors.ApiException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -26,6 +31,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
@@ -104,9 +110,18 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
                     try {
                         List<ChatMessage> chatMessages = getChatMessages(request);
+                        // the SDK reads the stream to its end unless the call is cancelled
+                        Consumer<ChatCompletionResponse> handleMessageOrCancel = message -> {
+                            try {
+                                handleMessage.accept(message);
+                            } catch (ClientDisconnectedException exception) {
+                                client.cancel();
+                                throw exception;
+                            }
+                        };
                         client.chat(chatMessages, failingWhenCutOffBeforeAnswering(request,
-                                new ChunkedResponseHandler(handleMessage, handleCloseAndRelease, handleErrorAndRelease,
-                                        request.model())));
+                                new ChunkedResponseHandler(handleMessageOrCancel, handleCloseAndRelease,
+                                        handleErrorAndRelease, request.model())));
                     } catch (Exception e) {
                         if (terminalReached.compareAndSet(false, true)) {
                             // Synchronous failure before any terminal — deliver the error and close the stream.
@@ -121,7 +136,9 @@ public class LlmProviderVertexAI implements LlmProviderService {
                                 log.warn("Vertex AI stream close handler failed", ex);
                             }
                         } else {
-                            log.warn("Vertex AI stream failed after a terminal callback had already run", e);
+                            log.warn(
+                                    "Vertex AI stream failed after a terminal callback had already run, error type '{}'",
+                                    ProviderFailures.rootType(e), ProviderFailures.redacted(e));
                         }
                         closeOnce.run();
                     }
@@ -136,9 +153,16 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     // InvalidRequestException is non-retriable, so the cut-off is not re-run (and re-billed) by the retry policy,
     // and it is classified as a 400 on both the streaming and the non-streaming path.
-    private static InvalidRequestException cutOffBeforeAnswering(ChatCompletionRequest request) {
+    private static CutOffBeforeAnsweringException cutOffBeforeAnswering(ChatCompletionRequest request) {
         var limit = GeminiMaxOutputTokens.firstPositive(request).map(" (%s)"::formatted).orElse("");
-        return new InvalidRequestException(CUT_OFF_BEFORE_ANSWERING.formatted(limit));
+        return new CutOffBeforeAnsweringException(CUT_OFF_BEFORE_ANSWERING.formatted(limit));
+    }
+
+    /** Raised by Opik rather than by Vertex AI, so its message is passed on to the caller. */
+    public static final class CutOffBeforeAnsweringException extends InvalidRequestException {
+        public CutOffBeforeAnsweringException(String message) {
+            super(message);
+        }
     }
 
     static StreamingChatResponseHandler failingWhenCutOffBeforeAnswering(ChatCompletionRequest request,
@@ -201,7 +225,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
     }
 
     private List<ChatMessage> getChatMessages(ChatCompletionRequest request) {
-        List<ChatMessage> chatMessages = LlmProviderLangChainMapper.INSTANCE.mapMessages(request);
+        List<ChatMessage> chatMessages = llmProviderClientGenerator.mapMessages(request);
 
         // This is a workaround for the Vertex AI API, which requires at least one user or AI message in the request.
         if (chatMessages.stream().noneMatch(chatMessage -> chatMessage.type() == ChatMessageType.AI
@@ -220,8 +244,23 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     }
 
+    /**
+     * The google-genai SDK raises an {@link ApiException} carrying the error's code, status and message, not the JSON
+     * envelope, so it is mapped as a Gemini envelope would be: its message is kept only when Google documents its
+     * status.
+     */
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
-        return LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log);
+        return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, ApiException.class))
+                .map(LlmProviderVertexAI::toErrorMessage)
+                .or(() -> LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log));
+    }
+
+    private static ErrorMessage toErrorMessage(ApiException exception) {
+        var errorMessage = new ErrorMessage(exception.code(), ProviderErrorMessageValidator.firstLine(
+                exception.message()), exception.status());
+        return DocumentedErrors.GOOGLE.documents(exception.status())
+                ? errorMessage
+                : ProviderErrorMessageValidator.withoutProviderText(errorMessage);
     }
 }

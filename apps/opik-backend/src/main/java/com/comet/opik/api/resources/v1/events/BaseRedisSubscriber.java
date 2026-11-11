@@ -623,7 +623,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 ErrorMetricsResolver.WORKSPACE_ID_KEY, context.workspaceId(),
                 ErrorMetricsResolver.WORKSPACE_NAME_KEY, context.workspaceName());
         // Deferring as processEvent is out of our control, it might not return a cold Mono
-        return Mono.defer(() -> processEvent(message))
+        return Mono.defer(() -> processEvent(message, messageId))
                 .subscribeOn(workersScheduler)
                 .thenReturn(ProcessingResult.builder()
                         .messageId(messageId)
@@ -635,6 +635,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .status(MessageStatus.FAILURE)
                         .error(throwable)
                         .context(context)
+                        .message(message)
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis, workspaceAttributes);
@@ -726,7 +727,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .map(failure -> {
                     log.warn("Non-retryable error for messageId '{}', removing from stream",
                             failure.messageId(), failure.error());
-                    return failure.messageId();
+                    return failure;
                 })
                 .toList();
 
@@ -741,10 +742,41 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .filter(this::maxRetriesReached)
                 .map(this::handleMaxRetriesReached)
                 .collectList() // Emits an empty list if the sequence is empty
-                .flatMap(maxRetries ->
-                // Delete all non-retryable combined with max retries reached
-                ackAndRemoveMessages(Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList()))
+                .flatMap(maxRetries -> {
+                    // Delete all non-retryable combined with max retries reached
+                    var retired = Stream.concat(nonRetryable.stream(), maxRetries.stream()).toList();
+                    return notifyRetired(retired)
+                            .then(ackAndRemoveMessages(retired.stream().map(ProcessingResult::messageId).toList()));
+                })
                 .thenReturn(processingResults);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Mono<Void> notifyRetired(List<ProcessingResult> retired) {
+        return Flux.fromIterable(retired)
+                .filter(failure -> failure.message() != null)
+                .flatMap(failure -> Mono.defer(
+                        () -> onRetired((M) failure.message(), failure.messageId(), failure.error()))
+                        .subscribeOn(workersScheduler)
+                        .onErrorResume(throwable -> {
+                            log.error("Failed to handle retired messageId '{}'", failure.messageId(), throwable);
+                            return Mono.empty();
+                        }))
+                .then();
+    }
+
+    // Runs once, just before a message the stream gives up on is acked and removed, so a subclass can record
+    // a terminal outcome for it. Best effort: an error here is logged and the message is removed anyway.
+    protected Mono<Void> onRetired(M message, Throwable error) {
+        return Mono.empty();
+    }
+
+    /**
+     * The same, for a subscriber that keys what it records on the stream entry, as
+     * {@link #processEvent(Object, StreamMessageId)} does.
+     */
+    protected Mono<Void> onRetired(M message, StreamMessageId messageId, Throwable error) {
+        return onRetired(message, error);
     }
 
     private boolean maxRetriesReached(ProcessingResult failure) {
@@ -758,11 +790,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return true;
     }
 
-    private StreamMessageId handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
+    private ProcessingResult handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
         // TODO: Send to the dead letter queue (DLQ) for further analysis
         log.error("Max retries reached, removing from stream, messageId '{}'",
                 maxRetriesFailure.messageId(), maxRetriesFailure.error());
-        return maxRetriesFailure.messageId();
+        return maxRetriesFailure;
     }
 
     private Mono<Long> ackAndRemoveMessages(List<StreamMessageId> messageIds) {
@@ -814,6 +846,17 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * @param message a Redis message, guaranteed non-null by {@link #processMessage}
      */
     protected abstract Mono<Void> processEvent(M message);
+
+    /**
+     * The same, for a subscriber that has to know which stream entry it is handling. The entry id is the only
+     * thing that stays the same when Redis delivers an unacknowledged message again, so it is what a subscriber
+     * keys on to make handling a message twice do no more than handling it once.
+     *
+     * @param messageId the stream entry id, identical across every delivery of the same message
+     */
+    protected Mono<Void> processEvent(M message, StreamMessageId messageId) {
+        return processEvent(message);
+    }
 
     /**
      * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>
@@ -890,7 +933,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Builder(toBuilder = true)
     private record ProcessingResult(
             StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount,
-            MessageContext context) {
+            MessageContext context, Object message) {
     }
 
     /**

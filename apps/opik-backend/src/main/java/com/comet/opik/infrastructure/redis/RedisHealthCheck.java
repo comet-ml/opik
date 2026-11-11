@@ -6,6 +6,7 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.redisnode.RedisNode;
 import org.redisson.api.redisnode.RedisNodes;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
 
@@ -24,15 +25,10 @@ public class RedisHealthCheck extends NamedHealthCheck {
         this.healthCheckTimeoutMillis = healthCheckTimeout.toMilliseconds();
     }
 
-    /**
-     * {@code RedisNodes.SINGLE} must match the topology set in {@link com.comet.opik.infrastructure.RedisConfig#build()},
-     * which uses {@code Config.useSingleServer()}. If the topology changes (e.g. to cluster),
-     * this call will throw {@code IllegalArgumentException} and the health check will report unhealthy.
-     */
     @Override
     protected Result check() {
         try {
-            if (redisClient.getRedisNodes(RedisNodes.SINGLE).pingAll(healthCheckTimeoutMillis, TimeUnit.MILLISECONDS)) {
+            if (master().ping(healthCheckTimeoutMillis, TimeUnit.MILLISECONDS)) {
                 return Result.healthy();
             }
         } catch (Exception ex) {
@@ -40,6 +36,17 @@ public class RedisHealthCheck extends NamedHealthCheck {
         }
 
         return Result.unhealthy("Redis health check failed");
+    }
+
+    /**
+     * The node group must match the client's topology or Redisson throws {@code IllegalArgumentException}. Only the
+     * master serves traffic, so a lost replica or sentinel keeps the backend ready; in sentinel mode this is the
+     * currently discovered master, so the check follows a failover.
+     */
+    private RedisNode master() {
+        return redisClient.getConfig().isSentinelConfig()
+                ? redisClient.getRedisNodes(RedisNodes.SENTINEL_MASTER_SLAVE).getMaster()
+                : redisClient.getRedisNodes(RedisNodes.SINGLE).getInstance();
     }
 
     @Override

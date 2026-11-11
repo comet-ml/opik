@@ -661,6 +661,7 @@ public class ExperimentDAO {
                     e.type as type,
                     e.evaluation_method as evaluation_method,
                     e.status as status,
+                    e.finished_at as finished_at,
                     e.experiment_scores as experiment_scores,
                     e.dataset_version_id as dataset_version_id,
                     agg.feedback_scores_avg as feedback_scores,
@@ -721,6 +722,7 @@ public class ExperimentDAO {
                     e.type as type,
                     e.evaluation_method as evaluation_method,
                     e.status as status,
+                    e.finished_at as finished_at,
                     e.experiment_scores as experiment_scores,
                     e.dataset_version_id as dataset_version_id,
                     fs.feedback_scores as feedback_scores,
@@ -1776,6 +1778,27 @@ public class ExperimentDAO {
             ;
             """;
 
+    // Experiments created before dataset versioning have an empty dataset_version_id and resolve to the
+    // latest version at read time, so they only match when the requested version is the latest one.
+    private static final String FIND_IDS_BY_DATASET_ID = """
+            SELECT id
+            FROM (
+                SELECT id, dataset_version_id, type
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :dataset_id
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE type = 'regular'
+            <if(dataset_version_id)>
+            AND (dataset_version_id = :dataset_version_id
+            <if(include_unversioned)>OR dataset_version_id = ''<endif>)
+            <endif>
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS = """
             SELECT
                 distinct dataset_id, type
@@ -1836,6 +1859,7 @@ public class ExperimentDAO {
                 dataset_version_id,
                 execution_policy,
                 project_id,
+                finished_at,
                 created_at,
                 last_updated_at
             )
@@ -1860,6 +1884,7 @@ public class ExperimentDAO {
                 dataset_version_id,
                 execution_policy,
                 project_id,
+                <if(finished)> now64(9) <else> finished_at <endif> as finished_at,
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
@@ -2114,6 +2139,7 @@ public class ExperimentDAO {
                     .evaluationMethod(
                             EvaluationMethod.fromString(row.get("evaluation_method", String.class)).orElse(null))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
+                    .finishedAt(row.get("finished_at", Instant.class))
                     .experimentScores(getExperimentScores(row))
                     .datasetVersionId(Optional.ofNullable(row.get("dataset_version_id", String.class))
                             .filter(str -> !str.isBlank())
@@ -2577,6 +2603,29 @@ public class ExperimentDAO {
     }
 
     @WithSpan
+    public Mono<Set<UUID>> findIdsByDatasetId(@NonNull UUID datasetId, UUID datasetVersionId,
+            boolean includeUnversioned) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(FIND_IDS_BY_DATASET_ID,
+                            "find_experiment_ids_by_dataset_id", workspaceId, userName, datasetId);
+                    if (datasetVersionId != null) {
+                        template.add("dataset_version_id", true);
+                        template.add("include_unversioned", includeUnversioned);
+                    }
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("dataset_id", datasetId);
+                    if (datasetVersionId != null) {
+                        statement.bind("dataset_version_id", datasetVersionId.toString());
+                    }
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
+                .collect(toSet());
+    }
+
+    @WithSpan
     public Mono<List<DatasetEventInfoHolder>> getExperimentsDatasetInfo(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
@@ -2913,6 +2962,10 @@ public class ExperimentDAO {
 
         if (experimentUpdate.status() != null) {
             template.add("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.finished()) {
+            template.add("finished", true);
         }
 
         if (experimentUpdate.experimentScores() != null) {

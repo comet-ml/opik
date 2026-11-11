@@ -8,11 +8,13 @@ export const ExperimentInfo: core.serialization.ObjectSchema<serializers.Experim
     core.serialization.object({
         experimentId: core.serialization.property("experiment_id", core.serialization.string().optional()),
         promptIndex: core.serialization.property("prompt_index", core.serialization.number().optional()),
+        totalItems: core.serialization.property("total_items", core.serialization.number().optional()),
     });
 
 export declare namespace ExperimentInfo {
     export interface Raw {
         experiment_id?: string | null;
         prompt_index?: number | null;
+        total_items?: number | null;
     }
 }

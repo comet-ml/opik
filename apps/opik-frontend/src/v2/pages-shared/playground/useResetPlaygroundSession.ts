@@ -3,7 +3,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import {
   useClearCreatedExperiments,
-  useClearRunningMap,
+  useSettleRun,
   useResetDatasetFilters,
   useSetDatasetType,
   useSetDatasetVariables,
@@ -23,7 +23,7 @@ function useResetPlaygroundSession() {
   );
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const clearCreatedExperiments = useClearCreatedExperiments();
-  const clearRunningMap = useClearRunningMap();
+  const settleRun = useSettleRun();
   const resetDatasetFilters = useResetDatasetFilters();
   const setDatasetVariables = useSetDatasetVariables();
   const setExperimentName = useSetExperimentName();
@@ -33,7 +33,7 @@ function useResetPlaygroundSession() {
     setDatasetVersionKey(null);
     setSelectedRuleIds(null);
     clearCreatedExperiments();
-    clearRunningMap();
+    settleRun();
     resetDatasetFilters();
     setDatasetVariables([]);
     setExperimentName(null);
@@ -42,7 +42,7 @@ function useResetPlaygroundSession() {
     setDatasetVersionKey,
     setSelectedRuleIds,
     clearCreatedExperiments,
-    clearRunningMap,
+    settleRun,
     resetDatasetFilters,
     setDatasetVariables,
     setExperimentName,

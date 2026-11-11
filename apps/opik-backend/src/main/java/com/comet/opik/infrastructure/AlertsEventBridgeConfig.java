@@ -32,6 +32,10 @@ public class AlertsEventBridgeConfig {
     @JsonProperty
     private String region;
 
+    // Optional: set on SageMaker Partner AI Apps, where it replaces every other credentials source
+    @JsonProperty
+    private String customerCredentialsEndpoint;
+
     @JsonIgnore
     @AssertTrue(message = "eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be an EventBridge bus name matching [/.-_A-Za-z0-9] of at most 256 characters, or a bus ARN arn:<partition>:events:<region>:<account>:event-bus/<name>")
     public boolean isEventBusValid() {

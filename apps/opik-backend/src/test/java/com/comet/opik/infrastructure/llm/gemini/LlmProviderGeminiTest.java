@@ -1,18 +1,26 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
+import io.dropwizard.jersey.errors.ErrorMessage;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +43,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Mockito.mock;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Gemini streaming")
@@ -65,6 +75,61 @@ class LlmProviderGeminiTest {
     @BeforeEach
     void setUp() {
         wireMock.server().resetAll();
+    }
+
+    /** The summary line of Gemini's quota error, followed in its message by the quota's specifics. */
+    private static final String QUOTA_SUMMARY = """
+            You exceeded your current quota, please check your plan and billing details. For more information on \
+            this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.""";
+
+    private static String quotaErrorBody() {
+        var message = "%s\n* Quota exceeded for metric: generate_content_free_tier_requests, limit: %d\nPlease retry in %ds."
+                .formatted(QUOTA_SUMMARY, RandomUtils.secure().randomInt(1, 100),
+                        RandomUtils.secure().randomInt(1, 60));
+        return JsonUtils.writeValueAsString(
+                Map.of("error", Map.of("code", 429, "message", message, "status", "RESOURCE_EXHAUSTED")));
+    }
+
+    /** As ChatCompletionService passes it on: parsed by the provider, then validated. */
+    private static ErrorMessage callerError(Throwable failure) {
+        var provider = new LlmProviderGemini(mock(GeminiClientGenerator.class),
+                LlmProviderClientApiConfig.builder().apiKey("test-api-key").build());
+        var validator = new ProviderErrorMessageValidator(TestConfigUtils.loadConfigTest().getLlmProviderClient());
+        return provider.getLlmProviderError(failure).map(validator::validate).orElseThrow();
+    }
+
+    @Test
+    @DisplayName("a documented quota error keeps its summary line, the specifics after it dropped")
+    void quotaErrorKeepsItsSummaryLine() {
+        wireMock.server().stubFor(post(urlPathMatching(".*:generateContent"))
+                .willReturn(aResponse().withStatus(429).withHeader("Content-Type", "application/json")
+                        .withBody(quotaErrorBody())));
+        var model = GoogleAiGeminiChatModel.builder()
+                .baseUrl("http://localhost:%d/v1beta".formatted(wireMock.server().port()))
+                .apiKey("test-api-key")
+                .httpClientBuilder(LlmTestClients.LLM_HTTP_CLIENT_BUILDERS.builder())
+                .modelName(MODEL)
+                .maxRetries(0)
+                .build();
+        var expectedError = new ErrorMessage(429, QUOTA_SUMMARY, "RESOURCE_EXHAUSTED");
+
+        var failure = catchThrowable(() -> model.chat(List.of(UserMessage.from("hello"))));
+
+        assertThat(callerError(failure)).isEqualTo(expectedError);
+    }
+
+    @Test
+    @DisplayName("a documented quota error on a stream keeps its summary line")
+    void streamedQuotaErrorKeepsItsSummaryLine() throws Exception {
+        wireMock.server().stubFor(post(urlPathMatching(STREAM_GENERATE_CONTENT_PATH))
+                .willReturn(aResponse().withStatus(429).withHeader("Content-Type", "application/json")
+                        .withBody(quotaErrorBody())));
+        var expectedErrors = List.of(new ErrorMessage(429, QUOTA_SUMMARY, "RESOURCE_EXHAUSTED"));
+
+        var outcome = stream(request(null, null, null));
+
+        assertThat(outcome.errors().stream().map(LlmProviderGeminiTest::callerError).toList())
+                .isEqualTo(expectedErrors);
     }
 
     @Test
@@ -182,6 +247,7 @@ class LlmProviderGeminiTest {
         GoogleAiGeminiStreamingChatModel.builder()
                 .baseUrl("http://localhost:%d/v1beta".formatted(wireMock.server().port()))
                 .apiKey("test-api-key")
+                .httpClientBuilder(LlmTestClients.LLM_HTTP_CLIENT_BUILDERS.builder())
                 .modelName(MODEL)
                 .maxOutputTokens(GeminiMaxOutputTokens.firstPositive(request).orElse(null))
                 .returnThinking(false)

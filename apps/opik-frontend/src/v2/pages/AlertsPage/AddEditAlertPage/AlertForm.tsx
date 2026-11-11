@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn, useWatch } from "react-hook-form";
@@ -65,6 +66,12 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
             value,
           }))
         : [],
+      customFields: alert?.custom_fields
+        ? Object.entries(alert.custom_fields).map(([key, value]) => ({
+            key,
+            value,
+          }))
+        : [],
       triggers: alertTriggersToFormTriggers(alert?.triggers ?? []),
     },
   });
@@ -86,6 +93,12 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
             : undefined,
         }),
       },
+      custom_fields:
+        formData.customFields.length > 0
+          ? Object.fromEntries(
+              formData.customFields.map(({ key, value }) => [key, value]),
+            )
+          : undefined,
       webhook: {
         url: formData.url.trim(),
         secret_token: formData.secretToken || undefined,
@@ -108,7 +121,14 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
     getAlert,
   });
 
-  const triggers = useWatch({ control: form.control, name: "triggers" });
+  // useWatch hands back the live form array, which a nested edit (a trigger's window) mutates in
+  // place, so the name effect below would never see it change. A copy per change gives it a new
+  // reference.
+  const triggers = useWatch({
+    control: form.control,
+    name: "triggers",
+    compute: cloneDeep,
+  });
   const nameValue = useWatch({ control: form.control, name: "name" });
 
   // The last name we suggested. formState.dirtyFields can't stand in for this:

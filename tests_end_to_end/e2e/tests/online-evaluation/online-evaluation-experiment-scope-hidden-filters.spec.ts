@@ -4,15 +4,15 @@ import { buildConstantScoreMetric } from '@e2e/core/metrics';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 
 /**
- * `RuleFilteringSection` early-returns `null` for `trigger_scope=experiment` —
+ * `FilteringSamplingCard` returns `null` for `trigger_scope=experiment`:
  * neither filters nor the sampling rate reach an experiment trace, so the
- * dialog has nothing to configure there and renders no control for either.
+ * editor has nothing to configure there and renders no control for either.
  *
  * That is a deliberate product decision, and it creates the exact shape a form
  * silently loses data in: two persisted fields the user cannot see while
  * editing. A serializer that rebuilds the payload from the controls it rendered
  * drops them; one that re-initialises from the form's defaults resets them to
- * 1.0 and `[]`. Both look identical on screen — the dialog closes, the row is
+ * 1.0 and `[]`. Both look identical on screen: the editor closes, the row is
  * unchanged, and the rule has quietly stopped being filtered.
  *
  * The assertion is therefore on the outbound PATCH body as well as the
@@ -21,10 +21,9 @@ import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
  * indistinguishable after the fact, and only the request tells them apart.
  *
  * Deterministic and LLM-free by construction — the rule never executes. It is
- * seeded over REST for a reason beyond isolating the edit path: with the
- * filtering section unrendered at this scope, the create dialog has no control
- * that could set a filter or a non-default rate, so there is no UI path to the
- * starting state at all.
+ * seeded over REST for a reason beyond isolating the edit path: the editor
+ * cannot make a rule experiment-only (its switch picks production or both), so
+ * there is no UI path to the starting state at all.
  *
  * `sampling_rate` is asserted against a value the server would never choose:
  * 1.0 is the create-time default, so a rule that lost its rate and got the
@@ -43,8 +42,8 @@ const SEEDED_SAMPLING_RATE = 0.42;
  * other, which is why the comparison below is a triple rather than a deep
  * equality. Measured against 2.2.66: the GET drops `type` entirely and adds no
  * `key`, so a rule seeded with the object above reads back as exactly
- * `{ field, operator, value }`. The outbound PATCH goes the other way — the
- * dialog rehydrates through `normalizeFilters`/`createFilter`, which re-derive
+ * `{ field, operator, value }`. The outbound PATCH goes the other way: the
+ * editor rehydrates through `normalizeFilters`/`createFilter`, which re-derive
  * `type` from the column config and attach a transient `id`.
  *
  * So field/operator/value is not a weakened comparison, it is the only one that
@@ -79,7 +78,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:online-evaluation'] },
   () => {
     test(
-      'Saving an experiment-scoped rule unchanged preserves the filters and rate the dialog hides',
+      'Saving an experiment-scoped rule preserves the filters and rate the editor hides',
       { tag: ['@cap:online-evaluation.rule-filters'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-exprule`;
@@ -111,62 +110,49 @@ test.describe(
 
         const onlineEval = new OnlineEvaluationPage(page);
 
-        await test.step('Open the rule in the edit dialog', async () => {
+        await test.step('Open the rule in the editor', async () => {
           await onlineEval.goto(project.id);
           await onlineEval.waitForReady();
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await onlineEval.openEditDialogByName(ruleName);
+          await onlineEval.openEditRulePanelByName(ruleName);
         });
 
-        await test.step('The dialog renders no filtering or sampling control at this scope', async () => {
-          // The whole accordion is unmounted, not merely collapsed, so the
-          // trigger itself is absent — and with it the sampling-rate input,
-          // which only exists inside it.
+        await test.step('The editor renders no filtering or sampling control at this scope', async () => {
+          // The whole card is unmounted, not merely collapsed, so the trigger
+          // itself is absent, and with it the sampling-rate input.
           await expect(
             onlineEval.filteringSamplingTrigger,
-            'Filtering & Sampling is not rendered for an experiment-scoped rule',
+            'Filtering and sampling is not rendered for an experiment-scoped rule',
           ).toHaveCount(0);
           await expect(
             onlineEval.samplingRateInput,
             'and neither is the sampling-rate control it contains',
           ).toHaveCount(0);
 
-          // The control that IS rendered, hydrated from the persisted scope.
-          // Without this the two absences above would also be satisfied by a
-          // dialog that failed to render its body at all, which would make the
-          // save below a save of nothing.
+          // The controls that ARE rendered. Without them the absences above
+          // would also be satisfied by an editor that failed to render at all.
+          await expect(onlineEval.scopeOption('Traces')).toHaveAttribute('data-state', 'on');
           await expect(
-            onlineEval.triggerScopeControl,
-            'the trace-scope dialog still renders its Trigger scope control',
-          ).toBeVisible();
-          await expect(onlineEval.triggerScopeOption('Experiment traces')).toHaveAttribute(
-            'data-state',
-            'on',
-          );
+            onlineEval.scoredTracesSelect,
+            'an experiment-only rule scores only experiment traces',
+          ).toHaveText('experiment traces');
         });
 
-        const update = await test.step('Press "Update rule" without editing anything', async () => {
+        const update = await test.step('Disable the rule and save, leaving everything else alone', async () => {
           // Armed before the click: the request is in flight the moment the
-          // dialog submits, so subscribing afterwards would race it.
+          // editor submits, so subscribing afterwards would race it.
           const patched = page.waitForRequest(
             (request) => request.method() === 'PATCH' && isRuleUpdate(request.url(), ruleId),
           );
-          // The response too, not just the dispatch. AddEditRuleDialog calls
-          // setOpen(false) outside the mutation's callbacks, so the dialog hides
-          // the moment the PATCH is sent — waiting for it to close is no
-          // barrier, and the read-back below would otherwise be free to observe
-          // the pre-save row and pass on a backend that cleared the filters.
           const answered = page.waitForResponse(
             (response) =>
               response.request().method() === 'PATCH' && isRuleUpdate(response.url(), ruleId),
           );
-          await onlineEval.submitDialog();
+          await onlineEval.toggleEnabled();
+          await onlineEval.submitPanel();
           const request = await patched;
           const response = await answered;
-          expect(
-            response.ok(),
-            `the unedited save was accepted (got ${response.status()})`,
-          ).toBe(true);
+          expect(response.ok(), `the save was accepted (got ${response.status()})`).toBe(true);
           return request;
         });
 
@@ -186,7 +172,7 @@ test.describe(
           ).toContain('sampling_rate');
           expect(Object.keys(body), 'the update payload names filters').toContain('filters');
 
-          expect(body.sampling_rate, 'an unedited save sends the rate back unchanged').toBe(
+          expect(body.sampling_rate, 'the save sends the hidden rate back unchanged').toBe(
             SEEDED_SAMPLING_RATE,
           );
           expect(body.trigger_scope, 'and does not change the scope').toBe('experiment');
@@ -210,18 +196,18 @@ test.describe(
           expect(saved.triggerScope, 'the persisted scope survives the round-trip').toBe(
             'experiment',
           );
-          expect(saved.enabled, 'the unedited save did not disable the rule').toBe(true);
+          expect(saved.enabled, 'the one edit made did land').toBe(false);
           expect(saved.filters, 'the rule still has a filter list').not.toBeNull();
           expect(saved.filters, 'and still exactly one filter').toHaveLength(1);
           expect(
             filterIdentity(saved.filters![0]),
-            'the filter survives the round-trip through the edit dialog',
+            'the filter survives the round-trip through the editor',
           ).toEqual(filterIdentity(SEEDED_FILTER));
         });
 
-        await test.step('The rule is still listed, with the state it started in', async () => {
+        await test.step('The rule is still listed, now disabled', async () => {
           await expect(onlineEval.ruleRow(ruleName)).toHaveCount(1);
-          await expect(onlineEval.ruleStatusCell(ruleName, 'Enabled')).toBeVisible();
+          await expect(onlineEval.ruleStatusCell(ruleName, 'Disabled')).toBeVisible();
         });
       },
     );

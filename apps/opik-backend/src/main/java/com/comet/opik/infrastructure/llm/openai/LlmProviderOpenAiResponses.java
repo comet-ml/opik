@@ -1,9 +1,12 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.api.ModelParams;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Throwables;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -85,6 +88,11 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
                 .or(() -> LlmProviderLangChainMapper.INSTANCE.getErrorObject(throwable, log));
     }
 
+    @Override
+    public String paramsRoute() {
+        return ModelParams.RESPONSES_API_ROUTE;
+    }
+
     private static Optional<OpenAIServiceException> findOpenAiServiceException(Throwable throwable) {
         return Throwables.getCausalChain(throwable).stream()
                 .filter(OpenAIServiceException.class::isInstance)
@@ -99,11 +107,30 @@ public class LlmProviderOpenAiResponses implements LlmProviderService {
      * {@code Optional.map(fn)} already returns empty when {@code fn} yields null, so no explicit
      * filter is needed.
      */
-    private static ErrorMessage toErrorMessage(OpenAIServiceException ex) {
+    static ErrorMessage toErrorMessage(OpenAIServiceException ex) {
         Integer status = ex.code()
                 .map(OpenAiCompatStatusCodes::fromCode)
                 .or(() -> ex.type().map(OpenAiCompatStatusCodes::fromCode))
                 .orElseGet(ex::statusCode);
-        return new ErrorMessage(status, ex.getMessage(), ex.code().orElse(null));
+        var envelope = OpenAiErrorMessage.builder()
+                .error(OpenAiErrorMessage.OpenAiError.builder()
+                        .message(messageOf(ex))
+                        .code(ex.code().orElse(null))
+                        .type(ex.type().orElse(null))
+                        .build())
+                .build();
+        var errorMessage = new ErrorMessage(status, envelope.error().message(), ex.code().orElse(null));
+        return envelope.isDocumented() ? errorMessage : ProviderErrorMessageValidator.withoutProviderText(errorMessage);
+    }
+
+    /** The exception's own message prefixes the status, or is the whole body when the SDK couldn't parse it. */
+    private static String messageOf(OpenAIServiceException ex) {
+        return Optional.of(ex.body())
+                .filter(body -> !body.isMissing())
+                .map(body -> body.convert(JsonNode.class))
+                .map(body -> body.path("message"))
+                .filter(JsonNode::isTextual)
+                .map(JsonNode::asText)
+                .orElse(null);
     }
 }

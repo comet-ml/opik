@@ -168,6 +168,37 @@ describe("searchHelpers", () => {
       await promise;
     });
 
+    it("should not sleep past the timeout when the poll interval is longer", async () => {
+      const mockSearchFn = vi.fn().mockResolvedValue([]);
+      const promise = searchAndWaitForDone(mockSearchFn, 1, 100, 5000);
+      let settled = false;
+      const trackedPromise = promise.then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      try {
+        expect(settled).toBe(true);
+        await expect(trackedPromise).resolves.toEqual([]);
+        expect(mockSearchFn).toHaveBeenCalledTimes(2);
+      } finally {
+        await vi.runAllTimersAsync();
+      }
+    });
+
+    it("should return after one search when the timeout is NaN", async () => {
+      const mockSearchFn = vi.fn().mockResolvedValue([1]);
+      const promise = searchAndWaitForDone(mockSearchFn, 2, Number.NaN, 1000);
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toEqual([1]);
+      expect(mockSearchFn).toHaveBeenCalledTimes(1);
+    });
+
     it("should propagate search function errors", async () => {
       const mockSearchFn = vi
         .fn()

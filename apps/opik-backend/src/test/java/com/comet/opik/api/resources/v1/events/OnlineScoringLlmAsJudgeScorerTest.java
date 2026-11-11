@@ -1,11 +1,13 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelApi;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
@@ -28,10 +30,13 @@ import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -46,6 +51,8 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -70,13 +77,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -85,6 +95,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -118,6 +129,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
     @Mock
     private OpenRouterDecisionsClient decisionsClient;
+    @Mock
+    private OpenAiDecisionsClient openAiDecisionsClient;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -152,13 +165,20 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
         lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
+        lenient().when(onlineEvaluationRecorder.begin(
+                any(Trace.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
+
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
         AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
-                toolRegistry);
+                toolRegistry,
+                LlmModelRegistryTestUtils.bundledRegistry());
         TraceCompressor traceCompressor = new TraceCompressor();
 
+        lenient().when(decisionsClient.provider()).thenReturn(LlmProvider.OPEN_ROUTER);
+        lenient().when(openAiDecisionsClient.provider()).thenReturn(LlmProvider.OPEN_AI);
         scorer = new OnlineScoringLlmAsJudgeScorer(
                 onlineScoringConfig,
                 serviceTogglesConfig,
@@ -175,7 +195,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 opikConfiguration,
                 onlineEvaluationRecorder,
                 attachmentService,
-                new DecisionScoringService(decisionsClient, llmProviderFactory));
+                new DecisionScoringService(Set.of(decisionsClient, openAiDecisionsClient), llmProviderFactory));
     }
 
     @AfterEach
@@ -254,7 +274,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     Map.of(),
                     PromptType.MUSTACHE,
                     hasExperimentId ? UUID.randomUUID() : null,
-                    "ws-name-1");
+                    "ws-name-1",
+                    null);
         }
     }
 
@@ -322,7 +343,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
         AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
                 new ToolRegistry(Set.of(
                         stubTool(GetTraceSpansTool.NAME, "{}"),
-                        stubTool(ReadTool.NAME, "{}"))));
+                        stubTool(ReadTool.NAME, "{}"))),
+                LlmModelRegistryTestUtils.bundledRegistry());
         ChatRequest withTools = agenticScoringService.addToolSpecs(original, ToolChoice.REQUIRED);
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
@@ -795,7 +817,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null);
+                    PromptType.MUSTACHE, null, null, null);
             var traceAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
                     .entityId(trace.id())
                     .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
@@ -906,7 +928,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null);
+                    PromptType.MUSTACHE, null, null, null);
         }
     }
 
@@ -914,6 +936,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
     class DecisionModelScoringTests {
 
         private static final String JEV_MODEL = "~typesafe/jev-latest";
+        private static final String LUNA_MODEL = "gpt-6-luna";
 
         private static final String JEV_EVALUATOR_JSON = """
                 {
@@ -1041,7 +1064,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         void promptOverContextLimitIsSkippedWithoutCallingTheModel() {
             // 4 chars per token (set in setUp): this answer alone is over the 32k-token limit.
             var message = buildJevMessage("question",
-                    RandomStringUtils.secure().nextAlphanumeric(DecisionScoringService.MAX_CONTEXT_TOKENS * 4 + 1));
+                    RandomStringUtils.secure().nextAlphanumeric(DecisionModels.JEV_MAX_CONTEXT_TOKENS * 4 + 1));
 
             scorer.score(message).block();
 
@@ -1075,6 +1098,57 @@ class OnlineScoringLlmAsJudgeScorerTest {
             // Unlike chat models on OpenRouter, a decisions model never takes the agentic path, so the
             // tool-calling provider alone doesn't trigger the fetch.
             assertThat(scorer.shouldFetchSpans(message)).isEqualTo(expected);
+        }
+
+        @Test
+        void gpt6LunaRuleOnTheDecisionsApiScoresThroughOpenAi() {
+            var lunaConfig = LlmProviderClientApiConfig.builder()
+                    .apiKey(RandomStringUtils.secure().nextAlphanumeric(16))
+                    .provider(LlmProvider.OPEN_AI)
+                    .build();
+            when(llmProviderFactory.getClientApiConfig(anyString(), eq(LUNA_MODEL))).thenReturn(lunaConfig);
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(openAiDecisionsClient.decide(requestCaptor.capture(), eq(lunaConfig)))
+                    .thenReturn(Mono.just(response(Map.of("q0", 0.93, "q1", 0.2))));
+
+            scorer.score(buildJevMessage(lunaCode(LlmAsJudgeModelApi.DECISIONS), "question", "answer")).block();
+
+            assertThat(requestCaptor.getValue().model()).isEqualTo(LUNA_MODEL);
+            assertThat(requestCaptor.getValue().questions()).containsOnlyKeys("q0", "q1");
+            assertThat(captureStoredScores())
+                    .extracting(FeedbackScoreBatchItem::name, score -> score.value().intValue())
+                    .containsExactly(tuple("answer_relevant", 1), tuple("answer_correct", 0));
+            // Picking the client asks every client for its provider, in the set's unspecified order.
+            verify(decisionsClient, never()).decide(any(), any());
+            verifyNoInteractions(aiProxyService);
+        }
+
+        @Test
+        void gpt6LunaRuleWithoutApiStaysOnTheChatJudge() {
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            lenient().when(llmProviderFactory.getLlmProvider(anyString())).thenReturn(LlmProvider.OPEN_AI);
+            lenient().when(llmProviderFactory.getStructuredOutputStrategy(anyString()))
+                    .thenReturn(new ToolCallingStrategy());
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+            when(aiProxyService.scoreTrace(any(), argThat(params -> LUNA_MODEL.equals(params.name())), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage("""
+                            {"answer_relevant": {"score": true, "reason": "on topic"},
+                             "answer_correct": {"score": false, "reason": "wrong"}}
+                            """)).build());
+
+            scorer.score(buildJevMessage(lunaCode(null), "question", "answer")).block();
+
+            assertThat(captureStoredScores()).extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("answer_relevant", "answer_correct");
+            verifyNoInteractions(decisionsClient);
+            verifyNoInteractions(openAiDecisionsClient);
+        }
+
+        private LlmAsJudgeCode lunaCode(LlmAsJudgeModelApi api) {
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            return code.toBuilder()
+                    .model(code.model().toBuilder().name(LUNA_MODEL).api(api).build())
+                    .build();
         }
 
         private List<FeedbackScoreBatchItem> captureStoredScores() {
@@ -1112,7 +1186,286 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null, null);
+                    PromptType.MUSTACHE, null, null, null);
+        }
+    }
+
+    @Nested
+    class TestSuiteJudgeFailureTests {
+
+        private static final String SUITE_EVALUATOR_JSON = """
+                {
+                  "model": { "name": "judge-a" },
+                  "messages": [
+                    { "role": "USER", "content": "Check this output: {{output}}" }
+                  ],
+                  "schema": [
+                    { "name": "assertion_1", "type": "BOOLEAN", "description": "Is polite" },
+                    { "name": "assertion_2", "type": "BOOLEAN", "description": "Is short" }
+                  ],
+                  "variables": {}
+                }
+                """;
+
+        private static final String SUITE_RESPONSE = """
+                {"assertion_1": {"score": true, "reason": "polite"}, "assertion_2": {"score": false, "reason": "long"}}
+                """;
+
+        private void stubJudgeRouting() {
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            lenient().when(llmProviderFactory.getLlmProvider(anyString())).thenReturn(LlmProvider.OPEN_AI);
+            lenient().when(llmProviderFactory.getStructuredOutputStrategy(anyString()))
+                    .thenReturn(new ToolCallingStrategy());
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+        }
+
+        private void stubJudge(String model, Throwable failure) {
+            when(aiProxyService.scoreTrace(any(), argThat(params -> params != null && model.equals(params.name())),
+                    any())).thenThrow(failure);
+        }
+
+        private void stubJudge(String model, String response) {
+            when(aiProxyService.scoreTrace(any(), argThat(params -> params != null && model.equals(params.name())),
+                    any())).thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(response)).build());
+        }
+
+        private void assertSpansFetchedOnceFor(TraceToScoreLlmAsJudge message) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Set<UUID>> traceIdsCaptor = ArgumentCaptor.forClass(Set.class);
+            verify(spanService, times(1)).getByTraceIds(traceIdsCaptor.capture());
+            assertThat(traceIdsCaptor.getValue()).containsExactly(message.trace().id());
+        }
+
+        private void assertSuiteScoresStoredOnceFor(TraceToScoreLlmAsJudge message) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService, times(1)).scoreBatchOfTraces(scoresCaptor.capture());
+            var trace = message.trace();
+            assertThat(scoresCaptor.getValue())
+                    .extracting(FeedbackScoreBatchItem::id, FeedbackScoreBatchItem::projectId,
+                            FeedbackScoreBatchItem::projectName, FeedbackScoreBatchItem::categoryName,
+                            FeedbackScoreBatchItem::name, item -> item.value().intValue(),
+                            FeedbackScoreBatchItem::reason)
+                    .containsExactlyInAnyOrder(
+                            tuple(trace.id(), trace.projectId(), trace.projectName(),
+                                    TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY, "Is polite", 1, "polite"),
+                            tuple(trace.id(), trace.projectId(), trace.projectName(),
+                                    TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY, "Is short", 0, "long"));
+        }
+
+        private List<String> judgedModels(int times) {
+            ArgumentCaptor<LlmAsJudgeModelParameters> captor = ArgumentCaptor.forClass(LlmAsJudgeModelParameters.class);
+            verify(aiProxyService, times(times)).scoreTrace(any(), captor.capture(), any());
+            return captor.getAllValues().stream().map(LlmAsJudgeModelParameters::name).toList();
+        }
+
+        @Test
+        void fallsBackToTheNextJudgeWhenTheFirstRejectsTheKey() {
+            var message = suiteMessage(List.of("judge-b", "judge-c"));
+            stubJudgeRouting();
+            stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
+            stubJudge("judge-b", SUITE_RESPONSE);
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
+
+            scorer.doScore(message).block();
+
+            assertThat(judgedModels(2)).containsExactly("judge-a", "judge-b");
+            assertSpansFetchedOnceFor(message);
+            assertSuiteScoresStoredOnceFor(message);
+            verify(testSuiteAssertionCounterService, times(1))
+                    .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
+        }
+
+        @Test
+        void surfacesTheLastRejectionWhenEveryJudgeRejectsTheKey() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
+            stubJudge("judge-b", new ClientErrorException("Incorrect API key provided", 401));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block())
+                    .isInstanceOf(ClientErrorException.class)
+                    .hasMessage("Incorrect API key provided");
+            assertThat(judgedModels(2)).containsExactly("judge-a", "judge-b");
+            verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        }
+
+        @ParameterizedTest(name = "status {0}")
+        @ValueSource(ints = {429, 500, 503})
+        void doesNotFallBackOnATransientFailure(int status) {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            RuntimeException failure = status >= 500
+                    ? new jakarta.ws.rs.ServerErrorException("provider down", status)
+                    : new ClientErrorException("rate limited", status);
+            stubJudge("judge-a", failure);
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
+            assertThat(judgedModels(1)).containsExactly("judge-a");
+        }
+
+        @Test
+        void doesNotFallBackWithoutFallbackJudges() {
+            var message = suiteMessage(null);
+            stubJudgeRouting();
+            stubJudge("judge-a", new ClientErrorException("invalid x-api-key", 401));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isInstanceOf(ClientErrorException.class);
+            assertThat(judgedModels(1)).containsExactly("judge-a");
+        }
+
+        @Test
+        void recordsTheFailedEvaluationOnceAndDoesNotFallBackWhenTheSpansCannotBeFetched() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            var monitored = new MonitoredEvaluation();
+            when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), anyString(), any(), any()))
+                    .thenReturn(monitored);
+            var failure = new NotFoundException("Trace not found");
+            when(spanService.getByTraceIds(Set.of(message.trace().id()))).thenReturn(Flux.error(failure));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
+            assertThat(monitored.failed).containsExactly(failure);
+            assertThat(monitored.completed).isEmpty();
+            verify(onlineEvaluationRecorder).begin(message.trace(), message.ruleId(), message.ruleName(), "judge-a",
+                    message.workspaceId(), message.userName());
+            verifyNoMoreInteractions(onlineEvaluationRecorder);
+            assertSpansFetchedOnceFor(message);
+            verifyNoInteractions(aiProxyService);
+            verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        }
+
+        @Test
+        void monitorsEachJudgeAttemptOnItsOwnTrace() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            var judgeA = new MonitoredEvaluation();
+            var judgeB = new MonitoredEvaluation();
+            when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), eq("judge-a"), any(), any()))
+                    .thenReturn(judgeA);
+            when(onlineEvaluationRecorder.begin(any(Trace.class), any(), any(), eq("judge-b"), any(), any()))
+                    .thenReturn(judgeB);
+            var rejection = new ClientErrorException("invalid x-api-key", 401);
+            stubJudge("judge-a", rejection);
+            stubJudge("judge-b", SUITE_RESPONSE);
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
+
+            scorer.doScore(message).block();
+
+            assertThat(judgeA.failed).containsExactly(rejection);
+            assertThat(judgeA.completed).isEmpty();
+            assertThat(judgeB.failed).isEmpty();
+            assertThat(judgeB.completed).singleElement()
+                    .satisfies(scores -> assertThat(scores).hasSize(2));
+        }
+
+        @Test
+        void doesNotFallBackWhenTheScoresCannotBeStored() {
+            var message = suiteMessage(List.of("judge-b"));
+            stubJudgeRouting();
+            stubJudge("judge-a", SUITE_RESPONSE);
+            var failure = new NotFoundException("Project not found");
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.error(failure));
+
+            assertThatThrownBy(() -> scorer.doScore(message).block()).isSameAs(failure);
+            assertThat(judgedModels(1)).containsExactly("judge-a");
+            assertSpansFetchedOnceFor(message);
+            assertSuiteScoresStoredOnceFor(message);
+            verify(testSuiteAssertionCounterService, never()).decrementAndFinishIfComplete(any(), any());
+        }
+
+        @Test
+        void retiredSuiteAssertionIsStoredAsFailedWithTheReasonAndFinishesTheItem() {
+            var message = suiteMessage(List.of("judge-b"));
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            when(feedbackScoreService.scoreBatchOfTraces(scoresCaptor.capture())).thenReturn(Mono.empty());
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any())).thenReturn(Mono.empty());
+
+            scorer.onRetired(message, new ClientErrorException("Incorrect API key provided", 401)).block();
+
+            assertThat(scoresCaptor.getValue())
+                    .extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("Is polite", "Is short");
+            assertThat(scoresCaptor.getValue()).allSatisfy(item -> {
+                assertThat(item.id()).isEqualTo(message.trace().id());
+                assertThat(item.value()).isEqualByComparingTo("0");
+                assertThat(item.categoryName()).isEqualTo(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY);
+                assertThat(item.reason())
+                        .contains("judge-a, judge-b")
+                        .contains("Incorrect API key provided");
+            });
+            verify(testSuiteAssertionCounterService, times(1))
+                    .decrementAndFinishIfComplete(message.workspaceId(), message.experimentId());
+        }
+
+        @Test
+        void retiredOnlineScoringRuleMessageIsLeftAlone() {
+            var message = suiteMessage(null).toBuilder().categoryName(null).build();
+
+            scorer.onRetired(message, new ClientErrorException("invalid x-api-key", 401)).block();
+
+            verifyNoInteractions(feedbackScoreService, testSuiteAssertionCounterService);
+        }
+
+        private TraceToScoreLlmAsJudge suiteMessage(List<String> judgeFallbackModels) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .name(UUID.randomUUID().toString())
+                    .startTime(Instant.now())
+                    .output(JsonUtils.getJsonNodeFromString("{\"answer\":\"hello\"}"))
+                    .build();
+            return TraceToScoreLlmAsJudge.builder()
+                    .trace(trace)
+                    .ruleId(UUID.randomUUID())
+                    .ruleName("suite-evaluator")
+                    .llmAsJudgeCode(JsonUtils.readValue(SUITE_EVALUATOR_JSON, LlmAsJudgeCode.class))
+                    .workspaceId(UUID.randomUUID().toString())
+                    .userName("user-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .categoryName(TestSuiteAssertionSampler.SUITE_ASSERTION_CATEGORY)
+                    .scoreNameMapping(Map.of("assertion_1", "Is polite", "assertion_2", "Is short"))
+                    .promptType(PromptType.MUSTACHE)
+                    .experimentId(UUID.randomUUID())
+                    .judgeFallbackModels(judgeFallbackModels)
+                    .build();
+        }
+    }
+
+    private static final class MonitoredEvaluation implements EvaluationRecorder {
+
+        private final List<List<? extends FeedbackScoreItem>> completed = new CopyOnWriteArrayList<>();
+        private final List<Throwable> failed = new CopyOnWriteArrayList<>();
+
+        @Override
+        public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
+            return EvaluationRecorder.NOOP.recordLlmCall(request, call);
+        }
+
+        @Override
+        public Mono<DecisionsResponse> recordDecisionCall(DecisionsRequest request, Mono<DecisionsResponse> call) {
+            return EvaluationRecorder.NOOP.recordDecisionCall(request, call);
+        }
+
+        @Override
+        public Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution) {
+            return EvaluationRecorder.NOOP.recordToolCall(toolName, arguments, execution);
+        }
+
+        @Override
+        public void recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
+        }
+
+        @Override
+        public void flagBudgetExceeded() {
+        }
+
+        @Override
+        public <T extends FeedbackScoreItem> Mono<List<T>> monitor(Mono<List<T>> scoring) {
+            return scoring.doOnNext(completed::add).doOnError(failed::add);
         }
     }
 
@@ -1173,7 +1526,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 Map.of(),
                 PromptType.MUSTACHE,
                 experimentId,
-                "ws-name-1");
+                "ws-name-1",
+                null);
     }
 
     /** Silences "unused import" on Span — used implicitly through Flux<Span>. */

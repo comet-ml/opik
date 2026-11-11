@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -7,100 +8,141 @@ import opik.exceptions as exceptions
 from opik.api_objects import opik_client
 from opik.rest_api import core as rest_api_core
 
-from . import guards, schemas
+from . import rest_api_client, rules, schemas
 
 LOGGER = logging.getLogger(__name__)
 
-RETRIEVE_POLICIES_PATH = "v1/private/guardrails/policies/retrieve"
+POLICIES_PATH = "v1/private/guardrails/policies"
+PAGE_SIZE = 100
 
 
-class StoredGuard(pydantic.BaseModel):
-    """A single stored check: a type and the configuration of the matching guard class."""
+class StoredRule(pydantic.BaseModel):
+    """A single stored check: a type and the configuration of the matching rule class."""
 
     type: str
     config: Dict[str, Any]
 
 
 class StoredPolicy(pydantic.BaseModel):
-    """A named group of guards, as stored in the workspace."""
+    """A named group of rules, as stored in the workspace."""
 
     name: str
-    guards: List[StoredGuard]
+    rules: List[StoredRule]
 
 
 def retrieve_policies(
     client: opik_client.Opik, names: Optional[Sequence[str]]
 ) -> List[StoredPolicy]:
     """
-    Fetch the named policies, plus every policy the workspace applies unconditionally.
+    Fetch the named policies, plus every global policy of the workspace, ordered by name.
+
+    Two lookups on the policies list: by names, then by the global execution scope. A
+    policy both named and global is returned once.
 
     Composed by hand rather than through the generated REST client: the endpoint is not
     part of the published OpenAPI definition the client is generated from.
-    """
-    response = client.rest_client._client_wrapper.httpx_client.request(
-        RETRIEVE_POLICIES_PATH,
-        method="POST",
-        json={"names": list(names) if names is not None else []},
-    )
 
-    if response.status_code != 200:
-        raise rest_api_core.ApiError(
-            status_code=response.status_code, body=response.text
+    Raises:
+        exceptions.GuardrailPolicyError: If a name is not a non-empty string, or a named
+            policy does not exist. The list leaves an unknown name out, and a guardrail
+            must not run with fewer checks than the policies it names.
+    """
+    # Read once: the names are used for two lookups, and a generator would be empty by the
+    # second, letting an unknown name through.
+    requested_names = list(names or [])
+    invalid_names = [
+        f"names[{index}] is {name!r}"
+        for index, name in enumerate(requested_names)
+        if not isinstance(name, str) or not name.strip()
+    ]
+    if invalid_names:
+        raise exceptions.GuardrailPolicyError(
+            "Guardrail policy names must be non-empty strings, but "
+            + ", ".join(invalid_names)
         )
 
-    return [StoredPolicy(**policy) for policy in response.json()["policies"]]
+    named_policies = (
+        _list_policies(client, {"names": json.dumps(requested_names)})
+        if requested_names
+        else []
+    )
+    # The backend matches names by its database collation, which also ignores accents and reads "ß" as "ss".
+    # lower() covers the common case; a name it leaves over is looked up on its own, so the backend decides.
+    found_names = {policy.name.lower() for policy in named_policies}
+    missing_names = sorted(
+        name
+        for name in set(requested_names)
+        if name.lower() not in found_names
+        and not _list_policies(client, {"names": json.dumps([name])})
+    )
+    if missing_names:
+        raise exceptions.GuardrailPolicyError(
+            f"Guardrail policies not found: {', '.join(missing_names)}"
+        )
+
+    global_policies = _list_policies(client, {"execution_scope": "global"})
+    policies_by_name = {
+        policy.name.lower(): policy for policy in named_policies + global_policies
+    }
+    return [policies_by_name[name] for name in sorted(policies_by_name)]
 
 
-def build_guards(policies: Sequence[StoredPolicy]) -> List[guards.Guard]:
+def _list_policies(
+    client: opik_client.Opik, filters: Dict[str, str]
+) -> List[StoredPolicy]:
+    policies: List[StoredPolicy] = []
+    page = 1
+    while True:
+        response = client.rest_client._client_wrapper.httpx_client.request(
+            POLICIES_PATH,
+            method="GET",
+            params={**filters, "page": page, "size": PAGE_SIZE},
+        )
+        if response.status_code != 200:
+            raise rest_api_core.ApiError(
+                status_code=response.status_code,
+                body=rest_api_client.error_body(response),
+            )
+
+        page_policies = response.json()["content"]
+        policies.extend(StoredPolicy(**policy) for policy in page_policies)
+        if len(page_policies) < PAGE_SIZE:
+            return policies
+        page += 1
+
+
+def build_rules(policies: Sequence[StoredPolicy]) -> List[rules.Rule]:
     """
-    Turn stored policies into runtime guards.
+    Turn stored policies into rules.
 
-    Which policy a guard came from is not preserved: the guards of every policy are
+    Which policy a rule came from is not preserved: the rules of every policy are
     checked together, as one flat set.
     """
     return [
-        _build_guard(policy_name=policy.name, stored_guard=stored_guard)
+        _build_rule(policy_name=policy.name, stored_rule=stored_rule)
         for policy in policies
-        for stored_guard in policy.guards
+        for stored_rule in policy.rules
     ]
 
 
-def _build_guard(policy_name: str, stored_guard: StoredGuard) -> guards.Guard:
-    config = stored_guard.config
+def _build_rule(policy_name: str, stored_rule: StoredRule) -> rules.Rule:
+    config = stored_rule.config
 
-    if stored_guard.type == schemas.ValidationType.PII:
-        return guards.PII(
-            blocked_entities=config["blocked_entities"],
-            threshold=config["threshold"],
-        )
+    if stored_rule.type == schemas.ValidationType.PII:
+        return rules.PII(entities=config["entities"])
 
-    if stored_guard.type == schemas.ValidationType.TOPIC:
-        return guards.Topic(
+    if stored_rule.type == schemas.ValidationType.TOPIC:
+        return rules.Topic(
             allowed_topics=config.get("allowed_topics"),
             restricted_topics=config.get("restricted_topics"),
-            threshold=config["threshold"],
         )
 
-    if stored_guard.type == schemas.ValidationType.PROMPT_INJECTION:
-        return guards.PromptInjection(threshold=config["threshold"])
-
-    if stored_guard.type == schemas.ValidationType.CUSTOM_CLASSIFIER:
-        return guards.CustomGuardrail(
-            model_name=config["model_name"],
-            threshold=config["threshold"],
-        )
-
-    if stored_guard.type == schemas.ValidationType.LLM_JUDGE:
-        # A policy holds at most one judge, so its results are labeled with the policy name.
-        return guards.LLMJudge(
-            name=policy_name,
-            instructions=config["instructions"],
-            model=config["model"],
-        )
+    if stored_rule.type == schemas.ValidationType.PROMPT_INJECTION:
+        return rules.PromptInjection()
 
     # Not skipped: guardrails fail closed, and a check that cannot run must not silently
     # reduce the protection a policy promises.
     raise exceptions.GuardrailPolicyError(
-        f"Guardrail policy '{policy_name}' contains a guard of type '{stored_guard.type}', "
+        f"Guardrail policy '{policy_name}' contains a rule of type '{stored_rule.type}', "
         "which this version of the Opik SDK cannot run. Upgrade the SDK."
     )

@@ -323,6 +323,56 @@ Different integrations handle thread IDs in various ways:
 
 </CodeBlocks>
 
+## Tagging threads with an environment
+
+A thread takes its environment from the **first trace** logged with its `thread_id`. To tag a thread, set
+`environment` on its traces, the same way you [tag any trace](/tracing/advanced/log_traces#logging-to-a-specific-environment).
+You can also set `OPIK_ENVIRONMENT` to apply a default environment to every trace.
+
+<CodeBlocks>
+    ```python title="Python decorators" language="python" wordWrap
+    import opik
+    from opik import opik_context
+
+    @opik.track(environment="production")
+    def chat_message(message, thread_id):
+        opik_context.update_current_trace(thread_id=thread_id)
+        return "Opik is an Open Source GenAI platform"
+
+    chat_message("What is Opik ?", thread_id="f174a")
+    ```
+
+    ```typescript title="Typescript SDK" language="typescript" wordWrap
+    import { Opik } from "opik";
+
+    const client = new Opik();
+
+    const trace = client.trace({
+        name: "chat turn",
+        input: { user: "Hi there" },
+        output: { assistant: "Hello!" },
+        threadId: "f174a",
+        environment: "production",
+    });
+    ```
+
+</CodeBlocks>
+
+<Note>
+  The thread environment is set once, when the thread is created. Traces added to the thread later do not change
+  it, so use the same environment for every trace in a conversation.
+</Note>
+
+You can then filter threads by environment from the **Threads** tab, or with the `environment` field in
+`search_threads`:
+
+```python wordWrap
+threads = client.search_threads(
+    project_name="my-chatbot",
+    filter_string='environment = "production"'
+)
+```
+
 ## Reviewing conversations
 
 Conversations can be viewed at a project level on the **Logs** page, in the **Threads** tab. All conversations are tracked and by clicking on a thread you will be able to

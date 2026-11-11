@@ -26,6 +26,7 @@ def test_litellm_chat_model_generate_string__happyflow(fake_backend, monkeypatch
     model = litellm_chat_model.LiteLLMChatModel(
         model_name=MODEL_FOR_TESTS,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
     result = model.generate_string("Tell me a short fact about Python programming")
     opik.flush_tracker()
@@ -77,13 +78,14 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(
     model = litellm_chat_model.LiteLLMChatModel(
         model_name=MODEL_FOR_TESTS,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
 
     @opik.track
     def outer_function(text: str) -> str:
         return model.generate_string(text)
 
-    result = outer_function("What is machine learning?")
+    result = outer_function("What is the capital of France? Answer in one word.")
     opik.flush_tracker()
 
     assert isinstance(result, str)
@@ -92,7 +94,7 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="outer_function",
-        input={"text": "What is machine learning?"},
+        input={"text": "What is the capital of France? Answer in one word."},
         output={"output": ANY_STRING},
         tags=None,
         metadata=None,
@@ -104,7 +106,7 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(
                 id=ANY_BUT_NONE,
                 type="general",
                 name="outer_function",
-                input={"text": "What is machine learning?"},
+                input={"text": "What is the capital of France? Answer in one word."},
                 output={"output": ANY_STRING},
                 tags=None,
                 metadata=None,
@@ -148,6 +150,7 @@ async def test_litellm_chat_model_agenerate_string__happyflow(
     model = litellm_chat_model.LiteLLMChatModel(
         model_name=MODEL_FOR_TESTS,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
     result = await model.agenerate_string(
         "Tell me a short fact about async programming"
@@ -204,6 +207,7 @@ def test_litellm_chat_model_with_response_format__structured_output(
     model = litellm_chat_model.LiteLLMChatModel(
         model_name=MODEL_FOR_TESTS,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=256,
     )
     result = model.generate_string(
         "What is 2+2? Answer in one word.", response_format=SimpleResponse
@@ -257,6 +261,7 @@ def test_litellm_chat_model_with_monitoring_disabled__no_traces_created(
     model = litellm_chat_model.LiteLLMChatModel(
         model_name=MODEL_FOR_TESTS,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
     result = model.generate_string("Tell me a short fact")
     opik.flush_tracker()
@@ -276,6 +281,7 @@ def test_litellm_chat_model_with_track_false__no_traces_created(
         model_name=MODEL_FOR_TESTS,
         track=False,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
     result = model.generate_string("Tell me a short fact")
     opik.flush_tracker()
@@ -293,6 +299,7 @@ def test_litellm_chat_model_with_track_true__traces_created(fake_backend, monkey
         model_name=MODEL_FOR_TESTS,
         track=True,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
     result = model.generate_string("Tell me a short fact")
     opik.flush_tracker()
@@ -310,6 +317,7 @@ def test_litellm_chat_model_generate_chat_completion__happyflow(monkeypatch):
         model_name=MODEL_FOR_TESTS,
         track=False,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
 
     message = model.generate_chat_completion(
@@ -333,6 +341,7 @@ async def test_litellm_chat_model_agenerate_chat_completion__happyflow(monkeypat
         model_name=MODEL_FOR_TESTS,
         track=False,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=64,
     )
 
     message = await model.agenerate_chat_completion(
@@ -360,6 +369,7 @@ def test_litellm_chat_model_generate_chat_completion__with_response_format(monke
         model_name=MODEL_FOR_TESTS,
         track=False,
         reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        max_tokens=256,
     )
 
     message = model.generate_chat_completion(

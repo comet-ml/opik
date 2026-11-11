@@ -6,64 +6,38 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
 /**
  * OPIK-3268 — a run the user stopped must not claim it finished.
  *
- * `stopAll` and `stopSingle` both revoke the announcer's claim so a late
- * completion cannot raise the "Run complete" toast, and the name field — which
- * only advances when that toast fires — stays on what the user typed. A false
- * "Run complete" plus a silently advanced counter is wrongness a user then acts
- * on: they believe experiments exist under a name that was never used, and
- * their next run lands under `_02` for no reason.
+ * A dataset run executes on the server: one `/experiments/execute` creates the
+ * experiments, and the page learns the run ended by polling them until they are
+ * terminal, then raises "Run complete" and advances the name field. A stop
+ * cancels them through `/experiments/cancel`, which makes them terminal too, so
+ * the stop also has to end the page's watch — a poll left running would read
+ * the cancelled experiments as finished and announce. A false "Run complete"
+ * plus a silently advanced counter is wrongness a user then acts on: they
+ * believe experiments exist under a name that was never used, and their next
+ * run lands under `_02` for no reason.
  *
  * Both halves get their own test because they are separate call sites AND
  * separate mechanisms, so a regression in one says nothing about the other:
  *
- * - **Stop all**, against a whole-page run, clears `announcePendingRef` (the
- *   flag `runAllViaFrontend`'s `createCompletionAnnouncer` callback checks) and
- *   sets `isToStopRef`, which is what makes the unscoped poll return early.
- *   `stopAll` also clears `scopedAnnounceRef`, but that set is empty on an
- *   unscoped run and plays no part in this test.
- * - **A variant's own Stop**, against a per-column run, deletes that prompt's
- *   id from `scopedAnnounceRef` — the set `runSingleViaFrontend` added it to,
- *   and the one the scoped poll's `delete()` gates the announce on.
+ * - **Stop all** moves the poll generation and sets `isToStopRef`, which ends
+ *   the unscoped poll before its next tick.
+ * - **A variant's own Stop** deletes that prompt's id from `scopedAnnounceRef`,
+ *   the set a scoped poll that is still ticking consults before it announces.
  *
- * The pure state machine behind the claim is unit-tested; neither piece of
- * wiring that revokes it is exercised anywhere else.
+ * ## What makes the silence mean something
  *
- * ## Why these assertions are load-bearing, and the one way they could stop being
- *
- * `createCompletionAnnouncer` only calls its callback once
- * `registered >= expected`, where `registered` comes from
- * `experimentsQueue.drain()` — so if a stop happened before the run had
- * registered one experiment PER VARIANT, the announcer would short-circuit on
- * the count and never reach the revoked claim at all. These tests would then
- * pass without exercising the wiring they name.
- *
- * What keeps the count satisfied is subtle enough to be worth writing down,
- * because getting it wrong makes these tests pass while asserting nothing.
- * `createLogPlaygroundProcessor` creates a prompt's experiment lazily, on the
- * FIRST run it is handed — so against a provider that never answers, nothing is
- * ever registered on its own. The experiments exist only because the stop
- * ABORTS the in-flight completion, and an aborted completion still RESOLVES
- * (`useCompletionProxyStreaming` returns a run with a null error for
- * `AbortError` rather than throwing), so it is logged like any other and its
- * experiment is created.
- *
- * That in turn is why each test waits for the completion requests to be ON THE
- * WIRE before clicking Stop. `processCombination` registers its abort
- * controller immediately before issuing the request, so a Stop that lands
- * earlier finds nothing to abort: the request is never cancelled, never
- * resolves, never logs, and no experiment is ever created. The announcer then
- * short-circuits on `registered < expected` and never consults the revoked
- * claim at all — the tests would go green having verified nothing. Waiting for
- * the request is what closes that hole, and the experiment count asserted below
- * is the guard that would catch it reopening.
+ * Each Stop is pressed only once `/execute` has answered. Before that the page
+ * holds no experiment ids, and `useBackendRunCancellation` queues the stop and
+ * replays it when they land — a different path from the one named here. Each
+ * test then asserts the cancel named exactly the run's experiments, and that
+ * the server holds them as `cancelled`: terminal, so a watch the stop had
+ * failed to end WOULD announce inside the window below.
  *
  * ## Why the provider is blackholed rather than refusing
  *
- * The rest of the Playground suite seeds `createUnreachable`, whose base URL
- * REFUSES every connection: the run fails in milliseconds, which is what makes
- * a naming assertion deterministic. It is unusable here — there is no window in
- * which to click Stop. `createUnresponsive` points at TEST-NET-1, so the
- * connect hangs and the run stays open until this test ends it.
+ * `createUnreachable` fails every call at once, so its run is over before Stop
+ * can be clicked. `createUnresponsive` points at TEST-NET-1, so the server's
+ * connect hangs and the run stays open until the test stops it.
  *
  * ## Why each test ends by running to completion
  *
@@ -91,43 +65,46 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
   const HANGING_MODEL = 'unresponsive-model';
   const FINISHING_MODEL = 'unreachable-model';
 
-  /**
-   * Count the completion requests the page puts on the wire, from before the
-   * run starts.
-   *
-   * This is the only observable that says a combination has got far enough for
-   * Stop to have something to abort: `processCombination` registers its abort
-   * controller and then immediately issues this request, so a request seen here
-   * is a controller already in `abortControllersRef`. The page's own "running"
-   * state is NOT that signal — it flips before the first combination has
-   * hydrated its dataset item, which is exactly the window in which a Stop
-   * aborts nothing (see the describe docblock).
-   */
-  const collectCompletionRequests = (page: Page): string[] => {
-    const issued: string[] = [];
-    page.on('request', (request) => {
-      if (request.method() !== 'POST') return;
-      if (!/\/v1\/private\/chat\/completions$/.test(new URL(request.url()).pathname)) return;
-      issued.push(request.url());
-    });
-    return issued;
-  };
+  /** The experiment ids the next `/experiments/execute` answers with. Arm before clicking Run. */
+  const nextExecutedExperimentIds = (page: Page): Promise<string[]> =>
+    page
+      .waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          /\/v1\/private\/experiments\/execute$/.test(new URL(response.url()).pathname),
+        { timeout: 60_000 },
+      )
+      .then(async (response) => {
+        expect(response.ok(), `execute answered ${response.status()}`).toBe(true);
+        const body = (await response.json()) as { experiments?: { experiment_id: string }[] };
+        return (body.experiments ?? []).map((e) => e.experiment_id);
+      });
 
-  /**
-   * Hold until `expected` completions are in flight.
-   *
-   * Combinations are built dataset-item-major (`item1×A, item1×B, item2×A, …`)
-   * and dispatched in that order, so the first two requests of a two-variant
-   * run are one per variant — which is what `runAllViaFrontend`'s announcer
-   * counts, and therefore what the Stop-all test needs in flight before it can
-   * revoke anything meaningful.
-   */
-  const waitForCompletionsInFlight = async (issued: string[], expected: number): Promise<void> => {
-    await test.step(`wait for ${expected} completion request(s) to be in flight`, async () => {
-      await expect
-        .poll(() => issued.length, { timeout: 60_000, intervals: [100, 250, 500] })
-        .toBeGreaterThanOrEqual(expected);
-    });
+  /** The experiment ids the next `/experiments/cancel` names. Arm before clicking Stop. */
+  const nextCancelledExperimentIds = (page: Page): Promise<string[]> =>
+    page
+      .waitForRequest(
+        (request) =>
+          request.method() === 'PUT' &&
+          /\/v1\/private\/experiments\/cancel$/.test(new URL(request.url()).pathname),
+        { timeout: 30_000 },
+      )
+      .then((request) => ((request.postDataJSON() ?? {}) as { ids?: string[] }).ids ?? []);
+
+  /** Wait until the server holds every one of `experimentIds` as cancelled. */
+  const expectCancelled = async (
+    backendClient: BackendClient,
+    experimentIds: string[],
+  ): Promise<void> => {
+    await expect
+      .poll(
+        async () =>
+          Promise.all(
+            experimentIds.map(async (id) => (await backendClient.getExperimentLifecycle(id)).status),
+          ),
+        { timeout: 30_000, intervals: [500, 1000, 2000] },
+      )
+      .toEqual(experimentIds.map(() => 'cancelled'));
   };
 
   /**
@@ -143,9 +120,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
    * not made.
    *
    * Shared by both tests rather than written out twice, so the two cannot drift
-   * into sweeping different things. Returns the names it found, so a caller can
-   * assert the run got far enough to register experiments at all — see the
-   * load-bearing note in the describe docblock.
+   * into sweeping different things.
    */
   const sweeperFor = (
     backendClient: BackendClient,
@@ -153,14 +128,13 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
     registerExperimentCleanup: (id: string, name: string) => void,
   ) => {
     const seen = new Set<string>();
-    return async (): Promise<string[]> => {
+    return async (): Promise<void> => {
       const found = await backendClient.listExperimentsForDataset(datasetId);
       for (const experiment of found) {
         if (seen.has(experiment.id)) continue;
         seen.add(experiment.id);
         registerExperimentCleanup(experiment.id, experiment.name);
       }
-      return found.map((e) => e.name);
     };
   };
 
@@ -186,7 +160,6 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         dataset.id,
         registerExperimentCleanup,
       );
-      const completionRequests = collectCompletionRequests(page);
 
       await test.step('Seed one provider that hangs and one that fails fast', async () => {
         await providerKeys.createUnresponsive({
@@ -207,7 +180,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
           userPrompt: '{{input}}',
           modelDisplayName: HANGING_MODEL,
         });
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });
         await expect(playground.loadedSourcePill()).toBeVisible();
@@ -215,16 +188,20 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         await playground.setExperimentName(runName);
       });
 
-      const stoppedAt = await test.step('Run everything, then stop everything', async () => {
+      const { stoppedAt, experimentIds } = await test.step('Run everything, then stop everything', async () => {
+        const executed = nextExecutedExperimentIds(page);
         await playground.clickReRun();
-        // "Stop all" replacing Run in the header is the page's own statement
-        // that a run is in flight — clicking it before that would be a click on
-        // a button that is not there yet. It is NOT enough on its own: the
-        // header swaps as soon as the run is dispatched, before any combination
-        // has issued its request, and a Stop in that window aborts nothing.
-        await waitForCompletionsInFlight(completionRequests, 2);
+        const ids = await executed;
+        await registerCreatedExperiments();
+        expect(ids, 'one experiment per variant').toHaveLength(2);
+
+        const cancelled = nextCancelledExperimentIds(page);
         await playground.clickStopAll();
-        return Date.now();
+        const at = Date.now();
+        expect([...(await cancelled)].sort(), 'the stop cancels exactly this run').toEqual(
+          [...ids].sort(),
+        );
+        return { stoppedAt: at, experimentIds: ids };
       });
 
       await test.step('The page agrees the run is over', async () => {
@@ -235,25 +212,8 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         await playground.waitForRunSettled(60_000);
       });
 
-      await test.step('The stopped run had registered both variants, so the silence below means something', async () => {
-        // Not a claim about how many experiments a stop SHOULD leave — that is a
-        // product decision the team has not made, and this does not pin it. It
-        // is the precondition that makes the next step load-bearing: the
-        // announcer only consults the revoked claim once one experiment per
-        // variant is registered, so with fewer than two it would stay silent
-        // for a reason that has nothing to do with `stopAll`.
-        //
-        // Polled rather than read once: the aborted completions resolve, log
-        // and create their experiments asynchronously, so the page settling is
-        // not the same instant as the writes landing. The poll registers every
-        // id it sees for teardown as it goes, so a run that wrote more than it
-        // should still gets swept.
-        await expect
-          .poll(async () => (await registerCreatedExperiments()).length, {
-            timeout: 30_000,
-            intervals: [500, 1000, 2000],
-          })
-          .toBeGreaterThanOrEqual(2);
+      await test.step('The server holds both experiments as cancelled, so the silence below means something', async () => {
+        await expectCancelled(backendClient, experimentIds);
       });
 
       await test.step('Nothing announced completion, and the name is untouched', async () => {
@@ -308,7 +268,6 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         dataset.id,
         registerExperimentCleanup,
       );
-      const completionRequests = collectCompletionRequests(page);
 
       await test.step('Seed one provider that hangs and one that fails fast', async () => {
         await providerKeys.createUnresponsive({
@@ -329,7 +288,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
           userPrompt: '{{input}}',
           modelDisplayName: HANGING_MODEL,
         });
-        await playground.duplicateLastVariant();
+        await playground.duplicateVariant(0);
         await playground.clickRunExperiment();
         await playground.selectRunExperimentSource({ mode: 'dataset', entityName: dataset.name });
         await expect(playground.loadedSourcePill()).toBeVisible();
@@ -337,34 +296,26 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         await playground.setExperimentName(runName);
       });
 
-      const stoppedAt = await test.step("Run variant B's column, then stop that column", async () => {
+      const { stoppedAt, experimentIds } = await test.step("Run variant B's column, then stop that column", async () => {
+        const executed = nextExecutedExperimentIds(page);
         await playground.clickVariantRun(1);
-        // The card's Run swapping to Stop is that variant's own statement that
-        // it is running, which is also what scopes the claim being cleared —
-        // but, as in the Stop-all test, it swaps before the first request goes
-        // out, and a Stop that lands then has no controller to abort. Only B is
-        // running, so any completion request in flight is B's.
-        await waitForCompletionsInFlight(completionRequests, 1);
+        const ids = await executed;
+        await registerCreatedExperiments();
+        expect(ids, "one experiment, B's").toHaveLength(1);
+
+        const cancelled = nextCancelledExperimentIds(page);
         await playground.clickVariantStop(1);
-        return Date.now();
+        const at = Date.now();
+        expect(await cancelled, 'the stop cancels exactly this column').toEqual(ids);
+        return { stoppedAt: at, experimentIds: ids };
       });
 
       await test.step('The page agrees the run is over', async () => {
         await playground.waitForRunSettled(60_000);
       });
 
-      await test.step('The stopped column had registered its experiment, so the silence below means something', async () => {
-        // Same precondition as the Stop-all test, at this path's own threshold:
-        // `runSingleViaFrontend` builds its announcer with `expected` of 1, so
-        // one registered experiment is what puts `scopedAnnounceRef` on the
-        // critical path rather than the count. Polled for the same reason as
-        // the Stop-all test's: the aborted completion logs asynchronously.
-        await expect
-          .poll(async () => (await registerCreatedExperiments()).length, {
-            timeout: 30_000,
-            intervals: [500, 1000, 2000],
-          })
-          .toBeGreaterThanOrEqual(1);
+      await test.step('The server holds the experiment as cancelled, so the silence below means something', async () => {
+        await expectCancelled(backendClient, experimentIds);
       });
 
       await test.step('Nothing announced completion, and the name is untouched', async () => {

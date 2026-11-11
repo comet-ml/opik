@@ -192,6 +192,10 @@ module.exports = {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
         },
+        "view-flash": {
+          "0%": { boxShadow: "0 0 0 3px hsl(var(--primary) / 0.5)" },
+          "100%": { boxShadow: "0 0 0 3px transparent" },
+        },
         // Outward box-shadow ring (inherits the dot's currentColor) + opacity
         // fade — the "thinking" beacon, matching ollie-assist's status dot.
         "beacon-pulse": {
@@ -213,6 +217,7 @@ module.exports = {
         "caret-blink": "caret-blink 1.25s ease-out infinite",
         shimmer: "shimmer 1.8s ease-in-out infinite",
         "beacon-pulse": "beacon-pulse 1.4s ease-out infinite",
+        "view-flash": "view-flash 1.2s ease-out",
         "progress-indeterminate":
           "progress-indeterminate 1.3s ease-in-out infinite",
       },

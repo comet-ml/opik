@@ -4,6 +4,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.model_params import ModelParams
 from .raw_client import AsyncRawLlmModelsClient, RawLlmModelsClient
 
 
@@ -43,6 +44,31 @@ class LlmModelsClient:
         client.llm_models.get_llm_models()
         """
         _response = self._raw_client.get_llm_models(request_options=request_options)
+        return _response.data
+
+    def get_llm_model_profiles(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Dict[str, ModelParams]:
+        """
+        Get the params each provider's unlisted models take, keyed by provider
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.Dict[str, ModelParams]
+            Params by provider
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.llm_models.get_llm_model_profiles()
+        """
+        _response = self._raw_client.get_llm_model_profiles(request_options=request_options)
         return _response.data
 
 
@@ -85,4 +111,32 @@ class AsyncLlmModelsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_llm_models(request_options=request_options)
+        return _response.data
+
+    async def get_llm_model_profiles(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Dict[str, ModelParams]:
+        """
+        Get the params each provider's unlisted models take, keyed by provider
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.Dict[str, ModelParams]
+            Params by provider
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.llm_models.get_llm_model_profiles()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_llm_model_profiles(request_options=request_options)
         return _response.data

@@ -78,7 +78,6 @@ class DashboardWidgetQueryResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
-    // A is on the Custom Charts allowlist, B is not.
     private static final String API_KEY_A = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_A = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_A = UUID.randomUUID().toString();
@@ -119,7 +118,7 @@ class DashboardWidgetQueryResourceTest {
                         // The read-only ClickHouse users come from users.xml on the container and config-test.yml.
                         .customConfigs(List.of(
                                 new CustomConfig("serviceToggles.ollieEnabled", "true"),
-                                new CustomConfig("customCharts.enabledWorkspaces", WORKSPACE_ID_A)))
+                                new CustomConfig("customCharts.enabled", "true")))
                         .build());
     }
 
@@ -252,17 +251,6 @@ class DashboardWidgetQueryResourceTest {
     }
 
     @Test
-    @DisplayName("a workspace not on the Custom Charts allowlist gets 501")
-    void runWidgetQuery__whenWorkspaceNotAllowlisted__thenNotImplemented() {
-        String widgetId = UUID.randomUUID().toString();
-        UUID dashboardIdB = dashboardClient.create(dashboard(widgetId, "ollie_chart", null),
-                API_KEY_B, WORKSPACE_NAME_B);
-
-        assertStatus(dashboardClient.callRunWidgetQuery(dashboardIdB, widgetId, window(null, null), API_KEY_B,
-                WORKSPACE_NAME_B), Response.Status.NOT_IMPLEMENTED);
-    }
-
-    @Test
     @DisplayName("a date range that ends before it starts is rejected")
     void runWidgetQuery__whenRangeReversed__thenBadRequest() {
         String widgetId = UUID.randomUUID().toString();
@@ -336,13 +324,11 @@ class DashboardWidgetQueryResourceTest {
     }
 
     @Test
-    @DisplayName("a query that is too long is refused, and a workspace off the allowlist cannot save one")
-    void saveDashboardQuery__whenTooLongOrNotAllowlisted__thenRefused() {
+    @DisplayName("a query that is too long is refused")
+    void saveDashboardQuery__whenTooLong__thenRefused() {
         assertStatus(
                 callSaveDashboardQuery("SELECT 1 -- " + "x".repeat(70_000), null, API_KEY_A, WORKSPACE_NAME_A),
                 422);
-        assertStatus(callSaveDashboardQuery(WINDOWED_QUERY, null, API_KEY_B, WORKSPACE_NAME_B),
-                Response.Status.NOT_IMPLEMENTED);
     }
 
     @Test

@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderTokenAuthConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -12,12 +14,16 @@ import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Client;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.options.KeysScanOptions;
@@ -48,6 +54,7 @@ class AuthTokenProviderTest {
 
     private static final String TOKEN_PATH = "/oauth/token";
     private static final String SECRET_VALUE = "super-s3cr3t";
+    private static final Client CLIENT = TestHttpClientUtils.client();
 
     /**
      * Single-flight correctness belongs to {@code RedissonLockService}'s own tests (which is also
@@ -134,7 +141,7 @@ class AuthTokenProviderTest {
         opikConfiguration.getEncryption().setKey("0123456789abcdef");
         EncryptionUtils.setConfig(opikConfiguration);
 
-        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+        provider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
     }
 
     private static LlmProviderTokenAuthConfig relaxedConfig() {
@@ -167,6 +174,16 @@ class AuthTokenProviderTest {
                         credential("grant_type", "client_credentials", false),
                         credential("client_id", "opik-prod", false),
                         credential("client_secret", SECRET_VALUE, true)));
+    }
+
+    private ProviderAuthConfig.ProviderAuthConfigBuilder serviceAccountRecipe() {
+        return ProviderAuthConfig.builder()
+                .tokenUrl(wireMock.baseUrl() + TOKEN_PATH)
+                .sendAs(ProviderAuthConfig.SendAs.BASIC)
+                .credentials(List.of(
+                        credential("username", "opik-service-account", false),
+                        credential("password", SECRET_VALUE, true)))
+                .fallbackTtlSeconds(86_400L);
     }
 
     private ProviderAuthConfig.Credential credential(String key, String value, boolean secret) {
@@ -227,6 +244,95 @@ class AuthTokenProviderTest {
         wireMock.verify(postRequestedFor(urlEqualTo(TOKEN_PATH))
                 .withHeader("Authorization", equalTo(expectedBasic))
                 .withRequestBody(equalTo("grant_type=client_credentials&scope=data%3Aread")));
+    }
+
+    @Test
+    @DisplayName("basic mode also takes a service account's username/password, with an empty body")
+    void basicModeSendsServiceAccountCredentials() {
+        stubToken("{\"access_token\": \"tok-sa\", \"expires_in\": 3600}");
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("tok-sa");
+
+        String expectedBasic = "Basic " + Base64.getEncoder()
+                .encodeToString(("opik-service-account:" + SECRET_VALUE).getBytes());
+        var requests = wireMock.findAll(postRequestedFor(urlEqualTo(TOKEN_PATH))
+                .withHeader("Authorization", equalTo(expectedBasic)));
+        assertThat(requests).singleElement()
+                .satisfies(request -> assertThat(request.getBodyAsString()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("basic mode without an id/secret pair is a clear error")
+    void basicModeWithoutCredentialPairIsRejected() {
+        var recipe = serviceAccountRecipe()
+                .credentials(List.of(credential("username", "opik-service-account", false)))
+                .build();
+
+        assertThatThrownBy(() -> provider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage("requires 'client_id' and 'client_secret' (or 'username' and 'password') credentials");
+        wireMock.verify(0, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+    }
+
+    @Test
+    @DisplayName("a plain-text reply is the token itself, with the fallback lifetime, and is cached")
+    void plainTextReplyIsTheToken() {
+        var jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJvcGlrLXRlc3QifQ.c2lnbmF0dXJl"; // betterleaks:allow — fake JWT, signature is base64 of "signature"
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/plain")
+                .withBody(jwt + "\n")));
+        var providerId = UUID.randomUUID();
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", providerId, wrap(recipe))).isEqualTo(jwt);
+        assertThat(provider.bearer("ws", providerId, wrap(recipe))).isEqualTo(jwt);
+
+        wireMock.verify(exactly(1), postRequestedFor(urlEqualTo(TOKEN_PATH)));
+        assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
+    }
+
+    @Test
+    @DisplayName("a reply that is a bare JSON string is the token itself")
+    void jsonStringReplyIsTheToken() {
+        stubToken("\"tok-string-0123456789\"");
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(serviceAccountRecipe().build())))
+                .isEqualTo("tok-string-0123456789");
+    }
+
+    @Test
+    @DisplayName("an all-digit plain-text reply is the token itself, not a JSON number to look a field up in")
+    void numericPlainTextReplyIsTheToken() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withHeader("Content-Type", "text/plain")
+                .withBody("4829130571638204\n")));
+        var recipe = serviceAccountRecipe().build();
+
+        assertThat(provider.bearer("ws", UUID.randomUUID(), wrap(recipe))).isEqualTo("4829130571638204");
+        assertThat(provider.testFetch(recipe)).isEqualTo(86_400L);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"null", "-1", "1.5", "1e5"})
+    @DisplayName("a JSON literal that isn't an all-digit token (null, negative, decimal, exponent) is rejected")
+    void nonTokenJsonLiteralIsRejected(String reply) {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody(reply)));
+
+        assertThatThrownBy(() -> provider.testFetch(serviceAccountRecipe().build()))
+                .isExactlyInstanceOf(AuthTokenException.class);
+    }
+
+    @Test
+    @DisplayName("a bare-token reply without a fallback lifetime is a clear error")
+    void plainTextReplyWithoutFallbackIsRejected() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withBody("tok-plain-0123456789")));
+        var recipe = serviceAccountRecipe().fallbackTtlSeconds(null).build();
+
+        assertThatThrownBy(() -> provider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(
+                        "token reply is a bare token, which states no lifetime, and no fallback lifetime is configured");
     }
 
     @Test
@@ -349,6 +455,29 @@ class AuthTokenProviderTest {
     }
 
     @Test
+    @DisplayName("an error reply without a body surfaces its status")
+    void emptyErrorReplySurfacesItsStatus() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withStatus(401)));
+        var recipe = oauthRecipe().build();
+        var expectedMessage = "token fetch failed with status '401' from '%s': ".formatted(recipe.tokenUrl());
+
+        assertThatThrownBy(() -> provider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(expectedMessage);
+    }
+
+    @Test
+    @DisplayName("a success reply without a body names the missing token field")
+    void emptySuccessReplyNamesTheMissingTokenField() {
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse().withStatus(200)));
+        var expectedMessage = "field 'access_token' not found in the token reply; top-level fields: []";
+
+        assertThatThrownBy(() -> provider.testFetch(oauthRecipe().build()))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(expectedMessage);
+    }
+
+    @Test
     @DisplayName("an oversized 200 reply is refused while streaming")
     void oversizedReplyIsRefused() {
         stubToken("{\"access_token\": \"%s\"}".formatted("x".repeat(1_100_000)));
@@ -356,6 +485,49 @@ class AuthTokenProviderTest {
         assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
                 .hasMessageContaining("exceeds the maximum accepted size");
+    }
+
+    @Test
+    @DisplayName("an oversized reply is refused without waiting for the rest of it")
+    void oversizedReplyIsRefusedWithoutReadingTheRest() {
+        var config = relaxedConfig();
+        config.setMaxResponseChars(1_000);
+        var cappedProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, config, CLIENT);
+        // the first chunk is past the cap, even compressed, and the rest takes 20 seconds to arrive
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withBody(RandomStringUtils.secure().nextAlphanumeric(100_000))
+                .withChunkedDribbleDelay(20, 20_000)));
+        var expectedMaxElapsed = Duration.ofSeconds(10);
+        long startNanos = System.nanoTime();
+
+        // the test fetch, which skips the token cache, so only the reply is timed
+        assertThatThrownBy(() -> cappedProvider.testFetch(oauthRecipe().build()))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessageContaining("exceeds the maximum accepted size");
+        var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+        assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
+    }
+
+    @Test
+    @DisplayName("a reply that trickles in is refused at the fetch timeout")
+    void tricklingReplyIsRefusedAtTheFetchTimeout() {
+        var config = relaxedConfig();
+        config.setFetchTimeout(TestConfigUtils.duration("1s"));
+        var shortTimeoutProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, config, CLIENT);
+        // 100 chunks over 20 seconds: each wait for bytes is well within the 1 second read timeout
+        wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
+                .withBody("{\"access_token\": \"%s\"}".formatted(RandomStringUtils.secure().nextAlphanumeric(100)))
+                .withChunkedDribbleDelay(100, 20_000)));
+        var recipe = oauthRecipe().build();
+        var expectedMessage = "token reply from '%s' took longer than the fetch timeout".formatted(recipe.tokenUrl());
+        var expectedMaxElapsed = Duration.ofSeconds(5);
+        long startNanos = System.nanoTime();
+
+        assertThatThrownBy(() -> shortTimeoutProvider.testFetch(recipe))
+                .isExactlyInstanceOf(AuthTokenException.class)
+                .hasMessage(expectedMessage);
+        var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
+        assertThat(actualElapsed).isLessThan(expectedMaxElapsed);
     }
 
     @Test
@@ -392,7 +564,7 @@ class AuthTokenProviderTest {
         UUID providerId = UUID.randomUUID();
 
         // the "holder": a normal provider sharing the same Redis, whose fetch caches tok-held
-        var holder = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+        var holder = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
         // the "waiter": its lock wait elapses (empty result), but only after the holder has
         // written — exactly the sequence the timed-out-waiter re-read is for
         LockService timedOutLock = org.mockito.Mockito.mock(LockService.class);
@@ -401,7 +573,7 @@ class AuthTokenProviderTest {
                 org.mockito.ArgumentMatchers.any()))
                 .thenAnswer(invocation -> Mono.fromRunnable(() -> holder.bearer("ws", providerId, wrap(recipe)))
                         .then(Mono.empty()));
-        var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig());
+        var waiter = new AuthTokenProvider(stringRedisClient, timedOutLock, relaxedConfig(), CLIENT);
 
         assertThat(waiter.bearer("ws", providerId, wrap(recipe))).isEqualTo("tok-held");
         // one fetch total (the holder's); the waiter recovered from the cache
@@ -461,12 +633,14 @@ class AuthTokenProviderTest {
                 .hasMessageContaining("no fallback lifetime");
     }
 
-    @Test
-    @DisplayName("a non-JSON reply is a clear error")
-    void nonJsonReplyIsRejected() {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"<html>gateway login page</html>", "<html>Unauthorized</html>", "{\"error\"", "OK",
+            "Unauthorized"})
+    @DisplayName("a non-JSON reply that isn't a bare token (e.g. a login page or truncated JSON) is a clear error")
+    void nonJsonReplyIsRejected(String reply) {
         wireMock.stubFor(post(urlEqualTo(TOKEN_PATH)).willReturn(aResponse()
                 .withStatus(200)
-                .withBody("<html>gateway login page</html>")));
+                .withBody(reply)));
 
         assertThatThrownBy(() -> provider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
@@ -488,7 +662,7 @@ class AuthTokenProviderTest {
     void strictGuardRefusesNonPublicTokenUrl() {
         var strictConfig = new LlmProviderTokenAuthConfig();
         strictConfig.setDestinationGuard(DestinationGuard.Mode.STRICT);
-        var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig);
+        var strictProvider = new AuthTokenProvider(stringRedisClient, PASSTHROUGH_LOCK_SERVICE, strictConfig, CLIENT);
 
         assertThatThrownBy(() -> strictProvider.bearer("ws", UUID.randomUUID(), wrap(oauthRecipe().build())))
                 .isInstanceOf(AuthTokenException.class)
@@ -510,7 +684,7 @@ class AuthTokenProviderTest {
         var flakyRedisson = Redisson.create(flakyConfig);
         try {
             var flakyProvider = new AuthTokenProvider(new StringRedisClient(flakyRedisson),
-                    PASSTHROUGH_LOCK_SERVICE, relaxedConfig());
+                    PASSTHROUGH_LOCK_SERVICE, relaxedConfig(), CLIENT);
             flakyRedis.stop();
 
             stubToken("{\"access_token\": \"tok-degraded\", \"expires_in\": 3600}");

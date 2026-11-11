@@ -846,9 +846,10 @@ class DatasetsClient:
         self,
         id: str,
         *,
-        experiment_ids: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        experiment_ids: typing.Optional[str] = None,
+        dataset_version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -862,11 +863,13 @@ class DatasetsClient:
         ----------
         id : str
 
-        experiment_ids : str
-
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        experiment_ids : typing.Optional[str]
+
+        dataset_version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -888,13 +891,14 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.find_dataset_items_with_experiment_items(id='id', experiment_ids='experiment_ids', )
+        client.datasets.find_dataset_items_with_experiment_items(id='id', )
         """
         _response = self._raw_client.find_dataset_items_with_experiment_items(
             id,
-            experiment_ids=experiment_ids,
             page=page,
             size=size,
+            experiment_ids=experiment_ids,
+            dataset_version=dataset_version,
             filters=filters,
             sorting=sorting,
             search=search,
@@ -1403,6 +1407,82 @@ class DatasetsClient:
         _response = self._raw_client.delete_version_tag(id, version_hash, tag, request_options=request_options)
         return _response.data
 
+    def get_dataset_version_by_hash(
+        self, id: str, version_hash: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Get a specific version by its version hash
+
+        Parameters
+        ----------
+        id : str
+
+        version_hash : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Dataset version
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.get_dataset_version_by_hash(id='id', version_hash='versionHash', )
+        """
+        _response = self._raw_client.get_dataset_version_by_hash(id, version_hash, request_options=request_options)
+        return _response.data
+
+    def update_dataset_version(
+        self,
+        id: str,
+        version_hash: str,
+        *,
+        change_description: typing.Optional[str] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetVersionPublic:
+        """
+        Update a dataset version's change_description and/or add new tags
+
+        Parameters
+        ----------
+        id : str
+
+        version_hash : str
+
+        change_description : typing.Optional[str]
+            Optional description of changes in this version
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Optional list of tags to add to this version
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Version updated successfully
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.update_dataset_version(id='id', version_hash='versionHash', )
+        """
+        _response = self._raw_client.update_dataset_version(
+            id,
+            version_hash,
+            change_description=change_description,
+            tags_to_add=tags_to_add,
+            request_options=request_options,
+        )
+        return _response.data
+
     def list_dataset_versions(
         self,
         id: str,
@@ -1500,53 +1580,6 @@ class DatasetsClient:
         """
         _response = self._raw_client.retrieve_dataset_version(
             id, version_name=version_name, request_options=request_options
-        )
-        return _response.data
-
-    def update_dataset_version(
-        self,
-        id: str,
-        version_hash: str,
-        *,
-        change_description: typing.Optional[str] = OMIT,
-        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> DatasetVersionPublic:
-        """
-        Update a dataset version's change_description and/or add new tags
-
-        Parameters
-        ----------
-        id : str
-
-        version_hash : str
-
-        change_description : typing.Optional[str]
-            Optional description of changes in this version
-
-        tags_to_add : typing.Optional[typing.Sequence[str]]
-            Optional list of tags to add to this version
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        DatasetVersionPublic
-            Version updated successfully
-
-        Examples
-        --------
-        from Opik import OpikApi
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.update_dataset_version(id='id', version_hash='versionHash', )
-        """
-        _response = self._raw_client.update_dataset_version(
-            id,
-            version_hash,
-            change_description=change_description,
-            tags_to_add=tags_to_add,
-            request_options=request_options,
         )
         return _response.data
 
@@ -2413,9 +2446,10 @@ class AsyncDatasetsClient:
         self,
         id: str,
         *,
-        experiment_ids: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        experiment_ids: typing.Optional[str] = None,
+        dataset_version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -2429,11 +2463,13 @@ class AsyncDatasetsClient:
         ----------
         id : str
 
-        experiment_ids : str
-
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        experiment_ids : typing.Optional[str]
+
+        dataset_version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -2457,14 +2493,15 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.find_dataset_items_with_experiment_items(id='id', experiment_ids='experiment_ids', )
+            await client.datasets.find_dataset_items_with_experiment_items(id='id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.find_dataset_items_with_experiment_items(
             id,
-            experiment_ids=experiment_ids,
             page=page,
             size=size,
+            experiment_ids=experiment_ids,
+            dataset_version=dataset_version,
             filters=filters,
             sorting=sorting,
             search=search,
@@ -3015,6 +3052,90 @@ class AsyncDatasetsClient:
         _response = await self._raw_client.delete_version_tag(id, version_hash, tag, request_options=request_options)
         return _response.data
 
+    async def get_dataset_version_by_hash(
+        self, id: str, version_hash: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Get a specific version by its version hash
+
+        Parameters
+        ----------
+        id : str
+
+        version_hash : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Dataset version
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.get_dataset_version_by_hash(id='id', version_hash='versionHash', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_dataset_version_by_hash(
+            id, version_hash, request_options=request_options
+        )
+        return _response.data
+
+    async def update_dataset_version(
+        self,
+        id: str,
+        version_hash: str,
+        *,
+        change_description: typing.Optional[str] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> DatasetVersionPublic:
+        """
+        Update a dataset version's change_description and/or add new tags
+
+        Parameters
+        ----------
+        id : str
+
+        version_hash : str
+
+        change_description : typing.Optional[str]
+            Optional description of changes in this version
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Optional list of tags to add to this version
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Version updated successfully
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.update_dataset_version(id='id', version_hash='versionHash', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_dataset_version(
+            id,
+            version_hash,
+            change_description=change_description,
+            tags_to_add=tags_to_add,
+            request_options=request_options,
+        )
+        return _response.data
+
     async def list_dataset_versions(
         self,
         id: str,
@@ -3123,55 +3244,5 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.retrieve_dataset_version(
             id, version_name=version_name, request_options=request_options
-        )
-        return _response.data
-
-    async def update_dataset_version(
-        self,
-        id: str,
-        version_hash: str,
-        *,
-        change_description: typing.Optional[str] = OMIT,
-        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> DatasetVersionPublic:
-        """
-        Update a dataset version's change_description and/or add new tags
-
-        Parameters
-        ----------
-        id : str
-
-        version_hash : str
-
-        change_description : typing.Optional[str]
-            Optional description of changes in this version
-
-        tags_to_add : typing.Optional[typing.Sequence[str]]
-            Optional list of tags to add to this version
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        DatasetVersionPublic
-            Version updated successfully
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.datasets.update_dataset_version(id='id', version_hash='versionHash', )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.update_dataset_version(
-            id,
-            version_hash,
-            change_description=change_description,
-            tags_to_add=tags_to_add,
-            request_options=request_options,
         )
         return _response.data

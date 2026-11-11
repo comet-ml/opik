@@ -3,8 +3,10 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.comet.opik.utils.ValidationUtils;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -53,7 +55,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     @Override
     protected Mono<Void> processEvent(@NonNull WebhookEvent<?> event) {
         log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
-                event.getId(), event.getEventType(), event.getUrl());
+                event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()));
 
         return validateEvent(event)
                 .then(Mono.fromCallable(() -> Attributes.builder()
@@ -69,7 +71,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                                     .flatMap(webhookHttpClient::sendWebhook)
                                     .doOnSuccess(unused -> {
                                         log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
-                                                event.getId(), event.getEventType(), event.getUrl());
+                                                event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()));
 
                                         // Record success metrics
                                         webhookEventProcessedCounter.add(1,
@@ -86,9 +88,9 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     }
 
     private Mono<Void> handlePermanentFailure(@NonNull WebhookEvent<?> event, @NonNull Throwable throwable) {
-        log.error("Webhook event '{}' permanently failed after all retries. " +
-                "Event type: '{}', URL: '{}', Error: '{}'",
-                event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage());
+        log.error("Webhook event '{}' permanently failed after all retries, event type '{}', url '{}', error type '{}'",
+                event.getId(), event.getEventType(), LoggableUrl.of(event.getUrl()),
+                ProviderFailures.rootType(throwable));
 
         // TODO: Implement dead letter queue or notification mechanism for permanent failures
         // For now, we'll just log the failure and continue processing other events

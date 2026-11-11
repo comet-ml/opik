@@ -122,6 +122,9 @@ public class OpikConfiguration extends JobConfiguration {
     private S3Config s3Config = new S3Config();
 
     @Valid @NotNull @JsonProperty
+    private GuardrailsConfig guardrails = new GuardrailsConfig();
+
+    @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
@@ -174,9 +177,6 @@ public class OpikConfiguration extends JobConfiguration {
     private SpanWeeksBackfillConfig spanWeeksBackfill = SpanWeeksBackfillConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
-    private SpanWeeksRegistrationConfig spanWeeksRegistration = SpanWeeksRegistrationConfig.builder().build();
-
-    @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -221,9 +221,33 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private RedactionConfig redaction = new RedactionConfig();
 
+    @Valid @NotNull @JsonProperty
+    private AiLabelsConfig aiLabels = new AiLabelsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private WorkspaceFeaturesConfig workspaceFeatures = new WorkspaceFeaturesConfig();
+
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) and aiLabels.inference.credential (AI_LABELS_INFERENCE_CREDENTIAL) must be set when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: the backend runs guardrail checks on opik-inference")
+    public boolean isGuardrailsInferenceConfigured() {
+        return !serviceToggles.isGuardrailsValidationsEnabled()
+                || (StringUtils.isNotBlank(aiLabels.getInference().getUrl())
+                        && StringUtils.isNotBlank(aiLabels.getInference().getCredential()));
+    }
+
+    @Valid @NotNull @JsonProperty
+    private AdminServerConfig adminServer;
+
     @JsonIgnore
     @AssertTrue(message = "alertsEventBridge.eventBus (ALERTS_EVENTBRIDGE_EVENT_BUS) must be set when serviceToggles.eventBridgeAlertsEnabled (ALERTS_EVENTBRIDGE_ENABLED) is true")
     public boolean isAlertsEventBridgeBusConfigured() {
         return !serviceToggles.isEventBridgeAlertsEnabled() || StringUtils.isNotBlank(alertsEventBridge.getEventBus());
+    }
+
+    // ai-labels reads traces only in their post-cutover layout; spans it reads in either (it runs before that cutover).
+    @JsonIgnore
+    @AssertTrue(message = "aiLabels.enabled (AI_LABELS_ENABLED) requires databaseAnalyticsDataModel.traceColumnsNonNullable (ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE): ai-labels reads only the cut-over traces table")
+    public boolean isAiLabelsDataModelSupported() {
+        return !aiLabels.isEnabled() || databaseAnalyticsDataModel.traceColumnsNonNullable();
     }
 }

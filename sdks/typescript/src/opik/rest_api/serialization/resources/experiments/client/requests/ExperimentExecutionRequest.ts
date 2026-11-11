@@ -14,12 +14,18 @@ export const ExperimentExecutionRequest: core.serialization.Schema<
     datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
     prompts: core.serialization.list(PromptVariant),
     projectName: core.serialization.property("project_name", core.serialization.string().optional()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string()),
     versionHash: core.serialization.property("version_hash", core.serialization.string().optional()),
     promptVersions: core.serialization.property(
         "prompt_versions",
         core.serialization.list(PromptVersionLink).optional(),
     ),
+    selectedRuleIds: core.serialization.property(
+        "selected_rule_ids",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
+    filters: core.serialization.string().optional(),
 });
 
 export declare namespace ExperimentExecutionRequest {
@@ -28,8 +34,11 @@ export declare namespace ExperimentExecutionRequest {
         dataset_version_id?: string | null;
         prompts: PromptVariant.Raw[];
         project_name?: string | null;
+        project_id?: string | null;
         dataset_id: string;
         version_hash?: string | null;
         prompt_versions?: PromptVersionLink.Raw[] | null;
+        selected_rule_ids?: string[] | null;
+        filters?: string | null;
     }
 }

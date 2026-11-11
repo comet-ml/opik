@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
-import { getAuthorName, getIsParentFeedbackScoreRow } from "../utils";
+import { getIsParentFeedbackScoreRow } from "../utils";
+import { getAuthorName } from "@/lib/feedback-scores";
 import { cn } from "@/lib/utils";
 
 const AuthorCell = (

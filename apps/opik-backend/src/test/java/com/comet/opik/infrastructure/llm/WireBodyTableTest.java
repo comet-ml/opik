@@ -7,10 +7,13 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudg
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.ParamResolver;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
+import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.comet.opik.utils.JsonUtils;
@@ -189,16 +192,22 @@ class WireBodyTableTest {
         var opikConfiguration = mock(OpikConfiguration.class);
         when(opikConfiguration.getFreeModel()).thenReturn(freeModelConfig);
 
-        llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration,
-                new LlmModelRegistryService(registryConfig));
+        var registryService = new LlmModelRegistryService(registryConfig);
+        llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, opikConfiguration, registryService,
+                new CustomLlmModule().providerBaseUrlGuard(config.getLlmProviderClient()));
         var anthropicModule = new AnthropicModule();
         anthropicModule.llmServiceProvider(llmProviderFactory,
-                anthropicModule.clientGenerator(config.getLlmProviderClient()));
+                anthropicModule.clientGenerator(config.getLlmProviderClient(), registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
         var openAiModule = new OpenAIModule();
         openAiModule.llmServiceProvider(llmProviderFactory,
-                openAiModule.clientGenerator(config.getLlmProviderClient()));
+                openAiModule.clientGenerator(config.getLlmProviderClient(), LlmTestClients.RESPONSES_API_HTTP_CLIENT,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS));
 
-        chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory);
+        chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
+                new ParamResolver(llmProviderFactory, registryService),
+                new ProviderErrorMessageValidator(config.getLlmProviderClient()));
     }
 
     @AfterAll

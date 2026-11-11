@@ -62,6 +62,17 @@ def assert_log_field(
         assert value is not None, f"{field} is None"
 
 
+def split_logs_by_stream(logs: List[Dict]) -> tuple:
+    """Split captured logs into (stderr_logs, stdout_logs).
+
+    stdout and stderr are read by separate threads, so order is only
+    guaranteed within each stream, not across them.
+    """
+    stdout_logs = [log for log in logs if log.get("logger_name") == "subprocess.stdout"]
+    stderr_logs = [log for log in logs if log.get("logger_name") != "subprocess.stdout"]
+    return stderr_logs, stdout_logs
+
+
 def wait_for_captured_requests(
     expected_count: int = 1, timeout_secs: float = 5.0, poll_interval_secs: float = 0.1
 ) -> List[Dict[str, Any]]:
@@ -233,30 +244,21 @@ print(json.dumps(result))
         expected_logs = 4
         assert len(logs) == expected_logs
 
-        expected_levels = ["INFO", "INFO", "INFO", "INFO"]
-        expected_messages = [
+        stderr_logs, stdout_logs = split_logs_by_stream(logs)
+        expected_stderr_messages = [
             "Step 1: Starting",
             "Step 2: Processing",
             "Step 3: Complete",
-            '{"status": "ok"}',
         ]
-        expected_logger_names = [
-            "subprocess.stderr",
-            "subprocess.stderr",
-            "subprocess.stderr",
-            "subprocess.stdout",
-        ]
-        expected_attrs_list = [{}, {}, {}, {}]
+        assert [log["message"] for log in stderr_logs] == expected_stderr_messages
+        assert [log["message"] for log in stdout_logs] == ['{"status": "ok"}']
 
-        # Validate each log
-        for i, log in enumerate(logs):
+        for log in stderr_logs + stdout_logs:
             assert_log_field(log, "timestamp", between=(before_time, after_time + 5000))
-            assert_log_field(log, "level", expected_value=expected_levels[i])
-            assert_log_field(log, "message", expected_value=expected_messages[i])
-            assert_log_field(
-                log, "logger_name", expected_value=expected_logger_names[i]
-            )
-            assert_log_field(log, "attributes", expected_value=expected_attrs_list[i])
+            assert_log_field(log, "level", expected_value="INFO")
+            assert_log_field(log, "attributes", expected_value={})
+        for log in stderr_logs:
+            assert_log_field(log, "logger_name", expected_value="subprocess.stderr")
 
         # Validate auth headers
         headers = captured_request["headers"]
@@ -567,32 +569,98 @@ print(json.dumps(result))
         expected_logs = 4
         assert len(logs) == expected_logs
 
-        expected_levels = ["INFO", "WARNING", "ERROR", "INFO"]
-        expected_messages = [
+        stderr_logs, stdout_logs = split_logs_by_stream(logs)
+
+        expected_stderr_levels = ["INFO", "WARNING", "ERROR"]
+        expected_stderr_messages = [
             "Processing step 0",
             "Processing step 1",
             "Processing step 2",
-            '{"processed": 3}',
         ]
-        expected_logger_names = [
-            "task.step_0",
-            "task.step_1",
-            "task.step_2",
-            "subprocess.stdout",
-        ]
-        expected_attrs_list = [
+        expected_stderr_logger_names = ["task.step_0", "task.step_1", "task.step_2"]
+        expected_stderr_attrs_list = [
             {"step_number": 0, "status": "running"},
             {"step_number": 1, "status": "running"},
             {"step_number": 2, "status": "running"},
-            {},
         ]
 
-        # Validate each log
-        for i, log in enumerate(logs):
+        assert len(stderr_logs) == 3
+        for i, log in enumerate(stderr_logs):
             assert_log_field(log, "timestamp", between=(before_time, after_time + 5000))
-            assert_log_field(log, "level", expected_value=expected_levels[i])
-            assert_log_field(log, "message", expected_value=expected_messages[i])
+            assert_log_field(log, "level", expected_value=expected_stderr_levels[i])
+            assert_log_field(log, "message", expected_value=expected_stderr_messages[i])
             assert_log_field(
-                log, "logger_name", expected_value=expected_logger_names[i]
+                log, "logger_name", expected_value=expected_stderr_logger_names[i]
             )
-            assert_log_field(log, "attributes", expected_value=expected_attrs_list[i])
+            assert_log_field(
+                log, "attributes", expected_value=expected_stderr_attrs_list[i]
+            )
+
+        assert len(stdout_logs) == 1
+        stdout_log = stdout_logs[0]
+        assert_log_field(
+            stdout_log, "timestamp", between=(before_time, after_time + 5000)
+        )
+        assert_log_field(stdout_log, "level", expected_value="INFO")
+        assert_log_field(stdout_log, "message", expected_value='{"processed": 3}')
+        assert_log_field(stdout_log, "logger_name", expected_value="subprocess.stdout")
+        assert_log_field(stdout_log, "attributes", expected_value={})
+
+
+def test_executor_when_child_exits_without_reading_stdin(mock_backend, caplog):
+    """A child that never reads stdin must not turn a successful run into an error."""
+    pytest.importorskip("requests")
+
+    from opik_backend.executor_isolated import IsolatedSubprocessExecutor
+
+    port = mock_backend
+    backend_url = f"http://localhost:{port}/logs"
+
+    code = """
+import json
+print(json.dumps({"status": "ok"}))
+"""
+
+    with patch("opik_backend.executor_isolated.SubprocessLogConfig") as mock_config:
+        mock_config.is_fully_configured.return_value = True
+        mock_config.get_backend_url.return_value = backend_url
+        mock_config.is_enabled.return_value = True
+        mock_config.get_flush_interval_ms.return_value = 50
+        mock_config.get_max_size_bytes.return_value = 10 * 1024 * 1024
+        mock_config.get_request_timeout_secs.return_value = 60
+        mock_config.should_fail_on_missing_backend.return_value = False
+
+        executor = IsolatedSubprocessExecutor()
+
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False)
+        try:
+            tmp.write(code)
+            tmp.flush()
+            # Larger than the OS pipe buffer, so the stdin write is guaranteed to
+            # hit the closed pipe instead of depending on scheduling.
+            with caplog.at_level("WARNING", logger="opik_backend.executor_isolated"):
+                result = executor.execute(
+                    file_path=tmp.name,
+                    data={"blob": "x" * (1024 * 1024)},
+                    env_vars={"OPIK_API_KEY": "pipe_key", "OPIK_WORKSPACE": "pipe_ws"},
+                    optimization_id="opt_pipe",
+                    job_id="job_pipe",
+                )
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
+
+        assert result == {"status": "ok"}
+        warnings = [
+            r.getMessage()
+            for r in caplog.records
+            if "closed stdin before reading its input" in r.getMessage()
+        ]
+        # close() may or may not fail too, depending on what write() left buffered.
+        assert any("stage=write" in w for w in warnings)
+        for w in warnings:
+            assert "job_id=job_pipe" in w
+            assert "optimization_id=opt_pipe" in w
+            assert "pipe_key" not in w

@@ -1,0 +1,330 @@
+import { useCallback } from "react";
+import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
+import { PlaygroundPromptType } from "@/types/playground";
+import { OpenAiPipelineMode } from "@/types/providers";
+import usePlaygroundStore, {
+  getExperimentNamesForPrompts,
+  usePromptIds,
+  usePromptMap,
+  useUpdateOutput,
+} from "@/store/PlaygroundStore";
+import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
+import {
+  LLMMessage,
+  MessageContent,
+  TextPart,
+  ImagePart,
+  VideoPart,
+  AudioPart,
+  ProviderMessageType,
+} from "@/types/llm";
+import { getPromptMustacheTags } from "@/lib/prompt";
+import mustache from "mustache";
+import isNumber from "lodash/isNumber";
+import {
+  describeRunFailure,
+  dropEmptySystemMessages,
+  RunFailedError,
+  RunFailure,
+} from "@/lib/playground";
+import { hasVisibleControls } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
+import { parseComposedProviderType } from "@/lib/provider";
+import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
+import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
+import { getTextFromMessageContent } from "@/lib/llm";
+
+export interface PromptCombination {
+  prompt: PlaygroundPromptType;
+  experimentName?: string;
+}
+
+const EMPTY_TEMPLATE_CONTEXT = {};
+
+const transformMessageIntoProviderMessage = (
+  message: LLMMessage,
+): ProviderMessageType => {
+  const messageTags = getPromptMustacheTags(
+    getTextFromMessageContent(message.content),
+  );
+
+  if (messageTags.length > 0) {
+    throw new Error(`${messageTags.join(", ")} not defined`);
+  }
+
+  // Handle content based on type
+  let processedContent: MessageContent;
+
+  if (typeof message.content === "string") {
+    // Text-only: render mustache and keep as string
+    processedContent = mustache.render(
+      message.content,
+      EMPTY_TEMPLATE_CONTEXT,
+      {},
+      { escape: (val: string) => val },
+    );
+  } else {
+    // Array with images/videos/audios: render mustache in text and media URLs
+    processedContent = message.content.map((part) => {
+      if (part.type === "text") {
+        return {
+          type: "text",
+          text: mustache.render(
+            part.text,
+            EMPTY_TEMPLATE_CONTEXT,
+            {},
+            { escape: (val: string) => val },
+          ),
+        } as TextPart;
+      } else if (part.type === "image_url") {
+        // Render mustache variables in image URLs
+        return {
+          type: "image_url",
+          image_url: {
+            url: mustache.render(
+              part.image_url.url,
+              EMPTY_TEMPLATE_CONTEXT,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as ImagePart;
+      } else if (part.type === "video_url") {
+        // Render mustache variables in video URLs
+        return {
+          type: "video_url",
+          video_url: {
+            url: mustache.render(
+              part.video_url.url,
+              EMPTY_TEMPLATE_CONTEXT,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as VideoPart;
+      } else {
+        // Render mustache variables in audio URLs
+        return {
+          type: "audio_url",
+          audio_url: {
+            url: mustache.render(
+              part.audio_url.url,
+              EMPTY_TEMPLATE_CONTEXT,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as AudioPart;
+      }
+    });
+  }
+
+  return {
+    role: message.role,
+    // Send content as-is (either string or array) to match OpenAI API spec
+    content: processedContent,
+  };
+};
+
+interface UsePromptCombinationArgs {
+  workspaceName: string;
+  selectedRuleIds: string[] | null;
+  addAbortController: (
+    key: string,
+    value: AbortController,
+    promptId: string,
+  ) => void;
+  deleteAbortController: (key: string) => void;
+  throttlingSeconds: number;
+  openAiPipelineMode?: OpenAiPipelineMode;
+}
+
+const usePromptCombination = ({
+  workspaceName,
+  selectedRuleIds,
+  addAbortController,
+  deleteAbortController,
+  throttlingSeconds,
+  openAiPipelineMode,
+}: UsePromptCombinationArgs) => {
+  const updateOutput = useUpdateOutput();
+  const hydratePromptMetadata = useHydratePromptMetadata();
+
+  const runStreaming = useCompletionProxyStreaming({
+    workspaceName,
+  });
+
+  const promptIds = usePromptIds();
+  const promptMap = usePromptMap();
+
+  // A run with a dataset executes server-side, so what reaches here is one combination per prompt.
+  const createCombinations = useCallback((): PromptCombination[] => {
+    const experimentNames = getExperimentNamesForPrompts(promptIds);
+
+    return promptIds.map((promptId) => ({
+      prompt: promptMap[promptId],
+      experimentName: experimentNames[promptId],
+    }));
+  }, [promptMap, promptIds]);
+
+  const processCombination = useCallback(
+    async (
+      { prompt, experimentName }: PromptCombination,
+      logProcessor: LogProcessor,
+    ) => {
+      if (!usePlaygroundStore.getState().isRunningMap[prompt.id]) {
+        return;
+      }
+
+      const controller = new AbortController();
+
+      addAbortController(prompt.id, controller, prompt.id);
+
+      try {
+        updateOutput(prompt.id, {
+          isLoading: true,
+          value: null,
+          error: undefined,
+          errorHint: undefined,
+          usage: undefined,
+        });
+
+        const messagesToSend = dropEmptySystemMessages(prompt.messages);
+        const providerMessages = messagesToSend.map((m) =>
+          transformMessageIntoProviderMessage(m),
+        );
+
+        // Single source of truth shared with the execute path: includes the
+        // CHAT prompt version (loadedChatPromptVersionId) that the old
+        // message-only collection silently dropped — the root cause of
+        // OPIK-6838 #1 (empty "Prompt commit" column) and #3 (dataset
+        // experiments missing from the prompt's Experiments tab).
+        const promptLibraryVersions = collectPromptVersionRefs(prompt).map(
+          (ref) => ({ id: ref.id }),
+        );
+
+        // Calculate prompt library metadata at execution time
+        // This checks React Query cache to determine if prompt is unchanged from library
+        const promptLibraryMetadata = await hydratePromptMetadata(prompt);
+
+        const run = await runStreaming({
+          model: prompt.model,
+          messages: providerMessages,
+          configs: prompt.configs,
+          openAiPipelineMode,
+          provider: prompt.provider,
+          signal: controller.signal,
+          onAddChunk: (o) => {
+            updateOutput(prompt.id, {
+              value: o,
+            });
+          },
+        });
+
+        const duration =
+          run.startTime && run.endTime
+            ? (new Date(run.endTime).getTime() -
+                new Date(run.startTime).getTime()) /
+              1000
+            : undefined;
+
+        const totalTokens = isNumber(run.usage?.total_tokens)
+          ? run.usage.total_tokens
+          : undefined;
+
+        updateOutput(prompt.id, {
+          isLoading: false,
+          usage: {
+            duration,
+            totalTokens,
+            model: prompt.model || "",
+            provider: prompt.provider || "",
+          },
+        });
+
+        logProcessor.log({
+          ...run,
+          providerMessages,
+          // Only role and content describe the template; id, promptId,
+          // promptVersionId and autoImprove are Playground editor state and
+          // have no place in the stored experiment config.
+          templateMessages: messagesToSend.map(({ role, content }) => ({
+            role,
+            content,
+          })),
+          promptLibraryVersions,
+          promptLibraryMetadata,
+          experimentName,
+          configs: prompt.configs,
+          openAiPipelineMode,
+          model: prompt.model,
+          provider: prompt.provider,
+          promptId: prompt.id,
+          datasetName: null,
+          selectedRuleIds,
+        });
+
+        if (
+          run.opikError ||
+          run.providerError ||
+          run.pythonProxyError ||
+          !run.result
+        ) {
+          throw new RunFailedError(
+            describeRunFailure(run, {
+              canTuneRequestRate: hasVisibleControls(
+                parseComposedProviderType(prompt.provider),
+                prompt.model,
+                prompt.configs,
+              ),
+              sentMessages: messagesToSend,
+              model: prompt.model,
+            }),
+          );
+        }
+      } catch (error) {
+        // Stopping a run is not a failure
+        const stopped = controller.signal.aborted;
+        const failure: RunFailure =
+          error instanceof RunFailedError
+            ? error.failure
+            : { message: (error as Error).message || "Unknown error" };
+
+        updateOutput(prompt.id, {
+          isLoading: false,
+          ...(stopped
+            ? {}
+            : { error: failure.message, errorHint: failure.hint }),
+        });
+      } finally {
+        deleteAbortController(prompt.id);
+
+        if (
+          throttlingSeconds > 0 &&
+          usePlaygroundStore.getState().isRunningMap[prompt.id]
+        ) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, throttlingSeconds * 1000),
+          );
+        }
+      }
+    },
+
+    [
+      hydratePromptMetadata,
+      addAbortController,
+      updateOutput,
+      runStreaming,
+      deleteAbortController,
+      selectedRuleIds,
+      throttlingSeconds,
+      openAiPipelineMode,
+    ],
+  );
+
+  return {
+    createCombinations,
+    processCombination,
+  };
+};
+
+export default usePromptCombination;

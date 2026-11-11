@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.net.LoggableUrl;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -34,12 +35,12 @@ public record ProviderAuthConfig(
                 ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Schema(description = "Auth service URL the credentials are sent to", example = "https://developer.api.example.com/authentication/v1/token") String tokenUrl,
         @JsonView({ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @Schema(description = "How credentials are sent: form body (default), JSON body, or basic auth (id/secret in an HTTP Basic header, remaining fields in the form body)") SendAs sendAs,
+                ProviderApiKey.View.Write.class}) @Schema(description = "How credentials are sent: form body (default), JSON body, or basic auth (client_id/client_secret, or username/password, in an HTTP Basic header; remaining fields in the form body)") SendAs sendAs,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Valid @Size(max = 20) @Schema(description = "Fields sent to the token URL. Values flagged as secret are write-only: they read back as the '"
                         + ProviderAuthConfig.SECRET_SENTINEL + "' sentinel") List<Credential> credentials,
         @JsonView({ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token in the reply; dot-path for nested replies", example = "access_token") String tokenField,
+                ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token in the reply; dot-path for nested replies. A reply that is the bare token itself (plain text or a JSON string) is used as-is and needs fallback_ttl_seconds", example = "access_token") String tokenField,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @Size(max = 250) @Schema(description = "Field holding the token lifetime in seconds in the reply; dot-path for nested replies", example = "expires_in") String expiresField,
         @JsonView({ProviderApiKey.View.Public.class,
@@ -120,15 +121,12 @@ public record ProviderAuthConfig(
                 .build();
     }
 
+    /** With the credential values masked, and the token URL's scheme, host and port only. */
     @Override
     public String toString() {
-        return "ProviderAuthConfig{" +
-                "tokenUrl='" + tokenUrl + '\'' +
-                ", sendAs=" + sendAs +
-                ", credentials=" + credentials +
-                ", tokenField='" + tokenField + '\'' +
-                ", expiresField='" + expiresField + '\'' +
-                ", fallbackTtlSeconds=" + fallbackTtlSeconds +
-                '}';
+        return """
+                ProviderAuthConfig{tokenUrl=%s, sendAs=%s, credentials=%s, tokenField='%s', expiresField='%s', \
+                fallbackTtlSeconds=%s}""".formatted(LoggableUrl.of(tokenUrl), sendAs, credentials, tokenField,
+                expiresField, fallbackTtlSeconds);
     }
 }

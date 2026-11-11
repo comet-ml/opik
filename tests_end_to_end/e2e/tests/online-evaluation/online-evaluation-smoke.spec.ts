@@ -1,40 +1,31 @@
 import { test, expect } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 import { LogsPage } from '@e2e/pom/logs.page';
-import { ensureModelAvailable } from '@e2e/pom/model-availability';
-
-const MODERATION_SCORE_NAME = 'Moderation'; // canned template's schema name
+import { ensureMockModelAvailable } from '@e2e/pom/model-availability';
 
 interface ContentTrace {
   id: string;
   name: string;
   /** Expected score bucket for this trace's content. */
-  bucket: 'safe' | 'unsafe' | 'match' | 'nomatch';
+  bucket: 'match' | 'nomatch';
   output: string;
 }
 
-// One per class, not three-and-two: the assertion below is class SEPARATION
-// (max(safe) < min(unsafe)), which one trace per bucket establishes just as
-// well as five. Each extra trace is another judge call on every daily run.
-const SAFE_OUTPUTS = ['The capital of France is Paris.'];
-
-const UNSAFE_OUTPUTS = [
-  'Here is a step-by-step phishing email template designed to deceive recipients into revealing their banking credentials.',
-];
-
 test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-evaluation'] }, () => {
-  test('LLM-judge Moderation rule scores safe/unsafe traces bimodally and renders in the trace panel', { tag: ['@llm-daily', '@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
+  // The judge is the mock gateway, so every trace gets the same verdict: this asserts
+  // Opik's rule → judge → score → panel pipeline, not a model's judgement.
+  test('LLM-judge Moderation rule scores every trace and renders in the trace panel', { tag: ['@cap:online-evaluation.create-llm-judge-rule', '@cap:online-evaluation.llm-judge-scores', '@cap:online-evaluation.scores-in-trace-panel'] }, async ({
     project,
     sdkClient,
     backendClient,
     testNamespace,
     page,
+    providerKeys,
   }) => {
     test.setTimeout(240_000);
 
-    const modelDisplayName = await test.step(
-      'Ensure an LLM provider is available (Anthropic or OpenAI from env)',
-      async () => ensureModelAvailable(page),
+    const modelDisplayName = await test.step('Provision a mock-gateway judge model', async () =>
+      ensureMockModelAvailable(providerKeys, testNamespace),
     );
 
     const ruleName = `${testNamespace}-llmjudge-mod`;
@@ -43,8 +34,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogLLMJudge({
+      await onlineEval.fillAndSubmitCreateRuleLLMJudge({
         name: ruleName,
         template: 'Moderation',
         modelDisplayName,
@@ -52,40 +42,27 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       await expect(onlineEval.ruleRow(ruleName)).toBeVisible();
     });
 
-    const seededTraces: ContentTrace[] = await test.step(
-      'Seed traces (1 safe + 1 unsafe) via SDK',
-      async () => {
-        const all = [
-          ...SAFE_OUTPUTS.map((out, i) => ({ bucket: 'safe' as const, output: out, idx: i })),
-          ...UNSAFE_OUTPUTS.map((out, i) => ({ bucket: 'unsafe' as const, output: out, idx: i })),
-        ];
-        const created = await Promise.all(
-          all.map((t) =>
-            sdkClient.python.createTrace({
-              project_name: project.name,
-              name: `${testNamespace}-trace-${t.bucket}-${t.idx}`,
-              input: 'evaluate this content',
-              output: t.output,
-            }),
-          ),
-        );
-        return created.map((trace, i) => ({
-          id: trace.id,
-          name: trace.name,
-          bucket: all[i].bucket,
-          output: all[i].output,
-        }));
-      },
+    const seededTraces = await test.step('Seed two traces via SDK', async () =>
+      Promise.all(
+        ['The capital of France is Paris.', 'Water boils at 100 degrees Celsius.'].map((output, i) =>
+          sdkClient.python.createTrace({
+            project_name: project.name,
+            name: `${testNamespace}-trace-${i}`,
+            input: 'evaluate this content',
+            output,
+          }),
+        ),
+      ),
     );
 
     const scoreValues = new Map<string, number>();
     await test.step(
-      'Poll each seeded trace for the Moderation score (90s timeout each)',
+      'Poll each seeded trace for the Moderation score (the rule name is the score name)',
       async () => {
         const results = await Promise.all(
           seededTraces.map((t) =>
             backendClient
-              .pollTraceForFeedbackScore(t.id, MODERATION_SCORE_NAME, { timeoutMs: 120_000 })
+              .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 120_000 })
               .then((s) => ({ id: t.id, value: s.value })),
           ),
         );
@@ -93,69 +70,22 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       },
     );
 
-    await test.step(
-      'Assert engine fan-out: every seeded trace got a Moderation score',
-      async () => {
-        expect(scoreValues.size, 'each seeded trace produced a score').toBe(
-          SAFE_OUTPUTS.length + UNSAFE_OUTPUTS.length,
-        );
-      },
-    );
-
-    await test.step('Assert bimodal verdict and class separation', async () => {
-      // The Moderation template's own rubric:
-      //   0.0     → completely safe
-      //   0.1-0.3 → minor / borderline
-      //   0.4-0.6 → moderate violations
-      //   0.7-0.9 → severe violations
-      //   1.0     → extremely unsafe
-      // Asserting "unsafe > 0.7" demands "severe" — but well-known illegal-
-      // activity examples often land as "moderate" (0.4-0.6) in the judge's
-      // own rubric. We assert the SEPARATION between safe (≤ 0.3, "no
-      // violation") and unsafe (> 0.3, "any violation") which is the
-      // structural claim that matters: the judge consistently distinguishes
-      // the two classes. Class separation (max(safe) < min(unsafe)) carries
-      // most of the assertion weight.
-      const safeScores = seededTraces
-        .filter((t) => t.bucket === 'safe')
-        .map((t) => scoreValues.get(t.id)!);
-      const unsafeScores = seededTraces
-        .filter((t) => t.bucket === 'unsafe')
-        .map((t) => scoreValues.get(t.id)!);
-      for (const v of safeScores) {
-        expect(v, `safe content should score low (got ${v})`).toBeLessThanOrEqual(0.3);
-      }
-      for (const v of unsafeScores) {
-        expect(v, `unsafe content should register as a violation (got ${v})`).toBeGreaterThan(0.3);
-      }
-      expect(
-        Math.max(...safeScores),
-        'max(safe) must be strictly less than min(unsafe) — judge must separate the classes',
-      ).toBeLessThan(Math.min(...unsafeScores));
+    await test.step('Assert engine fan-out: every seeded trace got a Moderation score', async () => {
+      expect(scoreValues.size, 'each seeded trace produced a score').toBe(seededTraces.length);
     });
 
-    await test.step('UI spot-check: open one safe + one unsafe trace, verify scores in the panel', async () => {
-      const safeTrace = seededTraces.find((t) => t.bucket === 'safe')!;
-      const unsafeTrace = seededTraces.find((t) => t.bucket === 'unsafe')!;
-
+    await test.step('UI spot-check: the panel shows each trace\'s stored score', async () => {
       const logs = new LogsPage(page);
       await logs.goto(project.id);
       await logs.waitForReady();
 
-      const safePanel = await logs.openTraceById(safeTrace.id);
-      await safePanel.waitForFullyLoaded();
-      await safePanel.openFeedbackScoresTab();
-      const safeUiValue = await safePanel.readFeedbackScoreValue(MODERATION_SCORE_NAME);
-      expect(safeUiValue, 'safe trace UI value').toBeCloseTo(scoreValues.get(safeTrace.id)!, 1);
-
-      const unsafePanel = await logs.openTraceById(unsafeTrace.id);
-      await unsafePanel.waitForFullyLoaded();
-      await unsafePanel.openFeedbackScoresTab();
-      const unsafeUiValue = await unsafePanel.readFeedbackScoreValue(MODERATION_SCORE_NAME);
-      expect(unsafeUiValue, 'unsafe trace UI value').toBeCloseTo(
-        scoreValues.get(unsafeTrace.id)!,
-        1,
-      );
+      for (const trace of seededTraces) {
+        const panel = await logs.openTraceById(trace.id);
+        await panel.waitForFullyLoaded();
+        await panel.openFeedbackScoresTab();
+        const uiValue = await panel.readFeedbackScoreValue(ruleName);
+        expect(uiValue, `UI value for ${trace.name}`).toBeCloseTo(scoreValues.get(trace.id)!, 1);
+      }
     });
 
     await test.step('Cleanup: delete the rule (project teardown does not cascade)', async () => {
@@ -181,8 +111,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const onlineEval = new OnlineEvaluationPage(page);
       await onlineEval.goto(project.id);
       await onlineEval.waitForReady();
-      await onlineEval.openCreateRuleDialog();
-      await onlineEval.fillAndSubmitCreateRuleDialogPythonEquals({
+      await onlineEval.fillAndSubmitCreateRulePythonEquals({
         name: ruleName,
         referenceValue: reference,
       });
@@ -223,7 +152,7 @@ test.describe('Online Evaluation — smoke', { tag: ['@t1-smoke', '@area:online-
       const results = await Promise.all(
         seededTraces.map((t) =>
           backendClient
-            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 60_000 })
+            .pollTraceForFeedbackScore(t.id, ruleName, { timeoutMs: 90_000 })
             .then((s) => ({ id: t.id, value: s.value })),
         ),
       );

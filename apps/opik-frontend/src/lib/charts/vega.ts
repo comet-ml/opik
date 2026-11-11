@@ -55,7 +55,7 @@ export const buildOpikVegaConfig = (
     domain: false,
     ticks: false,
     grid: false,
-    labelColor: tokens.tick,
+    labelColor: tokens.axisLabel,
     labelFont: tokens.font,
     labelFontSize: axis.fontSize,
     labelFontWeight: axis.fontWeight,
@@ -103,7 +103,7 @@ export const buildOpikVegaConfig = (
       columnPadding: legend.gapX,
       rowPadding: legend.gapY,
       labelLimit: axis.max,
-      labelColor: tokens.tick,
+      labelColor: tokens.legendLabel,
       labelFont: tokens.font,
       labelFontSize: legend.fontSize,
       titleColor: tokens.tick,
@@ -504,6 +504,29 @@ export const withoutNetwork = (vegaLoader: Loader): Loader => {
   return vegaLoader;
 };
 
+type VegaNode = Record<string, unknown>;
+
+// Built-in charts outline their light tick labels (DEFAULT_CHART_TICK). Vega-Lite's config can only style axis and
+// legend labels together, so the outline is added to the compiled spec's axes, nested views included.
+export const outlineAxisLabels =
+  (stroke: string) =>
+  (vgSpec: VegaNode): VegaNode => {
+    const visit = (node: VegaNode) => {
+      for (const axis of (node.axes as VegaNode[] | undefined) ?? []) {
+        const encode = (axis.encode ??= {}) as VegaNode;
+        const labels = (encode.labels ??= {}) as VegaNode;
+        const update = (labels.update ??= {}) as VegaNode;
+        update.stroke = { value: stroke };
+        update.strokeWidth = { value: 1 };
+      }
+      for (const mark of (node.marks as VegaNode[] | undefined) ?? []) {
+        visit(mark);
+      }
+    };
+    visit(vgSpec);
+    return vgSpec;
+  };
+
 export const renderVegaChart: RenderVegaChart = async (
   el,
   input,
@@ -535,6 +558,7 @@ export const renderVegaChart: RenderVegaChart = async (
     renderer: el.ownerDocument === document ? "svg" : "canvas",
     loader: withoutNetwork(loader()),
     config: buildOpikVegaConfig(tokens) as never,
+    patch: outlineAxisLabels(tokens.tick) as never,
     // Model-written expressions are interpreted, never compiled with new Function().
     ast: true,
     expr: expressionInterpreter,

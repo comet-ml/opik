@@ -2,10 +2,7 @@ import React from "react";
 import { HeaderContext } from "@tanstack/react-table";
 import HeaderWrapper from "@/shared/DataTableHeaders/HeaderWrapper";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
-import {
-  useFirstOutputUsageByPromptId,
-  useDatasetType,
-} from "@/store/PlaygroundStore";
+import { usePromptById, useDatasetType } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
 import usePromptResultStatus, {
@@ -25,10 +22,10 @@ const ColumnHeaderLayout: React.FC<ColumnHeaderLayoutProps> = ({
   children,
   promptId,
 }) => {
-  const usage = useFirstOutputUsageByPromptId(promptId);
+  const prompt = usePromptById(promptId);
   const { ProviderIcon, modelLabel } = usePromptModelDisplay(
-    usage?.provider,
-    usage?.model,
+    prompt?.provider,
+    prompt?.model,
   );
 
   return (

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loader } from "vega";
-import { coerceNumericRows, prepareVegaSpec, withoutNetwork } from "./vega";
+import { compile } from "vega-lite";
+import {
+  coerceNumericRows,
+  outlineAxisLabels,
+  prepareVegaSpec,
+  withoutNetwork,
+} from "./vega";
 
 describe("withoutNetwork", () => {
   afterEach(() => {
@@ -198,5 +204,31 @@ describe("coerceNumericRows", () => {
       id: "9007199254740993",
       name: "gpt-4",
     });
+  });
+});
+
+describe("outlineAxisLabels", () => {
+  it("outlines axis labels in nested views but not legend labels", () => {
+    const vg = compile({
+      data: { values: [{ x: "a", y: 1, c: "p" }] },
+      vconcat: [
+        {
+          mark: "line",
+          encoding: {
+            x: { field: "x", type: "nominal" },
+            y: { field: "y", type: "quantitative" },
+            color: { field: "c", type: "nominal" },
+          },
+        },
+      ],
+    }).spec as unknown as Record<string, unknown>;
+
+    const patched = JSON.stringify(outlineAxisLabels("#94a3b8")(vg));
+    const outlined = patched.match(/"stroke":\{"value":"#94a3b8"\}/g) ?? [];
+
+    expect(outlined.length).toBeGreaterThanOrEqual(2);
+    expect(
+      JSON.stringify((vg as { legends?: unknown }).legends ?? []),
+    ).not.toContain("#94a3b8");
   });
 });

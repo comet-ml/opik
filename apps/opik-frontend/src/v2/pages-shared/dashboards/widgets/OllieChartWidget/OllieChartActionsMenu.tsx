@@ -14,8 +14,10 @@ import {
   selectDeleteWidget,
   selectDuplicateWidget,
   selectOnAddEditWidgetCallback,
+  selectRuntimeConfig,
 } from "@/store/DashboardStore";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 type OllieChartActionsMenuProps = {
   sectionId: string;
@@ -23,6 +25,8 @@ type OllieChartActionsMenuProps = {
   widgetTitle: string;
   // Edit in Ollie; without it (Ollie off, or a console without chart editing) the item opens the widget editor.
   onEditInOllie?: () => void;
+  // "Duplicate in Ollie": a copy refined in chat, added as a new widget. Offered beside the plain duplicate.
+  onDuplicateInOllie?: () => void;
   // Absent until the widget's query can run.
   onRefresh?: () => void;
   onOpenChange?: (open: boolean) => void;
@@ -35,6 +39,7 @@ const OllieChartActionsMenu: React.FunctionComponent<
   widgetId,
   widgetTitle,
   onEditInOllie,
+  onDuplicateInOllie,
   onRefresh,
   onOpenChange,
 }) => {
@@ -45,6 +50,16 @@ const OllieChartActionsMenu: React.FunctionComponent<
   const onAddEditWidgetCallback = useDashboardStore(
     selectOnAddEditWidgetCallback,
   );
+  const runtimeConfig = useDashboardStore(selectRuntimeConfig);
+
+  const handleRemove = () => {
+    trackEvent(OpikEvent.DASHBOARD_OLLIE_WIDGET_REMOVED, {
+      dashboard_id: runtimeConfig.dashboardId,
+      dashboard_scope: runtimeConfig.dashboardScope,
+      widget_id: widgetId,
+    });
+    deleteWidget(sectionId, widgetId);
+  };
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -60,8 +75,10 @@ const OllieChartActionsMenu: React.FunctionComponent<
   );
 
   // Read on every render, so opening the menu sees whether the console has announced chart editing yet.
-  const editInOllie = window.opikBridge?.canEditChart?.()
-    ? onEditInOllie
+  const canEditChart = window.opikBridge?.canEditChart?.();
+  const editInOllie = canEditChart ? onEditInOllie : undefined;
+  const duplicateInOllie = window.opikBridge?.canDuplicateChart?.()
+    ? onDuplicateInOllie
     : undefined;
 
   const run = (action: () => void) => (e: React.MouseEvent) => {
@@ -82,7 +99,7 @@ const OllieChartActionsMenu: React.FunctionComponent<
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={run(() =>
               editInOllie
@@ -105,6 +122,12 @@ const OllieChartActionsMenu: React.FunctionComponent<
             <Copy className="mr-2 size-4" />
             Duplicate
           </DropdownMenuItem>
+          {duplicateInOllie && (
+            <DropdownMenuItem onClick={run(duplicateInOllie)}>
+              <Copy className="mr-2 size-4" />
+              Duplicate in Ollie
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -119,7 +142,7 @@ const OllieChartActionsMenu: React.FunctionComponent<
       <ConfirmDialog
         open={deleteDialogOpen}
         setOpen={handleDeleteDialogOpenChange}
-        onConfirm={() => deleteWidget(sectionId, widgetId)}
+        onConfirm={handleRemove}
         title="Remove widget?"
         description="Are you sure you want to remove this widget? This action cannot be undone."
         confirmText={`Remove ${widgetTitle}`}

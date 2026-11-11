@@ -35,6 +35,9 @@ vi.mock("@/api/provider-keys/useProviderKeys", () => ({
 vi.mock("@/api/llm/useLlmModels", () => ({
   default: () => ({ data: registry.data, isPending: false, isError: false }),
 }));
+vi.mock("@/api/llm/useLlmModelProfiles", () => ({
+  default: () => ({ data: undefined }),
+}));
 vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
   default: () => ({
     "custom-llm:local": [
@@ -43,7 +46,7 @@ vi.mock("@/hooks/useOpenAICompatibleModels", () => ({
   }),
 }));
 
-const FLASH = "minimax/minimax-m3.1-flash:free";
+const FLASH = "minimax/minimax-m3.1-flash";
 const M3 = "minimax/minimax-m3";
 const LEGACY = [
   "minimax/minimax-01",

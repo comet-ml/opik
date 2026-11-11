@@ -1,5 +1,5 @@
 export const MINIMAX_TEXT_MODEL_IDS = [
-  "minimax/minimax-m3.1-flash:free",
+  "minimax/minimax-m3.1-flash",
   "minimax/minimax-m3",
 ];
 

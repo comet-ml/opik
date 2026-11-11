@@ -1,13 +1,20 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
+import com.comet.opik.api.EncryptedAuthConfig;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.ProviderAuthConfig;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.LlmTestClients;
+import com.comet.opik.infrastructure.llm.MediaContentUtils;
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import jakarta.ws.rs.BadRequestException;
@@ -25,6 +32,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -37,7 +45,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CustomLlmProviderTest {
@@ -59,6 +69,7 @@ class CustomLlmProviderTest {
             """;
 
     private WireMockServer wireMock;
+    private final AuthTokenProvider authTokenProvider = mock(AuthTokenProvider.class);
     private CustomLlmClientGenerator clientGenerator;
 
     @BeforeAll
@@ -69,7 +80,12 @@ class CustomLlmProviderTest {
         var clientConfig = new LlmProviderClientConfig();
         clientConfig.setLogRequests(false);
         clientConfig.setLogResponses(false);
-        clientGenerator = new CustomLlmClientGenerator(clientConfig, mock(AuthTokenProvider.class));
+        var relaxedGuard = ProviderBaseUrlGuard.builder()
+                .mode(DestinationGuard.Mode.RELAXED)
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
+        clientGenerator = new CustomLlmClientGenerator(clientConfig, relaxedGuard, authTokenProvider,
+                LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
     }
 
     @AfterAll
@@ -340,14 +356,70 @@ class CustomLlmProviderTest {
                 arguments("A provider of unknown type is left as sent", null, 4000, null, null, 4000));
     }
 
+    @Test
+    void judgeSendsBase64MediaAsTheDataUrisItWasGiven() {
+        var base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var imageUri = "data:image/png;base64," + base64Data;
+        var videoUri = "data:video/mp4;base64," + base64Data;
+        var audioUri = "data:audio/wav;base64," + base64Data;
+        var judge = clientGenerator.newCustomProviderChatLanguageModel(config(LlmProvider.CUSTOM_LLM),
+                LlmAsJudgeModelParameters.builder().name("custom-llm/" + PROVIDER_NAME + "/" + MODEL).build());
+
+        judge.chat(dev.langchain4j.data.message.UserMessage.from(
+                TextContent.from("Describe these"),
+                MediaContentUtils.toImageContent(imageUri),
+                MediaContentUtils.toVideoContent(videoUri),
+                MediaContentUtils.toAudioContent(audioUri)));
+
+        var parts = sentBody().get("messages").get(0).get("content");
+        assertThat(List.of(
+                parts.get(1).get("image_url").get("url").asText(),
+                parts.get(2).get("video_url").get("url").asText(),
+                parts.get(3).get("audio_url").get("url").asText()))
+                .containsExactly(imageUri, videoUri, audioUri);
+    }
+
+    @Test
+    void tokenAuthSendsOnlyTheFetchedTokenWithoutDroppingAHeader() {
+        // a token-auth provider stores a blank static key
+        var config = config(LlmProvider.CUSTOM_LLM).toBuilder()
+                .apiKey("")
+                .workspaceId("workspace-id")
+                .providerId(UUID.randomUUID())
+                .authConfig(EncryptedAuthConfig.of(ProviderAuthConfig.builder()
+                        .tokenUrl("https://auth.example.com/token")
+                        .credentials(List.of(ProviderAuthConfig.Credential.builder()
+                                .key("password").value("secret").secret(true).build()))
+                        .build()))
+                .build();
+        when(authTokenProvider.bearer(any(), any(), any())).thenReturn("fetched-token");
+        var judge = clientGenerator.newCustomProviderChatLanguageModel(config,
+                LlmAsJudgeModelParameters.builder().name("custom-llm/" + PROVIDER_NAME + "/" + MODEL).build());
+
+        var events = LogCaptureUtils.logEventsOf(() -> {
+            new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration(),
+                    LlmProvider.CUSTOM_LLM).generate(request(null, null), "workspace-id");
+            judge.chat(dev.langchain4j.data.message.UserMessage.from("hello"));
+        });
+
+        assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(COMPLETIONS_PATH))))
+                .extracting(sent -> sent.getHeaders().getHeader("Authorization").values())
+                .containsExactly(List.of("Bearer fetched-token"), List.of("Bearer fetched-token"));
+        assertThat(events).noneMatch(event -> event.contains("Dropping pre-configured"));
+    }
+
     private CustomLlmProvider newProvider(LlmProvider provider) {
-        var config = LlmProviderClientApiConfig.builder()
+        var config = config(provider);
+        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration(), provider);
+    }
+
+    private LlmProviderClientApiConfig config(LlmProvider provider) {
+        return LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl(wireMock.baseUrl() + "/v1")
                 .configuration(Map.of("provider_name", PROVIDER_NAME))
                 .provider(provider)
                 .build();
-        return new CustomLlmProvider(clientGenerator.newCustomLlmClient(config), config.configuration(), provider);
     }
 
     private ChatCompletionRequest request(Integer maxCompletionTokens, Integer maxTokens) {
