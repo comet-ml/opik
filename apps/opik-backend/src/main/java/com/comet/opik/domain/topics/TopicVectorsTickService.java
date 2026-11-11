@@ -153,6 +153,8 @@ public class TopicVectorsTickService {
      * starts empty and discovers every workspace once more, which changes no row's {@code drained_at}.
      */
     private final Map<String, Instant> discoveredAt = new ConcurrentHashMap<>();
+    /** The workspaces whose workspace reads this pod is skipping, each logged once until it clears. */
+    private final Set<String> overExcluded = ConcurrentHashMap.newKeySet();
 
     private final LongCounter written;
     private final LongCounter skipped;
@@ -209,6 +211,10 @@ public class TopicVectorsTickService {
      * oldest first, and whether the read saw the whole window: every slice read, under the cap in all.
      */
     private record WindowRead(@NonNull List<TopicVectorCandidate> candidates, boolean complete) {
+    }
+
+    /** One project's turn in the backfill phase: what to record, and whether the project should get another turn. */
+    private record Turn(@NonNull Optional<TopicVectorBackfill.Progress> progress, boolean more) {
     }
 
     /** The bounds every window read of a tick has in common. */
@@ -346,8 +352,10 @@ public class TopicVectorsTickService {
                         + "window read), workspace and error type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read")
-                .setDescription("Enabled workspaces a tick did not read because its budget ran out, by workspace; "
-                        + "such a workspace has no value in topics.vectors.oldest_unvectored_seconds for that tick")
+                .setDescription("Enabled workspaces a tick's workspace read did not read, by workspace: its budget "
+                        + "ran out, or the workspace has more projects in backfill than the read can leave out (see "
+                        + "topics.vectors.backfill.undrained_projects). Such a workspace has no value in "
+                        + "topics.vectors.oldest_unvectored_seconds for that tick")
                 .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
@@ -553,9 +561,17 @@ public class TopicVectorsTickService {
                     .map(TopicVectorBackfill::projectId).toList();
             if (excluded.size() > MAX_EXCLUDED_PROJECTS) {
                 // Its traces are the backfill phase's for now; it does not hold the daily pass.
-                log.info("Topic vectors workspace read skipped, workspace '{}' has '{}' projects in backfill",
-                        workspaceId, excluded.size());
+                workspacesNotRead.add(1, tally.workspace(workspaceId).build());
+                if (overExcluded.add(workspaceId)) {
+                    log.warn("Topic vectors workspace reads skipped until the backfill brings it under '{}' projects, "
+                            + "workspace '{}', projects in backfill '{}'", MAX_EXCLUDED_PROJECTS, workspaceId,
+                            excluded.size());
+                }
                 continue;
+            }
+            if (overExcluded.remove(workspaceId)) {
+                log.info("Topic vectors workspace reads resumed, workspace '{}', projects in backfill '{}'",
+                        workspaceId, excluded.size());
             }
             try {
                 var read = readWindow(workspaceId, null, excluded, window, sliceSize, limit);
@@ -655,8 +671,10 @@ public class TopicVectorsTickService {
     /**
      * The backfill phase: the projects not drained yet, one at a time, while the tick has time for an embed call.
      * Workspaces take turns in the tick's visiting order, one project each, so a workspace with many projects does not
-     * hold the others; a workspace's projects go in {@link TopicVectorBackfill#backfillOrder}. A workspace an embed
-     * call backed off for is left for the next tick. Returns the keys of the projects drained; they and the vectors
+     * hold the others; a workspace's projects go in {@link TopicVectorBackfill#backfillOrder}. A project that wrote
+     * vectors and still has more than one read's worth takes its workspace's next turn too, so one large project uses
+     * the time the tick has, not one {@code maxTracesPerTick}. A workspace an embed call backed off for is left for the
+     * next tick. Returns the keys of the projects drained; they and the vectors
      * written are recorded in one write, and a failed write only means the projects are read again next tick.
      */
     private Set<TopicVectorBackfill> backfill(List<String> workspaceIds,
@@ -684,12 +702,16 @@ public class TopicVectorsTickService {
                     break;
                 }
                 any = true;
-                backfillProject(project, window, tally).ifPresent(done -> {
+                var turn = backfillProject(project, window, tally);
+                turn.progress().ifPresent(done -> {
                     progress.add(done);
                     if (done.drainedAt() != null) {
                         drained.add(project);
                     }
                 });
+                if (turn.more()) {
+                    entry.getValue().addFirst(project);
+                }
             }
         }
         try {
@@ -705,11 +727,12 @@ public class TopicVectorsTickService {
 
     /**
      * One project's turn: read its window, embed, write. The project is drained when the read was complete and none of
-     * its candidates were left for want of time, a read, a back-off or an insert. Empty when there is nothing to
-     * record: the read failed, or nothing was written and the project is not drained.
+     * its candidates were left for want of time, a read, a back-off or an insert. No progress when there is nothing
+     * to record: the read failed, or nothing was written and the project is not drained. More: the read stopped at the
+     * cap, every candidate had its turn and vectors were written, so another read now finds the next ones; a read
+     * whose candidates all fail is not repeated in the tick.
      */
-    private Optional<TopicVectorBackfill.Progress> backfillProject(TopicVectorBackfill project, Window window,
-            Tally tally) {
+    private Turn backfillProject(TopicVectorBackfill project, Window window, Tally tally) {
         var workspaceId = project.workspaceId();
         var sliceSize = project.tracesTotal() > ONE_SLICE_MAX_TRACES
                 ? config.getVectors().getFind().getSliceSize().toJavaDuration()
@@ -723,21 +746,21 @@ public class TopicVectorsTickService {
             countReadFailure("backfill", workspaceId, tally, exception);
             log.warn("Topic vectors backfill read failed, workspace '{}', project '{}'; reading it again next tick",
                     workspaceId, project.projectId(), exception);
-            return Optional.empty();
+            return new Turn(Optional.empty(), false);
         }
         int cuts = tally.cuts;
         int written = tally.written;
         embedAndWrite(read.candidates(), window.deadline(), null, tally);
         boolean drained = read.complete() && tally.cuts == cuts;
         if (!drained && tally.written == written) {
-            return Optional.empty();
+            return new Turn(Optional.empty(), false);
         }
-        return Optional.of(TopicVectorBackfill.Progress.builder()
+        return new Turn(Optional.of(TopicVectorBackfill.Progress.builder()
                 .workspaceId(workspaceId)
                 .projectId(project.projectId())
                 .drainedAt(drained ? window.start() : null)
                 .written(tally.written - written)
-                .build());
+                .build()), !read.complete() && tally.cuts == cuts);
     }
 
     /** Per workspace, the projects still not drained after this tick. */

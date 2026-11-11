@@ -1554,6 +1554,9 @@ class TopicVectorsTickServiceTest {
             var large = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
             trace(small, NOW.minusSeconds(3_600));
             IntStream.range(0, 3).forEach(i -> trace(large, NOW.minusSeconds(7_200 + i)));
+            // Time for two embed calls: the small project's, and one turn of the large one.
+            embedTime = EMBED_TIMEOUT;
+            clock.advance(Duration.ofSeconds(BUDGET_SECONDS).minus(EMBED_TIMEOUT.multipliedBy(2)));
 
             assertThat(service.tick(NOW).projectsDrained()).isOne();
 
@@ -1564,7 +1567,8 @@ class TopicVectorsTickServiceTest {
             assertThat(rows.get(large.projectId()).tracesDone()).isEqualTo(2);
             assertThat(unvectored).hasSize(1);
 
-            clock.advance(Duration.ofMinutes(1));
+            embedTime = Duration.ZERO;
+            clock.advance(Duration.between(clock.instant(), NOW.plusSeconds(60)));
             assertThat(service.tick(NOW.plusSeconds(60)).projectsDrained()).isOne();
             assertThat(rows.get(large.projectId()).drainedAt()).isEqualTo(NOW.plusSeconds(60));
             assertThat(unvectored).isEmpty();
@@ -1821,33 +1825,99 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
-        @DisplayName("a workspace with more projects in backfill than a read can leave out is not read as a whole; "
-                + "its projects are")
+        @DisplayName("a workspace with more projects in backfill than a read can leave out is not read as a whole: it "
+                + "is counted as not read every tick, and logged once")
         void tooManyProjectsToLeaveOut() {
             var drained = drained(WORKSPACE_ID);
             trace(drained, NOW.minusSeconds(30));
             IntStream.rangeClosed(0, TopicVectorsTickService.MAX_EXCLUDED_PROJECTS)
                     .forEach(i -> undrained(WORKSPACE_ID, NOW.minusSeconds(i)));
-            // One embed call's worth of time is left, so the phase takes a few projects and stops.
-            clock.advance(Duration.ofSeconds(BUDGET_SECONDS).minus(EMBED_TIMEOUT));
+            // Time for a window read, not for an embed call: the backfill phase does not start, so none is drained.
+            clock.advance(Duration.ofSeconds(BUDGET_SECONDS - 5));
+            var appender = new ListAppender<ILoggingEvent>();
+            var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
+            appender.start();
+            logger.addAppender(appender);
 
             var result = service.tick(NOW);
 
             assertThat(result.written()).isZero();
-            assertThat(reads).isNotEmpty().allMatch(read -> read.projectId() != null);
+            assertThat(reads).isEmpty();
+            // Visible to an operator: counted as not read, and without a value in the oldest-unvectored gauge.
             assertThat(meter.observeGauge()).isEmpty();
+            verify(meter.counter("topics.vectors.workspaces_not_read")).add(1, workspace(WORKSPACE_ID).build());
+            var warnings = appender.list.stream()
+                    .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count();
+            assertThat(warnings).isOne();
+
+            // Still over: counted again, logged once.
+            clock.advance(Duration.ofMinutes(1));
+            service.tick(clock.instant().minusSeconds(BUDGET_SECONDS - 5));
+            verify(meter.counter("topics.vectors.workspaces_not_read"), times(2)).add(1,
+                    workspace(WORKSPACE_ID).build());
+            assertThat(appender.list.stream()
+                    .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count())
+                    .isOne();
+            logger.detachAppender(appender);
+        }
+
+        @Test
+        @DisplayName("a large project alone takes turn after turn in one tick while the tick has time, not one cap")
+        void largeProjectUsesTheTick() {
+            config.getVectors().setMaxTracesPerTick(2);
+            var large = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            IntStream.range(0, 20).forEach(i -> trace(large, NOW.minusSeconds(7_200 + i)));
+            // 10 s per embed call and a 10 s embed timeout: the 50 s budget has time for 5 turns.
+            embedTime = EMBED_TIMEOUT;
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(10);
+            assertThat(result.projectsDrained()).isZero();
+            assertThat(rows.get(large.projectId()).tracesDone()).isEqualTo(10);
+            assertThat(reads).filteredOn(read -> read.projectId() != null).hasSize(5);
+            assertThat(clock.instant()).isEqualTo(NOW.plusSeconds(BUDGET_SECONDS));
+
+            // With time to spare, the same project is drained in one tick: 2 + 2 + 2 + 2 + 2 of 10, then an empty read.
+            embedTime = Duration.ZERO;
+            clock.advance(Duration.ofSeconds(10));
+            var next = service.tick(NOW.plusSeconds(60));
+            assertThat(next.written()).isEqualTo(10);
+            assertThat(next.projectsDrained()).isOne();
+            assertThat(unvectored).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a large project takes its workspace's turns; the other workspace still gets every second turn")
+        void largeProjectKeepsTheTurns() {
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE));
+            config.getVectors().setMaxTracesPerTick(2);
+            var large = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            IntStream.range(0, 5).forEach(i -> trace(large, NOW.minusSeconds(7_200 + i)));
+            var b1 = undrained(OTHER_WORKSPACE, NOW.minusSeconds(10));
+            var b2 = undrained(OTHER_WORKSPACE, NOW.minusSeconds(20));
+
+            assertThat(service.tick(NOW).projectsDrained()).isEqualTo(3);
+
+            var order = reads.stream().map(Read::projectId).filter(java.util.Objects::nonNull).toList();
+            // 2 + 2 + 1 for the large project, in three turns; the visiting order decides who leads.
+            assertThat(order).isIn(
+                    List.of(large.projectId(), b1.projectId(), large.projectId(), b2.projectId(),
+                            large.projectId()),
+                    List.of(b1.projectId(), large.projectId(), b2.projectId(), large.projectId(),
+                            large.projectId()));
         }
 
         @Test
         @DisplayName("the gauges publish, per workspace, the projects still in backfill after the tick and the age of "
                 + "the oldest of them")
         void undrainedGauges() {
-            config.getVectors().setMaxTracesPerTick(1);
             drained(WORKSPACE_ID);
             var done = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
             var stuck = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
             rows.put(stuck.projectId(), stuck.toBuilder().startedAt(NOW.minusSeconds(600)).build());
-            IntStream.range(0, 2).forEach(i -> trace(stuck, NOW.minusSeconds(3_600 + i)));
+            trace(stuck, NOW.minusSeconds(3_600));
+            failingProjects.add(stuck.projectId());
 
             assertThat(service.tick(NOW).projectsDrained()).isOne();
 
@@ -1857,10 +1927,9 @@ class TopicVectorsTickServiceTest {
             assertThat(meter.observeGauge("topics.vectors.backfill.oldest_started_seconds"))
                     .isEqualTo(Map.of(WORKSPACE_ID, 600.0));
 
+            failingProjects.clear();
             clock.advance(Duration.ofMinutes(1));
-            service.tick(NOW.plusSeconds(60));
-            clock.advance(Duration.ofMinutes(1));
-            assertThat(service.tick(NOW.plusSeconds(120)).projectsDrained()).isOne();
+            assertThat(service.tick(NOW.plusSeconds(60)).projectsDrained()).isOne();
             assertThat(meter.observeGauge("topics.vectors.backfill.undrained_projects"))
                     .isEqualTo(Map.of(WORKSPACE_ID, 0.0));
             assertThat(meter.observeGauge("topics.vectors.backfill.oldest_started_seconds"))
