@@ -9,12 +9,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -83,6 +85,13 @@ public class TopicVectorsDAO {
      * than the third read saves. Reading {@code done} once into Java and binding its keys back in 1,000-key chunks read
      * more (1.8M rows in 16 queries for 24h, 17M rows in 101 queries for 7d), because each chunk's ids are spread over the
      * workspace's granules.
+     *
+     * <p>Three optional scopes narrow every side alike, so the anti-join stays exact. One project: the read then follows
+     * the tables' sort keys, which have {@code project_id} right after {@code workspace_id}. Excluded projects, on
+     * {@code done} only: the other sides are joined to its keys. A slice, {@code trace_created_at < :created_before}:
+     * {@code trace_created_at} is the same on every row of a key, so half-open slices put each key in exactly one of
+     * them; a slice also bounds {@code id_at} from above by {@code done}'s newest trace id, so an old slice does not
+     * read the outputs and vectors of every newer trace.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -91,8 +100,11 @@ public class TopicVectorsDAO {
                     SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, status, updated_at
                     FROM ai_label_status
                     WHERE workspace_id = :workspace_id
+                    <if(project)>AND project_id = :project_id<endif>
+                    <if(excluded)>AND project_id NOT IN :excluded_project_ids<endif>
                     AND task = :task
                     AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
+                    <if(created_before)>AND trace_created_at \\< fromUnixTimestamp64Micro(:created_before_micros, 'UTC')<endif>
                     AND updated_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')
                     ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id
@@ -106,9 +118,11 @@ public class TopicVectorsDAO {
                     SELECT project_id, trace_id, task_version, JSONExtractString(output, 'summary') AS summary
                     FROM ai_labels
                     WHERE workspace_id = :workspace_id
+                    <if(project)>AND project_id = :project_id<endif>
                     AND task = :task
                     AND key = 'output'
                     AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
+                    <if(created_before)>AND id_at \\<= (SELECT max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC')) FROM done)<endif>
                     AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
                     ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key
@@ -124,8 +138,11 @@ public class TopicVectorsDAO {
                     SELECT workspace_id, project_id, trace_id, task_version, is_deleted
                     FROM topic_vectors
                     WHERE workspace_id = :workspace_id
+                    <if(project)>AND project_id = :project_id<endif>
                     AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
+                    <if(created_before)>AND trace_created_at \\< fromUnixTimestamp64Micro(:created_before_micros, 'UTC')<endif>
                     AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
+                    <if(created_before)>AND id_at \\<= (SELECT max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC')) FROM done)<endif>
                     ORDER BY workspace_id, project_id, trace_id, task_version, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, trace_id, task_version
                 )
@@ -145,6 +162,42 @@ public class TopicVectorsDAO {
      * Bound as a parameter so the backslashes need no escaping in the template.
      */
     static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\x{85}\\p{Z}]";
+
+    /**
+     * The backfill's discovery: the projects with a done status row written in the window, each with its latest one
+     * and its count of such rows of traces created at or after the window's lower bound. A plain aggregate: no dedup
+     * and no join, so its memory grows with the projects, not with the traces. A trace relabelled since its last merge
+     * has more than one done row and counts more than once. The guards are the window read's.
+     */
+    private static final String FIND_BACKFILL_PROJECTS = """
+            SELECT project_id,
+                countIf(trace_created_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')) AS traces,
+                max(updated_at) AS last_done_at
+            FROM ai_label_status
+            WHERE workspace_id = :workspace_id
+            AND task = :task
+            AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
+            AND updated_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')
+            AND status = 'done'
+            GROUP BY project_id
+            SETTINGS max_threads = 2, max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>,
+                max_execution_time = <max_execution_time>, priority = 100, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Per project, the vector rows, not deleted, of traces created at or after the window's lower bound: the other
+     * half of the discovery's counts. A plain aggregate too: a vector deleted and not merged yet still counts.
+     */
+    private static final String COUNT_VECTORS_BY_PROJECT = """
+            SELECT project_id, count() AS vectors
+            FROM topic_vectors
+            WHERE workspace_id = :workspace_id
+            AND trace_created_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')
+            AND is_deleted = 0
+            GROUP BY project_id
+            SETTINGS max_threads = 2, max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>,
+                max_execution_time = <max_execution_time>, priority = 100, log_comment = '<log_comment>'
+            """;
 
     /**
      * The summary read: each trace's latest output row, its text extracted in SQL exactly as stored. The (project,
@@ -275,30 +328,105 @@ public class TopicVectorsDAO {
 
     /**
      * Done statuses of {@code task} updated in {@code [lowerBound, upperBound]}, of traces created at or after
-     * {@code createdAfter}, without a vector, oldest first.
+     * {@code createdAfter}, without a vector, oldest first: the whole workspace in one read.
      */
     public Flux<TopicVectorCandidate> findUnvectored(@NonNull String workspaceId, @NonNull String task,
             @NonNull Instant lowerBound, @NonNull Instant upperBound, @NonNull Instant createdAfter, int limit,
             long maxExecutionSeconds) {
+        return findUnvectored(workspaceId, task, lowerBound, upperBound, createdAfter, null, null, List.of(), limit,
+                maxExecutionSeconds);
+    }
+
+    /**
+     * {@link #findUnvectored(String, String, Instant, Instant, Instant, int, long)} narrowed: to the traces created
+     * before {@code createdBefore} when it is not null (a slice), to {@code projectId} when it is not null, and to the
+     * projects not in {@code excludedProjectIds}.
+     */
+    public Flux<TopicVectorCandidate> findUnvectored(@NonNull String workspaceId, @NonNull String task,
+            @NonNull Instant lowerBound, @NonNull Instant upperBound, @NonNull Instant createdAfter,
+            @Nullable Instant createdBefore, @Nullable UUID projectId, @NonNull Collection<UUID> excludedProjectIds,
+            int limit, long maxExecutionSeconds) {
         var find = config.getVectors().getFind();
         // The guards go into the SETTINGS clause, which ClickHouse can't take as bound parameters. The values are
         // validated config numbers, never input.
         var template = getSTWithLogComment(FIND_UNVECTORED, "topics:find_unvectored", workspaceId, null,
-                "lower_bound=%s, created_after=%s, limit=%d".formatted(lowerBound, createdAfter, limit))
+                "lower_bound=%s, created_after=%s, created_before=%s, project_id=%s, excluded=%d, limit=%d".formatted(
+                        lowerBound, createdAfter, createdBefore, projectId, excludedProjectIds.size(), limit))
+                .add("project", projectId != null)
+                .add("excluded", !excludedProjectIds.isEmpty())
+                .add("created_before", createdBefore != null)
                 .add("max_rows_to_read", find.getMaxRowsToRead())
                 .add("max_memory_usage", find.getMaxMemoryUsage())
                 .add("max_execution_time", maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("task", task)
+                            .bind("created_after_micros", toEpochMicros(createdAfter))
+                            .bind("lower_bound_micros", toEpochMicros(lowerBound))
+                            .bind("upper_bound_micros", toEpochMicros(upperBound))
+                            .bind("limit", limit)
+                            .bind("non_blank", NON_BLANK);
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId.toString());
+                    }
+                    if (!excludedProjectIds.isEmpty()) {
+                        statement.bind("excluded_project_ids",
+                                excludedProjectIds.stream().map(UUID::toString).toArray(String[]::new));
+                    }
+                    if (createdBefore != null) {
+                        statement.bind("created_before_micros", toEpochMicros(createdBefore));
+                    }
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, metadata) -> toCandidate(row)));
+    }
+
+    /**
+     * The projects with a done status of {@code task} written at or after {@code lowerBound}, of traces created at or
+     * after {@code createdAfter}: see {@link #FIND_BACKFILL_PROJECTS}.
+     */
+    public Flux<TopicBackfillProject> findBackfillProjects(@NonNull String workspaceId, @NonNull String task,
+            @NonNull Instant lowerBound, @NonNull Instant createdAfter, long maxExecutionSeconds) {
+        var template = guarded(FIND_BACKFILL_PROJECTS, "topics:find_backfill_projects", workspaceId,
+                "lower_bound=%s, created_after=%s".formatted(lowerBound, createdAfter), maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("task", task)
                         .bind("created_after_micros", toEpochMicros(createdAfter))
                         .bind("lower_bound_micros", toEpochMicros(lowerBound))
-                        .bind("upper_bound_micros", toEpochMicros(upperBound))
-                        .bind("limit", limit)
-                        .bind("non_blank", NON_BLANK)
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> toCandidate(row)));
+                .flatMap(result -> result.map((row, metadata) -> TopicBackfillProject.builder()
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .traces(row.get("traces", Long.class))
+                        .lastDoneAt(row.get("last_done_at", Instant.class))
+                        .build()));
+    }
+
+    /** Per project, the vector rows of traces created at or after {@code lowerBound}. */
+    public Mono<Map<UUID, Long>> countVectorsByProject(@NonNull String workspaceId, @NonNull Instant lowerBound,
+            long maxExecutionSeconds) {
+        var template = guarded(COUNT_VECTORS_BY_PROJECT, "topics:count_vectors_by_project", workspaceId,
+                "lower_bound=%s".formatted(lowerBound), maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("lower_bound_micros", toEpochMicros(lowerBound))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("project_id", String.class)), row.get("vectors", Long.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    private ST guarded(String query, String queryName, String workspaceId, String details,
+            long maxExecutionSeconds) {
+        var find = config.getVectors().getFind();
+        return getSTWithLogComment(query, queryName, workspaceId, null, details)
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
+                .add("max_execution_time", maxExecutionSeconds);
     }
 
     /** Each key's latest output row of {@code task}, when it has one. */
