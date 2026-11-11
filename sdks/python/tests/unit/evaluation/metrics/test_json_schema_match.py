@@ -110,16 +110,21 @@ def test_json_schema_match__many_violations__collection_is_capped() -> None:
 
 
 @pytest.mark.parametrize(
-    "output",
+    "output, expected_path",
     [
-        float("nan"),
-        float("inf"),
-        {"invoice_id": "A-1", "total": float("-inf")},
-        {"invoice_id": "A-1", "total": 1, "items": [{"amount": float("nan")}]},
+        (float("nan"), "$"),
+        (float("inf"), "$"),
+        ({"invoice_id": "A-1", "total": float("-inf")}, "$.total"),
+        (
+            {"invoice_id": "A-1", "total": 1, "items": [{"amount": float("nan")}]},
+            "$.items[0].amount",
+        ),
+        ({"a": [1, (2, float("inf"))]}, "$.a[1][1]"),
+        ({float("nan"): "value"}, "$ (key nan)"),
     ],
 )
 def test_json_schema_match__parsed_output_with_nan_or_infinity__returns_score_zero(
-    output,
+    output, expected_path
 ) -> None:
     schema = {"type": ["number", "object"]}
 
@@ -127,7 +132,32 @@ def test_json_schema_match__parsed_output_with_nan_or_infinity__returns_score_ze
 
     assert result.value == 0.0
     assert result.metadata["valid_json"] is False
-    assert "NaN or Infinity" in result.reason
+    assert result.reason == (
+        f"Output is not valid JSON: {expected_path} is NaN or Infinity, "
+        "which JSON cannot represent"
+    )
+
+
+def test_json_schema_match__deeply_nested_parsed_output__returns_a_score() -> None:
+    output: list = []
+    current = output
+    for _ in range(50_000):
+        child: list = []
+        current.append(child)
+        current = child
+
+    result = _metric(schema={"type": "array"}).score(output=output)
+
+    assert result.value == 1.0
+
+
+def test_json_schema_match__self_referencing_output__does_not_loop() -> None:
+    output: dict = {"total": 1}
+    output["self"] = output
+
+    result = _metric(schema={"type": "object"}).score(output=output)
+
+    assert result.value == 1.0
 
 
 @pytest.mark.parametrize(
@@ -181,6 +211,7 @@ def test_json_schema_match__no_schema__raises() -> None:
         '{"maximum": NaN}',
         {"$schema": "https://example.com/my-dialect", "type": "string"},
         {"$schema": 7},
+        {"$schema": "http://json-schema.org/draft-07/schema##"},
     ],
 )
 def test_json_schema_match__invalid_schema__raises_instead_of_scoring_zero(

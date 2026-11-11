@@ -1,7 +1,7 @@
 import itertools
 import json
 import math
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
 
 import pydantic
 
@@ -17,8 +17,9 @@ except ImportError:
 SchemaType = Union[Dict[str, Any], str, Type[pydantic.BaseModel]]
 
 _MAX_ERRORS_IN_REASON = 5
-# Validation stops collecting after this many violations, so a huge invalid
-# output cannot exhaust memory; `metadata["truncated"]` says when it happened.
+# At most this many violations are kept, so a huge invalid output cannot
+# exhaust memory. One more is read only to tell whether the list was cut, which
+# `metadata["truncated"]` reports.
 _MAX_ERRORS_COLLECTED = 100
 
 
@@ -56,8 +57,13 @@ def _known_meta_schema_ids() -> set:
     ):
         meta_schema = validator_class.META_SCHEMA
         meta_schema_id = meta_schema.get("$id", meta_schema.get("id", ""))
-        ids.add(meta_schema_id.rstrip("#"))
+        ids.add(_strip_empty_fragment(meta_schema_id))
     return ids
+
+
+def _strip_empty_fragment(uri: str) -> str:
+    # "...schema#" and "...schema" name the same dialect; "...schema##" does not.
+    return uri[:-1] if uri.endswith("#") else uri
 
 
 def _validator_class_for(schema: Any) -> Any:
@@ -69,7 +75,7 @@ def _validator_class_for(schema: Any) -> Any:
     if isinstance(schema, dict) and "$schema" in schema:
         dialect = schema["$schema"]
         if not isinstance(dialect, str) or (
-            dialect.rstrip("#") not in _known_meta_schema_ids()
+            _strip_empty_fragment(dialect) not in _known_meta_schema_ids()
         ):
             raise MetricComputationError(
                 f"JsonSchemaMatch: unsupported $schema {dialect!r}"
@@ -79,21 +85,47 @@ def _validator_class_for(schema: Any) -> Any:
     )
 
 
-def _find_non_finite_number(value: Any, path: List[Any]) -> Optional[str]:
-    """Return the path of the first NaN/Infinity in a parsed value, if any."""
-    if isinstance(value, float) and not math.isfinite(value):
-        return _format_path(path)
-    if isinstance(value, dict):
-        for key, item in value.items():
-            found = _find_non_finite_number(item, path + [key])
-            if found is not None:
-                return found
-    elif isinstance(value, (list, tuple)):
-        for index, item in enumerate(value):
-            found = _find_non_finite_number(item, path + [index])
-            if found is not None:
-                return found
+def _find_non_finite_number(value: Any) -> Optional[str]:
+    """Return the path of the first NaN/Infinity in a parsed value, if any.
+
+    Dict keys are checked as well as values. The walk is iterative, so a deeply
+    nested value cannot raise ``RecursionError``, and a container that contains
+    itself is visited once. Paths are kept as parent links and only built into
+    a list for the value that is reported.
+    """
+    # Each entry is (value, path link); a path link is (parent link, key) or None.
+    stack: List[Tuple[Any, Any]] = [(value, None)]
+    seen: Set[int] = set()
+    while stack:
+        current, link = stack.pop()
+        if isinstance(current, float) and not math.isfinite(current):
+            return _format_path(_unlink(link))
+        if isinstance(current, (dict, list, tuple)):
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+        if isinstance(current, dict):
+            children = []
+            for key, item in current.items():
+                if isinstance(key, float) and not math.isfinite(key):
+                    return f"{_format_path(_unlink(link))} (key {key!r})"
+                children.append((item, (link, key)))
+            stack.extend(reversed(children))
+        elif isinstance(current, (list, tuple)):
+            stack.extend(
+                (item, (link, index))
+                for index, item in reversed(list(enumerate(current)))
+            )
     return None
+
+
+def _unlink(link: Any) -> List[Any]:
+    path: List[Any] = []
+    while link is not None:
+        link, key = link
+        path.append(key)
+    path.reverse()
+    return path
 
 
 def _format_path(path: Any) -> str:
@@ -226,7 +258,7 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                 return self._not_json_result(str(exception))
         else:
             instance = output
-            non_finite_path = _find_non_finite_number(instance, [])
+            non_finite_path = _find_non_finite_number(instance)
             if non_finite_path is not None:
                 return self._not_json_result(
                     f"{non_finite_path} is NaN or Infinity, which JSON cannot represent"
