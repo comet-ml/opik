@@ -1583,6 +1583,8 @@ partitionMetrics:
   interval: ${PARTITION_METRICS_INTERVAL:-5m}
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
+  # Tiered-storage gauges from system.query_log / system.part_log (fans out to every replica).
+  tieredStorageEnabled: ${PARTITION_METRICS_TIERED_STORAGE_ENABLED:-false}
 
 # LLM providers client configuration
 # Configuration for dynamic token auth on custom LLM providers (auth_config recipes)

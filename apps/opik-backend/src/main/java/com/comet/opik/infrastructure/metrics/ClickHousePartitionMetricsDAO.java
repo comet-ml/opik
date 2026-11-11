@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.metrics;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -12,7 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 /**
@@ -20,6 +24,9 @@ import java.util.regex.Pattern;
  * Section 11.1). Sources per-(table, partition) size, row, part and activity data from
  * {@code system.parts}, and lightweight-deleted (LWD-masked) row counts from the tables
  * themselves. Everything is {@code active}-parts-only and scoped to the analytics database.
+ *
+ * <p>The tiered-storage queries read {@code system.query_log} and {@code system.part_log} on every
+ * replica, over a recent window, for reads of the cold-tier tables and failed part moves.
  *
  * <p>This is infrastructure observability, not application domain: it reports on the storage
  * engine's internal state rather than any business entity.
@@ -36,10 +43,36 @@ public interface ClickHousePartitionMetricsDAO {
     record LwdStat(String table, String partition, long lwdRows) {
     }
 
+    /** Finished SELECTs on a tiered table; {@code cold*} counts only those that read the cold tier. */
+    @Builder(toBuilder = true)
+    record TieredReadStat(String table, long queries, long p99Millis, long coldQueries, long coldP99Millis) {
+    }
+
+    /** {@code code} is the ClickHouse error name, e.g. {@code S3_ERROR}. */
+    @Builder(toBuilder = true)
+    record TieredReadFailureStat(String table, String code, long failedQueries) {
+    }
+
+    @Builder(toBuilder = true)
+    record MoveErrorStat(String table, long moveErrors) {
+    }
+
     Mono<List<PartitionStat>> getPartitionStats();
 
     /** LWD-masked row counts per partition. A table whose scan fails contributes no stats; the others are unaffected. */
     Mono<List<LwdStat>> getLwdRowCounts(List<String> tables);
+
+    /**
+     * Reads of tables whose storage policy has an object-storage disk, from {@code system.query_log} on every replica,
+     * over the last {@code window}.
+     */
+    Mono<List<TieredReadStat>> getTieredReadStats(Duration window);
+
+    /** Queries on tiered tables that failed with a cold-read error code, over the last {@code window}. */
+    Mono<List<TieredReadFailureStat>> getTieredReadFailures(Duration window);
+
+    /** Failed part moves (e.g. hot to cold) from {@code system.part_log} on every replica, over the last {@code window}. */
+    Mono<List<MoveErrorStat>> getMoveErrors(Duration window);
 }
 
 @Slf4j
@@ -107,6 +140,85 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
             SETTINGS apply_deleted_mask = 0, max_execution_time = 30, priority = 100, log_comment = '<log_comment>'
             """;
 
+    /**
+     * Tables in the analytics database whose storage policy includes an object-storage (cold tier) disk, qualified as
+     * {@code database.table} the way {@code system.query_log.tables} lists them. Evaluated once on the node that
+     * answers, then used as a constant by the replica fan-out.
+     */
+    private static final String TIERED_TABLES = """
+            WITH
+                (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks,
+                (SELECT groupArray(policy_name) FROM system.storage_policies
+                    WHERE hasAny(disks, object_storage_disks)) AS tiered_policies,
+                (SELECT groupArray(concat(database, '.', name)) FROM system.tables
+                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_tables
+            """;
+
+    /**
+     * The window ends {@code LOG_FLUSH_LAG} in the past so rows still buffered for the system log (7.5 s flush by
+     * default) land in the next window instead of being skipped. Consecutive polls then tile time without gaps.
+     */
+    private static final String WINDOW = """
+            event_date >= toDate(now() - INTERVAL <window_start> SECOND)
+                AND event_time BETWEEN now() - INTERVAL <window_start> SECOND AND now() - INTERVAL <window_end> SECOND
+            """;
+
+    private static final Duration LOG_FLUSH_LAG = Duration.ofSeconds(15);
+
+    /**
+     * A read through a Distributed table logs a secondary query on the local table, and that secondary query is the
+     * one carrying the read's cache counters; the initial query names only the Distributed table, which has no storage
+     * policy, so each read is counted once. A read touched the cold tier when the cold disk's cache served any bytes,
+     * from the cache or from object storage.
+     */
+    private static final String TIERED_READ_STATS_SQL = TIERED_TABLES + """
+            SELECT
+                qualified_table,
+                toInt64(count()) AS queries,
+                toInt64(quantile(0.99)(query_duration_ms)) AS p99_ms,
+                toInt64(countIf(cold)) AS cold_queries,
+                toInt64(if(countIf(cold) = 0, 0, quantileIf(0.99)(query_duration_ms, cold))) AS cold_p99_ms
+            FROM (
+                SELECT
+                    arrayJoin(arrayIntersect(tables, tiered_tables)) AS qualified_table,
+                    query_duration_ms,
+                    ProfileEvents['CachedReadBufferReadFromSourceBytes']
+                        + ProfileEvents['CachedReadBufferReadFromCacheBytes'] > 0 AS cold
+                FROM clusterAllReplicas('{cluster}', system.query_log)
+                WHERE <window> AND type = 'QueryFinish' AND query_kind = 'Select' AND hasAny(tables, tiered_tables)
+            )
+            GROUP BY qualified_table
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Error codes a failed cold read surfaces as: CANNOT_READ_ALL_DATA (33), CHECKSUM_DOESNT_MATCH (40),
+     * RECEIVED_ERROR_FROM_REMOTE_IO_SERVER (86), CORRUPTED_DATA (246), S3_ERROR (499) and POCO_EXCEPTION (1000).
+     * Client disconnects and cancellations are routine on these tables, so the codes are an allowlist.
+     */
+    private static final String TIERED_READ_FAILURES_SQL = TIERED_TABLES + """
+            SELECT
+                qualified_table,
+                errorCodeToName(exception_code) AS code,
+                toInt64(count()) AS failed_queries
+            FROM (
+                SELECT arrayJoin(arrayIntersect(tables, tiered_tables)) AS qualified_table, exception_code
+                FROM clusterAllReplicas('{cluster}', system.query_log)
+                WHERE <window> AND type = 'ExceptionWhileProcessing'
+                    AND exception_code IN (33, 40, 86, 246, 499, 1000) AND hasAny(tables, tiered_tables)
+            )
+            GROUP BY qualified_table, code
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    private static final String MOVE_ERRORS_SQL = """
+            SELECT table AS table_name, toInt64(count()) AS move_errors
+            FROM clusterAllReplicas('{cluster}', system.part_log)
+            WHERE <window> AND event_type = 'MovePart' AND error != 0 AND database = :database_name
+            GROUP BY table
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private final ConnectionFactory connectionFactory;
     private final String databaseName;
 
@@ -168,6 +280,59 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                             .flatMapIterable(stats -> stats);
                 })
                 .collectList();
+    }
+
+    @Override
+    public Mono<List<TieredReadStat>> getTieredReadStats(@NonNull Duration window) {
+        return queryWindow(TIERED_READ_STATS_SQL, "partition_metrics_tiered_read_stats", window,
+                (row, rowMetadata) -> TieredReadStat.builder()
+                        .table(unqualified(row.get("qualified_table", String.class)))
+                        .queries(row.get("queries", Long.class))
+                        .p99Millis(row.get("p99_ms", Long.class))
+                        .coldQueries(row.get("cold_queries", Long.class))
+                        .coldP99Millis(row.get("cold_p99_ms", Long.class))
+                        .build());
+    }
+
+    @Override
+    public Mono<List<TieredReadFailureStat>> getTieredReadFailures(@NonNull Duration window) {
+        return queryWindow(TIERED_READ_FAILURES_SQL, "partition_metrics_tiered_read_failures", window,
+                (row, rowMetadata) -> TieredReadFailureStat.builder()
+                        .table(unqualified(row.get("qualified_table", String.class)))
+                        .code(row.get("code", String.class))
+                        .failedQueries(row.get("failed_queries", Long.class))
+                        .build());
+    }
+
+    @Override
+    public Mono<List<MoveErrorStat>> getMoveErrors(@NonNull Duration window) {
+        return queryWindow(MOVE_ERRORS_SQL, "partition_metrics_move_errors", window,
+                (row, rowMetadata) -> MoveErrorStat.builder()
+                        .table(row.get("table_name", String.class))
+                        .moveErrors(row.get("move_errors", Long.class))
+                        .build());
+    }
+
+    private <T> Mono<List<T>> queryWindow(String sql, String logComment, Duration window,
+            BiFunction<Row, RowMetadata, T> mapper) {
+        String query = TemplateUtils.newST(sql)
+                .add("window", TemplateUtils.newST(WINDOW)
+                        .add("window_start", window.plus(LOG_FLUSH_LAG).toSeconds())
+                        .add("window_end", LOG_FLUSH_LAG.toSeconds())
+                        .render())
+                .add("log_comment", logComment)
+                .render();
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(query)
+                        .bind("database_name", databaseName)
+                        .execute())
+                .flatMap(result -> result.map(mapper))
+                .collectList();
+    }
+
+    /** {@code system.query_log} qualifies table names; the gauges use the bare name, as {@code system.parts} does. */
+    private static String unqualified(String qualifiedTable) {
+        return qualifiedTable.substring(qualifiedTable.indexOf('.') + 1);
     }
 
     private boolean isValidTable(String table) {

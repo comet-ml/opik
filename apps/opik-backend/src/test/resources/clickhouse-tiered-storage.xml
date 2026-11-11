@@ -1,0 +1,32 @@
+<clickhouse>
+    <!-- A cold tier without S3: a local blob store behind a filesystem cache, so it reports as an
+         ObjectStorage disk and reads through it count the CachedReadBuffer* profile events. Opt-in per suite. -->
+    <storage_configuration>
+        <disks>
+            <cold_blob>
+                <type>object_storage</type>
+                <object_storage_type>local_blob_storage</object_storage_type>
+                <metadata_type>local</metadata_type>
+                <path>/var/lib/clickhouse/disks/cold_blob/</path>
+            </cold_blob>
+            <cold>
+                <type>cache</type>
+                <disk>cold_blob</disk>
+                <path>/var/lib/clickhouse/disks/cold_cache/</path>
+                <max_size>100Mi</max_size>
+            </cold>
+        </disks>
+        <policies>
+            <tiered>
+                <volumes>
+                    <hot>
+                        <disk>default</disk>
+                    </hot>
+                    <cold>
+                        <disk>cold</disk>
+                    </cold>
+                </volumes>
+            </tiered>
+        </policies>
+    </storage_configuration>
+</clickhouse>

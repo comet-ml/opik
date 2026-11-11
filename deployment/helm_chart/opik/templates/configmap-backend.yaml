@@ -65,6 +65,7 @@ data:
         "PARTITION_METRICS_ENABLED" $pm.enabled
         "PARTITION_METRICS_INTERVAL" $pm.interval
         "PARTITION_METRICS_LWD_TABLES" $pm.lwdTables
+        "PARTITION_METRICS_TIERED_STORAGE_ENABLED" $pm.tieredStorageEnabled
       }}
   {{- if not (hasKey $env $k) }}
   {{ $k }}: {{ $v | quote }}
