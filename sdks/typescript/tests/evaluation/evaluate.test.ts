@@ -16,7 +16,7 @@ import {
   mockAPIFunctionWithStream,
 } from "../mockUtils";
 import { SpanType } from "@/rest_api/api";
-import { ExactMatch } from "opik";
+import { Contains, ExactMatch } from "opik";
 
 describe("evaluate function", () => {
   // Client and mocks
@@ -390,6 +390,43 @@ describe("evaluate function", () => {
     );
     expect(loggedScoreNames).toContain("test-metric");
     expect(loggedScoreNames).not.toContain("throwing-metric");
+  });
+
+  test("reports an empty Contains substring and uploads the successful metric only", async () => {
+    const getExperimentById = vi
+      .spyOn(opikClient.api.experiments, "getExperimentById")
+      .mockImplementation(() => {
+        throw new Error("The test should not look up the experiment name");
+      });
+    const result = await evaluate({
+      dataset: testDataset,
+      experimentName: "test-experiment",
+      task: async () => ({
+        output: "generated output",
+        expected: "generated output",
+        substring: "",
+      }),
+      scoringMetrics: [
+        new Contains("contains", false),
+        new ExactMatch("exact_match", false),
+      ],
+      client: opikClient,
+    });
+
+    expect(result.testResults[0].scoreResults).toEqual([
+      {
+        name: "contains",
+        value: 0,
+        reason: "substring must be a non-empty string",
+        scoringFailed: true,
+      },
+      expect.objectContaining({ name: "exact_match", value: 1 }),
+    ]);
+    const uploadedScoreNames = scoreBatchOfTracesSpy.mock.calls.flatMap((call) =>
+      call[0].scores.map((score) => score.name),
+    );
+    expect(uploadedScoreNames).toEqual(["exact_match"]);
+    expect(getExperimentById).not.toHaveBeenCalled();
   });
 
   test("should throw error when dataset is missing", async () => {

@@ -24,6 +24,79 @@ describe("ExactMatch Metric", () => {
     expect(result.value).toBe(0.0);
   });
 
+  it("should compare strings case-insensitively when configured", async () => {
+    const ignoreCase = new ExactMatch("exact_match", false, false);
+    const result = await ignoreCase.score({
+      output: "Hello",
+      expected: "hello",
+    });
+    expect(result.value).toBe(1.0);
+  });
+
+  it("should match object values regardless of key order", async () => {
+    const result = await exactMatch.score({
+      output: { answer: "Paris", citations: ["1", "2"] },
+      expected: { citations: ["1", "2"], answer: "Paris" },
+    });
+    expect(result.value).toBe(1.0);
+  });
+
+  it("should apply the configured string comparison inside arrays and objects", async () => {
+    const ignoreCase = new ExactMatch("exact_match", false, false);
+    const input = {
+      output: [{ answer: "Paris" }],
+      expected: [{ answer: "PARIS" }],
+    };
+    expect((await exactMatch.score(input)).value).toBe(0.0);
+    expect((await ignoreCase.score(input)).value).toBe(1.0);
+  });
+
+  it.each([
+    { output: ["a", "b"], expected: ["b", "a"] },
+    { output: ["a"], expected: { 0: "a" } },
+    { output: { a: 1 }, expected: '{"a":1}' },
+    { output: 1, expected: "1" },
+    { output: true, expected: 1 },
+  ])(
+    "should distinguish values with different order or types (%#)",
+    async (input) => {
+      expect((await exactMatch.score(input)).value).toBe(0.0);
+    },
+  );
+
+  it("should preserve reference comparison for cyclic and non-plain objects", async () => {
+    const output: { self?: unknown } = {};
+    output.self = output;
+    const expected: { self?: unknown } = {};
+    expected.self = expected;
+    expect((await exactMatch.score({ output, expected })).value).toBe(0.0);
+    expect((await exactMatch.score({ output, expected: output })).value).toBe(
+      1.0,
+    );
+    expect(
+      (await exactMatch.score({ output: new Date(0), expected: new Date(0) }))
+        .value,
+    ).toBe(0.0);
+  });
+
+  it("should compare deeply nested JSON without exhausting the stack", async () => {
+    const json = "[".repeat(4000) + '"value"' + "]".repeat(4000);
+    const result = await exactMatch.score({
+      output: JSON.parse(json),
+      expected: JSON.parse(json),
+    });
+    expect(result.value).toBe(1.0);
+  });
+
+  it("should compare a shared subobject each time it appears", async () => {
+    const shared = { answer: "Paris" };
+    const result = await exactMatch.score({
+      output: [shared, shared],
+      expected: [{ answer: "Paris" }, { answer: "Paris" }],
+    });
+    expect(result.value).toBe(1.0);
+  });
+
   it("should handle empty strings correctly", async () => {
     const emptyResult = await exactMatch.score({ output: "", expected: "" });
     expect(emptyResult.value).toBe(1.0);

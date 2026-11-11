@@ -8,17 +8,97 @@ const validationSchema = z.object({
 });
 type Input = z.infer<typeof validationSchema>;
 
+function isComparableContainer(
+  value: unknown,
+): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return (
+    Array.isArray(value) || prototype === Object.prototype || prototype === null
+  );
+}
+
+type Comparison = { output: unknown; expected: unknown } | { exit: object };
+
+function valuesMatch(
+  output: unknown,
+  expected: unknown,
+  caseSensitive: boolean,
+): boolean {
+  const pending: Comparison[] = [{ output, expected }];
+  const ancestors = new WeakSet<object>();
+
+  for (
+    let comparison = pending.pop();
+    comparison !== undefined;
+    comparison = pending.pop()
+  ) {
+    if ("exit" in comparison) {
+      ancestors.delete(comparison.exit);
+      continue;
+    }
+
+    const { output, expected } = comparison;
+    if (output === expected) {
+      continue;
+    }
+
+    if (
+      !caseSensitive &&
+      typeof output === "string" &&
+      typeof expected === "string" &&
+      output.toLowerCase() === expected.toLowerCase()
+    ) {
+      continue;
+    }
+
+    if (
+      !isComparableContainer(output) ||
+      !isComparableContainer(expected) ||
+      Array.isArray(output) !== Array.isArray(expected) ||
+      (Array.isArray(output) && output.length !== expected.length) ||
+      ancestors.has(output)
+    ) {
+      return false;
+    }
+
+    const keys = Object.keys(output);
+    if (keys.length !== Object.keys(expected).length) {
+      return false;
+    }
+
+    // Release each ancestor after its children so shared values can be compared again.
+    ancestors.add(output);
+    pending.push({ exit: output });
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(expected, key)) {
+        return false;
+      }
+      pending.push({ output: output[key], expected: expected[key] });
+    }
+  }
+
+  return true;
+}
+
 /**
- * ExactMatch metric - checks if the actual output exactly matches the expected output.
- * Simple metric for exact string matching.
+ * Checks whether two values match, comparing arrays and plain objects by content.
  */
 export class ExactMatch extends BaseMetric {
   /**
    * Creates a new ExactMatch metric
    * @param name Optional name for the metric (defaults to "exact_match")
    * @param trackMetric Whether to track the metric
+   * @param caseSensitive Whether strings, including nested values, are matched case-sensitively (defaults to true)
    */
-  constructor(name = "exact_match", trackMetric = true) {
+  constructor(
+    name = "exact_match",
+    trackMetric = true,
+    private readonly caseSensitive = true,
+  ) {
     super(name, trackMetric);
   }
 
@@ -31,7 +111,7 @@ export class ExactMatch extends BaseMetric {
    */
   async score(input: Input): Promise<EvaluationScoreResult> {
     const { output, expected } = input;
-    const score = output === expected ? 1.0 : 0.0;
+    const score = valuesMatch(output, expected, this.caseSensitive) ? 1.0 : 0.0;
 
     return {
       name: this.name,
