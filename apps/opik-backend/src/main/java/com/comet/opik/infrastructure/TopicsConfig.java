@@ -88,7 +88,7 @@ public class TopicsConfig {
         private Duration longWindow;
 
         /**
-         * How often the long-window pass starts. A pass stays on, tick after tick, until one of its ticks drains it;
+         * How often the long-window pass starts. A pass stays on, every second tick, until one of its ticks drains it;
          * this interval runs from that tick.
          */
         @NotNull @JsonProperty

@@ -35,6 +35,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -68,6 +69,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -1113,6 +1115,170 @@ class TopicVectorsTickServiceTest {
                     Duration.ofDays(1));
             return on.findUnvectored(workspaceId, TopicVectorsTickService.TASK, lowerBound, start, createdAfter,
                     limit, maxExecutionSeconds);
+        }
+    }
+
+    /**
+     * The long-window pass's pace over several ticks. The lock service is a fake that keeps each key until its TTL
+     * runs out on the test clock, as Redis does, so the ticks decide "due" by the TTLs they really set.
+     */
+    @Nested
+    @DisplayName("long-window pace")
+    class LongWindowPace {
+
+        private static final Duration INTERVAL = Duration.ofMinutes(1);
+
+        private TopicsConfig config;
+        private TestClock clock;
+        private TopicVectorsTickService service;
+        private final Map<String, Instant> lockedUntil = new HashMap<>();
+        private final List<Duration> windowsRead = new ArrayList<>();
+        // What the next window reads answer, and how long each embed call takes.
+        private int unvectored;
+        private Duration embedTime = Duration.ZERO;
+
+        @BeforeEach
+        void setUp() {
+            config = TestConfigUtils.loadConfigTest().getTopics();
+            var dao = mock(TopicVectorsDAO.class);
+            var client = mock(InferenceClient.class);
+            var lockService = mock(LockService.class);
+            var workspaces = mock(TopicWorkspaceService.class);
+            var registry = mock(AiLabelTaskRegistry.class);
+            clock = new TestClock(NOW);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, lockService,
+                    registry, names(), new TestMeter().meter, clock);
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
+            // SET NX PX and DEL on the test clock: any lock and TTL, because the TTLs are what the tests are about.
+            when(lockService.lockUsingToken(any(LockService.Lock.class), any(Duration.class)))
+                    .thenAnswer(invocation -> {
+                        LockService.Lock lock = invocation.getArgument(0);
+                        Duration ttl = invocation.getArgument(1);
+                        assertThat(ttl).isPositive();
+                        var until = lockedUntil.get(lock.key());
+                        if (until != null && until.isAfter(clock.instant())) {
+                            return Mono.just(false);
+                        }
+                        lockedUntil.put(lock.key(), clock.instant().plus(ttl));
+                        return Mono.just(true);
+                    });
+            when(lockService.unlockUsingToken(any(LockService.Lock.class))).thenAnswer(invocation -> {
+                LockService.Lock lock = invocation.getArgument(0);
+                lockedUntil.remove(lock.key());
+                return Mono.empty();
+            });
+            // Every read answers the same backlog and records its window, so this takes any bounds.
+            when(dao.findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), any(Instant.class),
+                    any(Instant.class), any(Instant.class), anyInt(), anyLong())).thenAnswer(invocation -> {
+                        Instant lowerBound = invocation.getArgument(2);
+                        Instant upperBound = invocation.getArgument(3);
+                        windowsRead.add(Duration.between(lowerBound, upperBound));
+                        return Flux.fromStream(IntStream.range(0, unvectored)
+                                .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, upperBound.minusSeconds(60))));
+                    });
+            when(dao.findSummaries(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                    .thenAnswer(invocation -> {
+                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                        return Flux.fromIterable(keys).map(key -> TopicSummary.builder().projectId(key.projectId())
+                                .traceId(key.traceId()).taskVersion(1).summary("intent of " + key.traceId()).build());
+                    });
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                clock.advance(embedTime);
+                return Mono.just(embedded(request.inputs()));
+            });
+            when(dao.insert(anyList())).thenAnswer(invocation -> {
+                List<TopicVector> rows = invocation.getArgument(0);
+                return Mono.just((long) rows.size());
+            });
+            when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                    .thenAnswer(invocation -> {
+                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                        return Flux.fromIterable(keys);
+                    });
+        }
+
+        // The tick lock lasts 59 s and each pod fires at its own second, so ticks are 59 to 61 s apart.
+        @ParameterizedTest(name = "ticks {0} s apart")
+        @ValueSource(longs = {59, 60, 61})
+        @DisplayName("a pass that uses its whole budget and does not drain runs again after one short-window tick")
+        void budgetBoundPassEverySecondTick(long gapSeconds) {
+            // More than a tick embeds: 10 s per call and a 10 s embed timeout fill the 50 s budget with 5 calls.
+            unvectored = config.getVectors().getMaxTracesPerTick();
+            embedTime = EMBED_TIMEOUT;
+            var gap = Duration.ofSeconds(gapSeconds);
+
+            var first = tickAt(NOW);
+            assertThat(first.longWindowPass()).isTrue();
+            assertThat(first.written()).isEqualTo(5 * 256);
+            assertThat(clock.instant()).isEqualTo(NOW.plusSeconds(BUDGET_SECONDS));
+
+            assertThat(tickAt(NOW.plus(gap)).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(2))).longWindowPass()).isTrue();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(3))).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(4))).longWindowPass()).isTrue();
+            assertThat(windowsRead)
+                    .containsExactly(LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW);
+        }
+
+        @ParameterizedTest(name = "ticks {0} s apart")
+        @ValueSource(longs = {59, 60, 61})
+        @DisplayName("a pass that ends fast and does not drain runs again after one short-window tick")
+        void fastPassEverySecondTick(long gapSeconds) {
+            // At the cap, so not drained; the embed calls take no time.
+            config.getVectors().setMaxTracesPerTick(2);
+            unvectored = 2;
+            var gap = Duration.ofSeconds(gapSeconds);
+
+            assertThat(tickAt(NOW).longWindowPass()).isTrue();
+            assertThat(clock.instant()).isEqualTo(NOW);
+
+            assertThat(tickAt(NOW.plus(gap)).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(2))).longWindowPass()).isTrue();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(3))).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(4))).longWindowPass()).isTrue();
+            assertThat(windowsRead)
+                    .containsExactly(LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW);
+        }
+
+        @Test
+        @DisplayName("a drained pass is not due again until longWindowInterval after the tick that drained it")
+        void drainedPassWaitsForTheInterval() {
+            // Under the cap and embedded in one 10 s call: drained at NOW + 10 s.
+            unvectored = 1;
+            embedTime = EMBED_TIMEOUT;
+            var drainedAt = NOW.plus(EMBED_TIMEOUT);
+            var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
+
+            assertThat(tickAt(NOW).longWindowPass()).isTrue();
+            assertThat(clock.instant()).isEqualTo(drainedAt);
+
+            assertThat(tickAt(NOW.plus(INTERVAL)).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(INTERVAL.multipliedBy(2))).longWindowPass()).isFalse();
+            assertThat(tickAt(drainedAt.plus(interval).minusSeconds(1)).longWindowPass()).isFalse();
+            assertThat(tickAt(drainedAt.plus(interval)).longWindowPass()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a pass that ends after its not-due time is due at the next tick")
+        void overrunPassIsDueAtTheNextTick() {
+            // One embed call that returns 95 s after the tick started: past 1.5 tick intervals, and the tick one
+            // interval after the start could not run, because this one held the leader lock.
+            config.getVectors().setMaxTracesPerTick(2);
+            unvectored = 2;
+            embedTime = Duration.ofSeconds(95);
+
+            assertThat(tickAt(NOW).longWindowPass()).isTrue();
+
+            embedTime = Duration.ZERO;
+            assertThat(tickAt(NOW.plus(INTERVAL.multipliedBy(2))).longWindowPass()).isTrue();
+        }
+
+        /** Moves the clock to {@code start}, as the job does when a pod's trigger fires, and runs the tick. */
+        private TopicVectorsTickService.TickResult tickAt(Instant start) {
+            clock.advance(Duration.between(clock.instant(), start));
+            return service.tick(start);
         }
     }
 

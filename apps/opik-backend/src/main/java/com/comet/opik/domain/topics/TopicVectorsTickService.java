@@ -60,7 +60,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * <p>Nothing is kept between ticks: each reads the done statuses written in a window, less the keys already in
  * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader change loses nothing.
  * Once per {@code longWindowInterval} the window is the long one (or the backfill window), which picks up rows the short
- * window missed; the pass stays on, tick after tick, until one of its ticks drains it. Work per tick is bounded per
+ * window missed; the pass stays on, every second tick, until one of its ticks drains it. Work per tick is bounded per
  * workspace by {@code maxTracesPerTick}, oldest first, and in total by the tick budget; what is left is found again by
  * the next tick. Workspaces are visited from an offset that moves every tick, so none is always last.
  */
@@ -82,8 +82,9 @@ public class TopicVectorsTickService {
 
     /**
      * Present while the long-window pass is not due. A tick that finds it absent sets it for one lease and runs the
-     * pass; when the pass drains, the tick sets it again for {@code longWindowInterval}, otherwise it deletes it so the
-     * next tick runs the pass again. A leader that dies mid-pass leaves it to expire with its lease.
+     * pass. When the pass drains, the tick sets it again for {@code longWindowInterval}; otherwise it sets it to expire
+     * 1.5 tick intervals after the tick started, so the next tick is a normal one and the one after runs the pass
+     * again. A leader that dies mid-pass leaves it to expire with its lease.
      */
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
     // The insert after the last embed call, which has no deadline of its own, and the status check after it, which has
@@ -286,7 +287,7 @@ public class TopicVectorsTickService {
         var lowerBound = lowerBound(earliestAppliesFrom(task), start, window);
         if (lowerBound.isAfter(start)) {
             if (longWindowPass) {
-                finishLongWindow(true);
+                finishLongWindow(start, true);
             }
             return TickResult.builder().skipped(Map.of()).longWindowPass(longWindowPass).build();
         }
@@ -299,7 +300,7 @@ public class TopicVectorsTickService {
         var missedBefore = longWindowPass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
         timed("embed", () -> embedAndWrite(found.candidates(), deadline, missedBefore, tally));
         if (longWindowPass) {
-            finishLongWindow(found.complete() && !tally.cut);
+            finishLongWindow(start, found.complete() && !tally.cut);
         }
         return TickResult.builder().written(tally.written).skipped(tally.skipped).longWindowPass(longWindowPass)
                 .build();
@@ -322,18 +323,30 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Drained: the pass is not due again for {@code longWindowInterval}. Otherwise it is due again after one normal
-     * tick: until a long-window tick reads every workspace, finds fewer than the cap in each, and leaves nothing for
-     * want of time, a read, a back-off or an insert. The normal tick in between keeps the short window served when the
-     * pass can't drain, for example when one workspace's long read fails every time.
+     * Drained: the pass is not due again for {@code longWindowInterval}, counted from now, the end of the tick that
+     * drained it. A pass is drained when its tick read every workspace, found fewer than the cap in each, and left
+     * nothing for want of time, a read, a back-off or an insert.
+     *
+     * <p>Not drained: the pass is not due until 1.5 tick intervals after this tick's {@code start}, so it runs every
+     * second tick. It is counted from the start, not from now, so the pace is the same for a tick that ends at once and
+     * for one that uses its whole budget. Ticks start 59 to 61 s apart at the default interval (each pod fires at its
+     * own second, and the job's tick lock lasts one interval less a second): the next one starts before the 1.5
+     * intervals are over and reads the short window, the one after starts past them and runs the pass. That normal
+     * tick in between keeps the short window served when the pass can't drain, for example when one workspace's long
+     * read fails every time. A tick that ends past the 1.5 intervals leaves the pass due at once: it held the leader
+     * lock, so no tick ran in between.
      */
-    private void finishLongWindow(boolean drained) {
+    private void finishLongWindow(Instant start, boolean drained) {
         var vectors = config.getVectors();
         var notDueFor = drained
                 ? vectors.getLongWindowInterval().toJavaDuration()
-                : vectors.getTickInterval().toJavaDuration().multipliedBy(3).dividedBy(2);
-        var finish = lockService.unlockUsingToken(LONG_WINDOW_LOCK)
-                .then(lockService.lockUsingToken(LONG_WINDOW_LOCK, notDueFor));
+                : Duration.between(clock.instant(),
+                        start.plus(vectors.getTickInterval().toJavaDuration().multipliedBy(3).dividedBy(2)));
+        var finish = lockService.unlockUsingToken(LONG_WINDOW_LOCK);
+        // Redis takes a TTL in whole milliseconds, above zero.
+        if (notDueFor.toMillis() > 0) {
+            finish = finish.then(lockService.lockUsingToken(LONG_WINDOW_LOCK, notDueFor)).then();
+        }
         try {
             finish.block();
         } catch (RuntimeException exception) {

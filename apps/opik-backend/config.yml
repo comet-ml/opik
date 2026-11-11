@@ -2664,7 +2664,7 @@ topics:
     #  Description: The window of the long-window pass, for rows the short window missed. At least window
     longWindow: ${TOPICS_VECTORS_LONG_WINDOW:-7d}
     #  Default: 1d
-    #  Description: How often the long-window pass starts (a cluster-wide Redis lock). The pass stays on, tick after
+    #  Description: How often the long-window pass starts (a cluster-wide Redis lock). The pass stays on, every second
     #  tick, until one of its ticks drains it (every workspace read, each under maxTracesPerTick, nothing left for want
     #  of time, a read, a back-off or an insert); the interval runs from that tick. At most 7d
     longWindowInterval: ${TOPICS_VECTORS_LONG_WINDOW_INTERVAL:-1d}
