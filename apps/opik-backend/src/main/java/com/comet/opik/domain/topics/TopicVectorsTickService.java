@@ -616,6 +616,8 @@ public class TopicVectorsTickService {
         var callDeadline = clock.instant().plus(config.getVectors().getEmbedTimeout().toJavaDuration());
         var request = EmbedRequest.builder()
                 .orgId(workspaceId)
+                // opik-inference's own default for embed: vectors are large and a summary is embedded once, so a cached
+                // answer would only take cache space.
                 .cache(false)
                 .inputs(chunk.stream().map(Pending::text).toList())
                 .build();
