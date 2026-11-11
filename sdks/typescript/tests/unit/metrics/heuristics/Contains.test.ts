@@ -30,9 +30,14 @@ describe("Contains Metric", () => {
     it.each(["", null])(
       "should reject invalid substring %s clearly",
       async (substring) => {
-        await expect(
-          contains.score({ output: "test", substring: substring as string }),
-        ).rejects.toThrow("substring must be a non-empty string");
+        const result = contains.score({
+          output: "test",
+          substring: substring as string,
+        });
+        await expect(result).rejects.toThrow(TypeError);
+        await expect(result).rejects.toThrow(
+          /^substring must be a non-empty string$/,
+        );
       },
     );
   });

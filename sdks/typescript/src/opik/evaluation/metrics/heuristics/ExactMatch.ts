@@ -10,7 +10,7 @@ type Input = z.infer<typeof validationSchema>;
 
 function isComparableContainer(
   value: unknown,
-): value is Record<string, unknown> {
+): value is Record<PropertyKey, unknown> {
   if (value === null || typeof value !== "object") {
     return false;
   }
@@ -18,6 +18,12 @@ function isComparableContainer(
   const prototype = Object.getPrototypeOf(value);
   return (
     Array.isArray(value) || prototype === Object.prototype || prototype === null
+  );
+}
+
+function enumerableOwnKeys(value: object): (string | symbol)[] {
+  return Reflect.ownKeys(value).filter((key) =>
+    Object.prototype.propertyIsEnumerable.call(value, key),
   );
 }
 
@@ -65,8 +71,8 @@ function valuesMatch(
       return false;
     }
 
-    const keys = Object.keys(output);
-    if (keys.length !== Object.keys(expected).length) {
+    const keys = enumerableOwnKeys(output);
+    if (keys.length !== enumerableOwnKeys(expected).length) {
       return false;
     }
 
@@ -74,7 +80,7 @@ function valuesMatch(
     ancestors.add(output);
     pending.push({ exit: output });
     for (const key of keys) {
-      if (!Object.prototype.hasOwnProperty.call(expected, key)) {
+      if (!Object.prototype.propertyIsEnumerable.call(expected, key)) {
         return false;
       }
       pending.push({ output: output[key], expected: expected[key] });
@@ -85,7 +91,8 @@ function valuesMatch(
 }
 
 /**
- * Checks whether two values match, comparing arrays and plain objects by content.
+ * Checks whether two values match. Arrays and plain objects are compared by
+ * their own enumerable properties, including symbol keys.
  */
 export class ExactMatch extends BaseMetric {
   /**

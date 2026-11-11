@@ -41,6 +41,34 @@ describe("ExactMatch Metric", () => {
     expect(result.value).toBe(1.0);
   });
 
+  describe("own enumerable symbol properties", () => {
+    const key = Symbol("answer");
+    const otherKey = Symbol("answer");
+    const hidden = Object.defineProperty({}, key, { value: 1 });
+
+    it.each([
+      [
+        "nested matching values",
+        { [key]: { value: 1 } },
+        { [key]: { value: 1 } },
+        1,
+      ],
+      ["different values", { [key]: 1 }, { [key]: 2 }, 0],
+      ["a missing key", { [key]: 1 }, {}, 0],
+      ["different key identities", { [key]: 1 }, { [otherKey]: 1 }, 0],
+      ["a non-enumerable key", hidden, {}, 1],
+      [
+        "different enumerable keys",
+        { [key]: 1 },
+        Object.defineProperty({ [otherKey]: 1 }, key, { value: 1 }),
+        0,
+      ],
+      ["different array properties", Object.assign([1], { [key]: 1 }), [1], 0],
+    ] as const)("should compare %s", async (_label, output, expected, value) => {
+      expect((await exactMatch.score({ output, expected })).value).toBe(value);
+    });
+  });
+
   it("should apply the configured string comparison inside arrays and objects", async () => {
     const ignoreCase = new ExactMatch("exact_match", false, false);
     const input = {
