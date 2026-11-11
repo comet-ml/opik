@@ -90,6 +90,7 @@ import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ailabels.AiLabelTaskLoader.CLASSPATH_DIRECTORY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -99,7 +100,10 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -187,13 +191,16 @@ class TopicVectorsTickTest {
     private LockService lockService;
     private AiLabelTaskRegistry taskRegistry;
     private TopicWorkspaceService workspaceService;
+    private TopicVectorBackfillService backfillService;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
             @Jit LockService lockService, GuiceJobManager jobManager, EventBus eventBus,
             @Jit TopicVectorsTickService tickService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO, @Jit InferenceClient inferenceClient,
-            @Jit AiLabelTaskRegistry taskRegistry, @Jit TopicWorkspaceService workspaceService) {
+            @Jit AiLabelTaskRegistry taskRegistry, @Jit TopicWorkspaceService workspaceService,
+            @Jit TopicVectorBackfillService backfillService) {
+        this.backfillService = backfillService;
         this.inferenceClient = inferenceClient;
         this.workspaceService = workspaceService;
         this.lockService = lockService;
@@ -378,7 +385,8 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a status older than the short window is found only by the tick on which the long-window pass is due")
+    @DisplayName("a drained project's status older than the short window is found only by the tick on which the daily "
+            + "long-window pass is due")
     void longWindowPass() {
         // Wait for a tick that runs the pass, so the next one certainly doesn't.
         makeLongWindowPassDue();
@@ -389,6 +397,8 @@ class TopicVectorsTickTest {
         var projectId = ID_GENERATOR.generateId();
         labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
         insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(2, ChronoUnit.DAYS));
+        // Not drained, the project would be the backfill phase's, on any tick.
+        markDrained(workspaceId, projectId);
 
         var normal = tickService.tick(Instant.now());
 
@@ -403,6 +413,107 @@ class TopicVectorsTickTest {
                     assertThat(result.written()).isOne();
                 });
         assertVectors(vectors(workspaceId, List.of(traceId)), List.of(vector(workspaceId, projectId, traceId, 1)));
+    }
+
+    @Test
+    @DisplayName("a workspace's old traces are embedded project by project in one tick, and each project is marked "
+            + "drained with its counts")
+    void backfillByProject() {
+        var workspaceId = enabledWorkspace();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
+        var firstTraces = IntStream.range(0, 3).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        var secondTraces = IntStream.range(0, 2).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        var written = Instant.now().minus(2, ChronoUnit.DAYS);
+        Map.of(first, firstTraces, second, secondTraces).forEach((projectId, traceIds) -> {
+            labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, 1))
+                    .toList()).block();
+            traceIds.forEach(traceId -> insertStatusAt(workspaceId, projectId, traceId, 1, written));
+        });
+
+        var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var result = tickService.tick(start);
+
+        assertThat(result.longWindowPass()).isFalse();
+        assertThat(result.written()).isEqualTo(5);
+        assertThat(result.projectsDrained()).isEqualTo(2);
+        assertVectors(vectors(workspaceId, firstTraces), expectedVectors(workspaceId, first, firstTraces, 1));
+        assertVectors(vectors(workspaceId, secondTraces), expectedVectors(workspaceId, second, secondTraces, 1));
+        var rows = backfillService.findByKeys(workspaceId, List.of(first, second));
+        assertThat(rows.get(first)).usingRecursiveComparison().ignoringFields("lastDoneAt")
+                .isEqualTo(TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(first).startedAt(start)
+                        .checkedAt(start).drainedAt(start).lastDoneAt(start).tracesTotal(3).tracesDone(3).build());
+        assertThat(rows.get(second).drainedAt()).isEqualTo(start);
+        assertThat(rows.get(second).tracesTotal()).isEqualTo(2);
+        assertThat(rows.get(second).tracesDone()).isEqualTo(2);
+        assertThat(rows.get(first).lastDoneAt()).isCloseTo(written, within(1, ChronoUnit.SECONDS));
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+
+        // Drained: a new trace of the project is the next tick's workspace read's.
+        var later = labelTraces(workspaceId, first, 1, 1);
+        var next = tickService.tick(Instant.now());
+        assertThat(next.written()).isOne();
+        assertThat(next.projectsDrained()).isZero();
+        assertThat(vectors(workspaceId, later)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("the backfill table: a started row is not started again, a discovery keeps a row's start and drained "
+            + "mark, progress never passes the total, and rows not checked for long start again")
+    void backfillTable() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
+        var third = ID_GENERATOR.generateId();
+        var t0 = Instant.parse("2026-11-01T10:00:00.123456Z");
+        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        backfillService.start(List.of(row.projectId(first).build(), row.projectId(second).build()));
+        backfillService.start(List.of(row.projectId(first).startedAt(t0.plusSeconds(60)).build()));
+        var t1 = t0.plusSeconds(100);
+        backfillService.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId)
+                .projectId(first).drainedAt(t1).written(5).build()));
+
+        var started = backfillService.findByKeys(workspaceId, List.of(first, second, third));
+        // Never discovered, so its total is 0 and nothing written counts yet.
+        assertThat(started).isEqualTo(Map.of(
+                first, row.projectId(first).startedAt(t0).drainedAt(t1).build(),
+                second, row.projectId(second).startedAt(t0).drainedAt(null).build()));
+        assertThat(backfillService.findUndrained(List.of(workspaceId)))
+                .isEqualTo(Map.of(workspaceId, List.of(started.get(second))));
+
+        var t2 = t0.plusSeconds(200);
+        var t3 = t0.plusSeconds(300);
+        var found = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t3).checkedAt(t3);
+        backfillService.discovered(workspaceId, List.of(
+                found.projectId(first).lastDoneAt(t2).tracesTotal(10).tracesDone(4).build(),
+                found.projectId(third).lastDoneAt(t2).tracesTotal(7).tracesDone(0).build()), t3, t0.minusSeconds(1));
+        var progress = TopicVectorBackfill.Progress.builder().workspaceId(workspaceId).projectId(third).written(5)
+                .build();
+        backfillService.record(List.of(progress, progress));
+
+        assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
+                // Its start and drained mark are kept; the counts and the latest status are the discovery's.
+                first, found.projectId(first).startedAt(t0).drainedAt(t1).lastDoneAt(t2).tracesTotal(10)
+                        .tracesDone(4).build(),
+                // Not found by the discovery, but checked with its workspace.
+                second, row.projectId(second).startedAt(t0).checkedAt(t3).drainedAt(null).build(),
+                // New: starts a backfill. 5 + 5 written of 7.
+                third, found.projectId(third).startedAt(t3).drainedAt(null).lastDoneAt(t2).tracesTotal(7)
+                        .tracesDone(7).build()));
+
+        // The tick comes back long after t3: every row starts again.
+        var t4 = t3.plus(3, ChronoUnit.DAYS);
+        backfillService.discovered(workspaceId, List.of(), t4, t4.minus(2, ChronoUnit.DAYS));
+
+        var all = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorBackfillDAO.class).findByWorkspaceIds(List.of(workspaceId)));
+        assertThat(all).hasSize(3).allSatisfy(reset -> {
+            assertThat(reset.startedAt()).isEqualTo(t4);
+            assertThat(reset.checkedAt()).isEqualTo(t4);
+            assertThat(reset.drainedAt()).isNull();
+            assertThat(reset.tracesTotal()).isZero();
+            assertThat(reset.tracesDone()).isZero();
+        });
     }
 
     @Test
@@ -435,7 +546,8 @@ class TopicVectorsTickTest {
         embedStub.delay = Duration.ofSeconds(3);
         var meter = new TopicVectorsTickServiceTest.TestMeter();
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
-                vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
+                vectorsDAO, backfillService, inferenceClient, lockService, taskRegistry,
+                TopicVectorsTickServiceTest.names(),
                 meter.meter, Clock.systemUTC());
 
         var result = metered.tick(Instant.now());
@@ -454,14 +566,15 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("the find guards reach the window read: max_rows_to_read 1 trips it, counted as a find read failure; "
-            + "the default reads it")
+    @DisplayName("the find guards reach the discovery and the window read: max_rows_to_read 1 trips both, counted as "
+            + "a discover and a find read failure; the default reads them")
     void findGuardsReachTheWindowRead() {
         var workspaceId = enabledWorkspace();
         labelTraces(workspaceId, 3, 1);
         var meter = new TopicVectorsTickServiceTest.TestMeter();
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
-                vectorsDAO, inferenceClient, lockService, taskRegistry, TopicVectorsTickServiceTest.names(),
+                vectorsDAO, backfillService, inferenceClient, lockService, taskRegistry,
+                TopicVectorsTickServiceTest.names(),
                 meter.meter, Clock.systemUTC());
         var find = config().getFind();
         var maxRowsToRead = find.getMaxRowsToRead();
@@ -481,8 +594,9 @@ class TopicVectorsTickTest {
         assertThat(tripped.written()).isZero();
         assertThat(countRows(workspaceId)).isZero();
         var attributes = ArgumentCaptor.forClass(Attributes.class);
-        verify(meter.counter("topics.vectors.read.failures")).add(eq(1L), attributes.capture());
-        assertThat(attributes.getValue().get(stringKey("phase"))).isEqualTo("find");
+        verify(meter.counter("topics.vectors.read.failures"), times(2)).add(eq(1L), attributes.capture());
+        assertThat(attributes.getAllValues()).extracting(values -> values.get(stringKey("phase")))
+                .containsExactly("discover", "find");
         assertThat(attributes.getValue().get(stringKey("workspace_id"))).isEqualTo(workspaceId);
         assertThat(attributes.getValue().get(stringKey("workspace_name"))).isEqualTo("name-" + workspaceId);
         assertThat(attributes.getValue().get(stringKey("error_type"))).isNotBlank();
@@ -602,7 +716,7 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("the long-window pass stays on while its ticks reach the cap, and stops once one finds fewer")
+    @DisplayName("the daily long-window pass stays on while its ticks reach the cap, and stops once one finds fewer")
     void longWindowUntilDrained() {
         // Drain any pass in progress, and wait for a pass to be due, so the next tick is a long one.
         makeLongWindowPassDue();
@@ -618,6 +732,8 @@ class TopicVectorsTickTest {
             insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
                     Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
         }
+        // A drained project: its old statuses are the daily pass's, not the backfill phase's.
+        markDrained(workspaceId, projectId);
         Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(500))
                 .until(() -> !tickService.tick(Instant.now()).longWindowPass());
 
@@ -958,6 +1074,137 @@ class TopicVectorsTickTest {
          * Whole candidates, in any order, but {@code statusUpdatedAt}: ClickHouse stamps {@code updated_at} when
          * {@link AiLabelStatusDAO#insert} writes the status.
          */
+        @Test
+        @DisplayName("the window read in slices of trace creation time, per project or without some projects, finds "
+                + "exactly what one read of the window finds: a trace on a slice edge, an old trace with a late "
+                + "status and a trace that has its vector included")
+        void slicedReadEqualsUnsliced() {
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var projects = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
+            var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            var slice = Duration.ofDays(1);
+            var createdAfter = now.minus(10, ChronoUnit.DAYS);
+            // Every status is written now, so a trace created days ago has a late status.
+            var createdAts = List.of(
+                    now.minus(12, ChronoUnit.HOURS),
+                    // Exactly on the edge of the first two slices, and a microsecond on its older side.
+                    now.minus(slice),
+                    now.minus(slice).minus(1, ChronoUnit.MICROS),
+                    now.minus(5, ChronoUnit.DAYS),
+                    now.minus(5, ChronoUnit.DAYS).plusSeconds(1),
+                    // Exactly on the window's bound, which is inclusive, and just outside it.
+                    createdAfter,
+                    createdAfter.minus(1, ChronoUnit.MICROS));
+            var created = new java.util.HashMap<UUID, Instant>();
+            for (var projectId : projects) {
+                var statuses = new ArrayList<AiLabelStatus>();
+                for (var createdAt : createdAts) {
+                    var traceId = ID_GENERATOR.generateId();
+                    created.put(traceId, createdAt);
+                    statuses.add(doneStatus(workspaceId, projectId, traceId, 1).toBuilder().traceCreatedAt(createdAt)
+                            .build());
+                }
+                labelsDAO.insert(statuses.stream()
+                        .map(status -> outputLabel(workspaceId, projectId, status.traceId(), 1)).toList()).block();
+                statusDAO.insert(statuses).block();
+                // One trace of the project, five days old, already has its vector.
+                var vectored = statuses.get(3);
+                vectorsDAO.insert(List.of(vector(workspaceId, projectId, vectored.traceId(), 1).toBuilder()
+                        .traceCreatedAt(vectored.traceCreatedAt()).build())).block();
+                created.remove(vectored.traceId());
+            }
+            var lower = now.minus(1, ChronoUnit.HOURS);
+            var upper = Instant.now();
+
+            var unsliced = vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, createdAfter, 100, 10)
+                    .collectList().block();
+
+            // Per project: 7 traces, less the one with a vector and the one before the bound.
+            assertThat(unsliced).hasSize(10);
+            assertThat(unsliced).extracting(TopicVectorCandidate::traceId).doesNotHaveDuplicates()
+                    .allSatisfy(traceId -> assertThat(created.get(traceId)).isAfterOrEqualTo(createdAfter));
+            var byKey = Comparator.comparing(TopicVectorCandidate::projectId)
+                    .thenComparing(TopicVectorCandidate::traceId);
+            var expected = unsliced.stream().sorted(byKey).toList();
+
+            assertThat(
+                    sliced(workspaceId, null, List.of(), lower, upper, now, createdAfter, slice).stream().sorted(byKey))
+                    .containsExactlyElementsOf(expected);
+            // Each project on its own, in slices and in one read.
+            for (var projectId : projects) {
+                var ofProject = expected.stream().filter(candidate -> candidate.projectId().equals(projectId))
+                        .toList();
+                assertThat(sliced(workspaceId, projectId, List.of(), lower, upper, now, createdAfter, slice).stream()
+                        .sorted(byKey)).containsExactlyElementsOf(ofProject);
+                assertThat(vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, createdAfter, null, projectId,
+                        List.of(), 100, 10).collectList().block().stream().sorted(byKey))
+                        .containsExactlyElementsOf(ofProject);
+            }
+            // Without the second project: the first project's.
+            assertThat(sliced(workspaceId, null, List.of(projects.get(1)), lower, upper, now, createdAfter, slice)
+                    .stream().sorted(byKey))
+                    .containsExactlyElementsOf(expected.stream()
+                            .filter(candidate -> candidate.projectId().equals(projects.get(0))).toList());
+        }
+
+        @Test
+        @DisplayName("the discovery finds each project's done status rows of the window and its latest one, and the "
+                + "vector count its vector rows; a failed status and a tombstoned vector are not counted")
+        void discoveryAggregates() {
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var first = ID_GENERATOR.generateId();
+            var second = ID_GENERATOR.generateId();
+            var firstTraces = IntStream.range(0, 3).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+            var secondTraces = IntStream.range(0, 2).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+            var before = Instant.now().minusSeconds(1);
+            statusDAO.insert(firstTraces.stream().map(traceId -> doneStatus(workspaceId, first, traceId, 1)).toList())
+                    .block();
+            statusDAO.insert(List.of(
+                    doneStatus(workspaceId, second, secondTraces.get(0), 1),
+                    doneStatus(workspaceId, second, secondTraces.get(1), 1).toBuilder()
+                            .status(AiLabelStatus.Status.FAILED).build()))
+                    .block();
+            vectorsDAO.insert(List.of(vector(workspaceId, first, firstTraces.get(0), 1),
+                    vector(workspaceId, first, firstTraces.get(1), 1),
+                    vector(workspaceId, second, secondTraces.get(0), 1))).block();
+            insertTombstone(workspaceId, secondTraces.get(0), 1);
+            var lower = Instant.now().minus(2, ChronoUnit.HOURS);
+
+            var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
+                    .collectList().block();
+            var vectors = vectorsDAO.countVectorsByProject(workspaceId, lower, 10).block();
+
+            assertThat(found).extracting(TopicBackfillProject::projectId, TopicBackfillProject::traces)
+                    .containsExactlyInAnyOrder(tuple(first, 3L), tuple(second, 1L));
+            assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
+                    Instant.now().plusSeconds(1)));
+            assertThat(vectors.get(first)).isEqualTo(2);
+            // The tombstone row is not counted; the row it replaces still is, until ClickHouse merges them.
+            assertThat(vectors.get(second)).isEqualTo(1);
+            // A window that starts after the traces were created counts none of them, but still finds the projects.
+            assertThat(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, lower.minus(8, ChronoUnit.DAYS), 10)
+                    .collectList().block())
+                    .extracting(TopicBackfillProject::projectId, TopicBackfillProject::traces)
+                    .containsExactlyInAnyOrder(tuple(first, 0L), tuple(second, 0L));
+        }
+
+        /** The window read as the tick walks it: slices counted back from {@code start}, the newest open-ended. */
+        private List<TopicVectorCandidate> sliced(String workspaceId, UUID projectId, List<UUID> excluded,
+                Instant lower, Instant upper, Instant start, Instant createdAfter, Duration slice) {
+            var candidates = new ArrayList<TopicVectorCandidate>();
+            Instant createdBefore = null;
+            while (true) {
+                var sliceStart = (createdBefore == null ? start : createdBefore).minus(slice);
+                var from = sliceStart.isAfter(createdAfter) ? sliceStart : createdAfter;
+                candidates.addAll(vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, from, createdBefore,
+                        projectId, excluded, 100, 10).collectList().block());
+                if (!from.isAfter(createdAfter)) {
+                    return candidates;
+                }
+                createdBefore = from;
+            }
+        }
+
         private void assertCandidates(List<TopicVectorCandidate> actual, TopicVectorCandidate... expected) {
             assertThat(actual).usingRecursiveFieldByFieldElementComparatorIgnoringFields("statusUpdatedAt")
                     .containsExactlyInAnyOrder(expected);
@@ -1086,6 +1333,15 @@ class TopicVectorsTickTest {
 
     private String enabledWorkspace() {
         return workspaceWith(true, true);
+    }
+
+    /** Gives the project a drained backfill row, as a project whose backfill ended earlier has. */
+    private void markDrained(String workspaceId, UUID projectId) {
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        backfillService.start(List.of(TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(projectId)
+                .startedAt(now).checkedAt(now).lastDoneAt(now).build()));
+        backfillService.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId)
+                .projectId(projectId).drainedAt(now).build()));
     }
 
     /** Enabled in ai_label_workspaces or not, and listed in topics.enabledWorkspaces or not. */

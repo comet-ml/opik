@@ -181,15 +181,16 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration window;
 
-        /** The window of the pass run once per {@code longWindowInterval}, for rows the short window missed. */
+        /** The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
         private Duration longWindow;
 
         /**
-         * How often the long-window pass starts. A pass stays on, tick after tick, until one of its ticks drains it;
-         * this interval runs from that tick.
+         * How often the daily long-window pass starts. A pass stays on, every second tick, until one of its ticks drains
+         * it; this interval runs from that tick. Also how often the tick discovers each workspace's projects for the
+         * backfill.
          */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
@@ -197,15 +198,18 @@ public class TopicsConfig {
         private Duration longWindowInterval;
 
         /**
-         * When above zero, the long-window pass uses this window instead of {@code longWindow}, to catch up after a late
-         * start or a re-enabled workspace. 0 is off. The find cost grows with it.
+         * When above zero, the backfill phase and the daily pass use this window instead of {@code longWindow}, to embed
+         * the traces summarised before topics were enabled. 0 is off.
          */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration backfillWindow;
 
-        /** The most traces one tick embeds per workspace, oldest first; the tick budget bounds the total. */
+        /**
+         * The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project in the
+         * backfill phase; the tick budget bounds the total.
+         */
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick;
 
@@ -282,5 +286,14 @@ public class TopicsConfig {
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration createdAtSlack;
+
+        /**
+         * The daily pass, and the backfill of a large project, read their window in slices of this much trace creation
+         * time, one query each, so a query's rows and memory follow the slice and not the window.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration sliceSize;
     }
 }

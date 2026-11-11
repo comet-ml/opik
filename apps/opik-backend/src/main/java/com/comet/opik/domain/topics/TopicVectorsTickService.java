@@ -33,6 +33,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -43,6 +44,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -55,14 +58,31 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries with {@code /v1/embed} and
- * store the unit-length vectors in {@code topic_vectors}. Runs on the leader only.
+ * store the unit-length vectors in {@code topic_vectors}. Runs on the leader only. A tick has three parts:
+ * <ul>
+ * <li>The fresh phase, every tick: per workspace, one read of the done statuses written in {@code window} (24h), all
+ * its drained projects together, up to {@code maxTracesPerTick}, oldest first. It keeps new traces served.</li>
+ * <li>The backfill phase, every tick, with the budget the fresh phase left: the projects not drained yet, one at a
+ * time. A project's read covers the long window (or the backfill window) and only that project, so it follows the
+ * tables' sort keys; a large project is read in {@code find.sliceSize} slices of trace creation time, the newest
+ * first. A project whose read finds fewer than {@code maxTracesPerTick} traces, all embedded, is marked drained in
+ * {@code topic_vector_backfills}, and the tick goes on to the next one. Workspaces take turns, one project each; a
+ * workspace's projects go in {@link TopicVectorBackfill#backfillOrder}.</li>
+ * <li>The daily pass, once per {@code longWindowInterval}, in place of that tick's fresh read: the same read over the
+ * long window, in slices, for rows the fresh phase missed. Until one of its ticks drains it, it runs every second
+ * tick.</li>
+ * </ul>
+ * The fresh phase and the daily pass leave out the projects not drained yet, and the backfill phase reads only those,
+ * so a trace is embedded by one phase in a tick, and a project's backlog is never embedded mixed with the others'. A
+ * project the fresh phase sees for the first time gets its row there and its traces go to the backfill phase of the
+ * same tick. About once per {@code longWindowInterval} per workspace, the tick discovers the projects with done
+ * statuses in the long window, with two plain aggregates, and creates or refreshes their rows.
  *
- * <p>Nothing is kept between ticks: each reads the done statuses written in a window, less the keys already in
+ * <p>ClickHouse alone says which traces have no vector: every read is the done statuses less the keys already in
  * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader change loses nothing.
- * Once per {@code longWindowInterval} the window is the long one (or the backfill window), which picks up rows the short
- * window missed; the pass stays on, tick after tick, until one of its ticks drains it. Work per tick is bounded per
- * workspace by {@code maxTracesPerTick}, oldest first, and in total by the tick budget; what is left is found again by
- * the next tick. Workspaces are visited from an offset that moves every tick, so none is always last.
+ * The rows in MySQL only say which projects the backfill still has to read. Work per tick is bounded per read by
+ * {@code maxTracesPerTick} and in total by the tick budget; what is left is found again by the next tick. Workspaces
+ * are visited from an offset that moves every tick, so none is always last.
  */
 @Slf4j
 @Singleton
@@ -81,9 +101,27 @@ public class TopicVectorsTickService {
     static final String TRACE_DELETED = "trace_deleted";
 
     /**
-     * Present while the long-window pass is not due. A tick that finds it absent sets it for one lease and runs the
-     * pass; when the pass drains, the tick sets it again for {@code longWindowInterval}, otherwise it deletes it so the
-     * next tick runs the pass again. A leader that dies mid-pass leaves it to expire with its lease.
+     * The most undrained projects a workspace's fresh read or daily pass leaves out by id: the ids go into the query
+     * text, about 40 bytes each. A workspace with more is not read by those two until its backfill brings it under.
+     */
+    static final int MAX_EXCLUDED_PROJECTS = 2_000;
+    /** The most workspaces whose projects one tick discovers, so a new leader's first ticks still serve traces. */
+    static final int MAX_DISCOVERIES_PER_TICK = 5;
+    /**
+     * A project with at most this many traces in the backfill window, as discovered ({@code traces_total}), is read in
+     * one query over the whole window; a larger one in {@code find.sliceSize} slices. Measured on ClickHouse 26.3 with
+     * the real DDL, 100 projects in a workspace and a 30d window: one read of a project costs about 0.45 KB of memory
+     * and 6 rows read per trace (224k traces: 98 MB, 1.3M rows, 0.3 s; 1.2M traces: 447 MB, 5.8M rows, 1.6 s), while a
+     * one-day slice of the 1.2M-trace project costs 23 MB. At this value one read stays near 110 MB and 1.5M rows, an
+     * eighth of the default {@code find.maxMemoryUsage}, which leaves room for the count being approximate.
+     */
+    static final long ONE_SLICE_MAX_TRACES = 250_000;
+
+    /**
+     * Present while the daily long-window pass is not due. A tick that finds it absent sets it for one lease and runs the
+     * pass. When the pass drains, the tick sets it again for {@code longWindowInterval}; otherwise it sets it to expire
+     * 1.5 tick intervals after the tick started, so the next tick is a normal one and the one after runs the pass
+     * again. A leader that dies mid-pass leaves it to expire with its lease.
      */
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
     // The insert after the last embed call, which has no deadline of its own, and the status check after it, which has
@@ -96,6 +134,7 @@ public class TopicVectorsTickService {
     private final AiLabelsConfig aiLabelsConfig;
     private final TopicWorkspaceService workspaces;
     private final TopicVectorsDAO dao;
+    private final TopicVectorBackfillService backfills;
     private final InferenceClient client;
     private final LockService lockService;
     private final AiLabelTaskRegistry registry;
@@ -107,6 +146,13 @@ public class TopicVectorsTickService {
      * leader ticks, so on any other pod it is null or goes stale; a stale one is not published.
      */
     private volatile OldestSnapshot lastOldest;
+    /** Per workspace, the projects not drained after this pod's latest tick; published like {@link #lastOldest}. */
+    private volatile UndrainedSnapshot lastUndrained;
+    /**
+     * When this pod last discovered each workspace's projects. Only a hint for when to discover again: a new leader
+     * starts empty and discovers every workspace once more, which changes no row's {@code drained_at}.
+     */
+    private final Map<String, Instant> discoveredAt = new ConcurrentHashMap<>();
 
     private final LongCounter written;
     private final LongCounter skipped;
@@ -117,9 +163,18 @@ public class TopicVectorsTickService {
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
 
-    /** What one tick did: the vectors it wrote, the traces it skipped by reason, and whether it used the long window. */
+    /**
+     * What one tick did: the vectors it wrote, the traces it skipped by reason, whether its workspace reads were the
+     * daily long-window pass, and the projects its backfill phase drained.
+     */
     @Builder(toBuilder = true)
-    record TickResult(int written, @NonNull Map<String, Integer> skipped, boolean longWindowPass) {
+    record TickResult(int written, @NonNull Map<String, Integer> skipped, boolean longWindowPass,
+            int projectsDrained) {
+
+        TickResult(int written, Map<String, Integer> skipped, boolean longWindowPass) {
+            this(written, skipped, longWindowPass, 0);
+        }
+
         TickResult {
             skipped = Map.copyOf(skipped);
         }
@@ -135,11 +190,30 @@ public class TopicVectorsTickService {
     private record Oldest(@NonNull String workspaceName, @NonNull Instant statusAt) {
     }
 
+    private record UndrainedSnapshot(@NonNull Instant at, @NonNull Map<String, Undrained> undrained) {
+    }
+
+    /** One workspace's projects not drained yet: how many, and when the oldest of their backfills started. */
+    private record Undrained(@NonNull String workspaceName, int projects, @Nullable Instant oldestStartedAt) {
+    }
+
     /**
-     * The window read's outcome: the candidates, each workspace's oldest first, in visiting order, and whether it saw
-     * everything in the window: every workspace read and none at its cap.
+     * The workspace reads' outcome: the candidates, in visiting order, and whether they saw everything in the window:
+     * every workspace read and none at its cap.
      */
     private record Found(@NonNull List<TopicVectorCandidate> candidates, boolean complete) {
+    }
+
+    /**
+     * One window read, of a workspace or of a project: the candidates, the newest slice's first and each slice's
+     * oldest first, and whether the read saw the whole window: every slice read, under the cap in all.
+     */
+    private record WindowRead(@NonNull List<TopicVectorCandidate> candidates, boolean complete) {
+    }
+
+    /** The bounds every window read of a tick has in common. */
+    private record Window(@NonNull Instant lowerBound, @NonNull Instant createdAfter, @NonNull Instant start,
+            @NonNull Instant deadline) {
     }
 
     /**
@@ -151,8 +225,10 @@ public class TopicVectorsTickService {
         // Looked up once per tick, before the workspace's window read, so no later step waits on the name service.
         private final Map<String, String> names = new HashMap<>();
         private int written;
-        // Candidates were left for the next tick for want of time, a read, a back-off or an insert.
-        private boolean cut;
+        // How many times candidates were left for the next tick for want of time, a read, a back-off or an insert.
+        private int cuts;
+        // The workspaces an embed call backed off for: not called again this tick, in either phase.
+        private final Set<String> backedOff = new HashSet<>();
 
         String name(String workspaceId) {
             return names.computeIfAbsent(workspaceId, workspaceNames::name);
@@ -173,7 +249,9 @@ public class TopicVectorsTickService {
 
         void cut(String workspaceId, String reason, int traces) {
             skip(workspaceId, reason, traces);
-            cut = cut || traces > 0;
+            if (traces > 0) {
+                cuts++;
+            }
         }
 
         void written(String workspaceId, int rows) {
@@ -195,20 +273,23 @@ public class TopicVectorsTickService {
     @Inject
     public TopicVectorsTickService(@NonNull @Config("topics") TopicsConfig config,
             @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig, @NonNull TopicWorkspaceService workspaces,
-            @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client, @NonNull LockService lockService,
+            @NonNull TopicVectorsDAO dao, @NonNull TopicVectorBackfillService backfills,
+            @NonNull InferenceClient client, @NonNull LockService lockService,
             @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames) {
-        this(config, aiLabelsConfig, workspaces, dao, client, lockService, registry, workspaceNames,
+        this(config, aiLabelsConfig, workspaces, dao, backfills, client, lockService, registry, workspaceNames,
                 GlobalOpenTelemetry.get().getMeter("opik.topics"), Clock.systemUTC());
     }
 
     TopicVectorsTickService(@NonNull TopicsConfig config, @NonNull AiLabelsConfig aiLabelsConfig,
-            @NonNull TopicWorkspaceService workspaces, @NonNull TopicVectorsDAO dao, @NonNull InferenceClient client,
+            @NonNull TopicWorkspaceService workspaces, @NonNull TopicVectorsDAO dao,
+            @NonNull TopicVectorBackfillService backfills, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry,
             @NonNull TopicsWorkspaceNames workspaceNames, @NonNull Meter meter, @NonNull Clock clock) {
         this.config = config;
         this.aiLabelsConfig = aiLabelsConfig;
         this.workspaces = workspaces;
         this.dao = dao;
+        this.backfills = backfills;
         this.client = client;
         this.lockService = lockService;
         this.registry = registry;
@@ -216,15 +297,37 @@ public class TopicVectorsTickService {
         this.clock = clock;
 
         meter.gaugeBuilder("topics.vectors.oldest_unvectored_seconds").setUnit("s")
-                .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, as the "
-                        + "latest tick's window found it; 0 with none. Published only by the pod that ticked within "
-                        + "two tick intervals; a workspace whose read failed or was not reached has no value")
-                .buildWithCallback(measurement -> fresh(clock.instant())
+                .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, among "
+                        + "the projects whose backfill has drained, as the latest tick's workspace read found it; 0 "
+                        + "with none. Projects still in backfill are not in it: see topics.vectors.backfill.*. "
+                        + "Published only by the pod that ticked within two tick intervals; a workspace whose read "
+                        + "failed or was not reached has no value")
+                .buildWithCallback(measurement -> fresh(lastOldest, OldestSnapshot::at)
                         .ifPresent(snapshot -> {
                             var now = clock.instant();
                             snapshot.oldest().forEach((workspaceId, oldest) -> measurement.record(
                                     oldest.statusAt().equals(Instant.MAX) ? 0 : seconds(oldest.statusAt(), now),
                                     TopicsWorkspaceNames.builder(workspaceId, oldest.workspaceName()).build()));
+                        }));
+        meter.gaugeBuilder("topics.vectors.backfill.undrained_projects")
+                .setDescription("Projects whose backfill has not drained, per enabled workspace, after the latest "
+                        + "tick. Published only by the pod that ticked within two tick intervals")
+                .buildWithCallback(measurement -> fresh(lastUndrained, UndrainedSnapshot::at)
+                        .ifPresent(snapshot -> snapshot.undrained().forEach((workspaceId, undrained) -> measurement
+                                .record(undrained.projects(),
+                                        TopicsWorkspaceNames.builder(workspaceId, undrained.workspaceName())
+                                                .build()))));
+        meter.gaugeBuilder("topics.vectors.backfill.oldest_started_seconds").setUnit("s")
+                .setDescription("Age of the oldest backfill not drained yet, per enabled workspace, from its "
+                        + "started_at; 0 with none. Published only by the pod that ticked within two tick intervals")
+                .buildWithCallback(measurement -> fresh(lastUndrained, UndrainedSnapshot::at)
+                        .ifPresent(snapshot -> {
+                            var now = clock.instant();
+                            snapshot.undrained().forEach((workspaceId, undrained) -> measurement.record(
+                                    undrained.oldestStartedAt() == null
+                                            ? 0
+                                            : seconds(undrained.oldestStartedAt(), now),
+                                    TopicsWorkspaceNames.builder(workspaceId, undrained.workspaceName()).build()));
                         }));
         this.written = meter.counterBuilder("topics.vectors.written")
                 .setDescription("Vectors written to topic_vectors, by workspace")
@@ -238,8 +341,9 @@ public class TopicVectorsTickService {
                         + "workspace")
                 .build();
         this.readFailures = meter.counterBuilder("topics.vectors.read.failures")
-                .setDescription("ClickHouse reads that failed, by phase: find (one workspace's window read) or "
-                        + "summaries (one workspace's summary read), workspace and error type")
+                .setDescription("Reads that failed, by phase: find (one workspace's window read), summaries (one "
+                        + "summary read), discover (one workspace's project discovery) or backfill (one project's "
+                        + "window read), workspace and error type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read")
                 .setDescription("Enabled workspaces a tick did not read because its budget ran out, by workspace; "
@@ -253,7 +357,7 @@ public class TopicVectorsTickService {
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
-                .setDescription("Duration of each tick phase: find, embed")
+                .setDescription("Duration of each tick phase: discover, find, embed, backfill")
                 .build();
     }
 
@@ -282,27 +386,38 @@ public class TopicVectorsTickService {
         var task = registry.find(TASK)
                 .orElseThrow(() -> new IllegalStateException("ai-labels has no task '%s'".formatted(TASK)));
         boolean longWindowPass = startLongWindowIfDue();
-        var window = (longWindowPass ? longWindow(vectors) : vectors.getWindow()).toJavaDuration();
-        var lowerBound = lowerBound(earliestAppliesFrom(task), start, window);
+        var appliesFrom = earliestAppliesFrom(task);
+        var lowerBound = lowerBound(appliesFrom, start,
+                (longWindowPass ? longWindow(vectors) : vectors.getWindow()).toJavaDuration());
         if (lowerBound.isAfter(start)) {
             if (longWindowPass) {
-                finishLongWindow(true);
+                finishLongWindow(start, true);
             }
             return TickResult.builder().skipped(Map.of()).longWindowPass(longWindowPass).build();
         }
-        var createdAfter = createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
-                vectors.getFind().getCreatedAtSlack().toJavaDuration());
+        var horizon = aiLabelsConfig.getHorizon().toJavaDuration();
+        var slack = vectors.getFind().getCreatedAtSlack().toJavaDuration();
+        var window = new Window(lowerBound, createdAfter(lowerBound, horizon, slack), start, deadline);
+        var backfillLowerBound = lowerBound(appliesFrom, start, longWindow(vectors).toJavaDuration());
+        var backfillWindow = new Window(backfillLowerBound, createdAfter(backfillLowerBound, horizon, slack), start,
+                deadline);
 
         var tally = new Tally();
-        var found = timed("find", () -> find(start, lowerBound, createdAfter, deadline, tally));
+        var workspaceIds = rotated(workspaces.eligibleWorkspaceIds(), tickSequence(start));
+        timed("discover", () -> discover(workspaceIds, backfillWindow, tally));
+        // Mutable: the fresh phase adds the projects it sees for the first time.
+        var undrained = new HashMap<String, List<TopicVectorBackfill>>(backfills.findUndrained(workspaceIds));
+        var found = timed("find", () -> find(workspaceIds, window, longWindowPass, undrained, tally));
         // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
         var missedBefore = longWindowPass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
         timed("embed", () -> embedAndWrite(found.candidates(), deadline, missedBefore, tally));
         if (longWindowPass) {
-            finishLongWindow(found.complete() && !tally.cut);
+            finishLongWindow(start, found.complete() && tally.cuts == 0);
         }
+        var drained = timed("backfill", () -> backfill(workspaceIds, undrained, backfillWindow, tally));
+        lastUndrained = undrainedSnapshot(workspaceIds, undrained, drained, tally);
         return TickResult.builder().written(tally.written).skipped(tally.skipped).longWindowPass(longWindowPass)
-                .build();
+                .projectsDrained(drained.size()).build();
     }
 
     /** The long-window pass's window: the backfill window when one is set, else {@code longWindow}. */
@@ -310,7 +425,7 @@ public class TopicVectorsTickService {
         return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 
-    /** True when the long-window pass is due; it is then held by this tick for one lease. Redis down: not due. */
+    /** True when the daily pass is due; it is then held by this tick for one lease. Redis down: not due. */
     private boolean startLongWindowIfDue() {
         return lockService.lockUsingToken(LONG_WINDOW_LOCK, leaderLease())
                 .onErrorResume(error -> {
@@ -322,18 +437,30 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Drained: the pass is not due again for {@code longWindowInterval}. Otherwise it is due again after one normal
-     * tick: until a long-window tick reads every workspace, finds fewer than the cap in each, and leaves nothing for
-     * want of time, a read, a back-off or an insert. The normal tick in between keeps the short window served when the
-     * pass can't drain, for example when one workspace's long read fails every time.
+     * Drained: the pass is not due again for {@code longWindowInterval}, counted from now, the end of the tick that
+     * drained it. A pass is drained when its tick read every workspace, found fewer than the cap in each, and left
+     * nothing for want of time, a read, a back-off or an insert.
+     *
+     * <p>Not drained: the pass is not due until 1.5 tick intervals after this tick's {@code start}, so it runs every
+     * second tick. It is counted from the start, not from now, so the pace is the same for a tick that ends at once and
+     * for one that uses its whole budget. Ticks start 59 to 61 s apart at the default interval (each pod fires at its
+     * own second, and the job's tick lock lasts one interval less a second): the next one starts before the 1.5
+     * intervals are over and reads the short window, the one after starts past them and runs the pass. That normal
+     * tick in between keeps the short window served when the pass can't drain, for example when one workspace's long
+     * read fails every time. A tick that ends past the 1.5 intervals leaves the pass due at once: it held the leader
+     * lock, so no tick ran in between.
      */
-    private void finishLongWindow(boolean drained) {
+    private void finishLongWindow(Instant start, boolean drained) {
         var vectors = config.getVectors();
         var notDueFor = drained
                 ? vectors.getLongWindowInterval().toJavaDuration()
-                : vectors.getTickInterval().toJavaDuration().multipliedBy(3).dividedBy(2);
-        var finish = lockService.unlockUsingToken(LONG_WINDOW_LOCK)
-                .then(lockService.lockUsingToken(LONG_WINDOW_LOCK, notDueFor));
+                : Duration.between(clock.instant(),
+                        start.plus(vectors.getTickInterval().toJavaDuration().multipliedBy(3).dividedBy(2)));
+        var finish = lockService.unlockUsingToken(LONG_WINDOW_LOCK);
+        // Redis takes a TTL in whole milliseconds, above zero.
+        if (notDueFor.toMillis() > 0) {
+            finish = finish.then(lockService.lockUsingToken(LONG_WINDOW_LOCK, notDueFor)).then();
+        }
         try {
             finish.block();
         } catch (RuntimeException exception) {
@@ -345,21 +472,74 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Per enabled workspace, from a rotating offset, the oldest {@code maxTracesPerTick} candidates of its window. A
-     * workspace whose read fails, or isn't reached before the deadline, is read again next tick. Each workspace's name
-     * is resolved before its read; one not reached is counted with the name this pod already knows, so the name
-     * service can hold the tick past its deadline by at most one lookup.
+     * Discovers the projects of the workspaces due for it: never discovered by this pod, or not for
+     * {@code longWindowInterval}. Per workspace, two plain aggregates over the backfill window: the projects with done
+     * statuses, and their vector counts. A new project gets a row, an existing one its new counts; a workspace's rows
+     * not checked for twice the interval start again, because the tick did not run for it meanwhile. A failed
+     * discovery is tried again next tick. A workspace no longer eligible is forgotten, so one enabled again is
+     * discovered at its first tick.
      */
-    private Found find(Instant start, Instant lowerBound, Instant createdAfter, Instant deadline, Tally tally) {
+    private void discover(List<String> workspaceIds, Window window, Tally tally) {
+        discoveredAt.keySet().retainAll(new HashSet<>(workspaceIds));
+        var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
+        int discovered = 0;
+        for (var workspaceId : workspaceIds) {
+            var last = discoveredAt.get(workspaceId);
+            if (last != null && Duration.between(last, window.start()).compareTo(interval) < 0) {
+                continue;
+            }
+            var left = Duration.between(clock.instant(), window.deadline());
+            if (discovered == MAX_DISCOVERIES_PER_TICK || left.compareTo(MIN_READ_TIME) < 0) {
+                return;
+            }
+            discovered++;
+            try {
+                var projects = dao.findBackfillProjects(workspaceId, TASK, window.lowerBound(),
+                        window.createdAfter(), maxExecutionSeconds(left)).collectList().block();
+                var vectors = dao.countVectorsByProject(workspaceId, window.lowerBound(),
+                        secondsLeft(window.deadline())).block();
+                var rows = projects.stream()
+                        .map(project -> TopicVectorBackfill.builder()
+                                .workspaceId(workspaceId)
+                                .projectId(project.projectId())
+                                .startedAt(window.start())
+                                .checkedAt(window.start())
+                                .lastDoneAt(project.lastDoneAt())
+                                .tracesTotal(project.traces())
+                                .tracesDone(Math.min(project.traces(),
+                                        vectors.getOrDefault(project.projectId(), 0L)))
+                                .build())
+                        .toList();
+                backfills.discovered(workspaceId, rows, window.start(),
+                        window.start().minus(interval.multipliedBy(2)));
+                discoveredAt.put(workspaceId, window.start());
+            } catch (RuntimeException exception) {
+                rethrowIfInterrupted(exception);
+                countReadFailure("discover", workspaceId, tally, exception);
+                log.warn("Topic vectors project discovery failed, workspace '{}'; trying again next tick",
+                        workspaceId, exception);
+            }
+        }
+    }
+
+    /**
+     * Per enabled workspace, from a rotating offset, up to {@code maxTracesPerTick} candidates of its window, of the
+     * projects whose backfill has drained: the fresh phase's read, or the daily pass's sliced one. A workspace whose
+     * read fails, or isn't reached before the deadline, is read again next tick. Each workspace's name is resolved
+     * before its read; one not reached is counted with the name this pod already knows, so the name service can hold
+     * the tick past its deadline by at most one lookup.
+     */
+    private Found find(List<String> workspaceIds, Window window, boolean longWindowPass,
+            Map<String, List<TopicVectorBackfill>> undrained, Tally tally) {
         int limit = config.getVectors().getMaxTracesPerTick();
-        var workspaceIds = rotated(workspaces.eligibleWorkspaceIds(), tickSequence(start));
+        var sliceSize = longWindowPass ? config.getVectors().getFind().getSliceSize().toJavaDuration() : null;
         var oldest = new LinkedHashMap<String, Oldest>();
         var found = new ArrayList<TopicVectorCandidate>();
         boolean complete = true;
         for (int i = 0; i < workspaceIds.size(); i++) {
             var workspaceId = workspaceIds.get(i);
             var workspaceName = tally.name(workspaceId);
-            var left = Duration.between(clock.instant(), deadline);
+            var left = Duration.between(clock.instant(), window.deadline());
             if (left.compareTo(MIN_READ_TIME) < 0) {
                 complete = false;
                 var notRead = workspaceIds.subList(i, workspaceIds.size());
@@ -369,13 +549,22 @@ public class TopicVectorsTickService {
                         notRead.size(), workspaceIds.size());
                 break;
             }
+            var excluded = undrained.getOrDefault(workspaceId, List.of()).stream()
+                    .map(TopicVectorBackfill::projectId).toList();
+            if (excluded.size() > MAX_EXCLUDED_PROJECTS) {
+                // Its traces are the backfill phase's for now; it does not hold the daily pass.
+                log.info("Topic vectors workspace read skipped, workspace '{}' has '{}' projects in backfill",
+                        workspaceId, excluded.size());
+                continue;
+            }
             try {
-                var candidates = dao.findUnvectored(workspaceId, TASK, lowerBound, start, createdAfter, limit,
-                        maxExecutionSeconds(left)).collectList().block();
-                oldest.put(workspaceId, new Oldest(workspaceName,
-                        candidates.isEmpty() ? Instant.MAX : candidates.getFirst().statusUpdatedAt()));
-                found.addAll(candidates);
-                complete = complete && candidates.size() < limit;
+                var read = readWindow(workspaceId, null, excluded, window, sliceSize, limit);
+                var served = withoutNewProjects(workspaceId, read.candidates(), window.start(), undrained);
+                oldest.put(workspaceId, new Oldest(workspaceName, served.stream()
+                        .map(TopicVectorCandidate::statusUpdatedAt).min(Comparator.naturalOrder())
+                        .orElse(Instant.MAX)));
+                found.addAll(served);
+                complete = complete && read.complete();
             } catch (RuntimeException exception) {
                 rethrowIfInterrupted(exception);
                 complete = false;
@@ -386,6 +575,184 @@ public class TopicVectorsTickService {
         }
         lastOldest = new OldestSnapshot(clock.instant(), Map.copyOf(oldest));
         return new Found(List.copyOf(found), complete);
+    }
+
+    /**
+     * One window read, of the workspace or of one project. Without a slice size it is one query. With one, the
+     * window's traces are read by creation time in half-open slices of that size, counted back from the tick's start,
+     * the newest first and without an upper bound, down to the window's {@code createdAfter}: every trace is in exactly
+     * one slice, and each query's cost follows its slice, not the window. A window no longer than a slice is one query
+     * too. The read stops at {@code limit} candidates or when the tick has no time for another query; it is complete
+     * when it read every slice and found fewer than {@code limit}.
+     */
+    private WindowRead readWindow(String workspaceId, @Nullable UUID projectId, List<UUID> excludedProjectIds,
+            Window window, @Nullable Duration sliceSize, int limit) {
+        var candidates = new ArrayList<TopicVectorCandidate>();
+        Instant createdBefore = null;
+        while (true) {
+            var left = Duration.between(clock.instant(), window.deadline());
+            if (left.compareTo(MIN_READ_TIME) < 0) {
+                return new WindowRead(candidates, false);
+            }
+            var sliceStart = sliceSize == null
+                    ? window.createdAfter()
+                    : Optional.ofNullable(createdBefore).orElse(window.start()).minus(sliceSize);
+            var createdAfter = sliceStart.isAfter(window.createdAfter()) ? sliceStart : window.createdAfter();
+            int remaining = limit - candidates.size();
+            // The plain read when nothing narrows it: the fresh phase's query stays as it was measured.
+            var slice = createdBefore == null && projectId == null && excludedProjectIds.isEmpty()
+                    ? dao.findUnvectored(workspaceId, TASK, window.lowerBound(), window.start(), createdAfter,
+                            remaining, maxExecutionSeconds(left))
+                    : dao.findUnvectored(workspaceId, TASK, window.lowerBound(), window.start(), createdAfter,
+                            createdBefore, projectId, excludedProjectIds, remaining, maxExecutionSeconds(left));
+            var rows = slice.collectList().block();
+            candidates.addAll(rows);
+            if (rows.size() >= remaining) {
+                return new WindowRead(candidates, false);
+            }
+            if (!createdAfter.isAfter(window.createdAfter())) {
+                return new WindowRead(candidates, true);
+            }
+            createdBefore = createdAfter;
+        }
+    }
+
+    /**
+     * A workspace read's candidates without those of projects that have no drained row. Such a project is new to the
+     * tick: it gets a row, not drained, and its traces are left to the backfill phase of this tick, which reads the
+     * project's whole window.
+     */
+    private List<TopicVectorCandidate> withoutNewProjects(String workspaceId, List<TopicVectorCandidate> candidates,
+            Instant start, Map<String, List<TopicVectorBackfill>> undrained) {
+        if (candidates.isEmpty()) {
+            return candidates;
+        }
+        var lastDone = candidates.stream().collect(Collectors.toMap(TopicVectorCandidate::projectId,
+                TopicVectorCandidate::statusUpdatedAt, (a, b) -> a.isAfter(b) ? a : b, LinkedHashMap::new));
+        var known = backfills.findByKeys(workspaceId, lastDone.keySet());
+        var started = lastDone.entrySet().stream()
+                .filter(entry -> !known.containsKey(entry.getKey()))
+                .map(entry -> TopicVectorBackfill.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(entry.getKey())
+                        .startedAt(start)
+                        .checkedAt(start)
+                        .lastDoneAt(entry.getValue())
+                        .build())
+                .toList();
+        if (!started.isEmpty()) {
+            backfills.start(started);
+            undrained.computeIfAbsent(workspaceId, id -> new ArrayList<>()).addAll(started);
+            log.info("Topic vectors backfill started for new projects, workspace '{}', projects '{}'", workspaceId,
+                    started.size());
+        }
+        return candidates.stream()
+                .filter(candidate -> Optional.ofNullable(known.get(candidate.projectId()))
+                        .map(TopicVectorBackfill::drainedAt).isPresent())
+                .toList();
+    }
+
+    /**
+     * The backfill phase: the projects not drained yet, one at a time, while the tick has time for an embed call.
+     * Workspaces take turns in the tick's visiting order, one project each, so a workspace with many projects does not
+     * hold the others; a workspace's projects go in {@link TopicVectorBackfill#backfillOrder}. A workspace an embed
+     * call backed off for is left for the next tick. Returns the keys of the projects drained; they and the vectors
+     * written are recorded in one write, and a failed write only means the projects are read again next tick.
+     */
+    private Set<TopicVectorBackfill> backfill(List<String> workspaceIds,
+            Map<String, List<TopicVectorBackfill>> undrained, Window window, Tally tally) {
+        var order = TopicVectorBackfill.backfillOrder(config.getVectors().getMaxTracesPerTick());
+        var queues = new LinkedHashMap<String, ArrayDeque<TopicVectorBackfill>>();
+        for (var workspaceId : workspaceIds) {
+            var projects = undrained.getOrDefault(workspaceId, List.of());
+            if (!projects.isEmpty()) {
+                queues.put(workspaceId, projects.stream().sorted(order)
+                        .collect(Collectors.toCollection(ArrayDeque::new)));
+            }
+        }
+        var progress = new ArrayList<TopicVectorBackfill.Progress>();
+        var drained = new HashSet<TopicVectorBackfill>();
+        boolean any = !queues.isEmpty();
+        while (any && hasTimeForChunk(window.deadline())) {
+            any = false;
+            for (var entry : queues.entrySet()) {
+                var project = entry.getValue().poll();
+                if (project == null || tally.backedOff.contains(entry.getKey())) {
+                    continue;
+                }
+                if (!hasTimeForChunk(window.deadline())) {
+                    break;
+                }
+                any = true;
+                backfillProject(project, window, tally).ifPresent(done -> {
+                    progress.add(done);
+                    if (done.drainedAt() != null) {
+                        drained.add(project);
+                    }
+                });
+            }
+        }
+        try {
+            backfills.record(progress);
+        } catch (RuntimeException exception) {
+            rethrowIfInterrupted(exception);
+            log.warn("Topic vectors backfill progress not recorded, projects '{}'; reading them again next tick",
+                    progress.size(), exception);
+            return Set.of();
+        }
+        return drained;
+    }
+
+    /**
+     * One project's turn: read its window, embed, write. The project is drained when the read was complete and none of
+     * its candidates were left for want of time, a read, a back-off or an insert. Empty when there is nothing to
+     * record: the read failed, or nothing was written and the project is not drained.
+     */
+    private Optional<TopicVectorBackfill.Progress> backfillProject(TopicVectorBackfill project, Window window,
+            Tally tally) {
+        var workspaceId = project.workspaceId();
+        var sliceSize = project.tracesTotal() > ONE_SLICE_MAX_TRACES
+                ? config.getVectors().getFind().getSliceSize().toJavaDuration()
+                : null;
+        WindowRead read;
+        try {
+            read = readWindow(workspaceId, project.projectId(), List.of(), window, sliceSize,
+                    config.getVectors().getMaxTracesPerTick());
+        } catch (RuntimeException exception) {
+            rethrowIfInterrupted(exception);
+            countReadFailure("backfill", workspaceId, tally, exception);
+            log.warn("Topic vectors backfill read failed, workspace '{}', project '{}'; reading it again next tick",
+                    workspaceId, project.projectId(), exception);
+            return Optional.empty();
+        }
+        int cuts = tally.cuts;
+        int written = tally.written;
+        embedAndWrite(read.candidates(), window.deadline(), null, tally);
+        boolean drained = read.complete() && tally.cuts == cuts;
+        if (!drained && tally.written == written) {
+            return Optional.empty();
+        }
+        return Optional.of(TopicVectorBackfill.Progress.builder()
+                .workspaceId(workspaceId)
+                .projectId(project.projectId())
+                .drainedAt(drained ? window.start() : null)
+                .written(tally.written - written)
+                .build());
+    }
+
+    /** Per workspace, the projects still not drained after this tick. */
+    private UndrainedSnapshot undrainedSnapshot(List<String> workspaceIds,
+            Map<String, List<TopicVectorBackfill>> undrained, Set<TopicVectorBackfill> drained, Tally tally) {
+        var snapshot = new HashMap<String, Undrained>();
+        for (var workspaceId : workspaceIds) {
+            var left = undrained.getOrDefault(workspaceId, List.of()).stream()
+                    .filter(project -> !drained.contains(project)).toList();
+            var name = Optional.ofNullable(tally.names.get(workspaceId))
+                    .orElseGet(() -> workspaceNames.knownName(workspaceId));
+            snapshot.put(workspaceId, new Undrained(name, left.size(), left.stream()
+                    .map(TopicVectorBackfill::startedAt).min(Comparator.naturalOrder()).orElse(null)));
+        }
+        return new UndrainedSnapshot(clock.instant(), Map.copyOf(snapshot));
     }
 
     /**
@@ -546,7 +913,10 @@ public class TopicVectorsTickService {
                 return new Embedded(vectors, backOff);
             }
             tally.skip(workspaceId, EMBED_FAILED, chunk.size());
-            tally.cut = tally.cut || backOff;
+            if (backOff) {
+                tally.cuts++;
+                tally.backedOff.add(workspaceId);
+            }
             log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}', back off '{}'",
                     workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), backOff, exception);
             return new Embedded(List.of(), backOff);
@@ -776,10 +1146,10 @@ public class TopicVectorsTickService {
     }
 
     /** The snapshot, unless this pod last ticked more than two tick intervals ago. */
-    private Optional<OldestSnapshot> fresh(Instant now) {
+    private <T> Optional<T> fresh(@Nullable T snapshot, Function<T, Instant> at) {
         var maxAge = config.getVectors().getTickInterval().toJavaDuration().multipliedBy(2);
-        return Optional.ofNullable(lastOldest)
-                .filter(snapshot -> Duration.between(snapshot.at(), now).compareTo(maxAge) <= 0);
+        return Optional.ofNullable(snapshot)
+                .filter(value -> Duration.between(at.apply(value), clock.instant()).compareTo(maxAge) <= 0);
     }
 
     /**
