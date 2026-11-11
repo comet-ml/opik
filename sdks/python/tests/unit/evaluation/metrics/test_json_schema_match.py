@@ -83,13 +83,51 @@ def test_json_schema_match__all_violations_reported__in_metadata() -> None:
 
     result = _metric(schema=INVOICE_SCHEMA).score(output=output)
 
-    paths = [error["path"] for error in result.metadata["errors"]]
-    assert "$.total" in paths
-    assert "$.items[0].amount" in paths
-    assert "$.items[1].amount" in paths
-    assert result.reason.startswith(
-        f"Output does not match the schema ({len(paths)} errors)"
+    errors = result.metadata["errors"]
+    assert sorted(error["path"] for error in errors) == sorted(
+        ["$", "$", "$.items[0].amount", "$.items[1].amount", "$.total"]
     )
+    root_messages = [error["message"] for error in errors if error["path"] == "$"]
+    assert any("'invoice_id' is a required property" in m for m in root_messages)
+    assert any("Additional properties are not allowed" in m for m in root_messages)
+    assert result.metadata["truncated"] is False
+    assert result.reason.startswith("Output does not match the schema (5 errors)")
+    assert "'invoice_id' is a required property" in result.reason
+    assert "Additional properties are not allowed" in result.reason
+
+
+def test_json_schema_match__many_violations__collection_is_capped() -> None:
+    schema = {"type": "array", "items": {"type": "integer"}}
+    output = ["x"] * 10_000
+
+    result = _metric(schema=schema).score(output=output)
+
+    assert result.value == 0.0
+    assert len(result.metadata["errors"]) == 100
+    assert result.metadata["truncated"] is True
+    assert result.reason.startswith("Output does not match the schema (100+ errors)")
+    assert result.reason.endswith("; and 95+ more")
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        float("nan"),
+        float("inf"),
+        {"invoice_id": "A-1", "total": float("-inf")},
+        {"invoice_id": "A-1", "total": 1, "items": [{"amount": float("nan")}]},
+    ],
+)
+def test_json_schema_match__parsed_output_with_nan_or_infinity__returns_score_zero(
+    output,
+) -> None:
+    schema = {"type": ["number", "object"]}
+
+    result = _metric(schema=schema).score(output=output)
+
+    assert result.value == 0.0
+    assert result.metadata["valid_json"] is False
+    assert "NaN or Infinity" in result.reason
 
 
 @pytest.mark.parametrize(
@@ -135,7 +173,15 @@ def test_json_schema_match__no_schema__raises() -> None:
 
 @pytest.mark.parametrize(
     "schema",
-    [{"type": "no-such-type"}, {"minimum": "zero"}, "{not json", 42],
+    [
+        {"type": "no-such-type"},
+        {"minimum": "zero"},
+        "{not json",
+        42,
+        '{"maximum": NaN}',
+        {"$schema": "https://example.com/my-dialect", "type": "string"},
+        {"$schema": 7},
+    ],
 )
 def test_json_schema_match__invalid_schema__raises_instead_of_scoring_zero(
     schema,
@@ -173,3 +219,24 @@ def test_json_schema_match__draft_selected_from_dollar_schema() -> None:
 
     assert metric.score(output="9").value == 1.0
     assert metric.score(output="10").value == 0.0
+
+
+def test_json_schema_match__unresolvable_ref__raises_instead_of_leaking() -> None:
+    metric = _metric(schema={"$ref": "#/$defs/missing"})
+
+    with pytest.raises(MetricComputationError, match="could not be applied"):
+        metric.score(output="{}")
+
+
+@pytest.mark.parametrize(
+    "dialect",
+    [
+        "https://json-schema.org/draft/2020-12/schema",
+        "http://json-schema.org/draft-07/schema#",
+        "http://json-schema.org/draft-07/schema",
+    ],
+)
+def test_json_schema_match__known_dollar_schema__is_accepted(dialect) -> None:
+    metric = _metric(schema={"$schema": dialect, "type": "integer"})
+
+    assert metric.score(output="3").value == 1.0

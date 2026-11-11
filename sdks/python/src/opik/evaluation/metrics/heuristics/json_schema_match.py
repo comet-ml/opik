@@ -1,4 +1,6 @@
+import itertools
 import json
+import math
 from typing import Any, Dict, List, Optional, Type, Union
 
 import pydantic
@@ -15,6 +17,9 @@ except ImportError:
 SchemaType = Union[Dict[str, Any], str, Type[pydantic.BaseModel]]
 
 _MAX_ERRORS_IN_REASON = 5
+# Validation stops collecting after this many violations, so a huge invalid
+# output cannot exhaust memory; `metadata["truncated"]` says when it happened.
+_MAX_ERRORS_COLLECTED = 100
 
 
 def _reject_non_standard_constant(constant: str) -> None:
@@ -26,8 +31,8 @@ def _resolve_schema(schema: SchemaType) -> Dict[str, Any]:
         return schema.model_json_schema()
     if isinstance(schema, str):
         try:
-            schema = json.loads(schema)
-        except json.JSONDecodeError as exception:
+            schema = json.loads(schema, parse_constant=_reject_non_standard_constant)
+        except ValueError as exception:
             raise MetricComputationError(
                 f"JsonSchemaMatch: the schema is not valid JSON: {exception}"
             ) from exception
@@ -37,6 +42,58 @@ def _resolve_schema(schema: SchemaType) -> Dict[str, Any]:
             f"pydantic model class, got {type(schema).__name__}"
         )
     return schema  # type: ignore[return-value]
+
+
+def _known_meta_schema_ids() -> set:
+    ids = set()
+    for validator_class in (
+        jsonschema.Draft3Validator,
+        jsonschema.Draft4Validator,
+        jsonschema.Draft6Validator,
+        jsonschema.Draft7Validator,
+        jsonschema.Draft201909Validator,
+        jsonschema.Draft202012Validator,
+    ):
+        meta_schema = validator_class.META_SCHEMA
+        meta_schema_id = meta_schema.get("$id", meta_schema.get("id", ""))
+        ids.add(meta_schema_id.rstrip("#"))
+    return ids
+
+
+def _validator_class_for(schema: Any) -> Any:
+    """Pick the validator for ``$schema``, Draft 2020-12 when it is absent.
+
+    ``jsonschema`` silently falls back to its latest draft for an unknown
+    ``$schema``, which would validate under a draft the author did not ask for.
+    """
+    if isinstance(schema, dict) and "$schema" in schema:
+        dialect = schema["$schema"]
+        if not isinstance(dialect, str) or (
+            dialect.rstrip("#") not in _known_meta_schema_ids()
+        ):
+            raise MetricComputationError(
+                f"JsonSchemaMatch: unsupported $schema {dialect!r}"
+            )
+    return jsonschema.validators.validator_for(
+        schema, default=jsonschema.Draft202012Validator
+    )
+
+
+def _find_non_finite_number(value: Any, path: List[Any]) -> Optional[str]:
+    """Return the path of the first NaN/Infinity in a parsed value, if any."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return _format_path(path)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            found = _find_non_finite_number(item, path + [key])
+            if found is not None:
+                return found
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            found = _find_non_finite_number(item, path + [index])
+            if found is not None:
+                return found
+    return None
 
 
 def _format_path(path: Any) -> str:
@@ -60,9 +117,12 @@ class JsonSchemaMatch(base_metric.BaseMetric):
 
     The score is 1.0 when the output is valid and 0.0 otherwise. On failure the
     reason lists the first violations with their JSON paths, and ``metadata``
-    holds every violation.
+    holds up to 100 of them (``metadata["truncated"]`` is True when there were
+    more). An already-parsed output containing ``NaN`` or ``Infinity`` scores 0.0,
+    the same as a string containing them.
 
-    A missing or invalid schema raises ``MetricComputationError`` instead of
+    A missing or invalid schema (including an unsupported ``$schema`` or an
+    unresolvable ``$ref``) raises ``MetricComputationError`` instead of
     scoring 0.0, so a broken metric setup is reported as a scoring failure rather
     than blamed on the model output.
 
@@ -115,9 +175,7 @@ class JsonSchemaMatch(base_metric.BaseMetric):
             self._check_schema(self._schema)
 
     def _check_schema(self, schema: Dict[str, Any]) -> None:
-        validator_class = jsonschema.validators.validator_for(
-            schema, default=jsonschema.Draft202012Validator
-        )
+        validator_class = _validator_class_for(schema)
         try:
             validator_class.check_schema(schema)
         except jsonschema.SchemaError as exception:
@@ -165,25 +223,38 @@ class JsonSchemaMatch(base_metric.BaseMetric):
                     output, parse_constant=_reject_non_standard_constant
                 )
             except ValueError as exception:
-                return score_result.ScoreResult(
-                    value=0.0,
-                    name=self.name,
-                    reason=f"Output is not valid JSON: {exception}",
-                    metadata={"errors": [], "valid_json": False},
-                )
+                return self._not_json_result(str(exception))
         else:
             instance = output
+            non_finite_path = _find_non_finite_number(instance, [])
+            if non_finite_path is not None:
+                return self._not_json_result(
+                    f"{non_finite_path} is NaN or Infinity, which JSON cannot represent"
+                )
 
-        validator_class = jsonschema.validators.validator_for(
-            resolved_schema, default=jsonschema.Draft202012Validator
-        )
+        validator_class = _validator_class_for(resolved_schema)
         format_checker = validator_class.FORMAT_CHECKER if self._check_formats else None
         validator = validator_class(resolved_schema, format_checker=format_checker)
 
+        try:
+            # One extra error is read only to tell whether the list was cut.
+            collected = list(
+                itertools.islice(
+                    validator.iter_errors(instance), _MAX_ERRORS_COLLECTED + 1
+                )
+            )
+        except Exception as exception:
+            # For example an unresolvable "$ref": a problem with the schema,
+            # not with the output.
+            raise MetricComputationError(
+                f"JsonSchemaMatch: the schema could not be applied: {exception}"
+            ) from exception
+
+        truncated = len(collected) > _MAX_ERRORS_COLLECTED
         errors: List[Dict[str, str]] = [
             {"path": _format_path(error.absolute_path), "message": error.message}
             for error in sorted(
-                validator.iter_errors(instance),
+                collected[:_MAX_ERRORS_COLLECTED],
                 key=lambda error: (list(map(str, error.absolute_path)), error.message),
             )
         ]
@@ -191,18 +262,27 @@ class JsonSchemaMatch(base_metric.BaseMetric):
         if not errors:
             return score_result.ScoreResult(value=1.0, name=self.name)
 
+        count = f"{len(errors)}+" if truncated else str(len(errors))
         shown = "; ".join(
             f"{error['path']}: {error['message']}"
             for error in errors[:_MAX_ERRORS_IN_REASON]
         )
+        reason = f"Output does not match the schema ({count} errors): {shown}"
         more = len(errors) - _MAX_ERRORS_IN_REASON
-        reason = f"Output does not match the schema ({len(errors)} errors): {shown}"
         if more > 0:
-            reason += f"; and {more} more"
+            reason += f"; and {more}{'+' if truncated else ''} more"
 
         return score_result.ScoreResult(
             value=0.0,
             name=self.name,
             reason=reason,
-            metadata={"errors": errors, "valid_json": True},
+            metadata={"errors": errors, "valid_json": True, "truncated": truncated},
+        )
+
+    def _not_json_result(self, detail: str) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=0.0,
+            name=self.name,
+            reason=f"Output is not valid JSON: {detail}",
+            metadata={"errors": [], "valid_json": False},
         )
