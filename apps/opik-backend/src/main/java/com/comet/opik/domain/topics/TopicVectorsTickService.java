@@ -923,34 +923,34 @@ public class TopicVectorsTickService {
      */
     private Iterable<Embedded> embedInOrder(String workspaceId, Attributes attributes, List<List<Pending>> chunks,
             Instant deadline) {
-        var backOff = new AtomicBoolean();
+        var backedOff = new AtomicBoolean();
         int concurrency = config.getVectors().getEmbedConcurrency();
         if (concurrency == 1 || chunks.size() <= 1) {
             return () -> chunks.stream()
-                    .map(chunk -> embedSlot(workspaceId, attributes, chunk, deadline, backOff))
+                    .map(chunk -> embedSlot(workspaceId, attributes, chunk, deadline, backedOff))
                     .iterator();
         }
         return Flux.fromIterable(chunks)
                 .flatMapSequential(chunk -> Mono
-                        .fromCallable(() -> embedSlot(workspaceId, attributes, chunk, deadline, backOff))
+                        .fromCallable(() -> embedSlot(workspaceId, attributes, chunk, deadline, backedOff))
                         .subscribeOn(Schedulers.boundedElastic()), concurrency, 1)
                 .toIterable(1);
     }
 
     /**
-     * One chunk's turn: no call once the workspace backed off or the tick has no time for one. {@code backOff} is the
+     * One chunk's turn: no call once the workspace backed off or the tick has no time for one. {@code backedOff} is the
      * workspace's, shared by its chunks in flight.
      */
     private Embedded embedSlot(String workspaceId, Attributes attributes, List<Pending> chunk, Instant deadline,
-            AtomicBoolean backOff) {
-        if (backOff.get()) {
+            AtomicBoolean backedOff) {
+        if (backedOff.get()) {
             return Embedded.notCalled(tally -> tally.skip(workspaceId, EMBED_FAILED, chunk.size()));
         }
         if (!hasTimeForChunk(deadline)) {
             return Embedded.notCalled(tally -> tally.cut(workspaceId, OVER_BUDGET, chunk.size()));
         }
         var effects = new ArrayList<Consumer<Tally>>();
-        return new Embedded(embedChunk(workspaceId, attributes, chunk, deadline, backOff, effects), true, effects);
+        return new Embedded(embedChunk(workspaceId, attributes, chunk, deadline, backedOff, effects), true, effects);
     }
 
     /**
@@ -961,7 +961,7 @@ public class TopicVectorsTickService {
      * Runs on a call's thread: what it counts goes to {@code effects}, for the tick's thread to apply.
      */
     private List<TopicVector> embedChunk(String workspaceId, Attributes attributes, List<Pending> chunk,
-            Instant deadline, AtomicBoolean backOff, List<Consumer<Tally>> effects) {
+            Instant deadline, AtomicBoolean backedOff, List<Consumer<Tally>> effects) {
         try {
             return embed(workspaceId, attributes, chunk, effects);
         } catch (InferenceException exception) {
@@ -972,7 +972,7 @@ public class TopicVectorsTickService {
                 var vectors = new ArrayList<TopicVector>();
                 int half = chunk.size() / 2;
                 for (var part : List.of(chunk.subList(0, half), chunk.subList(half, chunk.size()))) {
-                    if (backOff.get()) {
+                    if (backedOff.get()) {
                         effects.add(tally -> tally.skip(workspaceId, EMBED_FAILED, part.size()));
                         continue;
                     }
@@ -980,12 +980,12 @@ public class TopicVectorsTickService {
                         effects.add(tally -> tally.cut(workspaceId, OVER_BUDGET, part.size()));
                         continue;
                     }
-                    vectors.addAll(embedChunk(workspaceId, attributes, part, deadline, backOff, effects));
+                    vectors.addAll(embedChunk(workspaceId, attributes, part, deadline, backedOff, effects));
                 }
                 return vectors;
             }
             if (stop) {
-                backOff.set(true);
+                backedOff.set(true);
             }
             effects.add(tally -> {
                 tally.skip(workspaceId, EMBED_FAILED, chunk.size());
