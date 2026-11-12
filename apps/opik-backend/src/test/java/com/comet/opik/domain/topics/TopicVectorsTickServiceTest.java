@@ -732,7 +732,7 @@ class TopicVectorsTickServiceTest {
                 // The discovery's two reads are window reads too: none with under a second left.
                 verify(dao, times(reads)).findBackfillProjects(anyString(), anyString(), any(Instant.class),
                         any(Instant.class), anyLong());
-                verify(dao, times(reads)).countVectorsByProject(anyString(), any(Instant.class), anyLong());
+                verify(dao, times(reads)).countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong());
                 verifyNoMoreInteractions(dao);
                 assertThat(appender.list)
                         .filteredOn(event -> event.getFormattedMessage().contains("workspaces not read"))
@@ -1436,7 +1436,7 @@ class TopicVectorsTickServiceTest {
                     });
             when(dao.findBackfillProjects(anyString(), eq(TopicVectorsTickService.TASK), any(Instant.class),
                     any(Instant.class), anyLong())).thenAnswer(invocation -> Flux.fromIterable(discoverable));
-            when(dao.countVectorsByProject(anyString(), any(Instant.class), anyLong()))
+            when(dao.countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong()))
                     .thenAnswer(invocation -> Mono.just(Map.copyOf(vectorCounts)));
         }
 
@@ -1775,7 +1775,7 @@ class TopicVectorsTickServiceTest {
             var lowerBound = NOW.minus(LONG_WINDOW);
             verify(dao).findBackfillProjects(WORKSPACE_ID, TopicVectorsTickService.TASK, lowerBound,
                     lowerBound.minus(Duration.ofDays(8)), FIND_SECONDS);
-            verify(dao).countVectorsByProject(WORKSPACE_ID, lowerBound, BUDGET_SECONDS);
+            verify(dao).countTracesWithVectorsByProject(WORKSPACE_ID, lowerBound, BUDGET_SECONDS);
             verify(backfills).discovered(eq(WORKSPACE_ID), anyList(), eq(NOW), eq(NOW.minus(Duration.ofDays(2))));
             // The known project keeps its start and its drained mark.
             assertThat(rows.get(known.projectId())).isEqualTo(known.toBuilder().checkedAt(NOW)
@@ -2263,7 +2263,8 @@ class TopicVectorsTickServiceTest {
     static void stubNoDiscovery(TopicVectorsDAO dao) {
         when(dao.findBackfillProjects(anyString(), anyString(), any(Instant.class), any(Instant.class), anyLong()))
                 .thenReturn(Flux.empty());
-        when(dao.countVectorsByProject(anyString(), any(Instant.class), anyLong())).thenReturn(Mono.just(Map.of()));
+        when(dao.countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong()))
+                .thenReturn(Mono.just(Map.of()));
     }
 
     /** A deterministic, non-unit 384-number vector per text; "zero" gives the zero vector. */

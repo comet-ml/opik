@@ -514,7 +514,7 @@ public class TopicVectorsTickService {
             try {
                 var projects = dao.findBackfillProjects(workspaceId, TASK, window.lowerBound(),
                         window.createdAfter(), maxExecutionSeconds(left)).collectList().block();
-                var vectors = dao.countVectorsByProject(workspaceId, window.lowerBound(),
+                var tracesWithVectors = dao.countTracesWithVectorsByProject(workspaceId, window.lowerBound(),
                         secondsLeft(window.deadline())).block();
                 var rows = projects.stream()
                         .map(project -> TopicVectorBackfill.builder()
@@ -525,7 +525,7 @@ public class TopicVectorsTickService {
                                 .lastDoneAt(project.lastDoneAt())
                                 .tracesTotal(project.traces())
                                 .tracesDone(Math.min(project.traces(),
-                                        vectors.getOrDefault(project.projectId(), 0L)))
+                                        tracesWithVectors.getOrDefault(project.projectId(), 0L)))
                                 .build())
                         .toList();
                 backfills.discovered(workspaceId, rows, window.start(),
@@ -967,7 +967,7 @@ public class TopicVectorsTickService {
         } catch (InferenceException exception) {
             boolean stop = backsOff(exception);
             if (!stop && isRejectedInput(exception) && chunk.size() > 1) {
-                log.info("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'; trying "
+                log.warn("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'; trying "
                         + "each half", workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size());
                 var vectors = new ArrayList<TopicVector>();
                 int half = chunk.size() / 2;

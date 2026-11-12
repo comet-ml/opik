@@ -191,8 +191,8 @@ public class TopicVectorsDAO {
      * older task versions and a row a tombstone replaced, not merged yet, do not raise it. The build reads a trace's
      * highest live task version, so a trace with any live vector is covered.
      */
-    private static final String COUNT_VECTORS_BY_PROJECT = """
-            SELECT project_id, uniqExact(trace_id) AS vectors
+    private static final String COUNT_TRACES_WITH_VECTORS_BY_PROJECT = """
+            SELECT project_id, uniqExact(trace_id) AS traces_with_vectors
             FROM (
                 SELECT project_id, trace_id, task_version, argMax(is_deleted, last_updated_at) AS deleted
                 FROM topic_vectors
@@ -414,11 +414,13 @@ public class TopicVectorsDAO {
 
     /**
      * Per project, the traces with a live vector, created at or after {@code lowerBound}: see
-     * {@link #COUNT_VECTORS_BY_PROJECT}.
+     * {@link #COUNT_TRACES_WITH_VECTORS_BY_PROJECT}.
      */
-    public Mono<Map<UUID, Long>> countVectorsByProject(@NonNull String workspaceId, @NonNull Instant lowerBound,
+    public Mono<Map<UUID, Long>> countTracesWithVectorsByProject(@NonNull String workspaceId,
+            @NonNull Instant lowerBound,
             long maxExecutionSeconds) {
-        var template = guarded(COUNT_VECTORS_BY_PROJECT, "topics:count_vectors_by_project", workspaceId,
+        var template = guarded(COUNT_TRACES_WITH_VECTORS_BY_PROJECT, "topics:count_traces_with_vectors_by_project",
+                workspaceId,
                 "lower_bound=%s".formatted(lowerBound), maxExecutionSeconds);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
@@ -426,7 +428,8 @@ public class TopicVectorsDAO {
                         .bind("lower_bound_micros", toEpochMicros(lowerBound))
                         .execute())
                 .flatMap(result -> result.map((row, metadata) -> Map.entry(
-                        UUID.fromString(row.get("project_id", String.class)), row.get("vectors", Long.class))))
+                        UUID.fromString(row.get("project_id", String.class)),
+                        row.get("traces_with_vectors", Long.class))))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 

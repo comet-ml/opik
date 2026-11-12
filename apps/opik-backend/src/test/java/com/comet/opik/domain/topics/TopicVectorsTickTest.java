@@ -1112,6 +1112,9 @@ class TopicVectorsTickTest {
                     createdAfter,
                     createdAfter.minus(1, ChronoUnit.MICROS));
             var created = new java.util.HashMap<UUID, Instant>();
+            // The oracle, from the fixture alone: (project, trace) of every trace but the one with a vector and the
+            // one before the bound.
+            var expectedKeys = new ArrayList<Map.Entry<UUID, UUID>>();
             for (var projectId : projects) {
                 var statuses = new ArrayList<AiLabelStatus>();
                 for (var createdAt : createdAts) {
@@ -1128,6 +1131,9 @@ class TopicVectorsTickTest {
                 vectorsDAO.insert(List.of(vector(workspaceId, projectId, vectored.traceId(), 1).toBuilder()
                         .traceCreatedAt(vectored.traceCreatedAt()).build())).block();
                 created.remove(vectored.traceId());
+                var beforeBound = statuses.getLast();
+                statuses.stream().filter(status -> status != vectored && status != beforeBound)
+                        .forEach(status -> expectedKeys.add(Map.entry(projectId, status.traceId())));
             }
             var lower = now.minus(1, ChronoUnit.HOURS);
             var upper = Instant.now();
@@ -1136,16 +1142,19 @@ class TopicVectorsTickTest {
                     .collectList().block();
 
             // Per project: 7 traces, less the one with a vector and the one before the bound.
-            assertThat(unsliced).hasSize(10);
-            assertThat(unsliced).extracting(TopicVectorCandidate::traceId).doesNotHaveDuplicates()
-                    .allSatisfy(traceId -> assertThat(created.get(traceId)).isAfterOrEqualTo(createdAfter));
+            assertThat(expectedKeys).hasSize(10);
+            assertThat(unsliced).extracting(candidate -> Map.entry(candidate.projectId(), candidate.traceId()))
+                    .containsExactlyInAnyOrderElementsOf(expectedKeys);
+            assertThat(unsliced).allSatisfy(candidate -> assertThat(candidate.traceCreatedAt())
+                    .isEqualTo(created.get(candidate.traceId())));
             var byKey = Comparator.comparing(TopicVectorCandidate::projectId)
                     .thenComparing(TopicVectorCandidate::traceId);
             var expected = unsliced.stream().sorted(byKey).toList();
 
-            assertThat(
-                    sliced(workspaceId, null, List.of(), lower, upper, now, createdAfter, slice).stream().sorted(byKey))
-                    .containsExactlyElementsOf(expected);
+            var slicedAll = sliced(workspaceId, null, List.of(), lower, upper, now, createdAfter, slice);
+            assertThat(slicedAll).extracting(candidate -> Map.entry(candidate.projectId(), candidate.traceId()))
+                    .containsExactlyInAnyOrderElementsOf(expectedKeys);
+            assertThat(slicedAll.stream().sorted(byKey)).containsExactlyElementsOf(expected);
             // Each project on its own, in slices and in one read.
             for (var projectId : projects) {
                 var ofProject = expected.stream().filter(candidate -> candidate.projectId().equals(projectId))
@@ -1192,15 +1201,15 @@ class TopicVectorsTickTest {
 
             var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
                     .collectList().block();
-            var vectors = vectorsDAO.countVectorsByProject(workspaceId, lower, 10).block();
+            var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, lower, 10).block();
 
             assertThat(found).extracting(TopicBackfillProject::projectId, TopicBackfillProject::traces)
                     .containsExactlyInAnyOrder(tuple(first, 3L), tuple(second, 1L));
             assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                     Instant.now().plusSeconds(1)));
-            assertThat(vectors.get(first)).isEqualTo(2);
+            assertThat(tracesWithVectors.get(first)).isEqualTo(2);
             // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
-            assertThat(vectors).doesNotContainKey(second);
+            assertThat(tracesWithVectors).doesNotContainKey(second);
             // A window that starts after the traces were created counts none of them, but still finds the projects.
             assertThat(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, lower.minus(8, ChronoUnit.DAYS), 10)
                     .collectList().block())
