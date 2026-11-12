@@ -5,15 +5,8 @@ import type * as core from "@/rest_api/core";
 import { parseNdjsonStreamToArray } from "@/utils/stream";
 import { OpikQueryLanguage } from "@/query";
 
-// The backend rejects stream search requests with a limit above 2000.
 const MAX_SEARCH_BATCH_SIZE = 2000;
 
-/**
- * Reads a stream search endpoint page by page until maxResults items are read
- * or the backend returns a short page. The cursor is the last id the backend
- * sent, not the last id that parsed, so a record that fails validation does
- * not cause the same page to be requested again.
- */
 async function searchAllPages<T>(
   fetchPage: (
     limit: number,
@@ -36,6 +29,7 @@ async function searchAllPages<T>(
       stream,
       serializer,
       limit,
+      // Count raw records so one that fails validation does not make a full page look short.
       (record) => {
         recordsReceived++;
         const id = (record as Record<string, unknown> | null)?.[cursorField];
