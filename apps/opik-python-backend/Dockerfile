@@ -2,7 +2,7 @@
 #######################################################################
 # Multi-stage build: Build stage
 #######################################################################
-FROM docker:29.9.3@sha256:d035bd30886e451b2727ef3cdb9af9a5c537a10d4bc5d18c08d0ffa597e46aeb AS builder
+FROM docker:29.9.3@sha256:08a98015fce594af7c382883bea080ea206de74402a95da9dc52b6428c8cd121 AS builder
 
 # Alpine base ships /bin/ash, not bash; ash honors -o pipefail for the RUN
 # below whose pipe into xargs would otherwise mask a failing find.
@@ -44,7 +44,7 @@ RUN set -eux; \
 #######################################################################
 # Multi-stage build: Runtime stage
 #######################################################################
-FROM docker:29.9.3@sha256:d035bd30886e451b2727ef3cdb9af9a5c537a10d4bc5d18c08d0ffa597e46aeb
+FROM docker:29.9.3@sha256:08a98015fce594af7c382883bea080ea206de74402a95da9dc52b6428c8cd121
 
 # tini (PID 1 reaper) + python3 are the runtime-only OS deps.
 # hadolint ignore=DL3018
