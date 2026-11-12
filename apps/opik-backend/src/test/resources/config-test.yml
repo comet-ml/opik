@@ -1085,6 +1085,43 @@ topics:
       #  Description: The daily pass, and the backfill of a large project, read their window in slices of this much
       #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
       sliceSize: 1d
+  build:
+    #  Default: 15m
+    #  Description: One project's build is stopped and failed with timeout after this. At most 2h
+    projectTimeout: 15m
+    #  Default: 100
+    #  Description: A project is built when its window holds at least this many traces with a vector. At most 100000
+    minVectors: 100
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the day it ends on. The first-build job's window ends at
+    #  tomorrow's start, so it holds today's traces so far
+    windowDays: 30
+    #  Default: 100000
+    #  Description: A larger window is sampled: the build finds topics on this many of its traces, spread evenly by a
+    #  hash of the trace id, and then labels every trace of the window. At most 100000
+    maxVectors: 100000
+    #  Default: 120s
+    #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
+    qwenDeadline: 120s
+    #  Default: 90d
+    #  Description: topic_runs rows are deleted after this. At most 365d
+    runsRetention: 90d
+  firstBuild:
+    #  Default: true
+    #  Description: Runs the first-build job, which builds the list of a project that has none yet. A project whose
+    #  first builds failed waits 1h, then 6h, then 1d between attempts. Needs topics.enabled
+    enabled: true
+    #  Default: 10m
+    #  Description: How often every pod fires the job; one run per interval across the cluster. At most 1d
+    interval: 10m
+    #  Default: 9m
+    #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
+    budget: 9m
+    #  Default: 72h
+    #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the
+    #  backfill has run for longer than this, the list is built anyway when at least 99 percent of the backfill's traces
+    #  have a vector; with fewer it keeps waiting, and topics.first_build.gate counts it as timed_out_waiting. At most 30d
+    backfillMaxWait: 72h
 
 # Python evaluator configuration
 pythonEvaluator:

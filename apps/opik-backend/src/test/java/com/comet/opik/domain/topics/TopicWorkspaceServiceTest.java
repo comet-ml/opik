@@ -48,6 +48,9 @@ class TopicWorkspaceServiceTest {
         config.setEnabledWorkspaces(" c, x,, a , c ");
 
         assertThat(service.eligibleWorkspaceIds()).containsExactly("a", "c");
+        assertThat(service.isEligible("a")).isTrue();
+        assertThat(service.isEligible("b")).as("enabled for ai-labels, not listed").isFalse();
+        assertThat(service.isEligible("x")).as("listed, not enabled for ai-labels").isFalse();
     }
 
     @Test
@@ -56,6 +59,7 @@ class TopicWorkspaceServiceTest {
         config.setEnabledWorkspaces(" , ,");
 
         assertThat(service.eligibleWorkspaceIds()).isEmpty();
+        assertThat(service.isEligible("a")).isFalse();
         verifyNoInteractions(template);
     }
 
