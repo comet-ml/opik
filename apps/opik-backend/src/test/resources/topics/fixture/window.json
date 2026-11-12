@@ -21,7 +21,7 @@
   {
    "id": "019f20c8-a1e6-7a7d-a655-c1c7f75d820c",
    "created_at": "2026-07-02T03:04:07.398042Z",
-   "intent": "ok"
+   "intent": "ok, understood"
   },
   {
    "id": "019f20cd-771d-7946-aed2-1cad636cc354",
@@ -86,12 +86,12 @@
   {
    "id": "019f264f-df3f-7321-9bb6-f808013d45e9",
    "created_at": "2026-07-03T04:49:56.543663Z",
-   "intent": "Cancel my order"
+   "intent": "Cancel the order I placed"
   },
   {
    "id": "019f26ec-77c3-7c34-94cc-3f3aa660f9ef",
    "created_at": "2026-07-03T07:40:59.203531Z",
-   "intent": "Test"
+   "intent": "Test message from the store app"
   },
   {
    "id": "019f271f-c65c-7d2c-b1ed-78e809f1e280",
@@ -111,7 +111,7 @@
   {
    "id": "019f27bf-28a7-705b-af5d-570e496fa9ca",
    "created_at": "2026-07-03T11:31:07.047556Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f27d9-f190-716f-94cd-0a29215fa580",
@@ -121,7 +121,7 @@
   {
    "id": "019f2908-501f-7753-ac39-260252ff360c",
    "created_at": "2026-07-03T17:30:38.495153Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f295a-daec-7a88-aef8-9d62574da63b",
@@ -181,7 +181,7 @@
   {
    "id": "019f2cb1-90b9-7831-aed7-54332b54f956",
    "created_at": "2026-07-04T10:34:22.265932Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f2d45-fb19-7707-88f5-eb0014224250",
@@ -191,7 +191,7 @@
   {
    "id": "019f2e36-cfdd-737f-b35e-19843a6efb5c",
    "created_at": "2026-07-04T17:39:31.933140Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f2fc0-cf83-7bca-b079-8db55957d100",
@@ -231,7 +231,7 @@
   {
    "id": "019f32c8-58bb-7407-abf1-9db4c89a1da3",
    "created_at": "2026-07-05T14:56:58.555213Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f3385-bfe8-72b1-9871-987d1fc62e79",
@@ -286,12 +286,12 @@
   {
    "id": "019f3802-d4c8-7398-a14e-fc71fa78e359",
    "created_at": "2026-07-06T15:18:57.480537Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f38f6-8186-79ad-96a7-79875b203ff2",
    "created_at": "2026-07-06T19:45:06.950469Z",
-   "intent": "Hey"
+   "intent": "Hey, anyone around?"
   },
   {
    "id": "019f39f8-f481-7671-8ea8-fbaf5cd46ce1",
@@ -306,12 +306,12 @@
   {
    "id": "019f3b75-e326-7686-b5b9-575a21a66410",
    "created_at": "2026-07-07T07:23:29.446424Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f3b86-4502-7649-bf11-56ab44bdffc8",
    "created_at": "2026-07-07T07:41:23.074953Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f3baf-6546-7b04-8a19-5092d0cf6899",
@@ -421,7 +421,7 @@
   {
    "id": "019f3f99-6dc6-75ea-a594-89af3c4dc63e",
    "created_at": "2026-07-08T02:40:47.558705Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f3ff6-4470-7f8f-ae77-75938246cadc",
@@ -506,7 +506,7 @@
   {
    "id": "019f4452-701c-7074-b2e8-7e0b8bf3c325",
    "created_at": "2026-07-09T00:41:21.180704Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f4487-e3d9-74be-a9ec-8e754e920422",
@@ -541,12 +541,12 @@
   {
    "id": "019f4755-f12b-7480-8ddf-f2ffe2c0a5ed",
    "created_at": "2026-07-09T14:44:02.475313Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f4766-d427-7a00-bdc8-e89e759be790",
    "created_at": "2026-07-09T15:02:29.159297Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f48c4-ffea-7d74-bb94-80adf79719c9",
@@ -591,12 +591,12 @@
   {
    "id": "019f4c1a-ee4f-72b9-90f7-666314d3f983",
    "created_at": "2026-07-10T12:57:41.199002Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f4c22-34b6-79e1-afaa-65e67ece1a13",
    "created_at": "2026-07-10T13:05:37.974351Z",
-   "intent": "Test"
+   "intent": "Test message from the store app"
   },
   {
    "id": "019f4cbf-a47b-74e1-849e-c9a7c6b57f20",
@@ -606,7 +606,7 @@
   {
    "id": "019f4d0e-41ab-7121-a794-a26622222631",
    "created_at": "2026-07-10T17:23:27.787177Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f4dac-33d0-739e-b228-2e626044e94d",
@@ -621,7 +621,7 @@
   {
    "id": "019f4e52-61b8-770d-90ab-889f4b666992",
    "created_at": "2026-07-10T23:17:29.656997Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f4ed7-bdb1-750a-84fd-a1b43095824d",
@@ -686,7 +686,7 @@
   {
    "id": "019f5208-d9f2-7bc0-8b6a-88b14a3ca1b8",
    "created_at": "2026-07-11T16:35:39.634268Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f520c-c214-72bb-9706-4e64ebe83456",
@@ -711,7 +711,7 @@
   {
    "id": "019f5420-1b55-731e-9c73-c0cf94eca4cd",
    "created_at": "2026-07-12T02:20:18.133827Z",
-   "intent": "Cancel my order"
+   "intent": "Cancel the order I placed"
   },
   {
    "id": "019f5453-bcfb-7da8-9559-4102150f153c",
@@ -731,7 +731,7 @@
   {
    "id": "019f5511-e1e5-7919-be21-a733804f1aaa",
    "created_at": "2026-07-12T06:44:23.141246Z",
-   "intent": "Cancel my order"
+   "intent": "Cancel the order I placed"
   },
   {
    "id": "019f552a-8c36-7621-8e3e-5cda8214b3c0",
@@ -761,7 +761,7 @@
   {
    "id": "019f56d4-51de-7b83-9769-4d35e32183e5",
    "created_at": "2026-07-12T14:56:23.006630Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f57b9-1a09-7370-949c-4b3d1406c4ef",
@@ -791,7 +791,7 @@
   {
    "id": "019f589c-70c4-7010-8814-8fd429191647",
    "created_at": "2026-07-12T23:14:35.332009Z",
-   "intent": "Delete my account"
+   "intent": "Close and delete my shop account"
   },
   {
    "id": "019f592d-cef1-711c-8902-a86bc917e468",
@@ -806,7 +806,7 @@
   {
    "id": "019f59b9-e2f7-79f7-baf0-673470058d4d",
    "created_at": "2026-07-13T04:26:22.327363Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f5a3f-c61e-7036-afee-f5f6f2dae8f5",
@@ -821,7 +821,7 @@
   {
    "id": "019f5b85-8250-75e5-aabf-cd0165d28ce1",
    "created_at": "2026-07-13T12:48:24.144355Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f5b87-567f-783e-bb82-27792ae25b6d",
@@ -841,17 +841,17 @@
   {
    "id": "019f5bfe-06a5-73a8-b5e2-a10f5ba8f129",
    "created_at": "2026-07-13T15:00:02.341107Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f5c2a-3aa4-7b29-b99f-fa0bf1c194be",
    "created_at": "2026-07-13T15:48:19.236636Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f5c68-dd1f-7e2b-91fb-29f7af1e854e",
    "created_at": "2026-07-13T16:56:44.063949Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f5c6c-01bb-77da-baf3-a23f5eaa0271",
@@ -876,7 +876,7 @@
   {
    "id": "019f5d12-5659-72bf-917f-40896aa5183e",
    "created_at": "2026-07-13T20:01:50.681413Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f5dcc-58db-7322-b75a-bf6b79f022ca",
@@ -1021,7 +1021,7 @@
   {
    "id": "019f6665-4db4-7c99-bc6f-b4296d3ed6fc",
    "created_at": "2026-07-15T15:29:02.900475Z",
-   "intent": "Hello"
+   "intent": "Hello, shop helper"
   },
   {
    "id": "019f66c4-e529-72fa-a37c-b2d93dcd1943",
@@ -1056,7 +1056,7 @@
   {
    "id": "019f6994-34d7-7732-b2e8-a91842674358",
    "created_at": "2026-07-16T06:19:08.375350Z",
-   "intent": "Show my order history"
+   "intent": "List all orders on my account"
   },
   {
    "id": "019f6aa2-487f-7d92-9ce2-37dc2aa24775",
@@ -1066,7 +1066,7 @@
   {
    "id": "019f6b6d-df5e-7e42-8ed1-8c84194150b9",
    "created_at": "2026-07-16T14:56:30.558858Z",
-   "intent": "Hello"
+   "intent": "Hello, shop helper"
   },
   {
    "id": "019f6b70-b8c6-7d09-826a-62f6eeb042ff",
@@ -1106,7 +1106,7 @@
   {
    "id": "019f6fc6-413f-7aab-ab01-858f1d731513",
    "created_at": "2026-07-17T11:11:31.647131Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f70ad-5041-7edd-b5a0-5d975400926e",
@@ -1116,7 +1116,7 @@
   {
    "id": "019f71ec-1037-7ec2-a34a-e0a86d87862f",
    "created_at": "2026-07-17T21:12:03.895378Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f71f0-affc-7d91-9df6-4eb0ba186144",
@@ -1136,7 +1136,7 @@
   {
    "id": "019f744d-e01b-72f0-8948-a8c3e517f6bc",
    "created_at": "2026-07-18T08:18:08.539019Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f74f2-188d-783b-965d-dae39a79040b",
@@ -1191,7 +1191,7 @@
   {
    "id": "019f7a25-67c1-7585-98fe-24a49ebf369e",
    "created_at": "2026-07-19T11:31:39.585397Z",
-   "intent": "Cancel my order"
+   "intent": "Cancel the order I placed"
   },
   {
    "id": "019f7a33-b9ae-71b0-b3b4-1bf7781c9fdf",
@@ -1206,7 +1206,7 @@
   {
    "id": "019f7a66-9e3e-7e82-98e4-ebad882eed74",
    "created_at": "2026-07-19T12:42:53.374876Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f7a6f-b18a-73a9-9a66-eb60f3a320ed",
@@ -1216,7 +1216,7 @@
   {
    "id": "019f7ac7-14d0-7262-8fe9-73a2d8030e5a",
    "created_at": "2026-07-19T14:28:15.184403Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f7b11-d891-7cc2-8bcd-09787614c2c2",
@@ -1251,7 +1251,7 @@
   {
    "id": "019f7ceb-dd82-779e-ac8b-ece44e22d68a",
    "created_at": "2026-07-20T00:27:40.290180Z",
-   "intent": "Delete my account"
+   "intent": "Close and delete my shop account"
   },
   {
    "id": "019f7cf3-3c60-7612-a906-2208fb69d242",
@@ -1311,12 +1311,12 @@
   {
    "id": "019f7fa0-a11a-7721-a778-3fb88c77a9ac",
    "created_at": "2026-07-20T13:04:21.274968Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f7fb6-c76a-7e6d-a080-cdf2d0a0ffb8",
    "created_at": "2026-07-20T13:28:32.874104Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f8023-7c45-72bf-98cd-dccb1eeab23a",
@@ -1336,7 +1336,7 @@
   {
    "id": "019f8135-01ff-78e7-8e98-6542823f00a7",
    "created_at": "2026-07-20T20:26:02.623848Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f8178-4904-7240-805c-edb4005cf807",
@@ -1361,12 +1361,12 @@
   {
    "id": "019f836a-5a10-7ef5-91c2-9ce28fa3f6c2",
    "created_at": "2026-07-21T06:43:33.008205Z",
-   "intent": "Hello"
+   "intent": "Hello, shop helper"
   },
   {
    "id": "019f8415-fe55-7374-9724-474fe790c686",
    "created_at": "2026-07-21T09:51:01.717884Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f849b-39fc-7304-b734-5d09ed76a468",
@@ -1386,7 +1386,7 @@
   {
    "id": "019f8564-56ed-7430-affd-cce767d4a15a",
    "created_at": "2026-07-21T15:56:13.421038Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f85d4-d802-7d0f-a4f9-1f9e2f5e1113",
@@ -1451,7 +1451,7 @@
   {
    "id": "019f8d31-a861-761d-a91f-8fb73146db2b",
    "created_at": "2026-07-23T04:17:49.665351Z",
-   "intent": "Ping"
+   "intent": "Ping from the uptime checker"
   },
   {
    "id": "019f8e05-daad-7cfc-a1c9-6833255b1e15",
@@ -1461,17 +1461,17 @@
   {
    "id": "019f8e25-66e1-737a-a630-ec4193ea78c6",
    "created_at": "2026-07-23T08:44:03.681578Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019f8e79-542c-7512-823d-f69652f661de",
    "created_at": "2026-07-23T10:15:43.916545Z",
-   "intent": "Hello"
+   "intent": "Hello, shop helper"
   },
   {
    "id": "019f8eb3-1d4d-7e0d-b837-72c0903ee63e",
    "created_at": "2026-07-23T11:18:50.957657Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f8f75-3b65-78ed-a0fa-4bf66f316385",
@@ -1596,7 +1596,7 @@
   {
    "id": "019f98de-75d8-7a92-8d8f-2e056b5a6def",
    "created_at": "2026-07-25T10:42:23.832640Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019f9902-a7e8-78a8-a6bf-233574f80e5d",
@@ -1621,7 +1621,7 @@
   {
    "id": "019f9ad2-7b1a-721b-9746-e1d7961676a8",
    "created_at": "2026-07-25T19:48:33.178230Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f9b5a-741e-7c67-af3b-943172bcf5c5",
@@ -1636,7 +1636,7 @@
   {
    "id": "019f9c0a-1713-7db1-a5b6-9f2548467ba2",
    "created_at": "2026-07-26T01:28:54.803462Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f9c20-9963-7a6a-938d-671704954689",
@@ -1646,7 +1646,7 @@
   {
    "id": "019f9e2b-8510-72b7-a777-0df084dbe507",
    "created_at": "2026-07-26T11:24:40.080332Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019f9fbd-96ff-7a87-a441-300a09493e8c",
@@ -1666,7 +1666,7 @@
   {
    "id": "019fa0c9-285d-7958-bd1b-863f8ebacdb9",
    "created_at": "2026-07-26T23:36:05.469712Z",
-   "intent": "Good morning"
+   "intent": "Good morning, shop team"
   },
   {
    "id": "019fa13e-e060-77fb-9de8-32777feae927",
@@ -1741,7 +1741,7 @@
   {
    "id": "019fa946-d182-7479-9116-ac7e3d1185d8",
    "created_at": "2026-07-28T15:10:18.498411Z",
-   "intent": "Where is my order?"
+   "intent": "Where has my order got to?"
   },
   {
    "id": "019fa982-d7dd-7db5-9451-82b0bce118aa",
@@ -1816,7 +1816,7 @@
   {
    "id": "019fad41-88e6-771f-affc-f4a204482715",
    "created_at": "2026-07-29T09:43:01.094042Z",
-   "intent": "Hi there"
+   "intent": "Hi there, shop helper"
   },
   {
    "id": "019fada3-9926-7897-9488-761fa8c5610e",
@@ -1826,7 +1826,7 @@
   {
    "id": "019fadd3-77e8-7673-973e-ce61a53855da",
    "created_at": "2026-07-29T12:22:25.000796Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019fae46-4df3-78f0-a4d8-400ce686eaa9",
@@ -1836,12 +1836,12 @@
   {
    "id": "019faef4-ed8c-7778-afee-1ba75c16eb90",
    "created_at": "2026-07-29T17:38:35.020479Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019fb096-7251-70e1-8afb-65ee0efc3f40",
    "created_at": "2026-07-30T01:14:37.521477Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019fb0a3-c29a-73e8-84dd-ddf282085abd",
@@ -1876,7 +1876,7 @@
   {
    "id": "019fb1e9-d71e-7b98-92e2-3bce3b76b572",
    "created_at": "2026-07-30T07:25:20.030954Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019fb282-766a-7ac2-b30e-dbc3e6036d13",
@@ -1901,7 +1901,7 @@
   {
    "id": "019fb38c-b511-7cab-8dba-2a3886fac2bd",
    "created_at": "2026-07-30T15:02:50.897116Z",
-   "intent": "Good morning"
+   "intent": "Good morning, shop team"
   },
   {
    "id": "019fb3f2-42bf-7957-9ec7-cc67e28803ea",
@@ -1926,7 +1926,7 @@
   {
    "id": "019fb598-0d94-75b4-ae7a-8ec07e93c46a",
    "created_at": "2026-07-31T00:34:28.884542Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019fb609-51e3-73d1-9900-8e095d99df7b",
@@ -1981,7 +1981,7 @@
   {
    "id": "019fb96e-3b38-7076-8d97-7c2d61195e7e",
    "created_at": "2026-07-31T18:27:16.920265Z",
-   "intent": "Retry the previous request"
+   "intent": "Retry the request once more"
   },
   {
    "id": "019fb980-57b4-737f-9584-e5609246307a",

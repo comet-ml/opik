@@ -1,81 +1,79 @@
 {
  "topics": [
   {
-   "name": "Order Status and Tracking",
-   "definition": "Requests to find the location, delivery date, or current status of a specific order.",
+   "name": "Order Delivery Management",
+   "definition": "Requests to change, track, or schedule delivery of an order.",
    "clusters": [
-    5
+    5,
+    0
    ]
   },
   {
-   "name": "Returns and Refunds",
-   "definition": "Requests to initiate returns, check refund status, or inquire about refund policies and timelines.",
+   "name": "Product Returns and Refunds",
+   "definition": "Requests to initiate returns, check refund status, or ask about return policies.",
    "clusters": [
-    2
-   ]
-  },
-  {
-   "name": "Order Modifications",
-   "definition": "Requests to change delivery details, address, size, or add messages to an existing order.",
-   "clusters": [
+    7,
+    12,
     6
    ]
   },
   {
-   "name": "Payment and Billing",
-   "definition": "Requests regarding payment methods, declined transactions, split payments, or duplicate charges.",
+   "name": "Order Status and Tracking",
+   "definition": "Requests to check where an order is, its current status, or delays.",
+   "clusters": [
+    1
+   ]
+  },
+  {
+   "name": "Payment and Billing Issues",
+   "definition": "Requests about payment methods, declined cards, charges, or splitting payments.",
+   "clusters": [
+    10
+   ]
+  },
+  {
+   "name": "Account and Profile Management",
+   "definition": "Requests to change account details, log in, log out, or manage account security.",
+   "clusters": [
+    3,
+    9
+   ]
+  },
+  {
+   "name": "Product Information and Specifications",
+   "definition": "Requests asking for product details, dimensions, materials, or suitability.",
+   "clusters": [
+    11,
+    13
+   ]
+  },
+  {
+   "name": "Product Assembly and Care",
+   "definition": "Requests for instructions on how to assemble, clean, or maintain a product.",
+   "clusters": []
+  },
+  {
+   "name": "Discounts and Promotions",
+   "definition": "Requests about discount codes, sales, or applying promo codes to an order.",
+   "clusters": []
+  },
+  {
+   "name": "Order Customization",
+   "definition": "Requests to add messages, change sizes, or modify order contents before shipping.",
    "clusters": [
     14
    ]
   },
   {
-   "name": "Product Information and Support",
-   "definition": "Requests for product specifications, assembly instructions, care guides, or product availability.",
+   "name": "Customer Support Escalation",
+   "definition": "Requests to speak to a human agent or get help from a live person.",
    "clusters": [
-    4
-   ]
-  },
-  {
-   "name": "Account Management",
-   "definition": "Requests to modify account settings, reset passwords, manage security, or access personal data.",
-   "clusters": [
-    12
-   ]
-  },
-  {
-   "name": "Sales and Promotions",
-   "definition": "Requests about discount codes, promo codes, sales events, and voucher usage.",
-   "clusters": [
-    1,
-    0
-   ]
-  },
-  {
-   "name": "Internal Reporting",
-   "definition": "Requests to generate stock reports, sales summaries, or track late deliveries for internal teams.",
-   "clusters": [
-    9,
-    13
-   ]
-  },
-  {
-   "name": "Delivery Instructions",
-   "definition": "Requests to hold orders, change delivery slots, or arrange alternative delivery locations.",
-   "clusters": [
-    7
-   ]
-  },
-  {
-   "name": "Customer Service Access",
-   "definition": "Requests to speak to a human agent or inquire about service hours.",
-   "clusters": [
-    3
+    8
    ]
   }
  ],
  "other": [
-  8,
-  10,
-  11
+  4,
+  2
  ]
 }
