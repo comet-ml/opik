@@ -27,7 +27,7 @@ import java.util.UUID;
  *        in the backfill window, as last discovered. Too high by the traces whose summary is blank or missing and by
  *        those the embed service refuses, which never get a vector, and by a relabelled trace's older done rows until
  *        ClickHouse merges them. 0 until first discovered
- * @param tracesDone about how many of them have a vector: the project's vector rows, not deleted, of traces created
+ * @param tracesDone about how many of them have a vector: the project's traces with a live vector, created
  *        in the backfill window, as last discovered, plus the vectors the backfill wrote since. Never above
  *        {@code tracesTotal}. Not kept up once the project is drained
  */

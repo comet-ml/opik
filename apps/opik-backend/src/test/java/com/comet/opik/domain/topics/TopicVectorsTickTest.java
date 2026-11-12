@@ -1165,7 +1165,8 @@ class TopicVectorsTickTest {
 
         @Test
         @DisplayName("the discovery finds each project's done status rows of the window and its latest one, and the "
-                + "vector count its vector rows; a failed status and a tombstoned vector are not counted")
+                + "vector count its traces with a live vector; a failed status, a tombstoned vector, a second task "
+                + "version and a rewritten row are not counted")
         void discoveryAggregates() {
             var workspaceId = ID_GENERATOR.generateId().toString();
             var first = ID_GENERATOR.generateId();
@@ -1184,6 +1185,9 @@ class TopicVectorsTickTest {
                     vector(workspaceId, first, firstTraces.get(1), 1),
                     vector(workspaceId, second, secondTraces.get(0), 1))).block();
             insertTombstone(workspaceId, secondTraces.get(0), 1);
+            // A relabel's second task version of one trace, and a rewrite of another's row: still one trace each.
+            vectorsDAO.insert(List.of(vector(workspaceId, first, firstTraces.get(0), 2),
+                    vector(workspaceId, first, firstTraces.get(1), 1))).block();
             var lower = Instant.now().minus(2, ChronoUnit.HOURS);
 
             var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
@@ -1195,8 +1199,8 @@ class TopicVectorsTickTest {
             assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                     Instant.now().plusSeconds(1)));
             assertThat(vectors.get(first)).isEqualTo(2);
-            // The tombstone row is not counted; the row it replaces still is, until ClickHouse merges them.
-            assertThat(vectors.get(second)).isEqualTo(1);
+            // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
+            assertThat(vectors).doesNotContainKey(second);
             // A window that starts after the traces were created counts none of them, but still finds the projects.
             assertThat(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, lower.minus(8, ChronoUnit.DAYS), 10)
                     .collectList().block())
