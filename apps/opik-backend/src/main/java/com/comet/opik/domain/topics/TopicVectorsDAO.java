@@ -185,15 +185,22 @@ public class TopicVectorsDAO {
             """;
 
     /**
-     * Per project, the vector rows, not deleted, of traces created at or after the window's lower bound: the other
-     * half of the discovery's counts. A plain aggregate too: a vector deleted and not merged yet still counts.
+     * Per project, the traces with a live vector, of traces created at or after the window's lower bound: the other
+     * half of the discovery's counts. As {@code TopicWindowDAO}'s count: each (trace, task version) key counts by its
+     * latest row, a key whose latest row is a tombstone is left out, and a trace counts once, so a relabelled trace's
+     * older task versions and a row a tombstone replaced, not merged yet, do not raise it. The build reads a trace's
+     * highest live task version, so a trace with any live vector is covered.
      */
     private static final String COUNT_VECTORS_BY_PROJECT = """
-            SELECT project_id, count() AS vectors
-            FROM topic_vectors
-            WHERE workspace_id = :workspace_id
-            AND trace_created_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')
-            AND is_deleted = 0
+            SELECT project_id, uniqExact(trace_id) AS vectors
+            FROM (
+                SELECT project_id, trace_id, task_version, argMax(is_deleted, last_updated_at) AS deleted
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:lower_bound_micros, 'UTC')
+                GROUP BY project_id, trace_id, task_version
+            )
+            WHERE deleted = 0
             GROUP BY project_id
             SETTINGS max_threads = 2, max_rows_to_read = <max_rows_to_read>, max_memory_usage = <max_memory_usage>,
                 max_execution_time = <max_execution_time>, priority = 100, log_comment = '<log_comment>'
@@ -405,7 +412,10 @@ public class TopicVectorsDAO {
                         .build()));
     }
 
-    /** Per project, the vector rows of traces created at or after {@code lowerBound}. */
+    /**
+     * Per project, the traces with a live vector, created at or after {@code lowerBound}: see
+     * {@link #COUNT_VECTORS_BY_PROJECT}.
+     */
     public Mono<Map<UUID, Long>> countVectorsByProject(@NonNull String workspaceId, @NonNull Instant lowerBound,
             long maxExecutionSeconds) {
         var template = guarded(COUNT_VECTORS_BY_PROJECT, "topics:count_vectors_by_project", workspaceId,
