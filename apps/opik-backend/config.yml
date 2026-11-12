@@ -2636,9 +2636,9 @@ aiLabels:
     #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
 
-# Topics: groups traces by the intent ai-labels summarizes. Step 1 stores a bge-small vector of every trace_summary in
-# ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for. Calls
-# aiLabels.inference's deployment with its credential (/v1/embed).
+# Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
+# trace_summary in ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for.
+# Calls aiLabels.inference's deployment with its credential (/v1/embed).
 topics:
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,

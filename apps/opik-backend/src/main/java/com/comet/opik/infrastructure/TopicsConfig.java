@@ -21,9 +21,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * Topics: groups traces by the intent ai-labels summarizes. Step 1 only stores a bge-small vector of every summary, for
- * the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for. Off by default, and deliberately not a
- * service toggle. Needs ai-labels on, and calls the same opik-inference deployment with the same credential
+ * Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
+ * summary, for the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for. Off by default, and
+ * deliberately not a service toggle. Needs ai-labels on, and calls the same opik-inference deployment with the same credential
  * ({@code aiLabels.inference}); see {@code OpikConfiguration#isTopicsAiLabelsEnabled}. The defaults are in
  * {@code config.yml}.
  */

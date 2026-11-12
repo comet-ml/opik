@@ -186,8 +186,8 @@ public class TopicVectorsDAO {
 
     /**
      * Per project, the traces with a live vector, of traces created at or after the window's lower bound: the other
-     * half of the discovery's counts. As {@code TopicWindowDAO}'s count: each (trace, task version) key counts by its
-     * latest row, a key whose latest row is a tombstone is left out, and a trace counts once, so a relabelled trace's
+     * half of the discovery's counts. Each (trace, task version) key counts by its latest row, a key whose latest row
+     * is a tombstone is left out, and a trace counts once, so a relabelled trace's
      * older task versions and a row a tombstone replaced, not merged yet, do not raise it. The build reads a trace's
      * highest live task version, so a trace with any live vector is covered.
      */
