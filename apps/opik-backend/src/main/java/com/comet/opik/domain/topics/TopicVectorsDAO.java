@@ -101,7 +101,7 @@ public class TopicVectorsDAO {
                     FROM ai_label_status
                     WHERE workspace_id = :workspace_id
                     <if(project)>AND project_id = :project_id<endif>
-                    <if(excluded)>AND project_id NOT IN :excluded_project_ids<endif>
+                    <if(excluded)>AND project_id NOT IN :undrained_project_ids<endif>
                     AND task = :task
                     AND trace_created_at >= fromUnixTimestamp64Micro(:created_after_micros, 'UTC')
                     <if(created_before)>AND trace_created_at \\< fromUnixTimestamp64Micro(:created_before_micros, 'UTC')<endif>
@@ -372,7 +372,7 @@ public class TopicVectorsDAO {
                         statement.bind("project_id", projectId.toString());
                     }
                     if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids",
+                        statement.bind("undrained_project_ids",
                                 excludedProjectIds.stream().map(UUID::toString).toArray(String[]::new));
                     }
                     if (createdBefore != null) {
