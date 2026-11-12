@@ -1,0 +1,2007 @@
+{
+ "night": "2026-08-01T00:00:00Z",
+ "window_from": "2026-07-02T00:00:00Z",
+ "dimensions": 384,
+ "traces": [
+  {
+   "id": "019f2047-04e5-7784-aa16-6da25ebfd0af",
+   "created_at": "2026-07-02T00:42:33.061263Z",
+   "intent": "Where can I find my invoice?"
+  },
+  {
+   "id": "019f20a9-9368-7be4-b538-8d2a11bc6b26",
+   "created_at": "2026-07-02T02:30:12.072241Z",
+   "intent": "Pay for order 83355 with a different card"
+  },
+  {
+   "id": "019f20c3-1f53-7000-9c32-c486cd8eb234",
+   "created_at": "2026-07-02T02:58:06.291047Z",
+   "intent": "My promo code does not work on the bedside table"
+  },
+  {
+   "id": "019f20c8-a1e6-7a7d-a655-c1c7f75d820c",
+   "created_at": "2026-07-02T03:04:07.398042Z",
+   "intent": "ok"
+  },
+  {
+   "id": "019f20cd-771d-7946-aed2-1cad636cc354",
+   "created_at": "2026-07-02T03:09:24.125011Z",
+   "intent": "Can I put the walnut desk in the dishwasher?"
+  },
+  {
+   "id": "019f2141-4c3b-799b-9852-c9b7bd107645",
+   "created_at": "2026-07-02T05:15:55.323685Z",
+   "intent": "Can I return the walnut desk after 30 days?"
+  },
+  {
+   "id": "019f21e7-e355-711b-99b2-bebfb3a54fa3",
+   "created_at": "2026-07-02T08:17:52.981896Z",
+   "intent": "What are your customer service hours?"
+  },
+  {
+   "id": "019f22a6-0d4b-7414-a6d5-285e06eeacfd",
+   "created_at": "2026-07-02T11:45:35.563967Z",
+   "intent": "How do I clean the wool rug?"
+  },
+  {
+   "id": "019f22b3-795f-7f72-9de9-0e1c154c3e9b",
+   "created_at": "2026-07-02T12:00:15.199772Z",
+   "intent": "Use my birthday voucher on the linen curtains"
+  },
+  {
+   "id": "019f2371-bece-7534-ad7b-da5ab75fadbe",
+   "created_at": "2026-07-02T15:28:04.814288Z",
+   "intent": "Hi, is anyone there?"
+  },
+  {
+   "id": "019f2464-8295-7d32-af08-48b743113efb",
+   "created_at": "2026-07-02T19:53:14.645031Z",
+   "intent": "Change the delivery slot for order 60148"
+  },
+  {
+   "id": "019f2509-811e-7ccf-8df9-fe7e96e33316",
+   "created_at": "2026-07-02T22:53:27.710435Z",
+   "intent": "Can the courier deliver order 39804 on Thursday instead?"
+  },
+  {
+   "id": "019f2560-7c05-7033-9ead-9548dfe1cc01",
+   "created_at": "2026-07-03T00:28:28.037462Z",
+   "intent": "Does the spring sale include the bamboo chair?"
+  },
+  {
+   "id": "019f2563-1dd0-7dcc-9811-4bbfc97b87c1",
+   "created_at": "2026-07-03T00:31:20.528657Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f2606-f23c-7555-98f7-cafc9b722b23",
+   "created_at": "2026-07-03T03:30:17.276039Z",
+   "intent": "Order 83355 has not moved for three days, where is it?"
+  },
+  {
+   "id": "019f2642-543d-7a9f-b420-79185dae7b17",
+   "created_at": "2026-07-03T04:35:08.989784Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f264f-df3f-7321-9bb6-f808013d45e9",
+   "created_at": "2026-07-03T04:49:56.543663Z",
+   "intent": "Cancel my order"
+  },
+  {
+   "id": "019f26ec-77c3-7c34-94cc-3f3aa660f9ef",
+   "created_at": "2026-07-03T07:40:59.203531Z",
+   "intent": "Test"
+  },
+  {
+   "id": "019f271f-c65c-7d2c-b1ed-78e809f1e280",
+   "created_at": "2026-07-03T08:37:01.660107Z",
+   "intent": "When will my parcel arrive?"
+  },
+  {
+   "id": "019f2787-8a98-7479-8fb1-45c5a4d71b15",
+   "created_at": "2026-07-03T10:30:22.104724Z",
+   "intent": "Do you have a video on how to build the bath towel set?"
+  },
+  {
+   "id": "019f27ac-9284-7cd2-b2bd-b118724386eb",
+   "created_at": "2026-07-03T11:10:48.964509Z",
+   "intent": "Change my delivery address"
+  },
+  {
+   "id": "019f27bf-28a7-705b-af5d-570e496fa9ca",
+   "created_at": "2026-07-03T11:31:07.047556Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f27d9-f190-716f-94cd-0a29215fa580",
+   "created_at": "2026-07-03T12:00:22.416823Z",
+   "intent": "I see a payment for order 44619 but no confirmation email"
+  },
+  {
+   "id": "019f2908-501f-7753-ac39-260252ff360c",
+   "created_at": "2026-07-03T17:30:38.495153Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f295a-daec-7a88-aef8-9d62574da63b",
+   "created_at": "2026-07-03T19:00:47.980354Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f295f-6ef4-7b13-904b-5f44ff30ab92",
+   "created_at": "2026-07-03T19:05:48.020425Z",
+   "intent": "I received the wrong colour of towel set"
+  },
+  {
+   "id": "019f2989-13b5-7a68-854b-791ef005e202",
+   "created_at": "2026-07-03T19:51:17.173600Z",
+   "intent": "What material is the glass vase made of?"
+  },
+  {
+   "id": "019f298a-a12e-7609-bd08-3461a1da9ff1",
+   "created_at": "2026-07-03T19:52:58.926715Z",
+   "intent": "Why was my card charged twice for order 67748?"
+  },
+  {
+   "id": "019f2a5e-5829-7eda-9e62-564552fee9b5",
+   "created_at": "2026-07-03T23:44:13.865311Z",
+   "intent": "Can I return the bath towel set if I opened the box?"
+  },
+  {
+   "id": "019f2aa2-3275-762b-99d7-cedb8af6349f",
+   "created_at": "2026-07-04T00:58:20.661471Z",
+   "intent": "My bank says the payment for order 38521 failed"
+  },
+  {
+   "id": "019f2af2-08fe-71e3-9894-8a755613c9ec",
+   "created_at": "2026-07-04T02:25:32.926639Z",
+   "intent": "Change my delivery address"
+  },
+  {
+   "id": "019f2b5a-a434-715f-b515-801445ae65b5",
+   "created_at": "2026-07-04T04:19:48.404822Z",
+   "intent": "The outdoor bench has a stain on it"
+  },
+  {
+   "id": "019f2b87-b9d7-75cf-be64-992c141edf96",
+   "created_at": "2026-07-04T05:09:03.063211Z",
+   "intent": "Do you have a video on how to build the terracotta plant pot?"
+  },
+  {
+   "id": "019f2bb2-21c3-7016-b854-98d23104a764",
+   "created_at": "2026-07-04T05:55:22.179383Z",
+   "intent": "Move the delivery of order 65270 to Saturday"
+  },
+  {
+   "id": "019f2c80-bbcc-74ca-a224-2309f0be31d8",
+   "created_at": "2026-07-04T09:41:02.028834Z",
+   "intent": "What are your customer service hours?"
+  },
+  {
+   "id": "019f2cb1-90b9-7831-aed7-54332b54f956",
+   "created_at": "2026-07-04T10:34:22.265932Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f2d45-fb19-7707-88f5-eb0014224250",
+   "created_at": "2026-07-04T13:16:28.825563Z",
+   "intent": "Try again please"
+  },
+  {
+   "id": "019f2e36-cfdd-737f-b35e-19843a6efb5c",
+   "created_at": "2026-07-04T17:39:31.933140Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f2fc0-cf83-7bca-b079-8db55957d100",
+   "created_at": "2026-07-05T00:49:53.027830Z",
+   "intent": "Count the late deliveries in the west region this week"
+  },
+  {
+   "id": "019f3133-3ce0-76aa-ae69-6880a35b2f37",
+   "created_at": "2026-07-05T07:34:29.344657Z",
+   "intent": "I did not get the password reset email"
+  },
+  {
+   "id": "019f318c-6f2d-75bc-8e62-d0c8c91818fc",
+   "created_at": "2026-07-05T09:11:54.925619Z",
+   "intent": "Has order 83355 been sent yet?"
+  },
+  {
+   "id": "019f31fa-a530-744e-bad0-315a080fc303",
+   "created_at": "2026-07-05T11:12:17.712646Z",
+   "intent": "How do I send back the rattan basket?"
+  },
+  {
+   "id": "019f321b-ee82-7674-94fd-fd7ae318f7fb",
+   "created_at": "2026-07-05T11:48:39.170493Z",
+   "intent": "Do you ship to other countries?"
+  },
+  {
+   "id": "019f328c-827a-7ed5-9c35-5c1af41a321c",
+   "created_at": "2026-07-05T13:51:37.082517Z",
+   "intent": "Speak to a human agent"
+  },
+  {
+   "id": "019f329c-a43e-7ecc-b2c2-571114bc0eb6",
+   "created_at": "2026-07-05T14:09:14.302446Z",
+   "intent": "Reset my password"
+  },
+  {
+   "id": "019f32c8-58bb-7407-abf1-9db4c89a1da3",
+   "created_at": "2026-07-05T14:56:58.555213Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f3385-bfe8-72b1-9871-987d1fc62e79",
+   "created_at": "2026-07-05T18:23:51.272474Z",
+   "intent": "Is there a discount code this week?"
+  },
+  {
+   "id": "019f3437-32e7-710b-b0d5-c6f87827ddec",
+   "created_at": "2026-07-05T21:37:40.583638Z",
+   "intent": "Can I split the payment for order 41027?"
+  },
+  {
+   "id": "019f344b-f12c-7d90-bcac-f0af735461cc",
+   "created_at": "2026-07-05T22:00:20.012999Z",
+   "intent": "When does order 41027 leave the warehouse?"
+  },
+  {
+   "id": "019f34e4-f48c-7e72-915f-31901d5613ed",
+   "created_at": "2026-07-06T00:47:27.884926Z",
+   "intent": "Reset my password"
+  },
+  {
+   "id": "019f3507-af43-7430-ae71-24ad60ebc943",
+   "created_at": "2026-07-06T01:25:23.907924Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f35bc-49f2-7a9a-945f-09feec832ff0",
+   "created_at": "2026-07-06T04:42:39.986777Z",
+   "intent": "I can't log in to my account"
+  },
+  {
+   "id": "019f35e9-adbc-758d-9994-e061d63571c1",
+   "created_at": "2026-07-06T05:32:14.652958Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f35f6-d253-7208-8448-924f370b7b24",
+   "created_at": "2026-07-06T05:46:35.987505Z",
+   "intent": "Order 47713 has not moved for three days, where is it?"
+  },
+  {
+   "id": "019f3797-4a77-7a03-96b0-17e0e6972326",
+   "created_at": "2026-07-06T13:21:29.719509Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f37f3-544a-78ce-9070-b6886ce1f740",
+   "created_at": "2026-07-06T15:02:01.546450Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f3802-d4c8-7398-a14e-fc71fa78e359",
+   "created_at": "2026-07-06T15:18:57.480537Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f38f6-8186-79ad-96a7-79875b203ff2",
+   "created_at": "2026-07-06T19:45:06.950469Z",
+   "intent": "Hey"
+  },
+  {
+   "id": "019f39f8-f481-7671-8ea8-fbaf5cd46ce1",
+   "created_at": "2026-07-07T00:27:24.673362Z",
+   "intent": "Reset my password"
+  },
+  {
+   "id": "019f3b0b-54a4-77e6-abd1-c8f3d727a096",
+   "created_at": "2026-07-07T05:27:06.148513Z",
+   "intent": "Can I pre-order the oak bookshelf?"
+  },
+  {
+   "id": "019f3b75-e326-7686-b5b9-575a21a66410",
+   "created_at": "2026-07-07T07:23:29.446424Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f3b86-4502-7649-bf11-56ab44bdffc8",
+   "created_at": "2026-07-07T07:41:23.074953Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f3baf-6546-7b04-8a19-5092d0cf6899",
+   "created_at": "2026-07-07T08:26:18.310312Z",
+   "intent": "How do I fix the rattan basket to the wall?"
+  },
+  {
+   "id": "019f3c13-d16f-72a1-bdff-1f024fd34021",
+   "created_at": "2026-07-07T10:15:59.599617Z",
+   "intent": "How many walnut desks do you have left?"
+  },
+  {
+   "id": "019f3c1d-8ee8-79d3-88cf-453cfbe65c45",
+   "created_at": "2026-07-07T10:26:37.928913Z",
+   "intent": "My bank says the payment for order 31864 failed"
+  },
+  {
+   "id": "019f3c35-18a3-7499-ac18-4cab40c0fe6b",
+   "created_at": "2026-07-07T10:52:20.515601Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f3c4d-71fa-733f-9fdd-32f43645328e",
+   "created_at": "2026-07-07T11:18:56.250423Z",
+   "intent": "One part of the standing lamp is missing"
+  },
+  {
+   "id": "019f3c90-1f53-7120-a053-fb41b45c5002",
+   "created_at": "2026-07-07T12:31:46.003355Z",
+   "intent": "How should I wash the rattan basket?"
+  },
+  {
+   "id": "019f3ca9-74e5-70f0-ac93-d24f98a1316a",
+   "created_at": "2026-07-07T12:59:26.309659Z",
+   "intent": "Prepare the Wednesday sales summary for the store managers"
+  },
+  {
+   "id": "019f3cbd-32f4-7402-b8c8-92a2d8522d07",
+   "created_at": "2026-07-07T13:21:00.148836Z",
+   "intent": "Build the weekly stock report for the east warehouse"
+  },
+  {
+   "id": "019f3ce9-14f2-7176-b1c2-2e0c73b7b3aa",
+   "created_at": "2026-07-07T14:08:56.050084Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f3d27-f1e7-76eb-a424-c04b757661d9",
+   "created_at": "2026-07-07T15:17:35.847988Z",
+   "intent": "Reset my password"
+  },
+  {
+   "id": "019f3d45-8124-7539-b570-96f95fc85cb5",
+   "created_at": "2026-07-07T15:49:53.060710Z",
+   "intent": "Is the outdoor bench weatherproof?"
+  },
+  {
+   "id": "019f3d54-8492-709b-ab69-946d388c0857",
+   "created_at": "2026-07-07T16:06:16.978670Z",
+   "intent": "How heavy is the wool rug?"
+  },
+  {
+   "id": "019f3d63-bfe6-7d17-b387-f853bd1483e6",
+   "created_at": "2026-07-07T16:22:55.206623Z",
+   "intent": "The lamp I received is broken"
+  },
+  {
+   "id": "019f3d78-5c81-742c-8243-8c166bd6cb45",
+   "created_at": "2026-07-07T16:45:26.017074Z",
+   "intent": "How long do refunds take?"
+  },
+  {
+   "id": "019f3db6-7aab-71bb-9e2f-9aed32d28e05",
+   "created_at": "2026-07-07T17:53:16.971706Z",
+   "intent": "Start a return for the walnut desk"
+  },
+  {
+   "id": "019f3e06-56db-759b-bbec-ccbf1b406a66",
+   "created_at": "2026-07-07T19:20:30.683048Z",
+   "intent": "Does the shoe rack come in grey?"
+  },
+  {
+   "id": "019f3e23-7d59-7fb0-8265-f949e1d0d09b",
+   "created_at": "2026-07-07T19:52:21.081779Z",
+   "intent": "Send a replacement for the damaged oak bookshelf"
+  },
+  {
+   "id": "019f3e66-5f89-7bd9-b53c-d2744c3ab146",
+   "created_at": "2026-07-07T21:05:24.361582Z",
+   "intent": "Send a replacement for the damaged steel kettle"
+  },
+  {
+   "id": "019f3ef4-dc0c-7c64-b933-363ff6bb9044",
+   "created_at": "2026-07-07T23:41:02.348865Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f3f82-b572-7c99-a64a-18ecb5e9f7bd",
+   "created_at": "2026-07-08T02:15:58.578193Z",
+   "intent": "Why was my card charged twice for order 56082?"
+  },
+  {
+   "id": "019f3f98-ca65-7df7-8c4d-a6b160fc5d25",
+   "created_at": "2026-07-08T02:40:05.733159Z",
+   "intent": "Do you ship to other countries?"
+  },
+  {
+   "id": "019f3f99-6dc6-75ea-a594-89af3c4dc63e",
+   "created_at": "2026-07-08T02:40:47.558705Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f3ff6-4470-7f8f-ae77-75938246cadc",
+   "created_at": "2026-07-08T04:22:11.824315Z",
+   "intent": "Sign me up for an account with my phone number"
+  },
+  {
+   "id": "019f401d-45ad-7203-b351-ad68829b0106",
+   "created_at": "2026-07-08T05:04:48.045959Z",
+   "intent": "My tracking link for order 83355 does not work"
+  },
+  {
+   "id": "019f4063-da70-7e3a-aea8-7cd8141cabf4",
+   "created_at": "2026-07-08T06:21:53.648994Z",
+   "intent": "Is the feather pillow suitable for a small flat?"
+  },
+  {
+   "id": "019f4077-7c59-75e7-8559-442c31e993a5",
+   "created_at": "2026-07-08T06:43:20.281005Z",
+   "intent": "Turn on two-step sign-in for my account"
+  },
+  {
+   "id": "019f40d3-b6ce-7e04-9999-2fb4c3cbf429",
+   "created_at": "2026-07-08T08:24:04.558487Z",
+   "intent": "Use my birthday voucher on the glass vase"
+  },
+  {
+   "id": "019f4101-3aa5-79f6-8760-a413ada59f32",
+   "created_at": "2026-07-08T09:13:47.429051Z",
+   "intent": "Is the glass vase safe to use outdoors?"
+  },
+  {
+   "id": "019f4161-141d-7f51-9f57-99c23e8ac458",
+   "created_at": "2026-07-08T10:58:29.021861Z",
+   "intent": "The courier left my parcel at the wrong door"
+  },
+  {
+   "id": "019f417f-707f-7082-be3d-14fdc148aea7",
+   "created_at": "2026-07-08T11:31:38.751008Z",
+   "intent": "Stop the shop from saving my addresses"
+  },
+  {
+   "id": "019f426f-0d76-78b6-982e-b708710658ef",
+   "created_at": "2026-07-08T15:53:22.038994Z",
+   "intent": "Can I pre-order the steel kettle?"
+  },
+  {
+   "id": "019f4336-4184-7cd7-b8e5-c8c85a55952a",
+   "created_at": "2026-07-08T19:30:57.028949Z",
+   "intent": "Can I return the feather pillow if I opened the box?"
+  },
+  {
+   "id": "019f436b-4161-79a9-beb6-b91d396f5316",
+   "created_at": "2026-07-08T20:28:50.401163Z",
+   "intent": "The lamp I received is broken"
+  },
+  {
+   "id": "019f4381-03f3-77c2-a9a3-1595cfdf652f",
+   "created_at": "2026-07-08T20:52:36.467294Z",
+   "intent": "My tracking link for order 47713 does not work"
+  },
+  {
+   "id": "019f438b-cef8-71b2-b3cc-856ca5c62250",
+   "created_at": "2026-07-08T21:04:23.800085Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f4394-36fc-7b74-8c34-07f27cb7e3cd",
+   "created_at": "2026-07-08T21:13:34.716686Z",
+   "intent": "List the orders that are late today"
+  },
+  {
+   "id": "019f43c2-aa20-71bf-92ad-ab31ca003936",
+   "created_at": "2026-07-08T22:04:18.848661Z",
+   "intent": "Where are the assembly instructions for the kitchen stool?"
+  },
+  {
+   "id": "019f43d9-a6d6-785f-9200-c8fd40922d87",
+   "created_at": "2026-07-08T22:29:25.334961Z",
+   "intent": "Was I charged twice for my order?"
+  },
+  {
+   "id": "019f4452-701c-7074-b2e8-7e0b8bf3c325",
+   "created_at": "2026-07-09T00:41:21.180704Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f4487-e3d9-74be-a9ec-8e754e920422",
+   "created_at": "2026-07-09T01:39:44.217974Z",
+   "intent": "Send order 44619 to my work address"
+  },
+  {
+   "id": "019f44ab-e4a1-7504-bcc5-4f32fe4426ea",
+   "created_at": "2026-07-09T02:19:03.713863Z",
+   "intent": "Unsubscribe me from the marketing emails"
+  },
+  {
+   "id": "019f450b-48f1-7e75-91b2-f3e6a15a7f26",
+   "created_at": "2026-07-09T04:03:15.313631Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f4540-cf3f-74b6-b6c3-8bf3c6365e67",
+   "created_at": "2026-07-09T05:01:43.103447Z",
+   "intent": "My promo code does not work on the oak bookshelf"
+  },
+  {
+   "id": "019f472f-49ee-7fdd-82c2-cdf666d5d7ca",
+   "created_at": "2026-07-09T14:01:49.294730Z",
+   "intent": "Why is the oak bookshelf out of stock everywhere?"
+  },
+  {
+   "id": "019f4733-b2a2-76c7-902d-6054fe4d76a1",
+   "created_at": "2026-07-09T14:06:38.242400Z",
+   "intent": "My bank says the payment for order 72561 failed"
+  },
+  {
+   "id": "019f4755-f12b-7480-8ddf-f2ffe2c0a5ed",
+   "created_at": "2026-07-09T14:44:02.475313Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f4766-d427-7a00-bdc8-e89e759be790",
+   "created_at": "2026-07-09T15:02:29.159297Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f48c4-ffea-7d74-bb94-80adf79719c9",
+   "created_at": "2026-07-09T21:24:57.962124Z",
+   "intent": "Does the spring sale include the wall clock?"
+  },
+  {
+   "id": "019f4929-9534-765c-888a-b3f205207330",
+   "created_at": "2026-07-09T23:14:49.780538Z",
+   "intent": "Summarise today's returns for the south region"
+  },
+  {
+   "id": "019f4a3d-dcba-78a1-9077-728210dff68d",
+   "created_at": "2026-07-10T04:16:36.026252Z",
+   "intent": "Can I return the bedside table after 30 days?"
+  },
+  {
+   "id": "019f4af1-64dd-7cac-b6f6-9d28ce7874a3",
+   "created_at": "2026-07-10T07:32:41.821215Z",
+   "intent": "The terracotta plant pot does not match the photo"
+  },
+  {
+   "id": "019f4b07-fbc4-76e2-b4ad-40489033fd7e",
+   "created_at": "2026-07-10T07:57:22.244679Z",
+   "intent": "I got a navy wall clock but ordered a different colour"
+  },
+  {
+   "id": "019f4b3b-c2ae-73be-aa5a-ae92b5e4a71b",
+   "created_at": "2026-07-10T08:53:55.502113Z",
+   "intent": "One part of the rattan basket is missing"
+  },
+  {
+   "id": "019f4ba4-40ea-7c15-8f74-ac65f5395e39",
+   "created_at": "2026-07-10T10:48:03.562207Z",
+   "intent": "Compare the wool rug with the larger model"
+  },
+  {
+   "id": "019f4bdd-b384-77b5-a02c-9a9f69be105b",
+   "created_at": "2026-07-10T11:50:48.452405Z",
+   "intent": "Move the delivery of order 44619 to Monday"
+  },
+  {
+   "id": "019f4c1a-ee4f-72b9-90f7-666314d3f983",
+   "created_at": "2026-07-10T12:57:41.199002Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f4c22-34b6-79e1-afaa-65e67ece1a13",
+   "created_at": "2026-07-10T13:05:37.974351Z",
+   "intent": "Test"
+  },
+  {
+   "id": "019f4cbf-a47b-74e1-849e-c9a7c6b57f20",
+   "created_at": "2026-07-10T15:57:35.739323Z",
+   "intent": "Can I put the bath towel set in the dishwasher?"
+  },
+  {
+   "id": "019f4d0e-41ab-7121-a794-a26622222631",
+   "created_at": "2026-07-10T17:23:27.787177Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f4dac-33d0-739e-b228-2e626044e94d",
+   "created_at": "2026-07-10T20:15:58.928525Z",
+   "intent": "I returned the rattan basket but got no refund"
+  },
+  {
+   "id": "019f4dae-0907-7fcb-a1c0-1cafb353d6be",
+   "created_at": "2026-07-10T20:17:59.047514Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f4e52-61b8-770d-90ab-889f4b666992",
+   "created_at": "2026-07-10T23:17:29.656997Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f4ed7-bdb1-750a-84fd-a1b43095824d",
+   "created_at": "2026-07-11T01:43:09.489005Z",
+   "intent": "Is there a discount code this week?"
+  },
+  {
+   "id": "019f4ef3-beff-720f-8e1b-0da655927ca4",
+   "created_at": "2026-07-11T02:13:44.831311Z",
+   "intent": "How much is delivery?"
+  },
+  {
+   "id": "019f4ef9-7273-7820-9eeb-3f587a91d89c",
+   "created_at": "2026-07-11T02:19:58.451235Z",
+   "intent": "Check the balance of my gift card"
+  },
+  {
+   "id": "019f4f1a-5f88-747f-9c2c-7207221dd294",
+   "created_at": "2026-07-11T02:55:56.296401Z",
+   "intent": "Can a neighbour accept order 44619 for me?"
+  },
+  {
+   "id": "019f4f3c-aef0-71b7-9e6c-c9e1e09c9435",
+   "created_at": "2026-07-11T03:33:24.848198Z",
+   "intent": "Start a return for the feather pillow"
+  },
+  {
+   "id": "019f4fa4-ceb8-72f2-97c6-1025f38c23c6",
+   "created_at": "2026-07-11T05:27:08.728632Z",
+   "intent": "Can I split the payment for order 60148?"
+  },
+  {
+   "id": "019f4ff1-22c7-75bf-b24e-cd084cfa722b",
+   "created_at": "2026-07-11T06:50:30.983262Z",
+   "intent": "Add a second delivery address to my account"
+  },
+  {
+   "id": "019f5059-8467-76fd-87d4-17202ab4c2cd",
+   "created_at": "2026-07-11T08:44:31.719812Z",
+   "intent": "Use my birthday voucher on the steel kettle"
+  },
+  {
+   "id": "019f5097-755c-7ff3-a4e7-797eb6aef360",
+   "created_at": "2026-07-11T09:52:11.100548Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f50a1-8be9-79ee-9c3b-16bf72236dc3",
+   "created_at": "2026-07-11T10:03:12.233412Z",
+   "intent": "My card payment was declined"
+  },
+  {
+   "id": "019f5169-ba86-707d-a905-e4ed87456451",
+   "created_at": "2026-07-11T13:41:51.366239Z",
+   "intent": "Send order 72561 to my work address"
+  },
+  {
+   "id": "019f519f-aab2-778c-8153-5aee000abbcb",
+   "created_at": "2026-07-11T14:40:46.258332Z",
+   "intent": "The bath towel set does not match the photo"
+  },
+  {
+   "id": "019f5208-d9f2-7bc0-8b6a-88b14a3ca1b8",
+   "created_at": "2026-07-11T16:35:39.634268Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f520c-c214-72bb-9706-4e64ebe83456",
+   "created_at": "2026-07-11T16:39:55.668523Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f5258-257a-7133-a425-2818f081f537",
+   "created_at": "2026-07-11T18:02:16.314826Z",
+   "intent": "Update my phone number"
+  },
+  {
+   "id": "019f52c4-c041-7214-887d-84bbecce5011",
+   "created_at": "2026-07-11T20:00:53.825897Z",
+   "intent": "Can I return the rattan basket if I opened the box?"
+  },
+  {
+   "id": "019f52e9-78be-7e4b-846d-88a70b773242",
+   "created_at": "2026-07-11T20:41:00.350025Z",
+   "intent": "What are the dimensions of the walnut desk?"
+  },
+  {
+   "id": "019f5420-1b55-731e-9c73-c0cf94eca4cd",
+   "created_at": "2026-07-12T02:20:18.133827Z",
+   "intent": "Cancel my order"
+  },
+  {
+   "id": "019f5453-bcfb-7da8-9559-4102150f153c",
+   "created_at": "2026-07-12T03:16:41.851497Z",
+   "intent": "Do you offer next-day delivery?"
+  },
+  {
+   "id": "019f54ac-4e51-7a96-aef5-f2eb1176f636",
+   "created_at": "2026-07-12T04:53:26.225205Z",
+   "intent": "Build the weekly stock report for the south warehouse"
+  },
+  {
+   "id": "019f54ac-f6be-74fc-9ce5-8c1fb6e7034a",
+   "created_at": "2026-07-12T04:54:09.342286Z",
+   "intent": "Can I pay with a gift card?"
+  },
+  {
+   "id": "019f5511-e1e5-7919-be21-a733804f1aaa",
+   "created_at": "2026-07-12T06:44:23.141246Z",
+   "intent": "Cancel my order"
+  },
+  {
+   "id": "019f552a-8c36-7621-8e3e-5cda8214b3c0",
+   "created_at": "2026-07-12T07:11:19.606815Z",
+   "intent": "I can't log in to my account"
+  },
+  {
+   "id": "019f553c-7347-7cb2-8573-601ada29b130",
+   "created_at": "2026-07-12T07:30:52.871518Z",
+   "intent": "How much is delivery?"
+  },
+  {
+   "id": "019f5573-e68d-7596-9071-c27172d90cb0",
+   "created_at": "2026-07-12T08:31:26.861598Z",
+   "intent": "Which screws do I need for the glass vase?"
+  },
+  {
+   "id": "019f5589-a1bb-778f-b424-2e56ad502fbb",
+   "created_at": "2026-07-12T08:55:11.035927Z",
+   "intent": "My refund has not arrived yet"
+  },
+  {
+   "id": "019f5697-4396-7365-9257-c7f59cb550c2",
+   "created_at": "2026-07-12T13:49:41.654068Z",
+   "intent": "How should I wash the terracotta plant pot?"
+  },
+  {
+   "id": "019f56d4-51de-7b83-9769-4d35e32183e5",
+   "created_at": "2026-07-12T14:56:23.006630Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f57b9-1a09-7370-949c-4b3d1406c4ef",
+   "created_at": "2026-07-12T19:06:16.457308Z",
+   "intent": "Is the terracotta plant pot available for delivery this week?"
+  },
+  {
+   "id": "019f57e6-ff62-79df-a2b9-3b6d1d84ccf1",
+   "created_at": "2026-07-12T19:56:24.290687Z",
+   "intent": "Is there a discount code this week?"
+  },
+  {
+   "id": "019f5839-459a-734b-bfa3-75dfa29c3b04",
+   "created_at": "2026-07-12T21:26:16.218625Z",
+   "intent": "What are the dimensions of the walnut desk?"
+  },
+  {
+   "id": "019f5867-bbe0-7416-bba0-0ba7ef1efb62",
+   "created_at": "2026-07-12T22:17:01.152699Z",
+   "intent": "One part of the shoe rack is missing"
+  },
+  {
+   "id": "019f588b-573b-71c9-bfc1-d93c314438c6",
+   "created_at": "2026-07-12T22:55:54.683442Z",
+   "intent": "My card payment was declined"
+  },
+  {
+   "id": "019f589c-70c4-7010-8814-8fd429191647",
+   "created_at": "2026-07-12T23:14:35.332009Z",
+   "intent": "Delete my account"
+  },
+  {
+   "id": "019f592d-cef1-711c-8902-a86bc917e468",
+   "created_at": "2026-07-13T01:53:22.161276Z",
+   "intent": "The tracking page says order 39804 is delayed, why?"
+  },
+  {
+   "id": "019f599e-cc56-769e-84bd-80e037b950a4",
+   "created_at": "2026-07-13T03:56:47.062232Z",
+   "intent": "Move the delivery of order 60148 to Friday"
+  },
+  {
+   "id": "019f59b9-e2f7-79f7-baf0-673470058d4d",
+   "created_at": "2026-07-13T04:26:22.327363Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f5a3f-c61e-7036-afee-f5f6f2dae8f5",
+   "created_at": "2026-07-13T06:52:36.766486Z",
+   "intent": "Where are the assembly instructions for the floor mirror?"
+  },
+  {
+   "id": "019f5a88-2245-751d-957a-2b6fbe902bc3",
+   "created_at": "2026-07-13T08:11:38.949976Z",
+   "intent": "Check the delivery status of order 83355"
+  },
+  {
+   "id": "019f5b85-8250-75e5-aabf-cd0165d28ce1",
+   "created_at": "2026-07-13T12:48:24.144355Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f5b87-567f-783e-bb82-27792ae25b6d",
+   "created_at": "2026-07-13T12:50:23.999181Z",
+   "intent": "Count the late deliveries in the north region this week"
+  },
+  {
+   "id": "019f5ba7-13d3-70c3-b5ea-653cecdfea1c",
+   "created_at": "2026-07-13T13:25:04.083911Z",
+   "intent": "I want a refund for the ceramic table lamp I returned last week"
+  },
+  {
+   "id": "019f5bb2-dc5f-742b-a91f-5e68f3cee2d9",
+   "created_at": "2026-07-13T13:37:56.319212Z",
+   "intent": "Can I exchange the curtains for a different length?"
+  },
+  {
+   "id": "019f5bfe-06a5-73a8-b5e2-a10f5ba8f129",
+   "created_at": "2026-07-13T15:00:02.341107Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f5c2a-3aa4-7b29-b99f-fa0bf1c194be",
+   "created_at": "2026-07-13T15:48:19.236636Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f5c68-dd1f-7e2b-91fb-29f7af1e854e",
+   "created_at": "2026-07-13T16:56:44.063949Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f5c6c-01bb-77da-baf3-a23f5eaa0271",
+   "created_at": "2026-07-13T17:00:10.043348Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f5c77-c495-70d8-971a-b27f7099341d",
+   "created_at": "2026-07-13T17:13:00.821742Z",
+   "intent": "List the orders that are late today"
+  },
+  {
+   "id": "019f5c7c-e013-7e22-8594-57c157898e60",
+   "created_at": "2026-07-13T17:18:35.539352Z",
+   "intent": "I got a charcoal feather pillow but ordered a different colour"
+  },
+  {
+   "id": "019f5cef-7fa8-7f80-985a-34c3db3c7189",
+   "created_at": "2026-07-13T19:23:47.496841Z",
+   "intent": "Is the oak bookshelf back in stock?"
+  },
+  {
+   "id": "019f5d12-5659-72bf-917f-40896aa5183e",
+   "created_at": "2026-07-13T20:01:50.681413Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f5dcc-58db-7322-b75a-bf6b79f022ca",
+   "created_at": "2026-07-13T23:25:01.019408Z",
+   "intent": "How do I stop the oak bookshelf from fading?"
+  },
+  {
+   "id": "019f5ddb-3ece-7c2b-b01f-2f9f2e5b8306",
+   "created_at": "2026-07-13T23:41:17.390256Z",
+   "intent": "Find out when order 29937 will be delivered"
+  },
+  {
+   "id": "019f5f26-3d2c-784b-96d5-614836d5a203",
+   "created_at": "2026-07-14T05:42:49.388763Z",
+   "intent": "Can I pick up my order from a collection point?"
+  },
+  {
+   "id": "019f5f82-1d17-7cb9-b745-cf7cab6b01c6",
+   "created_at": "2026-07-14T07:23:10.487120Z",
+   "intent": "Speak to a human agent"
+  },
+  {
+   "id": "019f5f9b-9702-715b-b4e1-42d4211b2cbd",
+   "created_at": "2026-07-14T07:51:00.098532Z",
+   "intent": "Can I put the wool rug in the dishwasher?"
+  },
+  {
+   "id": "019f6003-893f-78da-b5c4-7678dc9bf4b7",
+   "created_at": "2026-07-14T09:44:32.319539Z",
+   "intent": "How do I stop the cotton duvet cover from fading?"
+  },
+  {
+   "id": "019f6065-7fbf-7212-915b-095c9e8b967f",
+   "created_at": "2026-07-14T11:31:32.415102Z",
+   "intent": "What are the exact measurements of the standing lamp?"
+  },
+  {
+   "id": "019f6082-8e20-76c5-a03b-9c2488972057",
+   "created_at": "2026-07-14T12:03:16.640348Z",
+   "intent": "When will the wall clock be back in stock?"
+  },
+  {
+   "id": "019f616c-2884-70c9-979a-a107fba2b772",
+   "created_at": "2026-07-14T16:18:26.052746Z",
+   "intent": "Thank you so much 🚀"
+  },
+  {
+   "id": "019f6188-4b8a-7dbe-a6c3-9d53ba69eecd",
+   "created_at": "2026-07-14T16:49:10.026416Z",
+   "intent": "Speak to a human agent"
+  },
+  {
+   "id": "019f619f-ba0a-7322-9f02-660b048350fc",
+   "created_at": "2026-07-14T17:14:45.642242Z",
+   "intent": "Order 71406 has not moved for three days, where is it?"
+  },
+  {
+   "id": "019f61bb-e1ff-7e70-a949-b45fbbb6a3f7",
+   "created_at": "2026-07-14T17:45:30.879525Z",
+   "intent": "Buy a gift card worth 20 pounds"
+  },
+  {
+   "id": "019f61bd-4eab-7123-ab8f-7d7caa831a64",
+   "created_at": "2026-07-14T17:47:04.235680Z",
+   "intent": "Find out when order 47713 will be delivered"
+  },
+  {
+   "id": "019f6215-593b-7a0a-9c53-93f371bea01a",
+   "created_at": "2026-07-14T19:23:14.107909Z",
+   "intent": "The courier left my parcel at the wrong door"
+  },
+  {
+   "id": "019f62ce-82fa-7420-8610-fc911a5d82d5",
+   "created_at": "2026-07-14T22:45:28.954411Z",
+   "intent": "I returned the linen curtains but got no refund"
+  },
+  {
+   "id": "019f62ce-92f2-7c2b-a187-723a2a42f1d7",
+   "created_at": "2026-07-14T22:45:33.042183Z",
+   "intent": "Is the kitchen stool available for delivery this week?"
+  },
+  {
+   "id": "019f6302-8fa1-7c74-ab12-04e13dadb8ee",
+   "created_at": "2026-07-14T23:42:20.065007Z",
+   "intent": "Can a neighbour accept order 31864 for me?"
+  },
+  {
+   "id": "019f6336-80ca-7a79-a0d4-d2421147bc44",
+   "created_at": "2026-07-15T00:39:04.138092Z",
+   "intent": "The rattan basket arrived with a crack"
+  },
+  {
+   "id": "019f63ad-c85b-7e44-ba5d-0a9006d24e04",
+   "created_at": "2026-07-15T02:49:21.243261Z",
+   "intent": "Print a return label for the glass vase"
+  },
+  {
+   "id": "019f63c9-b13a-770a-a013-593756881cc1",
+   "created_at": "2026-07-15T03:19:50.330358Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f63ce-fdc0-7789-b719-68113009ad73",
+   "created_at": "2026-07-15T03:25:37.600013Z",
+   "intent": "My promo code does not work on the kitchen stool"
+  },
+  {
+   "id": "019f6468-5020-7c6a-9d1b-0a98f67a6346",
+   "created_at": "2026-07-15T06:13:05.696170Z",
+   "intent": "Buy a gift card worth 100 pounds"
+  },
+  {
+   "id": "019f6487-317f-77ac-a5bb-c4df6fa5dd89",
+   "created_at": "2026-07-15T06:46:49.471381Z",
+   "intent": "The box was crushed and the shoe rack is scratched"
+  },
+  {
+   "id": "019f64bc-14fb-75db-80a9-4b99f23a835c",
+   "created_at": "2026-07-15T07:44:35.579573Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f653a-d272-743b-b735-9ab3624f712c",
+   "created_at": "2026-07-15T10:03:01.618152Z",
+   "intent": "Is there a discount code this week?"
+  },
+  {
+   "id": "019f6592-3c38-7e80-98ac-7bed4de52f40",
+   "created_at": "2026-07-15T11:38:30.328223Z",
+   "intent": "Can I change the size in my order?"
+  },
+  {
+   "id": "019f65b5-dc6e-78c9-b374-b8f58791ab44",
+   "created_at": "2026-07-15T12:17:25.102591Z",
+   "intent": "Unsubscribe me from the marketing emails"
+  },
+  {
+   "id": "019f6608-fa7e-714c-979e-8d5ef900c703",
+   "created_at": "2026-07-15T13:48:12.286042Z",
+   "intent": "When does order 65270 leave the warehouse?"
+  },
+  {
+   "id": "019f6665-4db4-7c99-bc6f-b4296d3ed6fc",
+   "created_at": "2026-07-15T15:29:02.900475Z",
+   "intent": "Hello"
+  },
+  {
+   "id": "019f66c4-e529-72fa-a37c-b2d93dcd1943",
+   "created_at": "2026-07-15T17:13:27.593489Z",
+   "intent": "Do you ship to other countries?"
+  },
+  {
+   "id": "019f66f7-1d0e-7ed1-b57f-4b7c10008d42",
+   "created_at": "2026-07-15T18:08:18.702421Z",
+   "intent": "Which screws do I need for the walnut desk?"
+  },
+  {
+   "id": "019f676b-5a39-72fd-ad3d-5a1ffebca68f",
+   "created_at": "2026-07-15T20:15:16.537531Z",
+   "intent": "Summarise yesterday's customer complaints for the support lead"
+  },
+  {
+   "id": "019f679c-a4c2-70a0-893b-4d319b06311f",
+   "created_at": "2026-07-15T21:09:06.882306Z",
+   "intent": "How do I assemble the bedside table?"
+  },
+  {
+   "id": "019f6855-d518-7173-ae49-66d938ac827c",
+   "created_at": "2026-07-16T00:31:23.416770Z",
+   "intent": "Check the delivery status of order 56082"
+  },
+  {
+   "id": "019f68fa-d196-7ba0-89f7-04d24da923c3",
+   "created_at": "2026-07-16T03:31:35.958406Z",
+   "intent": "Leave order 67748 in the garden shed if I am out"
+  },
+  {
+   "id": "019f6994-34d7-7732-b2e8-a91842674358",
+   "created_at": "2026-07-16T06:19:08.375350Z",
+   "intent": "Show my order history"
+  },
+  {
+   "id": "019f6aa2-487f-7d92-9ce2-37dc2aa24775",
+   "created_at": "2026-07-16T11:14:08.127074Z",
+   "intent": "Does the linen curtains come in rust?"
+  },
+  {
+   "id": "019f6b6d-df5e-7e42-8ed1-8c84194150b9",
+   "created_at": "2026-07-16T14:56:30.558858Z",
+   "intent": "Hello"
+  },
+  {
+   "id": "019f6b70-b8c6-7d09-826a-62f6eeb042ff",
+   "created_at": "2026-07-16T14:59:37.286245Z",
+   "intent": "Send order 29937 to my work address"
+  },
+  {
+   "id": "019f6beb-f9a6-7e98-9d03-3f728f74c0d8",
+   "created_at": "2026-07-16T17:14:14.822845Z",
+   "intent": "Find out when order 65270 will be delivered"
+  },
+  {
+   "id": "019f6c4c-32fd-7aa0-995a-4a57a7aaa4b8",
+   "created_at": "2026-07-16T18:59:20.957944Z",
+   "intent": "Can I change the size in my order?"
+  },
+  {
+   "id": "019f6cb7-188f-7b7b-9e7c-bfadb82a693c",
+   "created_at": "2026-07-16T20:56:06.543370Z",
+   "intent": "Has order 72561 been sent yet?"
+  },
+  {
+   "id": "019f6d44-1ad3-7f20-93f3-4d7e3f5d7e83",
+   "created_at": "2026-07-16T23:30:07.699263Z",
+   "intent": "Tell me when the cream ceramic table lamp is available again"
+  },
+  {
+   "id": "019f6df9-5c15-7f76-b8d8-94968625ccb1",
+   "created_at": "2026-07-17T02:48:06.421884Z",
+   "intent": "Is the shoe rack suitable for a small flat?"
+  },
+  {
+   "id": "019f6f13-7c9b-7518-9ff6-5741359eb7fd",
+   "created_at": "2026-07-17T07:56:15.899235Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f6fc6-413f-7aab-ab01-858f1d731513",
+   "created_at": "2026-07-17T11:11:31.647131Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f70ad-5041-7edd-b5a0-5d975400926e",
+   "created_at": "2026-07-17T15:23:54.305283Z",
+   "intent": "Change my delivery address"
+  },
+  {
+   "id": "019f71ec-1037-7ec2-a34a-e0a86d87862f",
+   "created_at": "2026-07-17T21:12:03.895378Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f71f0-affc-7d91-9df6-4eb0ba186144",
+   "created_at": "2026-07-17T21:17:06.940003Z",
+   "intent": "When does the next sale start?"
+  },
+  {
+   "id": "019f72c7-bfa6-7f7f-a9b1-247088f6ba3c",
+   "created_at": "2026-07-18T01:12:01.190339Z",
+   "intent": "Is the ceramic table lamp safe to use outdoors?"
+  },
+  {
+   "id": "019f7395-1658-7da1-b40d-6c17af184cf9",
+   "created_at": "2026-07-18T04:56:18.264573Z",
+   "intent": "Can I pay for order 58193 in instalments?"
+  },
+  {
+   "id": "019f744d-e01b-72f0-8948-a8c3e517f6bc",
+   "created_at": "2026-07-18T08:18:08.539019Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f74f2-188d-783b-965d-dae39a79040b",
+   "created_at": "2026-07-18T11:17:30.893571Z",
+   "intent": "My tracking link for order 65270 does not work"
+  },
+  {
+   "id": "019f7505-e925-780e-8d46-d60bdd998db3",
+   "created_at": "2026-07-18T11:39:09.477078Z",
+   "intent": "When will my parcel arrive?"
+  },
+  {
+   "id": "019f75c6-6bfa-70e5-97b5-77f5b835e5b3",
+   "created_at": "2026-07-18T15:09:25.882420Z",
+   "intent": "The standing lamp does not match the photo"
+  },
+  {
+   "id": "019f75ef-4fe0-789a-92fc-843772e9f693",
+   "created_at": "2026-07-18T15:54:05.664603Z",
+   "intent": "Does the floor mirror come in navy?"
+  },
+  {
+   "id": "019f7625-2d0d-79c8-b312-94b1f8bddc89",
+   "created_at": "2026-07-18T16:52:55.693516Z",
+   "intent": "How do I get a refund for a returned item?"
+  },
+  {
+   "id": "019f772f-a1f7-70c8-b8f2-ab5fa96180e3",
+   "created_at": "2026-07-18T21:43:58.199091Z",
+   "intent": "Summarise today's returns for the north region"
+  },
+  {
+   "id": "019f7740-5a1a-7e81-9bec-6555bd300595",
+   "created_at": "2026-07-18T22:02:13.914653Z",
+   "intent": "Can I pay for order 38521 in instalments?"
+  },
+  {
+   "id": "019f77f3-78fc-7740-a377-01311b8b8095",
+   "created_at": "2026-07-19T01:17:52.764097Z",
+   "intent": "The tracking page says order 44619 is delayed, why?"
+  },
+  {
+   "id": "019f799d-67fe-7bc4-b10a-9e42a605de1e",
+   "created_at": "2026-07-19T09:03:06.750257Z",
+   "intent": "Why does the app ask me to sign in again every day?"
+  },
+  {
+   "id": "019f79fb-f5df-7dd7-b488-926baa39ea0b",
+   "created_at": "2026-07-19T10:46:23.455105Z",
+   "intent": "The shoe rack arrived with a crack"
+  },
+  {
+   "id": "019f7a25-67c1-7585-98fe-24a49ebf369e",
+   "created_at": "2026-07-19T11:31:39.585397Z",
+   "intent": "Cancel my order"
+  },
+  {
+   "id": "019f7a33-b9ae-71b0-b3b4-1bf7781c9fdf",
+   "created_at": "2026-07-19T11:47:18.062260Z",
+   "intent": "Can I pay with a gift card?"
+  },
+  {
+   "id": "019f7a61-a78d-71c4-bb7f-51ec09ae4708",
+   "created_at": "2026-07-19T12:37:28.077033Z",
+   "intent": "How heavy is the outdoor bench?"
+  },
+  {
+   "id": "019f7a66-9e3e-7e82-98e4-ebad882eed74",
+   "created_at": "2026-07-19T12:42:53.374876Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f7a6f-b18a-73a9-9a66-eb60f3a320ed",
+   "created_at": "2026-07-19T12:52:48.138106Z",
+   "intent": "Retry the last message"
+  },
+  {
+   "id": "019f7ac7-14d0-7262-8fe9-73a2d8030e5a",
+   "created_at": "2026-07-19T14:28:15.184403Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f7b11-d891-7cc2-8bcd-09787614c2c2",
+   "created_at": "2026-07-19T15:49:54.961250Z",
+   "intent": "How do I fix the oak bookshelf to the wall?"
+  },
+  {
+   "id": "019f7b32-ef8f-70ec-844c-fe7124ee06c8",
+   "created_at": "2026-07-19T16:26:03.535989Z",
+   "intent": "Can I pay for order 39804 in instalments?"
+  },
+  {
+   "id": "019f7b38-ec9d-7d02-b96f-5eb85f250c3b",
+   "created_at": "2026-07-19T16:32:35.997235Z",
+   "intent": "How long do refunds take?"
+  },
+  {
+   "id": "019f7ba9-a950-7d9b-9dac-a45a90250eb6",
+   "created_at": "2026-07-19T18:35:44.336002Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f7c7a-51c2-7386-b70b-3b006500e474",
+   "created_at": "2026-07-19T22:23:38.946876Z",
+   "intent": "Download the personal data you hold about me"
+  },
+  {
+   "id": "019f7cd7-0b98-7864-ad7b-a901a7fc6b53",
+   "created_at": "2026-07-20T00:04:55.832187Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f7ceb-dd82-779e-ac8b-ece44e22d68a",
+   "created_at": "2026-07-20T00:27:40.290180Z",
+   "intent": "Delete my account"
+  },
+  {
+   "id": "019f7cf3-3c60-7612-a906-2208fb69d242",
+   "created_at": "2026-07-20T00:35:43.328159Z",
+   "intent": "I returned the feather pillow but got no refund"
+  },
+  {
+   "id": "019f7cf5-5569-7a35-99a4-8c9bcf731367",
+   "created_at": "2026-07-20T00:38:00.809695Z",
+   "intent": "My card payment was declined"
+  },
+  {
+   "id": "019f7d6e-c980-7039-afbc-27bad45fdf6f",
+   "created_at": "2026-07-20T02:50:40.384628Z",
+   "intent": "My account is locked after too many sign-in attempts"
+  },
+  {
+   "id": "019f7d6f-357b-79b4-97a4-3994cec1d24d",
+   "created_at": "2026-07-20T02:51:08.027515Z",
+   "intent": "What are your customer service hours?"
+  },
+  {
+   "id": "019f7dd7-16c5-7622-b3a5-9678144a239a",
+   "created_at": "2026-07-20T04:44:35.909989Z",
+   "intent": "Ask where order 56082 is now"
+  },
+  {
+   "id": "019f7df8-83b3-77ae-b691-91edd4599e4d",
+   "created_at": "2026-07-20T05:21:06.483931Z",
+   "intent": "Can I exchange the curtains for a different length?"
+  },
+  {
+   "id": "019f7e1c-edd1-752d-b6a0-41bcd0ec973f",
+   "created_at": "2026-07-20T06:00:52.945280Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f7e31-9e0b-73c0-9694-b2245283454d",
+   "created_at": "2026-07-20T06:23:28.779136Z",
+   "intent": "The box was crushed and the bath towel set is scratched"
+  },
+  {
+   "id": "019f7f04-d758-7499-914e-92dd37459507",
+   "created_at": "2026-07-20T10:14:11.544194Z",
+   "intent": "Can I use two discount codes on one order?"
+  },
+  {
+   "id": "019f7f58-5122-7cd2-abc0-e84b2b7d27e4",
+   "created_at": "2026-07-20T11:45:22.210138Z",
+   "intent": "Flag orders over 500 pounds for a fraud check in the south region"
+  },
+  {
+   "id": "019f7f93-896e-7baf-8962-712931f378e9",
+   "created_at": "2026-07-20T12:50:03.246438Z",
+   "intent": "Speak to a human agent"
+  },
+  {
+   "id": "019f7fa0-a11a-7721-a778-3fb88c77a9ac",
+   "created_at": "2026-07-20T13:04:21.274968Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f7fb6-c76a-7e6d-a080-cdf2d0a0ffb8",
+   "created_at": "2026-07-20T13:28:32.874104Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f8023-7c45-72bf-98cd-dccb1eeab23a",
+   "created_at": "2026-07-20T15:27:17.061652Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f808c-e205-7f59-b1d9-af20f77a729c",
+   "created_at": "2026-07-20T17:22:24.389330Z",
+   "intent": "How do I send back the bamboo chair?"
+  },
+  {
+   "id": "019f8101-ebfb-7448-a514-0053471dbf21",
+   "created_at": "2026-07-20T19:30:14.651824Z",
+   "intent": "Is the terracotta plant pot safe to use outdoors?"
+  },
+  {
+   "id": "019f8135-01ff-78e7-8e98-6542823f00a7",
+   "created_at": "2026-07-20T20:26:02.623848Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f8178-4904-7240-805c-edb4005cf807",
+   "created_at": "2026-07-20T21:39:31.716210Z",
+   "intent": "Update the billing address on my account"
+  },
+  {
+   "id": "019f8194-c5bb-7944-9012-a66d2b1b972c",
+   "created_at": "2026-07-20T22:10:38.651221Z",
+   "intent": "I received the wrong colour of towel set"
+  },
+  {
+   "id": "019f81d0-6c30-7495-9a48-52d824cdb39e",
+   "created_at": "2026-07-20T23:15:47.888301Z",
+   "intent": "Print a return label for the rattan basket"
+  },
+  {
+   "id": "019f82b0-a080-7179-979a-7f1945cda5d0",
+   "created_at": "2026-07-21T03:20:41.344869Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f836a-5a10-7ef5-91c2-9ce28fa3f6c2",
+   "created_at": "2026-07-21T06:43:33.008205Z",
+   "intent": "Hello"
+  },
+  {
+   "id": "019f8415-fe55-7374-9724-474fe790c686",
+   "created_at": "2026-07-21T09:51:01.717884Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f849b-39fc-7304-b734-5d09ed76a468",
+   "created_at": "2026-07-21T12:16:33.276055Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f84ec-dcfe-7f75-aed0-bb60301d3f1c",
+   "created_at": "2026-07-21T13:45:43.422259Z",
+   "intent": "Great, thanks for the help"
+  },
+  {
+   "id": "019f855b-30a8-7bfa-acf9-cc02719e2300",
+   "created_at": "2026-07-21T15:46:13.800790Z",
+   "intent": "The terracotta plant pot arrived with a crack"
+  },
+  {
+   "id": "019f8564-56ed-7430-affd-cce767d4a15a",
+   "created_at": "2026-07-21T15:56:13.421038Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f85d4-d802-7d0f-a4f9-1f9e2f5e1113",
+   "created_at": "2026-07-21T17:59:06.498751Z",
+   "intent": "How do I get a refund for a returned item?"
+  },
+  {
+   "id": "019f8650-a624-78d7-a428-762a9801c7e9",
+   "created_at": "2026-07-21T20:14:20.196425Z",
+   "intent": "Is return shipping free for the feather pillow?"
+  },
+  {
+   "id": "019f8760-d19d-70fc-b7b1-0a54e3d5627a",
+   "created_at": "2026-07-22T01:11:37.117896Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f8795-92f5-7827-87fd-b6e5ff0e8747",
+   "created_at": "2026-07-22T02:09:14.485899Z",
+   "intent": "What are the exact measurements of the outdoor bench?"
+  },
+  {
+   "id": "019f8814-e4f9-7c59-8343-97a8a8cea079",
+   "created_at": "2026-07-22T04:28:18.553212Z",
+   "intent": "Get a VAT invoice for order 38521"
+  },
+  {
+   "id": "019f8843-1072-722b-84e3-23c0152e3e27",
+   "created_at": "2026-07-22T05:18:44.338451Z",
+   "intent": "The tracking page says order 52290 is delayed, why?"
+  },
+  {
+   "id": "019f88cc-ef23-70a2-9d61-245e0ab07768",
+   "created_at": "2026-07-22T07:49:19.779012Z",
+   "intent": "Can the courier deliver order 41027 on Thursday instead?"
+  },
+  {
+   "id": "019f88f2-d660-73fb-9fde-33f1766447e2",
+   "created_at": "2026-07-22T08:30:43.808820Z",
+   "intent": "Thanks, that solved it"
+  },
+  {
+   "id": "019f88f6-26a7-78ad-a3f1-f6c74aeca886",
+   "created_at": "2026-07-22T08:34:20.967313Z",
+   "intent": "Compare the linen curtains with the larger model"
+  },
+  {
+   "id": "019f895d-218d-7753-a4d4-17438dda8d3a",
+   "created_at": "2026-07-22T10:26:49.869796Z",
+   "intent": "Flag orders over 500 pounds for a fraud check in the west region"
+  },
+  {
+   "id": "019f8a89-07fa-7fff-8f17-2f3c629e2288",
+   "created_at": "2026-07-22T15:54:24.122014Z",
+   "intent": "I will be away, hold order 44619 until Monday"
+  },
+  {
+   "id": "019f8cda-a51c-782e-92ce-cc2f78663f75",
+   "created_at": "2026-07-23T02:42:47.196963Z",
+   "intent": "Summarise yesterday's customer complaints for the support lead"
+  },
+  {
+   "id": "019f8d31-a861-761d-a91f-8fb73146db2b",
+   "created_at": "2026-07-23T04:17:49.665351Z",
+   "intent": "Ping"
+  },
+  {
+   "id": "019f8e05-daad-7cfc-a1c9-6833255b1e15",
+   "created_at": "2026-07-23T08:09:36.173392Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f8e25-66e1-737a-a630-ec4193ea78c6",
+   "created_at": "2026-07-23T08:44:03.681578Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019f8e79-542c-7512-823d-f69652f661de",
+   "created_at": "2026-07-23T10:15:43.916545Z",
+   "intent": "Hello"
+  },
+  {
+   "id": "019f8eb3-1d4d-7e0d-b837-72c0903ee63e",
+   "created_at": "2026-07-23T11:18:50.957657Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f8f75-3b65-78ed-a0fa-4bf66f316385",
+   "created_at": "2026-07-23T14:50:52.645451Z",
+   "intent": "Compare the bedside table with the larger model"
+  },
+  {
+   "id": "019f8f7e-49aa-7aec-8325-207c10ed58fd",
+   "created_at": "2026-07-23T15:00:46.122904Z",
+   "intent": "Change the language of the emails I get"
+  },
+  {
+   "id": "019f8fbd-ae1f-7a8a-9bd5-375ef2146e55",
+   "created_at": "2026-07-23T16:10:00.607718Z",
+   "intent": "List the west warehouse items that are low in stock"
+  },
+  {
+   "id": "019f8ffe-18b3-7f62-b831-a2c64347b5e1",
+   "created_at": "2026-07-23T17:20:22.195942Z",
+   "intent": "Has order 71406 been sent yet?"
+  },
+  {
+   "id": "019f9018-0f4a-77d8-980c-82302cf773de",
+   "created_at": "2026-07-23T17:48:43.722905Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f9068-4b3b-7ab3-93b3-2914b88aea03",
+   "created_at": "2026-07-23T19:16:21.947185Z",
+   "intent": "Thanks, that solved it"
+  },
+  {
+   "id": "019f90bd-af5f-7ca6-8c0b-759d97a602c0",
+   "created_at": "2026-07-23T20:49:38.143439Z",
+   "intent": "Reset my password"
+  },
+  {
+   "id": "019f9206-688a-7a9a-98e0-28515f43e640",
+   "created_at": "2026-07-24T02:48:41.354527Z",
+   "intent": "Apply a promo code to my basket"
+  },
+  {
+   "id": "019f9425-25a7-76c6-aabc-eff9edfd8196",
+   "created_at": "2026-07-24T12:41:30.279621Z",
+   "intent": "Track order 40517"
+  },
+  {
+   "id": "019f9487-5a15-792e-a732-b435bfa08e63",
+   "created_at": "2026-07-24T14:28:46.229716Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f94d4-6227-792c-877f-2393c0595681",
+   "created_at": "2026-07-24T15:52:54.567762Z",
+   "intent": "Why can't I see my old orders?"
+  },
+  {
+   "id": "019f954c-58cc-7c57-82e4-3d77cd2d627f",
+   "created_at": "2026-07-24T18:03:56.492864Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f95f2-d2dd-7afa-a696-9bd7193ba843",
+   "created_at": "2026-07-24T21:05:46.717162Z",
+   "intent": "Update my phone number"
+  },
+  {
+   "id": "019f9699-5559-7884-9f81-661e94ad0436",
+   "created_at": "2026-07-25T00:07:39.097582Z",
+   "intent": "What are the exact measurements of the rattan basket?"
+  },
+  {
+   "id": "019f9725-a9bf-7679-a193-d33a025e80c8",
+   "created_at": "2026-07-25T02:40:55.743876Z",
+   "intent": "When does order 38521 leave the warehouse?"
+  },
+  {
+   "id": "019f9732-b7f8-7e1b-961f-905414aae271",
+   "created_at": "2026-07-25T02:55:11.352169Z",
+   "intent": "Get a VAT invoice for order 58193"
+  },
+  {
+   "id": "019f9742-0e11-773a-a568-2a19f58cde73",
+   "created_at": "2026-07-25T03:11:56.433209Z",
+   "intent": "Speak to a human agent"
+  },
+  {
+   "id": "019f9744-9439-762d-a0a3-5d46677ed379",
+   "created_at": "2026-07-25T03:14:41.849484Z",
+   "intent": "Add a gift message to my order"
+  },
+  {
+   "id": "019f97aa-a172-706c-aec8-94425e875b89",
+   "created_at": "2026-07-25T05:06:09.906758Z",
+   "intent": "Do you have a video on how to build the kitchen stool?"
+  },
+  {
+   "id": "019f97c3-0617-7a23-9e25-290e79db8d46",
+   "created_at": "2026-07-25T05:32:48.535217Z",
+   "intent": "Can the courier deliver order 31864 on Saturday instead?"
+  },
+  {
+   "id": "019f9807-6767-7362-a564-5098684281fe",
+   "created_at": "2026-07-25T06:47:29.895891Z",
+   "intent": "Change my delivery address"
+  },
+  {
+   "id": "019f9882-1677-74b3-be6e-b45f78b9e5e0",
+   "created_at": "2026-07-25T09:01:30.103295Z",
+   "intent": "Check the delivery status of order 67748"
+  },
+  {
+   "id": "019f988d-cf54-7922-b324-334df4b96559",
+   "created_at": "2026-07-25T09:14:18.324117Z",
+   "intent": "Reset my password"
+  },
+  {
+   "id": "019f98d9-0036-7110-86e1-b6ab02cb59c4",
+   "created_at": "2026-07-25T10:36:26.038815Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f98de-75d8-7a92-8d8f-2e056b5a6def",
+   "created_at": "2026-07-25T10:42:23.832640Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019f9902-a7e8-78a8-a6bf-233574f80e5d",
+   "created_at": "2026-07-25T11:21:55.944908Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f9947-e4e4-7f28-a0df-691a6deca800",
+   "created_at": "2026-07-25T12:37:33.540181Z",
+   "intent": "How many rattan baskets do you have left?"
+  },
+  {
+   "id": "019f99d4-9442-7acc-9255-6a179fb49c60",
+   "created_at": "2026-07-25T15:11:13.474458Z",
+   "intent": "When will the bath towel set be back in stock?"
+  },
+  {
+   "id": "019f99f3-5219-7cd7-94b5-42235e7f8bc7",
+   "created_at": "2026-07-25T15:44:48.153467Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019f9ad2-7b1a-721b-9746-e1d7961676a8",
+   "created_at": "2026-07-25T19:48:33.178230Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f9b5a-741e-7c67-af3b-943172bcf5c5",
+   "created_at": "2026-07-25T22:17:04.286421Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019f9b88-0347-728c-9b94-007caefe9dc6",
+   "created_at": "2026-07-25T23:06:50.055939Z",
+   "intent": "Which screws do I need for the rattan basket?"
+  },
+  {
+   "id": "019f9c0a-1713-7db1-a5b6-9f2548467ba2",
+   "created_at": "2026-07-26T01:28:54.803462Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f9c20-9963-7a6a-938d-671704954689",
+   "created_at": "2026-07-26T01:53:29.955431Z",
+   "intent": "Is return shipping free for the bedside table?"
+  },
+  {
+   "id": "019f9e2b-8510-72b7-a777-0df084dbe507",
+   "created_at": "2026-07-26T11:24:40.080332Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019f9fbd-96ff-7a87-a441-300a09493e8c",
+   "created_at": "2026-07-26T18:43:50.143273Z",
+   "intent": "I got a sage green walnut desk but ordered a different colour"
+  },
+  {
+   "id": "019f9ffd-97b4-74d8-8d11-d0790ced99ef",
+   "created_at": "2026-07-26T19:53:44.628930Z",
+   "intent": "The rattan basket has a stain on it"
+  },
+  {
+   "id": "019fa091-58f6-75ed-a8bf-395881a040ac",
+   "created_at": "2026-07-26T22:35:07.894868Z",
+   "intent": "Change the delivery slot for order 38521"
+  },
+  {
+   "id": "019fa0c9-285d-7958-bd1b-863f8ebacdb9",
+   "created_at": "2026-07-26T23:36:05.469712Z",
+   "intent": "Good morning"
+  },
+  {
+   "id": "019fa13e-e060-77fb-9de8-32777feae927",
+   "created_at": "2026-07-27T01:44:40.288004Z",
+   "intent": "Is the oak bookshelf back in stock?"
+  },
+  {
+   "id": "019fa182-8f7d-7de3-9b31-71064f189339",
+   "created_at": "2026-07-27T02:58:36.029245Z",
+   "intent": "Is the ceramic table lamp suitable for a small flat?"
+  },
+  {
+   "id": "019fa21d-a719-7ccc-a815-def76dee25bf",
+   "created_at": "2026-07-27T05:48:00.153015Z",
+   "intent": "Ask where order 39804 is now"
+  },
+  {
+   "id": "019fa230-366e-7886-b34c-ef86f2455bb7",
+   "created_at": "2026-07-27T06:08:16.494234Z",
+   "intent": "I see a payment for order 67748 but no confirmation email"
+  },
+  {
+   "id": "019fa335-bd7e-7847-97aa-f9894d622b18",
+   "created_at": "2026-07-27T10:53:55.966492Z",
+   "intent": "Compare the terracotta plant pot with the larger model"
+  },
+  {
+   "id": "019fa35f-83a6-7b6d-9e50-a9ce2119f226",
+   "created_at": "2026-07-27T11:39:33.670951Z",
+   "intent": "Buy a gift card worth 50 pounds"
+  },
+  {
+   "id": "019fa497-11ad-78bc-ab15-063ccb8ec049",
+   "created_at": "2026-07-27T17:19:51.725057Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019fa54f-29cb-72ad-9b68-d3746daa9073",
+   "created_at": "2026-07-27T20:40:56.523365Z",
+   "intent": "Track order 40517"
+  },
+  {
+   "id": "019fa60b-f5e3-7867-b75b-9e1c5fcd2a94",
+   "created_at": "2026-07-28T00:07:09.539575Z",
+   "intent": "Prepare the Friday sales summary for the store managers"
+  },
+  {
+   "id": "019fa6c8-3c17-7d76-b4b5-dfc5a291861a",
+   "created_at": "2026-07-28T03:32:48.279737Z",
+   "intent": "Pay for order 41027 with a different card"
+  },
+  {
+   "id": "019fa704-b4c8-7214-8e44-336c31a4c047",
+   "created_at": "2026-07-28T04:38:51.336427Z",
+   "intent": "Ask where order 31864 is now"
+  },
+  {
+   "id": "019fa814-e08a-7425-9def-4b831fbfe404",
+   "created_at": "2026-07-28T09:36:08.330746Z",
+   "intent": "Is the outdoor bench weatherproof?"
+  },
+  {
+   "id": "019fa81f-a85e-7d68-af95-4a5718c906a1",
+   "created_at": "2026-07-28T09:47:54.846682Z",
+   "intent": "I will be away, hold order 52290 until Monday"
+  },
+  {
+   "id": "019fa929-c454-7e7c-8eea-06529d2c4cf9",
+   "created_at": "2026-07-28T14:38:34.580876Z",
+   "intent": "Can I pick up my order from a collection point?"
+  },
+  {
+   "id": "019fa946-d182-7479-9116-ac7e3d1185d8",
+   "created_at": "2026-07-28T15:10:18.498411Z",
+   "intent": "Where is my order?"
+  },
+  {
+   "id": "019fa982-d7dd-7db5-9451-82b0bce118aa",
+   "created_at": "2026-07-28T16:15:52.285613Z",
+   "intent": "Is the steel kettle safe to use outdoors?"
+  },
+  {
+   "id": "019fa9e7-32be-7e77-8855-b05bfd248ea9",
+   "created_at": "2026-07-28T18:05:29.150397Z",
+   "intent": "Get a VAT invoice for order 47713"
+  },
+  {
+   "id": "019faa0f-ed22-7608-8cd0-60994224a37b",
+   "created_at": "2026-07-28T18:49:58.306381Z",
+   "intent": "What material is the bath towel set made of?"
+  },
+  {
+   "id": "019faa81-bfc0-7be8-bdcd-51e1025b26d5",
+   "created_at": "2026-07-28T20:54:17.792312Z",
+   "intent": "Does the cotton duvet cover come in sage green?"
+  },
+  {
+   "id": "019faa8d-9a61-7c72-b849-1d0417c4e19e",
+   "created_at": "2026-07-28T21:07:14.657218Z",
+   "intent": "Was I charged twice for my order?"
+  },
+  {
+   "id": "019faa9e-2a77-7db8-a6df-a26f0fcae93d",
+   "created_at": "2026-07-28T21:25:20.119105Z",
+   "intent": "My refund has not arrived yet"
+  },
+  {
+   "id": "019faaaf-f08e-71a4-88a5-1e6b49c5450f",
+   "created_at": "2026-07-28T21:44:44.942854Z",
+   "intent": "Unsubscribe me from the marketing emails"
+  },
+  {
+   "id": "019faac2-ec21-7a03-8702-215bbd83f0c3",
+   "created_at": "2026-07-28T22:05:28.993631Z",
+   "intent": "Can a neighbour accept order 58193 for me?"
+  },
+  {
+   "id": "019fab57-193c-7e55-a8b4-fe63d8603faa",
+   "created_at": "2026-07-29T00:47:19.868270Z",
+   "intent": "Change the name on my account"
+  },
+  {
+   "id": "019fabca-9054-763a-8b98-5652a1054308",
+   "created_at": "2026-07-29T02:53:26.996817Z",
+   "intent": "Where can I find my invoice?"
+  },
+  {
+   "id": "019fac04-be5b-7aba-bf0d-c6988fab86ad",
+   "created_at": "2026-07-29T03:56:59.867602Z",
+   "intent": "Can I pre-order the cotton duvet cover?"
+  },
+  {
+   "id": "019fac2e-624b-7f98-9313-d5d62098c087",
+   "created_at": "2026-07-29T04:42:28.811335Z",
+   "intent": "Build the daily stock report for the warehouse team"
+  },
+  {
+   "id": "019fac33-6852-7d54-a839-ac4bdfaa996b",
+   "created_at": "2026-07-29T04:47:58.034734Z",
+   "intent": "I want a refund for the terracotta plant pot I returned last week"
+  },
+  {
+   "id": "019fac59-8e81-75a9-a220-b37d28491f3c",
+   "created_at": "2026-07-29T05:29:38.177792Z",
+   "intent": "Does the spring sale include the feather pillow?"
+  },
+  {
+   "id": "019fad41-88e6-771f-affc-f4a204482715",
+   "created_at": "2026-07-29T09:43:01.094042Z",
+   "intent": "Hi there"
+  },
+  {
+   "id": "019fada3-9926-7897-9488-761fa8c5610e",
+   "created_at": "2026-07-29T11:30:07.782969Z",
+   "intent": "Is return shipping free for the linen curtains?"
+  },
+  {
+   "id": "019fadd3-77e8-7673-973e-ce61a53855da",
+   "created_at": "2026-07-29T12:22:25.000796Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019fae46-4df3-78f0-a4d8-400ce686eaa9",
+   "created_at": "2026-07-29T14:27:50.899579Z",
+   "intent": "Can I split the payment for order 47713?"
+  },
+  {
+   "id": "019faef4-ed8c-7778-afee-1ba75c16eb90",
+   "created_at": "2026-07-29T17:38:35.020479Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019fb096-7251-70e1-8afb-65ee0efc3f40",
+   "created_at": "2026-07-30T01:14:37.521477Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019fb0a3-c29a-73e8-84dd-ddf282085abd",
+   "created_at": "2026-07-30T01:29:10.042963Z",
+   "intent": "Use my birthday voucher on the ceramic table lamp"
+  },
+  {
+   "id": "019fb0ef-0502-70ff-a1b3-90bc9985df44",
+   "created_at": "2026-07-30T02:51:22.242498Z",
+   "intent": "Log me out of all my devices"
+  },
+  {
+   "id": "019fb177-6efe-7d88-80bf-96dc59cd4f6d",
+   "created_at": "2026-07-30T05:20:22.270916Z",
+   "intent": "Why is the linen curtains out of stock everywhere?"
+  },
+  {
+   "id": "019fb187-c86c-7da2-b81e-9802a430432f",
+   "created_at": "2026-07-30T05:38:13.740624Z",
+   "intent": "How do I send back the walnut desk?"
+  },
+  {
+   "id": "019fb1a5-577c-74e5-a147-d26287176df5",
+   "created_at": "2026-07-30T06:10:30.908398Z",
+   "intent": "I want to return an item"
+  },
+  {
+   "id": "019fb1ba-12a7-712e-93c8-1197b9c2cfb8",
+   "created_at": "2026-07-30T06:33:09.543603Z",
+   "intent": "How heavy is the kitchen stool?"
+  },
+  {
+   "id": "019fb1e9-d71e-7b98-92e2-3bce3b76b572",
+   "created_at": "2026-07-30T07:25:20.030954Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019fb282-766a-7ac2-b30e-dbc3e6036d13",
+   "created_at": "2026-07-30T10:12:02.282048Z",
+   "intent": "I will be away, hold order 56082 until Monday"
+  },
+  {
+   "id": "019fb289-d191-75b4-918a-33e51e82ff45",
+   "created_at": "2026-07-30T10:20:04.369039Z",
+   "intent": "Change the delivery slot for order 31864"
+  },
+  {
+   "id": "019fb35e-c28a-7442-add1-78a979c295cf",
+   "created_at": "2026-07-30T14:12:39.690932Z",
+   "intent": "Can I return the floor mirror after 30 days?"
+  },
+  {
+   "id": "019fb363-4b63-7fd4-b94c-ea976c42f612",
+   "created_at": "2026-07-30T14:17:36.867115Z",
+   "intent": "List the south warehouse items that are low in stock"
+  },
+  {
+   "id": "019fb38c-b511-7cab-8dba-2a3886fac2bd",
+   "created_at": "2026-07-30T15:02:50.897116Z",
+   "intent": "Good morning"
+  },
+  {
+   "id": "019fb3f2-42bf-7957-9ec7-cc67e28803ea",
+   "created_at": "2026-07-30T16:53:46.303113Z",
+   "intent": "Link my account to my partner's account"
+  },
+  {
+   "id": "019fb457-c623-7a93-9be2-35eff07e4181",
+   "created_at": "2026-07-30T18:44:39.075056Z",
+   "intent": "Do you offer next-day delivery?"
+  },
+  {
+   "id": "019fb4d9-089b-786a-bb04-34479889b6fa",
+   "created_at": "2026-07-30T21:05:50.235642Z",
+   "intent": "How do I clean the wool rug?"
+  },
+  {
+   "id": "019fb4df-d79a-7de4-99bd-d1e03727c0bf",
+   "created_at": "2026-07-30T21:13:16.442256Z",
+   "intent": "Add a gift message to my order"
+  },
+  {
+   "id": "019fb598-0d94-75b4-ae7a-8ec07e93c46a",
+   "created_at": "2026-07-31T00:34:28.884542Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019fb609-51e3-73d1-9900-8e095d99df7b",
+   "created_at": "2026-07-31T02:38:11.939320Z",
+   "intent": "Why was my card charged twice for order 38521?"
+  },
+  {
+   "id": "019fb6f4-1a1b-7b8f-98b6-35b393d0b751",
+   "created_at": "2026-07-31T06:54:38.619505Z",
+   "intent": "I see a payment for order 38521 but no confirmation email"
+  },
+  {
+   "id": "019fb727-cfbf-7048-a01f-5c1c9165991c",
+   "created_at": "2026-07-31T07:51:07.455658Z",
+   "intent": "Leave order 52290 in the garden shed if I am out"
+  },
+  {
+   "id": "019fb73d-ee78-7f90-905e-cdb707a16bc0",
+   "created_at": "2026-07-31T08:15:17.112994Z",
+   "intent": "What material is the ceramic table lamp made of?"
+  },
+  {
+   "id": "019fb7f8-7d1c-7190-811b-2ed8d2f57d56",
+   "created_at": "2026-07-31T11:39:03.324981Z",
+   "intent": "Tell me when the grey shoe rack is available again"
+  },
+  {
+   "id": "019fb834-4cac-7570-a5c5-3f26dbbf15e9",
+   "created_at": "2026-07-31T12:44:23.084707Z",
+   "intent": "Thanks, that solved it"
+  },
+  {
+   "id": "019fb90b-2caa-7abe-b7be-d66c03be01fe",
+   "created_at": "2026-07-31T16:39:05.130215Z",
+   "intent": "Is there a discount code this week?"
+  },
+  {
+   "id": "019fb927-793b-7efa-a1e8-b5e680fe826b",
+   "created_at": "2026-07-31T17:09:59.739685Z",
+   "intent": "My card payment was declined"
+  },
+  {
+   "id": "019fb92e-dd94-7f12-97b8-643f6f3b086f",
+   "created_at": "2026-07-31T17:18:04.180187Z",
+   "intent": "Tell me when the charcoal cotton duvet cover is available again"
+  },
+  {
+   "id": "019fb965-555d-7b0a-abf0-ba816d26903c",
+   "created_at": "2026-07-31T18:17:33.789385Z",
+   "intent": "Merge my two shop accounts"
+  },
+  {
+   "id": "019fb96e-3b38-7076-8d97-7c2d61195e7e",
+   "created_at": "2026-07-31T18:27:16.920265Z",
+   "intent": "Retry the previous request"
+  },
+  {
+   "id": "019fb980-57b4-737f-9584-e5609246307a",
+   "created_at": "2026-07-31T18:47:03.860137Z",
+   "intent": "Print a return label for the walnut desk"
+  },
+  {
+   "id": "019fba08-b70a-7dd6-b365-b0bc023acc9e",
+   "created_at": "2026-07-31T21:16:01.162137Z",
+   "intent": "Apply a promo code to my basket"
+  },
+  {
+   "id": "019fba62-ec98-788d-9622-50fa0039cb77",
+   "created_at": "2026-07-31T22:54:33.112570Z",
+   "intent": "How do I assemble the bedside table?"
+  },
+  {
+   "id": "019fba64-8584-7901-b5c1-e4df686c4b2a",
+   "created_at": "2026-07-31T22:56:17.796165Z",
+   "intent": "Speak to a human agent"
+  }
+ ]
+}
