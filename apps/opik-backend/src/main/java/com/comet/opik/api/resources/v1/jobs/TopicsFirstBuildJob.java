@@ -63,7 +63,7 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
         Disposable disposable = lockService.bestEffortLock(
                 TopicsFirstBuildService.LEADER_LOCK,
                 Mono.fromRunnable(() -> runIfDue(start)).subscribeOn(Schedulers.boundedElastic()),
-                Mono.fromRunnable(() -> log.info("Topics first builds skipped, lock '{}' is held by another instance",
+                Mono.fromRunnable(() -> log.debug("Topics first builds skipped, lock '{}' is held by another instance",
                         TopicsFirstBuildService.LEADER_LOCK.key())),
                 firstBuildService.lease(),
                 Duration.ZERO)
@@ -95,7 +95,7 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
             if (Boolean.TRUE.equals(lockService.lockUsingToken(RUN_LOCK, runSlot()).block())) {
                 firstBuildService.run(start);
             } else {
-                log.info("Topics first builds skipped, lock '{}' is held: a run started less than one interval ago",
+                log.debug("Topics first builds skipped, lock '{}' is held: a run started less than one interval ago",
                         RUN_LOCK.key());
             }
         } catch (RuntimeException exception) {

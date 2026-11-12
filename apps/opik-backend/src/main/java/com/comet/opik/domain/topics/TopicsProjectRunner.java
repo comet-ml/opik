@@ -15,6 +15,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -207,6 +208,33 @@ public class TopicsProjectRunner {
                     TopicsMetrics.ERROR_ABANDONED));
         } catch (RuntimeException exception) {
             log.warn("Topics runs housekeeping failed", exception);
+        }
+    }
+
+    /**
+     * Deletes the topics, prototypes, states and runs of the workspaces' projects that no longer exist: what a failed
+     * delete on {@code ProjectsDeleted} left behind, or a save that committed after its project was deleted. A
+     * failure is logged, and the caller goes on.
+     */
+    public void deleteOfMissingProjects(@NonNull Collection<String> workspaceIds) {
+        if (workspaceIds.isEmpty()) {
+            return;
+        }
+        try {
+            template.inTransaction(WRITE, handle -> {
+                var topicDAO = handle.attach(TopicDAO.class);
+                int topics = topicDAO.deleteTopicsOfMissingProjects(workspaceIds);
+                int prototypes = topicDAO.deletePrototypesOfMissingProjects(workspaceIds);
+                int states = topicDAO.deleteStatesOfMissingProjects(workspaceIds);
+                int runs = handle.attach(TopicRunDAO.class).deleteOfMissingProjects(workspaceIds);
+                if (topics + prototypes + states + runs > 0) {
+                    log.info("Deleted the topic data of deleted projects, topics '{}', prototypes '{}', states '{}', "
+                            + "runs '{}'", topics, prototypes, states, runs);
+                }
+                return null;
+            });
+        } catch (RuntimeException exception) {
+            log.warn("Topics delete of deleted projects' data failed", exception);
         }
     }
 }

@@ -134,7 +134,7 @@ Requests") is dropped. It writes:
 | `TOPICS_BUILD_PROJECT_TIMEOUT` | `15m` | One run is stopped and failed with `timeout` after this. At most `2h`. |
 | `TOPICS_BUILD_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. At most 100000. |
 | `TOPICS_BUILD_WINDOW_DAYS` | `30` | The window, in whole UTC days before its end. At most 90. |
-| `TOPICS_BUILD_MAX_VECTORS` | `100000` | A larger window is sampled: the run finds topics on this many of its traces, spread evenly by a hash of the trace id, and then labels every trace of the window. |
+| `TOPICS_BUILD_MAX_VECTORS` | `100000` | A larger window is sampled: the run finds topics on this many of its traces, spread evenly by a hash of the trace id, and then labels every trace of the window. At least `TOPICS_BUILD_MIN_VECTORS`. |
 | `TOPICS_BUILD_QWEN_DEADLINE` | `120s` | The deadline of the Qwen call. Under the project timeout. The call uses the `batch` lane, which takes up to 300s. |
 | `TOPICS_BUILD_RUNS_RETENTION` | `90d` | `topic_runs` rows are deleted after this. At most `365d`. |
 
@@ -143,7 +143,7 @@ read also use `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` as their ClickHouse `max_ro
 
 To turn the job off, set `TOPICS_FIRST_BUILD_ENABLED=false` and restart. Saved lists stay. A run by hand still works,
 but the runs' housekeeping stops with the job: a run by hand left `running` by a dead pod stays `running`, and old
-`topic_runs` rows stay.
+`topic_runs` rows and the topic rows of deleted projects stay.
 
 To stop it for one workspace, remove the workspace from `TOGGLE_TOPICS_WORKSPACES` (a deploy), or, without a deploy,
 disable it in `ai_label_workspaces`, which also stops its ai-labels summaries (see "Opting workspaces in and out").
@@ -426,5 +426,7 @@ small. The alert clears when its backfill reaches 99%, or when the project gets 
 
 A `trace_topics` row lives as long as its trace, as for `topic_vectors`: retention and the trace-delete cascade delete
 both. Deleting a project deletes its MySQL rows too: `topics`, `topic_prototypes`, `topic_project_states`,
-`topic_runs` and `topic_vector_backfills`, since names, definitions and prototypes come from its traces.
+`topic_runs` and `topic_vector_backfills`, since names, definitions and prototypes come from its traces. When that
+delete fails, or a save commits after its project was deleted, the next run of the first-build job deletes the rows
+of the opted-in workspaces' projects that no longer exist.
 `topic_runs` rows go after 90 days anyway. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.

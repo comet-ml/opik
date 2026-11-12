@@ -38,7 +38,8 @@ public class TopicWindowDAO {
      * {@code maxMap} keeps, per task version, the latest row as {@code last_updated_at * 2 + live}, and the trace is
      * live when one of those is odd. Small blocks keep those per-trace arrays small in flight: 74 MiB at 3 million
      * traces, where grouping every key and then {@code uniqExact} took 0.8 to 1.05 GiB, over the 1 GiB guard. Two rows
-     * of one key with the same {@code last_updated_at} count as live, where {@code argMax} picked either.
+     * of one key with the same {@code last_updated_at} count as live, as in the reads, whose {@code argMax} orders a
+     * key's rows by {@code (last_updated_at, live)}.
      */
     private static final String COUNT_BY_PROJECT = """
             SELECT project_id, countIf(live) AS traces
@@ -66,7 +67,7 @@ public class TopicWindowDAO {
      * lowest {@code cityHash64(trace_id)}: the hash mixes every character of the id, so it does not follow the id's
      * time prefix and the sample is even over the window; and a trace's hash never changes, so the same traces are
      * chosen run after run while they stay in the window and the window keeps its size. A key whose latest row is a
-     * tombstone is left out first, as in {@link #COUNT_BY_PROJECT}. The keys are chosen without the vector and text
+     * tombstone is left out first, as in {@link #COUNT_BY_PROJECT}: on a tie the live row wins. The keys are chosen without the vector and text
      * columns. A sample has rows in nearly every granule of the window, so the second step reads those columns for the
      * whole window, not only for its newest part. The caller orders the rows by time.
      *
@@ -90,7 +91,7 @@ public class TopicWindowDAO {
             keys AS (
                 SELECT trace_id, max(task_version) AS task_version
                 FROM (
-                    SELECT trace_id, task_version, argMax(is_deleted, last_updated_at) AS deleted
+                    SELECT trace_id, task_version, argMax(is_deleted, (last_updated_at, is_deleted = 0)) AS deleted
                     FROM topic_vectors
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -130,7 +131,7 @@ public class TopicWindowDAO {
             WITH keys AS (
                 SELECT trace_id, max(task_version) AS task_version
                 FROM (
-                    SELECT trace_id, task_version, argMax(is_deleted, last_updated_at) AS deleted
+                    SELECT trace_id, task_version, argMax(is_deleted, (last_updated_at, is_deleted = 0)) AS deleted
                     FROM topic_vectors
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id

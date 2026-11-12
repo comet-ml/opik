@@ -81,7 +81,7 @@ class TopicsFirstBuildJobTest {
         job.doJob(null);
         verify(firstBuildService).run(any());
         assertThat(appender.list).anySatisfy(event -> {
-            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getLevel()).isEqualTo(Level.DEBUG);
             assertThat(event.getFormattedMessage()).contains("lock 'topics:first_build:run'");
         });
 

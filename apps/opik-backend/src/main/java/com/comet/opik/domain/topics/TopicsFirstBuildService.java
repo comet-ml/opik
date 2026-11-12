@@ -91,14 +91,17 @@ public class TopicsFirstBuildService {
     }
 
     /**
-     * The job's run: the runs' housekeeping, then the first builds of {@link #candidates}, one at a time, until the
-     * budget is used. The window ends at the start of the day after {@code start} (UTC).
+     * The job's run: the runs' housekeeping and the delete of deleted projects' topic data, then the first builds of
+     * {@link #candidates}, one at a time, until the budget is used. The window ends at the start of the day after
+     * {@code start} (UTC).
      */
     public void run(@NonNull Instant start) {
         var began = Instant.now();
         runner.housekeeping(began);
+        var workspaceIds = workspaceService.eligibleWorkspaceIds();
+        runner.deleteOfMissingProjects(workspaceIds);
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
-        var candidates = candidates(night, began);
+        var candidates = candidates(night, began, workspaceIds);
         log.info("Topics first builds started, window until '{}', projects to build '{}'", night, candidates.size());
         var budgetEnd = began.plus(config.getFirstBuild().getBudget().toJavaDuration());
         int saved = 0;
@@ -166,10 +169,13 @@ public class TopicsFirstBuildService {
      * read fails is left for the next run. Also publishes the gate's waits and the projects waiting for a list.
      */
     List<Candidate> candidates(@NonNull LocalDate night, @NonNull Instant now) {
+        return candidates(night, now, workspaceService.eligibleWorkspaceIds());
+    }
+
+    private List<Candidate> candidates(LocalDate night, Instant now, List<String> workspaceIds) {
         var build = config.getBuild();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(build.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
-        var workspaceIds = workspaceService.eligibleWorkspaceIds();
         var listless = workspaceIds.isEmpty()
                 ? Map.<String, List<UUID>>of()
                 : template.inTransaction(READ_ONLY,

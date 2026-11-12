@@ -73,7 +73,8 @@ class TopicWindowLabelServiceTest {
     private float[] refundsPrototype;
     private float[] otherPrototype;
 
-    private record Trace(UUID traceId, Instant createdAt, float[] vector) {
+    /** A trace, and the topic it is built to get: the one whose prototype it was nudged from, or Other. */
+    private record Trace(UUID traceId, Instant createdAt, float[] vector, UUID expectedTopic) {
     }
 
     @BeforeEach
@@ -113,14 +114,19 @@ class TopicWindowLabelServiceTest {
         var from = NIGHT.minus(Duration.ofDays(WINDOW_DAYS));
         var step = Duration.ofDays(WINDOW_DAYS).dividedBy(IN_WINDOW);
         var near = List.of(billingPrototype, refundsPrototype, otherPrototype);
+        var nearTopics = List.of(billing, refunds, TraceTopic.OTHER);
         for (int i = 0; i < IN_WINDOW; i++) {
-            // Every fourth trace is random noise: Other by the threshold.
-            var vector = i % 4 == 3 ? unit(random) : nudge(near.get(i % 4), random);
-            add(from.plus(step.multipliedBy(i)), vector);
+            // Every fourth trace is random noise, far from every prototype: Other by the threshold.
+            var createdAt = from.plus(step.multipliedBy(i));
+            if (i % 4 == 3) {
+                add(createdAt, unit(random), TraceTopic.OTHER);
+            } else {
+                add(createdAt, nudge(near.get(i % 4), random), nearTopics.get(i % 4));
+            }
         }
         // Outside the window: before it, and at its end.
-        add(from.minusSeconds(1), nudge(billingPrototype, random));
-        add(NIGHT, nudge(billingPrototype, random));
+        add(from.minusSeconds(1), nudge(billingPrototype, random), billing);
+        add(NIGHT, nudge(billingPrototype, random), billing);
 
         when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(List.of(projectId)), any(), any(), anyLong()))
                 .thenAnswer(invocation -> Flux.just(new TopicWindowDAO.ProjectCount(projectId,
@@ -168,7 +174,7 @@ class TopicWindowLabelServiceTest {
         // Near a billing or refunds prototype: that topic; near the known-Other prototype or random: Other.
         var expected = new HashMap<UUID, UUID>();
         for (var trace : window) {
-            expected.put(trace.traceId(), expectedTopic(trace.vector()));
+            expected.put(trace.traceId(), trace.expectedTopic());
         }
         assertThat(inserted.stream().collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId)))
                 .isEqualTo(expected);
@@ -188,7 +194,8 @@ class TopicWindowLabelServiceTest {
                 prototype(3, null, otherPrototype)));
         var from = NIGHT.minus(Duration.ofDays(WINDOW_DAYS));
         for (int i = 0; i < 10; i++) {
-            add(from.plus(Duration.ofHours(i + 1)), nudge(retiredPrototype, random));
+            // Far from every live prototype: Other.
+            add(from.plus(Duration.ofHours(i + 1)), nudge(retiredPrototype, random), TraceTopic.OTHER);
         }
 
         var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
@@ -198,7 +205,7 @@ class TopicWindowLabelServiceTest {
         var window = inWindow(from, NIGHT);
         var expected = new HashMap<UUID, UUID>();
         for (var trace : window) {
-            expected.put(trace.traceId(), expectedTopic(trace.vector()));
+            expected.put(trace.traceId(), trace.expectedTopic());
         }
         assertThat(inserted.stream().collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId)))
                 .isEqualTo(expected);
@@ -340,13 +347,6 @@ class TopicWindowLabelServiceTest {
                 .build();
     }
 
-    private UUID expectedTopic(float[] vector) {
-        var cosines = Map.of(billing, dot(vector, billingPrototype), refunds, dot(vector, refundsPrototype),
-                TraceTopic.OTHER, dot(vector, otherPrototype));
-        var best = cosines.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow();
-        return best.getValue() >= PrototypeAssigner.ASSIGN_MIN_COSINE ? best.getKey() : TraceTopic.OTHER;
-    }
-
     /** The traces created in {@code [from, to)}, in trace id order as the page read returns them. */
     private List<Trace> inWindow(Instant from, Instant to) {
         return traces.values().stream()
@@ -355,12 +355,12 @@ class TopicWindowLabelServiceTest {
                 .toList();
     }
 
-    private void add(Instant createdAt, float[] vector) {
+    private void add(Instant createdAt, float[] vector, UUID expectedTopic) {
         // A UUID v7 of the trace's time, with a random tail.
         long msb = (createdAt.toEpochMilli() << 16) | 0x7000L | (random.nextInt() & 0x0FFFL);
         long lsb = 0x8000000000000000L | (random.nextLong() & 0x3FFFFFFFFFFFFFFFL);
         var traceId = new UUID(msb, lsb);
-        traces.put(traceId, new Trace(traceId, createdAt, vector));
+        traces.put(traceId, new Trace(traceId, createdAt, vector, expectedTopic));
     }
 
     private Topic topic(UUID topicId) {
@@ -411,13 +411,5 @@ class TopicWindowLabelServiceTest {
             vector[t] /= (float) Math.sqrt(norm);
         }
         return vector;
-    }
-
-    private static double dot(float[] a, float[] b) {
-        double s = 0;
-        for (int t = 0; t < a.length; t++) {
-            s += (double) a[t] * b[t];
-        }
-        return s;
     }
 }

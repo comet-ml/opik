@@ -112,6 +112,12 @@ public class TopicsConfig {
             return qwenDeadline == null || projectTimeout == null
                     || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
+
+        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
+            return maxVectors >= minVectors;
+        }
     }
 
     /**

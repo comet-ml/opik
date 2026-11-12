@@ -162,8 +162,8 @@ class TopicsStorageTest {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
         var kept = UUID.randomUUID();
-        insertTopicData(workspaceId, projectId);
-        insertTopicData(workspaceId, kept);
+        data.savedList(workspaceId, projectId, NIGHT, BUILT - 10);
+        data.savedList(workspaceId, kept, NIGHT, BUILT - 10);
 
         projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(projectId), workspaceId, "test"));
 
@@ -237,6 +237,27 @@ class TopicsStorageTest {
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
                 .extracting(TopicWindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(tombstoned.size(), BUILT));
+    }
+
+    @Test
+    @DisplayName("a tombstone stamped at the same time as its live row loses, in the count and in both reads")
+    void tiedTombstoneLoses() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var tied = TRACES.traceIds().subList(0, 10);
+        // A merge would keep one row of each tied key; the queries are checked on the rows as written.
+        data.withoutMerges(() -> {
+            data.insertTiedVectorTombstones(workspaceId, projectId, tied);
+
+            assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList()
+                    .block()).containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT));
+            assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
+                    .extracting(TopicWindowRow::traceId).containsAll(tied).hasSize(BUILT);
+            assertThat(windowDAO.readUnlabelled(workspaceId, projectId, UUID.randomUUID(), from(), to(), "", BUILT,
+                    60).collectList().block())
+                    .extracting(TopicWindowDAO.WindowVector::traceId).containsAll(tied).hasSize(BUILT);
+        });
     }
 
     @Test
@@ -446,53 +467,6 @@ class TopicsStorageTest {
                         UUID.fromString(row.get("trace_id", String.class)), row.get("rows", Long.class))))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue))
                 .block();
-    }
-
-    /**
-     * What a saved run leaves in MySQL for a project: a topic, its prototype and an Other one, the state, the run and
-     * its counts.
-     */
-    private void insertTopicData(String workspaceId, UUID projectId) {
-        var runId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
-        var savedAt = NIGHT.plus(Duration.ofHours(2));
-        var vector = TopicPrototype.encode(new float[TopicVectorsTickService.EMBED_DIMENSIONS]);
-        template.inTransaction(WRITE, handle -> {
-            var topicDAO = handle.attach(TopicDAO.class);
-            topicDAO.insertState(TopicProjectState.builder()
-                    .projectId(projectId)
-                    .workspaceId(workspaceId)
-                    .rebuilds(1)
-                    .firstBuiltAt(savedAt)
-                    .lastRunId(runId)
-                    .lastSuccessAt(savedAt)
-                    .windowUntil(NIGHT)
-                    .build());
-            topicDAO.insertTopics(List.of(Topic.builder()
-                    .id(topicId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .name("Billing")
-                    .definition("Requests about invoices")
-                    .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
-                    .size(BUILT - 10)
-                    .build()));
-            topicDAO.insertPrototypes(List.of(
-                    TopicPrototype.builder().workspaceId(workspaceId).projectId(projectId).position(0)
-                            .topicId(topicId).vector(vector).build(),
-                    TopicPrototype.builder().workspaceId(workspaceId).projectId(projectId).position(1)
-                            .vector(vector).build()));
-            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
-                    .runId(runId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .mode(TopicRun.Mode.FIRST_BUILD)
-                    .status(TopicRun.Status.SAVED)
-                    .startedAt(savedAt.minus(Duration.ofMinutes(1)))
-                    .finishedAt(savedAt)
-                    .build());
-            return null;
-        });
     }
 
     /** The window that ends at the seeded traces' night. */

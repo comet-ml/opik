@@ -268,13 +268,14 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a stalled insert attempt stops after 120 s and is retried; when every attempt stalls, the run stays "
-            + "saved and its thread is freed")
+    @DisplayName("a stalled insert attempt stops after 120 s, is cancelled and is retried; when every attempt stalls, "
+            + "the run stays saved and its thread is freed")
     void stalledInsertStops() throws Exception {
         var attempts = new AtomicInteger();
+        var cancelled = new AtomicInteger();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> {
             attempts.incrementAndGet();
-            return Mono.never();
+            return Mono.<Long>never().doOnCancel(cancelled::incrementAndGet);
         }));
         answer(FIXTURE.answer);
         var scheduler = VirtualTimeScheduler.getOrSet();
@@ -293,6 +294,8 @@ class TopicsRebuildServiceTest {
 
         assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
         assertThat(attempts).hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
+        assertThat(cancelled).as("every stalled attempt is cancelled")
+                .hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
     }
 

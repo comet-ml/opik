@@ -502,6 +502,29 @@ class TopicsFirstBuildJobIntegrationTest {
         assertThat(data.runs(projectId)).extracting(TopicRun::runId).containsExactly(recent.runId());
     }
 
+    @Test
+    @DisplayName("a job run deletes the topics, prototypes, state and runs of a project that no longer exists, and "
+            + "keeps an existing project's")
+    void deletedProjectsDataGoes() {
+        var workspaceId = enabledWorkspace();
+        var deleted = UUID.randomUUID();
+        var kept = UUID.randomUUID();
+        data.project(workspaceId, kept);
+        data.savedList(workspaceId, deleted, tomorrowStart(), BUILT);
+        data.savedList(workspaceId, kept, tomorrowStart(), BUILT);
+
+        firstBuildService.run(Instant.now());
+
+        assertThat(data.topics(deleted)).isEmpty();
+        assertThat(data.prototypes(deleted)).isEmpty();
+        assertThat(data.state(deleted)).isNull();
+        assertThat(data.runs(deleted)).isEmpty();
+        assertThat(data.topics(kept)).hasSize(1);
+        assertThat(data.prototypes(kept)).hasSize(2);
+        assertThat(data.state(kept)).isNotNull();
+        assertThat(data.runs(kept)).hasSize(1);
+    }
+
     /**
      * Runs the job's run until the project has {@code runs} runs: a project whose lock a run by hand of an earlier test
      * still holds for a moment is skipped, and the next run takes it.
@@ -536,7 +559,9 @@ class TopicsFirstBuildJobIntegrationTest {
                 .finishedAt(startedAt.plus(Duration.ofMinutes(1))).build();
     }
 
+    /** Inserts the run, and its project's row: the job deletes the runs of projects that no longer exist. */
     private void insertRun(TopicRun run) {
+        data.project(run.workspaceId(), run.projectId());
         template.inTransaction(WRITE, handle -> {
             handle.attach(TopicRunDAO.class).insert(run);
             return null;

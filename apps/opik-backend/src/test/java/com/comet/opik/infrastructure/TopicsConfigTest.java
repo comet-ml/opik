@@ -128,6 +128,14 @@ class TopicsConfigTest {
                     topics.getBuild().setProjectTimeout(Duration.minutes(2));
                     topics.getBuild().setQwenDeadline(Duration.minutes(2));
                 }, List.of("build.qwenDeadlineValid")),
+                arguments("max vectors under the min vectors", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setMinVectors(500);
+                    topics.getBuild().setMaxVectors(400);
+                }, List.of("build.maxVectorsValid")),
+                arguments("max vectors equal to the min vectors", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setMinVectors(500);
+                    topics.getBuild().setMaxVectors(500);
+                }, List.of()),
                 arguments("first-build budget equal to its interval", (Consumer<TopicsConfig>) topics -> {
                     topics.getFirstBuild().setInterval(Duration.minutes(10));
                     topics.getFirstBuild().setBudget(Duration.minutes(10));

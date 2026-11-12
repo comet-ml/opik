@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.db.AbstractEnumColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
@@ -101,11 +102,20 @@ public interface TopicRunDAO {
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
+    /** As {@link TopicDAO#deleteTopicsOfMissingProjects}, for {@code topic_runs}. */
+    @SqlUpdate("""
+            DELETE r FROM topic_runs r
+            LEFT JOIN projects p ON p.id = r.project_id AND p.workspace_id = r.workspace_id
+            WHERE r.workspace_id IN (<workspaceIds>) AND p.id IS NULL
+            """)
+    int deleteOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
+
     @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
     int deleteStartedBefore(@Bind("before") Instant before);
 
+    /** The run, or {@code null} when the workspace has no run with this id. */
     @SqlQuery("SELECT * FROM topic_runs WHERE workspace_id = :workspaceId AND run_id = :runId")
-    TopicRun findById(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId);
+    @Nullable TopicRun findById(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId);
 
     @SqlQuery("""
             SELECT * FROM topic_runs

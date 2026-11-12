@@ -424,6 +424,22 @@ class TopicsFirstBuildServiceTest {
     }
 
     @Test
+    @DisplayName("a run deletes the topic data of the opted-in workspaces' deleted projects, reading the workspaces "
+            + "once; a failed delete does not stop the run")
+    void deletesDeletedProjectsData() {
+        when(workspaceService.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
+        when(topicDAO.deleteTopicsOfMissingProjects(any())).thenThrow(new IllegalStateException("MySQL down"));
+        vectors.put(started, 140L);
+        listless.add(new TopicDAO.ProjectKey(WORKSPACE_ID, started));
+
+        service.run(START);
+
+        verify(topicDAO).deleteTopicsOfMissingProjects(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
+        verify(workspaceService).eligibleWorkspaceIds();
+        verify(rebuildService).firstBuild(any(), eq(WORKSPACE_ID), eq(started), any());
+    }
+
+    @Test
     @DisplayName("a run by hand answers 503 with Retry-After when Redis fails, and 409 only when the lock is held")
     void byHandLockUnavailable() {
         vectors.put(started, 140L);

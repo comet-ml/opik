@@ -28,6 +28,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Duration;
 import java.time.Instant;
@@ -97,8 +98,12 @@ public class TopicsRebuildService {
     /** The {@code trace_topics} insert after the commit: retries, and the first backoff (it doubles each time). */
     static final int INSERT_RETRIES = 3;
     static final Duration INSERT_BACKOFF = Duration.ofMillis(500);
-    /** Failure codes whose exceptions can carry text of Qwen's answer. */
-    private static final Set<Code> QWEN_CODES = EnumSet.of(Code.QWEN_TIMEOUT, Code.QWEN_ERROR, Code.QWEN_BAD_ANSWER);
+    /**
+     * Failure codes whose exceptions can carry trace-derived text: of Qwen's answer, or the topic names and definitions
+     * a failed save statement quotes in its bound arguments.
+     */
+    private static final Set<Code> TEXT_CODES = EnumSet.of(Code.QWEN_TIMEOUT, Code.QWEN_ERROR, Code.QWEN_BAD_ANSWER,
+            Code.SAVE);
     /** The longest the insert after the commit takes: every attempt to its stop, plus the backoffs and some slack. */
     static final Duration INSERT_BOUND = Duration.ofSeconds(READ_SECONDS * (INSERT_RETRIES + 1) + 30);
     /** The labelling pass after the save ends this long before the run's timeout, so the run returns before it. */
@@ -602,12 +607,13 @@ public class TopicsRebuildService {
         Outcome failed(Code code, Exception exception) {
             stats.set("seconds", seconds);
             var message = StringUtils.defaultIfBlank(ExceptionUtils.getMessage(exception), code.getValue());
-            if (QWEN_CODES.contains(code)) {
-                // A cause of a Qwen failure can quote the answer (a Jackson parse error does): the exception types
-                // only, never their messages or stack. The answer's length and SHA-256 are logged when it arrives.
+            if (TEXT_CODES.contains(code)) {
+                // A cause can quote the answer (a Jackson parse error does) or the save's bound arguments (a Jdbi
+                // statement error does): the exception types only, and a SQL error's state and code, never their
+                // messages or stack. The answer's length and SHA-256 are logged when it arrives.
                 log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}'", runId, projectId,
                         code.getValue(), ExceptionUtils.getThrowableList(exception).stream()
-                                .map(throwable -> throwable.getClass().getName()).toList());
+                                .map(TopicsRebuildService::errorType).toList());
             } else {
                 log.warn("Topics run '{}' failed, project '{}', code '{}'", runId, projectId, code.getValue(),
                         exception);
@@ -635,6 +641,12 @@ public class TopicsRebuildService {
         private TopicsRunException invariant(String message) {
             return new TopicsRunException(Code.INVARIANT, message);
         }
+    }
+
+    private static String errorType(Throwable throwable) {
+        return throwable instanceof SQLException sql
+                ? "%s(state %s, code %s)".formatted(sql.getClass().getName(), sql.getSQLState(), sql.getErrorCode())
+                : throwable.getClass().getName();
     }
 
     /** The assignment, and the prototypes it used: the topic ones and the known-Other ones the gate kept. */

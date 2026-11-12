@@ -2727,7 +2727,7 @@ topics:
     windowDays: ${TOPICS_BUILD_WINDOW_DAYS:-30}
     #  Default: 100000
     #  Description: A larger window is sampled: the build finds topics on this many of its traces, spread evenly by a
-    #  hash of the trace id, and then labels every trace of the window. At most 100000
+    #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
     maxVectors: ${TOPICS_BUILD_MAX_VECTORS:-100000}
     #  Default: 120s
     #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout

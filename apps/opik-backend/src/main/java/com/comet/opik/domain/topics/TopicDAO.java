@@ -75,6 +75,33 @@ public interface TopicDAO {
     int deleteStatesByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
+    /**
+     * Deletes the workspaces' topics whose project no longer exists: rows a failed delete on {@code ProjectsDeleted}
+     * left behind, or a save that committed after the project was deleted.
+     */
+    @SqlUpdate("""
+            DELETE t FROM topics t
+            LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
+            WHERE t.workspace_id IN (<workspaceIds>) AND p.id IS NULL
+            """)
+    int deleteTopicsOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    /** As {@link #deleteTopicsOfMissingProjects}, for {@code topic_prototypes}. */
+    @SqlUpdate("""
+            DELETE t FROM topic_prototypes t
+            LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
+            WHERE t.workspace_id IN (<workspaceIds>) AND p.id IS NULL
+            """)
+    int deletePrototypesOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    /** As {@link #deleteTopicsOfMissingProjects}, for {@code topic_project_states}. */
+    @SqlUpdate("""
+            DELETE t FROM topic_project_states t
+            LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
+            WHERE t.workspace_id IN (<workspaceIds>) AND p.id IS NULL
+            """)
+    int deleteStatesOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
+
     @SqlQuery("SELECT * FROM topic_project_states WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     List<TopicProjectState> findStates(@Bind("workspaceId") String workspaceId,
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);

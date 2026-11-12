@@ -18,6 +18,8 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -151,6 +153,60 @@ final class TopicsTestData {
         vectorsDAO.insert(rows).block();
     }
 
+    /** The project's row in MySQL, with no trace written yet; kept as it is when it exists. */
+    void project(String workspaceId, UUID projectId) {
+        template.inTransaction(WRITE, handle -> handle.execute(
+                "INSERT IGNORE INTO projects (id, name, workspace_id) VALUES (?, ?, ?)",
+                projectId.toString(), "topics-" + projectId, workspaceId));
+    }
+
+    /**
+     * What a saved run leaves in MySQL for a project: a topic of {@code size} traces, its prototype and an Other one,
+     * the state, and the run, saved two hours after {@code night}.
+     */
+    void savedList(String workspaceId, UUID projectId, Instant night, int size) {
+        var runId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var savedAt = night.plus(Duration.ofHours(2));
+        var vector = TopicPrototype.encode(new float[TopicVectorsTickService.EMBED_DIMENSIONS]);
+        template.inTransaction(WRITE, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            topicDAO.insertState(TopicProjectState.builder()
+                    .projectId(projectId)
+                    .workspaceId(workspaceId)
+                    .rebuilds(1)
+                    .firstBuiltAt(savedAt)
+                    .lastRunId(runId)
+                    .lastSuccessAt(savedAt)
+                    .windowUntil(night)
+                    .build());
+            topicDAO.insertTopics(List.of(Topic.builder()
+                    .id(topicId)
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .name("Billing")
+                    .definition("Requests about invoices")
+                    .born(LocalDate.ofInstant(night, ZoneOffset.UTC))
+                    .size(size)
+                    .build()));
+            topicDAO.insertPrototypes(List.of(
+                    TopicPrototype.builder().workspaceId(workspaceId).projectId(projectId).position(0)
+                            .topicId(topicId).vector(vector).build(),
+                    TopicPrototype.builder().workspaceId(workspaceId).projectId(projectId).position(1)
+                            .vector(vector).build()));
+            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
+                    .runId(runId)
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .mode(TopicRun.Mode.FIRST_BUILD)
+                    .status(TopicRun.Status.SAVED)
+                    .startedAt(savedAt.minus(Duration.ofMinutes(1)))
+                    .finishedAt(savedAt)
+                    .build());
+            return null;
+        });
+    }
+
     List<TopicRun> runs(UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_runs", projectId).stream()
                 .flatMap(workspaceId -> handle.attach(TopicRunDAO.class).findByProject(workspaceId, projectId).stream())
@@ -250,6 +306,28 @@ final class TopicsTestData {
     void insertVectorTombstones(String workspaceId, UUID projectId, List<UUID> traceIds, int offsetSeconds) {
         insertVectorRows(workspaceId, projectId, traceIds, "task_version", "addSeconds(now64(6), %d)"
                 .formatted(offsetSeconds), 1, "");
+    }
+
+    /** Runs {@code action} with the merges of {@code topic_vectors} stopped, so its rows stay as written. */
+    void withoutMerges(Runnable action) {
+        systemMerges("STOP");
+        try {
+            action.run();
+        } finally {
+            systemMerges("START");
+        }
+    }
+
+    private void systemMerges(String verb) {
+        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection
+                .createStatement("SYSTEM " + verb + " MERGES topic_vectors").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+    }
+
+    /** A tombstone for each of the traces' vector rows, stamped at the same time as the row it copies. */
+    void insertTiedVectorTombstones(String workspaceId, UUID projectId, List<UUID> traceIds) {
+        insertVectorRows(workspaceId, projectId, traceIds, "task_version", "last_updated_at", 1, "");
     }
 
     /** As {@link #insertVectorTombstones}, for the traces' rows of task version 1 only. */
