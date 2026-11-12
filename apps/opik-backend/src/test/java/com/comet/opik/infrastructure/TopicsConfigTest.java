@@ -63,6 +63,12 @@ class TopicsConfigTest {
         return Stream.of(
                 arguments("config-test.yml", change(vectors -> {
                 }), List.of()),
+                arguments("no embed call in flight", change(vectors -> vectors.setEmbedConcurrency(0)),
+                        List.of("embedConcurrency")),
+                arguments("as many embed calls in flight as the service queues",
+                        change(vectors -> vectors.setEmbedConcurrency(4)), List.of()),
+                arguments("more embed calls in flight than the service queues",
+                        change(vectors -> vectors.setEmbedConcurrency(5)), List.of("embedConcurrency")),
                 arguments("budget equal to the interval", change(vectors -> {
                     vectors.setTickInterval(Duration.seconds(60));
                     vectors.setTickBudget(Duration.seconds(60));

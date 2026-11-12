@@ -28,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Clock;
@@ -46,6 +47,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -153,6 +156,8 @@ public class TopicVectorsTickService {
      * starts empty and discovers every workspace once more, which changes no row's {@code drained_at}.
      */
     private final Map<String, Instant> discoveredAt = new ConcurrentHashMap<>();
+    /** The workspaces whose workspace reads this pod is skipping, each logged once until it clears. */
+    private final Set<String> overExcluded = ConcurrentHashMap.newKeySet();
 
     private final LongCounter written;
     private final LongCounter skipped;
@@ -211,6 +216,10 @@ public class TopicVectorsTickService {
     private record WindowRead(@NonNull List<TopicVectorCandidate> candidates, boolean complete) {
     }
 
+    /** One project's turn in the backfill phase: what to record, and whether the project should get another turn. */
+    private record Turn(@NonNull Optional<TopicVectorBackfill.Progress> progress, boolean more) {
+    }
+
     /** The bounds every window read of a tick has in common. */
     private record Window(@NonNull Instant lowerBound, @NonNull Instant createdAfter, @NonNull Instant start,
             @NonNull Instant deadline) {
@@ -266,8 +275,15 @@ public class TopicVectorsTickService {
     private record Pending(TopicVectorCandidate candidate, String text) {
     }
 
-    /** What one chunk's embed calls made, and whether the workspace must not be called again this tick. */
-    private record Embedded(List<TopicVector> vectors, boolean backOff) {
+    /**
+     * What one chunk's turn made: its vectors, whether an embed call was made for it, and what to count, for the
+     * tick's thread to apply.
+     */
+    private record Embedded(List<TopicVector> vectors, boolean called, List<Consumer<Tally>> effects) {
+
+        static Embedded notCalled(Consumer<Tally> effect) {
+            return new Embedded(List.of(), false, List.of(effect));
+        }
     }
 
     @Inject
@@ -346,8 +362,10 @@ public class TopicVectorsTickService {
                         + "window read), workspace and error type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read")
-                .setDescription("Enabled workspaces a tick did not read because its budget ran out, by workspace; "
-                        + "such a workspace has no value in topics.vectors.oldest_unvectored_seconds for that tick")
+                .setDescription("Enabled workspaces a tick's workspace read did not read, by workspace: its budget "
+                        + "ran out, or the workspace has more projects in backfill than the read can leave out (see "
+                        + "topics.vectors.backfill.undrained_projects). Such a workspace has no value in "
+                        + "topics.vectors.oldest_unvectored_seconds for that tick")
                 .build();
         this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed")
                 .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
@@ -553,9 +571,17 @@ public class TopicVectorsTickService {
                     .map(TopicVectorBackfill::projectId).toList();
             if (excluded.size() > MAX_EXCLUDED_PROJECTS) {
                 // Its traces are the backfill phase's for now; it does not hold the daily pass.
-                log.info("Topic vectors workspace read skipped, workspace '{}' has '{}' projects in backfill",
-                        workspaceId, excluded.size());
+                workspacesNotRead.add(1, tally.workspace(workspaceId).build());
+                if (overExcluded.add(workspaceId)) {
+                    log.warn("Topic vectors workspace reads skipped until the backfill brings it under '{}' projects, "
+                            + "workspace '{}', projects in backfill '{}'", MAX_EXCLUDED_PROJECTS, workspaceId,
+                            excluded.size());
+                }
                 continue;
+            }
+            if (overExcluded.remove(workspaceId)) {
+                log.info("Topic vectors workspace reads resumed, workspace '{}', projects in backfill '{}'",
+                        workspaceId, excluded.size());
             }
             try {
                 var read = readWindow(workspaceId, null, excluded, window, sliceSize, limit);
@@ -655,8 +681,10 @@ public class TopicVectorsTickService {
     /**
      * The backfill phase: the projects not drained yet, one at a time, while the tick has time for an embed call.
      * Workspaces take turns in the tick's visiting order, one project each, so a workspace with many projects does not
-     * hold the others; a workspace's projects go in {@link TopicVectorBackfill#backfillOrder}. A workspace an embed
-     * call backed off for is left for the next tick. Returns the keys of the projects drained; they and the vectors
+     * hold the others; a workspace's projects go in {@link TopicVectorBackfill#backfillOrder}. A project that wrote
+     * vectors and still has more than one read's worth takes its workspace's next turn too, so one large project uses
+     * the time the tick has, not one {@code maxTracesPerTick}. A workspace an embed call backed off for is left for the
+     * next tick. Returns the keys of the projects drained; they and the vectors
      * written are recorded in one write, and a failed write only means the projects are read again next tick.
      */
     private Set<TopicVectorBackfill> backfill(List<String> workspaceIds,
@@ -684,12 +712,16 @@ public class TopicVectorsTickService {
                     break;
                 }
                 any = true;
-                backfillProject(project, window, tally).ifPresent(done -> {
+                var turn = backfillProject(project, window, tally);
+                turn.progress().ifPresent(done -> {
                     progress.add(done);
                     if (done.drainedAt() != null) {
                         drained.add(project);
                     }
                 });
+                if (turn.more()) {
+                    entry.getValue().addFirst(project);
+                }
             }
         }
         try {
@@ -705,11 +737,12 @@ public class TopicVectorsTickService {
 
     /**
      * One project's turn: read its window, embed, write. The project is drained when the read was complete and none of
-     * its candidates were left for want of time, a read, a back-off or an insert. Empty when there is nothing to
-     * record: the read failed, or nothing was written and the project is not drained.
+     * its candidates were left for want of time, a read, a back-off or an insert. No progress when there is nothing
+     * to record: the read failed, or nothing was written and the project is not drained. More: the read stopped at the
+     * cap, every candidate had its turn and vectors were written, so another read now finds the next ones; a read
+     * whose candidates all fail is not repeated in the tick.
      */
-    private Optional<TopicVectorBackfill.Progress> backfillProject(TopicVectorBackfill project, Window window,
-            Tally tally) {
+    private Turn backfillProject(TopicVectorBackfill project, Window window, Tally tally) {
         var workspaceId = project.workspaceId();
         var sliceSize = project.tracesTotal() > ONE_SLICE_MAX_TRACES
                 ? config.getVectors().getFind().getSliceSize().toJavaDuration()
@@ -723,21 +756,21 @@ public class TopicVectorsTickService {
             countReadFailure("backfill", workspaceId, tally, exception);
             log.warn("Topic vectors backfill read failed, workspace '{}', project '{}'; reading it again next tick",
                     workspaceId, project.projectId(), exception);
-            return Optional.empty();
+            return new Turn(Optional.empty(), false);
         }
         int cuts = tally.cuts;
         int written = tally.written;
         embedAndWrite(read.candidates(), window.deadline(), null, tally);
         boolean drained = read.complete() && tally.cuts == cuts;
         if (!drained && tally.written == written) {
-            return Optional.empty();
+            return new Turn(Optional.empty(), false);
         }
-        return Optional.of(TopicVectorBackfill.Progress.builder()
+        return new Turn(Optional.of(TopicVectorBackfill.Progress.builder()
                 .workspaceId(workspaceId)
                 .projectId(project.projectId())
                 .drainedAt(drained ? window.start() : null)
                 .written(tally.written - written)
-                .build());
+                .build()), !read.complete() && tally.cuts == cuts);
     }
 
     /** Per workspace, the projects still not drained after this tick. */
@@ -761,6 +794,10 @@ public class TopicVectorsTickService {
      * rest is {@code over_budget}. After an embed call fails with a 429, a 5xx, a timeout or a retryable code, the
      * workspace is not called again this tick; other workspaces go on. After the workspace's last insert, one check
      * deletes the vectors of traces deleted meanwhile.
+     *
+     * <p>Up to {@code embedConcurrency} of a workspace's chunks are embedded at a time. Their vectors are still
+     * inserted in chunk order, by this thread alone, and every count is kept by this thread: a call's thread only
+     * returns what it made. After a back-off no new call starts; those in flight end and their vectors are inserted.
      */
     private void embedAndWrite(List<TopicVectorCandidate> candidates, Instant deadline, Instant missedBefore,
             Tally tally) {
@@ -804,19 +841,15 @@ public class TopicVectorsTickService {
                 log.warn("Topic vectors skip done statuses without a summary, workspace '{}', traces '{}', oldest '{}'",
                         workspaceId, missing.size(), missing.getFirst().traceId());
             }
-            boolean backOff = false;
             var written = new ArrayList<TopicVector>();
-            for (var chunk : Lists.partition(pending, config.getVectors().getEmbedBatchSize())) {
-                if (backOff) {
-                    tally.skip(workspaceId, EMBED_FAILED, chunk.size());
+            var chunks = Lists.partition(pending, config.getVectors().getEmbedBatchSize());
+            // Built here: the calls' threads must not use the tally, not even for its workspace names.
+            var attributes = tally.workspace(workspaceId).build();
+            for (var embedded : embedInOrder(workspaceId, attributes, chunks, deadline)) {
+                embedded.effects().forEach(effect -> effect.accept(tally));
+                if (!embedded.called()) {
                     continue;
                 }
-                if (!hasTimeForChunk(deadline)) {
-                    tally.cut(workspaceId, OVER_BUDGET, chunk.size());
-                    continue;
-                }
-                var embedded = embedChunk(workspaceId, chunk, deadline, tally);
-                backOff = embedded.backOff();
                 var vectors = embedded.vectors();
                 try {
                     dao.insert(vectors).block();
@@ -882,44 +915,88 @@ public class TopicVectorsTickService {
     }
 
     /**
+     * What each chunk's embed calls made, in chunk order. With {@code embedConcurrency} 1, or one chunk, each chunk is
+     * embedded on this thread when the caller asks for it, so the next call starts after the previous chunk's insert.
+     * Otherwise up to {@code embedConcurrency} chunks are embedded at a time, on other threads, and a new one starts
+     * only when the caller has taken an earlier one: never more than that many calls in flight. An interrupt of the
+     * caller cancels the calls in flight.
+     */
+    private Iterable<Embedded> embedInOrder(String workspaceId, Attributes attributes, List<List<Pending>> chunks,
+            Instant deadline) {
+        var backOff = new AtomicBoolean();
+        int concurrency = config.getVectors().getEmbedConcurrency();
+        if (concurrency == 1 || chunks.size() <= 1) {
+            return () -> chunks.stream()
+                    .map(chunk -> embedSlot(workspaceId, attributes, chunk, deadline, backOff))
+                    .iterator();
+        }
+        return Flux.fromIterable(chunks)
+                .flatMapSequential(chunk -> Mono
+                        .fromCallable(() -> embedSlot(workspaceId, attributes, chunk, deadline, backOff))
+                        .subscribeOn(Schedulers.boundedElastic()), concurrency, 1)
+                .toIterable(1);
+    }
+
+    /**
+     * One chunk's turn: no call once the workspace backed off or the tick has no time for one. {@code backOff} is the
+     * workspace's, shared by its chunks in flight.
+     */
+    private Embedded embedSlot(String workspaceId, Attributes attributes, List<Pending> chunk, Instant deadline,
+            AtomicBoolean backOff) {
+        if (backOff.get()) {
+            return Embedded.notCalled(tally -> tally.skip(workspaceId, EMBED_FAILED, chunk.size()));
+        }
+        if (!hasTimeForChunk(deadline)) {
+            return Embedded.notCalled(tally -> tally.cut(workspaceId, OVER_BUDGET, chunk.size()));
+        }
+        var effects = new ArrayList<Consumer<Tally>>();
+        return new Embedded(embedChunk(workspaceId, attributes, chunk, deadline, backOff, effects), true, effects);
+    }
+
+    /**
      * One chunk's embed call. When the service rejects the call with a non-retryable 4xx, an input in it is bad (one
      * opik-inference refuses), so the chunk is halved and each half is tried, down to single inputs: a bad input costs
-     * only itself, at about two calls per halving (17 calls for one bad input in 256). Halving stops at a back-off or
-     * when the tick has no time for another call.
+     * only itself, at about two calls per halving (17 calls for one bad input in 256). The halves are tried one after
+     * the other, in the chunk's own turn. Halving stops at a back-off or when the tick has no time for another call.
+     * Runs on a call's thread: what it counts goes to {@code effects}, for the tick's thread to apply.
      */
-    private Embedded embedChunk(String workspaceId, List<Pending> chunk, Instant deadline, Tally tally) {
+    private List<TopicVector> embedChunk(String workspaceId, Attributes attributes, List<Pending> chunk,
+            Instant deadline, AtomicBoolean backOff, List<Consumer<Tally>> effects) {
         try {
-            return new Embedded(embed(workspaceId, chunk, tally), false);
+            return embed(workspaceId, attributes, chunk, effects);
         } catch (InferenceException exception) {
-            boolean backOff = backsOff(exception);
-            if (!backOff && isRejectedInput(exception) && chunk.size() > 1) {
+            boolean stop = backsOff(exception);
+            if (!stop && isRejectedInput(exception) && chunk.size() > 1) {
                 log.info("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'; trying "
                         + "each half", workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size());
                 var vectors = new ArrayList<TopicVector>();
                 int half = chunk.size() / 2;
                 for (var part : List.of(chunk.subList(0, half), chunk.subList(half, chunk.size()))) {
-                    if (backOff) {
-                        tally.skip(workspaceId, EMBED_FAILED, part.size());
+                    if (backOff.get()) {
+                        effects.add(tally -> tally.skip(workspaceId, EMBED_FAILED, part.size()));
                         continue;
                     }
                     if (!hasTimeForChunk(deadline)) {
-                        tally.cut(workspaceId, OVER_BUDGET, part.size());
+                        effects.add(tally -> tally.cut(workspaceId, OVER_BUDGET, part.size()));
                         continue;
                     }
-                    var embedded = embedChunk(workspaceId, part, deadline, tally);
-                    vectors.addAll(embedded.vectors());
-                    backOff = embedded.backOff();
+                    vectors.addAll(embedChunk(workspaceId, attributes, part, deadline, backOff, effects));
                 }
-                return new Embedded(vectors, backOff);
+                return vectors;
             }
-            tally.skip(workspaceId, EMBED_FAILED, chunk.size());
-            if (backOff) {
-                tally.cuts++;
-                tally.backedOff.add(workspaceId);
+            if (stop) {
+                backOff.set(true);
             }
+            effects.add(tally -> {
+                tally.skip(workspaceId, EMBED_FAILED, chunk.size());
+                if (stop) {
+                    tally.cuts++;
+                    tally.backedOff.add(workspaceId);
+                }
+            });
             log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}', back off '{}'",
-                    workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), backOff, exception);
-            return new Embedded(List.of(), backOff);
+                    workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), stop, exception);
+            return List.of();
         }
     }
 
@@ -980,9 +1057,11 @@ public class TopicVectorsTickService {
 
     /**
      * One embed call with its full {@code embedTimeout}; vectors that aren't {@value #EMBED_DIMENSIONS} non-zero
-     * numbers are dropped and counted.
+     * numbers are dropped and counted. May run on a call's thread: the instruments it records to are thread-safe, and
+     * what it counts in the tally goes to {@code effects}.
      */
-    private List<TopicVector> embed(String workspaceId, List<Pending> chunk, Tally tally) {
+    private List<TopicVector> embed(String workspaceId, Attributes attributes, List<Pending> chunk,
+            List<Consumer<Tally>> effects) {
         var callDeadline = clock.instant().plus(config.getVectors().getEmbedTimeout().toJavaDuration());
         var request = EmbedRequest.builder()
                 .orgId(workspaceId)
@@ -997,8 +1076,8 @@ public class TopicVectorsTickService {
             response = client.embed(request, callDeadline).block();
         } catch (InferenceException exception) {
             embedDuration.record((System.nanoTime() - started) / 1e9,
-                    tally.workspace(workspaceId).put(stringKey("outcome"), metricCode(exception.getCode())).build());
-            embedFailures.add(1, tally.workspace(workspaceId)
+                    attributes.toBuilder().put(stringKey("outcome"), metricCode(exception.getCode())).build());
+            embedFailures.add(1, attributes.toBuilder()
                     .put(longKey("http_status"), (long) exception.getHttpStatus())
                     .put(stringKey("code"), metricCode(exception.getCode()))
                     .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(exception))
@@ -1006,20 +1085,20 @@ public class TopicVectorsTickService {
             throw exception;
         }
         embedDuration.record((System.nanoTime() - started) / 1e9,
-                tally.workspace(workspaceId).put(stringKey("outcome"), "ok").build());
+                attributes.toBuilder().put(stringKey("outcome"), "ok").build());
         // A malformed response must cost only its own traces, never an exception out of the tick.
         var embeddings = Optional.ofNullable(response).map(EmbedResponse::result).map(EmbedResult::embeddings)
                 .orElse(null);
         if (embeddings == null) {
             log.error("Topic vectors embed answered no embeddings for '{}' inputs, workspace '{}'", chunk.size(),
                     workspaceId);
-            tally.skip(workspaceId, INVALID_VECTOR, chunk.size());
+            effects.add(tally -> tally.skip(workspaceId, INVALID_VECTOR, chunk.size()));
             return List.of();
         }
         if (embeddings.size() != chunk.size()) {
             log.error("Topic vectors embed answered '{}' vectors for '{}' inputs, workspace '{}'", embeddings.size(),
                     chunk.size(), workspaceId);
-            tally.skip(workspaceId, INVALID_VECTOR, chunk.size());
+            effects.add(tally -> tally.skip(workspaceId, INVALID_VECTOR, chunk.size()));
             return List.of();
         }
         var vectors = new ArrayList<TopicVector>(chunk.size());
@@ -1031,7 +1110,7 @@ public class TopicVectorsTickService {
                             ? normalize(embedding)
                             : Optional.<List<Float>>empty();
             if (normalized.isEmpty()) {
-                tally.skip(workspaceId, INVALID_VECTOR, 1);
+                effects.add(tally -> tally.skip(workspaceId, INVALID_VECTOR, 1));
                 continue;
             }
             vectors.add(TopicVector.builder()

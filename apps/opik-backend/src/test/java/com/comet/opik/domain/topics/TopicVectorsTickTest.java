@@ -517,6 +517,26 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("with two embed calls in flight, every chunk's vectors are written, each with its own trace")
+    void embedConcurrency() {
+        config().setEmbedBatchSize(2);
+        config().setEmbedConcurrency(2);
+        try {
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var traceIds = labelTraces(workspaceId, projectId, 9, 1);
+
+            var result = tickService.tick(Instant.now());
+
+            assertThat(result.written()).isEqualTo(9);
+            assertThat(embedStub.callsFor(workspaceId)).isEqualTo(5);
+            assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        } finally {
+            config().setEmbedConcurrency(1);
+        }
+    }
+
+    @Test
     @DisplayName("a 429 on the second chunk: the first chunk is written, the next tick completes the second")
     void throttledSecondChunk() {
         config().setEmbedBatchSize(10);
@@ -645,11 +665,13 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("with a cap of 5,000, one tick writes 5,000 of 20,000 traces, oldest status first, and four ticks "
-            + "write all")
+    @DisplayName("with a cap of 5,000, one tick writes 5,000 of a drained project's 20,000 traces, oldest status "
+            + "first, and four ticks write all")
     void cap() {
         var workspaceId = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
+        // A drained project: the workspace read serves it, one cap per tick. In backfill it would take turn after turn.
+        markDrained(workspaceId, projectId);
         // Four batches of 5,000, labeled in this order. Each batch's ids are generated after the next one's, so trace id
         // order is the reverse of status order: the ticks can only follow status order if they sort by updated_at.
         var batches = new ArrayList<List<UUID>>();
@@ -673,13 +695,16 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("the cap is per workspace, and a 429 with an unknown code backs off only its workspace")
+    @DisplayName("the workspace read's cap is per workspace, and a 429 with an unknown code backs off only its "
+            + "workspace")
     void perWorkspaceCapAndBackOff() {
         config().setMaxTracesPerTick(4);
         config().setEmbedBatchSize(2);
         var throttled = enabledWorkspace();
         var healthy = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
+        markDrained(throttled, projectId);
+        markDrained(healthy, projectId);
         var throttledTraces = labelTraces(throttled, projectId, 6, 1);
         var healthyTraces = labelTraces(healthy, projectId, 6, 1);
         embedStub.fail(throttled, 429, "{\"error\":{\"code\":\"rate_limited\",\"message\":\"m\"}}");
