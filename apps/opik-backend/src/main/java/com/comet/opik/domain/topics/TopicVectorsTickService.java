@@ -515,7 +515,7 @@ public class TopicVectorsTickService {
                 var projects = dao.findBackfillProjects(workspaceId, TASK, window.lowerBound(),
                         window.createdAfter(), maxExecutionSeconds(left)).collectList().block();
                 var tracesWithVectors = dao.countTracesWithVectorsByProject(workspaceId, window.lowerBound(),
-                        secondsLeft(window.deadline())).block();
+                        maxExecutionSeconds(Duration.between(clock.instant(), window.deadline()))).block();
                 var rows = projects.stream()
                         .map(project -> TopicVectorBackfill.builder()
                                 .workspaceId(workspaceId)
@@ -854,6 +854,7 @@ public class TopicVectorsTickService {
                 try {
                     dao.insert(vectors).block();
                 } catch (RuntimeException exception) {
+                    rethrowIfInterrupted(exception);
                     tally.cut(workspaceId, INSERT_FAILED, vectors.size());
                     log.warn("Topic vectors insert failed, workspace '{}', rows '{}'; embedding them again next tick",
                             workspaceId, vectors.size(), exception);
@@ -903,6 +904,7 @@ public class TopicVectorsTickService {
                     deleted.addAll(gone);
                 }
             } catch (RuntimeException exception) {
+                rethrowIfInterrupted(exception);
                 log.warn("Topic vectors deleted-trace check failed, workspace '{}', traces '{}'; retention removes "
                         + "any left", workspaceId, chunk.size(), exception);
             }

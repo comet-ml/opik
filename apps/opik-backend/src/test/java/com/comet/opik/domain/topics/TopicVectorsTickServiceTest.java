@@ -564,6 +564,38 @@ class TopicVectorsTickServiceTest {
             findUnvectored(verify(dao, never()), "second", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS);
         }
 
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("an interrupt during an insert or the deleted-trace check stops the tick: the next workspace's "
+                + "traces are not embedded")
+        void interruptAfterEmbedStopsTheTick(boolean duringInsert) {
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("first", "second"));
+            var first = candidate("first", NOW.minusSeconds(10));
+            var second = candidate("second", NOW.minusSeconds(10));
+            when(findUnvectored(dao, "first", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(first));
+            when(findUnvectored(dao, "second", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(second));
+            stubSummaries("first", List.of(first), candidate -> "first text", BUDGET_SECONDS);
+            stubSummaries("second", List.of(second), candidate -> "second text", BUDGET_SECONDS);
+            var interrupt = reactor.core.Exceptions.propagate(new InterruptedException());
+            if (duringInsert) {
+                when(dao.insert(anyList())).thenReturn(Mono.error(interrupt));
+            } else {
+                when(dao.findStatusKeys(eq("first"), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                        .thenReturn(Flux.error(interrupt));
+            }
+
+            try {
+                assertThatThrownBy(() -> service.tick(NOW))
+                        .satisfies(error -> assertThat(reactor.core.Exceptions.unwrap(error))
+                                .isInstanceOf(InterruptedException.class));
+                assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            } finally {
+                Thread.interrupted();
+            }
+            assertThat(inserted).extracting(TopicVector::workspaceId).doesNotContain("second");
+            assertThat(requests).flatExtracting(EmbedRequest::inputs).containsExactly("first text");
+        }
+
         @Test
         @DisplayName("a failed insert is skipped as insert_failed, keeps the long-window pass on, and the next "
                 + "workspace still runs")
@@ -1775,7 +1807,7 @@ class TopicVectorsTickServiceTest {
             var lowerBound = NOW.minus(LONG_WINDOW);
             verify(dao).findBackfillProjects(WORKSPACE_ID, TopicVectorsTickService.TASK, lowerBound,
                     lowerBound.minus(Duration.ofDays(8)), FIND_SECONDS);
-            verify(dao).countTracesWithVectorsByProject(WORKSPACE_ID, lowerBound, BUDGET_SECONDS);
+            verify(dao).countTracesWithVectorsByProject(WORKSPACE_ID, lowerBound, FIND_SECONDS);
             verify(backfills).discovered(eq(WORKSPACE_ID), anyList(), eq(NOW), eq(NOW.minus(Duration.ofDays(2))));
             // The known project keeps its start and its drained mark.
             assertThat(rows.get(known.projectId())).isEqualTo(known.toBuilder().checkedAt(NOW)
