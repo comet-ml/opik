@@ -135,7 +135,7 @@ public class TopicWindowLabelService {
             var to = state.get().windowUntil();
             var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             // As the run built it: the topic prototypes in position order, then the known-Other ones. Only live topics
-            // label: a retired topic's prototypes, kept for a later revival, are left out.
+            // label: a prototype of a retired topic is left out.
             var live = topicDAO.findLive(workspaceId, projectId).stream().map(Topic::id).collect(Collectors.toSet());
             var topicIds = new ArrayList<UUID>();
             var topicPrototypes = new ArrayList<float[]>();

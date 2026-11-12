@@ -4,8 +4,7 @@
 
 -- One row per topic a project's run created. An id is never reused: a renamed or merged topic keeps its id, a
 -- retired one keeps its row with retired_at set. low_nights is the lifecycle streak of the nightly update;
--- the first build writes it as 0. size is the topic's count among the traces the last saved run read. revived_at is the last
--- night a retired topic came back live with its id (the nightly update, OPIK-8988); the first build leaves it null.
+-- the first build writes it as 0. size is the topic's count among the traces the last saved run read.
 CREATE TABLE IF NOT EXISTS topics
 (
     id             CHAR(36)      NOT NULL,
@@ -16,7 +15,6 @@ CREATE TABLE IF NOT EXISTS topics
     born           DATE          NOT NULL,
     retired_at     DATE          NULL,
     retired_reason VARCHAR(64)   NULL,
-    revived_at     DATE          NULL,
     low_nights     INT           NOT NULL DEFAULT 0,
     size           INT           NOT NULL DEFAULT 0,
     created_at     TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
