@@ -7,6 +7,29 @@ import { OpikQueryLanguage } from "@/query";
 
 const MAX_SEARCH_BATCH_SIZE = 2000;
 
+async function readPage<T>(
+  stream: ReadableStream<Uint8Array>,
+  serializer: core.serialization.Schema<unknown, T>,
+  cursorField: string,
+  limit: number
+) {
+  let recordsSent = 0;
+  let lastIdSent: string | undefined;
+  const items = await parseNdjsonStreamToArray<T>(
+    stream,
+    serializer,
+    limit,
+    (record) => {
+      recordsSent++;
+      const id = (record as Record<string, unknown> | null)?.[cursorField];
+      if (typeof id === "string") {
+        lastIdSent = id;
+      }
+    }
+  );
+  return { items, recordsSent, lastIdSent };
+}
+
 async function searchAllPages<T>(
   fetchPage: (
     limit: number,
@@ -21,33 +44,21 @@ async function searchAllPages<T>(
 
   while (results.length < maxResults) {
     const limit = Math.min(maxResults - results.length, MAX_SEARCH_BATCH_SIZE);
-    let recordsReceived = 0;
-    let pageLastId: string | undefined;
-
-    const stream = await fetchPage(limit, cursor);
-    const items = await parseNdjsonStreamToArray<T>(
-      stream,
+    const page = await readPage(
+      await fetchPage(limit, cursor),
       serializer,
-      limit,
-      // Count raw records so one that fails validation does not make a full page look short.
-      (record) => {
-        recordsReceived++;
-        const id = (record as Record<string, unknown> | null)?.[cursorField];
-        if (typeof id === "string") {
-          pageLastId = id;
-        }
-      }
+      cursorField,
+      limit
     );
-    results.push(...items);
+    results.push(...page.items);
 
-    if (
-      Math.max(recordsReceived, items.length) < limit ||
-      pageLastId === undefined ||
-      pageLastId === cursor
-    ) {
+    const isLastPage = page.recordsSent < limit;
+    const cursorMoved =
+      page.lastIdSent !== undefined && page.lastIdSent !== cursor;
+    if (isLastPage || !cursorMoved) {
       break;
     }
-    cursor = pageLastId;
+    cursor = page.lastIdSent;
   }
 
   return results;
