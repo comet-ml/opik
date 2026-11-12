@@ -8,12 +8,14 @@ import { logger } from "./logger";
  * @param stream The ReadableStream of bytes
  * @param serializer Schema for deserializing the stream data (can be passed as ExperimentItemCompare, etc.)
  * @param nbSamples Optional maximum number of samples to parse
+ * @param onRecord Optional callback for every decoded JSON record, including records that fail schema validation
  * @returns Array of parsed objects
  */
 export async function parseNdjsonStreamToArray<T>(
   stream: ReadableStream<Uint8Array>,
   serializer: core.serialization.Schema<unknown, T>,
-  nbSamples?: number
+  nbSamples?: number,
+  onRecord?: (record: unknown) => void
 ): Promise<T[]> {
   // Early return for nbSamples=0 to avoid processing any items
   if (nbSamples === 0) {
@@ -43,6 +45,7 @@ export async function parseNdjsonStreamToArray<T>(
 
         try {
           const parsed = JSON.parse(line);
+          onRecord?.(parsed);
           const result = serializer.parse(parsed, { unrecognizedObjectKeys: "strip" });
 
           if (result.ok) {
@@ -74,6 +77,7 @@ export async function parseNdjsonStreamToArray<T>(
     ) {
       try {
         const parsed = JSON.parse(buffer);
+        onRecord?.(parsed);
         const result = serializer.parse(parsed, { unrecognizedObjectKeys: "strip" });
 
         if (result.ok) {

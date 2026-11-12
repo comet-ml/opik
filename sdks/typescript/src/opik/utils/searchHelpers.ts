@@ -1,8 +1,64 @@
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import * as OpikApi from "@/rest_api/api";
 import { serialization } from "@/rest_api";
+import type * as core from "@/rest_api/core";
 import { parseNdjsonStreamToArray } from "@/utils/stream";
 import { OpikQueryLanguage } from "@/query";
+
+// The backend rejects stream search requests with a limit above 2000.
+export const MAX_SEARCH_BATCH_SIZE = 2000;
+
+/**
+ * Reads a stream search endpoint page by page until maxResults items are read
+ * or the backend returns a short page. The cursor is the last id the backend
+ * sent, not the last id that parsed, so a record that fails validation does
+ * not cause the same page to be requested again.
+ */
+export async function searchAllPages<T>(
+  fetchPage: (
+    limit: number,
+    cursor: string | undefined
+  ) => Promise<ReadableStream<Uint8Array>>,
+  serializer: core.serialization.Schema<unknown, T>,
+  cursorField: string,
+  maxResults: number,
+  batchSize: number = MAX_SEARCH_BATCH_SIZE
+): Promise<T[]> {
+  const results: T[] = [];
+  let cursor: string | undefined;
+
+  while (results.length < maxResults) {
+    const limit = Math.min(maxResults - results.length, batchSize);
+    let recordsReceived = 0;
+    let pageLastId: string | undefined;
+
+    const stream = await fetchPage(limit, cursor);
+    const items = await parseNdjsonStreamToArray<T>(
+      stream,
+      serializer,
+      limit,
+      (record) => {
+        recordsReceived++;
+        const id = (record as Record<string, unknown> | null)?.[cursorField];
+        if (typeof id === "string") {
+          pageLastId = id;
+        }
+      }
+    );
+    results.push(...items);
+
+    if (
+      Math.max(recordsReceived, items.length) < limit ||
+      pageLastId === undefined ||
+      pageLastId === cursor
+    ) {
+      break;
+    }
+    cursor = pageLastId;
+  }
+
+  return results;
+}
 
 /**
  * Searches traces with filters and returns parsed results
@@ -15,21 +71,20 @@ export async function searchTracesWithFilters(
   truncate: boolean,
   exclude?: OpikApi.TraceSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.TracePublic[]> {
-  const streamResponse = await apiClient.traces.searchTraces({
-    projectName,
-    filters: filters ?? undefined,
-    limit: maxResults,
-    truncate,
-    exclude,
-  });
-
-  const traces = await parseNdjsonStreamToArray<OpikApi.TracePublic>(
-    streamResponse,
+  return searchAllPages(
+    (limit, lastRetrievedId) =>
+      apiClient.traces.searchTraces({
+        projectName,
+        filters: filters ?? undefined,
+        limit,
+        lastRetrievedId,
+        truncate,
+        exclude,
+      }),
     serialization.TracePublic,
+    "id",
     maxResults
   );
-
-  return traces;
 }
 
 /**
@@ -78,20 +133,19 @@ export async function searchThreadsWithFilters(
   maxResults: number,
   truncate: boolean
 ): Promise<OpikApi.TraceThread[]> {
-  const streamResponse = await apiClient.traces.searchTraceThreads({
-    projectName,
-    filters: filters ?? undefined,
-    limit: maxResults,
-    truncate,
-  });
-
-  const threads = await parseNdjsonStreamToArray<OpikApi.TraceThread>(
-    streamResponse,
+  return searchAllPages(
+    (limit, lastRetrievedThreadModelId) =>
+      apiClient.traces.searchTraceThreads({
+        projectName,
+        filters: filters ?? undefined,
+        limit,
+        lastRetrievedThreadModelId,
+        truncate,
+      }),
     serialization.TraceThread,
+    "thread_model_id",
     maxResults
   );
-
-  return threads;
 }
 
 /**
@@ -176,21 +230,20 @@ export async function searchSpansWithFilters(
   truncate: boolean,
   exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.SpanPublic[]> {
-  const streamResponse = await apiClient.spans.searchSpans({
-    projectName,
-    filters: filters ?? undefined,
-    limit: maxResults,
-    truncate,
-    exclude,
-  });
-
-  const spans = await parseNdjsonStreamToArray<OpikApi.SpanPublic>(
-    streamResponse,
+  return searchAllPages(
+    (limit, lastRetrievedId) =>
+      apiClient.spans.searchSpans({
+        projectName,
+        filters: filters ?? undefined,
+        limit,
+        lastRetrievedId,
+        truncate,
+        exclude,
+      }),
     serialization.SpanPublic,
+    "id",
     maxResults
   );
-
-  return spans;
 }
 
 /**
