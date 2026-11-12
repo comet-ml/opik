@@ -6,7 +6,7 @@ import { parseNdjsonStreamToArray } from "@/utils/stream";
 import { OpikQueryLanguage } from "@/query";
 
 // The backend rejects stream search requests with a limit above 2000.
-export const MAX_SEARCH_BATCH_SIZE = 2000;
+const MAX_SEARCH_BATCH_SIZE = 2000;
 
 /**
  * Reads a stream search endpoint page by page until maxResults items are read
@@ -14,21 +14,20 @@ export const MAX_SEARCH_BATCH_SIZE = 2000;
  * sent, not the last id that parsed, so a record that fails validation does
  * not cause the same page to be requested again.
  */
-export async function searchAllPages<T>(
+async function searchAllPages<T>(
   fetchPage: (
     limit: number,
     cursor: string | undefined
   ) => Promise<ReadableStream<Uint8Array>>,
   serializer: core.serialization.Schema<unknown, T>,
   cursorField: string,
-  maxResults: number,
-  batchSize: number = MAX_SEARCH_BATCH_SIZE
+  maxResults: number
 ): Promise<T[]> {
   const results: T[] = [];
   let cursor: string | undefined;
 
   while (results.length < maxResults) {
-    const limit = Math.min(maxResults - results.length, batchSize);
+    const limit = Math.min(maxResults - results.length, MAX_SEARCH_BATCH_SIZE);
     let recordsReceived = 0;
     let pageLastId: string | undefined;
 
