@@ -1,0 +1,100 @@
+---
+title: Move to Opik Cloud
+headline: Move from self-hosted Opik to Opik Cloud | Opik Documentation
+og:title: Move from self-hosted Opik to Opik Cloud
+og:description: Copy traces, spans, datasets, prompts, and experiments from a self-hosted
+  Opik deployment to Opik Cloud with the opik export and opik import commands.
+og:site_name: Opik Documentation
+---
+
+Use the `opik export` and `opik import` commands to copy your data from a self-hosted Opik deployment to Opik Cloud. Export writes each project to local JSON files. Import reads those files and sends them to your Opik Cloud workspace.
+
+<Note>
+  Use the CLI for this move, not the SDK search methods. Methods such as `searchTraces` and `search_traces` only return data to your code. They do not write files, and there is no SDK method that imports them back.
+</Note>
+
+## Before you start
+
+You need:
+
+- The `opik` CLI on your machine. It comes with the Python SDK: `pip install --upgrade opik`.
+- The URL of your self-hosted Opik API. For a local install, this is `http://localhost:5173/api`.
+- An Opik Cloud API key and the name of your Opik Cloud workspace. See [SDK configuration](/tracing/advanced/sdk_configuration) for where to find them.
+- The names of the projects that you want to move. Each command moves one project.
+
+### Workspace names
+
+A self-hosted deployment has one workspace, and its name is `default`. The Opik UI shows this workspace as **Personal**, but the CLI needs the real name, `default`.
+
+Your Opik Cloud workspace has a different name. Use it as the value of `--to-workspace` when you import.
+
+## Move a project
+
+<Steps>
+  <Step title="Export the project from your self-hosted deployment">
+    Point the CLI at your self-hosted API and export everything in the project:
+
+    ```bash wordWrap
+    OPIK_URL_OVERRIDE=http://localhost:5173/api \
+      opik export default "my-project" all --path ./opik_exports
+    ```
+
+    The command writes the data to `./opik_exports/default/projects/<project_id>/`. If you do not set `--path`, the CLI uses `./opik_exports`.
+  </Step>
+  <Step title="Preview the import">
+    Point the CLI at Opik Cloud and run the import with `--dry-run`. The first argument stays `default`, because the CLI uses it to find the exported files on disk:
+
+    ```bash wordWrap
+    OPIK_URL_OVERRIDE=https://www.comet.com/opik/api \
+    OPIK_API_KEY=<your-api-key> \
+      opik import default "my-project" all --path ./opik_exports \
+      --to-workspace <your-cloud-workspace> --dry-run
+    ```
+
+    Make sure that the plan shows the datasets, prompts, experiments, and traces that you expect.
+  </Step>
+  <Step title="Import the project into Opik Cloud">
+    Run the same command without `--dry-run`:
+
+    ```bash wordWrap
+    OPIK_URL_OVERRIDE=https://www.comet.com/opik/api \
+    OPIK_API_KEY=<your-api-key> \
+      opik import default "my-project" all --path ./opik_exports \
+      --to-workspace <your-cloud-workspace>
+    ```
+
+    If the import stops before it is complete, run the same command again. The CLI continues from where it stopped and does not create duplicates.
+  </Step>
+  <Step title="Check the data in Opik Cloud">
+    Open your workspace in Opik Cloud and make sure that the project shows your traces, datasets, prompts, and experiments.
+  </Step>
+</Steps>
+
+Do these steps again for each project that you want to move. To give the project a different name in Opik Cloud, add `--to-project <new-name>` to the import command.
+
+## What the CLI moves
+
+The `all` item moves the datasets, prompts, experiments, traces, and spans of the project. Feedback scores and span hierarchies stay attached to their traces.
+
+The CLI does not move other project configuration, such as online evaluation rules, dashboards, and alerts. Create them again in Opik Cloud.
+
+### Imported traces get new IDs
+
+Opik Cloud gives each imported trace and span a new ID. The original ID is in the trace metadata as `_import_id`. The `start_time` and `end_time` of each trace do not change.
+
+The project metrics charts use the time in the trace ID. Thus, these charts count imported traces at the time of the import, not at the time that they ran. For more information, see [Imported trace and span IDs](/tracing/advanced/export-data#imported-trace-and-span-ids).
+
+## Send new traces to Opik Cloud
+
+After the move, change the configuration of your applications so that new traces go to Opik Cloud:
+
+```bash wordWrap
+opik configure
+```
+
+You can also set the `OPIK_URL_OVERRIDE`, `OPIK_API_KEY`, and `OPIK_WORKSPACE` environment variables. See [SDK configuration](/tracing/advanced/sdk_configuration) for all the options.
+
+## Next steps
+
+- [Export data](/tracing/advanced/export-data): all the `opik export` and `opik import` options.
+- [SDK configuration](/tracing/advanced/sdk_configuration): connect your applications to Opik Cloud.
