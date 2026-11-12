@@ -11,8 +11,9 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 /**
  * Deletes the {@code topic_vector_backfills} rows of deleted projects, within the event's workspace. Their vectors
- * follow through the TracesDeleted cascade of each trace delete. Runs with topics off too, so no row outlives its
- * project.
+ * follow through the TracesDeleted cascade of each trace delete. Runs with topics off too. A row this misses, from a
+ * failed delete or a tick that wrote it again before the project's traces were gone, is removed by the tick's next
+ * discovery of the workspace's projects ({@link TopicVectorBackfillService#discovered}).
  */
 @EagerSingleton
 @Slf4j

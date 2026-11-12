@@ -458,6 +458,7 @@ class TopicVectorsTickTest {
         var second = ID_GENERATOR.generateId();
         var third = ID_GENERATOR.generateId();
         var t0 = Instant.parse("2026-11-01T10:00:00.123456Z");
+        List.of(first, second, third).forEach(projectId -> project(workspaceId, projectId));
         var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
         backfillService.start(List.of(row.projectId(first).build(), row.projectId(second).build()));
         backfillService.start(List.of(row.projectId(first).startedAt(t0.plusSeconds(60)).build()));
@@ -526,6 +527,26 @@ class TopicVectorsTickTest {
                 .untilAsserted(() -> assertThat(backfillService.findByKeys(workspaceId, List.of(deleted, kept)))
                         .containsOnlyKeys(kept));
         assertThat(backfillService.findByKeys(otherWorkspaceId, List.of(deleted))).containsOnlyKeys(deleted);
+    }
+
+    @Test
+    @DisplayName("a discovery removes the rows of projects that no longer exist, also one it was about to write again")
+    void discoveryRemovesRowsOfDeletedProjects() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var kept = ID_GENERATOR.generateId();
+        var deleted = ID_GENERATOR.generateId();
+        project(workspaceId, kept);
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        // Left behind by a failed delete on ProjectsDeleted.
+        backfillService.start(List.of(row.projectId(kept).build(), row.projectId(deleted).build()));
+
+        // The deleted project's statuses are still there, so the discovery finds it again.
+        int removed = backfillService.discovered(workspaceId, List.of(row.projectId(kept).tracesTotal(3).build(),
+                row.projectId(deleted).tracesTotal(3).build()), t0.plusSeconds(60), t0);
+
+        assertThat(removed).isOne();
+        assertThat(backfillService.findByKeys(workspaceId, List.of(kept, deleted))).containsOnlyKeys(kept);
     }
 
     @Test
@@ -714,11 +735,12 @@ class TopicVectorsTickTest {
         config().setEmbedBatchSize(2);
         var throttled = enabledWorkspace();
         var healthy = enabledWorkspace();
-        var projectId = ID_GENERATOR.generateId();
-        markDrained(throttled, projectId);
-        markDrained(healthy, projectId);
-        var throttledTraces = labelTraces(throttled, projectId, 6, 1);
-        var healthyTraces = labelTraces(healthy, projectId, 6, 1);
+        var throttledProject = ID_GENERATOR.generateId();
+        var healthyProject = ID_GENERATOR.generateId();
+        markDrained(throttled, throttledProject);
+        markDrained(healthy, healthyProject);
+        var throttledTraces = labelTraces(throttled, throttledProject, 6, 1);
+        var healthyTraces = labelTraces(healthy, healthyProject, 6, 1);
         embedStub.fail(throttled, 429, "{\"error\":{\"code\":\"rate_limited\",\"message\":\"m\"}}");
 
         var result = tickService.tick(Instant.now());
@@ -727,14 +749,14 @@ class TopicVectorsTickTest {
         assertThat(result.written()).isEqualTo(4);
         assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 4));
         assertVectors(vectors(healthy, healthyTraces),
-                expectedVectors(healthy, projectId, oldestFour(healthyTraces), 1));
+                expectedVectors(healthy, healthyProject, oldestFour(healthyTraces), 1));
         assertThat(vectors(throttled, throttledTraces)).isEmpty();
 
         embedStub.reset();
         assertThat(tickService.tick(Instant.now()).written()).isEqualTo(6);
         assertVectors(vectors(throttled, throttledTraces),
-                expectedVectors(throttled, projectId, oldestFour(throttledTraces), 1));
-        assertVectors(vectors(healthy, healthyTraces), expectedVectors(healthy, projectId, healthyTraces, 1));
+                expectedVectors(throttled, throttledProject, oldestFour(throttledTraces), 1));
+        assertVectors(vectors(healthy, healthyTraces), expectedVectors(healthy, healthyProject, healthyTraces, 1));
     }
 
     @Test
@@ -1385,8 +1407,19 @@ class TopicVectorsTickTest {
         return workspaceWith(true, true);
     }
 
+    /** The project's MySQL row, which a discovery needs to keep the project's backfill row. */
+    private void project(String workspaceId, UUID projectId) {
+        template.inTransaction(WRITE, handle -> handle.createUpdate(
+                "INSERT IGNORE INTO projects (id, name, workspace_id) VALUES (:id, :name, :workspaceId)")
+                .bind("id", projectId.toString())
+                .bind("name", projectId.toString())
+                .bind("workspaceId", workspaceId)
+                .execute());
+    }
+
     /** Gives the project a drained backfill row, as a project whose backfill ended earlier has. */
     private void markDrained(String workspaceId, UUID projectId) {
+        project(workspaceId, projectId);
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         backfillService.start(List.of(TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(projectId)
                 .startedAt(now).checkedAt(now).lastDoneAt(now).build()));
@@ -1431,6 +1464,7 @@ class TopicVectorsTickTest {
     }
 
     private void label(String workspaceId, UUID projectId, List<UUID> traceIds, int taskVersion) {
+        project(workspaceId, projectId);
         labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, taskVersion))
                 .toList()).block();
         statusDAO.insert(traceIds.stream().map(traceId -> doneStatus(workspaceId, projectId, traceId, taskVersion))
@@ -1610,6 +1644,7 @@ class TopicVectorsTickTest {
 
     private void insertStatusAt(String workspaceId, UUID projectId, UUID traceId, int taskVersion,
             Instant updatedAt) {
+        project(workspaceId, projectId);
         execute("""
                 INSERT INTO ai_label_status (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
                     renderer_version, status, retryable, attempt, updated_at)

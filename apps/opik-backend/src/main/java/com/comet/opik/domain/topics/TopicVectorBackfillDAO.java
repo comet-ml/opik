@@ -101,4 +101,15 @@ public interface TopicVectorBackfillDAO {
     @SqlUpdate("DELETE FROM topic_vector_backfills WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
+    /**
+     * Removes the workspace's rows whose project no longer exists: a row a tick wrote for a project deleted meanwhile,
+     * or one a failed delete on {@code ProjectsDeleted} left behind.
+     */
+    @SqlUpdate("""
+            DELETE b FROM topic_vector_backfills b
+            LEFT JOIN projects p ON p.id = b.project_id AND p.workspace_id = b.workspace_id
+            WHERE b.workspace_id = :workspaceId AND p.id IS NULL
+            """)
+    int deleteOfMissingProjects(@Bind("workspaceId") String workspaceId);
 }

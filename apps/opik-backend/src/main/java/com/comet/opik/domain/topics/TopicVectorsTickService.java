@@ -528,8 +528,12 @@ public class TopicVectorsTickService {
                                         tracesWithVectors.getOrDefault(project.projectId(), 0L)))
                                 .build())
                         .toList();
-                backfills.discovered(workspaceId, rows, window.start(),
+                int removed = backfills.discovered(workspaceId, rows, window.start(),
                         window.start().minus(interval.multipliedBy(2)));
+                if (removed > 0) {
+                    log.info("Topic vectors backfill rows of deleted projects removed, workspace '{}', rows '{}'",
+                            workspaceId, removed);
+                }
                 discoveredAt.put(workspaceId, window.start());
             } catch (RuntimeException exception) {
                 rethrowIfInterrupted(exception);

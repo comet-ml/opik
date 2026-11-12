@@ -60,18 +60,20 @@ public class TopicVectorBackfillService {
 
     /**
      * Records one discovery of a workspace's projects, in one transaction: rows not checked since {@code staleBefore}
-     * start again, every row is checked at {@code now}, and {@code found} are created or take their new counts.
+     * start again, every row is checked at {@code now}, {@code found} are created or take their new counts, and the
+     * rows of deleted projects are removed. Returns how many rows were removed.
      */
-    public void discovered(@NonNull String workspaceId, @NonNull List<TopicVectorBackfill> found,
+    public int discovered(@NonNull String workspaceId, @NonNull List<TopicVectorBackfill> found,
             @NonNull Instant now, @NonNull Instant staleBefore) {
-        template.inTransaction(WRITE, handle -> {
+        return template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicVectorBackfillDAO.class);
             dao.resetStale(workspaceId, staleBefore, now);
             dao.touch(workspaceId, now);
             if (!found.isEmpty()) {
                 dao.discovered(found);
             }
-            return null;
+            // Last, so a project deleted while the tick read it gets no row back.
+            return dao.deleteOfMissingProjects(workspaceId);
         });
     }
 

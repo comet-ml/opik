@@ -1515,7 +1515,7 @@ class TopicVectorsTickServiceTest {
                 found.forEach(row -> rows.merge(row.projectId(), row, (old, fresh) -> old.toBuilder()
                         .checkedAt(fresh.checkedAt()).lastDoneAt(fresh.lastDoneAt())
                         .tracesTotal(fresh.tracesTotal()).tracesDone(fresh.tracesDone()).build()));
-                return null;
+                return 0;
             }).when(backfills).discovered(anyString(), anyList(), any(Instant.class), any(Instant.class));
             doAnswer(invocation -> {
                 if (recordFails) {
