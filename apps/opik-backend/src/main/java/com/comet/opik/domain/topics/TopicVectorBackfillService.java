@@ -85,4 +85,13 @@ public class TopicVectorBackfillService {
             return null;
         });
     }
+
+    /** Removes the rows of deleted projects, see {@link TopicVectorBackfillDAO#deleteByProjects}. */
+    public int deleteByProjects(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds) {
+        if (projectIds.isEmpty()) {
+            return 0;
+        }
+        return template.inTransaction(WRITE,
+                handle -> handle.attach(TopicVectorBackfillDAO.class).deleteByProjects(workspaceId, projectIds));
+    }
 }

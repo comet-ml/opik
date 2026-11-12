@@ -15,7 +15,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-/** {@code topic_vector_backfills}. Only the topic vectors tick writes it; other code reads it. */
+/**
+ * {@code topic_vector_backfills}. Only the topic vectors tick writes it; a project delete removes the project's row.
+ */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(TopicVectorBackfill.class)
 public interface TopicVectorBackfillDAO {
@@ -94,4 +96,9 @@ public interface TopicVectorBackfillDAO {
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     void record(@BindMethods List<TopicVectorBackfill.Progress> progress);
+
+    /** Removes the rows of deleted projects. */
+    @SqlUpdate("DELETE FROM topic_vector_backfills WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deleteByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
 }

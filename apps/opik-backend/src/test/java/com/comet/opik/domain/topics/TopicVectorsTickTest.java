@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -505,6 +506,26 @@ class TopicVectorsTickTest {
             assertThat(reset.tracesTotal()).isZero();
             assertThat(reset.tracesDone()).isZero();
         });
+    }
+
+    @Test
+    @DisplayName("a project delete removes that project's backfill row, in its workspace only")
+    void backfillRowsOfDeletedProject() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var otherWorkspaceId = ID_GENERATOR.generateId().toString();
+        var deleted = ID_GENERATOR.generateId();
+        var kept = ID_GENERATOR.generateId();
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        backfillService.start(List.of(row.projectId(deleted).build(), row.projectId(kept).build(),
+                row.workspaceId(otherWorkspaceId).projectId(deleted).build()));
+
+        eventBus.post(new ProjectsDeleted(Set.of(deleted), workspaceId, "user"));
+
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                .untilAsserted(() -> assertThat(backfillService.findByKeys(workspaceId, List.of(deleted, kept)))
+                        .containsOnlyKeys(kept));
+        assertThat(backfillService.findByKeys(otherWorkspaceId, List.of(deleted))).containsOnlyKeys(deleted);
     }
 
     @Test
