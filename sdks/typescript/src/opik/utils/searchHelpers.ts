@@ -1,68 +1,8 @@
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import * as OpikApi from "@/rest_api/api";
 import { serialization } from "@/rest_api";
-import type * as core from "@/rest_api/core";
-import { parseNdjsonStreamToArray } from "@/utils/stream";
+import { readAllStreamPages } from "@/utils/stream";
 import { OpikQueryLanguage } from "@/query";
-
-const MAX_SEARCH_BATCH_SIZE = 2000;
-
-async function readPage<T>(
-  stream: ReadableStream<Uint8Array>,
-  serializer: core.serialization.Schema<unknown, T>,
-  cursorField: string,
-  limit: number
-) {
-  let recordsSent = 0;
-  let lastIdSent: string | undefined;
-  const items = await parseNdjsonStreamToArray<T>(
-    stream,
-    serializer,
-    limit,
-    (record) => {
-      recordsSent++;
-      const id = (record as Record<string, unknown> | null)?.[cursorField];
-      if (typeof id === "string") {
-        lastIdSent = id;
-      }
-    }
-  );
-  return { items, recordsSent, lastIdSent };
-}
-
-async function searchAllPages<T>(
-  fetchPage: (
-    limit: number,
-    cursor: string | undefined
-  ) => Promise<ReadableStream<Uint8Array>>,
-  serializer: core.serialization.Schema<unknown, T>,
-  cursorField: string,
-  maxResults: number
-): Promise<T[]> {
-  const results: T[] = [];
-  let cursor: string | undefined;
-
-  while (results.length < maxResults) {
-    const limit = Math.min(maxResults - results.length, MAX_SEARCH_BATCH_SIZE);
-    const page = await readPage(
-      await fetchPage(limit, cursor),
-      serializer,
-      cursorField,
-      limit
-    );
-    results.push(...page.items);
-
-    const isLastPage = page.recordsSent < limit;
-    const cursorMoved =
-      page.lastIdSent !== undefined && page.lastIdSent !== cursor;
-    if (isLastPage || !cursorMoved) {
-      break;
-    }
-    cursor = page.lastIdSent;
-  }
-
-  return results;
-}
 
 /**
  * Searches traces with filters and returns parsed results
@@ -75,7 +15,7 @@ export async function searchTracesWithFilters(
   truncate: boolean,
   exclude?: OpikApi.TraceSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.TracePublic[]> {
-  return searchAllPages(
+  return readAllStreamPages(
     (limit, lastRetrievedId) =>
       apiClient.traces.searchTraces({
         projectName,
@@ -137,7 +77,7 @@ export async function searchThreadsWithFilters(
   maxResults: number,
   truncate: boolean
 ): Promise<OpikApi.TraceThread[]> {
-  return searchAllPages(
+  return readAllStreamPages(
     (limit, lastRetrievedThreadModelId) =>
       apiClient.traces.searchTraceThreads({
         projectName,
@@ -234,7 +174,7 @@ export async function searchSpansWithFilters(
   truncate: boolean,
   exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.SpanPublic[]> {
-  return searchAllPages(
+  return readAllStreamPages(
     (limit, lastRetrievedId) =>
       apiClient.spans.searchSpans({
         projectName,

@@ -759,6 +759,7 @@ describe("Opik prompt operations", () => {
         {
           filters: undefined,
           projectId: "project-id",
+          page: 1,
           size: 1000,
         },
         client.api.requestOptions
@@ -782,7 +783,7 @@ describe("Opik prompt operations", () => {
 
       expect(retrieveProjectSpy).toHaveBeenCalledWith({ name: "other-project" });
       expect(getPromptsSpy).toHaveBeenCalledWith(
-        { filters: undefined, projectId: "project-id", size: 1000 },
+        { filters: undefined, projectId: "project-id", page: 1, size: 1000 },
         client.api.requestOptions
       );
     });

@@ -114,3 +114,62 @@ export function splitIntoBatches<T>(
   }
   return batches;
 }
+
+const MAX_STREAM_PAGE_SIZE = 2000;
+
+async function readStreamPage<T>(
+  stream: ReadableStream<Uint8Array>,
+  serializer: core.serialization.Schema<unknown, T>,
+  cursorField: string,
+  limit: number
+) {
+  let recordsSent = 0;
+  let lastIdSent: string | undefined;
+  const items = await parseNdjsonStreamToArray<T>(
+    stream,
+    serializer,
+    limit,
+    (record) => {
+      recordsSent++;
+      const id = (record as Record<string, unknown> | null)?.[cursorField];
+      if (typeof id === "string") {
+        lastIdSent = id;
+      }
+    }
+  );
+  return { items, recordsSent, lastIdSent };
+}
+
+export async function readAllStreamPages<T>(
+  fetchPage: (
+    limit: number,
+    cursor: string | undefined
+  ) => Promise<ReadableStream<Uint8Array>>,
+  serializer: core.serialization.Schema<unknown, T>,
+  cursorField: string,
+  maxResults: number = Number.POSITIVE_INFINITY
+): Promise<T[]> {
+  const results: T[] = [];
+  let cursor: string | undefined;
+
+  while (results.length < maxResults) {
+    const limit = Math.min(maxResults - results.length, MAX_STREAM_PAGE_SIZE);
+    const page = await readStreamPage(
+      await fetchPage(limit, cursor),
+      serializer,
+      cursorField,
+      limit
+    );
+    results.push(...page.items);
+
+    const isLastPage = page.recordsSent < limit;
+    const cursorMoved =
+      page.lastIdSent !== undefined && page.lastIdSent !== cursor;
+    if (isLastPage || !cursorMoved) {
+      break;
+    }
+    cursor = page.lastIdSent;
+  }
+
+  return results;
+}
