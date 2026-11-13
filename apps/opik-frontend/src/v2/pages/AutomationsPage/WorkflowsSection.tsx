@@ -18,7 +18,8 @@ const STATE: Record<
 };
 
 const summarize = (workflow: Workflow) => {
-  const on = workflow.automations.filter((a) => a.enabled).length;
+  // A recipe lists templates for what it would create too; only stored ones can be on.
+  const on = workflow.automations.filter((a) => a.id && a.enabled).length;
   const parts = [`${on} of ${workflow.automations.length} automations on`];
   const estimate = workflow.estimate;
   if (estimate && workflow.state !== "on") {
