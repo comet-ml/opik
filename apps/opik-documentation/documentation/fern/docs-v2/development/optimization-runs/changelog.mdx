@@ -26,7 +26,7 @@ These changes are pending release and are not included in the published package 
 
 ### Migration
 
-- **Multimodal reasoning:** images in an optimization now reach the optimizer model as native image blocks, so it must support vision; otherwise the run fails before the optimizer model is called. Agent and optimizer settings remain independent. Audio, video and file content is named but not sent to the optimizer model.
+- **Multimodal reasoning:** images in an optimization now reach the optimizer model as native image blocks, so it must support vision; otherwise the run fails before the optimizer model is called. Models LiteLLM has no entry for, such as Azure deployment names or proxy aliases, are allowed with a warning. Agent and optimizer settings remain independent. Audio, video and file content is named but not sent to the optimizer model.
 - **Generation overrides:** candidate responses now contain targeted text edits (`segment_id`, `text`) instead of regenerated messages. Update custom generation prompts and response fixtures; legacy message-shaped responses are not accepted. GEPA exposes each multimodal text block as a separate component and requires `gepa>=0.1.4`.
 
 - **Tracking IDs:** caller-supplied `optimization_id` values must be valid UUIDv7 strings. If creation of an explicitly requested run fails, the error propagates instead of continuing untracked.

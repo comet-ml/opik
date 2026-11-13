@@ -237,7 +237,10 @@ def _word_level_mutation_prompt(
         )
         for segment in describe_text_segments(prompt, allowed_roles)
     ]
-    return apply_text_edits(prompt, edits, allowed_roles)
+    try:
+        return apply_text_edits(prompt, edits, allowed_roles)
+    except ValueError:
+        return prompt.copy()
 
 
 def _structural_mutation(
@@ -257,7 +260,10 @@ def _structural_mutation(
         )
         for segment in describe_text_segments(prompt, allowed_roles)
     ]
-    return apply_text_edits(prompt, edits, allowed_roles)
+    try:
+        return apply_text_edits(prompt, edits, allowed_roles)
+    except ValueError:
+        return prompt.copy()
 
 
 def _mutate_sentences(

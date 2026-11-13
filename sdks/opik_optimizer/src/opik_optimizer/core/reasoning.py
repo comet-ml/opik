@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -17,6 +18,8 @@ from pydantic import BaseModel
 from ..api_objects.chat_prompt import ChatPrompt
 from ..api_objects.evidence import EvidenceCase, ReasoningEvidence
 from ..utils.prompt_editing import describe_text_segments
+
+logger = logging.getLogger(__name__)
 
 ChatMessages = list[dict[str, Any]]
 
@@ -291,6 +294,14 @@ def validate_reasoning_messages(messages: ChatMessages, model: str) -> None:
                     f"Optimizer evidence modality {kind} is not supported."
                 )
     if image and not litellm.supports_vision(model=model):
+        try:
+            litellm.get_model_info(model=model)
+        except Exception:
+            logger.warning(
+                "Can't tell whether optimizer model %r reads images; sending them anyway.",
+                model,
+            )
+            return
         raise ValueError(
             f"Optimizer model {model!r} cannot read images, but this optimization "
             "includes images. Configure a vision-capable optimizer model."
