@@ -842,3 +842,190 @@ HAVING COUNT(DISTINCT np.night) = 2;
 ```
 
 The gauges also leave out workspaces no longer opted in and deleted projects; these queries do not.
+
+## Reading topics
+
+`GET /v1/private/topics?project_id=<project_id>` returns a project's live topics and their trace counts over the
+window: the last `TOPICS_BUILD_WINDOW_DAYS` UTC days (default 30), today included. The UI calls it. It reads MySQL,
+then runs at most one ClickHouse query, and writes nothing.
+
+```bash
+curl "http://<opik-backend>:8080/v1/private/topics?project_id=<project_id>" \
+  -H "Authorization: <api_key>" \
+  -H "Comet-Workspace: <workspace_name>"
+```
+
+The caller needs `PROJECT_DATA_VIEW` in the workspace, so the endpoint answers only for our own workspaces. For a
+customer's project, run the queries under [Reading a project by hand](#reading-a-project-by-hand). They apply the same
+rules.
+
+### Status
+
+Every body has `today` and `window_from` (UTC dates, both included) and `topics` (empty unless `ready`).
+
+| `status` | When | Other fields |
+|---|---|---|
+| `disabled` | The workspace is not opted in to both topics and ai-labels. This includes a workspace opted out after a build: its topics stay in MySQL and are not shown. | None. No ClickHouse query. |
+| `collecting` | Opted in, and the project has no live topic: before its first build, or after all its topics retired. | `vectors_in_window` (traces with a topic vector in the window) and `min_vectors` (`TOPICS_BUILD_MIN_VECTORS`). `last_run_at` after a saved run. `attempt` (`status` only) when the project's newest `topic_runs` row (by `started_at`, then `run_id`) is `running` or `failed`. |
+| `ready` | Opted in, and the project has at least one live topic. | `last_run_at`, `total_traces`, `labelled_from`, `topics` in rank order, `other`. |
+
+A `collecting` body is one of these cases:
+
+| `attempt` | `last_run_at` | Meaning |
+|---|---|---|
+| none | none | Queued: no run yet. The first-build job runs every `TOPICS_FIRST_BUILD_INTERVAL` (10 minutes) and builds the project once `vectors_in_window` reaches `min_vectors` and its vectors backfill allows it (see "First builds and the vectors backfill"). |
+| `running` | none or set | A build runs now. |
+| `failed` | none or set | The newest run failed. The job tries again 1 hour after the first failed first build, 6 hours after the second, and 1 day after each later one (see "Retries"). |
+| none | set | A run saved and left no live topic. |
+
+The housekeeping at the start of every first-build run fails a `running` row whose pod died, so the API shows the
+row as it is.
+
+### How it counts
+
+- **Window.** The `TOPICS_BUILD_WINDOW_DAYS` UTC days that end today: `[today - (windowDays - 1) days, today + 1 day)`.
+  The day of a trace is `toDate(trace_created_at, 'UTC')`, the column the builds use. Near midnight UTC it can differ
+  from the day the traces list shows.
+- **Traces.** Only the traces the Logs page lists count. In `traces`, that is `source` `sdk` (or `unknown`, rows from
+  before sources) and `visibility_mode` `default`, the filters the Logs page adds by itself. A trace counts when any
+  of its rows matches, as in the traces list. Topics are built from every labelled trace. So experiment, playground,
+  optimization and evaluator traces and hidden traces have topic rows, but no count includes them. A topic's `count`
+  is then the number of traces Logs lists for it.
+- **Rows.** Every row counts: arrival rows and run rows. A run writes its rows only after its MySQL save commits, so a
+  failed run has none. A run's rows still count after retention deletes its `topic_runs` row.
+- **Latest row.** Each trace counts once, by its latest row (the greatest `(last_updated_at, run_id)`). A trace whose
+  latest row is a tombstone (`is_deleted = 1`) does not count.
+- **Other.** The all-zeros id. A row whose `topic_id` is not a live topic counts as Other.
+- **Numbers.** `count`: the topic's counted traces in the window. `total_traces`: all counted traces, Other included.
+  `share`: `count / total_traces`, 0 with no trace. `series`: one `{day, count}` entry per window day, oldest first,
+  today last. `rank`: by `count` descending, then `born`, then `id`. `is_new`: born after the first build's date and
+  in the last 7 days. `other`: only its `series`; add it to the topics' series for the project's total per day.
+- **`labelled_from`.** The first day in the window with any row, omitted with no row. Zeros before it mean nothing was
+  labelled yet (a new opt-in), not that there was no traffic.
+- **Cache.** The counts of a `ready` project are kept in Redis for `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION`
+  (default 5 minutes), so they can be up to that old: a trace labelled on arrival shows in the counts after at most
+  that time. A saved run, or a new UTC day, starts a new entry at once. The MySQL reads, the `collecting` vector count
+  and errors are not cached.
+
+### Reading a project by hand
+
+The queries read only, so agentro can run them for any workspace. Run the MySQL ones first: the ClickHouse query
+takes their output.
+
+```sql
+-- MySQL: 1 when the workspace is enabled in ai-labels. The workspace must also be in TOGGLE_TOPICS_WORKSPACES (see
+-- "Opting workspaces in and out"). Not in the list, or 0 here, means `disabled`
+SELECT COUNT(*) > 0 AS eligible
+FROM ai_label_workspaces
+WHERE workspace_id = '<workspace_id>' AND enabled = TRUE;
+
+-- MySQL: the first build and the last saved run (`last_run_at`). No row means no live topic: `collecting`
+SELECT first_built_at, last_success_at, last_run_id
+FROM topic_project_states
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
+
+-- MySQL: the project's live topics; none means `collecting`
+SELECT id, name, born
+FROM topics
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>' AND retired_at IS NULL
+ORDER BY born, id;
+
+-- MySQL: the newest run, for `attempt` in `collecting`: shown when `running` or `failed`, omitted when `saved`
+SELECT run_id, status, started_at, error_code
+FROM topic_runs
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
+ORDER BY started_at DESC, run_id DESC
+LIMIT 1;
+
+-- MySQL: the live topic ids for the ClickHouse query, quoted and comma-separated
+SELECT CONCAT('''', GROUP_CONCAT(id SEPARATOR ''','''), '''') AS live_ids
+FROM topics
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>' AND retired_at IS NULL;
+```
+
+The ClickHouse query below is for the default window of 30 days: each `- 29` is `windowDays - 1`.
+
+```sql
+-- ClickHouse: the API's counts per topic and UTC day. Paste <live_ids> from MySQL.
+SELECT if(latest_topic IN (<live_ids>), latest_topic, '00000000-0000-0000-0000-000000000000') AS topic,
+       toDate(created_at, 'UTC') AS day,
+       count() AS traces
+FROM (
+    SELECT argMax(topic_id, (last_updated_at, run_id)) AS latest_topic, any(trace_created_at) AS created_at
+    FROM trace_topics
+    WHERE workspace_id = '<workspace_id>'
+      AND project_id = '<project_id>'
+      AND trace_created_at >= toDateTime64(toDate(now(), 'UTC') - 29, 6, 'UTC')
+      AND trace_created_at < toDateTime64(toDate(now(), 'UTC') + 1, 6, 'UTC')
+      AND trace_id IN (
+          SELECT id
+          FROM traces
+          WHERE workspace_id = '<workspace_id>'
+            AND project_id = '<project_id>'
+            AND created_at >= toDateTime64(toDate(now(), 'UTC') - 29, 6, 'UTC')
+            AND created_at < toDateTime64(toDate(now(), 'UTC') + 1, 6, 'UTC')
+            AND source IN ('sdk', 'unknown')
+            AND visibility_mode = 'default'
+      )
+    GROUP BY trace_id
+    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+)
+GROUP BY topic, day
+ORDER BY day, topic;
+```
+
+From the result: a topic's `count` is the sum of its `traces`, and `total_traces` is the sum of all rows. To compare
+with the API, run the query on the same UTC date and at least `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION` after the
+project's last API call, or the API can answer from its cache. A run that saves between the two reads changes the
+counts.
+
+### Errors
+
+| Code | When |
+|---|---|
+| 501 | `TOPICS_ENABLED=false`. No body. The first check inside the endpoint, before the project. |
+| 404 | The project is not in the workspace. |
+| 400, `This project is too large for topics` | The ClickHouse read hit its rows or bytes limit: code 158 (rows), 307 (bytes) or 396 (rows or bytes). The same project fails the same way on a retry, so there is no `Retry-After`. The backend logs a WARN `Topics read is too large` with the workspace and the project. Raise `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` if the project should fit. A 400 without this message is a request without `project_id`. |
+| 503, `Retry-After: 5` | A ClickHouse read stopped at its time (159) or memory (241) limit, or the backend waited 11 s for it. A retry can pass. The backend logs a WARN `Topics read hit a ClickHouse limit` with the workspace and the project. |
+| 429 | More than `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` requests from one workspace in `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` (60 s). |
+| 500 | Any other error. |
+
+The counts query has `max_execution_time` 10 s, and `max_rows_to_read` and `max_memory_usage` from
+`TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` and `TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE`. These two limits are shared with
+the vectors job: raising them raises both. Its rows to read include the window's `traces` rows, for the Logs filters.
+
+### Load
+
+The counts query, measured locally:
+
+| Traces in the window | Data | Memory | Time |
+|---|---|---|---|
+| 100,000 | One project | 95 MiB | 0.13 s p50 |
+| 400,000 | Merged | 294 MiB | 0.76 s p50 |
+| 2,400,000 over 120 days | Merged, 1,245,184 rows read | 379 MiB | 327 ms |
+
+The largest window tested is 400,000 traces. Memory is the first limit expected: at the default
+`TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE`, about 1,500,000 traces in the window (an extrapolation, not measured). Many
+unmerged versions per trace raise the cost: with 30 versions per trace the query reads 15 times the rows.
+
+### What to watch
+
+| Metric | Prometheus name | Meaning |
+|---|---|---|
+| `topics.api.duration_seconds` by `status` | `topics_api_duration_seconds` | Wall time of a request after its project check, a native histogram. `status` is `ready`, `collecting`, `disabled` or `error`. No workspace attributes. A 404 records nothing. |
+
+In ClickHouse `system.query_log`, the counts query's `log_comment` starts with `topics:count_by_topic_and_day:` (filter
+`log_comment LIKE 'topics:count_by_topic_and_day:%'`), then the workspace id and the project. A read served from the
+cache runs no query. No alert reads these metrics.
+
+### Turning it off
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_ENABLED` | `false` | Off: the endpoint answers 501. It also stops the vectors and the builds. |
+| `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` | `60` | Requests per workspace in one time bucket. |
+| `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` | `60` | The time bucket, in seconds. |
+| `CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION` | `PT5M` | How long the counts of a `ready` project stay in Redis. |
+
+The endpoint has no switch of its own. The rollback is `TOPICS_ENABLED=false` and a restart; stored topics and rows
+stay.
