@@ -162,6 +162,7 @@ class TopicsNightlyJobTest {
     private TopicsProjectRunner runner;
     private TopicsTestData data;
     private TopicVectorsDAO vectorsDAO;
+    private TraceTopicsDAO traceTopicsDAO;
     private GuiceJobManager jobManager;
     private ClientSupport client;
     private String baseUrl;
@@ -170,7 +171,7 @@ class TopicsNightlyJobTest {
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager,
             @Jit TopicsNightlyService nightlyService, @Jit TopicsFirstBuildService firstBuildService,
-            @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO) {
+            @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO) {
         this.client = client;
         this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
@@ -181,6 +182,7 @@ class TopicsNightlyJobTest {
         this.firstBuildService = firstBuildService;
         this.runner = runner;
         this.vectorsDAO = vectorsDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
                 FIXTURE.traceIds, FIXTURE.createdAt, FIXTURE.intents, FIXTURE.vectors, FIXTURE.night));
     }
@@ -569,6 +571,61 @@ class TopicsNightlyJobTest {
         assertThat(state.labelsComplete()).isTrue();
         assertThat(labels(workspaceId, projectId, lost.runId()))
                 .hasSize(json(lost.stats()).path("window_traces").asInt());
+    }
+
+    @Test
+    @DisplayName("after a nightly update that retires a topic, the labelling pass also labels a trace vectored after the "
+            + "window's end and before the save: its arrival row of the retired topic gets a row of the night's run")
+    void passLabelsUpToTheSave() {
+        var workspaceId = enabledWorkspace();
+        var projectId = firstBuilt(workspaceId);
+        var firstRun = data.state(projectId).lastRunId();
+        // One topic keeps no prototype, so it holds no trace tonight and retires.
+        var retiring = data.topics(projectId).getFirst();
+        template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM topic_prototypes WHERE topic_id = ?",
+                retiring.id().toString()));
+        // A trace created an hour after the night's window ends, with a vector and the arrival row the old list gave.
+        int d = TopicsNightlyFixture.DIMENSIONS;
+        var vector = new ArrayList<Float>(d);
+        for (int t = 0; t < d; t++) {
+            vector.add(NIGHTLY.vectors[t]);
+        }
+        var traceId = ID_GENERATOR.generateId();
+        var createdAt = secondNight().atStartOfDay(ZoneOffset.UTC).toInstant().plus(Duration.ofHours(1));
+        vectorsDAO.insert(List.of(TopicVector.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .traceId(traceId)
+                .traceCreatedAt(createdAt)
+                .taskVersion(1)
+                .embedModel(TopicVectorsTickService.EMBED_MODEL)
+                .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
+                .text(NIGHTLY.intents[0])
+                .vector(vector)
+                .build())).block();
+        traceTopicsDAO.insert(List.of(TraceTopic.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .traceId(traceId)
+                .traceCreatedAt(createdAt)
+                .topicId(retiring.id())
+                .source(TraceTopic.Source.ARRIVAL)
+                .runId(firstRun.toString())
+                .build())).block();
+        stubNightly(emptyNaming(), sameAnswers());
+
+        assertThat(runNight(secondStart()).saved()).isEqualTo(1);
+
+        var update = nightlyRun(projectId);
+        assertThat(allTopics(projectId)).filteredOn(topic -> topic.id().equals(retiring.id())).singleElement()
+                .satisfies(topic -> assertThat(topic.retiredAt()).isEqualTo(secondNight()));
+        assertThat(data.traceTopics(workspaceId, projectId)).filteredOn(row -> row.traceId().equals(traceId))
+                .singleElement().satisfies(row -> {
+                    assertThat(row.runId()).isEqualTo(update.runId().toString());
+                    assertThat(row.source()).isEqualTo(TraceTopic.Source.RUN);
+                    assertThat(row.topicId()).isNotEqualTo(retiring.id());
+                });
+        assertThat(data.state(projectId).labelsComplete()).isTrue();
     }
 
     @Test

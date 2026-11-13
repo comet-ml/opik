@@ -74,8 +74,8 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * What a pass did. {@code runId} is null when the project has no saved list. {@code windowTraces} is the
-     * window's exact count. {@code complete} is true when no trace of the window is left without a row of the run; false when the
+     * What a pass did. {@code runId} is null when the project has no saved list. {@code windowTraces} is the exact
+     * count of the traces the pass labels. {@code complete} is true when no trace of the window is left without a row of the run; false when the
      * pass was cut, and a later call finishes it.
      */
     @Builder
@@ -170,7 +170,12 @@ public class TopicWindowLabelService {
         }
     }
 
-    /** The project's last saved run, its window and the labeller of its prototypes, read in one transaction. */
+    /**
+     * The project's last saved run, the traces it labels and the labeller of its prototypes, read in one transaction.
+     * The traces run from the run's window start to its window end or its save, whichever is later. A nightly update
+     * saves after its window's end: its pass also labels the traces vectored since, which arrival labelled by the list
+     * before the save. A first build's window ends at tomorrow's start, after its save.
+     */
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
@@ -178,8 +183,10 @@ public class TopicWindowLabelService {
             if (state.isEmpty() || state.get().lastRunId() == null || state.get().windowUntil() == null) {
                 return Optional.empty();
             }
-            var to = state.get().windowUntil();
-            var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
+            var windowUntil = state.get().windowUntil();
+            var lastSuccessAt = state.get().lastSuccessAt();
+            var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
+            var from = windowUntil.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             var labeller = algorithm.labeller(topicDAO.findPrototypes(workspaceId, projectId))
                     .orElse(TopicWindowLabelService::allOther);
             return Optional.of(new Saved(state.get().lastRunId(), from, to, labeller));
