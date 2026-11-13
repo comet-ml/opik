@@ -15,9 +15,10 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * The topic algorithm: how a project's window of vectors becomes its topic list, and the rule that labels a trace by a
- * saved list. {@link TopicsRebuildService} does everything around a build: it reads the window, makes the LLM calls the
- * algorithm asks for, checks the prototypes, saves and counts. {@link TopicWindowLabelService} labels the window's
+ * The topic algorithm: how a project's window of vectors becomes its topic list, how a nightly update changes that list,
+ * and the rule that labels a trace by a saved list. {@link TopicsRebuildService} does everything around a run: it reads
+ * the window and the saved list, makes the LLM calls the algorithm asks for, checks what the algorithm returns, saves,
+ * computes the churn and counts. {@link TopicWindowLabelService} labels the window's
  * other traces with {@link #labeller}. To try another algorithm, implement this interface and bind it in place of
  * {@link KMeansTopicAlgorithm}.
  *
@@ -41,6 +42,14 @@ public interface TopicAlgorithm {
      * @param maxTopics the most topics the list may hold
      */
     FirstBuild firstBuild(Window window, int maxTopics, Context context);
+
+    /**
+     * Updates a project's saved list for one night's window. It changes {@code state} in place: topics born and
+     * retired, prototypes, lifecycle columns and sizes. A retired topic keeps no prototype. It labels every window trace.
+     *
+     * @param maxTopics the most live topics the list may hold
+     */
+    Update update(NightState state, NightWindow window, int maxTopics, Context context);
 
     /**
      * The rule that labels vectors by a project's saved list. Empty when the list has no topic prototype: then it
@@ -128,5 +137,14 @@ public interface TopicAlgorithm {
     @Builder(toBuilder = true)
     record FirstBuild(@NonNull List<NewTopic> topics, @NonNull int[] labels, @NonNull List<float[]> topicPrototypes,
             @NonNull List<Integer> owners, @NonNull List<float[]> otherPrototypes) {
+    }
+
+    /**
+     * A nightly update's labels, per window trace an index in the state's topics or {@link #OTHER}: {@code before} by
+     * the list as saved before tonight, {@code labels} by the list after tonight's changes. The service computes the
+     * churn from the two.
+     */
+    @Builder(toBuilder = true)
+    record Update(@NonNull int[] before, @NonNull int[] labels) {
     }
 }

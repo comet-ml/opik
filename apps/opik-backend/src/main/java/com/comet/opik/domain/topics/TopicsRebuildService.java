@@ -11,7 +11,6 @@ import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -42,7 +41,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -70,7 +68,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * insert that still failed. The topics' sizes and the run's Other share are those of the traces it read: on a sampled
  * window, of the sample.
  *
- * <p>A nightly update reads the same window and the project's saved list, runs {@link NightlyUpdate} over them and saves
+ * <p>A nightly update reads the same window and the project's saved list, has the algorithm update the list and saves
  * the changed list the same way: one transaction that checks no other run saved the project since this one read it,
  * then the {@code trace_topics} insert, then the labelling pass. A save that leaves no live topic deletes the project's
  * state and prototypes instead, so the first-build job builds the project again.
@@ -334,24 +332,18 @@ public class TopicsRebuildService {
             var window = NightWindow.builder().texts(flat.texts()).vectors(flat.vectors()).createdAt(createdAt)
                     .from(from).night(to).dimensions(DIMENSIONS).build();
 
-            var result = timed("update", () -> NightlyUpdate.run(state, window, MAX_TOPICS, this::generate));
+            var result = timed("update", () -> algorithm.update(state, window, MAX_TOPICS, this));
             NightInvariants.check(state, DIMENSIONS);
 
             var labels = new UUID[n];
             int other = 0;
             for (int i = 0; i < n; i++) {
                 int label = result.labels()[i];
-                other += label == PrototypeAssigner.OTHER ? 1 : 0;
-                labels[i] = label == PrototypeAssigner.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
+                other += label == TopicAlgorithm.OTHER ? 1 : 0;
+                labels[i] = label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
             }
             var churn = TopicChurn.of(result.before(), result.labels());
 
-            stats.put("unassigned", result.unassigned());
-            stats.put("candidates", result.candidates().size());
-            stats.put("big", result.big().size());
-            var forced = stats.putObject("forced");
-            result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
-                    forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
             int bornTonight = (int) state.getTopics().stream()
                     .filter(topic -> !saved.names().containsKey(topic.getId()))
                     .count();
@@ -369,11 +361,11 @@ public class TopicsRebuildService {
             stats.put("churn", churn.churn());
             stats.put("churn_any", churn.churnAny());
             stats.set("seconds", seconds);
-            log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', unassigned '{}', "
-                    + "candidates '{}', big '{}', born '{}', retired '{}', topics '{}', Other share '{}', churn '{}', "
-                    + "seconds '{}'", runId, projectId, from, to, n, result.unassigned(), result.candidates().size(),
-                    result.big().size(), bornTonight, retired, state.liveCount(),
-                    TopicText.fixed((double) other / n, 3), churn, seconds);
+            log.info(
+                    "Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', born '{}', retired '{}', "
+                            + "topics '{}', Other share '{}', churn '{}', seconds '{}'",
+                    runId, projectId, from, to, n,
+                    bornTonight, retired, state.liveCount(), TopicText.fixed((double) other / n, 3), churn, seconds);
 
             boolean kept = timed("save", () -> saveUpdate(flat.traces(), labels, state, saved, bornTonight));
             metrics.churn(workspaceId, churn);
@@ -433,19 +425,6 @@ public class TopicsRebuildService {
                             : NightState.RetiredReason.of(topic.retiredReason()))
                     .size(topic.size())
                     .build();
-        }
-
-        /**
-         * {@link NightLlm} for the nightly update, through {@link #generate(TopicAlgorithm.Call, String, String,
-         * JsonNode, int, java.util.function.Function)}: verify and naming have their own deadlines. A failed call
-         * throws and fails the run, whichever call it is; the project keeps its list. The answer must be a JSON
-         * object, as for {@link AuthorAnswer#parse}; text is not parsed. An answer that is not an object is counted
-         * {@code bad_answer} and passed on as null, so its groups stay in Other.
-         */
-        private JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens) {
-            var call = ForcedBirth.VERIFY_TAG.equals(tag) ? TopicAlgorithm.Call.VERIFY : TopicAlgorithm.Call.NAMING;
-            var answer = generate(call, tag, prompt, schema, maxTokens, NightJson::object);
-            return answer == null ? NullNode.getInstance() : answer;
         }
 
         /**

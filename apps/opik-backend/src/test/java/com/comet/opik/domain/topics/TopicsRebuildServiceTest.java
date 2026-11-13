@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import io.dropwizard.util.Duration;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
@@ -31,8 +32,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -591,6 +594,46 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
+    @DisplayName("an answer the algorithm's read returns null for counts the call bad_answer under its kind, generate "
+            + "returns null, and the nightly update saves")
+    void readReturnsNull() {
+        var kmeans = new KMeansTopicAlgorithm();
+        var answers = new ArrayList<Object>();
+        var stub = new TopicAlgorithm() {
+            @Override
+            public FirstBuild firstBuild(Window window, int maxTopics, Context context) {
+                return kmeans.firstBuild(window, maxTopics, context);
+            }
+
+            @Override
+            public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                answers.add(Objects.requireNonNullElse(context.generate(Call.NAMING, "naming", "prompt",
+                        JsonUtils.createObjectNode(), 10, output -> null), "null"));
+                var labels = new int[window.size()];
+                Arrays.fill(labels, OTHER);
+                return Update.builder().before(labels).labels(labels).build();
+            }
+
+            @Override
+            public Optional<Labeller> labeller(List<TopicPrototype> prototypes) {
+                return kmeans.labeller(prototypes);
+            }
+        };
+        var withStub = serviceWith.apply(stub);
+        answer(FIXTURE.answer);
+        withStub.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        readBackFirstBuild();
+        answer(TextNode.valueOf("Sorry, I cannot name these groups."));
+
+        var outcome = withStub.nightlyUpdate(UUID.randomUUID(), WORKSPACE_ID, projectId, night.plusDays(1));
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(answers).containsExactly("null");
+        assertThat(meter.sum("topics.qwen.calls", "call", "naming", "outcome", "bad_answer")).isEqualTo(1);
+        assertThat(meter.sum("topics.qwen.calls", "call", "naming", "outcome", "ok")).isZero();
+    }
+
+    @Test
     @DisplayName("born, retired and churn keep their own attributes next to the workspace's")
     void lifecycleMetricsHaveTheWorkspace() {
         // Its own meter: the service's metrics already registered their gauges on the shared one.
@@ -773,6 +816,11 @@ class TopicsRebuildServiceTest {
                         .owners(List.of(1, 0))
                         .otherPrototypes(List.of(other))
                         .build();
+            }
+
+            @Override
+            public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                throw new UnsupportedOperationException();
             }
 
             @Override
