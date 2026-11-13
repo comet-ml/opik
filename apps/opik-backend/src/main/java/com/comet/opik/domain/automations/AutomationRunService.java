@@ -128,6 +128,22 @@ public class AutomationRunService {
         });
     }
 
+    public List<AutomationRun> findWaitingByPrefix(@NonNull String prefix) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRunDAO.class);
+            var runs = dao.findWaitingByPrefix(prefix);
+            var steps = runs.isEmpty()
+                    ? List.<AutomationRunDAO.StepRow>of()
+                    : dao.findStepsByRunIds(runs.stream().map(AutomationRunDAO.RunRow::id).toList());
+            return toApi(runs, steps);
+        });
+    }
+
+    public int failParkedBefore(@NonNull Instant cutoff, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE,
+                handle -> handle.attach(AutomationRunDAO.class).failParkedBefore(cutoff, reason, Instant.now()));
+    }
+
     public AutomationRun.AutomationRunPage find(@NonNull String workspaceId, @Nullable UUID projectId,
             @Nullable UUID automationId, @Nullable AutomationRun.Status status, @Nullable Instant since,
             @Nullable UUID parentRunId, int page, int size) {
@@ -198,6 +214,7 @@ public class AutomationRunService {
             boolean single = AutomationRun.Kind.SINGLE.getValue().equals(run.kind());
             return AutomationRun.builder()
                     .id(run.id()).automationId(run.automationId()).projectId(run.projectId())
+                    .workspaceId(run.workspaceId())
                     .kind(single ? AutomationRun.Kind.SINGLE : AutomationRun.Kind.ROLLUP)
                     .status(single ? AutomationRun.Status.fromString(run.status()) : statusOf(runSteps))
                     .itemId(run.itemId())

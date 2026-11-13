@@ -1474,6 +1474,12 @@ automationEvents:
   # Default: https://api.github.com
   # Description: GitHub API base the github.check step posts commit statuses to
   githubApiUrl: ${AUTOMATION_EVENTS_GITHUB_API_URL:-https://api.github.com}
+  # Default: 30s
+  # Description: How often counted triggers (suite grew, queue submitted) and parked runs are checked
+  pollInterval: ${AUTOMATION_EVENTS_POLL_INTERVAL:-30s}
+  # Default: 24h
+  # Description: A run parked on an experiment or optimization that never finishes fails after this long
+  waitTimeout: ${AUTOMATION_EVENTS_WAIT_TIMEOUT:-24h}
 
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:

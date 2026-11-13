@@ -4,6 +4,7 @@ import com.comet.opik.api.resources.v1.jobs.AgentInsightsAutoFirstRunJob;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.api.resources.v1.jobs.AiLabelsJob;
 import com.comet.opik.api.resources.v1.jobs.AnnotationQueueRoutingFlushJob;
+import com.comet.opik.api.resources.v1.jobs.AutomationPollJob;
 import com.comet.opik.api.resources.v1.jobs.ClickHousePartitionMetricsJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
@@ -71,6 +72,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setExperimentDenormalizationJob();
                 setProjectLastUpdatedFlushJob();
                 setAnnotationQueueRoutingFlushJob();
+                setAutomationPollJob();
                 setAiLabelsJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
@@ -163,6 +165,16 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(ProjectLastUpdatedFlushJob.class,
                 flushConfig.getJobInterval().toJavaDuration(), null);
+    }
+
+    private void setAutomationPollJob() {
+        var config = injector.get().getInstance(OpikConfiguration.class);
+        if (!config.getServiceToggles().isAutomationsEnabled()) {
+            log.info("Automations are disabled, skipping the poll job setup");
+            return;
+        }
+        scheduleRepeatingJob(AutomationPollJob.class, config.getAutomationEvents().getPollInterval().toJavaDuration(),
+                null);
     }
 
     private void setAnnotationQueueRoutingFlushJob() {

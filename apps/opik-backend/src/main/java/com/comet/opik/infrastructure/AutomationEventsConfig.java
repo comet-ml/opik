@@ -68,6 +68,18 @@ public class AutomationEventsConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @Min(1) @Max(100_000) private int streamTrimLimit;
 
+    // How often counted triggers (suite grew, queue submitted) and parked runs are checked.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration pollInterval = Duration.seconds(30);
+
+    // A run parked on an experiment or an optimization that never finishes fails after this long.
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+    private Duration waitTimeout = Duration.hours(24);
+
     // Where github.check posts commit statuses; a test points it at a stub.
     @Valid @NotBlank @JsonProperty
     private String githubApiUrl = "https://api.github.com";

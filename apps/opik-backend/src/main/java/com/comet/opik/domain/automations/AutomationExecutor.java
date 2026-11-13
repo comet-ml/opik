@@ -4,10 +4,14 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueItemSource;
+import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.Visibility;
@@ -27,6 +31,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentExecutionService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.OptimizationService;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.TraceEnrichmentOptions;
@@ -98,6 +103,8 @@ public class AutomationExecutor {
     private final @NonNull GithubIntegrationService githubIntegrationService;
     private final @NonNull GithubClient githubClient;
     private final @NonNull WebhookHttpClient webhookHttpClient;
+    private final @NonNull OptimizationService optimizationService;
+    private final @NonNull AutomationActivityDAO activityDAO;
 
     /** The listener's guard: whether any automation of the project (or, with none given, the workspace) listens to scores. */
     public boolean listens(@NonNull String workspaceId, @Nullable UUID projectId) {
@@ -308,8 +315,10 @@ public class AutomationExecutor {
                     AutomationTargetHistoryDAO.TargetType.TEST_SUITE, itemIds);
             case DATASET_ADD -> addToDataset(automation, step, step.datasetId(),
                     AutomationTargetHistoryDAO.TargetType.DATASET, itemIds);
-            case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY -> Mono.error(new IllegalStateException(
-                    "step '%s' runs on event triggers only".formatted(step.type())));
+            case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY, OPTIMIZER_RUN, PROMPT_VERSION_SAVE, JUDGE_AGREEMENT,
+                    JUDGE_REVISE ->
+                Mono.error(new IllegalStateException(
+                        "step '%s' runs on event triggers only".formatted(step.type())));
         };
     }
 
@@ -335,7 +344,9 @@ public class AutomationExecutor {
             EntityFeedbackScores entity) {
         Set<UUID> one = Set.of(entity.entityId());
         Mono<Set<UUID>> held = switch (Objects.requireNonNull(Automation.StepType.fromString(step.type()))) {
-            case ANNOTATION_QUEUE_ADD, TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY -> Mono.just(Set.of());
+            case ANNOTATION_QUEUE_ADD, TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY, OPTIMIZER_RUN, PROMPT_VERSION_SAVE,
+                    JUDGE_AGREEMENT, JUDGE_REVISE ->
+                Mono.just(Set.of());
             case TEST_SUITE_ADD -> targetHistoryDAO.findPreviouslyAddedItems(
                     AutomationTargetHistoryDAO.TargetType.TEST_SUITE, step.testSuiteId(), automation.projectId(), one);
             case DATASET_ADD -> targetHistoryDAO.findPreviouslyAddedItems(
@@ -365,10 +376,11 @@ public class AutomationExecutor {
     }
 
     private Mono<Void> resumeWaiting(AutomationEvent message) {
-        if (!Automation.Event.EXPERIMENT_FINISHED.getValue().equals(message.event())) {
+        Automation.Event event = Automation.Event.fromString(message.event());
+        if (event != Automation.Event.EXPERIMENT_FINISHED && event != Automation.Event.OPTIMIZATION_FINISHED) {
             return Mono.empty();
         }
-        String waitingOn = waitKey(Automation.Event.EXPERIMENT_FINISHED, message.itemId());
+        String waitingOn = waitKey(event, message.itemId());
         return Mono.fromCallable(() -> runService.findWaiting(message.workspaceId(), waitingOn))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(Flux::fromIterable)
@@ -386,7 +398,7 @@ public class AutomationExecutor {
 
     private Mono<Void> fire(AutomationEvent message) {
         Automation.Event event = Automation.Event.fromString(message.event());
-        if (event == null || event.isScoreEvent()) {
+        if (event == null || event.isScoreEvent() || !event.isTrigger()) {
             return Mono.empty();
         }
         return Mono.fromCallable(() -> message.projectId() == null
@@ -418,7 +430,11 @@ public class AutomationExecutor {
                     || trigger.testSuiteId().toString().equals(payload.get("dataset_id"));
             case CI_RUN -> (trigger.repository() == null || trigger.repository().equals(payload.get("repository")))
                     && (trigger.branch() == null || trigger.branch().equals(payload.get("branch")));
-            case FEEDBACK_SCORE_CREATED -> false;
+            case TEST_SUITE_GREW -> trigger.testSuiteId() != null
+                    && trigger.testSuiteId().toString().equals(payload.get("test_suite_id"));
+            case ANNOTATION_QUEUE_SUBMITTED -> trigger.annotationQueueId() != null
+                    && trigger.annotationQueueId().toString().equals(payload.get("annotation_queue_id"));
+            case FEEDBACK_SCORE_CREATED, OPTIMIZATION_FINISHED -> false;
         };
     }
 
@@ -463,7 +479,10 @@ public class AutomationExecutor {
                 .originRunId(run.parentRunId()).depth(run.depth())
                 .build();
         var context = new RunContext(original, automation, run.id(), outputs, outcomes);
-        return suiteRunFinished(context, step, message.payload())
+        Mono<StepResult> finished = Automation.StepType.fromString(step.type()) == Automation.StepType.OPTIMIZER_RUN
+                ? optimizationFinished(context, message.payload())
+                : suiteRunFinished(context, step, message.payload());
+        return finished
                 .flatMap(result -> {
                     record(context, step, result);
                     return executeFrom(context, index + 1);
@@ -569,6 +588,10 @@ public class AutomationExecutor {
             case TEST_SUITE_RUN -> runSuite(context, step);
             case GITHUB_CHECK -> githubCheck(context, step);
             case NOTIFY -> notify(context, step);
+            case OPTIMIZER_RUN -> runOptimizer(context, step);
+            case PROMPT_VERSION_SAVE -> savePromptVersion(context, step);
+            case JUDGE_AGREEMENT -> judgeAgreement(context, step);
+            case JUDGE_REVISE -> judgeRevise(context, step);
             case ANNOTATION_QUEUE_ADD, TEST_SUITE_ADD, DATASET_ADD -> Mono.just(StepResult.skipped(
                     "step '%s' needs a scored trace; this run was fired by %s".formatted(step.type(),
                             context.event().event())));
@@ -788,5 +811,228 @@ public class AutomationExecutor {
         return webhookHttpClient.sendWebhook(event)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, context.event().workspaceId()))
                 .thenReturn(StepResult.done(Map.of()));
+    }
+
+    // ---- phase 3 steps: the optimizer, saving its winner, and judge alignment
+
+    /**
+     * Starts an Optimization Studio run on the suite with the prompt's latest version and parks the run;
+     * the poll job resumes it when the optimization reaches a terminal status. Needs the python backend
+     * worker, and on cloud an API key the automation does not have.
+     */
+    private Mono<StepResult> runOptimizer(RunContext context, Automation.Step step) {
+        String workspaceId = context.event().workspaceId();
+        return Mono.fromCallable(() -> {
+            PromptVersion version = step.promptId() == null
+                    ? null
+                    : promptService.getLatestVersion(workspaceId, step.promptId());
+            if (version == null) {
+                throw new IllegalStateException(
+                        "no prompt version to optimize: the step names no prompt, or it has no version");
+            }
+            return version;
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(version -> {
+                    var messages = messagesOf(version).stream()
+                            .map(message -> OptimizationStudioConfig.StudioMessage.builder()
+                                    .role(message.role()).content(message.content().isTextual()
+                                            ? message.content().asText()
+                                            : message.content().toString())
+                                    .build())
+                            .toList();
+                    var optimization = Optimization.builder()
+                            .name("%s · %s".formatted(context.automation().name(),
+                                    Optional.ofNullable(version.commit()).orElse(version.id().toString())))
+                            .datasetName(step.testSuiteName())
+                            .objectiveName(Optional.ofNullable(step.metric()).orElse("metric"))
+                            .status(OptimizationStatus.INITIALIZED)
+                            .projectId(context.automation().projectId())
+                            .studioConfig(OptimizationStudioConfig.builder()
+                                    .datasetName(step.testSuiteName())
+                                    .prompt(OptimizationStudioConfig.StudioPrompt.builder().messages(messages).build())
+                                    .llmModel(OptimizationStudioConfig.StudioLlmModel.builder().model(step.model())
+                                            .build())
+                                    .evaluation(OptimizationStudioConfig.StudioEvaluation.builder()
+                                            .metrics(List.of(OptimizationStudioConfig.StudioMetric.builder()
+                                                    .type(Optional.ofNullable(step.metric())
+                                                            .orElse("levenshtein_ratio"))
+                                                    .build()))
+                                            .build())
+                                    .optimizer(OptimizationStudioConfig.StudioOptimizer.builder()
+                                            .type(Optional.ofNullable(step.optimizer()).orElse("metaprompt"))
+                                            .build())
+                                    .build())
+                            .build();
+                    return optimizationService.upsert(optimization)
+                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                                    .put(RequestContext.WORKSPACE_NAME, context.event().workspaceName())
+                                    .put(RequestContext.USER_NAME, context.event().userName())
+                                    .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
+                            .map(optimizationId -> {
+                                Map<String, Object> outputs = new HashMap<>();
+                                outputs.put("optimization_id", optimizationId.toString());
+                                outputs.put("prompt_version_id", version.id().toString());
+                                return StepResult.waiting(waitKey(Automation.Event.OPTIMIZATION_FINISHED,
+                                        optimizationId.toString()), outputs);
+                            });
+                });
+    }
+
+    /**
+     * The waiting step's outputs once the optimization ended. The gain is read from the trials: the
+     * baseline is the earliest trial's objective score and the best the highest, as the optimizer reports
+     * them, so a run with no trials gains nothing.
+     */
+    private Mono<StepResult> optimizationFinished(RunContext context, Map<String, Object> finished) {
+        String optimizationId = String.valueOf(finished.get("optimization_id"));
+        String status = String.valueOf(finished.get("status"));
+        if (!OptimizationStatus.COMPLETED.getValue().equals(status)) {
+            return Mono.just(StepResult.failed("optimization ended as %s".formatted(status)));
+        }
+        String objective = finished.get("objective_name") instanceof String name ? name : null;
+        return trials(context, UUID.fromString(optimizationId))
+                .collectList()
+                .map(trials -> {
+                    var scored = trials.stream()
+                            .filter(trial -> trial.createdAt() != null && objectiveScore(trial, objective) != null)
+                            .sorted(java.util.Comparator.comparing(Experiment::createdAt))
+                            .toList();
+                    double baseline = scored.isEmpty() ? 0 : objectiveScore(scored.getFirst(), objective);
+                    double best = scored.stream().mapToDouble(trial -> objectiveScore(trial, objective)).max()
+                            .orElse(0);
+                    Map<String, Object> outputs = new HashMap<>();
+                    outputs.put("optimization_id", optimizationId);
+                    outputs.put("trials", trials.size());
+                    outputs.put("best_score", best);
+                    outputs.put("baseline_score", baseline);
+                    outputs.put("gain", best - baseline);
+                    return StepResult.done(outputs);
+                });
+    }
+
+    /** The trial experiments an optimization produced, in this run's workspace. */
+    private Flux<Experiment> trials(RunContext context, UUID optimizationId) {
+        var criteria = ExperimentSearchCriteria.builder()
+                .optimizationId(optimizationId)
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build();
+        return experimentService.find(1, 100, criteria)
+                .flatMapIterable(Experiment.ExperimentPage::content)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, context.event().workspaceId())
+                        .put(RequestContext.USER_NAME, context.event().userName())
+                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE));
+    }
+
+    /** The trial's score under the objective name, or its first score when the objective is unnamed. */
+    private static Double objectiveScore(Experiment trial, @Nullable String objective) {
+        if (trial.feedbackScores() == null || trial.feedbackScores().isEmpty()) {
+            return null;
+        }
+        return trial.feedbackScores().stream()
+                .filter(score -> objective == null || objective.equals(score.name()))
+                .findFirst()
+                .map(score -> score.value().doubleValue())
+                .orElse(null);
+    }
+
+    /**
+     * Saves the optimizer's winner as a new version of the prompt. The winner is the best trial's prompt,
+     * which the optimizer records under the experiment's configuration.
+     */
+    private Mono<StepResult> savePromptVersion(RunContext context, Automation.Step step) {
+        String optimizationId = context.outputs().entrySet().stream()
+                .filter(entry -> entry.getKey().endsWith(".optimization_id"))
+                .map(entry -> String.valueOf(entry.getValue()))
+                .findFirst().orElse(null);
+        if (optimizationId == null) {
+            return Mono.just(StepResult.failed("nothing to save: no optimizer.run output in this run"));
+        }
+        if (step.promptName() == null) {
+            return Mono.just(StepResult.failed("prompt_version.save needs the prompt to save under (prompt_name)"));
+        }
+        return trials(context, UUID.fromString(optimizationId))
+                .filter(experiment -> experiment.metadata() != null
+                        && !experiment.metadata().path("configuration").path("prompt").isMissingNode())
+                .reduce((best, next) -> bestScore(next) > bestScore(best) ? next : best)
+                .switchIfEmpty(Mono.error(new IllegalStateException("the optimization left no trial with a prompt")))
+                .flatMap(best -> Mono.fromCallable(() -> {
+                    var messages = best.metadata().path("configuration").path("prompt");
+                    var version = promptService.createPromptVersion(context.event().workspaceId(),
+                            context.event().workspaceName(), context.event().userName(),
+                            CreatePromptVersion.builder()
+                                    .name(step.promptName())
+                                    .templateStructure(TemplateStructure.CHAT)
+                                    .version(PromptVersion.builder()
+                                            .template(messages.toString())
+                                            .changeDescription(
+                                                    "Opik Improve: optimization %s".formatted(optimizationId))
+                                            .build())
+                                    .build());
+                    Map<String, Object> outputs = new HashMap<>();
+                    outputs.put("prompt_version_id", version.id().toString());
+                    outputs.put("commit", version.commit());
+                    return outputs;
+                }).subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(outputs -> originStore.record(String.valueOf(outputs.get("prompt_version_id")),
+                        new AutomationOriginStore.Origin(context.runId(), context.event().depth()))
+                        .thenReturn(StepResult.done(outputs)));
+    }
+
+    private static double bestScore(Experiment experiment) {
+        return experiment.feedbackScores() == null
+                ? 0
+                : experiment.feedbackScores().stream().mapToDouble(score -> score.value().doubleValue()).max()
+                        .orElse(0);
+    }
+
+    /** How often the judge and the reviewers landed on the same side of the threshold, over the window. */
+    private Mono<StepResult> judgeAgreement(RunContext context, Automation.Step step) {
+        if (step.scoreName() == null || step.annotationQueueId() == null) {
+            return Mono.just(StepResult.failed("judge.agreement needs the score_name and the annotation queue"));
+        }
+        double threshold = Optional.ofNullable(step.threshold()).orElse(0.5);
+        return activityDAO.judgeHumanPairs(context.automation().projectId(), step.annotationQueueId(), step.scoreName(),
+                Instant.now().minus(Duration.ofDays(AutomationService.ESTIMATE_WINDOW_DAYS)), 500)
+                .collectList()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, context.event().workspaceId())
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .map(pairs -> {
+                    long agree = pairs.stream().filter(pair -> (pair.judge().doubleValue() >= threshold) == (pair
+                            .human().doubleValue() >= threshold)).count();
+                    var disagreements = pairs.stream()
+                            .filter(pair -> (pair.judge().doubleValue() >= threshold) != (pair.human()
+                                    .doubleValue() >= threshold))
+                            .limit(20)
+                            .map(pair -> Map.of("trace_id", pair.entityId().toString(), "judge", pair.judge(), "human",
+                                    pair.human()))
+                            .toList();
+                    Map<String, Object> outputs = new HashMap<>();
+                    outputs.put("compared", pairs.size());
+                    outputs.put("agreement", pairs.isEmpty() ? 1.0 : (double) agree / pairs.size());
+                    outputs.put("disagreements", disagreements);
+                    return StepResult.done(outputs);
+                });
+    }
+
+    /** Opik has no judge-revision object yet: the owner is told, with the disagreements attached. */
+    private Mono<StepResult> judgeRevise(RunContext context, Automation.Step step) {
+        if (step.url() == null) {
+            return Mono.just(StepResult.failed("judge.revise needs a url to send the revision request to"));
+        }
+        Object agreement = context.outputs().entrySet().stream()
+                .filter(entry -> entry.getKey().endsWith(".agreement")).map(Map.Entry::getValue).findFirst()
+                .orElse(null);
+        Object disagreements = context.outputs().entrySet().stream()
+                .filter(entry -> entry.getKey().endsWith(".disagreements")).map(Map.Entry::getValue).findFirst()
+                .orElse(List.of());
+        var revise = step.toBuilder()
+                .message(Optional.ofNullable(step.message()).orElse(
+                        "Judge '%s' agrees with reviewers %.0f%% of the time; revise it. Disagreements: %s".formatted(
+                                step.scoreName(), agreement instanceof Number number ? number.doubleValue() * 100 : 0,
+                                JsonUtils.writeValueAsString(disagreements))))
+                .build();
+        return notify(context, revise);
     }
 }

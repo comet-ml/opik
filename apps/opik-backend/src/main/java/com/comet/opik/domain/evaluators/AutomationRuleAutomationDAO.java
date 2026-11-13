@@ -29,7 +29,7 @@ import java.util.stream.Stream;
 public interface AutomationRuleAutomationDAO {
 
     String SELECT = """
-            SELECT rule.id, arp.project_id, rule.name, rule.sampling_rate, rule.enabled,
+            SELECT rule.id, rule.workspace_id, arp.project_id, rule.name, rule.sampling_rate, rule.enabled,
                    rule.trigger_scope, rule.filters,
                    a.triggers, a.steps, a.limits, a.recipe_id, a.recipe_version, a.created_via,
                    a.paused_until, a.paused_reason,
@@ -114,6 +114,15 @@ public interface AutomationRuleAutomationDAO {
             """)
     Stream<AutomationRuleAutomationModel> findEnabledByWorkspace(@Bind("workspaceId") String workspaceId,
             @Bind("event") String event);
+
+    /** Every enabled automation in every workspace listening to one of the events: what the poll job walks. */
+    @SqlQuery(SELECT + """
+            WHERE rule.enabled = TRUE
+              AND (JSON_SEARCH(a.triggers, 'one', :first, NULL, '$[*].event') IS NOT NULL
+                   OR JSON_SEARCH(a.triggers, 'one', :second, NULL, '$[*].event') IS NOT NULL)
+            """)
+    Stream<AutomationRuleAutomationModel> findEnabledListening(@Bind("first") String first,
+            @Bind("second") String second);
 
     @SqlQuery("""
             SELECT EXISTS (

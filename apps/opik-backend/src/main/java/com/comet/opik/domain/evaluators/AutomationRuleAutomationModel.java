@@ -18,6 +18,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 public record AutomationRuleAutomationModel(
         UUID id,
+        String workspaceId,
         UUID projectId,
         String name,
         Float samplingRate,

@@ -114,6 +114,17 @@ public interface AutomationRunDAO {
     @SqlQuery("SELECT * FROM automation_runs WHERE workspace_id = :workspaceId AND waiting_on = :waitingOn")
     List<RunRow> findWaiting(@Bind("workspaceId") String workspaceId, @Bind("waitingOn") String waitingOn);
 
+    /** Parked runs across workspaces whose wait handle starts with the prefix: what the poll job checks. */
+    @SqlQuery("SELECT * FROM automation_runs WHERE status = 'pending' AND waiting_on LIKE CONCAT(:prefix, '%') LIMIT 500")
+    List<RunRow> findWaitingByPrefix(@Bind("prefix") String prefix);
+
+    @SqlUpdate("""
+            UPDATE automation_runs
+            SET status = 'failed', waiting_on = NULL, last_error = :reason, finished_at = :now
+            WHERE status = 'pending' AND waiting_on IS NOT NULL AND started_at < :cutoff
+            """)
+    int failParkedBefore(@Bind("cutoff") Instant cutoff, @Bind("reason") String reason, @Bind("now") Instant now);
+
     @SqlQuery("SELECT * FROM automation_runs " + FILTERS + " ORDER BY window_start DESC LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine
     @AllowUnusedBindings

@@ -77,8 +77,16 @@ public class RecommendationService {
                     var collect = byRecipe(workflows, WorkflowService.COLLECT);
                     var align = byRecipe(workflows, WorkflowService.ALIGN);
                     var gate = byRecipe(workflows, WorkflowService.GATE);
+                    var improve = byRecipe(workflows, WorkflowService.IMPROVE);
                     boolean gates = running.stream().anyMatch(automation -> hasStep(automation,
                             Automation.StepType.TEST_SUITE_RUN));
+                    boolean improves = running.stream().anyMatch(automation -> hasStep(automation,
+                            Automation.StepType.OPTIMIZER_RUN));
+                    boolean checksJudge = running.stream().anyMatch(automation -> hasStep(automation,
+                            Automation.StepType.JUDGE_AGREEMENT));
+                    var stats = runService.stats(workspaceId, running.stream().map(Automation::id).toList(),
+                            Instant.now().minus(Duration.ofDays(AutomationService.ESTIMATE_WINDOW_DAYS)),
+                            AutomationService.ESTIMATE_WINDOW_DAYS);
                     var out = new ArrayList<Recommendation>();
 
                     String judges = collect.availableScoreNames().isEmpty()
@@ -107,6 +115,28 @@ public class RecommendationService {
                     if (gateRecommendation != null && gate.prerequisitesMet()) {
                         out.add(gateRecommendation);
                     }
+                    // Improve comes once Gate tests versions, so a saved winner is tested before anyone uses it.
+                    Recommendation improveRecommendation = improves || !gates
+                            ? null
+                            : setup(workspaceId, projectId, improve,
+                                    "Gate tests new versions of '%s' and nothing writes them. Optimize the prompt every %d new suite cases and save a version that gains at least %.0f%%."
+                                            .formatted(improve.overrides().promptName() != null
+                                                    ? improve.overrides().promptName()
+                                                    : gate.overrides().promptName(),
+                                                    improve.overrides().n(), improve.overrides().minGain() * 100),
+                                    Map.of("cases_written_14d", casesWritten, "suite",
+                                            improve.overrides().testSuiteName()));
+                    if (improveRecommendation != null && improve.prerequisitesMet()) {
+                        out.add(improveRecommendation);
+                    }
+                    // Upkeep: what the runs say about the automations already on.
+                    out.addAll(upkeep(workspaceId, projectId, running, stats));
+                    if (samples && !checksJudge && hasJudge) {
+                        out.add(setup(workspaceId, projectId, align,
+                                "Reviewers see '%s' traces, and nothing compares their verdicts with the judge's. Enabling Align again adds the agreement check every %d reviews."
+                                        .formatted(align.overrides().annotationQueueName(), align.overrides().n()),
+                                Map.of("queue", align.overrides().annotationQueueName())));
+                    }
                     // Align ranks after Collect, and last of all while no judge decides anything here.
                     var alignRecommendation = samples
                             ? null
@@ -132,6 +162,9 @@ public class RecommendationService {
                     // Setup steps still blocked come last, so the agent can say what unblocks them.
                     if (gateRecommendation != null && !gate.prerequisitesMet()) {
                         out.add(gateRecommendation.toBuilder().blockedUntil(gate.blockedReason()).build());
+                    }
+                    if (improveRecommendation != null && !improve.prerequisitesMet()) {
+                        out.add(improveRecommendation.toBuilder().blockedUntil(improve.blockedReason()).build());
                     }
                     return out.stream().filter(recommendation -> !dismissed.contains(recommendation.id())).toList();
                 })
@@ -173,6 +206,61 @@ public class RecommendationService {
                 .evidence(JsonUtils.valueToTree(evidence))
                 .apply(Recommendation.Apply.builder().operation("workflow.enable").data(JsonUtils.valueToTree(data))
                         .build())
+                .build();
+    }
+
+    /**
+     * Upkeep over the window: a paused automation whose daily limit stops it, one whose trigger fired but
+     * never matched (the threshold is off), and one whose every step failed (disable it until fixed).
+     */
+    private List<Recommendation> upkeep(String workspaceId, UUID projectId, List<Automation> running,
+            Map<UUID, Automation.Stats> stats) {
+        var out = new ArrayList<Recommendation>();
+        for (var automation : running) {
+            var figures = stats.getOrDefault(automation.id(),
+                    AutomationRunService.emptyStats(AutomationService.ESTIMATE_WINDOW_DAYS));
+            if (automation.pausedReason() != null && automation.limits() != null
+                    && automation.limits().maxItemsPerDay() != null) {
+                int raised = automation.limits().maxItemsPerDay() * 2;
+                out.add(upkeepRecommendation(workspaceId, projectId, Recommendation.Kind.TUNE, automation, "paused",
+                        "'%s' hit its %s limit and is paused until %s. Raise max_items_per_day to %d, or tighten the threshold so fewer traces match."
+                                .formatted(automation.name(), automation.pausedReason().limit(),
+                                        automation.pausedReason().until(), raised),
+                        Map.of("limit", automation.pausedReason().limit(), "until",
+                                String.valueOf(automation.pausedReason().until())),
+                        "automation.update", Map.of("id", automation.id(), "limits",
+                                Map.of("max_items_per_day", raised))));
+            } else if (figures.fired() >= 50 && figures.matched() == 0) {
+                out.add(upkeepRecommendation(workspaceId, projectId, Recommendation.Kind.TUNE, automation,
+                        "never-matches",
+                        "'%s' saw %d events in %d days and matched none: the condition never holds. Check the score name and threshold."
+                                .formatted(automation.name(), figures.fired(), figures.windowDays()),
+                        Map.of("fired", figures.fired(), "matched", figures.matched()), null, null));
+            } else if (figures.stepsFailed() > 0 && figures.stepsDone() == 0) {
+                out.add(upkeepRecommendation(workspaceId, projectId, Recommendation.Kind.REMOVE, automation,
+                        "all-failed",
+                        "Every step of '%s' failed in %d days (%d failures). Disable it until the target is fixed."
+                                .formatted(automation.name(), figures.windowDays(), figures.stepsFailed()),
+                        Map.of("steps_failed", figures.stepsFailed()),
+                        "automation.disable", Map.of("id", automation.id())));
+            }
+        }
+        return out;
+    }
+
+    private static Recommendation upkeepRecommendation(String workspaceId, UUID projectId, Recommendation.Kind kind,
+            Automation automation, String key, String reason, Map<String, Object> evidence, String operation,
+            Map<String, Object> data) {
+        return Recommendation.builder()
+                .id(id(workspaceId, projectId, kind, automation.id() + ":" + key))
+                .kind(kind)
+                .automationId(automation.id())
+                .workflow(automation.recipe() == null ? null : automation.recipe().id())
+                .reason(reason)
+                .evidence(JsonUtils.valueToTree(evidence))
+                .apply(operation == null
+                        ? null
+                        : Recommendation.Apply.builder().operation(operation).data(JsonUtils.valueToTree(data)).build())
                 .build();
     }
 

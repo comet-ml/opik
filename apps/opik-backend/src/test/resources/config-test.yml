@@ -1492,3 +1492,5 @@ automationEvents:
   streamMaxLen: 100000
   streamTrimLimit: 1000
   githubApiUrl: https://api.github.com
+  pollInterval: 2s
+  waitTimeout: 24h

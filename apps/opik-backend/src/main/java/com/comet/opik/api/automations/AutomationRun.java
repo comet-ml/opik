@@ -29,6 +29,7 @@ public record AutomationRun(
         UUID id,
         UUID automationId,
         UUID projectId,
+        @com.fasterxml.jackson.annotation.JsonIgnore @Nullable String workspaceId,
         Kind kind,
         Status status,
         Trigger trigger,

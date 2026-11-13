@@ -85,6 +85,9 @@ public record Automation(
             @Nullable String promptName,
             @Nullable UUID testSuiteId,
             @Nullable String testSuiteName,
+            @Nullable UUID annotationQueueId,
+            @Nullable String annotationQueueName,
+            @Nullable @Positive Integer n,
             @Nullable String repository,
             @Nullable String branch) {
     }
@@ -114,6 +117,10 @@ public record Automation(
             @Nullable String url,
             @Nullable NotifyKind kind,
             @Nullable String message,
+            @Nullable String metric,
+            @Nullable String optimizer,
+            @Nullable String scoreName,
+            @Nullable Double threshold,
             @Nullable @Valid StepConditions onlyIf) {
     }
 
@@ -226,13 +233,26 @@ public record Automation(
         FEEDBACK_SCORE_CREATED("feedback_score:created"),
         PROMPT_COMMITTED("prompt:committed"),
         EXPERIMENT_FINISHED("experiment:finished"),
-        CI_RUN("ci:run");
+        CI_RUN("ci:run"),
+        TEST_SUITE_GREW("test_suite:grew"),
+        ANNOTATION_QUEUE_SUBMITTED("annotation_queue:submitted"),
+        /** Internal: resumes a run waiting on an optimization. Not a trigger an automation can name. */
+        OPTIMIZATION_FINISHED("optimization:finished");
 
         private final String value;
 
         /** Score events roll up by the hour; every other event is one firing, one run. */
         public boolean isScoreEvent() {
             return this == FEEDBACK_SCORE_CREATED;
+        }
+
+        /** Fired by the poll job when N things happened since the last firing. */
+        public boolean isCounted() {
+            return this == TEST_SUITE_GREW || this == ANNOTATION_QUEUE_SUBMITTED;
+        }
+
+        public boolean isTrigger() {
+            return this != OPTIMIZATION_FINISHED;
         }
 
         public static @Nullable Event fromString(String value) {
@@ -254,9 +274,15 @@ public record Automation(
         TEST_SUITE_ADD("test_suite.add", java.util.Set.of()),
         DATASET_ADD("dataset.add", java.util.Set.of()),
         TEST_SUITE_RUN("test_suite.run",
-                java.util.Set.of("pass_rate", "baseline_pass_rate", "regressions", "experiment_id")),
+                java.util.Set.of("pass_rate", "baseline_pass_rate", "regressions", "experiment_id",
+                        "baseline_experiment_id")),
         GITHUB_CHECK("github.check", java.util.Set.of()),
-        NOTIFY("notify", java.util.Set.of());
+        NOTIFY("notify", java.util.Set.of()),
+        OPTIMIZER_RUN("optimizer.run",
+                java.util.Set.of("gain", "best_score", "baseline_score", "optimization_id")),
+        PROMPT_VERSION_SAVE("prompt_version.save", java.util.Set.of("prompt_version_id", "commit")),
+        JUDGE_AGREEMENT("judge.agreement", java.util.Set.of("agreement", "compared")),
+        JUDGE_REVISE("judge.revise", java.util.Set.of());
 
         private final String value;
         private final java.util.Set<String> outputs;

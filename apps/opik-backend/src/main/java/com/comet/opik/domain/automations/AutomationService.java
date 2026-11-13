@@ -236,9 +236,16 @@ public class AutomationService {
                 .toList();
 
         for (var trigger : triggers) {
-            if (Automation.Event.fromString(trigger.event()) == null) {
+            var event = Automation.Event.fromString(trigger.event());
+            if (event == null || !event.isTrigger()) {
                 throw refuse(UNKNOWN_EVENT, "'%s' is not an event; known: %s".formatted(trigger.event(),
-                        names(Automation.Event.values())));
+                        names(java.util.Arrays.stream(Automation.Event.values()).filter(Automation.Event::isTrigger)
+                                .toArray(Automation.Event[]::new))));
+            }
+            if (event.isCounted() && trigger.testSuiteId() == null && trigger.testSuiteName() == null
+                    && trigger.annotationQueueId() == null && trigger.annotationQueueName() == null) {
+                throw refuse(TARGET_NOT_FOUND,
+                        "a %s trigger names the suite or queue it counts".formatted(event.getValue()));
             }
         }
 
@@ -266,7 +273,9 @@ public class AutomationService {
             }
             boolean addStep = switch (type) {
                 case ANNOTATION_QUEUE_ADD, TEST_SUITE_ADD, DATASET_ADD -> true;
-                case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY -> false;
+                case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY, OPTIMIZER_RUN, PROMPT_VERSION_SAVE, JUDGE_AGREEMENT,
+                        JUDGE_REVISE ->
+                    false;
             };
             if (addStep != scoreTriggers) {
                 throw refuse(STEP_SCOPE_MISMATCH, addStep
@@ -279,8 +288,24 @@ public class AutomationService {
                 throw refuse(TARGET_NOT_FOUND,
                         "step '%s' needs the model to run the suite with (model)".formatted(step.id()));
             }
-            if (type == Automation.StepType.NOTIFY && step.url() == null) {
-                throw refuse(TARGET_NOT_FOUND, "step '%s' needs a url to notify".formatted(step.id()));
+            if ((type == Automation.StepType.NOTIFY || type == Automation.StepType.JUDGE_REVISE)
+                    && step.url() == null) {
+                throw refuse(TARGET_NOT_FOUND, "step '%s' needs a url to send to".formatted(step.id()));
+            }
+            if (type == Automation.StepType.OPTIMIZER_RUN && (step.model() == null
+                    || (step.promptId() == null && step.promptName() == null))) {
+                throw refuse(TARGET_NOT_FOUND,
+                        "step '%s' needs the prompt to optimize (prompt_name) and the model".formatted(step.id()));
+            }
+            if (type == Automation.StepType.PROMPT_VERSION_SAVE && step.promptName() == null
+                    && step.promptId() == null) {
+                throw refuse(TARGET_NOT_FOUND,
+                        "step '%s' needs the prompt to save under (prompt_name)".formatted(step.id()));
+            }
+            if (type == Automation.StepType.JUDGE_AGREEMENT && (step.scoreName() == null
+                    || (step.annotationQueueId() == null && step.annotationQueueName() == null))) {
+                throw refuse(TARGET_NOT_FOUND,
+                        "step '%s' needs the judge's score_name and the review queue".formatted(step.id()));
             }
             validateOnlyIf(step, definition.steps());
         }
@@ -408,7 +433,16 @@ public class AutomationService {
     /** Resolves what an event trigger names: a prompt or a suite by name becomes an id, and both come back. */
     private Mono<Automation.Trigger> resolveTrigger(String workspaceId, UUID projectId, Automation.Trigger trigger) {
         return switch (Objects.requireNonNull(Automation.Event.fromString(trigger.event()))) {
-            case FEEDBACK_SCORE_CREATED, CI_RUN -> Mono.just(trigger);
+            case FEEDBACK_SCORE_CREATED, CI_RUN, OPTIMIZATION_FINISHED -> Mono.just(trigger);
+            case TEST_SUITE_GREW -> Mono.fromCallable(() -> {
+                var suite = findDataset(workspaceId, projectId, trigger.testSuiteId(), trigger.testSuiteName(),
+                        DatasetType.TEST_SUITE, "test suite");
+                return trigger.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name()).build();
+            }).subscribeOn(Schedulers.boundedElastic());
+            case ANNOTATION_QUEUE_SUBMITTED -> findQueue(workspaceId, projectId, trigger.annotationQueueId(),
+                    trigger.annotationQueueName())
+                    .map(queue -> trigger.toBuilder().annotationQueueId(queue.id()).annotationQueueName(queue.name())
+                            .build());
             case PROMPT_COMMITTED -> Mono.fromCallable(() -> {
                 if (trigger.promptId() == null && trigger.promptName() == null) {
                     return trigger;
@@ -431,6 +465,27 @@ public class AutomationService {
                 return trigger.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name()).build();
             }).subscribeOn(Schedulers.boundedElastic());
         };
+    }
+
+    private Mono<AnnotationQueue> findQueue(String workspaceId, UUID projectId, UUID id, String name) {
+        Mono<AnnotationQueue> queue;
+        if (id != null) {
+            queue = annotationQueueDAO.findById(id).filter(found -> projectId.equals(found.projectId()));
+        } else if (name != null) {
+            queue = annotationQueueDAO
+                    .find(1, 100, AnnotationQueueSearchCriteria.builder().name(name).filters(List.of())
+                            .sortingFields(List.of()).build())
+                    .flatMapIterable(AnnotationQueue.AnnotationQueuePage::content)
+                    .filter(found -> projectId.equals(found.projectId()) && name.equals(found.name()))
+                    .next();
+        } else {
+            return Mono.error(refuse(TARGET_NOT_FOUND, "an annotation queue id or name is required"));
+        }
+        return queue
+                .switchIfEmpty(Mono.error(() -> refuse(TARGET_NOT_FOUND,
+                        "annotation queue '%s' not found in the project".formatted(name != null ? name : id))))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
     }
 
     private Dataset findDataset(String workspaceId, UUID projectId, UUID id, String name, DatasetType type,
@@ -473,6 +528,25 @@ public class AutomationService {
                 }
                 return resolved.build();
             }).subscribeOn(Schedulers.boundedElastic());
+            case OPTIMIZER_RUN -> Mono.fromCallable(() -> {
+                var suite = findDataset(workspaceId, projectId, step.testSuiteId(), step.testSuiteName(),
+                        DatasetType.TEST_SUITE, "test suite");
+                var prompt = step.promptId() != null
+                        ? promptService.findById(workspaceId, step.promptId())
+                        : promptService.findByName(workspaceId, step.promptName());
+                if (prompt == null) {
+                    throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found".formatted(
+                            step.promptName() != null ? step.promptName() : step.promptId()));
+                }
+                return step.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name())
+                        .promptId(prompt.id()).promptName(prompt.name()).build();
+            }).subscribeOn(Schedulers.boundedElastic());
+            case PROMPT_VERSION_SAVE -> Mono.just(step);
+            case JUDGE_AGREEMENT ->
+                findQueue(workspaceId, projectId, step.annotationQueueId(), step.annotationQueueName())
+                        .map(queue -> step.toBuilder().annotationQueueId(queue.id()).annotationQueueName(queue.name())
+                                .build());
+            case JUDGE_REVISE -> Mono.just(step);
             case GITHUB_CHECK -> Mono.fromCallable(() -> {
                 if (githubIntegrationService.status(workspaceId).configured() != Boolean.TRUE) {
                     throw refuse(INTEGRATION_REQUIRED,

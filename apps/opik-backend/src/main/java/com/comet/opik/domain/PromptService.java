@@ -113,6 +113,10 @@ public interface PromptService {
 
     Prompt findById(String workspaceId, UUID id);
 
+    /** The same create as the request path, for callers that carry their own context. */
+    PromptVersion createPromptVersion(String workspaceId, String workspaceName, String userName,
+            CreatePromptVersion createPromptVersion);
+
     PromptVersion getVersionByNumber(UUID promptId, String versionNumber);
 
     int updateVersions(PromptVersionBatchUpdate update);
@@ -365,10 +369,13 @@ class PromptServiceImpl implements PromptService {
 
     @Override
     public PromptVersion createPromptVersion(@NonNull CreatePromptVersion createPromptVersion) {
+        return createPromptVersion(requestContext.get().getWorkspaceId(), requestContext.get().getWorkspaceName(),
+                requestContext.get().getUserName(), createPromptVersion);
+    }
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String workspaceName = requestContext.get().getWorkspaceName();
-        String userName = requestContext.get().getUserName();
+    @Override
+    public PromptVersion createPromptVersion(@NonNull String workspaceId, String workspaceName,
+            @NonNull String userName, @NonNull CreatePromptVersion createPromptVersion) {
 
         if (createPromptVersion.version().id() != null) {
             IdGenerator.validateVersion(createPromptVersion.version().id(), "prompt version");

@@ -52,9 +52,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * The recipes: a workflow is one or two automations that do one job on a cadence, stamped with the recipe
  * id so reads can tell which workflows are on. Nothing is stored for the workflow itself.
  *
- * <p>Two recipes exist so far. {@code collect} keeps the production traces a judge scored low in the
- * regression suite; {@code align} sends a random few a day to a review queue, the half of judge alignment
- * that needs no new event producer. The rest arrive with their events.
+ * <p>{@code collect} keeps the production traces a judge scored low in the regression suite; {@code gate}
+ * runs the suite on every new prompt version or CI run; {@code improve} optimizes the prompt against the
+ * suite every time it grows by N cases and saves a winner that gains enough; {@code align} sends a random
+ * few scored traces a day to a review queue and, every N reviews, measures how often the judge and the
+ * reviewers agree.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -64,6 +66,7 @@ public class WorkflowService {
     public static final String COLLECT = "collect";
     public static final String ALIGN = "align";
     public static final String GATE = "gate";
+    public static final String IMPROVE = "improve";
     public static final int VERSION = 1;
     /** Stands in for the judge in a recipe shown before one was chosen; an enable never stores it. */
     public static final String SCORE_NAME_PLACEHOLDER = "<score_name>";
@@ -71,7 +74,13 @@ public class WorkflowService {
     public static final int DEFAULT_PER_DAY = 10;
     public static final int DEFAULT_MAX_ITEMS_PER_DAY = 200;
     public static final String REVIEW_QUEUE_NAME = "Judge review";
-    private static final List<String> RECIPES = List.of(COLLECT, GATE, ALIGN);
+    public static final int DEFAULT_SUITE_GROWTH = 50;
+    public static final int DEFAULT_REVIEWS = 20;
+    public static final double DEFAULT_MIN_GAIN = 0.05;
+    public static final double DEFAULT_MIN_AGREEMENT = 0.8;
+    public static final String DEFAULT_METRIC = "levenshtein_ratio";
+    public static final String DEFAULT_OPTIMIZER = "metaprompt";
+    private static final List<String> RECIPES = List.of(COLLECT, GATE, ALIGN, IMPROVE);
     static final String GITHUB_ACTION = """
             # Opik Gate: tell Opik this commit ran, so the regression suite runs and a check comes back.
             - name: Opik gate
@@ -120,9 +129,9 @@ public class WorkflowService {
     private Mono<Workflow.Enabled> enable(String workspaceId, String userName, Workflow.EnableRequest request,
             boolean dryRun, Project project, List<Automation> existing, List<String> scoreNames) {
         var recipe = recipe(request.recipe(), project, request.overrides());
-        if (GATE.equals(recipe.id())) {
+        if (GATE.equals(recipe.id()) || IMPROVE.equals(recipe.id())) {
             if (recipe.overrides().promptName() == null) {
-                throw refuse(PROMPT_NAME_REQUIRED, "name the prompt Gate tests in overrides.prompt_name");
+                throw refuse(PROMPT_NAME_REQUIRED, "name the prompt in overrides.prompt_name");
             }
             if (recipe.overrides().model() == null) {
                 throw refuse(MODEL_REQUIRED,
@@ -220,7 +229,7 @@ public class WorkflowService {
 
         // Before a judge is chosen there is nothing to replay, so the estimate stays at zero: the dry run
         // of the enable, with the chosen score, is where the numbers come from.
-        boolean gate = GATE.equals(recipe.id());
+        boolean gate = GATE.equals(recipe.id()) || IMPROVE.equals(recipe.id());
         Mono<AutomationDryRun.Estimate> estimate = gate || overrides.scoreName() == null
                 ? Mono.just(emptyEstimate())
                 : estimate(workspaceId, project.id(), templates(recipe(recipe.id(), project, overrides), project));
@@ -228,7 +237,7 @@ public class WorkflowService {
         String blockedReason = gate
                 ? (suiteHasCases
                         ? (state == Workflow.State.OFF && (overrides.promptName() == null || overrides.model() == null)
-                                ? "name the prompt to test (overrides.prompt_name) and the model to run with (overrides.model)"
+                                ? "name the prompt (overrides.prompt_name) and the model to run with (overrides.model)"
                                 : null)
                         : "the suite has no cases yet: turn Collect on first")
                 : (overrides.scoreName() == null && state == Workflow.State.OFF
@@ -299,6 +308,21 @@ public class WorkflowService {
                         ? null
                         : Optional.ofNullable(automation.limits()).map(Automation.Limits::maxItemsPerDay)
                                 .orElse(defaults.maxItemsPerDay()))
+                .metric(automation.steps().stream().map(Automation.Step::metric).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.metric()))
+                .optimizer(automation.steps().stream().map(Automation.Step::optimizer).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.optimizer()))
+                .n(automation.triggers().stream().map(Automation.Trigger::n).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.n()))
+                .minGain(defaults.minGain() == null
+                        ? null
+                        : automation.steps().stream()
+                                .filter(candidate -> candidate.onlyIf() != null)
+                                .flatMap(candidate -> candidate.onlyIf().groups().stream())
+                                .flatMap(group -> group.conditions().stream())
+                                .filter(gain -> "optimize.gain".equals(gain.stepOutput()))
+                                .map(Automation.StepConditions.Condition::value)
+                                .findFirst().orElse(defaults.minGain()))
                 .build();
     }
 
@@ -353,12 +377,29 @@ public class WorkflowService {
                             .build());
             case ALIGN -> new Recipe(ALIGN, "Align",
                     "A judge score lands on a production trace: send a few a day, at random, to a review queue "
-                            + "so people can check the judge.",
+                            + "so people can check the judge. Every N reviews, measure how often the judge and the "
+                            + "reviewers agree, and ask for a revision when they drift apart.",
                     Workflow.Overrides.builder()
                             .scoreName(given.scoreName())
+                            .threshold(Optional.ofNullable(given.threshold()).orElse(DEFAULT_THRESHOLD))
                             .annotationQueueName(
                                     Optional.ofNullable(given.annotationQueueName()).orElse(REVIEW_QUEUE_NAME))
                             .perDay(Optional.ofNullable(given.perDay()).orElse(DEFAULT_PER_DAY))
+                            .n(Optional.ofNullable(given.n()).orElse(DEFAULT_REVIEWS))
+                            .notifyUrl(given.notifyUrl())
+                            .build());
+            case IMPROVE -> new Recipe(IMPROVE, "Improve",
+                    "The regression suite grows by N cases: optimize the prompt against it, and save the winner as "
+                            + "a new version when it gains enough. Gate then tests that version.",
+                    Workflow.Overrides.builder()
+                            .promptName(given.promptName())
+                            .model(given.model())
+                            .testSuiteName(Optional.ofNullable(given.testSuiteName()).orElse(suiteName(project)))
+                            .metric(Optional.ofNullable(given.metric()).orElse(DEFAULT_METRIC))
+                            .optimizer(Optional.ofNullable(given.optimizer()).orElse(DEFAULT_OPTIMIZER))
+                            .n(Optional.ofNullable(given.n()).orElse(DEFAULT_SUITE_GROWTH))
+                            .minGain(Optional.ofNullable(given.minGain()).orElse(DEFAULT_MIN_GAIN))
+                            .notifyUrl(given.notifyUrl())
                             .build());
             default -> throw refuse(UNKNOWN_RECIPE, "'%s' is not a recipe; known: %s".formatted(id, RECIPES));
         };
@@ -401,21 +442,48 @@ public class WorkflowService {
                     .steps(gateSteps(overrides))
                     .limits(Automation.Limits.builder().maxRunsPerDay(50).build())
                     .build());
-            case ALIGN -> List.of(Automation.builder()
-                    .projectId(project.id()).name("Random %s traces to review".formatted(overrides.scoreName()))
+            case ALIGN -> List.of(
+                    Automation.builder()
+                            .projectId(project.id()).name("Random %s traces to review".formatted(overrides.scoreName()))
+                            .enabled(true)
+                            .recipe(Automation.Recipe.builder().id(ALIGN).version(VERSION).build())
+                            .triggers(List.of(Automation.Trigger.builder()
+                                    .event(Automation.Event.FEEDBACK_SCORE_CREATED.getValue())
+                                    .scope(Automation.Scope.TRACE)
+                                    // Any value of the judge's score: the sample has to be blind to the verdict.
+                                    .conditions(any(overrides.scoreName()))
+                                    .perDay(overrides.perDay())
+                                    .build()))
+                            .steps(List.of(Automation.Step.builder()
+                                    .id("review").type(Automation.StepType.ANNOTATION_QUEUE_ADD.getValue())
+                                    .annotationQueueName(overrides.annotationQueueName())
+                                    .build()))
+                            .limits(Automation.Limits.builder().maxItemsPerDay(overrides.perDay()).build())
+                            .build(),
+                    Automation.builder()
+                            .projectId(project.id()).name("Check %s against reviewers".formatted(overrides.scoreName()))
+                            .enabled(true)
+                            .recipe(Automation.Recipe.builder().id(ALIGN).version(VERSION).build())
+                            .triggers(List.of(Automation.Trigger.builder()
+                                    .event(Automation.Event.ANNOTATION_QUEUE_SUBMITTED.getValue())
+                                    .annotationQueueName(overrides.annotationQueueName())
+                                    .n(overrides.n())
+                                    .build()))
+                            .steps(alignSteps(overrides))
+                            .limits(Automation.Limits.builder().maxRunsPerDay(10).build())
+                            .build());
+            case IMPROVE -> List.of(Automation.builder()
+                    .projectId(project.id()).name("Optimize %s as the suite grows".formatted(
+                            Optional.ofNullable(overrides.promptName()).orElse("the prompt")))
                     .enabled(true)
-                    .recipe(Automation.Recipe.builder().id(ALIGN).version(VERSION).build())
+                    .recipe(Automation.Recipe.builder().id(IMPROVE).version(VERSION).build())
                     .triggers(List.of(Automation.Trigger.builder()
-                            .event(Automation.Event.FEEDBACK_SCORE_CREATED.getValue()).scope(Automation.Scope.TRACE)
-                            // Any value of the judge's score: the sample has to be blind to the verdict.
-                            .conditions(any(overrides.scoreName()))
-                            .perDay(overrides.perDay())
+                            .event(Automation.Event.TEST_SUITE_GREW.getValue())
+                            .testSuiteName(overrides.testSuiteName())
+                            .n(overrides.n())
                             .build()))
-                    .steps(List.of(Automation.Step.builder()
-                            .id("review").type(Automation.StepType.ANNOTATION_QUEUE_ADD.getValue())
-                            .annotationQueueName(overrides.annotationQueueName())
-                            .build()))
-                    .limits(Automation.Limits.builder().maxItemsPerDay(overrides.perDay()).build())
+                    .steps(improveSteps(overrides))
+                    .limits(Automation.Limits.builder().maxRunsPerDay(5).build())
                     .build());
             default -> throw refuse(UNKNOWN_RECIPE, "'%s' is not a recipe".formatted(recipe.id()));
         };
@@ -456,6 +524,76 @@ public class WorkflowService {
         return steps;
     }
 
+    /** Optimize, save the winner only when it gained enough, and tell someone when it did. */
+    private static List<Automation.Step> improveSteps(Workflow.Overrides overrides) {
+        var steps = new java.util.ArrayList<Automation.Step>();
+        steps.add(Automation.Step.builder()
+                .id("optimize").type(Automation.StepType.OPTIMIZER_RUN.getValue())
+                .testSuiteName(overrides.testSuiteName())
+                .promptName(overrides.promptName())
+                .model(overrides.model())
+                .metric(overrides.metric())
+                .optimizer(overrides.optimizer())
+                .build());
+        steps.add(Automation.Step.builder()
+                .id("save").type(Automation.StepType.PROMPT_VERSION_SAVE.getValue())
+                .promptName(overrides.promptName())
+                .onlyIf(atLeast("optimize.gain", overrides.minGain()))
+                .build());
+        if (overrides.notifyUrl() != null) {
+            steps.add(Automation.Step.builder()
+                    .id("notify").type(Automation.StepType.NOTIFY.getValue())
+                    .url(overrides.notifyUrl())
+                    .kind(notifyKind(overrides.notifyUrl()))
+                    .message("Opik Improve saved a new version of %s".formatted(overrides.promptName()))
+                    .onlyIf(atLeast("optimize.gain", overrides.minGain()))
+                    .build());
+        }
+        return steps;
+    }
+
+    /** Measure agreement every N reviews; ask for a judge revision only when it fell under the floor. */
+    private static List<Automation.Step> alignSteps(Workflow.Overrides overrides) {
+        var steps = new java.util.ArrayList<Automation.Step>();
+        steps.add(Automation.Step.builder()
+                .id("agreement").type(Automation.StepType.JUDGE_AGREEMENT.getValue())
+                .scoreName(overrides.scoreName())
+                .annotationQueueName(overrides.annotationQueueName())
+                .threshold(overrides.threshold())
+                .build());
+        if (overrides.notifyUrl() != null) {
+            steps.add(Automation.Step.builder()
+                    .id("revise").type(Automation.StepType.JUDGE_REVISE.getValue())
+                    .scoreName(overrides.scoreName())
+                    .url(overrides.notifyUrl())
+                    .kind(notifyKind(overrides.notifyUrl()))
+                    .onlyIf(Automation.StepConditions.builder().groups(List.of(
+                            Automation.StepConditions.Group.builder().conditions(List.of(
+                                    Automation.StepConditions.Condition.builder()
+                                            .stepOutput("agreement.agreement")
+                                            .operator(ScoreConditionOperator.LESS_THAN).value(DEFAULT_MIN_AGREEMENT)
+                                            .build()))
+                                    .build()))
+                            .build())
+                    .build());
+        }
+        return steps;
+    }
+
+    private static Automation.NotifyKind notifyKind(String url) {
+        return url.contains("hooks.slack.com") ? Automation.NotifyKind.SLACK : Automation.NotifyKind.WEBHOOK;
+    }
+
+    private static Automation.StepConditions atLeast(String stepOutput, double value) {
+        return Automation.StepConditions.builder().groups(List.of(
+                Automation.StepConditions.Group.builder().conditions(List.of(
+                        Automation.StepConditions.Condition.builder()
+                                .stepOutput(stepOutput)
+                                .operator(ScoreConditionOperator.GREATER_THAN_OR_EQUAL).value(value).build()))
+                        .build()))
+                .build();
+    }
+
     /** Creates the suite or queue a template names when the project has none yet. */
     private Mono<Void> ensureTargets(String workspaceId, String userName, Project project,
             List<Automation> templates) {
@@ -467,7 +605,9 @@ public class WorkflowService {
                     case DATASET_ADD -> Mono.fromRunnable(() -> ensureDataset(workspaceId, userName, project,
                             step.datasetName(), DatasetType.DATASET)).subscribeOn(Schedulers.boundedElastic());
                     case ANNOTATION_QUEUE_ADD -> ensureQueue(project, step.annotationQueueName());
-                    case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY -> Mono.empty();
+                    case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY, OPTIMIZER_RUN, PROMPT_VERSION_SAVE, JUDGE_AGREEMENT,
+                            JUDGE_REVISE ->
+                        Mono.empty();
                     case null -> Mono.empty();
                 })
                 .then();

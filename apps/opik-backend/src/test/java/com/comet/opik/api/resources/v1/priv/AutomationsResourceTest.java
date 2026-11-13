@@ -127,6 +127,7 @@ class AutomationsResourceTest {
     private TraceResourceClient traceResourceClient;
     private PromptResourceClient promptResourceClient;
     private ExperimentResourceClient experimentResourceClient;
+    private com.comet.opik.api.resources.utils.resources.OptimizationResourceClient optimizationResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -138,6 +139,8 @@ class AutomationsResourceTest {
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        this.optimizationResourceClient = new com.comet.opik.api.resources.utils.resources.OptimizationResourceClient(
+                client, baseURI, factory);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
     }
 
@@ -156,7 +159,7 @@ class AutomationsResourceTest {
         assertRefused(post(definition(project.id(), suiteId).toBuilder()
                 .triggers(List.of(trigger().toBuilder().event("schedule").build())).build()), "unknown_event");
         assertRefused(post(definition(project.id(), suiteId).toBuilder()
-                .steps(List.of(step(suiteId).toBuilder().type("optimizer.run").build())).build()), "unknown_step");
+                .steps(List.of(step(suiteId).toBuilder().type("slack.post").build())).build()), "unknown_step");
         assertRefused(post(definition(project.id(), suiteId).toBuilder()
                 .steps(List.of(step(suiteId).toBuilder().testSuiteId(UUID.randomUUID()).build())).build()),
                 "target_not_found");
@@ -315,7 +318,7 @@ class AutomationsResourceTest {
         var project = newProject();
 
         var workflows = workflows(project.id());
-        assertThat(workflows).extracting(Workflow::recipe).containsExactly("collect", "gate", "align");
+        assertThat(workflows).extracting(Workflow::recipe).containsExactly("collect", "gate", "align", "improve");
         assertThat(workflows).allMatch(workflow -> workflow.state() == Workflow.State.OFF);
         assertThat(workflows.getFirst().overrides().testSuiteName()).isEqualTo("Regression · " + project.name());
 
@@ -375,11 +378,22 @@ class AutomationsResourceTest {
 
         var enabled = enable(Workflow.EnableRequest.builder().recipe("align").projectId(project.id())
                 .overrides(Workflow.Overrides.builder().scoreName(SCORE).perDay(3).build()).build(), false);
+        assertThat(enabled.created()).hasSize(2);
         var review = enabled.created().getFirst();
         assertThat(review.recipe().id()).isEqualTo("align");
         assertThat(review.triggers().getFirst().perDay()).isEqualTo(3);
         assertThat(review.steps().getFirst().annotationQueueName()).isEqualTo(WorkflowService.REVIEW_QUEUE_NAME);
         assertThat(review.steps().getFirst().annotationQueueId()).isNotNull();
+        // The second half counts reviews on that same queue and measures agreement with the judge.
+        var agreement = enabled.created().get(1);
+        assertThat(agreement.triggers().getFirst().event()).isEqualTo("annotation_queue:submitted");
+        assertThat(agreement.triggers().getFirst().annotationQueueId())
+                .isEqualTo(review.steps().getFirst().annotationQueueId());
+        assertThat(agreement.triggers().getFirst().n()).isEqualTo(WorkflowService.DEFAULT_REVIEWS);
+        assertThat(agreement.steps().getFirst().type()).isEqualTo("judge.agreement");
+        assertThat(agreement.steps().getFirst().scoreName()).isEqualTo(SCORE);
+        assertThat(agreement.steps().getFirst().annotationQueueId())
+                .isEqualTo(review.steps().getFirst().annotationQueueId());
         assertThat(workflows(project.id()).stream().filter(w -> w.recipe().equals("align")).findFirst().orElseThrow()
                 .state()).isEqualTo(Workflow.State.ON);
 
@@ -500,8 +514,12 @@ class AutomationsResourceTest {
         // the test finishes the experiment the way an SDK run would, through the API.
         Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
                 .untilAsserted(() -> assertThat(runs(gate.id()).content())
-                        .anySatisfy(run -> assertThat(run.waitingOn()).startsWith("experiment:finished:")));
-        var pending = runs(gate.id()).content().getFirst();
+                        .anySatisfy(run -> {
+                            assertThat(run.itemId()).isEqualTo("acme/demo@abc123");
+                            assertThat(run.waitingOn()).startsWith("experiment:finished:");
+                        }));
+        var pending = runs(gate.id()).content().stream()
+                .filter(candidate -> "acme/demo@abc123".equals(candidate.itemId())).findFirst().orElseThrow();
         assertThat(pending.status()).isEqualTo(AutomationRun.Status.PENDING);
         assertThat(pending.outputs().get("run.experiment_id").asText()).isNotBlank();
         UUID experimentId = UUID.fromString(pending.waitingOn().substring("experiment:finished:".length()));
@@ -512,9 +530,8 @@ class AutomationsResourceTest {
                         com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
                                 com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo(
                                         "/repos/acme/demo/statuses/abc123"))));
-        var runs = runs(gate.id());
-        assertThat(runs.total()).isEqualTo(1);
-        var run = runs.content().getFirst();
+        var run = runs(gate.id()).content().stream()
+                .filter(candidate -> "acme/demo@abc123".equals(candidate.itemId())).findFirst().orElseThrow();
         assertThat(run.kind()).isEqualTo(AutomationRun.Kind.SINGLE);
         assertThat(run.status()).isEqualTo(AutomationRun.Status.DONE);
         assertThat(run.trigger().event()).isEqualTo("ci:run");
@@ -544,16 +561,97 @@ class AutomationsResourceTest {
                 .build(), false).created().getFirst();
         assertThat(gate.steps()).extracting(Automation.Step::type).containsExactly("test_suite.run");
 
-        promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+        var version = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
+        // The version saved before Gate was on may still be consumed after it, so the run is matched by item,
+        // and it is read once parked: the record exists while the suite run is still being started.
         Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
-                .untilAsserted(() -> assertThat(runs(gate.id()).total()).isEqualTo(1));
-        var run = runs(gate.id()).content().getFirst();
+                .untilAsserted(() -> assertThat(runs(gate.id()).content())
+                        .anySatisfy(candidate -> {
+                            assertThat(candidate.itemId()).isEqualTo(version.id().toString());
+                            assertThat(candidate.waitingOn()).startsWith("experiment:finished:");
+                        }));
+        var run = runs(gate.id()).content().stream()
+                .filter(candidate -> version.id().toString().equals(candidate.itemId())).findFirst().orElseThrow();
         assertThat(run.trigger().event()).isEqualTo("prompt:committed");
         assertThat(run.status()).isEqualTo(AutomationRun.Status.PENDING);
         assertThat(run.waitingOn()).startsWith("experiment:finished:");
         assertThat(run.depth()).isZero();
         assertThat(run.parentRunId()).isNull();
+    }
+
+    @Test
+    @DisplayName("The suite growing by N fires Improve: the optimizer starts, the run parks, and resumes when it ends")
+    void suiteGrowthFiresImproveAndParksOnTheOptimization() {
+        var project = newProject();
+        var suiteId = newSuite(project.id(), "Regression · " + project.name());
+        addSuiteCase(suiteId);
+        var prompt = com.comet.opik.api.Prompt.builder().name("support-" + UUID.randomUUID()).build();
+        promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+        promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+        enable(Workflow.EnableRequest.builder().recipe("gate").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().promptName(prompt.name()).model("gpt-4o-mini").build())
+                .build(), false);
+        // Improve is offered once Gate tests versions, and still has to be told the prompt and the model.
+        assertThat(recommendations(project.id())).anySatisfy(recommendation -> {
+            assertThat(recommendation.workflow()).isEqualTo("improve");
+            assertThat(recommendation.blockedUntil()).isNull();
+        });
+
+        var improve = enable(Workflow.EnableRequest.builder().recipe("improve").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().promptName(prompt.name()).model("gpt-4o-mini").n(2)
+                        .minGain(0.0).build())
+                .build(), false).created().getFirst();
+        assertThat(improve.triggers().getFirst().event()).isEqualTo("test_suite:grew");
+        assertThat(improve.triggers().getFirst().testSuiteId()).isEqualTo(suiteId);
+        assertThat(improve.triggers().getFirst().n()).isEqualTo(2);
+        assertThat(improve.steps()).extracting(Automation.Step::type)
+                .containsExactly("optimizer.run", "prompt_version.save");
+        assertThat(improve.steps().get(1).onlyIf().groups().getFirst().conditions().getFirst().stepOutput())
+                .isEqualTo("optimize.gain");
+
+        addSuiteCase(suiteId);
+        addSuiteCase(suiteId);
+
+        // The poll counts the growth, the optimizer starts, and the run parks until it ends.
+        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> assertThat(runs(improve.id()).content())
+                        .anySatisfy(run -> assertThat(run.waitingOn()).startsWith("optimization:finished:")));
+        var pending = runs(improve.id()).content().getFirst();
+        assertThat(pending.trigger().event()).isEqualTo("test_suite:grew");
+        assertThat(pending.triggerPayload().get("test_suite_id").asText()).isEqualTo(suiteId.toString());
+        UUID optimizationId = UUID.fromString(pending.outputs().get("optimize.optimization_id").asText());
+        assertThat(pending.outputs().get("optimize.prompt_version_id").asText()).isNotBlank();
+        var optimization = optimizationResourceClient.get(optimizationId, API_KEY, TEST_WORKSPACE, 200);
+        assertThat(optimization.studioConfig().datasetName()).isEqualTo("Regression · " + project.name());
+        assertThat(optimization.studioConfig().llmModel().model()).isEqualTo("gpt-4o-mini");
+        assertThat(optimization.studioConfig().prompt().messages()).isNotEmpty();
+
+        // No worker runs here, so the test ends the optimization the way the worker does, through the API.
+        optimizationResourceClient.update(optimizationId, com.comet.opik.api.OptimizationUpdate.builder()
+                .status(com.comet.opik.api.OptimizationStatus.COMPLETED).build(), API_KEY, TEST_WORKSPACE, 204);
+        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> assertThat(runs(improve.id()).content().getFirst().status())
+                        .isNotEqualTo(AutomationRun.Status.PENDING));
+        var run = runs(improve.id()).content().getFirst();
+        assertThat(run.waitingOn()).isNull();
+        assertThat(run.outputs().get("optimize.gain").asDouble()).isZero();
+        assertThat(run.steps()).extracting(AutomationRun.Step::id).containsExactly("optimize", "save");
+        assertThat(run.steps().get(0).done()).isEqualTo(1);
+        // The gain held, but an optimization with no trials leaves nothing to save.
+        assertThat(run.steps().get(1).failed()).isEqualTo(1);
+        assertThat(run.lastError()).contains("no trial");
+
+        var loop = loop(project.id());
+        assertThat(loop.nodes()).extracting(com.comet.opik.api.automations.Loop.Node::kind)
+                .contains("project", "test_suite", "prompt");
+        assertThat(loop.edges()).extracting(com.comet.opik.api.automations.Loop.Edge::recipe)
+                .containsExactlyInAnyOrder("gate", "improve");
+        var edge = loop.edges().stream().filter(candidate -> "improve".equals(candidate.recipe())).findFirst()
+                .orElseThrow();
+        assertThat(edge.from()).startsWith("suite:");
+        assertThat(edge.to()).allMatch(node -> node.startsWith("prompt:"));
+        assertThat(edge.produced().get("fired")).isEqualTo(1);
     }
 
     private void addSuiteCase(UUID suiteId) {
@@ -704,6 +802,13 @@ class AutomationsResourceTest {
                 .post(Entity.json(request))) {
             assertThat(response.getStatus()).isEqualTo(200);
             return response.readEntity(Workflow.Enabled.class);
+        }
+    }
+
+    private com.comet.opik.api.automations.Loop loop(UUID projectId) {
+        try (var response = request(PATH.formatted(baseURI) + "/loop", Map.of("project_id", projectId)).get()) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            return response.readEntity(com.comet.opik.api.automations.Loop.class);
         }
     }
 

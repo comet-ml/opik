@@ -9,6 +9,7 @@ import com.comet.opik.api.automations.AutomationTestRequest;
 import com.comet.opik.api.automations.AutomationUpdate;
 import com.comet.opik.api.automations.CiRunEvent;
 import com.comet.opik.api.automations.GithubIntegration;
+import com.comet.opik.api.automations.Loop;
 import com.comet.opik.api.automations.Recommendation;
 import com.comet.opik.api.automations.Workflow;
 import com.comet.opik.domain.automations.AutomationEvent;
@@ -17,6 +18,7 @@ import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.domain.automations.AutomationRunService;
 import com.comet.opik.domain.automations.AutomationService;
 import com.comet.opik.domain.automations.GithubIntegrationService;
+import com.comet.opik.domain.automations.LoopService;
 import com.comet.opik.domain.automations.RecommendationService;
 import com.comet.opik.domain.automations.WorkflowService;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -79,6 +81,7 @@ public class AutomationsResource {
     private final @NonNull AutomationExecutor executor;
     private final @NonNull WorkflowService workflowService;
     private final @NonNull RecommendationService recommendationService;
+    private final @NonNull LoopService loopService;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull AutomationEventPublisher eventPublisher;
     private final @NonNull GithubIntegrationService githubIntegrationService;
@@ -242,6 +245,15 @@ public class AutomationsResource {
         List<Recommendation> recommendations = recommendationService.list(workspaceId(), projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext)).block();
         return Response.ok(recommendations).build();
+    }
+
+    @GET
+    @Path("/loop")
+    @Operation(operationId = "getLoop", summary = "Get the loop", description = "The running automations as edges between the objects they read and write, with what each produced over the window", responses = {
+            @ApiResponse(responseCode = "200", description = "Loop", content = @Content(schema = @Schema(implementation = Loop.class)))})
+    public Response getLoop(@QueryParam("project_id") @NotNull UUID projectId) {
+        checkEnabled();
+        return Response.ok(loopService.describe(workspaceId(), projectId)).build();
     }
 
     @POST

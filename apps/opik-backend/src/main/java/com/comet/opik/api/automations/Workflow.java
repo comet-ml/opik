@@ -50,7 +50,11 @@ public record Workflow(
             @Nullable String promptName,
             @Nullable String model,
             @Nullable String repository,
-            @Nullable String notifyUrl) {
+            @Nullable String notifyUrl,
+            @Nullable String metric,
+            @Nullable String optimizer,
+            @Nullable Integer n,
+            @Nullable Double minGain) {
     }
 
     @Getter
