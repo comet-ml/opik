@@ -49,6 +49,31 @@ def reason_to_text(value: Any) -> str:
     return str(value)
 
 
+def _extract_all_json_objects(content: str) -> list[Any]:
+    """Decode every complete top-level JSON object in ``content``.
+
+    Scanning restarts at each ``{`` so prose or a malformed fragment between
+    objects cannot hide a later one; a failed decode just moves the scan
+    past that brace. A ``{`` inside a decoded object's strings is never
+    re-scanned because the scan resumes past the end of each decoded object.
+    """
+    decoder = json.JSONDecoder()
+    objects: list[Any] = []
+    pos = 0
+    while True:
+        start = content.find("{", pos)
+        if start == -1:
+            break
+        try:
+            obj, end = decoder.raw_decode(content[start:])
+        except json.JSONDecodeError:
+            pos = start + 1
+            continue
+        objects.append(obj)
+        pos = start + end
+    return objects
+
+
 def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     first_paren = content.find("{")
     last_paren = content.rfind("}")
@@ -68,13 +93,21 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
 
     # Fallback: under reasoning models with response_format the LLM
     # occasionally emits multiple complete JSON objects glued together
-    # (e.g. ``{...}\n{...}``). Streaming-decode the first complete object
-    # so the call doesn't fail when the model duplicates its answer.
-    decoder = json.JSONDecoder()
-    try:
-        obj, _ = decoder.raw_decode(content[first_paren:])
-        return obj
-    except json.JSONDecodeError as e:
+    # (e.g. ``{...}\n{...}``). Decode every complete object: identical
+    # duplicates (the known reasoning-model behaviour) still return the
+    # verdict, but conflicting objects are ambiguous — trusting the first
+    # one lets quoted candidate content override the judge's real verdict
+    # (#7848), so fail loud instead of guessing.
+    objects = _extract_all_json_objects(content[first_paren:])
+    if not objects:
         raise exceptions.JSONParsingError(
-            f"Failed to extract presumably JSON dictionary: {str(e)}"
-        ) from e
+            "Failed to extract presumably JSON dictionary: "
+            "no complete JSON object found in content"
+        )
+    if all(obj == objects[0] for obj in objects):
+        return objects[0]
+    raise exceptions.JSONParsingError(
+        "Failed to extract presumably JSON dictionary: "
+        "multiple conflicting JSON objects found in content, "
+        "refusing to guess which one is the judge's verdict"
+    )
