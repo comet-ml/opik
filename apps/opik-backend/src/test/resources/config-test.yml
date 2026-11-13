@@ -898,6 +898,9 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: PT10S
+    # Default: PT5M
+    # Description: Cache TTL for the topics read API's counts per topic and day of a ready project
+    topics_day_counts: PT5M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
