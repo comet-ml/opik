@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -456,6 +457,30 @@ class TopicsStorageTest {
 
         assertThat(last).isEqualTo(1);
         assertThat(data.state(projectId).labelsComplete()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the passes to resume are the workspaces' projects whose labels are not complete, the oldest save "
+            + "first, whatever order they were saved in")
+    void labelsIncompleteOldestFirst() {
+        var workspaceId = UUID.randomUUID().toString();
+        var newest = UUID.randomUUID();
+        var oldest = UUID.randomUUID();
+        var middle = UUID.randomUUID();
+        var complete = UUID.randomUUID();
+        data.savedList(workspaceId, newest, NIGHT, BUILT);
+        data.savedList(workspaceId, oldest, NIGHT.minus(Duration.ofDays(3)), BUILT);
+        data.savedList(workspaceId, middle, NIGHT.minus(Duration.ofDays(1)), BUILT);
+        data.savedList(workspaceId, complete, NIGHT.minus(Duration.ofDays(4)), BUILT);
+        var completeRunId = data.state(complete).lastRunId();
+        template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .markLabelsComplete(workspaceId, complete, completeRunId));
+        data.savedList(UUID.randomUUID().toString(), UUID.randomUUID(), NIGHT.minus(Duration.ofDays(5)), BUILT);
+
+        var unfinished = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findLabelsIncomplete(List.of(workspaceId)));
+
+        assertThat(unfinished).extracting(TopicDAO.ProjectKey::projectId).containsExactly(oldest, middle, newest);
     }
 
     private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {

@@ -168,7 +168,7 @@ public class TopicsFirstBuildService {
             try {
                 var timeoutEnd = Instant.now().plus(projectTimeout).minus(TopicsRebuildService.LABEL_SLACK);
                 var deadline = end.isBefore(timeoutEnd) ? end : timeoutEnd;
-                log.info("Topics labelling pass resumed, workspace '{}', project '{}'", project.workspaceId(),
+                log.debug("Topics labelling pass resumed, workspace '{}', project '{}'", project.workspaceId(),
                         project.projectId());
                 labelService.labelWindow(project.workspaceId(), project.projectId(), deadline,
                         TopicWindowLabelService.Trigger.RESUME);

@@ -1117,7 +1117,7 @@ topics:
     interval: 10m
     #  Default: 9m
     #  Description: No project starts after this much of a run; the rest wait for the next run. Unfinished
-    #  labelling passes use up to half of it while a first build waits, all of it otherwise. Under interval
+    #  labelling passes use up to half of it while a first build waits, all of it otherwise. Must be shorter than interval
     budget: 9m
     #  Default: 72h
     #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the

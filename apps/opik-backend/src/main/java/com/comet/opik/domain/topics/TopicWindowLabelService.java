@@ -160,8 +160,12 @@ public class TopicWindowLabelService {
                         + "'{}'; its labels stay as the newer run left them", runId, projectId);
             }
         } catch (RuntimeException exception) {
-            log.warn("Topics labelling pass could not mark run '{}' complete, project '{}'; the first-build job "
-                    + "runs the pass again", runId, projectId, exception);
+            // A Jdbi statement error quotes the bound arguments: the exception types only, and a SQL error's state
+            // and code, as a failed run logs them.
+            log.warn("Topics labelling pass could not mark run '{}' complete, project '{}', errors '{}'; the "
+                    + "first-build job runs the pass again", runId, projectId,
+                    ExceptionUtils
+                            .getThrowableList(exception).stream().map(TopicsRebuildService::errorType).toList());
         }
     }
 

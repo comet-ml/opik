@@ -242,7 +242,8 @@ workspaces, the oldest save first, and goes on with each pass under the project'
 logs and metrics). A paused or opted-out workspace is not read. A pass stops at half the job's budget while a first
 build waits (4.5 minutes by default), at the whole budget otherwise, and 30 seconds before the project timeout. A
 window that needs more time is finished over several runs, one every `TOPICS_FIRST_BUILD_INTERVAL`; a project waits
-behind the projects saved before it.
+behind the projects saved before it. A resumed pass takes the window's start from `TOPICS_BUILD_WINDOW_DAYS` as it is
+then: change that setting while passes are unfinished, and they label the new window.
 
 To see the projects that wait:
 
@@ -255,8 +256,9 @@ WHERE labels_complete = FALSE ORDER BY last_success_at;
 When a project stays on that list:
 
 1. Check that its workspace is opted in to both topics and ai-labels (see "Opting workspaces in and out").
-2. Search the logs for its project id. `Topics labelling pass resumed` means the job reached it. `labelling pass not
-   resumed, ... another run holds its lock` means a run of the project holds `topics:project:<project_id>`.
+2. Search the logs for its project id. `labelling pass ended` with `trigger 'resume'` means the job reached it.
+   `labelling pass not resumed, ... another run holds its lock` means a run of the project holds
+   `topics:project:<project_id>`.
 3. Read how the pass ended: `labelling pass ended` with `complete 'false'`, `labelling pass cut` with its reason, or
    `labelling pass failed` with the exception. A pass that fails again and again usually means a ClickHouse read or
    insert failure: look for `topics:read_unlabelled` in `system.query_log`.

@@ -649,7 +649,7 @@ public class TopicsRebuildService {
         }
     }
 
-    private static String errorType(Throwable throwable) {
+    static String errorType(Throwable throwable) {
         return throwable instanceof SQLException sql
                 ? "%s(state %s, code %s)".formatted(sql.getClass().getName(), sql.getSQLState(), sql.getErrorCode())
                 : throwable.getClass().getName();
