@@ -773,8 +773,9 @@ def add_start_candidates(
             client = opik_client.get_global_client()
 
             if client.config.log_start_trace_span:
-                client.__internal_api__span__(
-                    **span_creation_result.span_data.as_start_parameters
+                _send_start_message(
+                    client.__internal_api__span__,
+                    span_creation_result.span_data.as_start_parameters,
                 )
     else:
         _show_root_span_not_created_warning_if_needed(
@@ -828,7 +829,25 @@ def add_start_trace_candidate(
 
     client = opik_client.get_global_client()
     if client.config.log_start_trace_span:
-        client.__internal_api__trace__(**trace_data.as_start_parameters)
+        _send_start_message(
+            client.__internal_api__trace__, trace_data.as_start_parameters
+        )
+
+
+def _send_start_message(
+    send: Callable[..., Any], start_parameters: Dict[str, Any]
+) -> None:
+    # The span or trace is already on the context, so a failed start message must not
+    # escape. Raising here would skip _after_call and leave it there for later calls.
+    try:
+        send(**start_parameters)
+    except Exception as exception:
+        LOGGER.error(
+            logging_messages.UNEXPECTED_EXCEPTION_ON_START_MESSAGE,
+            start_parameters.get("name"),
+            str(exception),
+            exc_info=True,
+        )
 
 
 def _show_root_span_not_created_warning_if_needed(
