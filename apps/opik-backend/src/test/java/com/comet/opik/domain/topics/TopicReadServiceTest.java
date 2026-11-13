@@ -4,9 +4,13 @@ import com.clickhouse.client.api.ServerException;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServiceUnavailableException;
@@ -19,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
+import reactor.util.context.Context;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
@@ -28,6 +33,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
@@ -229,6 +235,50 @@ class TopicReadServiceTest {
         verifyNoInteractions(workspaces, topicDAO, traceTopicsDAO);
         verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
         assertThat(meter.points(DURATION)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("filter scope: no topic filter reads nothing; topics off, a workspace not eligible or no live topic "
+            + "is empty; else the live ids and the guards of topics.filter")
+    void filterScope() {
+        var topicFilter = List.of(TraceFilter.builder()
+                .field(TraceField.TOPIC_ID).operator(Operator.EQUAL).value(UUID.randomUUID().toString()).build());
+        var nameFilter = List.of(TraceFilter.builder()
+                .field(TraceField.NAME).operator(Operator.EQUAL).value("name").build());
+        var topic = topic();
+        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
+
+        config.setEnabled(true);
+        assertThat(filterScope(null)).isEmpty();
+        assertThat(filterScope(nameFilter)).isEmpty();
+        verifyNoInteractions(workspaces, topicDAO);
+
+        config.setEnabled(false);
+        assertThat(filterScope(topicFilter)).isEmpty();
+        verifyNoInteractions(workspaces, topicDAO);
+
+        config.setEnabled(true);
+        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(false);
+        assertThat(filterScope(topicFilter)).isEmpty();
+        verifyNoInteractions(topicDAO);
+
+        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(true);
+        assertThat(filterScope(topicFilter)).hasValueSatisfying(scope -> {
+            assertThat(scope.liveIds()).containsExactly(topic.id().toString());
+            assertThat(scope.maxExecutionSeconds()).isEqualTo(30L);
+            assertThat(scope.maxMemoryUsage()).isEqualTo(4L * 1024 * 1024 * 1024);
+        });
+        // No state read: the filter needs only the live topics.
+        verify(topicDAO, never()).findStates(any(), any());
+
+        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of());
+        assertThat(filterScope(topicFilter)).isEmpty();
+    }
+
+    private Optional<TopicFilterScope> filterScope(List<TraceFilter> filters) {
+        return service.filterScope(filters, projectId)
+                .contextWrite(Context.of(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
     }
 
     private TopicReadService service(Instant now) {

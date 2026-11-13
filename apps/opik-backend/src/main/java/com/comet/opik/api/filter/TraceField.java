@@ -39,6 +39,7 @@ public enum TraceField implements Field {
     EXPERIMENT_IDS(EXPERIMENT_IDS_QUERY_PARAM, FieldType.STRING_LIST),
     SOURCE(SOURCE_QUERY_PARAM, FieldType.ENUM_LEGACY),
     ENVIRONMENT(ENVIRONMENT_QUERY_PARAM, FieldType.ENUM),
+    TOPIC_ID(TOPIC_ID_QUERY_PARAM, FieldType.STRING_EXACT),
     ;
 
     private final String queryParamField;

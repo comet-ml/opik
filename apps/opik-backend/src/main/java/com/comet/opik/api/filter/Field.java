@@ -61,6 +61,7 @@ public interface Field {
     String COMMENTS_QUERY_PARAM = "comments";
     String EXPERIMENT_ID_QUERY_PARAM = "experiment_id";
     String EXPERIMENT_IDS_QUERY_PARAM = "experiment_ids";
+    String TOPIC_ID_QUERY_PARAM = "topic_id";
     String WEBHOOK_URL_QUERY_PARAM = "webhook_url";
     String ALERT_TYPE_QUERY_PARAM = "alert_type";
     String ENABLED_QUERY_PARAM = "enabled";
