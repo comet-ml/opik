@@ -8,12 +8,14 @@ import { logger } from "./logger";
  * @param stream The ReadableStream of bytes
  * @param serializer Schema for deserializing the stream data (can be passed as ExperimentItemCompare, etc.)
  * @param nbSamples Optional maximum number of samples to parse
+ * @param onRecord Optional callback for every decoded JSON record, including records that fail schema validation
  * @returns Array of parsed objects
  */
 export async function parseNdjsonStreamToArray<T>(
   stream: ReadableStream<Uint8Array>,
   serializer: core.serialization.Schema<unknown, T>,
-  nbSamples?: number
+  nbSamples?: number,
+  onRecord?: (record: unknown) => void
 ): Promise<T[]> {
   // Early return for nbSamples=0 to avoid processing any items
   if (nbSamples === 0) {
@@ -43,6 +45,7 @@ export async function parseNdjsonStreamToArray<T>(
 
         try {
           const parsed = JSON.parse(line);
+          onRecord?.(parsed);
           const result = serializer.parse(parsed, { unrecognizedObjectKeys: "strip" });
 
           if (result.ok) {
@@ -74,6 +77,7 @@ export async function parseNdjsonStreamToArray<T>(
     ) {
       try {
         const parsed = JSON.parse(buffer);
+        onRecord?.(parsed);
         const result = serializer.parse(parsed, { unrecognizedObjectKeys: "strip" });
 
         if (result.ok) {
@@ -109,4 +113,66 @@ export function splitIntoBatches<T>(
     batches.push(items.slice(i, i + options.maxBatchSize));
   }
   return batches;
+}
+
+const MAX_STREAM_PAGE_SIZE = 2000;
+
+async function readStreamPage<T>(
+  stream: ReadableStream<Uint8Array>,
+  serializer: core.serialization.Schema<unknown, T>,
+  cursorField: string,
+  limit: number
+) {
+  let recordsRead = 0;
+  let lastCursorRead: string | undefined;
+  const items = await parseNdjsonStreamToArray<T>(
+    stream,
+    serializer,
+    limit,
+    (record) => {
+      recordsRead++;
+      const id = (record as Record<string, unknown> | null)?.[cursorField];
+      if (typeof id === "string") {
+        lastCursorRead = id;
+      }
+    }
+  );
+  return { items, recordsRead, lastCursorRead };
+}
+
+export async function readAllStreamPages<T>(
+  fetchPage: (
+    limit: number,
+    cursor: string | undefined
+  ) => Promise<ReadableStream<Uint8Array>>,
+  serializer: core.serialization.Schema<unknown, T>,
+  cursorField: string,
+  {
+    maxResults = Number.POSITIVE_INFINITY,
+    startAfter,
+  }: { maxResults?: number; startAfter?: string } = {}
+): Promise<T[]> {
+  const results: T[] = [];
+  let cursor = startAfter;
+
+  while (results.length < maxResults) {
+    const limit = Math.min(maxResults - results.length, MAX_STREAM_PAGE_SIZE);
+    const page = await readStreamPage(
+      await fetchPage(limit, cursor),
+      serializer,
+      cursorField,
+      limit
+    );
+    results.push(...page.items);
+
+    const isLastPage = page.recordsRead < limit;
+    const cursorMoved =
+      page.lastCursorRead !== undefined && page.lastCursorRead !== cursor;
+    if (isLastPage || !cursorMoved) {
+      break;
+    }
+    cursor = page.lastCursorRead;
+  }
+
+  return results;
 }

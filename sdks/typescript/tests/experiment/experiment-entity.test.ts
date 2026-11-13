@@ -470,59 +470,44 @@ describe("Experiment entity operations", () => {
     });
 
     it("should handle pagination with lastRetrievedId", async () => {
-      const mockFirstPageItem = createMockExperimentItemCompareRaw({
-        id: "experiment-item-1",
-        dataset_item_id: "dataset-item-1",
-        trace_id: "trace-1",
+      const firstPage = Array.from({ length: 2000 }, (_, i) =>
+        createMockExperimentItemCompareRaw({
+          id: `experiment-item-${i}`,
+          dataset_item_id: `dataset-item-${i}`,
+          trace_id: `trace-${i}`,
+          feedback_scores: undefined,
+        })
+      );
+      const lastItem = createMockExperimentItemCompareRaw({
+        id: "experiment-item-last",
+        dataset_item_id: "dataset-item-last",
+        trace_id: "trace-last",
         feedback_scores: undefined,
       });
 
-      const mockSecondPageItem = createMockExperimentItemCompareRaw({
-        id: "experiment-item-2",
-        dataset_item_id: "dataset-item-2",
-        trace_id: "trace-2",
-        feedback_scores: undefined,
-      });
-
       streamExperimentItemsSpy.mockImplementationOnce(() =>
-        mockAPIFunctionWithStream(JSON.stringify(mockFirstPageItem) + "\n")
+        mockAPIFunctionWithStream(
+          firstPage.map((item) => JSON.stringify(item)).join("\n")
+        )
       );
-
       streamExperimentItemsSpy.mockImplementationOnce(() =>
-        mockAPIFunctionWithStream(JSON.stringify(mockSecondPageItem) + "\n")
-      );
-
-      streamExperimentItemsSpy.mockImplementationOnce(() =>
-        mockAPIFunctionWithStream("")
+        mockAPIFunctionWithStream(JSON.stringify(lastItem) + "\n")
       );
 
       const items = await experiment.getItems();
 
-      expect(streamExperimentItemsSpy).toHaveBeenCalledTimes(3);
-
+      expect(streamExperimentItemsSpy).toHaveBeenCalledTimes(2);
       expect(
         streamExperimentItemsSpy.mock.calls[0][0].lastRetrievedId
       ).toBeUndefined();
-
       expect(streamExperimentItemsSpy.mock.calls[1][0].lastRetrievedId).toBe(
-        mockFirstPageItem.id
+        firstPage[1999].id
       );
-
-      expect(streamExperimentItemsSpy.mock.calls[2][0].lastRetrievedId).toBe(
-        mockSecondPageItem.id
-      );
-
-      expect(items).toHaveLength(2);
-      verifyExperimentItemContent(items[0], {
-        id: mockFirstPageItem.id as string,
-        datasetItemId: mockFirstPageItem.dataset_item_id,
-        traceId: mockFirstPageItem.trace_id,
-        feedbackScores: [],
-      });
-      verifyExperimentItemContent(items[1], {
-        id: mockSecondPageItem.id as string,
-        datasetItemId: mockSecondPageItem.dataset_item_id,
-        traceId: mockSecondPageItem.trace_id,
+      expect(items).toHaveLength(2001);
+      verifyExperimentItemContent(items[2000], {
+        id: lastItem.id as string,
+        datasetItemId: lastItem.dataset_item_id,
+        traceId: lastItem.trace_id,
         feedbackScores: [],
       });
     });

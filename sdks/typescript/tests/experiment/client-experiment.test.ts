@@ -90,6 +90,7 @@ describe("Opik experiment operations", () => {
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: mockExperiment.name,
         projectName: "opik-sdk-typescript",
+        limit: 2000,
       });
     });
 
@@ -109,6 +110,7 @@ describe("Opik experiment operations", () => {
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "nonexistent-experiment",
         projectName: "opik-sdk-typescript",
+        limit: 2000,
       });
     });
 
@@ -130,6 +132,7 @@ describe("Opik experiment operations", () => {
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "test-experiment",
         projectName: "opik-sdk-typescript",
+        limit: 2000,
       });
     });
 
@@ -156,6 +159,7 @@ describe("Opik experiment operations", () => {
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "test-experiment",
         projectName: "opik-sdk-typescript",
+        limit: 2000,
       });
     });
   });
@@ -309,6 +313,7 @@ describe("Opik experiment operations", () => {
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "experiment-one",
         projectName: "opik-sdk-typescript",
+        limit: 2000,
       });
     });
 
@@ -329,6 +334,7 @@ describe("Opik experiment operations", () => {
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "nonexistent-experiment",
         projectName: "opik-sdk-typescript",
+        limit: 2000,
       });
     });
 

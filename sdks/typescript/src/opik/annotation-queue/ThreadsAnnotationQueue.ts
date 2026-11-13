@@ -1,7 +1,7 @@
 import { OpikClient } from "@/client/Client";
 import { TraceThread, AnnotationQueuePublic } from "@/rest_api/api";
 import { serialization } from "@/rest_api";
-import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
+import { readAllStreamPages, splitIntoBatches } from "@/utils/stream";
 import { parseThreadFilterString } from "@/utils/searchHelpers";
 import { logger } from "@/utils/logger";
 import { AnnotationQueueItemMissingIdError } from "./errors";
@@ -63,24 +63,17 @@ export class ThreadsAnnotationQueue extends BaseAnnotationQueue {
 
     logger.debug(`Fetching items from annotation queue "${this.name}"`);
 
-    const threads = await this.fetchAllItems<TraceThread>(
-      async (limit, lastRetrievedThreadModelId) => {
-        const streamResponse =
-          await this.opik.api.traces.searchTraceThreads({
-            projectId: this.projectId,
-            filters: filters ?? undefined,
-            limit,
-            lastRetrievedThreadModelId,
-            truncate,
-          });
-
-        return parseNdjsonStreamToArray<TraceThread>(
-          streamResponse,
-          serialization.TraceThread,
-          limit
-        );
-      },
-      (thread) => thread.threadModelId
+    const threads = await readAllStreamPages<TraceThread>(
+      (limit, lastRetrievedThreadModelId) =>
+        this.opik.api.traces.searchTraceThreads({
+          projectId: this.projectId,
+          filters: filters ?? undefined,
+          limit,
+          lastRetrievedThreadModelId,
+          truncate,
+        }),
+      serialization.TraceThread,
+      "thread_model_id"
     );
 
     logger.debug(
