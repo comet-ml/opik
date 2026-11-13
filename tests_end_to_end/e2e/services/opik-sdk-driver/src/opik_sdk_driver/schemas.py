@@ -281,6 +281,57 @@ class DatasetInsertItemsSessionResponse(BaseModel):
     inserted: list[int]
 
 
+class DatasetInsertRetryAfterFailureRequest(BaseModel):
+    """One `Dataset` object driven through an ABORTED insert and then a retry.
+
+    The whole sequence has to live in one request for the same reason
+    `/datasets/insert-items-session` exists — the bridge builds a fresh client
+    per call, and the defect under test (opik#9393) is only reachable on an
+    object whose local hash cache survived a failed insert. Across two HTTP
+    calls the retry would re-sync no matter what the first insert did, and the
+    test could not fail.
+
+    The intermediate item counts are reported back rather than left for the
+    caller to read, because the caller cannot observe the moment between the
+    two inserts at all. They are read through a SEPARATE `get_dataset()` so the
+    subject object's cache is not touched by the reading.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    # Fed to the aborted insert as a generator that yields all of them and then
+    # raises, and then handed to the retry as a plain list. Small on purpose:
+    # the SDK batches at 1000 items, so a count below that means the aborted
+    # insert never flushes and nothing it hashed reaches the backend — which is
+    # the state a retry has to recover from.
+    items: list[dict[str, Any]]
+    workspace: str | None = None
+
+
+class DatasetInsertRetryAfterFailureResponse(BaseModel):
+    dataset_id: str
+    # str() of the exception the aborted insert raised. The route fails with a
+    # 500 if it raised nothing, rather than reporting None: an insert that
+    # completed means the seed never reached the state under test, and every
+    # count below would then be asserted against the wrong scenario.
+    aborted_insert_error: str
+    # Items the backend holds after the aborted insert. Expected to be zero —
+    # the generator raises before the first batch is flushed — and read rather
+    # than assumed, because "the retry stored everything" is only the fix if
+    # the items were genuinely missing beforehand.
+    items_after_aborted_insert: int
+    # Items the backend holds after re-inserting the SAME items on the SAME
+    # object with deduplication left at its default. This is the number the fix
+    # changes: without the cache invalidation the retry skips every item as a
+    # duplicate and this stays at items_after_aborted_insert.
+    items_after_retry: int
+    # Items after a THIRD insert of the same items, so the caller can assert the
+    # invalidation did not simply disable deduplication from then on.
+    items_after_repeat: int
+
+
 class DatasetReadItemsRequest(BaseModel):
     """One `Dataset.get_items(...)` call, with its read knobs exposed verbatim.
 

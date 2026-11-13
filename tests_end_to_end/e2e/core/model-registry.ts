@@ -17,6 +17,19 @@ export interface RegistryModel {
   /** The id the frontend matches on, e.g. `gpt-5-nano` or `openai/gpt-5-nano`. */
   id: string;
   /**
+   * The provider-qualified id, when the row carries one — `vertex_ai/gemini-2.5-flash`
+   * for the Vertex AI copy of a model Gemini also serves bare.
+   *
+   * Absent on most rows, and that absence is load-bearing:
+   * `transformFetched` builds every dropdown value as
+   * `getRoutableProviderModelValue(provider, qualified_name || id)`, so this is
+   * the field that makes the two providers' otherwise-identical rows resolve to
+   * two different stored values behind one display label. A spec asserting that
+   * a span logged under `google_ai` and one logged under `google_vertexai` land
+   * on DIFFERENT providers has to be able to name the value it expects.
+   */
+  qualified_name?: string | null;
+  /**
    * The row's display label — and the flag that decides whether any model
    * picker LISTS it.
    *

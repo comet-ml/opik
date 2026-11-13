@@ -19,14 +19,29 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
  * hook that returned it unconditionally.
  *
  * The non-409 vector is an over-long name. It is asserted to have failed, and
- * to have failed with something other than a 409, before its message is
- * compared — a vector that started succeeding (or that started answering 409)
+ * to have failed with something other than a 409, before anything is read off
+ * its toast — a vector that started succeeding (or that started answering 409)
  * would otherwise quietly stop testing the fall-through while still passing.
- * What the toast is compared against is the server's OWN message, read off the
- * failing response in the same test, rather than a string pinned here: the
- * claim is "the user is shown what the server said", and hard-coding today's
- * wording would make a copy-edit in the backend look like a regression in the
- * frontend.
+ *
+ * ## What this spec no longer compares, and where that claim went
+ *
+ * It used to read the server's own message off the failing response and assert
+ * the toast contained it. opik#9308 (2.2.142) put a `@Size` on `Project.name`,
+ * so the over-long vector moved from a `{"message":…}`-carrying 500 to a
+ * `422 {"errors":[…]}` — and `useProjectCreateMutation` reads only
+ * `response.data.message`, so there is no longer a server message for the toast
+ * to show. That comparison was failing here against 2.2.142+.
+ *
+ * The claim is not dropped, it is RELOCATED to the spec whose subject it is:
+ * `project-name-length-limit.spec.ts` asserts the toast must name the limit,
+ * against the correct behaviour, marked `test.fail()` with the defect written
+ * out. Asserting it in both places would mean two `test.fail()`s on one bug.
+ *
+ * What stays here is this spec's own subject, undiminished: a 409 is translated
+ * exactly, and a NON-409 is not translated — which is the regression opik#9187's
+ * special case could introduce. The response's shape is pinned in its place, so
+ * the day the backend starts sending `message` alongside `errors` this test
+ * fails and prompts someone to restore the toast comparison above.
  *
  * Both halves also assert no project was created, which neither toast says.
  *
@@ -46,15 +61,18 @@ const DUPLICATE_NAME_MESSAGE = 'Project with this name already exists';
 /**
  * Long enough that the write fails on the name alone.
  *
- * The API declares no `@Size` on a project name, so the limit is the column's;
- * 400 characters clears it comfortably. The test asserts the failure rather
- * than assuming it, and says why if it stops failing.
+ * `Project.name` carries `@Size(max = 150)` as of opik#9308, and the column is
+ * `VARCHAR(150)` behind it; 400 characters clears both comfortably. The test
+ * asserts the failure rather than assuming it, and says why if it stops
+ * failing. The exact limit is not pinned here on purpose — that is
+ * `project-name-length-limit.spec.ts`'s subject, and this vector only needs to
+ * be refused for some reason other than a name clash.
  */
 const OVERLONG_NAME_LENGTH = 400;
 
 test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects'] }, () => {
   test(
-    'a duplicate name shows the translated message, while a different failure keeps the server\'s own',
+    'a duplicate name shows the translated message, while a different failure is not reported as one',
     { tag: ['@cap:projects.create-project'] },
     async ({ project, backendClient, testNamespace, page }) => {
       const projects = new ProjectsPage(page);
@@ -147,23 +165,34 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         ).not.toBe(409);
       });
 
-      await test.step('The toast carries the server\'s own message, not the duplicate-name string', async () => {
+      await test.step('The refusal arrives in the errors envelope, which the toast cannot read', async () => {
+        // The shape, pinned in place of the message comparison this step used to
+        // make — see the file header. Both halves are asserted, because it is
+        // the PAIR that explains why the user is shown a transport status:
+        // the server did say why, and it said it under a key the frontend's
+        // `response.data.message` read cannot reach.
+        expect(
+          other.errors,
+          'the 422 carries its reason in the errors envelope',
+        ).not.toBeNull();
+        expect(
+          other.message,
+          'and NOT under `message`, the only key useProjectCreateMutation reads — the day this ' +
+            'fails, the toast can show the reason again and ' +
+            'project-name-length-limit.spec.ts can drop its test.fail()',
+        ).toBeNull();
+      });
+
+      await test.step('The toast does not report it as a name clash', async () => {
         // The reload reset the recorder (it is a per-document init script), so
         // this is the toast raised by the second submit alone.
         const toasts = await readRecordedToasts(page);
         expect(toasts, 'exactly one toast was raised by the second submit').toHaveLength(1);
         expect(
-          other.message,
-          'the failing response carried a message for the toast to show',
-        ).not.toBeNull();
-        expect(
-          toasts[0],
-          'a non-conflict failure shows what the server said',
-        ).toContain(other.message!);
-        expect(
           toasts[0],
           'a non-conflict failure must NOT be reported as a name clash — that is the ' +
-            'regression the 409 special case could introduce',
+            'regression the 409 special case could introduce, and the whole reason this vector ' +
+            'sits in the same test as the 409 one',
         ).not.toContain(DUPLICATE_NAME_MESSAGE);
       });
 

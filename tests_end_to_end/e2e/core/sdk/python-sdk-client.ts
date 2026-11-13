@@ -150,6 +150,30 @@ export interface PythonSdkClient {
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number[] }>;
   /**
+   * One `Dataset` object driven through an insert that ABORTS part-way and then
+   * a retry of the same items — opik#9393's failure path.
+   *
+   * Neither `insertDatasetItems` nor `insertDatasetItemsSession` can express
+   * it: both feed `Dataset.insert` a list that always finishes, so the funnel
+   * always completes and the stale-cache state is unreachable. Here the bridge
+   * feeds the items as a generator that raises after yielding them all, keeps
+   * the object, and reports the item counts it read between the steps —
+   * observations the caller cannot make for itself, since the whole sequence
+   * has to happen inside one request.
+   */
+  insertDatasetItemsRetryAfterFailedFunnel(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    workspace?: string;
+  }): Promise<{
+    dataset_id: string;
+    aborted_insert_error: string;
+    items_after_aborted_insert: number;
+    items_after_retry: number;
+    items_after_repeat: number;
+  }>;
+  /**
    * One `Dataset.insert([item])` whose content carries non-JSON-native Python
    * types — a `uuid.UUID`, an `enum.Enum` member, a tz-aware `datetime`, a
    * `set`, a `tuple`.
@@ -818,6 +842,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         args,
         { timeoutMs: 180_000 },
       );
+    },
+    async insertDatasetItemsRetryAfterFailedFunnel(args) {
+      // Three inserts and three reads back to back in one request, so the same
+      // budget as the other session route.
+      return request<{
+        dataset_id: string;
+        aborted_insert_error: string;
+        items_after_aborted_insert: number;
+        items_after_retry: number;
+        items_after_repeat: number;
+      }>('POST', '/datasets/insert-retry-after-failed-funnel', args, { timeoutMs: 180_000 });
     },
     async insertTypedDatasetItem(args) {
       // One item, but the same cloud rate-limiting exposure as the other insert
