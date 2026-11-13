@@ -31,6 +31,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.comet.opik.utils.JsonUtils;
@@ -290,11 +291,14 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
-                .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring traceId '{}' with rule '{}', error type '{}'",
+                .doOnError(withMdc(mdc, error -> DecisionsUrlException.find(error).ifPresentOrElse(
+                        urlError -> userFacingLogger.error("Error while scoring traceId '{}' with rule '{}': {}",
+                                trace.id(), message.ruleName(), urlError.getMessage()),
+                        () -> userFacingLogger.error(
+                                "Unexpected error while scoring traceId '{}' with rule '{}', error type '{}'",
                                 trace.id(), message.ruleName(),
                                 // the type only: a provider's text can be in any message of the chain
-                                ProviderFailures.rootType(error))))
+                                ProviderFailures.rootType(error)))))
                 .then();
     }
 

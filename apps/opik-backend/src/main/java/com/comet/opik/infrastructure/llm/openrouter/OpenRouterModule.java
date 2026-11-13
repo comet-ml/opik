@@ -1,11 +1,13 @@
 package com.comet.opik.infrastructure.llm.openrouter;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
@@ -38,8 +40,10 @@ public class OpenRouterModule extends AbstractModule {
     @ProvidesIntoSet
     @Singleton
     public DecisionsClient decisionsClient(@NonNull RetriableHttpClient client,
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new OpenRouterDecisionsClient(client, config);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull ProviderBaseUrlGuard providerBaseUrlGuard,
+            @NonNull ProviderErrorMessageValidator providerErrorMessageValidator) {
+        return new OpenRouterDecisionsClient(client, config, providerBaseUrlGuard, providerErrorMessageValidator);
     }
 
     @Provides

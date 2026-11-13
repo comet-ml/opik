@@ -1,15 +1,24 @@
 package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
@@ -19,23 +28,27 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 
 /**
  * Client for the OpenRouter Decisions API ({@code POST /api/alpha/decisions}), which serves decisions models
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
  *
- * <p>Requests always go to the configured {@code openRouterDecisionsUrl}, never to the {@code baseUrl} of the
- * workspace's OpenRouter provider: that base URL points at {@code /api/v1}, and the Decisions API lives outside
- * it, so a workspace that routes OpenRouter chat traffic through a proxy still calls Jev on openrouter.ai.
- *
- * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
+ * <p>Error messages keep only a documented OpenRouter error, checked by {@link ProviderErrorMessageValidator} as on
+ * the chat path; any other upstream text is dropped, also from the 503/504 that {@link RetriableHttpClient} retries. Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
  * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
  * online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers transient ones.
  * Rate limits and gateway errors are also retried in-process first.
@@ -50,7 +63,8 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
 
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
-    private static final int MAX_ERROR_MESSAGE_LENGTH = 512;
+    private static final String CHAT_API_SUFFIX = "/v1";
+    private static final String DECISIONS_API_SUFFIX = "/alpha/decisions";
 
     /**
      * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit, bad
@@ -66,6 +80,8 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull ProviderBaseUrlGuard providerBaseUrlGuard;
+    private final @NonNull ProviderErrorMessageValidator providerErrorMessageValidator;
 
     @Override
     public LlmProvider provider() {
@@ -75,11 +91,23 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
+        var openRouterUrl = StringUtils.isNotBlank(config.baseUrl())
+                ? config.baseUrl()
+                : llmProviderClientConfig.getOpenRouterUrl();
+        var decisionsUrl = decisionsUrl(openRouterUrl);
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
-                .requestFunction(httpClient -> httpClient.target(llmProviderClientConfig.getOpenRouterDecisionsUrl()))
+                .requestFunction(httpClient -> httpClient.target(decisionsUrl))
                 .requestCustomizer(builder -> {
-                    Optional.ofNullable(config.headers()).orElse(Map.of()).forEach(builder::header);
-                    builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
+                    builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
+                            .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
+                    // as for chat: no compressed reply, as an inflated body has no bound, and a stored header
+                    // replaces the one Opik sets
+                    builder.acceptEncoding("identity");
+                    var headers = ProviderHeadersHttpClient.normalizedProviderHeaders(config.headers());
+                    if (!headers.containsKey(HttpHeaders.AUTHORIZATION)) {
+                        builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
+                    }
+                    headers.forEach(builder::header);
                 })
                 .retryPolicy(RetryUtils.handleHttpErrors(
                         Optional.ofNullable(llmProviderClientConfig.getMaxAttempts()).orElse(DEFAULT_MAX_ATTEMPTS),
@@ -91,16 +119,39 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .readTimeout(Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
                         .map(io.dropwizard.util.Duration::toJavaDuration).orElse(null))
                 .responseFunction(this::processResponse)
+                .errorMessageFunction(this::extractErrorMessage)
                 .build();
         return client.executePostWithRetry(httpRequest);
+    }
+
+    static String decisionsUrl(@NonNull String openRouterUrl) {
+        URI uri;
+        try {
+            uri = new URI(openRouterUrl.trim());
+        } catch (URISyntaxException invalidUrl) {
+            throw new DecisionsUrlException();
+        }
+        var path = StringUtils.stripEnd(uri.getRawPath(), "/");
+        if (uri.getRawAuthority() == null || !StringUtils.endsWith(path, CHAT_API_SUFFIX)) {
+            throw new DecisionsUrlException();
+        }
+        return uri.getScheme() + "://" + uri.getRawAuthority()
+                + StringUtils.removeEnd(path, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX
+                + (uri.getRawQuery() != null ? "?" + uri.getRawQuery() : "");
     }
 
     private DecisionsResponse processResponse(Response response) {
         int status = response.getStatus();
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
-            var body = response.hasEntity() && response.bufferEntity()
-                    ? response.readEntity(DecisionsResponse.class)
-                    : null;
+            DecisionsResponse body;
+            try {
+                body = response.hasEntity() ? response.readEntity(DecisionsResponse.class) : null;
+            } catch (ProcessingException unreadable) {
+                // redacted as on the chat path: a parse error can quote the upstream body
+                throw new InternalServerErrorException(
+                        "OpenRouter Decisions API returned an unreadable response, status '%s'".formatted(status),
+                        ProviderFailures.redacted(unreadable));
+            }
             if (body == null || body.answers() == null) {
                 throw new InternalServerErrorException(
                         "OpenRouter Decisions API returned an empty response, status '%s'".formatted(status));
@@ -122,23 +173,39 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     }
 
     private String extractErrorMessage(Response response) {
-        if (!response.hasEntity() || !response.bufferEntity()) {
-            return "<no body>";
+        if (!response.hasEntity()) {
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
         }
+        OpenRouterErrorMessage errorResponse;
         try {
-            var errorResponse = response.readEntity(DecisionsErrorResponse.class);
-            if (errorResponse != null && errorResponse.error() != null
-                    && StringUtils.isNotBlank(errorResponse.error().message())) {
-                return StringUtils.truncate(errorResponse.error().message(), MAX_ERROR_MESSAGE_LENGTH);
+            errorResponse = JsonUtils.readValue(readErrorBody(response), OpenRouterErrorMessage.class);
+        } catch (IOException | ProcessingException | IllegalStateException | UncheckedIOException unreadable) {
+            // the type only: the message can quote the upstream body or name the destination
+            log.debug("Failed to read OpenRouter error response, error type '{}'",
+                    unreadable.getClass().getSimpleName());
+            return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+        }
+        if (errorResponse != null && errorResponse.error() != null && errorResponse.isDocumented()) {
+            return providerErrorMessageValidator.validate(errorResponse.toErrorMessage()).getMessage();
+        }
+        return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+    }
+
+    /**
+     * At most {@code providerErrorBodyMaxSize} bytes, read within the read timeout as a whole, as for a custom
+     * provider: the base URL can be the workspace's. Closing the body before its end cancels the connection.
+     */
+    private byte[] readErrorBody(Response response) throws IOException {
+        int maxBytes = Math.toIntExact(llmProviderClientConfig.getProviderErrorBodyMaxSize().toBytes());
+        var readTimeout = Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .map(io.dropwizard.util.Duration::toJavaDuration);
+        try (var body = response.readEntity(InputStream.class);
+                var deadline = readTimeout.map(within -> BodyDeadline.closing(body, within)).orElse(null)) {
+            var bytes = body.readNBytes(maxBytes);
+            if (deadline != null && deadline.expired()) {
+                throw new IOException("the deadline closed the body");
             }
-        } catch (RuntimeException parseErrorResponse) {
-            // Expected when the body is not the structured error shape; fall back to the raw body.
-            log.debug("Failed to parse OpenRouter error response, falling back to raw body", parseErrorResponse);
-        }
-        try {
-            return StringUtils.truncate(response.readEntity(String.class), MAX_ERROR_MESSAGE_LENGTH);
-        } catch (RuntimeException unreadable) {
-            return "<unreadable body>";
+            return bytes;
         }
     }
 }
