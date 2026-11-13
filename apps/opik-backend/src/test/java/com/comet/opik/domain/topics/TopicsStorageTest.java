@@ -180,8 +180,9 @@ class TopicsStorageTest {
         assertThat(rows).extracting(TopicPrototype::projectId, TopicPrototype::position)
                 .containsExactlyElementsOf(Stream.of(first, second).sorted(Comparator.comparing(UUID::toString))
                         .flatMap(projectId -> Stream.of(tuple(projectId, 0), tuple(projectId, 1))).toList());
-        assertThat(template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findPrototypes(workspaceId, List.<UUID>of()))).isEmpty();
+        List<TopicPrototype> none = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findPrototypes(workspaceId, List.<UUID>of()));
+        assertThat(none).isEmpty();
     }
 
     @Test
