@@ -11,6 +11,36 @@ except ImportError:
     nltk_bleu_score = None
 
 
+def _validate_smoothing_method(smoothing_method: str) -> None:
+    """Validate an NLTK SmoothingFunction method name.
+
+    Raises ValueError if `smoothing_method` is not one of NLTK's
+    SmoothingFunction methods (e.g. "method1", "method2"). This matches the
+    existing eager-validation convention used for `n_grams` / `weights`, and
+    prevents an unknown name from silently falling back to `method0` and
+    producing a plausible-looking but wrong BLEU score.
+
+    Defined at module level because it carries no instance state. `nltk_bleu_score`
+    is guaranteed non-None when called from `BaseBLEU.__init__` (the ImportError
+    guard runs first); we still guard defensively.
+    """
+    if nltk_bleu_score is None:
+        raise ImportError(
+            "`nltk` library is required for BLEU score calculation. "
+            "Install via `pip install nltk`."
+        )
+    smoother = nltk_bleu_score.SmoothingFunction()
+    valid_methods = sorted(
+        a for a in dir(smoother) if a.startswith("method") and a[6:].isdigit()
+    )
+    if smoothing_method not in valid_methods:
+        raise ValueError(
+            f"Invalid smoothing_method {smoothing_method!r}. "
+            f"Must be one of NLTK's SmoothingFunction methods: "
+            f"{', '.join(valid_methods)}."
+        )
+
+
 class BaseBLEU(base_metric.BaseMetric):
     """
     Base class containing shared BLEU logic, such as handling n-grams, smoothing,
@@ -71,6 +101,16 @@ class BaseBLEU(base_metric.BaseMetric):
         self.n_grams = n_grams
         self.smoothing_method = smoothing_method
 
+        # Validate the smoothing method eagerly: an unknown name used to fall
+        # through to `method0` silently (see _get_smoothing_func), producing a
+        # plausible-looking but wrong score. Raise instead, matching the
+        # existing convention for `n_grams` / `weights`. `nltk_bleu_score` is
+        # guaranteed non-None here: the ImportError guard above already raised
+        # when NLTK is unavailable.
+        _validate_smoothing_method(self.smoothing_method)
+
+        self._smoother = nltk_bleu_score.SmoothingFunction()
+
         if weights is None:
             self.weights = [1.0 / n_grams] * n_grams
         else:
@@ -82,10 +122,10 @@ class BaseBLEU(base_metric.BaseMetric):
                 raise ValueError("Weights must sum to 1.0")
             self.weights = weights
 
-        self._smoother = nltk_bleu_score.SmoothingFunction()
-
     def _get_smoothing_func(self) -> "nltk_bleu_score.SmoothingFunction":
-        return getattr(self._smoother, self.smoothing_method, self._smoother.method0)
+        # `smoothing_method` is validated in __init__, so it always resolves to a
+        # real SmoothingFunction method — no silent fallback to `method0`.
+        return getattr(self._smoother, self.smoothing_method)
 
     def _truncate_weights(self, max_len: int) -> Tuple[float, ...]:
         used_order = min(self.n_grams, max_len)
