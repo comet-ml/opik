@@ -17,6 +17,30 @@ except ImportError:  # pragma: no cover - optional dependency
 ChrFFn = Callable[[Sequence[str], Sequence[str]], float]
 
 
+def _text_length(text: Sequence[str], ignore_whitespace: bool) -> int:
+    # Counted the way NLTK counts: without whitespace when it is ignored.
+    if ignore_whitespace:
+        return sum(1 for char in text if not char.isspace())
+    return len(text)
+
+
+def _effective_char_order(
+    candidate: Sequence[str],
+    reference: Sequence[str],
+    char_order: int,
+    ignore_whitespace: bool,
+) -> int:
+    # NLTK averages the f-score over every order up to ``max_len``, and an order
+    # longer than the text has no n-grams and scores 0, which drags even identical
+    # short strings below 1.0. Like sacrebleu's effective order, only average over
+    # orders both sides can produce.
+    shortest = min(
+        _text_length(candidate, ignore_whitespace),
+        _text_length(reference, ignore_whitespace),
+    )
+    return max(1, min(char_order, shortest))
+
+
 class ChrF(BaseMetric):
     """
     Compute chrF / chrF++ scores between a candidate string and references.
@@ -126,29 +150,18 @@ class ChrF(BaseMetric):
                     " `pip install nltk` or provide `chrf_fn`."
                 )
 
-            def _text_length(text: Sequence[str]) -> int:
-                # Counted the way NLTK counts: without whitespace when it is ignored.
-                if self._ignore_whitespace:
-                    return sum(1 for char in text if not char.isspace())
-                return len(text)
-
-            def _effective_char_order(
-                candidate: Sequence[str], reference: Sequence[str]
-            ) -> int:
-                # NLTK averages the f-score over every order up to ``max_len``, and
-                # an order longer than the text has no n-grams and scores 0, which
-                # drags even identical short strings below 1.0. Like sacrebleu's
-                # effective order, only average over orders both sides can produce.
-                shortest = min(_text_length(candidate), _text_length(reference))
-                return max(1, min(self._char_order, shortest))
-
             def _score_single(candidate: Sequence[str], reference: str) -> float:
                 try:
                     return float(
                         nltk_chrf_score.sentence_chrf(
                             reference,
                             candidate,
-                            max_len=_effective_char_order(candidate, reference),
+                            max_len=_effective_char_order(
+                                candidate,
+                                reference,
+                                char_order=self._char_order,
+                                ignore_whitespace=self._ignore_whitespace,
+                            ),
                             beta=self._beta,
                             ignore_whitespace=self._ignore_whitespace,
                         )

@@ -26,7 +26,7 @@ from opik.evaluation.metrics.heuristics.distribution_metrics import (
 from opik.evaluation.metrics.heuristics.meteor import METEOR
 from opik.evaluation.metrics.heuristics.gleu import GLEU
 from opik.evaluation.metrics.heuristics.bertscore import BERTScore
-from opik.evaluation.metrics.heuristics.chrf import ChrF
+from opik.evaluation.metrics.heuristics.chrf import ChrF, _effective_char_order
 from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
 from opik.evaluation.metrics.heuristics.readability import Readability
@@ -1010,6 +1010,33 @@ def test_chrf_metric__only_one_side_is_short__orders_clamped_to_shorter_side():
     # hypothesis "h": P = 1/1, R = 1/5
     assert metric.score(output="h", reference="hello").value == pytest.approx(
         5 * 1.0 * 0.2 / (4 * 1.0 + 0.2)
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,char_order,ignore_whitespace,expected",
+    [
+        ("hello world", "hello world", 6, True, 6),
+        ("hello", "hello world", 6, True, 5),
+        ("hello world", "abc", 6, True, 3),
+        ("a b", "a b", 6, True, 2),
+        ("a b", "a b", 6, False, 3),
+        ("hello", "hello", 2, True, 2),
+        ("", "hello", 6, True, 1),
+        ("   ", "hello", 6, True, 1),
+    ],
+)
+def test_chrf_effective_char_order__clamped_to_shorter_side(
+    candidate, reference, char_order, ignore_whitespace, expected
+):
+    assert (
+        _effective_char_order(
+            candidate,
+            reference,
+            char_order=char_order,
+            ignore_whitespace=ignore_whitespace,
+        )
+        == expected
     )
 
 
