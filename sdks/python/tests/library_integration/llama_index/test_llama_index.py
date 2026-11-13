@@ -1374,3 +1374,56 @@ def test_llama_index__concurrent_pipelines__thread_safe(
     # Verify all traces have different IDs (no collision)
     trace_ids = {tree.id for tree in fake_backend.trace_trees}
     assert len(trace_ids) == 3
+
+
+@pytest.mark.parametrize("skip_index_construction_trace", [False, True])
+def test_llama_index__repeated_queries__event_outputs_are_released(
+    fake_backend, skip_index_construction_trace
+):
+    """A long-lived handler keeps an event's output only until its trace ends."""
+    from llama_index.core import Document, VectorStoreIndex
+    from llama_index.core.embeddings import MockEmbedding
+    from llama_index.core.llms import MockLLM
+
+    opik_callback_handler = LlamaIndexCallbackHandler(
+        skip_index_construction_trace=skip_index_construction_trace
+    )
+    Settings.callback_manager = CallbackManager([opik_callback_handler])
+    Settings.transformations = None
+    Settings.llm = MockLLM(max_tokens=4)
+    Settings.embed_model = MockEmbedding(embed_dim=8)
+
+    index = VectorStoreIndex.from_documents([Document(text="Paul Graham essays.")])
+    query_engine = index.as_query_engine()
+    for i in range(3):
+        query_engine.query(f"Question {i}?")
+
+    opik_callback_handler.flush()
+
+    query_traces = [t for t in fake_backend.trace_trees if t.name == "query"]
+    assert len(query_traces) == 3
+    assert all(trace_tree.output is not None for trace_tree in query_traces)
+
+    assert opik_callback_handler._map_event_id_to_output == {}
+    assert opik_callback_handler._map_root_id_to_event_ids == {}
+
+
+def test_llama_index__stream_chat__event_outputs_are_released(fake_backend):
+    """A streamed call ends its last event after end_trace; that output is not kept."""
+    from llama_index.core.llms import ChatMessage, MockLLM
+
+    opik_callback_handler = LlamaIndexCallbackHandler()
+    Settings.callback_manager = CallbackManager([opik_callback_handler])
+    Settings.llm = MockLLM(max_tokens=4)
+
+    for i in range(3):
+        stream = Settings.llm.stream_chat([ChatMessage(role="user", content=f"Hi {i}")])
+        _ = list(stream)
+
+    opik_callback_handler.flush()
+
+    assert len(fake_backend.trace_trees) == 3
+    assert all(trace_tree.output is not None for trace_tree in fake_backend.trace_trees)
+
+    assert opik_callback_handler._map_event_id_to_output == {}
+    assert opik_callback_handler._map_root_id_to_event_ids == {}
