@@ -1004,6 +1004,87 @@ aiLabels:
     maxConcurrentDecides: 256
     decideKeepAlive: 30s
     decideTimeToLive: 5m
+    #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+    #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+    #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+    #  flight can hold this much heap
+    maxResponseBytes: 33554432
+
+topics:
+  #  Default: false
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
+  #  never exposed to the UI
+  enabled: false
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
+  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  enabledWorkspaces: ""
+  vectors:
+    #  Default: 1m
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. A tick
+    #  has three parts. The fresh phase, every tick: per workspace, the statuses written in `window`, of the projects
+    #  whose backfill has drained. The backfill phase, every tick, with the budget left: the projects not drained yet,
+    #  one at a time, each over the long window (or backfillWindow); a drained project is marked in MySQL
+    #  (topic_vector_backfills). The daily pass, once per longWindowInterval: the long window per workspace, in slices,
+    #  for rows the fresh phase missed. At most 1h
+    tickInterval: 1m
+    #  Default: 50s
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
+    tickBudget: 50s
+    #  Default: 24h
+    #  Description: The fresh phase's window: how far back, by ai_label_status write time, each tick looks for done
+    #  traces without a vector. Never before the task's applies_from
+    window: 24h
+    #  Default: 7d
+    #  Description: The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. At least
+    #  window
+    longWindow: 7d
+    #  Default: 1d
+    #  Description: How often the daily pass starts (a cluster-wide Redis lock). The pass stays on, every second tick,
+    #  until one of its ticks drains it (every workspace read, each under maxTracesPerTick, nothing left for want of
+    #  time, a read, a back-off or an insert); the interval runs from that tick. Also how often the tick discovers each
+    #  workspace's projects for the backfill. At most 7d
+    longWindowInterval: 1d
+    #  Default: 0 (off)
+    #  Description: When above zero, the backfill phase and the daily pass use this window instead of longWindow, to
+    #  embed the traces summarised before topics were enabled. 0 or at least window; at most 365d
+    backfillWindow: 0s
+    #  Default: 5000
+    #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
+    #  in the backfill phase; the tick budget bounds the total
+    maxTracesPerTick: 5000
+    #  Default: 256 (the most /v1/embed takes)
+    #  Description: Texts per embed call
+    embedBatchSize: 256
+    #  Default: 1
+    #  Description: Embed calls in flight at a time, within one workspace's or project's read. Set it to the embed
+    #  pool's replica count: the pool computes one call at a time per replica, so more only makes each call wait
+    #  longer, toward embedTimeout. Never above 4: the service's queue holds 4 full calls and answers a fifth with 429
+    embedConcurrency: 1
+    #  Default: 10s
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
+    #  tickBudget, at most 60s
+    embedTimeout: 10s
+    find:
+      #  Default: 30000000
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  1000000000
+      maxRowsToRead: 30000000
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per window read on the shared ClickHouse; a trip fails that workspace's read for the tick. At most
+      #  8589934592 (8 GiB)
+      maxMemoryUsage: 1073741824
+      #  Default: 30s
+      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
+      maxExecutionTime: 30s
+      #  Default: 1d
+      #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
+      #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
+      createdAtSlack: 1d
+      #  Default: 1d
+      #  Description: The daily pass, and the backfill of a large project, read their window in slices of this much
+      #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
+      sliceSize: 1d
 
 # Python evaluator configuration
 pythonEvaluator:
