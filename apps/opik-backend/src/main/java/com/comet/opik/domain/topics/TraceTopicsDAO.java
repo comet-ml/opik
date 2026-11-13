@@ -1,5 +1,8 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.Source;
+import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WeeklyPartitions;
@@ -8,13 +11,17 @@ import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +49,48 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 public class TraceTopicsDAO {
 
     static final String TABLE = "trace_topics";
+
+    /**
+     * The Logs page's default filters, which the read API applies to the traces it counts: {@code source = sdk} (with
+     * the {@code unknown} rows from before sources, {@link Source#legacyFallbackDbValue}) and
+     * {@code visibility_mode = default}. Bound as {@code :logs_sources} and {@code :logs_visibility_mode}.
+     */
+    private static final String[] LOGS_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
+    private static final String LOGS_VISIBILITY_MODE = VisibilityMode.DEFAULT.getValue();
+
+    /**
+     * Traces per topic and UTC day among the project's traces created in the window that Logs lists, each by its
+     * latest row. Topics are built from every labelled trace, but the counts take only the traces Logs lists
+     * ({@link #LOGS_SOURCES}), so a topic's count is the number of traces Logs lists for it; any version of a trace
+     * that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows. The latest row is the
+     * greatest (last_updated_at, run_id). A trace whose latest row is a tombstone is left out ({@code HAVING}).
+     */
+    private static final String COUNT_BY_TOPIC_AND_DAY = """
+            SELECT latest_topic AS topic_id, toDate(created_at, 'UTC') AS day, count() AS traces
+            FROM (
+                SELECT argMax(topic_id, (last_updated_at, run_id)) AS latest_topic, any(trace_created_at) AS created_at
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND trace_id IN (
+                    SELECT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    AND source IN :logs_sources
+                    AND visibility_mode = :logs_visibility_mode
+                )
+                GROUP BY trace_id
+                HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+            )
+            GROUP BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
 
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM trace_topics
@@ -96,6 +145,7 @@ public class TraceTopicsDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
+    private final @NonNull @Config("topics") TopicsConfig config;
 
     public Mono<Long> insert(List<TraceTopic> rows) {
         if (CollectionUtils.isEmpty(rows)) {
@@ -116,6 +166,35 @@ public class TraceTopicsDAO {
                     node.put("run_id", row.runId());
                     return node;
                 });
+    }
+
+    /**
+     * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
+     * created in {@code [from, to)}. A trace counts by its latest row. Rows and memory are capped by the vectors job's
+     * window read guards ({@code topics.vectors.find}), time by {@code maxExecutionSeconds}.
+     */
+    public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
+        var find = config.getVectors().getFind();
+        var template = getSTWithLogComment(COUNT_BY_TOPIC_AND_DAY, "topics:count_by_topic_and_day", workspaceId, null,
+                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
+                .add("max_execution_time", maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("from_micros", toEpochMicros(from))
+                        .bind("to_micros", toEpochMicros(to))
+                        .bind("logs_sources", LOGS_SOURCES)
+                        .bind("logs_visibility_mode", LOGS_VISIBILITY_MODE)
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> TopicDayCount.builder()
+                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
+                        .day(row.get("day", LocalDate.class))
+                        .traces(((Number) row.get("traces", Object.class)).longValue())
+                        .build()));
     }
 
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
@@ -204,4 +283,12 @@ public class TraceTopicsDAO {
                 .then();
     }
 
+    private static long toEpochMicros(Instant instant) {
+        return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
+    }
+
+    /** One row of {@link #countByTopicAndDay}. */
+    @Builder(toBuilder = true)
+    public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
+    }
 }
