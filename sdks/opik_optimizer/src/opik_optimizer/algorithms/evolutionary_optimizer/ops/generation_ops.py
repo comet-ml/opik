@@ -308,7 +308,8 @@ def run_generation(
                 optimizer._individual_to_prompts(new_ind)
             ) == prompt_fingerprint(before):
                 continue
-            # A crossover child was never evaluated, so keep its parents.
+            # A crossover child keeps both crossover parents; otherwise the parent
+            # is the individual before mutation.
             parents_of.setdefault(i, [before])
             offspring[i] = new_ind
             del offspring[i].fitness.values
