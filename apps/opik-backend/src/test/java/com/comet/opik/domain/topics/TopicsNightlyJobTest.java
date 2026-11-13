@@ -771,7 +771,7 @@ class TopicsNightlyJobTest {
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC);
         Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             result.set(nightlyService.runNight(start));
-            assertThat(nightRows(night, null)).noneMatch(row -> TopicsMetrics.REASON_LOCKED.equals(row.reason()));
+            assertThat(nightRows(night, null)).noneMatch(row -> TopicNightProject.REASON_LOCKED.equals(row.reason()));
         });
         return result.get();
     }

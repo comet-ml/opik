@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -18,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
@@ -27,21 +25,6 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  */
 @Singleton
 public class TopicsMetrics {
-
-    static final String DECISION_SKIP = "skip";
-    static final String DECISION_NIGHTLY_UPDATE = "nightly_update";
-    static final String DECISION_NOT_REACHED = "not_reached";
-
-    /**
-     * Why the night skipped a project: under {@code minVectors}, deleted, its lock held, its last saved run already
-     * covers the night, paused after its last runs failed, or no live topic left when the night took its lock.
-     */
-    static final String REASON_SMALL = "small";
-    static final String REASON_DELETED = "deleted";
-    static final String REASON_LOCKED = "locked";
-    static final String REASON_ALREADY_SAVED = "already_saved";
-    static final String REASON_PAUSED = "paused";
-    static final String REASON_NO_LIST = "no_list";
 
     static final String FIRST_BUILD_GATE = "topics.first_build.gate";
     static final String FIRST_BUILD_LONGEST_WAIT = "topics.first_build.gate.longest_wait_seconds";
@@ -52,7 +35,6 @@ public class TopicsMetrics {
     /** Housekeeping failed a run its pod left {@code running}: the code {@code TopicRunDAO.failAbandoned} writes. */
     static final String ERROR_ABANDONED = "abandoned";
 
-    private static final AttributeKey<String> DECISION = stringKey("decision");
     private static final AttributeKey<String> REASON = stringKey("reason");
     private static final AttributeKey<String> STATUS = stringKey("status");
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
@@ -63,7 +45,6 @@ public class TopicsMetrics {
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
 
     private final TopicsWorkspaceNames names;
-    private final LongCounter projects;
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
     private final LongCounter qwenCalls;
@@ -77,7 +58,6 @@ public class TopicsMetrics {
     private final LongCounter born;
     private final DoubleHistogram churn;
     private final DoubleHistogram churnAny;
-    private final LongCounter countFailures;
     private volatile FirstBuildState firstBuildState;
 
     /**
@@ -100,12 +80,6 @@ public class TopicsMetrics {
 
     TopicsMetrics(@NonNull Meter meter, @NonNull TopicsWorkspaceNames names) {
         this.names = names;
-        this.projects = meter.counterBuilder("topics.nightly.projects")
-                .setDescription("Projects the nightly job looked at, by decision: nightly_update, not_reached (the "
-                        + "night's budget ran out), skip (by reason: small, under minVectors; deleted; locked, its "
-                        + "lock held by another run; already_saved, its last saved run already covers the night; "
-                        + "paused, its last 3 runs failed within 7 nights; no_list, no live topic left)")
-                .build();
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
                         + "could not start, abandoned when housekeeping failed a run its pod left running")
@@ -165,23 +139,11 @@ public class TopicsMetrics {
                 .setDescription("Of the window traces labelled on both the last and this saved night, the share "
                         + "whose label changed, Other included")
                 .build();
-        this.countFailures = meter.counterBuilder("topics.nightly.count_failures")
-                .setDescription("Projects whose window count read failed, by error_type: the night skips them")
-                .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's traces labelled Other, among the traces it read (the window, "
                         + "or its sample): the stats.other_share of its topic_runs row")
                 .build();
-    }
-
-    /** {@code reason} is null for a decision other than skip. */
-    void project(@NonNull String workspaceId, @NonNull String decision, String reason) {
-        var attributes = names.builder(workspaceId).put(DECISION, decision);
-        if (reason != null) {
-            attributes.put(REASON, reason);
-        }
-        projects.add(1, attributes.build());
     }
 
     void run(@NonNull String workspaceId, @NonNull TopicRun.Status status, String errorCode) {
@@ -216,11 +178,6 @@ public class TopicsMetrics {
         var attributes = names.of(workspaceId);
         churn.record(value.churn(), attributes);
         churnAny.record(value.churnAny(), attributes);
-    }
-
-    void countFailure(@NonNull String workspaceId, @NonNull Throwable error) {
-        countFailures.add(1,
-                names.builder(workspaceId).put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
     void budgetUsed(@NonNull Duration duration) {

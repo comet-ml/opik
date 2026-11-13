@@ -147,14 +147,14 @@ public class TopicsNightlyService {
             for (var candidate : candidates) {
                 if (Thread.currentThread().isInterrupted() || !Instant.now().isBefore(budgetEnd)) {
                     notReached++;
-                    record.decide(candidate, TopicsMetrics.DECISION_NOT_REACHED, null, null);
+                    record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
                     continue;
                 }
                 if (!runner.lockProject(candidate.projectId())) {
                     log.info("Topics night skipped project '{}', its lock is held by another run or Redis is down",
                             candidate.projectId());
                     skipped++;
-                    record.decide(candidate, TopicsMetrics.DECISION_SKIP, TopicsMetrics.REASON_LOCKED, null);
+                    record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_LOCKED, null);
                     continue;
                 }
                 try {
@@ -240,19 +240,19 @@ public class TopicsNightlyService {
         try {
             if (savedFor(workspaceId, projectId, night)) {
                 log.info("Topics night skipped project '{}', its last saved run already covers the night", projectId);
-                record.decide(candidate, TopicsMetrics.DECISION_SKIP, TopicsMetrics.REASON_ALREADY_SAVED, null);
+                record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_ALREADY_SAVED, null);
                 return Outcome.SKIPPED;
             }
             if (!hasLiveTopics(workspaceId, projectId)) {
                 log.info("Topics night skipped project '{}', it has no live topic left", projectId);
-                record.decide(candidate, TopicsMetrics.DECISION_SKIP, TopicsMetrics.REASON_NO_LIST, null);
+                record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_NO_LIST, null);
                 return Outcome.SKIPPED;
             }
             runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.NIGHTLY_UPDATE);
         } catch (RuntimeException exception) {
             log.error("Topics run could not start, project '{}'", projectId, exception);
         }
-        record.decide(candidate, TopicsMetrics.DECISION_NIGHTLY_UPDATE, null, runId);
+        record.decide(candidate, TopicNightProject.NIGHTLY_UPDATE, null, runId);
         if (runId == null) {
             metrics.run(workspaceId, TopicRun.Status.FAILED, TopicsMetrics.ERROR_START_FAILED);
             return Outcome.FAILED;
@@ -307,12 +307,12 @@ public class TopicsNightlyService {
                 if (traces >= build.getMinVectors()) {
                     found.add(candidate);
                 } else {
-                    skipped.add(new Skipped(candidate, TopicsMetrics.REASON_SMALL));
+                    skipped.add(new Skipped(candidate, TopicNightProject.REASON_SMALL));
                 }
             } catch (RuntimeException exception) {
                 log.warn("Topics night count read failed, workspace '{}', project '{}'; it runs the next night",
                         project.workspaceId(), project.projectId(), exception);
-                record.countFailed(project, exception);
+                record.countFailed(project);
             }
         }
         var windowUntil = new HashMap<UUID, Instant>();
@@ -332,9 +332,9 @@ public class TopicsNightlyService {
                 }));
         for (var candidate : found) {
             if (!existing.contains(candidate.projectId())) {
-                skipped.add(new Skipped(candidate, TopicsMetrics.REASON_DELETED));
+                skipped.add(new Skipped(candidate, TopicNightProject.REASON_DELETED));
             } else if (paused.contains(candidate.projectId())) {
-                skipped.add(new Skipped(candidate, TopicsMetrics.REASON_PAUSED));
+                skipped.add(new Skipped(candidate, TopicNightProject.REASON_PAUSED));
             } else {
                 candidates.add(candidate);
             }
@@ -388,9 +388,8 @@ public class TopicsNightlyService {
     }
 
     /**
-     * The night's record in {@code topic_nights} and {@code topic_night_projects}, written as the night goes. Each
-     * decision is counted in {@code topics.nightly.projects} and written as a row. Its start must succeed, or the night
-     * does not run. A later write that fails is logged and the night goes on: the state gauges then show it, a missing
+     * The night's record in {@code topic_nights} and {@code topic_night_projects}, written as the night goes: a row per
+     * decision, which the state gauges publish. Its start must succeed, or the night does not run. A later write that fails is logged and the night goes on: the state gauges then show it, a missing
      * end as a night left running, which the next night's housekeeping fails. The first failed write of a night is a
      * WARN with its error, the others DEBUG, and the night's end WARNs how many failed.
      */
@@ -415,8 +414,7 @@ public class TopicsNightlyService {
             });
         }
 
-        void countFailed(TopicDAO.ProjectKey project, RuntimeException error) {
-            metrics.countFailure(project.workspaceId(), error);
+        void countFailed(TopicDAO.ProjectKey project) {
             write("count failure", dao -> dao.insertProjects(List.of(TopicNightProject.builder()
                     .id(idGenerator.generateId())
                     .night(night)
@@ -428,7 +426,6 @@ public class TopicsNightlyService {
 
         /** {@code reason} is null for a decision other than skip, {@code runId} when no run started. */
         void decide(Candidate candidate, String decision, String reason, UUID runId) {
-            metrics.project(candidate.workspaceId(), decision, reason);
             write("project", dao -> dao.insertProjects(List.of(row(candidate, decision, reason, runId))));
         }
 
@@ -439,8 +436,7 @@ public class TopicsNightlyService {
             }
             var rows = new ArrayList<TopicNightProject>(skipped.size());
             for (var skip : skipped) {
-                metrics.project(skip.candidate().workspaceId(), TopicsMetrics.DECISION_SKIP, skip.reason());
-                rows.add(row(skip.candidate(), TopicsMetrics.DECISION_SKIP, skip.reason(), null));
+                rows.add(row(skip.candidate(), TopicNightProject.SKIP, skip.reason(), null));
             }
             write("skipped projects", dao -> dao.insertProjects(rows));
         }

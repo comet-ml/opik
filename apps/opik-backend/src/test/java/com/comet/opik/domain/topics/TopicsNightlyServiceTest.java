@@ -166,7 +166,7 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
-    @DisplayName("each project's decision is counted with its skip reason and workspace; a failed count read too")
+    @DisplayName("each project's decision is a night row with its skip reason and workspace; a failed count read too")
     void decisions() {
         when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(UUID.randomUUID());
 
@@ -174,16 +174,14 @@ class TopicsNightlyServiceTest {
 
         assertThat(result.saved()).isEqualTo(1);
         assertThat(result.skipped()).isEqualTo(4);
-        for (var reason : List.of("small", "deleted", "already_saved", "locked")) {
-            assertThat(meter.sum("topics.nightly.projects", "decision", "skip", "reason", reason, "workspace_id",
-                    WORKSPACE_ID)).as(reason).isEqualTo(1);
-        }
-        assertThat(meter.sum("topics.nightly.projects", "decision", "nightly_update", "workspace_id", WORKSPACE_ID))
-                .isEqualTo(1);
-        assertThat(meter.points("topics.nightly.count_failures")).singleElement().satisfies(point -> {
-            assertThat(point.get("workspace_id")).isEqualTo(BROKEN_WORKSPACE_ID);
-            assertThat(point.get("error_type")).isNotBlank();
-        });
+        assertThat(rows()).extracting(TopicNightProject::workspaceId, TopicNightProject::decision,
+                TopicNightProject::reason).containsExactlyInAnyOrder(
+                        tuple(WORKSPACE_ID, "skip", "small"),
+                        tuple(WORKSPACE_ID, "skip", "deleted"),
+                        tuple(WORKSPACE_ID, "skip", "already_saved"),
+                        tuple(WORKSPACE_ID, "skip", "locked"),
+                        tuple(WORKSPACE_ID, "nightly_update", null),
+                        tuple(BROKEN_WORKSPACE_ID, "count_failed", null));
         assertThat(meter.points("topics.runs")).isEmpty();
     }
 
@@ -233,8 +231,6 @@ class TopicsNightlyServiceTest {
 
         assertThat(result.saved()).isZero();
         verify(rebuildService, never()).startRun(any(), any(), any());
-        assertThat(meter.sum("topics.nightly.projects", "decision", "skip", "reason", "no_list", "workspace_id",
-                WORKSPACE_ID)).isEqualTo(1);
         assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
                 .extracting(TopicNightProject::decision, TopicNightProject::reason)
                 .containsExactly(tuple("skip", "no_list"));
@@ -254,7 +250,6 @@ class TopicsNightlyServiceTest {
             assertThat(point.get("error_code")).isEqualTo("start_failed");
             assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
         });
-        assertThat(meter.sum("topics.nightly.projects", "decision", "nightly_update")).isEqualTo(1);
         assertThat(rows()).filteredOn(row -> started.equals(row.projectId())).singleElement().satisfies(row -> {
             assertThat(row.decision()).isEqualTo("nightly_update");
             assertThat(row.runId()).isNull();
@@ -275,7 +270,7 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
-    @DisplayName("projects the night does not reach are counted per workspace, and get a not_reached row")
+    @DisplayName("projects the night does not reach get a not_reached row each")
     void notReached() {
         Thread.currentThread().interrupt();
         try {
@@ -285,8 +280,6 @@ class TopicsNightlyServiceTest {
         } finally {
             Thread.interrupted();
         }
-        assertThat(meter.sum("topics.nightly.projects", "decision", "not_reached", "workspace_id", WORKSPACE_ID))
-                .isEqualTo(3);
         assertThat(meter.points("topics.runs")).isEmpty();
         assertThat(rows()).filteredOn(row -> "not_reached".equals(row.decision()))
                 .extracting(TopicNightProject::projectId).containsExactlyInAnyOrder(built, locked, started);
@@ -362,7 +355,8 @@ class TopicsNightlyServiceTest {
         var result = service.runNight(START);
 
         assertThat(result.saved()).isEqualTo(1);
-        assertThat(meter.sum("topics.nightly.projects", "decision", "nightly_update")).isEqualTo(1);
+        assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
+                .extracting(TopicNightProject::decision).containsExactly("nightly_update");
         assertThat(end().outcome()).isEqualTo(TopicNight.Outcome.FINISHED);
     }
 
@@ -393,8 +387,6 @@ class TopicsNightlyServiceTest {
         assertThat(result.saved()).isZero();
         assertThat(result.skipped()).isEqualTo(5);
         verify(rebuildService, never()).startRun(any(), any(), any());
-        assertThat(meter.sum("topics.nightly.projects", "decision", "skip", "reason", "paused", "workspace_id",
-                WORKSPACE_ID)).isEqualTo(1);
         assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
                 .extracting(TopicNightProject::decision, TopicNightProject::reason)
                 .containsExactly(tuple("skip", "paused"));
