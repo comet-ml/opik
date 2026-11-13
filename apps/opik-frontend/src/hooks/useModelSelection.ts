@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { isMiniMaxTextModel } from "@/constants/minimax";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
@@ -8,6 +9,7 @@ import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 
 export interface UseModelSelectionParams {
@@ -61,9 +63,12 @@ const useModelSelection = ({
       lastPickedModel,
       defaultProvider,
     );
-    const rememberedModel = isDropdownModel(lastPickedModel, lastPickedProvider)
-      ? lastPickedModel
-      : "";
+    const rememberedModel =
+      isDropdownModel(lastPickedModel, lastPickedProvider) ||
+      (isMiniMaxTextModel(lastPickedModel) &&
+        lastPickedProvider === PROVIDER_TYPE.OPEN_ROUTER)
+        ? lastPickedModel
+        : "";
 
     if (rememberedModel && providerKeys.includes(lastPickedProvider)) {
       return {
