@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 from typing import Any, TYPE_CHECKING
 
@@ -56,24 +55,30 @@ def instantiate_agent(
     return bind_optimizer(optimizer, agent)
 
 
-_SECRET_SUFFIXES = ("api_key", "secret", "password", "access_token", "auth_token")
-_SECRET_KEYS = {"authorization", "headers", "extra_headers"}
+_SECRET_MARKERS = ("key", "secret", "password", "credential", "auth", "header", "token")
+
+
+def _is_secret(key: Any) -> bool:
+    lowered = str(key).lower()
+    return not lowered.endswith("tokens") and any(m in lowered for m in _SECRET_MARKERS)
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            k: "***REDACTED***" if _is_secret(k) else _redact(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact(v) for v in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return type(value).__name__
 
 
 def _loggable_settings(settings: dict[str, Any] | None) -> dict[str, Any] | None:
     """The agent's model settings as experiment metadata, without credentials."""
-    loggable: dict[str, Any] = {}
-    for key, value in (settings or {}).items():
-        lowered = str(key).lower()
-        if lowered in _SECRET_KEYS or lowered.endswith(_SECRET_SUFFIXES):
-            loggable[key] = "***REDACTED***"
-        elif value is None or isinstance(value, (str, int, float, bool)):
-            loggable[key] = value
-        elif isinstance(value, (dict, list, tuple)):
-            loggable[key] = json.loads(json.dumps(value, default=repr))
-        else:
-            loggable[key] = type(value).__name__
-    return loggable or None
+    return _redact(dict(settings or {})) or None
 
 
 def build_agent_config(

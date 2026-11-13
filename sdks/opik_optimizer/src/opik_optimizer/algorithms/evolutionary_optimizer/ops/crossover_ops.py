@@ -90,10 +90,15 @@ def _crossover_messages(
             children = _deap_crossover_word_level(left["text"], other["text"], rng)
         for index, text in enumerate(children):
             edits[index].append(TextEdit(segment_id=left["segment_id"], text=text))
-    return (
-        apply_text_edits(parents[0], edits[0], allowed_roles).get_messages(),
-        apply_text_edits(parents[1], edits[1], allowed_roles).get_messages(),
-    )
+    results = []
+    for parent, child_edits in zip(parents, edits):
+        try:
+            results.append(
+                apply_text_edits(parent, child_edits, allowed_roles).get_messages()
+            )
+        except ValueError:
+            results.append(parent.get_messages())
+    return results[0], results[1]
 
 
 def deap_crossover(
