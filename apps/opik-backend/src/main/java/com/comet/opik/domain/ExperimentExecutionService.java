@@ -130,7 +130,7 @@ public class ExperimentExecutionService {
                         var dataset = tuple.getT2();
                         boolean testSuite = dataset.type() == DatasetType.TEST_SUITE;
                         String datasetName = dataset.name();
-                        var plannedExperiments = planExperiments(request, projectName, testSuite, datasetName);
+                        var plannedExperiments = planExperiments(request, projectName, testSuite, dataset);
                         return resolveOpikPromptsByVariant(request)
                                 .flatMap(opikPromptsByVariant -> {
                                     List<UUID> experimentIds = plannedExperiments.stream()
@@ -145,7 +145,7 @@ public class ExperimentExecutionService {
 
                                     UUID batchId = idGenerator.generateId();
 
-                                    return streamDatasetItems(request, datasetName, filters, versionHash)
+                                    return streamDatasetItems(request, dataset, filters, versionHash)
                                             .flatMapIterable(item -> buildMessages(
                                                     item, request, versionHash, experimentIds,
                                                     datasetExecutionPolicy, projectName, workspaceId,
@@ -278,7 +278,7 @@ public class ExperimentExecutionService {
     }
 
     private List<Experiment> planExperiments(ExperimentExecutionRequest request, String projectName,
-            boolean testSuite, String datasetName) {
+            boolean testSuite, Dataset dataset) {
         return IntStream.range(0, request.prompts().size())
                 .mapToObj(i -> {
                     var prompt = request.prompts().get(i);
@@ -294,7 +294,8 @@ public class ExperimentExecutionService {
                     var experiment = Experiment.builder()
                             .id(experimentId)
                             .name(prompt.experimentName())
-                            .datasetName(datasetName)
+                            .datasetName(dataset.name())
+                            .datasetId(dataset.id())
                             .datasetVersionId(request.datasetVersionId())
                             .projectId(request.projectId())
                             .projectName(projectName)
@@ -326,19 +327,21 @@ public class ExperimentExecutionService {
      * Both the versioned and the legacy query order by item id descending and take {@code id < lastRetrievedId},
      * so the last item of a page is the cursor for the next one. A short page means the dataset is exhausted.
      */
-    private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request, String datasetName,
+    private Flux<DatasetItem> streamDatasetItems(ExperimentExecutionRequest request, Dataset dataset,
             List<DatasetItemFilter> filters, String versionHash) {
-        return fetchItemPage(request, datasetName, filters, versionHash, null)
+        return fetchItemPage(request, dataset, filters, versionHash, null)
                 .expand(page -> page.size() < STREAM_PAGE_SIZE
                         ? Mono.empty()
-                        : fetchItemPage(request, datasetName, filters, versionHash, page.getLast().id()))
+                        : fetchItemPage(request, dataset, filters, versionHash, page.getLast().id()))
                 .flatMapIterable(page -> page);
     }
 
-    private Mono<List<DatasetItem>> fetchItemPage(ExperimentExecutionRequest request, String datasetName,
+    private Mono<List<DatasetItem>> fetchItemPage(ExperimentExecutionRequest request, Dataset dataset,
             List<DatasetItemFilter> filters, String versionHash, UUID lastRetrievedId) {
+        // Stream from the dataset's own project: the name alone resolves in the Default Project.
         var streamRequest = DatasetItemStreamRequest.builder()
-                .datasetName(datasetName)
+                .datasetName(dataset.name())
+                .projectId(dataset.projectId())
                 .datasetVersion(versionHash)
                 .steamLimit(STREAM_PAGE_SIZE)
                 .lastRetrievedId(lastRetrievedId)
@@ -364,12 +367,14 @@ public class ExperimentExecutionService {
     }
 
     private Mono<Void> requireDatasetItems(ExperimentExecutionRequest request) {
-        var firstItemRequest = DatasetItemStreamRequest.builder()
-                .datasetName(request.datasetName())
-                .datasetVersion(request.versionHash())
-                .steamLimit(1)
-                .build();
-        return datasetItemService.getItems(firstItemRequest, List.of())
+        // Stream from the dataset's own project: the name alone resolves in the Default Project.
+        return resolveDataset(request.datasetId())
+                .flatMapMany(dataset -> datasetItemService.getItems(DatasetItemStreamRequest.builder()
+                        .datasetName(dataset.name())
+                        .projectId(dataset.projectId())
+                        .datasetVersion(request.versionHash())
+                        .steamLimit(1)
+                        .build(), List.of()))
                 .hasElements()
                 .filter(Boolean::booleanValue)
                 .switchIfEmpty(Mono.error(() -> new BadRequestException(

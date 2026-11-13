@@ -7390,7 +7390,8 @@ class ExperimentsResourceTest {
 
             // the dataset was created in the requested project
             Dataset dataset = datasetResourceClient.getDatasetByIdentifier(
-                    DatasetIdentifier.builder().datasetName(datasetName).build(), API_KEY, TEST_WORKSPACE);
+                    DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build(), API_KEY,
+                    TEST_WORKSPACE);
             assertThat(dataset).isNotNull();
             assertThat(dataset.name()).isEqualTo(datasetName);
             assertThat(dataset.projectId()).isEqualTo(projectId);
@@ -7496,8 +7497,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when project_name is provided but the dataset already belongs to a different project, then return conflict")
-        void experimentItemsBulk__whenProjectNameMismatchesDatasetProject__thenReturnConflict() {
+        @DisplayName("when project_name is provided and only another project has a dataset with that name, then the dataset is created in the request project")
+        void experimentItemsBulk__whenDatasetNameOnlyInAnotherProject__thenDatasetCreatedInRequestProject() {
             // given — a dataset that already belongs to one project
             var datasetProjectName = newProjectName();
             projectResourceClient.createProject(datasetProjectName, API_KEY, TEST_WORKSPACE);
@@ -7518,11 +7519,22 @@ class ExperimentsResourceTest {
                             .build()))
                     .build();
 
-            // when / then
+            // when
             try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
                     TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
+
+            // then — each project has its own dataset with that name
+            var requestProjectId = projectResourceClient.getByName(requestProjectName, API_KEY, TEST_WORKSPACE).id();
+            var requestProjectDataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(dataset.name()).projectName(requestProjectName).build(),
+                    API_KEY, TEST_WORKSPACE);
+            var datasetProjectDataset = datasetResourceClient.getDatasetByIdentifier(
+                    DatasetIdentifier.builder().datasetName(dataset.name()).projectName(datasetProjectName).build(),
+                    API_KEY, TEST_WORKSPACE);
+            assertThat(requestProjectDataset.projectId()).isEqualTo(requestProjectId);
+            assertThat(requestProjectDataset.id()).isNotEqualTo(datasetProjectDataset.id());
         }
 
         @Test
@@ -7618,6 +7630,37 @@ class ExperimentsResourceTest {
             Trace trace = traceResourceClient.getById(actualExperimentItems.getFirst().traceId(), TEST_WORKSPACE,
                     API_KEY);
             assertThat(trace.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("when no project_name and the dataset name exists in several projects, then the request is rejected")
+        void experimentItemsBulk__whenNoProjectNameAndDatasetNameInSeveralProjects__thenReturnBadRequest() {
+            // given
+            var datasetName = "dataset-" + UUID.randomUUID();
+            for (int i = 0; i < 2; i++) {
+                var dataset = buildDataset().toBuilder().name(datasetName).projectName(newProjectName()).build();
+                datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+            }
+
+            var bulkUploadRequest = ExperimentItemBulkUpload.builder()
+                    .experimentName(newExperimentName())
+                    .datasetName(datasetName)
+                    .items(List.of(ExperimentItemBulkRecord.builder()
+                            .datasetItemId(podamFactory.manufacturePojo(UUID.class))
+                            .evaluateTaskResult(JsonUtils.readTree("{\"answer\": \"42\"}"))
+                            .build()))
+                    .build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "Dataset name exists in several projects, please provide project_name: '%s'"
+                            .formatted(datasetName));
+
+            // when
+            try (var response = experimentResourceClient.callExperimentItemBulkUpload(bulkUploadRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                // then
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
         }
 
         @Test

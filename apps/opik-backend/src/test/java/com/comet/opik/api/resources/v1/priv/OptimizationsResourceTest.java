@@ -935,14 +935,6 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var datasetName = "reflection-cost-test-" + UUID.randomUUID();
-            Dataset dataset = Dataset.builder()
-                    .name(datasetName)
-                    .build();
-            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
-
-            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
-            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
-            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
 
             // Production shape: the optimizer writes its internal traces to the
             // optimization's own project, while trial traces land in the dataset's project.
@@ -950,6 +942,16 @@ class OptimizationsResourceTest {
                     .name("Optimizer-%s".formatted(datasetName))
                     .build();
             projectResourceClient.createProject(optimizerProject, apiKey, workspaceName);
+
+            Dataset dataset = Dataset.builder()
+                    .name(datasetName)
+                    .projectName(optimizerProject.name())
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
 
             var objectiveName = "accuracy";
             var optimization = optimizationResourceClient.createPartialOptimization()
@@ -1105,18 +1107,19 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var datasetName = "shared-project-cost-test-" + UUID.randomUUID();
-            var datasetId = datasetResourceClient.createDataset(
-                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
-
-            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
-            datasetResourceClient.createDatasetItems(
-                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
 
             // One project for the run, its trials and its optimizer-internal traces.
             Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
                     .name("Shared-%s".formatted(datasetName))
                     .build();
             projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).projectName(project.name()).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
 
             var objectiveName = "accuracy";
             var optimizationId = optimizationResourceClient.create(
@@ -1217,12 +1220,6 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var datasetName = "cross-run-tag-test-" + UUID.randomUUID();
-            var datasetId = datasetResourceClient.createDataset(
-                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
-
-            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
-            datasetResourceClient.createDatasetItems(
-                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
 
             // One project for both runs, so the query's project bound cannot separate them and the
             // experiment-item exclusion is the only thing deciding attribution.
@@ -1230,6 +1227,13 @@ class OptimizationsResourceTest {
                     .name("Shared-%s".formatted(datasetName))
                     .build();
             projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).projectName(project.name()).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
 
             var objectiveName = "accuracy";
 
@@ -1333,13 +1337,14 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var datasetName = "tag-removal-test-" + UUID.randomUUID();
-            var datasetId = datasetResourceClient.createDataset(
-                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
 
             Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
                     .name("Optimizer-%s".formatted(datasetName))
                     .build();
             projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).projectName(project.name()).build(), apiKey, workspaceName);
 
             var optimization = optimizationResourceClient.createPartialOptimization()
                     .datasetId(datasetId)
@@ -1503,9 +1508,9 @@ class OptimizationsResourceTest {
                     .pollInterval(1, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         var pageWithBoth = optimizationResourceClient.find(
-                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+                                apiKey, workspaceName, 1, 10, null, null, null, 200);
                         var pageWithXOnly = optimizationResourceClient.find(
-                                apiKey, workspaceName, 1, 1, datasetId, null, null, 200);
+                                apiKey, workspaceName, 1, 1, null, null, null, 200);
 
                         assertThat(pageWithBoth.content())
                                 .usingRecursiveComparison()
@@ -1704,13 +1709,14 @@ class OptimizationsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var datasetName = "parent-rewrite-test-" + UUID.randomUUID();
-            var datasetId = datasetResourceClient.createDataset(
-                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
 
             Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
                     .name("Optimizer-%s".formatted(datasetName))
                     .build();
             projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).projectName(project.name()).build(), apiKey, workspaceName);
 
             var optimization = optimizationResourceClient.createPartialOptimization()
                     .datasetId(datasetId)

@@ -298,15 +298,15 @@ def test_get_items__dataset_created_without_project_name__returns_inserted_items
 ):
     """Regression test for OPIK-5704.
 
-    Datasets created via the Opik 1.0 UI (or REST API without project_name) have
-    project_id=NULL in the DB. When the SDK fetches such a dataset via get_dataset()
-    and then calls get_items(), items must be returned — not an empty list.
+    A dataset created through the REST API without project_name belongs to the
+    Default Project. When the SDK fetches it from there via get_dataset() and then
+    calls get_items(), items must be returned — not an empty list.
     """
-    # Simulate Opik 1.0 UI: create dataset at workspace level (no project_name)
+    # Simulate an Opik 1.0 client: create the dataset without project_name
     opik_client._rest_client.datasets.create_dataset(name=dataset_name)
 
     # SDK lookup — this is the path that used to return [] for items
-    dataset = opik_client.get_dataset(dataset_name)
+    dataset = opik_client.get_dataset(dataset_name, project_name="Default Project")
     dataset.insert(
         [
             {
