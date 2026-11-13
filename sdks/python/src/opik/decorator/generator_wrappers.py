@@ -43,6 +43,7 @@ class FinishGeneratorCallback(Protocol):
         capture_output: bool,
         generators_span_to_end: Optional[span.SpanData] = None,
         generators_trace_to_end: Optional[trace.TraceData] = None,
+        flush: bool = False,
     ) -> None: ...
 
 
@@ -120,10 +121,15 @@ class BaseTrackedGenerator(Generic[YieldType]):
             self._accumulated_values,
             generations_aggregator=self._track_options.generations_aggregator,
         )
+        # `flush=True` promises the same thing here as it does for a plain tracked
+        # function: the data just logged is sent before control returns to the
+        # caller. Only the end of the generator can honour it -- that is when the
+        # span is logged -- so the flag is carried by the wrapper.
         self._finally_callback(
             output=output,
             error_info=None,
             capture_output=self._track_options.capture_output,
+            flush=self._track_options.flush,
             generators_span_to_end=self._created_span_data,
             generators_trace_to_end=self._created_trace_data,
         )
@@ -144,6 +150,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
             output=None,
             error_info=error_info,
             capture_output=self._track_options.capture_output,
+            flush=self._track_options.flush,
             generators_span_to_end=self._created_span_data,
             generators_trace_to_end=self._created_trace_data,
         )
