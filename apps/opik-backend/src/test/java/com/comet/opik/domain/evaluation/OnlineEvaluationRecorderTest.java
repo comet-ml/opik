@@ -160,6 +160,30 @@ class OnlineEvaluationRecorderTest {
     }
 
     @Test
+    void recordsModelReportedByResponseOnLlmSpan() {
+        stubSpanWrites();
+        var response = ChatResponse.builder().aiMessage(AiMessage.from("ok"))
+                .modelName("claude-actual-20260917")
+                .tokenUsage(AnthropicTokenUsage.builder().inputTokenCount(10).outputTokenCount(5).build())
+                .build();
+
+        recorder().recordLlmCall(request(), Mono.just(response)).block();
+
+        // The dated snapshot that answered wins over the configured alias.
+        assertThat(capturedSpan().model()).isEqualTo("claude-actual-20260917");
+    }
+
+    @Test
+    void keepsConfiguredModelOnLlmSpanWhenResponseNamesNone() {
+        stubSpanWrites();
+        var usage = AnthropicTokenUsage.builder().inputTokenCount(10).outputTokenCount(5).build();
+
+        recorder().recordLlmCall(request(), Mono.just(responseWith(usage))).block();
+
+        assertThat(capturedSpan().model()).isEqualTo("claude-actual");
+    }
+
+    @Test
     void recordsDecisionCallWithReportedCostModelAndUsage() {
         stubSpanWrites();
         var request = DecisionsRequest.builder()
