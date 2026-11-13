@@ -171,6 +171,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Fable 5.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_2,
+      label: "Claude Fable 5.2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5,
       label: "Claude Mythos 5",
     },
@@ -232,6 +236,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1,
       label: "anthropic/claude-fable-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_2,
+      label: "anthropic/claude-fable-5.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
@@ -547,18 +555,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "ibm-granite/granite-4.2-8b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2,
-      label: "inception/mercury-2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_2_5,
-      label: "inception/mercury-2.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_3,
-      label: "inception/mercury-3",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH,
       label: "inclusionai/ling-3.0-flash",
     },
@@ -595,6 +591,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "liquid/lfm-2.5-24b-a2b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_3_1_7B,
+      label: "liquid/lfm-3-1.7b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_3_1_7B_FREE,
+      label: "liquid/lfm-3-1.7b:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MANCER_WEAVER,
       label: "mancer/weaver",
     },
@@ -625,6 +629,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
       label: "meta-llama/llama-4-scout",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_EMBER,
+      label: "meta/muse-ember",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_GLIMMER_30B,
@@ -1354,10 +1362,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.SCALEDOWN_SUMMARIZE,
       label: "scaledown/summarize",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.STEALTH_CROUTON_ALPHA,
-      label: "stealth/crouton-alpha",
     },
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_5_FLASH,
