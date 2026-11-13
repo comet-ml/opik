@@ -16,6 +16,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -80,6 +81,8 @@ public class TopicsArrivalService {
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
     private final TopicAlgorithm algorithm;
+    // The tick's clock: the time bound is measured against the tick's deadline.
+    private final Clock clock;
 
     private final LongCounter labelled;
     private final LongCounter failures;
@@ -88,15 +91,18 @@ public class TopicsArrivalService {
     @Inject
     public TopicsArrivalService(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
             @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicAlgorithm algorithm) {
-        this(config, template, traceTopicsDAO, algorithm, GlobalOpenTelemetry.get().getMeter("opik.topics"));
+        this(config, template, traceTopicsDAO, algorithm, GlobalOpenTelemetry.get().getMeter("opik.topics"),
+                Clock.systemUTC());
     }
 
     TopicsArrivalService(@NonNull TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicAlgorithm algorithm, @NonNull Meter meter) {
+            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull TopicAlgorithm algorithm, @NonNull Meter meter,
+            @NonNull Clock clock) {
         this.config = config;
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
         this.algorithm = algorithm;
+        this.clock = clock;
         this.labelled = meter.counterBuilder("topics.arrival.labelled")
                 .setDescription("Traces the vectors tick labelled on arrival, by outcome and workspace: topic or other "
                         + "(a trace_topics row written), no_prototypes (the project's saved list labels nothing), "
@@ -152,7 +158,7 @@ public class TopicsArrivalService {
                 count(workspaceId, workspaceName, AFTER_FAILURE, vectors.size());
                 return;
             }
-            var now = Instant.now();
+            var now = clock.instant();
             var until = min(now.plus(config.getArrival().getTimeout().toJavaDuration().minus(spent)), tickDeadline);
             if (Duration.between(now, until).compareTo(MIN_TIME) < 0) {
                 count(workspaceId, workspaceName, OVER_BUDGET, vectors.size());
@@ -286,8 +292,8 @@ public class TopicsArrivalService {
     }
 
     /** The time left until {@code until}, zero once it has passed. */
-    private static Duration left(Instant until) {
-        var left = Duration.between(Instant.now(), until);
+    private Duration left(Instant until) {
+        var left = Duration.between(clock.instant(), until);
         return left.isNegative() ? Duration.ZERO : left;
     }
 

@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -48,11 +49,13 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -595,6 +598,52 @@ class TopicVectorsTickServiceTest {
                 Thread.interrupted();
             }
             assertThat(inserted).extracting(TopicVector::workspaceId).doesNotContain("second");
+            assertThat(requests).flatExtracting(EmbedRequest::inputs).containsExactly("first text");
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("an interrupt during the arrival read or insert stops the tick: the next workspace's traces are "
+                + "not embedded")
+        void interruptDuringArrivalStopsTheTick(boolean duringRead) {
+            var interrupt = reactor.core.Exceptions.propagate(new InterruptedException());
+            var arrivalTemplate = mock(TransactionTemplate.class);
+            var traceTopicsDAO = mock(TraceTopicsDAO.class);
+            var algorithm = mock(TopicAlgorithm.class);
+            if (duringRead) {
+                when(arrivalTemplate.inTransaction(any(TxConfig.class), any())).thenThrow(interrupt);
+            } else {
+                when(arrivalTemplate.inTransaction(any(TxConfig.class), any())).thenReturn(List.of());
+                when(algorithm.labeller(anyList())).thenReturn(Optional.of(vectors -> {
+                    var topics = new UUID[vectors.length / TopicsRebuildService.DIMENSIONS];
+                    Arrays.fill(topics, TraceTopic.OTHER);
+                    return topics;
+                }));
+                when(traceTopicsDAO.insert(anyList())).thenReturn(Mono.error(interrupt));
+            }
+            var arrival = new TopicsArrivalService(config, arrivalTemplate, traceTopicsDAO, algorithm,
+                    new TestMeter().meter, clock);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService, registry, names(), arrival, meter.meter, clock);
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(false));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("first", "second"));
+            var first = candidate("first", NOW.minusSeconds(10));
+            var second = candidate("second", NOW.minusSeconds(10));
+            when(findUnvectored(dao, "first", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(first));
+            when(findUnvectored(dao, "second", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(second));
+            stubSummaries("first", List.of(first), candidate -> "first text", BUDGET_SECONDS);
+            stubSummaries("second", List.of(second), candidate -> "second text", BUDGET_SECONDS);
+
+            try {
+                assertThatThrownBy(() -> service.tick(NOW))
+                        .satisfies(error -> assertThat(reactor.core.Exceptions.unwrap(error))
+                                .isInstanceOf(InterruptedException.class));
+                assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            } finally {
+                Thread.interrupted();
+            }
+            assertThat(inserted).extracting(TopicVector::workspaceId).containsExactly("first");
             assertThat(requests).flatExtracting(EmbedRequest::inputs).containsExactly("first text");
         }
 
@@ -2488,7 +2537,7 @@ class TopicVectorsTickServiceTest {
         arrival.setEnabled(false);
         topics.setArrival(arrival);
         return new TopicsArrivalService(topics, mock(TransactionTemplate.class), mock(TraceTopicsDAO.class),
-                new KMeansTopicAlgorithm(), OpenTelemetry.noop().getMeter("test"));
+                new KMeansTopicAlgorithm(), OpenTelemetry.noop().getMeter("test"), Clock.systemUTC());
     }
 
     static TopicsWorkspaceNames names() {
