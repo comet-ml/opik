@@ -1,9 +1,15 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.FieldType;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -23,9 +29,20 @@ import static com.comet.opik.domain.filter.FilterQueryBuilder.JSONPATH_ROOT;
  * Unquoted dot notation only accepts {@code [A-Za-z0-9_]} in a key, so a key holding any other
  * character — a hyphen being by far the most common — cannot be expressed that way. Bracket notation
  * accepts arbitrary characters once quoted and is used for those keys.
+ * <p>
+ * Plain keys that contain dots without being explicit JSONPath expressions are ambiguous: the same
+ * filter key may refer to nested segments ({@code a.b}) or to a single dictionary key literally named
+ * {@code "a.b"}. Dictionary filters evaluate both interpretations.
  */
 @UtilityClass
 public class JsonPathUtils {
+
+    /**
+     * Negation and emptiness operators require both nested-path and literal-flat-key interpretations
+     * to agree; positive match operators succeed when either interpretation matches.
+     */
+    public static final Set<Operator> AMBIGUOUS_DICTIONARY_AND_OPERATORS = EnumSet.of(Operator.IS_EMPTY,
+            Operator.NOT_CONTAINS, Operator.NOT_EQUAL);
 
     private static final Pattern DOT_NOTATION_SEGMENT = Pattern.compile("[A-Za-z0-9_]+");
 
@@ -86,23 +103,39 @@ public class JsonPathUtils {
     }
 
     /**
-     * A plain dictionary key whose segments are all dot-notation-safe reads as a nested path
-     * ({@code a.b.c} → {@code $.a.b.c}) but may instead name a single flat key that contains
-     * dots ({@code "a.b.c"}). Callers that cannot know which the author intended must try both.
+     * A plain dictionary key that contains dots reads as a nested path ({@code a.b.c} →
+     * {@code $.a.b.c}) but may instead name a single flat key ({@code "a.b.c"}). Callers that cannot
+     * know which the author intended must try both.
      */
     public static boolean hasAmbiguousDottedPlainKey(@NonNull String key) {
-        if (!key.contains(PATH_SEPARATOR) || isPathExpression(key)) {
-            return false;
-        }
+        return key.contains(PATH_SEPARATOR) && !isPathExpression(key);
+    }
 
-        return isExpressibleInDotNotation(key.split("\\.", -1));
+    public static boolean isAmbiguousDictionaryFilter(@NonNull Filter filter) {
+        return filter.field().getType() == FieldType.DICTIONARY
+                && StringUtils.isNotBlank(filter.key())
+                && hasAmbiguousDottedPlainKey(filter.key());
     }
 
     /**
      * JSONPath for a single top-level key whose name is {@code key} in full, including any dots.
      */
-    public static String toAnalyticsDbLiteralFlatKeyPath(@NonNull String key) {
+    public static String toLiteralFlatKeyJsonPath(@NonNull String key) {
         return JSONPATH_ROOT + quoteSegment(key);
+    }
+
+    public static boolean combineAmbiguousDictionaryMatches(
+            Operator operator, boolean nestedMatches, boolean literalMatches) {
+        return AMBIGUOUS_DICTIONARY_AND_OPERATORS.contains(operator)
+                ? nestedMatches && literalMatches
+                : nestedMatches || literalMatches;
+    }
+
+    public static String combineAmbiguousDictionaryConditions(
+            Operator operator, String nestedPathCondition, String literalFlatKeyCondition) {
+        return AMBIGUOUS_DICTIONARY_AND_OPERATORS.contains(operator)
+                ? "(%s AND %s)".formatted(nestedPathCondition, literalFlatKeyCondition)
+                : "(%s OR %s)".formatted(nestedPathCondition, literalFlatKeyCondition);
     }
 
     private static boolean isPathExpression(String key) {

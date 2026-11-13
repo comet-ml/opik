@@ -2,7 +2,6 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.filter.Field;
-import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.domain.filter.JsonPathUtils;
@@ -51,7 +50,9 @@ public abstract class FilterEvaluationServiceBase<E> {
      * This method must be implemented by subclasses to provide entity-specific field extraction.
      *
      * @param field the field to extract
-     * @param key optional key for nested field extraction (e.g., metadata keys, feedback score names)
+     * @param key optional key for nested field extraction (e.g., metadata keys, feedback score names).
+     *        When {@code null}, dictionary fields must return the raw JSON object or string root
+     *        (not a nested slice) so ambiguous dotted-key filters can evaluate both interpretations.
      * @param entity the entity to extract the field from
      * @return the extracted field value, or null if not found
      */
@@ -101,9 +102,7 @@ public abstract class FilterEvaluationServiceBase<E> {
     public boolean matchesFilter(Filter filter, E entity) {
         try {
             Field field = filter.field();
-            if (field.getType() == FieldType.DICTIONARY
-                    && StringUtils.isNotBlank(filter.key())
-                    && JsonPathUtils.hasAmbiguousDottedPlainKey(filter.key())) {
+            if (JsonPathUtils.isAmbiguousDictionaryFilter(filter)) {
                 return matchesAmbiguousDictionaryFilter(filter, entity);
             }
 
@@ -119,20 +118,34 @@ public abstract class FilterEvaluationServiceBase<E> {
 
     private boolean matchesAmbiguousDictionaryFilter(Filter filter, E entity) {
         var jsonRoot = extractFieldValue(filter.field(), null, entity);
-        var nestedValue = extractNestedValue(jsonRoot, filter.key());
-        var literalFlatKeyValue = extractJsonPathValue(jsonRoot,
-                JsonPathUtils.toAnalyticsDbLiteralFlatKeyPath(filter.key()));
-        var nestedMatches = evaluateOperator(filter.operator(), nestedValue, filter.value());
-        var literalMatches = evaluateOperator(filter.operator(), literalFlatKeyValue, filter.value());
-        return combineAmbiguousDictionaryMatches(filter.operator(), nestedMatches, literalMatches);
+        if (jsonRoot == null) {
+            return JsonPathUtils.combineAmbiguousDictionaryMatches(filter.operator(), false, false);
+        }
+
+        try {
+            String jsonString = jsonRoot instanceof String str
+                    ? str
+                    : JsonUtils.writeValueAsString(jsonRoot);
+            var document = JsonPath.using(JSON_PATH_CONFIG).parse(jsonString);
+            var nestedPath = toNestedJsonPath(filter.key());
+            var nestedValue = document.read(nestedPath);
+            var literalValue = document.read(JsonPathUtils.toLiteralFlatKeyJsonPath(filter.key()));
+            var nestedMatches = evaluateOperator(filter.operator(), nestedValue, filter.value());
+            var literalMatches = evaluateOperator(filter.operator(), literalValue, filter.value());
+            return JsonPathUtils.combineAmbiguousDictionaryMatches(
+                    filter.operator(), nestedMatches, literalMatches);
+        } catch (Exception e) {
+            log.warn("Failed to evaluate ambiguous dictionary filter '{}'", filter, e);
+            return false;
+        }
     }
 
-    private static boolean combineAmbiguousDictionaryMatches(Operator operator, boolean nestedMatches,
-            boolean literalMatches) {
-        return switch (operator) {
-            case IS_EMPTY, NOT_CONTAINS, NOT_EQUAL -> nestedMatches && literalMatches;
-            default -> nestedMatches || literalMatches;
-        };
+    private String toNestedJsonPath(String key) {
+        String normalizedKey = normalizeJsonPath(key);
+        if (StringUtils.isBlank(normalizedKey)) {
+            return "$";
+        }
+        return normalizedKey.startsWith("$") ? normalizedKey : "$." + normalizedKey;
     }
 
     /**
@@ -168,34 +181,7 @@ public abstract class FilterEvaluationServiceBase<E> {
             return null;
         }
 
-        // Normalize numeric dot notation to bracket notation (e.g., "messages.0.content" -> "messages[0].content")
-        String normalizedKey = normalizeJsonPath(key);
-
-        // Normalize the path to ensure it starts with $. for JSONPath
-        // If key is blank, return root path "$" instead of "$." which JsonPath rejects
-        String jsonPath;
-        if (StringUtils.isBlank(normalizedKey)) {
-            jsonPath = "$";
-        } else {
-            jsonPath = normalizedKey.startsWith("$") ? normalizedKey : "$." + normalizedKey;
-        }
-
-        try {
-            String jsonString;
-            if (jsonValue instanceof String str) {
-                jsonString = str;
-            } else {
-                // Convert object to JSON string for JSONPath parsing
-                jsonString = JsonUtils.writeValueAsString(jsonValue);
-            }
-
-            // Use JSONPath to extract the value
-            // JSON_PATH_CONFIG is static and reused, providing better performance than creating a new Configuration each time
-            return JsonPath.using(JSON_PATH_CONFIG).parse(jsonString).read(jsonPath);
-        } catch (Exception e) {
-            log.warn("Failed to extract nested value with JSONPath '{}'", jsonPath, e);
-            return null;
-        }
+        return extractJsonPathValue(jsonValue, toNestedJsonPath(key));
     }
 
     private Object extractJsonPathValue(Object jsonValue, String jsonPath) {

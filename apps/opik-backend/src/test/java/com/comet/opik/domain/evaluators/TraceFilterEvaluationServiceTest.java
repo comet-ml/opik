@@ -540,26 +540,7 @@ class TraceFilterEvaluationServiceTest {
             assertThat(result).isTrue();
         }
 
-        @Test
-        void matchesFilterWithFlatMetadataKeyContainingDots() {
-            ObjectNode metadata = JsonUtils.createObjectNode();
-            metadata.put("uni.workflow.id", "019e7212-cbb2-7972-b061-0a703e19ef18");
-
-            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
-                    .metadata(metadata)
-                    .build();
-            var filter = TraceFilter.builder()
-                    .field(TraceField.METADATA)
-                    .key("uni.workflow.id")
-                    .operator(Operator.EQUAL)
-                    .value("019e7212-cbb2-7972-b061-0a703e19ef18")
-                    .build();
-
-            assertThat(traceFilterEvaluationService.matchesFilter(filter, trace)).isTrue();
-        }
-
         @Nested
-        @DisplayName("Ambiguous dotted metadata keys")
         class AmbiguousDottedMetadataKeys {
 
             @ParameterizedTest(name = "{0} metadata, operator {2}, expected {4}")
@@ -587,6 +568,8 @@ class TraceFilterEvaluationServiceTest {
                 var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
                 var flatOnly = "{\"uni.workflow.id\":\"%s\"}".formatted(workflowId);
                 var nestedOnly = "{\"uni\":{\"workflow\":{\"id\":\"%s\"}}}".formatted(workflowId);
+                var bothWithDifferentValues = "{\"uni.workflow.id\":\"flat\",\"uni\":{\"workflow\":{\"id\":\"%s\"}}}"
+                        .formatted(workflowId);
                 var absent = "{}";
                 var flatOther = "{\"uni.workflow.id\":\"other\"}";
 
@@ -597,6 +580,18 @@ class TraceFilterEvaluationServiceTest {
                         arguments(flatOther, "uni.workflow.id", Operator.EQUAL, workflowId, false),
                         arguments(flatOnly, "uni.workflow.id", Operator.NOT_EQUAL, workflowId, false),
                         arguments(flatOther, "uni.workflow.id", Operator.NOT_EQUAL, workflowId, true),
+                        arguments(flatOnly, "uni.workflow.id", Operator.CONTAINS, "019e7212", true),
+                        arguments(flatOther, "uni.workflow.id", Operator.CONTAINS, "019e7212", false),
+                        arguments(flatOnly, "uni.workflow.id", Operator.IS_NOT_EMPTY, "", true),
+                        arguments(absent, "uni.workflow.id", Operator.IS_NOT_EMPTY, "", false),
+                        arguments(flatOnly, "uni.workflow.id", Operator.STARTS_WITH, "019e7212", true),
+                        arguments(flatOnly, "uni.workflow.id", Operator.GREATER_THAN, "1", true),
+                        arguments(
+                                bothWithDifferentValues,
+                                "uni.workflow.id",
+                                Operator.EQUAL,
+                                workflowId,
+                                true),
                         arguments(absent, "uni.workflow.id", Operator.IS_EMPTY, "", true),
                         arguments(flatOnly, "uni.workflow.id", Operator.IS_EMPTY, "", false),
                         arguments(nestedOnly, "uni.workflow.id", Operator.NOT_CONTAINS, "019e7212", false),

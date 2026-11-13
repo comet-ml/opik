@@ -2312,6 +2312,58 @@ class FindSpansResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
+        void whenFilterSpanMetadataAmbiguousDottedKeyEqual__thenReturnMatchingSpans(
+                String endpoint, SpanPageTestAssertion testAssertion) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+            var flatSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni.workflow.id\":\"%s\"}".formatted(workflowId)))
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+            var nestedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni\":{\"workflow\":{\"id\":\"%s\"}}}".formatted(workflowId)))
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+            var otherSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString("{\"uni.workflow.id\":\"other\"}"))
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+            var spans = List.of(flatSpan, nestedSpan, otherSpan);
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("uni.workflow.id")
+                    .value(workflowId)
+                    .build());
+
+            var expectedSpans = List.of(flatSpan, nestedSpan);
+            var unexpectedSpans = List.of(otherSpan);
+            var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
         void whenFilterMetadataKeyHasSpecialCharacters__thenReturnSpansFiltered(String endpoint,
                 SpanPageTestAssertion testAssertion) {
 

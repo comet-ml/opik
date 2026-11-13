@@ -645,6 +645,32 @@ class SpanFilterEvaluationServiceTest {
         }
 
         @Test
+        void matchesFilterWithAmbiguousDottedMetadataKeyFlatAndNested() {
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+
+            ObjectNode flatMetadata = JsonUtils.createObjectNode();
+            flatMetadata.put("uni.workflow.id", workflowId);
+            var flatSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .metadata(flatMetadata)
+                    .build();
+
+            var nestedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni\":{\"workflow\":{\"id\":\"%s\"}}}".formatted(workflowId)))
+                    .build();
+
+            var filter = SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .key("uni.workflow.id")
+                    .operator(Operator.EQUAL)
+                    .value(workflowId)
+                    .build();
+
+            assertThat(spanFilterEvaluationService.matchesFilter(filter, flatSpan)).isTrue();
+            assertThat(spanFilterEvaluationService.matchesFilter(filter, nestedSpan)).isTrue();
+        }
+
+        @Test
         void matchesFilterWithInputField() {
             // Given
             ObjectNode input = JsonUtils.createObjectNode();

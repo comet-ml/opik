@@ -1044,29 +1044,14 @@ public class FilterQueryBuilder {
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
         var condition = filter.field().getType().buildFilter(template, dbField, i, filter.value(),
                 enumFallbackTemplate);
-        if (filter.field().getType() == FieldType.DICTIONARY
-                && StringUtils.isNotBlank(filter.key())
-                && JsonPathUtils.hasAmbiguousDottedPlainKey(filter.key())) {
-            var literalTemplate = template.replace(":filterKey" + i, ":filterKeyLiteral" + i);
+        if (JsonPathUtils.isAmbiguousDictionaryFilter(filter)) {
+            var literalTemplate = template.replace(":filterKey%2$d", ":filterKeyLiteral%2$d");
             var literalCondition = filter.field().getType()
                     .buildFilter(literalTemplate, dbField, i, filter.value(), enumFallbackTemplate);
-            condition = combineAmbiguousDictionaryConditions(filter.operator(), condition, literalCondition);
+            condition = JsonPathUtils.combineAmbiguousDictionaryConditions(
+                    filter.operator(), condition, literalCondition);
         }
         return condition;
-    }
-
-    /**
-     * Merges nested-path and flat-key interpretations for dictionary filters on ambiguous dotted keys.
-     * Positive match operators succeed when either interpretation matches; negations and emptiness
-     * require every interpretation to agree.
-     */
-    private static String combineAmbiguousDictionaryConditions(
-            Operator operator, String nestedPathCondition, String literalFlatKeyCondition) {
-        return switch (operator) {
-            case IS_EMPTY, NOT_CONTAINS, NOT_EQUAL ->
-                "(%s AND %s)".formatted(nestedPathCondition, literalFlatKeyCondition);
-            default -> "(%s OR %s)".formatted(nestedPathCondition, literalFlatKeyCondition);
-        };
     }
 
     private static String getAnalyticsDbField(
@@ -1242,11 +1227,10 @@ public class FilterQueryBuilder {
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);
                     binder.accept("filterKey%d".formatted(i), key);
-                    if (filter.field().getType() == FieldType.DICTIONARY
-                            && JsonPathUtils.hasAmbiguousDottedPlainKey(filter.key())) {
+                    if (JsonPathUtils.isAmbiguousDictionaryFilter(filter)) {
                         binder.accept(
                                 "filterKeyLiteral%d".formatted(i),
-                                JsonPathUtils.toAnalyticsDbLiteralFlatKeyPath(filter.key()));
+                                JsonPathUtils.toLiteralFlatKeyJsonPath(filter.key()));
                     }
                 }
             }
