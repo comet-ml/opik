@@ -10,11 +10,17 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.concurrent.TimeUnit;
 
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class AuthenticationConfig {
 
     public record UrlConfig(@Valid @JsonProperty @NotNull String url) {
@@ -82,6 +88,21 @@ public class AuthenticationConfig {
     @MaxDuration(value = 30, unit = TimeUnit.SECONDS)
     private Duration requestRetryMaxBackoff;
 
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 60, unit = TimeUnit.MINUTES)
+    private Duration organizationCacheTTL;
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    @MaxDuration(value = 60, unit = TimeUnit.MINUTES)
+    private Duration organizationCacheStaleTTL;
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration organizationCacheRetryAfterFailure;
+
     /**
      * Cross-field constraint: a backoff whose minimum exceeds its maximum is contradictory, and
      * Reactor's {@code Retry.backoff} would clamp it silently rather than fail. Validate it at
@@ -92,5 +113,16 @@ public class AuthenticationConfig {
         return requestRetryMinBackoff == null
                 || requestRetryMaxBackoff == null
                 || requestRetryMinBackoff.toMilliseconds() <= requestRetryMaxBackoff.toMilliseconds();
+    }
+
+    /**
+     * Redis drops a cached organization after the stale TTL, so a stale TTL shorter than the fresh one would drop
+     * entries while they are still fresh: every request would ask Comet, and nothing would be left for Comet outages.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "authentication.organizationCacheStaleTTL must be at least authentication.organizationCacheTTL") public boolean isOrganizationCacheTtlOrderValid() {
+        return organizationCacheTTL == null
+                || organizationCacheStaleTTL == null
+                || organizationCacheTTL.toMilliseconds() <= organizationCacheStaleTTL.toMilliseconds();
     }
 }

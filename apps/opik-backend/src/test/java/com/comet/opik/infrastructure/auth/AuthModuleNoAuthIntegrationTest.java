@@ -153,7 +153,7 @@ class AuthModuleNoAuthIntegrationTest {
 
     @Test
     void testOrganizationResolver__noAuthIsConfigured__thenResolveDefaultOrganization(OrganizationResolver resolver) {
-        assertThat(resolver).isInstanceOf(DefaultOrganizationResolver.class);
+        assertThat(resolver).isExactlyInstanceOf(DefaultOrganizationResolver.class);
 
         StepVerifier.create(resolver.organizationId())
                 .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)

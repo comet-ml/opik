@@ -2,12 +2,12 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.domain.ProjectService;
 import org.junit.jupiter.api.Named;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 
+import java.util.UUID;
 import java.util.stream.Stream;
 
 class DefaultOrganizationResolverTest {
@@ -25,7 +25,7 @@ class DefaultOrganizationResolverTest {
                         RequestContext.WORKSPACE_NAME, ProjectService.DEFAULT_WORKSPACE_NAME)),
                 Named.of("job carrying another organization", Context.of(
                         RequestContext.WORKSPACE_ID, ProjectService.DEFAULT_WORKSPACE_ID,
-                        RequestContext.ORGANIZATION_ID, "another-organization")));
+                        RequestContext.ORGANIZATION_ID, UUID.randomUUID().toString())));
     }
 
     @ParameterizedTest
@@ -36,9 +36,10 @@ class DefaultOrganizationResolverTest {
                 .verifyComplete();
     }
 
-    @Test
-    void requireOrganizationAdminAllowsWithDefaultOrganization() {
-        StepVerifier.create(resolver.requireOrganizationAdmin())
+    @ParameterizedTest
+    @MethodSource("contexts")
+    void requireOrganizationAdminAllowsWithDefaultOrganization(Context context) {
+        StepVerifier.create(resolver.requireOrganizationAdmin().contextWrite(context))
                 .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
                 .verifyComplete();
     }

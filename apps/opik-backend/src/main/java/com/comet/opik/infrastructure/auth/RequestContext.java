@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Set;
@@ -26,6 +27,7 @@ public class RequestContext {
     public static final String SESSION_COOKIE = "sessionToken";
     public static final String WORKSPACE_ID = "workspaceId";
     public static final String ORGANIZATION_ID = "organizationId";
+    public static final String COMET_CREDENTIALS = "cometCredentials";
     public static final String API_KEY = "apiKey";
     public static final String LIMIT = "Opik-%s-Limit";
     public static final String REMAINING_LIMIT = "Opik-%s-Remaining-Limit";
@@ -52,6 +54,9 @@ public class RequestContext {
     private String workspaceFallbackMessage;
 
     private String cipxDeviceId;
+
+    @ToString.Exclude
+    private CometCredentials cometCredentials;
 
     /**
      * Whether this caller's response content must be redacted. Resolved once, after authentication, because

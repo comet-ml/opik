@@ -427,14 +427,54 @@ authentication:
   reactService:
     url: ''
 
-  # Per-call read timeout for auth requests to the React service (overrides jerseyClient.timeout for this hop).
+  # Default: 3s
+  # Description: Per-call read timeout for auth requests to the React service, overriding
+  #   jerseyClient.timeout (30s) for this hop only. Sized from measured production latency of
+  #   successful auth calls: p50 22ms, p99 147ms, p99.9 305ms, p99.99 1.15s -- so 3s is ~2.6x
+  #   p99.99 and normal calls never reach it. Without this override a stalled auth call blocks
+  #   for the full 30s and returns a 500 to the user. Set to 0s to inherit the shared timeout.
+  #   Does NOT apply to listEligibleWorkspaces, which has a documented large-payload case.
+  #   NOTE: this bounds a single attempt, not the whole operation -- see requestMaxRetries for
+  #   the end-to-end budget. It is an override rather than a clamp: it wins over
+  #   jerseyClient.timeout in both directions, so lowering jerseyClient.timeout alone does not cap
+  #   the auth hop -- lower this value too.
   requestTimeout: 3s
-  # Maximum retry attempts for a failed auth request. Transport failures only; HTTP error statuses are not retried.
+  # Default: 1
+  # Description: Maximum number of RETRIES for a failed auth request -- additional attempts after
+  #   the first, not a total attempt budget. The default of 1 therefore permits 2 outbound calls. The call is issued through the
+  #   shared RetriableHttpClient, which owns the retry policy for outbound calls in this service --
+  #   nothing bespoke is implemented for this hop. Retried: transport failures per
+  #   RetryUtils.handleHttpErrors (SocketException, TimeoutException, InterruptedIOException --
+  #   covering SocketTimeoutException and ConnectTimeoutException -- and NoHttpResponseException),
+  #   plus HTTP 503/504, which RetriableHttpClient maps to RetryableHttpException. React emits 503s
+  #   while draining during a rolling restart, so that is useful here. NOT retried: any other HTTP
+  #   error status, since verifyResponse maps 4xx to ClientErrorException, which is not retriable --
+  #   a 401 surfaces on the first attempt. Retries will NOT recover a React CPU brownout: those last
+  #   1-3 minutes, so the retry lands in the same brownout. Set to 0 to disable.
   requestMaxRetries: 1
-  # Minimum backoff between auth request attempts.
+  # Default: 250ms
+  # Description: Minimum backoff between auth request attempts. Deliberately non-zero -- an
+  #   immediate retry adds load to a React service that may already be CPU-starved.
   requestRetryMinBackoff: 250ms
-  # Upper bound on the backoff between auth request attempts.
+  # Default: 1s
+  # Description: Upper bound on the exponential backoff between auth request attempts.
   requestRetryMaxBackoff: 1s
+  # Default: 10m
+  # Description: How long a workspace's organization, as Comet reported it, is reused before Comet is asked again.
+  #   Used for organization settings such as custom model prices. A workspace moved to another organization picks
+  #   up the new one within this time. Between 1m and 60m.
+  organizationCacheTTL: 10m
+  # Default: 60m
+  # Description: How long the last known organization of a workspace is kept, for when Comet can't be reached and
+  #   for background jobs that carry no organization of their own. Comet brownouts last minutes, so an hour covers
+  #   them with room to spare. At least organizationCacheTTL, and between 1m and 60m.
+  organizationCacheStaleTTL: 60m
+  # Default: 30s
+  # Description: While Comet fails, how long the last known organization is served before Comet is asked again.
+  #   Each attempt already retries per requestMaxRetries with backoff, so this is the pause between those rounds:
+  #   shorter notices recovery sooner but sends more calls to a failing Comet. Between 1s and 5m.
+  organizationCacheRetryAfterFailure: 30s
+
 sharedHttpClientHealthCheck:
   timeout: 1s
 
@@ -1109,6 +1149,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: "false"
+  # Default: false
+  # Description: Whether or not organization admins can set custom model prices through /v1/private/model-prices
+  modelPricesEnabled: "false"
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: "true"
