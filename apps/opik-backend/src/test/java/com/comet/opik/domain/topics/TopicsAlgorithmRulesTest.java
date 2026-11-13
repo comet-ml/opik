@@ -48,7 +48,7 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
-        @DisplayName("shares format as the stand's 100 * size / n")
+        @DisplayName("shares format as 100 * size / n, rounded as Python's f-format")
         void shares() {
             assertThat(TopicText.fixed(100 * ((double) 122 / 400), 1)).isEqualTo("30.5");
             assertThat(TopicText.fixed(100 * ((double) 1 / 3), 1)).isEqualTo("33.3");

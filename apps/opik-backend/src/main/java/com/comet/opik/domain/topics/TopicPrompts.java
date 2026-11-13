@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * The Qwen prompts, built from files under {@code topics/prompts/} copied verbatim from the stand, with the stand's
- * substitutions and number formats, so the text is the stand's byte for byte.
+ * The Qwen prompts: the templates under {@code topics/prompts/} with their placeholders filled in. Numbers use the
+ * fixed formats of {@link TopicText}, so the same groups always give the same prompt text.
  */
 @UtilityClass
 public class TopicPrompts {

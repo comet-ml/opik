@@ -15,8 +15,7 @@ import java.util.UUID;
 
 /**
  * The fixture under {@code src/test/resources/topics/fixture/}: one small window of synthetic trace summaries and,
- * for it, the outputs of the stand (the Python reference implementation of the first build), written by the stand's
- * export script.
+ * for it, the expected output of each step of the first build.
  */
 final class TopicsFixture {
 
@@ -32,7 +31,7 @@ final class TopicsFixture {
     final float[] vectors;
     final float[] centres;
     final JsonNode expected;
-    /** The stand's author answer, in the per-cluster form the service reads ({@link #assignment}). */
+    /** The expected author answer, in the per-cluster form the service reads ({@link #assignment}). */
     final JsonNode answer;
 
     private TopicsFixture() {
@@ -57,23 +56,23 @@ final class TopicsFixture {
     }
 
     /**
-     * The stand's answer, {@code {topics: [{name, definition, clusters}], other}}, as the per-cluster answer
+     * The expected answer, {@code {topics: [{name, definition, clusters}], other}}, as the per-cluster answer
      * {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}: each topic's clusters in topic order, then
      * the {@code other} clusters as -1.
      */
-    static JsonNode assignment(JsonNode stand) {
+    static JsonNode assignment(JsonNode answer) {
         var out = MAPPER.createObjectNode();
         var topics = out.putArray("topics");
         var assignment = out.putArray("assignment");
-        for (int t = 0; t < stand.get("topics").size(); t++) {
-            var topic = stand.get("topics").get(t);
+        for (int t = 0; t < answer.get("topics").size(); t++) {
+            var topic = answer.get("topics").get(t);
             topics.addObject().put("name", topic.get("name").asText())
                     .put("definition", topic.get("definition").asText());
             for (var cluster : topic.get("clusters")) {
                 assignment.addObject().put("cluster", cluster.asInt()).put("topic", t);
             }
         }
-        for (var cluster : stand.get("other")) {
+        for (var cluster : answer.get("other")) {
             assignment.addObject().put("cluster", cluster.asInt()).put("topic", -1);
         }
         return out;

@@ -8,8 +8,8 @@ import java.math.RoundingMode;
 import java.util.Comparator;
 
 /**
- * The string rules the stand (Python) applies and the Java port must reproduce byte for byte: Python's
- * {@code str.strip()}, numpy's text order (Unicode code points, not UTF-16 units as {@link String#compareTo}), and
+ * The string rules of the topics algorithm, with Python's semantics, so its outputs match the fixture byte for byte:
+ * Python's {@code str.strip()}, numpy's text order (Unicode code points, not UTF-16 units as {@link String#compareTo}), and
  * Python's {@code f"{x:.Nf}"} (correct rounding of the exact binary value, ties to even).
  */
 @UtilityClass
@@ -62,7 +62,7 @@ public class TopicText {
 
     /**
      * A topic name as stored: {@link #pythonStrip(String)}, then cut to {@value #MAX_NAME_LENGTH} code points so an
-     * over-long answer can't fail the save. Names that short never differ from the stand's.
+     * over-long answer can't fail the save.
      */
     public static String name(@NonNull String text) {
         var stripped = pythonStrip(text);

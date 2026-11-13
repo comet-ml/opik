@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.TreeMap;
 
 /**
- * Per k-means group, what the author prompt shows: its size and share of the window, and its example texts. As the
- * stand's {@code summarize_clusters}, with stable tie-breaks.
+ * Per k-means group, what the author prompt shows: its size and share of the window, and its example texts, with
+ * stable tie-breaks.
  */
 @UtilityClass
 public class GroupSummaries {

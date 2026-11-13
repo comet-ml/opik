@@ -9,9 +9,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 /**
- * Merges identical intents into weighted points, as the stand's {@code fine_cluster} does: one point per exact text
- * (no further normalization), weighted by its count, represented by the vector of its first trace. The texts are in code
- * point order ({@code np.unique}'s), which fixes the k-means input order.
+ * Merges identical intents into weighted points: one point per exact text (no further normalization), weighted by its
+ * count, represented by the vector of its first trace. The texts are in code point order, which fixes the k-means
+ * input order.
  */
 @UtilityClass
 public class IntentMerger {

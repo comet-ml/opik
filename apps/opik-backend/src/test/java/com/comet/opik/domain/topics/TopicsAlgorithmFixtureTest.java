@@ -17,10 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * The Java first build against the stand's outputs on the fixture (the stand is the Python reference implementation
- * of the first build). The deterministic parts are equal byte for byte given the stand's cluster labels; the k-means passes the quality bar.
+ * The Java first build against the fixture's expected outputs. The deterministic parts are equal byte for byte given
+ * the fixture's cluster labels; the k-means passes the quality bar.
  */
-@DisplayName("topics first build: the algorithm against the stand's fixture")
+@DisplayName("topics first build: the algorithm against the fixture")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TopicsAlgorithmFixtureTest {
 
@@ -36,7 +36,7 @@ class TopicsAlgorithmFixtureTest {
     }
 
     @Test
-    @DisplayName("merge: unique texts, counts, first traces and order equal the stand's (an NBSP and an emoji included)")
+    @DisplayName("merge: unique texts, counts, first traces and order equal the fixture's (an NBSP and an emoji included)")
     void merge() {
         var expected = fixture.expected;
         assertThat(merged.texts()).containsExactlyElementsOf(TopicsFixture.strings(expected.get("unique_texts")));
@@ -49,7 +49,7 @@ class TopicsAlgorithmFixtureTest {
             assertThat(Arrays.copyOfRange(merged.vectors(), u * D, (u + 1) * D))
                     .containsExactly(Arrays.copyOfRange(fixture.vectors, first * D, (first + 1) * D));
         }
-        // The stand grouped this window into 15; the first build that runs this algorithm makes finer groups.
+        // The fixture groups this window into 15; the first build that runs this algorithm makes finer groups.
         assertThat(fixture.k()).isEqualTo(15);
     }
 
@@ -104,11 +104,11 @@ class TopicsAlgorithmFixtureTest {
     }
 
     @Test
-    @DisplayName("summaries equal the stand's byte for byte, given its cluster labels; the prompt lists every group")
+    @DisplayName("summaries equal the fixture's byte for byte, given its cluster labels; the prompt lists every group")
     void summariesAndPrompt() {
         var summaries = summaries();
         var expected = fixture.expected.get("summaries");
-        // The stand's summaries list up to 3 repeated texts, then the nearest ones, 5 in all.
+        // The fixture's summaries list up to 3 repeated texts, then the nearest ones, 5 in all.
         var standExamples = GroupSummaries.authorExamples(fixture.intents, fixture.vectors,
                 fixture.sklearnTraceLabels(merged), fixture.centres, D, 3, 2);
         assertThat(summaries).hasSize(expected.size());
@@ -131,7 +131,7 @@ class TopicsAlgorithmFixtureTest {
     }
 
     @Test
-    @DisplayName("apply and assignment: the topic map, the prototypes and the final labels equal the stand's")
+    @DisplayName("apply and assignment: the topic map, the prototypes and the final labels equal the fixture's")
     void applyAndAssign() throws IOException {
         var summaries = summaries();
         var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree(fixture.answer.toString()));

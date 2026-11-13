@@ -13,8 +13,7 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
- * Turns the author answer into topics, as the stand's {@code apply_author} (v4): topics with the same name merged
- * first (see {@link #mergeSameNames}); topics ordered by the total size of their valid group ids (largest first, ties
+ * Turns the author answer into topics: topics with the same name merged first (see {@link #mergeSameNames}); topics ordered by the total size of their valid group ids (largest first, ties
  * in answer order); names that are a catch-all as a whole dropped ({@link #isCatchAllName}); the first
  * {@code maxTopics} kept; each takes the groups no earlier topic claimed, and one left with none creates nothing; every
  * unclaimed group is Other. The per-cluster answer lists each group once, so the order matters only for the same-name
@@ -122,7 +121,7 @@ public class AuthorApplier {
         return CATCH_ALL_NAME.matcher(nameKey(name)).matches();
     }
 
-    /** As the stand: every listed valid id counts, a repeated one each time. */
+    /** Every listed valid id counts, a repeated one each time. */
     private static long validSize(AuthorAnswer.Topic topic, List<GroupSummary> groups) {
         long size = 0;
         for (int j : topic.clusters()) {
