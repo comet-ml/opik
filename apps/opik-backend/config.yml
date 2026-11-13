@@ -2737,14 +2737,16 @@ topics:
     runsRetention: ${TOPICS_BUILD_RUNS_RETENTION:-90d}
   firstBuild:
     #  Default: true
-    #  Description: Runs the first-build job, which builds the list of a project that has none yet. A project whose
-    #  first builds failed waits 1h, then 6h, then 1d between attempts. Needs topics.enabled
+    #  Description: Runs the first-build job, which builds the list of a project that has none yet, and finishes
+    #  the labelling passes that did not end. A project whose first builds failed waits 1h, then 6h, then 1d between
+    #  attempts. Needs topics.enabled
     enabled: ${TOPICS_FIRST_BUILD_ENABLED:-true}
     #  Default: 10m
     #  Description: How often every pod fires the job; one run per interval across the cluster. At most 1d
     interval: ${TOPICS_FIRST_BUILD_INTERVAL:-10m}
     #  Default: 9m
-    #  Description: No project starts after this much of a run; the rest wait for the next run. Under interval
+    #  Description: No project starts after this much of a run; the rest wait for the next run. Unfinished
+    #  labelling passes use up to half of it while a first build waits, all of it otherwise. Under interval
     budget: ${TOPICS_FIRST_BUILD_BUDGET:-9m}
     #  Default: 72h
     #  Description: A project's first build waits until the vectors backfill of the project has drained. Once the

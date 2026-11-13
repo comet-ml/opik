@@ -49,8 +49,10 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -84,6 +86,8 @@ class TopicsFirstBuildServiceTest {
     private final List<TopicVectorBackfill> backfills = new ArrayList<>();
     private TopicWindowDAO windowDAO;
     private TopicsRebuildService rebuildService;
+    private TopicWindowLabelService labelService;
+    private final List<TopicDAO.ProjectKey> unlabelled = new ArrayList<>();
     private LockService lockService;
     private TopicsConfig config;
     private TopicsFirstBuildService service;
@@ -114,6 +118,8 @@ class TopicsFirstBuildServiceTest {
         when(runDAO.findAbandonedWorkspaceIds(any())).thenReturn(List.of());
         when(topicDAO.findListlessProjects(any(), any())).thenAnswer(invocation -> listless.stream()
                 .filter(key -> invocation.<Collection<String>>getArgument(0).contains(key.workspaceId())).toList());
+        when(topicDAO.findLabelsIncomplete(any())).thenAnswer(invocation -> unlabelled.stream()
+                .filter(key -> invocation.<Collection<String>>getArgument(0).contains(key.workspaceId())).toList());
         when(topicDAO.findStates(anyString(), any())).thenAnswer(invocation -> invocation
                 .<Collection<UUID>>getArgument(1).stream().filter(withList::contains)
                 .map(projectId -> TopicProjectState.builder().projectId(projectId)
@@ -138,11 +144,15 @@ class TopicsFirstBuildServiceTest {
                 .thenAnswer(invocation -> TopicsRebuildService.Outcome.builder().runId(invocation.getArgument(0))
                         .status(TopicRun.Status.SAVED).build());
 
+        labelService = mock(TopicWindowLabelService.class);
+        when(labelService.labelWindow(anyString(), any(), any(), any()))
+                .thenReturn(TopicWindowLabelService.Pass.builder().complete(true).build());
+
         config = TestConfigUtils.loadConfigTest().getTopics();
         var metrics = new TopicsMetrics(meter.meter);
         var runner = new TopicsProjectRunner(config, template, rebuildService, metrics, lockService);
         service = new TopicsFirstBuildService(config, template, workspaceService, windowDAO, rebuildService, runner,
-                metrics, new TopicsBackfillGate(config, template));
+                metrics, new TopicsBackfillGate(config, template), labelService);
     }
 
     @Test
@@ -344,6 +354,70 @@ class TopicsFirstBuildServiceTest {
         verify(rebuildService, never()).startRun(any(), eq(built), any());
         verify(lockService, never()).unlockUsingToken(TopicsProjectRunner.projectLock(locked));
         verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(built));
+    }
+
+    @Test
+    @DisplayName("the unfinished labelling passes of the eligible workspaces go on before the builds, the oldest save "
+            + "first, each under its project's lock and stopping by half the budget while a build waits; a project "
+            + "whose lock another run holds is left for the next run")
+    void resumesUnfinishedPasses() {
+        var oldest = UUID.randomUUID();
+        var locked = UUID.randomUUID();
+        var newer = UUID.randomUUID();
+        unlabelled.add(new TopicDAO.ProjectKey(WORKSPACE_ID, oldest));
+        unlabelled.add(new TopicDAO.ProjectKey(WORKSPACE_ID, locked));
+        unlabelled.add(new TopicDAO.ProjectKey(WORKSPACE_ID, newer));
+        // Paused or opted out: not eligible, so never read.
+        unlabelled.add(new TopicDAO.ProjectKey(OTHER_WORKSPACE_ID, UUID.randomUUID()));
+        project(WORKSPACE_ID, started, 140);
+        doReturn(Mono.just(false)).when(lockService).lockUsingToken(eq(TopicsProjectRunner.projectLock(locked)),
+                any());
+        var halfBudget = config.getFirstBuild().getBudget().toJavaDuration().dividedBy(2);
+        var before = Instant.now();
+
+        service.run(START);
+
+        var after = Instant.now();
+        verify(topicDAO).findLabelsIncomplete(List.of(WORKSPACE_ID));
+        var order = inOrder(labelService, rebuildService);
+        for (var projectId : List.of(oldest, newer)) {
+            order.verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(projectId),
+                    argThat(deadline -> deadline.isAfter(before.plus(halfBudget).minusSeconds(1))
+                            && !deadline.isAfter(after.plus(halfBudget))),
+                    eq(TopicWindowLabelService.Trigger.RESUME));
+        }
+        order.verify(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+        verify(labelService, never()).labelWindow(any(), eq(locked), any(), any());
+        verify(labelService, times(2)).labelWindow(any(), any(), any(), any());
+        verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(oldest));
+        verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(newer));
+        verify(lockService, never()).unlockUsingToken(TopicsProjectRunner.projectLock(locked));
+    }
+
+    @Test
+    @DisplayName("while a build waits the passes get half the budget, and none when that half is shorter than a "
+            + "page; with no build waiting they get all of it")
+    void passesShareTheBudget() {
+        var unfinished = UUID.randomUUID();
+        unlabelled.add(new TopicDAO.ProjectKey(WORKSPACE_ID, unfinished));
+        // Half of 15 s is under MIN_PAGE_TIME (10 s); all of it is not.
+        config.getFirstBuild().setBudget(io.dropwizard.util.Duration.seconds(15));
+        project(WORKSPACE_ID, started, 140);
+
+        service.run(START);
+
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
+        verify(rebuildService).startRun(WORKSPACE_ID, started, TopicRun.Mode.FIRST_BUILD);
+
+        listless.clear();
+        var before = Instant.now();
+
+        service.run(START);
+
+        verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(unfinished),
+                argThat(deadline -> !deadline.isBefore(before.plusSeconds(15))
+                        && !deadline.isAfter(Instant.now().plusSeconds(15))),
+                eq(TopicWindowLabelService.Trigger.RESUME));
     }
 
     @Test

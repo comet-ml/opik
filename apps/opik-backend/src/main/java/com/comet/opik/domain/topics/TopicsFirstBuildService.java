@@ -66,6 +66,7 @@ public class TopicsFirstBuildService {
     private final @NonNull TopicsProjectRunner runner;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicsBackfillGate backfillGate;
+    private final @NonNull TopicWindowLabelService labelService;
 
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
@@ -91,9 +92,11 @@ public class TopicsFirstBuildService {
     }
 
     /**
-     * The job's run: the runs' housekeeping and the delete of deleted projects' topic data, then the first builds of
-     * {@link #candidates}, one at a time, until the budget is used. The window ends at the start of the day after
-     * {@code start} (UTC).
+     * The job's run: the runs' housekeeping and the delete of deleted projects' topic data, then the labelling passes
+     * that did not finish ({@link #resumeLabels}), then the first builds of {@link #candidates}, one at a time, until the
+     * budget is used. The passes go first but stop at half the budget when a first build waits, so a project with
+     * unfinished labels and a project with no list both get a turn in every run. The window ends at the start of the
+     * day after {@code start} (UTC).
      */
     public void run(@NonNull Instant start) {
         var began = Instant.now();
@@ -103,7 +106,9 @@ public class TopicsFirstBuildService {
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC).plusDays(1);
         var candidates = candidates(night, began, workspaceIds);
         log.info("Topics first builds started, window until '{}', projects to build '{}'", night, candidates.size());
-        var budgetEnd = began.plus(config.getFirstBuild().getBudget().toJavaDuration());
+        var budget = config.getFirstBuild().getBudget().toJavaDuration();
+        var budgetEnd = began.plus(budget);
+        int resumed = resumeLabels(workspaceIds, candidates.isEmpty() ? budgetEnd : began.plus(budget.dividedBy(2)));
         int saved = 0;
         int failed = 0;
         int skipped = 0;
@@ -124,9 +129,55 @@ public class TopicsFirstBuildService {
             // Not close(): it waits for every task, and a run stopped by its timeout may ignore the interrupt.
             executor.shutdownNow();
         }
-        log.info("Topics first builds finished, window until '{}', saved '{}', failed '{}', skipped '{}', not started "
-                + "'{}', seconds '{}'", night, saved, failed, skipped, candidates.size() - saved - failed - skipped,
-                Duration.between(began, Instant.now()).toSeconds());
+        log.info("Topics first builds finished, window until '{}', labelling passes resumed '{}', saved '{}', failed "
+                + "'{}', skipped '{}', not started '{}', seconds '{}'", night, resumed, saved, failed, skipped,
+                candidates.size() - saved - failed - skipped, Duration.between(began, Instant.now()).toSeconds());
+    }
+
+    /**
+     * Goes on with the labelling passes of the workspaces' projects whose last saved run's labels are not complete, the
+     * oldest save first, until {@code end}. Each pass runs under its project's lock, so it never runs beside a build of
+     * that project, and stops by {@code end} or the project timeout. A project whose lock is held is left for the next
+     * run. Returns how many passes ran.
+     */
+    private int resumeLabels(List<String> workspaceIds, Instant end) {
+        if (workspaceIds.isEmpty()) {
+            return 0;
+        }
+        List<TopicDAO.ProjectKey> unfinished;
+        try {
+            unfinished = template.inTransaction(READ_ONLY,
+                    handle -> handle.attach(TopicDAO.class).findLabelsIncomplete(workspaceIds));
+        } catch (RuntimeException exception) {
+            log.warn("Topics labelling passes to resume could not be read; they are read again the next run",
+                    exception);
+            return 0;
+        }
+        var projectTimeout = config.getBuild().getProjectTimeout().toJavaDuration();
+        int resumed = 0;
+        for (var project : unfinished) {
+            if (Thread.currentThread().isInterrupted()
+                    || Duration.between(Instant.now(), end).compareTo(TopicWindowLabelService.MIN_PAGE_TIME) < 0) {
+                break;
+            }
+            if (!runner.lockProject(project.projectId())) {
+                log.info("Topics labelling pass not resumed, project '{}', another run holds its lock",
+                        project.projectId());
+                continue;
+            }
+            try {
+                var timeoutEnd = Instant.now().plus(projectTimeout).minus(TopicsRebuildService.LABEL_SLACK);
+                var deadline = end.isBefore(timeoutEnd) ? end : timeoutEnd;
+                log.info("Topics labelling pass resumed, workspace '{}', project '{}'", project.workspaceId(),
+                        project.projectId());
+                labelService.labelWindow(project.workspaceId(), project.projectId(), deadline,
+                        TopicWindowLabelService.Trigger.RESUME);
+                resumed++;
+            } finally {
+                runner.unlockProject(project.projectId());
+            }
+        }
+        return resumed;
     }
 
     /**

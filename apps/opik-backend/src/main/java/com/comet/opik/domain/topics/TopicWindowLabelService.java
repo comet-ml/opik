@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * The labelling pass: gives every trace of a saved run's window its {@code trace_topics} row. A run finds its topics on
@@ -31,7 +33,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <p>Resumable: what is left is read from ClickHouse each time, as the window's traces without a row of the run. A pass
  * cut by its deadline, an interrupt or a failed read or insert loses nothing: the list stays saved, the rows written
- * stay, and a later call goes on from there. No cursor is kept anywhere.
+ * stay, and a later call goes on from there. No cursor is kept: the state's {@code labels_complete} is false from the
+ * save until a pass ends complete, and the first-build job calls the pass again for every project where it is false.
  *
  * <p>Bounded: the window is read in slices of trace creation time with about {@value #SLICE_TRACES} traces each, and a
  * slice in pages of at most {@value #CHUNK} traces, each read, assigned and inserted before the next, so the heap holds
@@ -59,6 +62,16 @@ public class TopicWindowLabelService {
     private final @NonNull TraceTopicsDAO traceTopicsDAO;
     private final @NonNull TopicsMetrics metrics;
 
+    /** Who called a pass: the run right after its save, or the first-build job going on with an unfinished one. */
+    @Getter
+    @RequiredArgsConstructor
+    public enum Trigger {
+        RUN("run"),
+        RESUME("resume");
+
+        private final String value;
+    }
+
     /**
      * What a pass did. {@code runId} is null when the project has no saved list. {@code windowTraces} is the
      * window's exact count. {@code complete} is true when no trace of the window is left without a row of the run; false when the
@@ -81,21 +94,24 @@ public class TopicWindowLabelService {
 
     /**
      * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
-     * none is left or {@code deadline}. Never throws: a failure ends the pass, which says so. The caller holds the
-     * project's lock, as for a run: a run that saves meanwhile would make this pass label with a list that is no longer
-     * the project's.
+     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete, only while the state
+     * still names that run. Never throws: a failure ends the pass, which says so. The caller holds the project's lock,
+     * as for a run: a run that saves meanwhile would make this pass label with a list that is no longer the project's.
      */
-    public Pass labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline) {
-        return labelWindow(workspaceId, projectId, deadline, CHUNK, SLICE_TRACES);
+    public Pass labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline,
+            @NonNull Trigger trigger) {
+        return labelWindow(workspaceId, projectId, deadline, trigger, CHUNK, SLICE_TRACES);
     }
 
-    Pass labelWindow(String workspaceId, UUID projectId, Instant deadline, int chunk, int sliceTraces) {
+    Pass labelWindow(String workspaceId, UUID projectId, Instant deadline, Trigger trigger, int chunk,
+            int sliceTraces) {
         long started = System.nanoTime();
         Optional<Saved> saved;
         try {
             saved = readSaved(workspaceId, projectId);
         } catch (RuntimeException exception) {
             log.warn("Topics labelling pass could not read the saved list, project '{}'", projectId, exception);
+            metrics.labelPass(workspaceId, trigger, false);
             return Pass.builder().complete(false).build();
         }
         if (saved.isEmpty()) {
@@ -115,13 +131,38 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass failed, run '{}', project '{}'; a later pass labels the rest",
                     saved.get().runId(), projectId, exception);
         }
+        if (pass.complete) {
+            markComplete(workspaceId, projectId, saved.get().runId());
+        }
         var duration = Duration.ofNanos(System.nanoTime() - started);
         metrics.phase(workspaceId, "label", duration);
+        metrics.labelPass(workspaceId, trigger, pass.complete);
         var result = pass.result();
-        log.info("Topics labelling pass ended, run '{}', project '{}', window traces '{}', labelled '{}', Other '{}', "
-                + "skipped '{}', complete '{}', seconds '{}'", result.runId(), projectId, result.windowTraces(),
-                result.labelled(), result.other(), result.skipped(), result.complete(), duration.toMillis() / 1000.0);
+        log.info(
+                "Topics labelling pass ended, run '{}', project '{}', trigger '{}', window traces '{}', labelled '{}', "
+                        + "Other '{}', skipped '{}', complete '{}', seconds '{}'",
+                result.runId(), projectId,
+                trigger.getValue(), result.windowTraces(), result.labelled(), result.other(), result.skipped(),
+                result.complete(), duration.toMillis() / 1000.0);
         return result;
+    }
+
+    /**
+     * Sets {@code labels_complete} for the run. A failed write leaves it false: the job's next run calls the pass
+     * again, which finds nothing left and writes it again.
+     */
+    private void markComplete(String workspaceId, UUID projectId, UUID runId) {
+        try {
+            int updated = template.inTransaction(WRITE,
+                    handle -> handle.attach(TopicDAO.class).markLabelsComplete(workspaceId, projectId, runId));
+            if (updated == 0) {
+                log.info("Topics labelling pass complete, but run '{}' is no longer the last saved run of project "
+                        + "'{}'; its labels stay as the newer run left them", runId, projectId);
+            }
+        } catch (RuntimeException exception) {
+            log.warn("Topics labelling pass could not mark run '{}' complete, project '{}'; the first-build job "
+                    + "runs the pass again", runId, projectId, exception);
+        }
     }
 
     /** The project's last saved run, its window and the assigner of its prototypes, read in one transaction. */

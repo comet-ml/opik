@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS topic_prototypes
   COLLATE = utf8mb4_unicode_ci;
 
 -- One row per project with a saved run. rebuilds counts the saved runs; window_until is the end of the last saved
--- run's window.
+-- run's window. labels_complete is false from the save until the labelling pass has given every trace of that window a
+-- trace_topics row of the run; the first-build job resumes the pass while it is false.
 CREATE TABLE IF NOT EXISTS topic_project_states
 (
     project_id      CHAR(36)     NOT NULL,
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS topic_project_states
     last_run_id     CHAR(36)     NULL,
     last_success_at TIMESTAMP(6) NULL,
     window_until    TIMESTAMP(6) NULL,
+    labels_complete BOOLEAN      NOT NULL DEFAULT FALSE,
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (workspace_id, project_id)

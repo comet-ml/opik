@@ -155,7 +155,7 @@ class TopicWindowLabelServiceTest {
 
     @Test
     @DisplayName("every window trace gets exactly one row of the run, labelled by the saved prototypes; no trace "
-            + "outside the window gets one")
+            + "outside the window gets one, and the run's labels are marked complete")
     void labelsEveryWindowTraceOnce() {
         var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
 
@@ -179,6 +179,7 @@ class TopicWindowLabelServiceTest {
         assertThat(inserted.stream().collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId)))
                 .isEqualTo(expected);
         assertThat(expected.values()).contains(billing, refunds, TraceTopic.OTHER);
+        verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
         assertThat(pass.other()).isEqualTo(expected.values().stream().filter(TraceTopic.OTHER::equals).count());
     }
 
@@ -226,8 +227,9 @@ class TopicWindowLabelServiceTest {
     }
 
     @Test
-    @DisplayName("a failed chunk ends the pass without throwing and touches no part of the saved list; a later pass "
-            + "labels the rest, and every window trace ends with exactly one row")
+    @DisplayName("a failed chunk ends the pass without throwing, touches no part of the saved list and marks "
+            + "nothing complete; a later pass labels the rest, every window trace ends with exactly one row, and "
+            + "only then are the labels marked complete")
     void failedChunkResumes() {
         var calls = new AtomicInteger();
         doAnswer(invocation -> {
@@ -245,16 +247,18 @@ class TopicWindowLabelServiceTest {
         assertThat(cut.labelled()).isEqualTo(2L * CHUNK);
         assertThat(inserted).hasSize(2 * CHUNK);
         verify(topicDAO, never()).insertTopics(any());
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
 
         var resumed = label(Instant.now().plus(Duration.ofMinutes(5)));
 
         assertThat(resumed.complete()).isTrue();
         assertThat(resumed.labelled()).isEqualTo(IN_WINDOW - 2L * CHUNK);
+        verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
         assertExactlyOneRowPerWindowTrace();
     }
 
     @Test
-    @DisplayName("a pass whose deadline is too close reads nothing and says it is not complete")
+    @DisplayName("a pass whose deadline is too close reads nothing, says it is not complete and marks nothing")
     void deadlineTooClose() {
         var pass = label(Instant.now().plus(TopicWindowLabelService.MIN_PAGE_TIME).minusSeconds(1));
 
@@ -262,6 +266,7 @@ class TopicWindowLabelServiceTest {
         assertThat(pass.labelled()).isZero();
         verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
         verifyNoInteractions(traceTopicsDAO);
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
     }
 
     @Test
@@ -323,7 +328,8 @@ class TopicWindowLabelServiceTest {
     }
 
     private TopicWindowLabelService.Pass label(Instant deadline) {
-        return service.labelWindow(WORKSPACE_ID, projectId, deadline, CHUNK, SLICE_TRACES);
+        return service.labelWindow(WORKSPACE_ID, projectId, deadline, TopicWindowLabelService.Trigger.RUN, CHUNK,
+                SLICE_TRACES);
     }
 
     private void assertExactlyOneRowPerWindowTrace() {

@@ -58,10 +58,30 @@ public interface TopicDAO {
     /** The first save of a project: a second run that saved meanwhile fails it on the primary key. */
     @SqlUpdate("""
             INSERT INTO topic_project_states (project_id, workspace_id, rebuilds, first_built_at, last_run_id,
-                last_success_at, window_until)
-            VALUES (:projectId, :workspaceId, :rebuilds, :firstBuiltAt, :lastRunId, :lastSuccessAt, :windowUntil)
+                last_success_at, window_until, labels_complete)
+            VALUES (:projectId, :workspaceId, :rebuilds, :firstBuiltAt, :lastRunId, :lastSuccessAt, :windowUntil,
+                :labelsComplete)
             """)
     void insertState(@BindMethods TopicProjectState state);
+
+    /**
+     * Marks the labels of the project's last saved run complete. Only while the state still names {@code runId}: a
+     * pass that labelled an older run never marks a newer one. 0 when the state names another run or is gone.
+     */
+    @SqlUpdate("""
+            UPDATE topic_project_states SET labels_complete = TRUE
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND last_run_id = :runId
+            """)
+    int markLabelsComplete(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId);
+
+    /** The projects of {@code workspaceIds} whose last saved run's labels are not complete, the oldest save first. */
+    @SqlQuery("""
+            SELECT workspace_id, project_id FROM topic_project_states
+            WHERE workspace_id IN (<workspaceIds>) AND labels_complete = FALSE
+            ORDER BY last_success_at, project_id
+            """)
+    List<ProjectKey> findLabelsIncomplete(@BindList("workspaceIds") Collection<String> workspaceIds);
 
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,

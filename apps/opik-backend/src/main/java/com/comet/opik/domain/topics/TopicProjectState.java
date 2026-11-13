@@ -9,7 +9,8 @@ import java.util.UUID;
 
 /**
  * One row of {@code topic_project_states}: a project with a saved run. {@code rebuilds} counts the saved runs and seeds
- * the next run's k-means; {@code windowUntil} is the end of the last saved run's window.
+ * the next run's k-means; {@code windowUntil} is the end of the last saved run's window. {@code labelsComplete} is
+ * false from the save until the labelling pass has labelled every trace of that window.
  */
 @Builder(toBuilder = true)
 public record TopicProjectState(
@@ -19,5 +20,6 @@ public record TopicProjectState(
         @Nullable Instant firstBuiltAt,
         @Nullable UUID lastRunId,
         @Nullable Instant lastSuccessAt,
-        @Nullable Instant windowUntil) {
+        @Nullable Instant windowUntil,
+        boolean labelsComplete) {
 }

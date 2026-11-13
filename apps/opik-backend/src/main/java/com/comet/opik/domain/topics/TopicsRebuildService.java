@@ -194,8 +194,9 @@ public class TopicsRebuildService {
 
     /**
      * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, then labels
-     * the rest of the window until {@code topics.build.projectTimeout} minus {@link #LABEL_SLACK} from the start.
-     * Never throws: a failure is recorded on the run and returned.
+     * the rest of the window until {@code topics.build.projectTimeout} minus {@link #LABEL_SLACK} from the start. The
+     * save leaves the labels incomplete; the pass marks them complete when it finishes, else the first-build job goes on
+     * with it. Never throws: a failure is recorded on the run and returned.
      */
     public Outcome firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night) {
@@ -210,7 +211,11 @@ public class TopicsRebuildService {
         } catch (RuntimeException exception) {
             return run.failed(Thread.currentThread().isInterrupted() ? Code.TIMEOUT : Code.INTERNAL, exception);
         }
-        labelService.labelWindow(workspaceId, projectId, deadline);
+        var pass = labelService.labelWindow(workspaceId, projectId, deadline, TopicWindowLabelService.Trigger.RUN);
+        if (!pass.complete()) {
+            log.info("Topics run '{}' saved, project '{}', but its labelling pass did not finish; the first-build job "
+                    + "goes on with it", runId, projectId);
+        }
         return Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
     }
 
@@ -517,8 +522,8 @@ public class TopicsRebuildService {
                 metrics.saved(workspaceId, "trace_topics", traceTopics.size());
                 return true;
             } catch (ExecutionException | RuntimeException exception) {
-                log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the window's "
-                        + "traces keep the topics they had until a later saved run", runId, projectId, exception);
+                log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "
+                        + "pass gives the window's traces their topics", runId, projectId, exception);
                 return false;
             }
         }
@@ -576,6 +581,7 @@ public class TopicsRebuildService {
                             .lastRunId(runId)
                             .lastSuccessAt(now)
                             .windowUntil(to)
+                            .labelsComplete(false)
                             .build());
                     if (!topics.isEmpty()) {
                         topicDAO.insertTopics(topics);

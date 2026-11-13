@@ -400,9 +400,13 @@ class TopicsStorageTest {
                         .build())
                 .toList()).block();
 
-        var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)), 7, 20);
+        assertThat(data.state(projectId).labelsComplete()).isFalse();
+
+        var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
+                TopicWindowLabelService.Trigger.RUN, 7, 20);
 
         assertThat(pass.complete()).isTrue();
+        assertThat(data.state(projectId).labelsComplete()).isTrue();
         assertThat(pass.runId()).isEqualTo(runId);
         assertThat(pass.windowTraces()).isEqualTo(BUILT);
         assertThat(pass.labelled()).isEqualTo(BUILT - 30);
@@ -423,14 +427,35 @@ class TopicsStorageTest {
         assertThat(data.traceTopics(workspaceId, projectId).stream()
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId))).isEqualTo(expected);
 
-        var again = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)), 7,
-                20);
+        var again = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
+                TopicWindowLabelService.Trigger.RESUME, 7, 20);
 
         assertThat(again.complete()).isTrue();
         assertThat(again.labelled()).isZero();
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
         assertThat(guards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
+    }
+
+    @Test
+    @DisplayName("the labels are marked complete only for the run the state names: an older run's pass marks nothing")
+    void labelsCompleteOnlyForTheLastRun() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        var lastRunId = data.state(projectId).lastRunId();
+
+        int older = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .markLabelsComplete(workspaceId, projectId, UUID.randomUUID()));
+
+        assertThat(older).isZero();
+        assertThat(data.state(projectId).labelsComplete()).isFalse();
+
+        int last = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .markLabelsComplete(workspaceId, projectId, lastRunId));
+
+        assertThat(last).isEqualTo(1);
+        assertThat(data.state(projectId).labelsComplete()).isTrue();
     }
 
     private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {

@@ -39,6 +39,7 @@ public class TopicsMetrics {
     private static final AttributeKey<String> PHASE = stringKey("phase");
     private static final AttributeKey<String> OUTCOME = stringKey("outcome");
     private static final AttributeKey<String> TABLE = stringKey("table");
+    private static final AttributeKey<String> TRIGGER = stringKey("trigger");
 
     private final TopicsWorkspaceNames names;
     private final LongCounter runs;
@@ -47,6 +48,7 @@ public class TopicsMetrics {
     private final LongCounter saveRows;
     private final DoubleHistogram otherShare;
     private final LongCounter firstBuildGate;
+    private final LongCounter labelPasses;
     private volatile FirstBuildState firstBuildState;
 
     /**
@@ -102,6 +104,11 @@ public class TopicsMetrics {
                 .buildWithCallback(measurement -> firstBuildState()
                         .ifPresent(state -> state.waitingProjects().forEach(
                                 (attributes, projects) -> measurement.record(projects, attributes))));
+        this.labelPasses = meter.counterBuilder("topics.label.passes")
+                .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
+                        + "resume: the first-build job going on with a pass that did not finish) and outcome "
+                        + "(complete, or incomplete when the pass was cut or failed)")
+                .build();
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's traces labelled Other, among the traces it read (the window, "
@@ -127,6 +134,11 @@ public class TopicsMetrics {
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
         saveRows.add(rows, names.builder(workspaceId).put(TABLE, table).build());
+    }
+
+    void labelPass(@NonNull String workspaceId, @NonNull TopicWindowLabelService.Trigger trigger, boolean complete) {
+        labelPasses.add(1, names.builder(workspaceId).put(TRIGGER, trigger.getValue())
+                .put(OUTCOME, complete ? "complete" : "incomplete").build());
     }
 
     void otherShare(@NonNull String workspaceId, double share) {

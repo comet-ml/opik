@@ -228,6 +228,8 @@ class TopicsFirstBuildJobIntegrationTest {
         assertThat(topics).isNotEmpty()
                 .allSatisfy(topic -> assertThat(topic.born()).isEqualTo(LocalDate.now(ZoneOffset.UTC)));
         assertThat(data.state(built).windowUntil()).isEqualTo(tomorrowStart());
+        // The window is under maxVectors: the run labels it whole, and its pass finds nothing left.
+        assertThat(data.state(built).labelsComplete()).isTrue();
         for (var skipped : List.of(withList, small, quiet, notOptedIn, deleted)) {
             assertThat(data.runs(skipped)).isEmpty();
         }
@@ -500,6 +502,41 @@ class TopicsFirstBuildJobIntegrationTest {
         firstBuildService.run(Instant.now());
 
         assertThat(data.runs(projectId)).extracting(TopicRun::runId).containsExactly(recent.runId());
+    }
+
+    @Test
+    @DisplayName("a job run finishes the labelling pass of a saved list whose labels are not complete, and marks "
+            + "them complete; a project of a workspace not opted in or with AI labels off is left as it is")
+    void resumesAnUnfinishedPass() {
+        var workspaceId = enabledWorkspace();
+        var unfinished = UUID.randomUUID();
+        // A list saved for the window whose pass was cut before it labelled a trace.
+        data.seed(workspaceId, unfinished, 0, BUILT, tomorrowStart());
+        data.savedList(workspaceId, unfinished, tomorrowStart(), BUILT);
+        var notOptedIn = UUID.randomUUID();
+        var notOptedInWorkspace = aiLabelsOnlyWorkspace();
+        data.seed(notOptedInWorkspace, notOptedIn, 0, BUILT, tomorrowStart());
+        data.savedList(notOptedInWorkspace, notOptedIn, tomorrowStart(), BUILT);
+        var aiLabelsOff = UUID.randomUUID();
+        var aiLabelsOffWorkspace = enabledWorkspace();
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(aiLabelsOffWorkspace, false, "test");
+            return null;
+        });
+        data.seed(aiLabelsOffWorkspace, aiLabelsOff, 0, BUILT, tomorrowStart());
+        data.savedList(aiLabelsOffWorkspace, aiLabelsOff, tomorrowStart(), BUILT);
+        var runId = data.state(unfinished).lastRunId();
+
+        firstBuildService.run(Instant.now());
+
+        assertThat(data.traceTopics(workspaceId, unfinished)).hasSize(BUILT)
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(runId.toString()));
+        assertThat(data.state(unfinished).labelsComplete()).isTrue();
+        for (var left : List.of(notOptedIn, aiLabelsOff)) {
+            assertThat(data.state(left).labelsComplete()).isFalse();
+        }
+        assertThat(data.traceTopics(notOptedInWorkspace, notOptedIn)).isEmpty();
+        assertThat(data.traceTopics(aiLabelsOffWorkspace, aiLabelsOff)).isEmpty();
     }
 
     @Test

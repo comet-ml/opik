@@ -119,7 +119,7 @@ Requests") is dropped. It writes:
 |---|---|---|
 | `topics` | MySQL | One row per topic: name, definition, `born` (the window's end date, or the day of the run if that is later: the job's window ends tomorrow), `size` (traces the run read: the window, or its sample). |
 | `topic_prototypes` | MySQL | The vectors traces are assigned by, several per topic, and the known-Other ones (`topic_id` null). |
-| `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`. |
+| `topic_project_states` | MySQL | One row per project with a saved list: `rebuilds`, `last_run_id`, `window_until`, `labels_complete` (false until the labelling pass of `last_run_id` has given every window trace a row; see "Saving and labelling"). |
 | `topic_runs` | MySQL | One row per run: `running`, then `saved` or `failed` with `error_code`. Kept 90 days. |
 | `trace_topics` | ClickHouse | One row per window trace and run (`source = 'run'`, `run_id` of the run, from the run's insert or the labelling pass): its `topic_id`, the all-zeros id for Other. The latest row by `last_updated_at` wins across sources (dedupe by `trace_id`, not by the sort key); a latest row with `is_deleted = 1` hides the trace. The sort key ends in `source`, so merges keep one run row and one arrival row per trace. |
 
@@ -129,7 +129,7 @@ Requests") is dropped. It writes:
 |---|---|---|
 | `TOPICS_FIRST_BUILD_ENABLED` | `true` | Runs the job. Needs `TOPICS_ENABLED=true`. |
 | `TOPICS_FIRST_BUILD_INTERVAL` | `10m` | How often every pod fires the job; one run per interval across the cluster. At most `1d`. |
-| `TOPICS_FIRST_BUILD_BUDGET` | `9m` | No project starts after this much of a run; the rest wait for the next run. Under the interval. |
+| `TOPICS_FIRST_BUILD_BUDGET` | `9m` | No project starts after this much of a run; the rest wait for the next run. Unfinished labelling passes use up to half of it while a first build waits, and all of it otherwise. Under the interval. |
 | `TOPICS_FIRST_BUILD_BACKFILL_MAX_WAIT` | `72h` | How long a first build waits for the project's vectors backfill before it decides by the share of traces with a vector (see "First builds and the vectors backfill"). At most `30d`. |
 | `TOPICS_BUILD_PROJECT_TIMEOUT` | `15m` | One run is stopped and failed with `timeout` after this. At most `2h`. |
 | `TOPICS_BUILD_MIN_VECTORS` | `100` | A project is built when its window holds at least this many traces with a vector. At most 100000. |
@@ -167,7 +167,8 @@ flowchart TD
     E -->|open| F["ClickHouse: count the open projects'<br/>vectors in the window"]
     F -->|a workspace count fails| F1["WARN; the workspace is read again the next run"]
     F --> G["Keep minVectors or more;<br/>leave out those that wait to retry a failed build"]
-    G --> H{"Next project, most vectors first, budget left?"}
+    G --> L["Resume unfinished labelling passes (labels_complete = false),<br/>oldest save first, each under its project lock,<br/>until half the budget (all of it with nothing to build)"]
+    L --> H{"Next project, most vectors first, budget left?"}
     H -->|no| M["Run ends"]
     H -->|yes| I{"Takes topics:project lock,<br/>still no list?"}
     I -->|no| I1["Skipped"]
@@ -195,6 +196,9 @@ flowchart TD
   ClickHouse.
 - It keeps the projects with at least `TOPICS_BUILD_MIN_VECTORS` vectors that do not wait to retry a failed build (see
   "Retries"), and builds them one at a time, the most vectors first.
+- Before the builds, it goes on with the labelling passes that did not finish (see "Saving and labelling"). While a
+  build waits, the passes stop at half of `TOPICS_FIRST_BUILD_BUDGET`; with nothing to build they may use all of it. So
+  unfinished passes and new projects both get time in every run.
 - Each run holds the Redis lock `topics:project:<project_id>`, so a run started by hand and the job never build the
   same project at once. Under the lock the job reads the project's list again: a project built by hand meanwhile is
   skipped. A project whose lock is held, or whose run cannot start, is skipped too, and the job goes on with the next
@@ -217,9 +221,8 @@ not wait. A project whose first failed first build started more than 24 hours ag
 
 A run saves in this order: one MySQL transaction (state, topics, prototypes, the run `saved`), then the
 `trace_topics` insert, retried up to 3 times; each attempt stops after 120s. If the insert still fails, the run stays
-saved and an ERROR names it (`saved, but its trace_topics insert failed`); the window's traces have no topic until a
-later saved run writes the window again. To write them now, forget the project's list and build it again (see "Running
-by hand"). A timeout that comes after the MySQL commit finds the run saved: it logs a WARN (`saved, ... but its
+saved and an ERROR names it (`saved, but its trace_topics insert failed`); the labelling pass below then gives the
+window's traces their topics. A timeout that comes after the MySQL commit finds the run saved: it logs a WARN (`saved, ... but its
 trace_topics insert outlasted the stop`), the run counts as saved, and the project's locks are held until the insert
 ends (at most about 8.5 minutes; the lock leases cover it).
 
@@ -227,10 +230,39 @@ Then the labelling pass gives a `trace_topics` row of the run to every window tr
 the sample, and the run's own traces when its insert failed. It reads the saved prototypes from MySQL and the vectors
 from ClickHouse in pages of 10,000 traces (`topics:read_unlabelled` in `system.query_log`), assigns them in the backend
 and inserts each page. It stops 30 seconds before the run's timeout and logs `labelling pass ended` with `complete`.
-What is left is read from ClickHouse each time (the window's traces without a row of the run), so a pass that was cut
-or failed loses nothing, but only the nightly update calls it again; until then, the traces it did not reach have no
-topic. To label them now, forget the project's list and build it again. The run's Other share stays that of the
-traces it read.
+The run's Other share stays that of the traces it read.
+
+The save writes `labels_complete = false` on the project's `topic_project_states` row. A pass that reaches the end of
+the window sets it to true, but only while `last_run_id` still names its run: a pass of an older run never marks a
+newer one. While the flag is false, the traces the pass did not reach have no topic. What is left is read from
+ClickHouse each time (the window's traces without a row of the run), so a pass that was cut or failed loses nothing.
+
+The first-build job finishes such a pass. Each run reads the projects with `labels_complete = false` in the opted-in
+workspaces, the oldest save first, and goes on with each pass under the project's lock (`trigger = resume` in the
+logs and metrics). A paused or opted-out workspace is not read. A pass stops at half the job's budget while a first
+build waits (4.5 minutes by default), at the whole budget otherwise, and 30 seconds before the project timeout. A
+window that needs more time is finished over several runs, one every `TOPICS_FIRST_BUILD_INTERVAL`; a project waits
+behind the projects saved before it.
+
+To see the projects that wait:
+
+```sql
+-- MySQL: projects whose last saved run's labels are not complete, the oldest save first.
+SELECT workspace_id, project_id, last_run_id, last_success_at FROM topic_project_states
+WHERE labels_complete = FALSE ORDER BY last_success_at;
+```
+
+When a project stays on that list:
+
+1. Check that its workspace is opted in to both topics and ai-labels (see "Opting workspaces in and out").
+2. Search the logs for its project id. `Topics labelling pass resumed` means the job reached it. `labelling pass not
+   resumed, ... another run holds its lock` means a run of the project holds `topics:project:<project_id>`.
+3. Read how the pass ended: `labelling pass ended` with `complete 'false'`, `labelling pass cut` with its reason, or
+   `labelling pass failed` with the exception. A pass that fails again and again usually means a ClickHouse read or
+   insert failure: look for `topics:read_unlabelled` in `system.query_log`.
+4. `topics.label.passes` with `trigger = resume` and `outcome = incomplete` growing run after run means the passes
+   start but do not finish.
+5. To start over, forget the project's list and build it again (see "Running by hand").
 
 | `error_code` | Meaning |
 |---|---|
@@ -384,6 +416,7 @@ count on each pod. The alerts read the gauges.
 |---|---|
 | `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when housekeeping fails a run left `running`. A run is counted by the write that ends its row: when marking a run failed throws, its row stays `running` and nothing counts it until housekeeping fails it as `abandoned`. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`, `label` (the labelling pass). |
+| `topics.label.passes` by `trigger`, `outcome` | Labelling passes: `trigger` is `run` (after a save) or `resume` (the first-build job finishing one); `outcome` is `complete` or `incomplete` (cut, failed, or the saved list could not be read). See "Saving and labelling". |
 | `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. A `trace_topics` insert that failed after the save adds none. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |

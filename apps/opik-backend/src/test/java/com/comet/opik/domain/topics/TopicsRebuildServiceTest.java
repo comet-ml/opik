@@ -99,6 +99,8 @@ class TopicsRebuildServiceTest {
         when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(Set.of(projectId)), any(), any(), anyLong()))
                 .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(projectId, TRACES)));
         labelService = mock(TopicWindowLabelService.class);
+        when(labelService.labelWindow(any(), any(), any(), any()))
+                .thenReturn(TopicWindowLabelService.Pass.builder().complete(true).build());
         when(topicDAO.findStates(any(), any())).thenReturn(List.of());
         when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
@@ -204,7 +206,7 @@ class TopicsRebuildServiceTest {
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
         assertThat(meter.sum("topics.runs", "status", "saved")).isZero();
         assertThat(meter.points("topics.save.rows")).isEmpty();
-        verify(labelService, never()).labelWindow(any(), any(), any());
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -356,7 +358,8 @@ class TopicsRebuildServiceTest {
         var order = inOrder(runDAO, traceTopicsDAO, labelService);
         order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), any());
         order.verify(traceTopicsDAO).insert(any());
-        order.verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(projectId), deadline.capture());
+        order.verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(projectId), deadline.capture(),
+                eq(TopicWindowLabelService.Trigger.RUN));
         assertThat(deadline.getValue()).isBetween(earliest, latest);
     }
 
@@ -368,7 +371,7 @@ class TopicsRebuildServiceTest {
 
         service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        verify(labelService, never()).labelWindow(any(), any(), any());
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
