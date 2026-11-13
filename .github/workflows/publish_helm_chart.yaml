@@ -17,9 +17,14 @@ on:
         description: Version
 
 
+permissions:
+  contents: read
+
 jobs:
 
   publish-helm-chart:
+    permissions:
+      contents: write
     # TODO(OPIK-6617): Add a preflight check that verifies the runner can push to the
     # `gh-pages` branch (e.g. `git ls-remote --exit-code` with the same credentials)
     # so a missing/expired GH token fails fast instead of after `helm package`.

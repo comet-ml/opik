@@ -16,6 +16,9 @@ on:
         options:
           - 'false'
           - 'true'
+permissions:
+  contents: read
+
 jobs:
   test-notebooks:
     runs-on: ${{ matrix.os }}

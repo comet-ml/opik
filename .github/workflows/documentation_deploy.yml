@@ -8,6 +8,9 @@ on:
     paths:
       - 'apps/opik-documentation/documentation/**'
 
+permissions:
+  contents: read
+
 jobs:
   run:
     runs-on: ubuntu-latest
