@@ -601,7 +601,7 @@ class TopicVectorsTickTest {
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
                 vectorsDAO, backfillService, inferenceClient, lockService, taskRegistry,
                 TopicVectorsTickServiceTest.names(),
-                meter.meter, Clock.systemUTC());
+                TopicVectorsTickServiceTest.noArrival(), meter.meter, Clock.systemUTC());
 
         var result = metered.tick(Instant.now());
 
@@ -628,7 +628,7 @@ class TopicVectorsTickTest {
         var metered = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
                 vectorsDAO, backfillService, inferenceClient, lockService, taskRegistry,
                 TopicVectorsTickServiceTest.names(),
-                meter.meter, Clock.systemUTC());
+                TopicVectorsTickServiceTest.noArrival(), meter.meter, Clock.systemUTC());
         var find = config().getFind();
         var maxRowsToRead = find.getMaxRowsToRead();
         find.setMaxRowsToRead(1);
