@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -44,15 +45,16 @@ import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * One project's first build: read the window of vectors (all of it, or an even sample of {@code topics.build.maxVectors}
- * traces when it is larger), merge identical texts, k-means them into fine groups, have Qwen name topics over the
- * groups, assign every read trace to its nearest prototype, check the prototypes and save. Synchronous: the caller runs
- * it on its own thread, one project at a time.
+ * traces when it is larger), have the {@link TopicAlgorithm} build the list and label every read trace, check the
+ * prototypes and save. The service makes the LLM calls the algorithm asks for ({@link TopicAlgorithm.Context}).
+ * Synchronous: the caller runs it on its own thread, one project at a time.
  *
  * <p>The save commits one MySQL transaction first: the project's state, the new topics, its prototypes and the run as
  * {@code saved}. Then it inserts {@code trace_topics} for the traces it read, retried up to {@value #INSERT_RETRIES}
@@ -68,20 +70,6 @@ public class TopicsRebuildService {
 
     static final int DIMENSIONS = TopicVectorsTickService.EMBED_DIMENSIONS;
     static final int MAX_TOPICS = 10;
-    /** The first build's fine groups: one per {@value #TEXTS_PER_GROUP} unique texts, within these bounds. */
-    static final int MIN_GROUPS = 30;
-    static final int MAX_GROUPS = 50;
-    static final int TEXTS_PER_GROUP = 30;
-    /**
-     * The author sees up to {@value #AUTHOR_FREQUENT} repeated texts per group, then the ones nearest its centre, in
-     * all clamp(round({@value #AUTHOR_BUDGET} / k), {@value #AUTHOR_MIN}, {@value #AUTHOR_MAX}) texts, so the prompt
-     * stays about as long as the longest one known to work (5 texts on 50 groups).
-     */
-    static final int AUTHOR_FREQUENT = 5;
-    static final int AUTHOR_BUDGET = 250;
-    static final int AUTHOR_MIN = 5;
-    static final int AUTHOR_MAX = 10;
-    static final int QWEN_MAX_TOKENS = 2500;
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
     static final double UNIT_TOLERANCE = 1e-3;
@@ -117,18 +105,11 @@ public class TopicsRebuildService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicWindowLabelService labelService;
+    private final @NonNull TopicAlgorithm algorithm;
 
     /** How a run ended. {@code errorCode} is null for a saved run. */
     @Builder
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
-    }
-
-    /**
-     * The first build's number of fine groups: min({@value #MAX_GROUPS}, max({@value #MIN_GROUPS}, unique /
-     * {@value #TEXTS_PER_GROUP})), at most the unique texts.
-     */
-    static int groups(int unique) {
-        return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
     }
 
     /**
@@ -150,11 +131,6 @@ public class TopicsRebuildService {
     /** ClickHouse {@code max_execution_time} of a run's read: {@value #READ_SECONDS} s, or the run's timeout if shorter. */
     static long readSeconds(@NonNull TopicsConfig.BuildConfig build) {
         return Math.min(READ_SECONDS, build.getProjectTimeout().toSeconds());
-    }
-
-    /** How many texts the author sees per group for {@code k} groups. */
-    static int authorExampleCount(int k) {
-        return Math.min(AUTHOR_MAX, Math.max(AUTHOR_MIN, (int) Math.round((double) AUTHOR_BUDGET / k)));
     }
 
     /** Inserts the run as {@code running} and returns its id. */
@@ -219,8 +195,11 @@ public class TopicsRebuildService {
         return Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
     }
 
-    /** One run's state while it builds: the stats it records and the phase timings. */
-    private final class Run {
+    /**
+     * One run's state while it builds: the stats it records and the phase timings. It is the algorithm's
+     * {@link TopicAlgorithm.Context}.
+     */
+    private final class Run implements TopicAlgorithm.Context {
 
         private final UUID runId;
         private final String workspaceId;
@@ -250,66 +229,31 @@ public class TopicsRebuildService {
         void build() {
             var window = flatten(timed("window", this::readWindow));
             int n = window.texts().length;
-            var texts = window.texts();
-            var vectors = window.vectors();
             var versionShares = stats.putObject("task_version_shares");
             window.versions().forEach((version, count) -> versionShares.put(String.valueOf(version),
                     (double) count / n));
-
-            var merged = IntentMerger.merge(texts, vectors, DIMENSIONS);
-            int unique = merged.size();
-            int k = groups(unique);
-            long seed = 0;
-            var weights = new double[unique];
-            for (int u = 0; u < unique; u++) {
-                weights[u] = merged.weights()[u];
-            }
-            var fit = timed("kmeans", () -> KMeans.fit(merged.vectors(), weights, DIMENSIONS, k, seed));
-            var groupOf = new int[n];
-            for (int i = 0; i < n; i++) {
-                groupOf[i] = fit.labels()[merged.inverse()[i]];
-            }
             stats.put("vectors", n);
-            stats.put("unique_texts", unique);
-            stats.put("k", k);
-            stats.put("seed", seed);
-            stats.put("kmeans_inertia", fit.inertia());
-            stats.put("kmeans_iterations", fit.iterations());
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
-            var groups = GroupSummaries.summarize(groupOf, k);
-            int perGroup = authorExampleCount(k);
-            stats.put("author_examples", perGroup);
-            var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
-                    Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
-            var prompt = TopicPrompts.author(groups, MAX_TOPICS, examples);
-            // The prompt holds users' trace text: the log gets its size and hash only, never the text.
-            log.info("Topics run '{}' author prompt, project '{}', groups '{}', examples per group '{}', chars '{}', "
-                    + "sha256 '{}'", runId, projectId, groups.size(), perGroup, prompt.length(), sha256(prompt));
-            var answer = timed("qwen", () -> author(prompt));
-            var applied = AuthorApplier.apply(answer, groups, MAX_TOPICS);
-
-            var assigned = timed("assign", () -> assign(applied, fit.centres(), vectors, n));
-            var topics = topics(applied, assigned.labels());
-            var prototypes = prototypes(assigned, topics);
+            var built = algorithm.firstBuild(new TopicAlgorithm.Window(window.texts(), window.vectors()), MAX_TOPICS,
+                    this);
+            var topics = topics(built);
+            var prototypes = prototypes(built, topics);
             checkPrototypes(prototypes);
 
             int other = 0;
-            for (int label : assigned.labels()) {
-                other += label == PrototypeAssigner.OTHER ? 1 : 0;
+            for (int label : built.labels()) {
+                other += label == TopicAlgorithm.OTHER ? 1 : 0;
             }
             stats.put("topics", topics.size());
             stats.put("other_share", (double) other / n);
-            stats.put("other_groups", applied.other().size());
-            stats.put("gated_other", assigned.assigner().gatedOther());
             stats.put("prototypes", prototypes.size());
             stats.set("seconds", seconds);
-            log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', unique texts '{}', "
-                    + "k '{}', seed '{}', topic sizes '{}', Other share '{}', seconds '{}'", runId, projectId, from, to,
-                    n, unique, k, seed, topics.stream().map(Topic::size).toList(),
-                    TopicText.fixed((double) other / n, 3), seconds);
+            log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
+                    + "share '{}', seconds '{}'", runId, projectId, from, to, n,
+                    topics.stream().map(Topic::size).toList(), TopicText.fixed((double) other / n, 3), seconds);
             timed("save", () -> {
-                save(window.traces(), assigned.labels(), topics, prototypes);
+                save(window.traces(), built.labels(), topics, prototypes);
                 return null;
             });
         }
@@ -318,7 +262,7 @@ public class TopicsRebuildService {
          * The window as flat arrays, in the rows' order. The rows' own vectors are not kept: once this returns, only
          * the flat copy holds them, so the build does not carry two copies of the window.
          */
-        private Window flatten(List<TopicWindowRow> rows) {
+        private ReadWindow flatten(List<TopicWindowRow> rows) {
             int n = rows.size();
             var texts = new String[n];
             var vectors = new float[n * DIMENSIONS];
@@ -331,7 +275,7 @@ public class TopicsRebuildService {
                 versions.merge(row.taskVersion(), 1, Integer::sum);
                 traces.add(new WindowTrace(row.traceId(), row.traceCreatedAt()));
             }
-            return new Window(texts, vectors, traces, versions);
+            return new ReadWindow(texts, vectors, traces, versions);
         }
 
         /**
@@ -374,84 +318,94 @@ public class TopicsRebuildService {
             return kept;
         }
 
-        private AuthorAnswer author(String prompt) {
+        @Override
+        public <T> T generate(@NonNull TopicAlgorithm.Call call, @NonNull String tag, @NonNull String prompt,
+                @NonNull JsonNode schema, int maxTokens, @NonNull Function<JsonNode, T> read) {
+            // The prompt holds users' trace text: the log gets its size and hash only, never the text.
+            log.info("Topics run '{}' {} prompt, project '{}', chars '{}', sha256 '{}'", runId, tag, projectId,
+                    prompt.length(), sha256(prompt));
+            return timed("qwen", () -> call(call, tag, prompt, schema, maxTokens, read));
+        }
+
+        private <T> T call(TopicAlgorithm.Call call, String tag, String prompt, JsonNode schema, int maxTokens,
+                Function<JsonNode, T> read) {
             var request = GenerateRequest.builder()
                     .orgId(workspaceId)
                     .workspaceId(workspaceId)
-                    .requestId(runId.toString())
+                    .requestId(runId + ":" + tag)
                     .cache(true)
                     .lane(GenerateRequest.Lane.BATCH)
                     .messages(List.of(Message.builder().role(Message.Role.USER).content(prompt).build()))
-                    .schema(TopicPrompts.AUTHOR_SCHEMA)
-                    .maxTokens(QWEN_MAX_TOKENS)
+                    .schema(schema)
+                    .maxTokens(maxTokens)
                     .temperature(0)
                     .build();
-            stats.put("qwen_calls", 1);
+            add("qwen_calls", 1);
             GenerateResponse response;
             try {
-                response = client.generate(request,
-                        Instant.now().plus(config.getBuild().getQwenDeadline().toJavaDuration())).block();
+                response = client.generate(request, Instant.now().plus(deadline(call))).block();
             } catch (InferenceException exception) {
                 if (exception.isSchemaViolation()) {
                     // The service checks the answer against the schema: a cut or off-schema answer comes back so.
-                    metrics.qwen(workspaceId, "bad_answer");
+                    metrics.qwen(workspaceId, call, "bad_answer");
                     throw new TopicsRunException(Code.QWEN_BAD_ANSWER,
                             "the Qwen answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()),
                             exception);
                 }
                 boolean timeout = isTimeout(exception);
-                metrics.qwen(workspaceId, timeout ? "timeout" : "error");
+                metrics.qwen(workspaceId, call, timeout ? "timeout" : "error");
                 throw new TopicsRunException(timeout ? Code.QWEN_TIMEOUT : Code.QWEN_ERROR,
                         "the Qwen call failed, code '%s', status '%s'".formatted(exception.getCode(),
                                 exception.getHttpStatus()),
                         exception);
             }
             var output = response.result().output();
-            log.info("Topics run '{}' author answer, project '{}', input tokens '{}', output tokens '{}', cache hit "
-                    + "'{}'", runId, projectId, response.usage().inputTokens(), response.usage().outputTokens(),
+            log.info("Topics run '{}' {} answer, project '{}', input tokens '{}', output tokens '{}', cache hit '{}'",
+                    runId, tag, projectId, response.usage().inputTokens(), response.usage().outputTokens(),
                     response.cacheHit());
-            // The answer names topics from users' trace text: the log gets its size and hash only, never the text.
+            // The answer comes from users' trace text: the log gets its size and hash only, never the text.
             var canonical = output == null ? "null" : InferenceJson.canonical(output);
-            log.info("Topics run '{}' author answer body, project '{}', chars '{}', sha256 '{}'", runId, projectId,
+            log.info("Topics run '{}' {} answer body, project '{}', chars '{}', sha256 '{}'", runId, tag, projectId,
                     canonical.length(), sha256(canonical));
-            stats.put("qwen_input_tokens", response.usage().inputTokens());
-            stats.put("qwen_output_tokens", response.usage().outputTokens());
+            add("qwen_input_tokens", response.usage().inputTokens());
+            add("qwen_output_tokens", response.usage().outputTokens());
             stats.put("qwen_cache_hit", response.cacheHit());
             try {
                 // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
-                var answer = AuthorAnswer.parse(output);
-                metrics.qwen(workspaceId, "ok");
+                var answer = read.apply(output);
+                metrics.qwen(workspaceId, call, "ok");
                 return answer;
             } catch (TopicsRunException exception) {
-                metrics.qwen(workspaceId, "bad_answer");
+                metrics.qwen(workspaceId, call, "bad_answer");
                 throw exception;
             }
         }
 
-        private Assigned assign(AuthorApplier.Applied applied, float[] centres, float[] vectors, int n) {
-            var topicPrototypes = new ArrayList<float[]>();
-            var owners = new ArrayList<Integer>();
-            for (int t = 0; t < applied.topics().size(); t++) {
-                for (int group : applied.topics().get(t).groups()) {
-                    topicPrototypes.add(centre(centres, group));
-                    owners.add(t);
-                }
-            }
-            var otherPrototypes = applied.other().stream().map(group -> centre(centres, group)).toList();
-            var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, DIMENSIONS);
-            return new Assigned(assigner, assigner.assign(vectors), topicPrototypes, owners, assigner.keptOther());
+        private Duration deadline(TopicAlgorithm.Call call) {
+            return switch (call) {
+                case AUTHOR -> config.getBuild().getQwenDeadline().toJavaDuration();
+            };
         }
 
-        private List<Topic> topics(AuthorApplier.Applied applied, int[] labels) {
-            var sizes = new int[applied.topics().size()];
-            for (int label : labels) {
-                if (label != PrototypeAssigner.OTHER) {
+        private void add(String stat, long value) {
+            stats.put(stat, stats.path(stat).asLong(0) + value);
+        }
+
+        @Override
+        public ObjectNode stats() {
+            return stats;
+        }
+
+        private List<Topic> topics(TopicAlgorithm.FirstBuild built) {
+            var sizes = new int[built.topics().size()];
+            for (int label : built.labels()) {
+                if (label != TopicAlgorithm.OTHER) {
                     sizes[label]++;
                 }
             }
             var topics = new ArrayList<Topic>(sizes.length);
             for (int t = 0; t < sizes.length; t++) {
-                var topic = applied.topics().get(t);
+                var topic = built.topics().get(t);
                 topics.add(Topic.builder()
                         .id(idGenerator.generateId())
                         .workspaceId(workspaceId)
@@ -465,18 +419,15 @@ public class TopicsRebuildService {
             return topics;
         }
 
-        /**
-         * The topic prototypes, then the known-Other ones the 0.95 gate kept. A gated one is not saved: an assigner
-         * leaves it out as long as the topic prototype near it is saved, so it would assign no trace.
-         */
-        private List<TopicPrototype> prototypes(Assigned assigned, List<Topic> topics) {
+        /** The topic prototypes, each with its topic's id, then the known-Other ones, in the algorithm's order. */
+        private List<TopicPrototype> prototypes(TopicAlgorithm.FirstBuild built, List<Topic> topics) {
             var prototypes = new ArrayList<TopicPrototype>(
-                    assigned.topicPrototypes().size() + assigned.otherPrototypes().size());
-            for (int p = 0; p < assigned.topicPrototypes().size(); p++) {
-                prototypes.add(prototype(prototypes.size(), topics.get(assigned.owners().get(p)).id(),
-                        assigned.topicPrototypes().get(p)));
+                    built.topicPrototypes().size() + built.otherPrototypes().size());
+            for (int p = 0; p < built.topicPrototypes().size(); p++) {
+                prototypes.add(prototype(prototypes.size(), topics.get(built.owners().get(p)).id(),
+                        built.topicPrototypes().get(p)));
             }
-            for (var vector : assigned.otherPrototypes()) {
+            for (var vector : built.otherPrototypes()) {
                 prototypes.add(prototype(prototypes.size(), null, vector));
             }
             return prototypes;
@@ -562,7 +513,7 @@ public class TopicsRebuildService {
                         .projectId(projectId)
                         .traceId(traces.get(i).traceId())
                         .traceCreatedAt(traces.get(i).traceCreatedAt())
-                        .topicId(labels[i] == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
+                        .topicId(labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
                         .source(TraceTopic.Source.RUN)
                         .runId(runId.toString())
                         .build());
@@ -633,13 +584,15 @@ public class TopicsRebuildService {
             return Outcome.builder().runId(runId).status(TopicRun.Status.FAILED).errorCode(code.getValue()).build();
         }
 
-        private <T> T timed(String phase, Supplier<T> action) {
+        /** A phase timed more than once adds up in the stats. */
+        @Override
+        public <T> T timed(@NonNull String phase, @NonNull Supplier<T> action) {
             long started = System.nanoTime();
             try {
                 return action.get();
             } finally {
                 var duration = Duration.ofNanos(System.nanoTime() - started);
-                seconds.put(phase, duration.toMillis() / 1000.0);
+                seconds.put(phase, seconds.path(phase).asDouble(0) + duration.toMillis() / 1000.0);
                 metrics.phase(workspaceId, phase, duration);
             }
         }
@@ -655,13 +608,8 @@ public class TopicsRebuildService {
                 : throwable.getClass().getName();
     }
 
-    /** The assignment, and the prototypes it used: the topic ones and the known-Other ones the gate kept. */
-    private record Assigned(PrototypeAssigner assigner, int[] labels, List<float[]> topicPrototypes,
-            List<Integer> owners, List<float[]> otherPrototypes) {
-    }
-
     /** The window as the build reads it: per trace, in time order, its text and vector. */
-    private record Window(String[] texts, float[] vectors, List<WindowTrace> traces,
+    private record ReadWindow(String[] texts, float[] vectors, List<WindowTrace> traces,
             TreeMap<Long, Integer> versions) {
     }
 
@@ -672,12 +620,6 @@ public class TopicsRebuildService {
     /** Lets a prompt or an answer be matched across logs (opik-inference's included) without logging its text. */
     private static String sha256(String text) {
         return Hashing.sha256().hashString(text, StandardCharsets.UTF_8).toString();
-    }
-
-    private static float[] centre(float[] centres, int group) {
-        var centre = new float[DIMENSIONS];
-        System.arraycopy(centres, group * DIMENSIONS, centre, 0, DIMENSIONS);
-        return centre;
     }
 
     private static boolean isTimeout(InferenceException exception) {

@@ -14,8 +14,6 @@ import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -91,7 +89,7 @@ class TopicWindowLabelServiceTest {
         var config = TestConfigUtils.loadConfigTest().getTopics();
         config.getBuild().setWindowDays(WINDOW_DAYS);
         service = new TopicWindowLabelService(config, template, windowDAO, traceTopicsDAO,
-                new TopicsMetrics(new TopicsTestMeter().meter, names));
+                new TopicsMetrics(new TopicsTestMeter().meter, names), new KMeansTopicAlgorithm());
 
         billingPrototype = unit(random);
         refundsPrototype = unit(random);
@@ -103,7 +101,6 @@ class TopicWindowLabelServiceTest {
                 .lastRunId(runId)
                 .windowUntil(NIGHT)
                 .build()));
-        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic(billing), topic(refunds)));
         // Billing has two prototypes, refunds one, then a known-Other one.
         when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of(
                 prototype(0, billing, billingPrototype),
@@ -184,32 +181,37 @@ class TopicWindowLabelServiceTest {
     }
 
     @Test
-    @DisplayName("a retired topic's prototypes label nothing: its traces go to the nearest live topic or Other")
-    void retiredTopicLabelsNothing() {
-        var retired = UUID.randomUUID();
-        var retiredPrototype = unit(random);
-        when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of(
-                prototype(0, billing, billingPrototype),
-                prototype(1, refunds, refundsPrototype),
-                prototype(2, retired, retiredPrototype),
-                prototype(3, null, otherPrototype)));
-        var from = NIGHT.minus(Duration.ofDays(WINDOW_DAYS));
-        for (int i = 0; i < 10; i++) {
-            // Far from every live prototype: Other.
-            add(from.plus(Duration.ofHours(i + 1)), nudge(retiredPrototype, random), TraceTopic.OTHER);
+    @DisplayName("the rows the pass writes are what the algorithm's labeller gives for the saved prototypes")
+    void rowsAreTheLabellers() {
+        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(pass.complete()).isTrue();
+        var labeller = new KMeansTopicAlgorithm().labeller(topicDAO.findPrototypes(WORKSPACE_ID, projectId))
+                .orElseThrow();
+        var window = inWindow(NIGHT.minus(Duration.ofDays(WINDOW_DAYS)), NIGHT);
+        var vectors = new float[window.size() * DIMENSIONS];
+        for (int i = 0; i < window.size(); i++) {
+            System.arraycopy(window.get(i).vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
         }
+        var labels = labeller.label(vectors);
+        var expected = new HashMap<UUID, UUID>();
+        for (int i = 0; i < window.size(); i++) {
+            expected.put(window.get(i).traceId(), labels[i]);
+        }
+        assertThat(inserted.stream().collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId)))
+                .isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("a saved list with no topic prototype labels every window trace Other, as its run did")
+    void noTopicPrototypeLabelsOther() {
+        when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of(prototype(0, null, otherPrototype)));
 
         var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
 
         assertThat(pass.complete()).isTrue();
-        assertThat(inserted).extracting(TraceTopic::topicId).doesNotContain(retired);
-        var window = inWindow(from, NIGHT);
-        var expected = new HashMap<UUID, UUID>();
-        for (var trace : window) {
-            expected.put(trace.traceId(), trace.expectedTopic());
-        }
-        assertThat(inserted.stream().collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId)))
-                .isEqualTo(expected);
+        assertExactlyOneRowPerWindowTrace();
+        assertThat(inserted).extracting(TraceTopic::topicId).containsOnly(TraceTopic.OTHER);
     }
 
     @Test
@@ -367,17 +369,6 @@ class TopicWindowLabelServiceTest {
         long lsb = 0x8000000000000000L | (random.nextLong() & 0x3FFFFFFFFFFFFFFFL);
         var traceId = new UUID(msb, lsb);
         traces.put(traceId, new Trace(traceId, createdAt, vector, expectedTopic));
-    }
-
-    private Topic topic(UUID topicId) {
-        return Topic.builder()
-                .id(topicId)
-                .workspaceId(WORKSPACE_ID)
-                .projectId(projectId)
-                .name("topic")
-                .definition("a topic")
-                .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
-                .build();
     }
 
     private TopicPrototype prototype(int position, UUID topicId, float[] vector) {

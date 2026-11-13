@@ -17,8 +17,6 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -34,13 +32,18 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -79,6 +82,7 @@ class TopicsRebuildServiceTest {
     private TopicWindowDAO windowDAO;
     private TopicWindowLabelService labelService;
     private TopicsRebuildService service;
+    private Function<TopicAlgorithm, TopicsRebuildService> serviceWith;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -108,8 +112,10 @@ class TopicsRebuildServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         var names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
-        service = new TopicsRebuildService(TestConfigUtils.loadConfigTest().getTopics(), template, windowDAO,
-                traceTopicsDAO, client, idGenerator, new TopicsMetrics(meter.meter, names), labelService);
+        var metrics = new TopicsMetrics(meter.meter, names);
+        serviceWith = algorithm -> new TopicsRebuildService(TestConfigUtils.loadConfigTest().getTopics(), template,
+                windowDAO, traceTopicsDAO, client, idGenerator, metrics, labelService, algorithm);
+        service = serviceWith.apply(new KMeansTopicAlgorithm());
     }
 
     @Test
@@ -164,6 +170,7 @@ class TopicsRebuildServiceTest {
 
         assertThat(outcome.errorCode()).isEqualTo("qwen_bad_answer");
         assertThat(meter.points("topics.qwen.calls")).singleElement().satisfies(point -> {
+            assertThat(point.get("call")).isEqualTo("author");
             assertThat(point.get("outcome")).isEqualTo("bad_answer");
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
         });
@@ -492,6 +499,69 @@ class TopicsRebuildServiceTest {
                 0, 0, PrototypeAssigner.OTHER);
     }
 
+    @Test
+    @DisplayName("the service saves what the bound algorithm returns: its topics, prototypes in order, labels and stats")
+    void savesWhatTheAlgorithmReturns() throws Exception {
+        int d = TopicsRebuildService.DIMENSIONS;
+        var first = unit(d, 0, 1, 1, 0);
+        var second = unit(d, 1, 1, 0, 0);
+        var other = unit(d, 2, 1, 0, 0);
+        var stub = new TopicAlgorithm() {
+            @Override
+            public FirstBuild firstBuild(Window window, int maxTopics, Context context) {
+                context.stats().put("stub_stat", maxTopics);
+                var labels = new int[window.size()];
+                for (int i = 0; i < labels.length; i++) {
+                    labels[i] = i % 3 == 2 ? OTHER : i % 3;
+                }
+                return FirstBuild.builder()
+                        .topics(List.of(NewTopic.builder().name("First").definition("one").build(),
+                                NewTopic.builder().name("Second").definition("two").build()))
+                        .labels(labels)
+                        .topicPrototypes(List.of(second, first))
+                        .owners(List.of(1, 0))
+                        .otherPrototypes(List.of(other))
+                        .build();
+            }
+
+            @Override
+            public Optional<Labeller> labeller(List<TopicPrototype> prototypes) {
+                return Optional.empty();
+            }
+        };
+
+        var outcome = serviceWith.apply(stub).firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        verify(client, never()).generate(any(), any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Topic>> topics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(topics.capture());
+        assertThat(topics.getValue()).extracting(Topic::name, Topic::definition, Topic::size)
+                .containsExactly(tuple("First", "one", TRACES / 3), tuple("Second", "two", TRACES / 3));
+        var firstId = topics.getValue().get(0).id();
+        var secondId = topics.getValue().get(1).id();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TopicPrototype>> prototypes = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertPrototypes(prototypes.capture());
+        assertThat(prototypes.getValue()).extracting(TopicPrototype::position, TopicPrototype::topicId)
+                .containsExactly(tuple(0, secondId), tuple(1, firstId), tuple(2, null));
+        assertThat(prototypes.getValue().get(0).values()).containsExactly(second);
+        assertThat(prototypes.getValue().get(2).values()).containsExactly(other);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TraceTopic>> traceTopics = ArgumentCaptor.forClass(List.class);
+        verify(traceTopicsDAO).insert(traceTopics.capture());
+        assertThat(traceTopics.getValue().stream().collect(Collectors.groupingBy(TraceTopic::topicId,
+                Collectors.counting()))).isEqualTo(Map.of(firstId, (long) TRACES / 3, secondId, (long) TRACES / 3,
+                        TraceTopic.OTHER, (long) TRACES / 3));
+        var stats = ArgumentCaptor.forClass(String.class);
+        verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
+        var json = JsonUtils.getMapper().readTree(stats.getValue());
+        assertThat(json.get("stub_stat").asInt()).isEqualTo(TopicsRebuildService.MAX_TOPICS);
+        assertThat(json.get("topics").asInt()).isEqualTo(2);
+        assertThat(json.get("other_share").asDouble()).isEqualTo(1.0 / 3);
+    }
+
     /** A unit vector of {@code d} values: {@code a} at index {@code i}, {@code b} at index {@code j}. */
     private static float[] unit(int d, int i, double a, int j, double b) {
         var out = new float[d];
@@ -528,22 +598,6 @@ class TopicsRebuildServiceTest {
         infinite[2] = Float.POSITIVE_INFINITY;
         assertThat(TopicsRebuildService.isUnit(infinite)).isFalse();
         assertThat(TopicsRebuildService.isUnit(new float[]{0.6f, 0.8f})).isFalse();
-    }
-
-    @ParameterizedTest(name = "{0} unique texts make {1} groups")
-    @CsvSource({"1068, 35", "481, 30", "4622, 50", "20, 20"})
-    @DisplayName("fine groups: one per 30 unique texts, at least 30, at most 50 or the unique texts")
-    void groups(int uniqueTexts, int expectedGroups) {
-        assertThat(TopicsRebuildService.groups(uniqueTexts)).isEqualTo(expectedGroups);
-    }
-
-    @Test
-    @DisplayName("texts per group: round(250 / k), from 5 to 10")
-    void budget() {
-        assertThat(TopicsRebuildService.authorExampleCount(50)).isEqualTo(5);
-        assertThat(TopicsRebuildService.authorExampleCount(35)).isEqualTo(7);
-        assertThat(TopicsRebuildService.authorExampleCount(30)).isEqualTo(8);
-        assertThat(TopicsRebuildService.authorExampleCount(15)).isEqualTo(10);
     }
 
     @Test

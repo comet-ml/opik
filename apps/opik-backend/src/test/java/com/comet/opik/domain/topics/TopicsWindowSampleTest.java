@@ -172,7 +172,7 @@ class TopicsWindowSampleTest {
                 .put("name", "Plan questions")
                 .put("definition", "Questions about the user's plan");
         var assignment = answer.putArray("assignment");
-        for (int cluster = 0; cluster < TopicsRebuildService.groups(MAX_VECTORS); cluster++) {
+        for (int cluster = 0; cluster < KMeansTopicAlgorithm.groups(MAX_VECTORS); cluster++) {
             assignment.addObject().put("cluster", cluster).put("topic", 0);
         }
         return answer;

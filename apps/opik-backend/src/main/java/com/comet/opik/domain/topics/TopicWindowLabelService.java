@@ -16,10 +16,10 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -27,8 +27,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 /**
  * The labelling pass: gives every trace of a saved run's window its {@code trace_topics} row. A run finds its topics on
  * a sample of the window when the window is larger than {@code topics.build.maxVectors}, and its own insert labels
- * only the sample; this pass labels the rest, by the same rule: {@link PrototypeAssigner} over the saved prototypes of the live topics
- * (the nearest at cosine 0.75 or more, else Other, with the known-Other prototypes and their gate). The rows carry
+ * only the sample; this pass labels the rest, by the same rule: the {@link TopicAlgorithm#labeller} of the saved
+ * prototypes. A list with no topic prototype labels every trace Other, as its run did. The rows carry
  * {@code source = 'run'} and the run's id, as the run's own rows do: they are the run's labels.
  *
  * <p>Resumable: what is left is read from ClickHouse each time, as the window's traces without a row of the run. A pass
@@ -61,6 +61,7 @@ public class TopicWindowLabelService {
     private final @NonNull TopicWindowDAO windowDAO;
     private final @NonNull TraceTopicsDAO traceTopicsDAO;
     private final @NonNull TopicsMetrics metrics;
+    private final @NonNull TopicAlgorithm algorithm;
 
     /** Who called a pass: the run right after its save, or the first-build job going on with an unfinished one. */
     @Getter
@@ -81,8 +82,8 @@ public class TopicWindowLabelService {
     public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete) {
     }
 
-    /** The saved list a pass labels with. {@code topicIds} maps the assigner's topic index to the topic's id. */
-    private record Saved(UUID runId, Instant from, Instant to, PrototypeAssigner assigner, List<UUID> topicIds) {
+    /** The saved list a pass labels with. */
+    private record Saved(UUID runId, Instant from, Instant to, TopicAlgorithm.Labeller labeller) {
     }
 
     /** Ends a pass early: the deadline is too close or the thread was interrupted. */
@@ -169,7 +170,7 @@ public class TopicWindowLabelService {
         }
     }
 
-    /** The project's last saved run, its window and the assigner of its prototypes, read in one transaction. */
+    /** The project's last saved run, its window and the labeller of its prototypes, read in one transaction. */
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
@@ -179,33 +180,17 @@ public class TopicWindowLabelService {
             }
             var to = state.get().windowUntil();
             var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
-            // As the run built it: the topic prototypes in position order, then the known-Other ones. Only live topics
-            // label: a prototype of a retired topic is left out.
-            var live = topicDAO.findLive(workspaceId, projectId).stream().map(Topic::id).collect(Collectors.toSet());
-            var topicIds = new ArrayList<UUID>();
-            var topicPrototypes = new ArrayList<float[]>();
-            var owners = new ArrayList<Integer>();
-            var otherPrototypes = new ArrayList<float[]>();
-            for (var prototype : topicDAO.findPrototypes(workspaceId, projectId)) {
-                if (prototype.topicId() == null) {
-                    otherPrototypes.add(prototype.values());
-                    continue;
-                }
-                if (!live.contains(prototype.topicId())) {
-                    continue;
-                }
-                int owner = topicIds.indexOf(prototype.topicId());
-                if (owner < 0) {
-                    topicIds.add(prototype.topicId());
-                    owner = topicIds.size() - 1;
-                }
-                topicPrototypes.add(prototype.values());
-                owners.add(owner);
-            }
-            var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes,
-                    TopicsRebuildService.DIMENSIONS);
-            return Optional.of(new Saved(state.get().lastRunId(), from, to, assigner, List.copyOf(topicIds)));
+            var labeller = algorithm.labeller(topicDAO.findPrototypes(workspaceId, projectId))
+                    .orElse(TopicWindowLabelService::allOther);
+            return Optional.of(new Saved(state.get().lastRunId(), from, to, labeller));
         });
+    }
+
+    /** The labels of a list with no topic prototype: every trace is Other, as its run labelled them. */
+    private static UUID[] allOther(float[] vectors) {
+        var out = new UUID[vectors.length / TopicsRebuildService.DIMENSIONS];
+        Arrays.fill(out, TraceTopic.OTHER);
+        return out;
     }
 
     /** One pass's progress. */
@@ -279,16 +264,15 @@ public class TopicWindowLabelService {
             for (int i = 0; i < kept.size(); i++) {
                 System.arraycopy(kept.get(i).vector(), 0, vectors, i * dimensions, dimensions);
             }
-            var labels = saved.assigner().assign(vectors);
+            var labels = saved.labeller().label(vectors);
             var rows = new ArrayList<TraceTopic>(kept.size());
             for (int i = 0; i < kept.size(); i++) {
-                int label = labels[i];
                 rows.add(TraceTopic.builder()
                         .workspaceId(workspaceId)
                         .projectId(projectId)
                         .traceId(kept.get(i).traceId())
                         .traceCreatedAt(kept.get(i).traceCreatedAt())
-                        .topicId(label == PrototypeAssigner.OTHER ? TraceTopic.OTHER : saved.topicIds().get(label))
+                        .topicId(labels[i])
                         .source(TraceTopic.Source.RUN)
                         .runId(saved.runId().toString())
                         .build());

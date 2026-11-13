@@ -312,11 +312,12 @@ GROUP BY topic_id
 ORDER BY traces DESC;
 ```
 
-Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, unique texts, k, seed,
-the topics with their sizes, the Other share and the phase timings. The author prompt and Qwen's raw answer hold
-users' trace text, so no log level prints them: the run logs their length, the prompt's group count and a SHA-256 of
-each, which matches the same prompt or answer across runs.
-Search the logs for `Topics run '<run_id>'`.
+Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, the topics with their
+sizes, the Other share and the phase timings. The algorithm's own numbers (unique texts, k, seed, groups) are in the
+run's `stats` in `topic_runs`. The author prompt and Qwen's raw answer hold users' trace text, so no log level prints
+them: the run logs their length and a SHA-256 of each, which matches the same prompt or answer across runs. Each LLM
+call's request id is `<run_id>:<call>`, for example `<run_id>:author`, so the call can be found in opik-inference's
+logs. Search the logs for `Topics run '<run_id>'`.
 
 ### Running by hand
 
@@ -419,7 +420,7 @@ count on each pod. The alerts read the gauges.
 | `topics.runs` by `status`, `error_code` | Finished runs. Each failed run counts once: `start_failed` when the run could not start (it has no `topic_runs` row), `abandoned` when housekeeping fails a run left `running`. A run is counted by the write that ends its row: when marking a run failed throws, its row stays `running` and nothing counts it until housekeeping fails it as `abandoned`. |
 | `topics.run.duration_seconds` by `phase` | Time in `window` (ClickHouse read), `kmeans`, `qwen`, `assign`, `save`, `label` (the labelling pass). |
 | `topics.label.passes` by `trigger`, `outcome` | Labelling passes: `trigger` is `run` (after a save) or `resume` (the first-build job finishing one); `outcome` is `complete` or `incomplete` (cut, failed, or the saved list could not be read). See "Saving and labelling". |
-| `topics.qwen.calls` by `outcome` | `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
+| `topics.qwen.calls` by `call`, `outcome` | `call` is the kind of call (`author`); `outcome` is `ok`, `timeout`, `error`, `bad_answer`. A call counts after its answer is read: an answer that cannot be read is `bad_answer`, not `ok`. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. A `trace_topics` insert that failed after the save adds none. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No alert: no threshold is set. |
 | `topics.first_build.gate` by `outcome` | See "First builds and the vectors backfill". |

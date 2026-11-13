@@ -38,6 +38,7 @@ public class TopicsMetrics {
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
     private static final AttributeKey<String> PHASE = stringKey("phase");
     private static final AttributeKey<String> OUTCOME = stringKey("outcome");
+    private static final AttributeKey<String> CALL = stringKey("call");
     private static final AttributeKey<String> TABLE = stringKey("table");
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
 
@@ -79,7 +80,7 @@ public class TopicsMetrics {
                 .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save, label")
                 .build();
         this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
-                .setDescription("Qwen calls, by outcome: ok, timeout, error, bad_answer")
+                .setDescription("Qwen calls, by call (author) and outcome: ok, timeout, error, bad_answer")
                 .build();
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
@@ -128,8 +129,8 @@ public class TopicsMetrics {
         runDuration.record(duration.toNanos() / 1e9, names.builder(workspaceId).put(PHASE, phase).build());
     }
 
-    void qwen(@NonNull String workspaceId, @NonNull String outcome) {
-        qwenCalls.add(1, names.builder(workspaceId).put(OUTCOME, outcome).build());
+    void qwen(@NonNull String workspaceId, @NonNull TopicAlgorithm.Call call, @NonNull String outcome) {
+        qwenCalls.add(1, names.builder(workspaceId).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
     }
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
