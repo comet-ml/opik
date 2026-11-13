@@ -1081,69 +1081,85 @@ navigation:
       - page: Overview
         path: ./docs-v2/self-host/overview.mdx
         slug: overview
-      - page: Migrating to Opik 2.0
-        path: ./docs-v2/self-host/v1_to_v2_migration.mdx
-        slug: v1-to-v2-migration
-      - page: Local deployment
-        path: ./docs-v2/self-host/local_deployment.mdx
-        slug: local_deployment
-      - page: Kubernetes deployment
-        path: ./docs-v2/self-host/kubernetes.mdx
-        slug: kubernetes
-      - page: Helm chart migration
-        path: ./docs-v2/self-host/helm.mdx
-        slug: helm
-      - page: ClickHouse cold-tier migration
-        path: ./docs-v2/self-host/clickhouse-cold-tier-migration.mdx
-        slug: clickhouse-cold-tier-migration
-      - page: ClickHouse tiered-storage TTL and backfill
-        path: ./docs-v2/self-host/clickhouse-tiered-storage-ttl.mdx
-        slug: clickhouse-tiered-storage-ttl
-      - page: Platform Architecture
-        path: ./docs-v2/self-host/architecture.mdx
-        slug: architecture
-      - page: Scaling Opik
-        path: ./docs-v2/self-host/scaling.mdx
-        slug: scaling
-      - page: Advanced clickhouse backup
-        path: ./docs-v2/self-host/backup.mdx
-        slug: backup
-      - page: Troubleshooting
-        path: ./docs-v2/self-host/troubleshooting.mdx
-        slug: troubleshooting
-      - page: Changelog
-        path: ./docs-v2/self-host/changelog.mdx
-        slug: changelog
-      - section: Configuration
+      - section: Deploy
+        skip-slug: true
+        contents:
+          - page: Local deployment
+            path: ./docs-v2/self-host/local_deployment.mdx
+            slug: local_deployment
+          - page: Kubernetes deployment
+            path: ./docs-v2/self-host/kubernetes.mdx
+            slug: kubernetes
+          - page: Platform architecture
+            path: ./docs-v2/self-host/architecture.mdx
+            slug: architecture
+      - section: Configure
         slug: /configure
         contents:
-          - page: Anonymous usage statistics
-            path: ./docs-v2/self-host/configure/anonymous_usage_statistics.mdx
-            slug: anonymous_usage_statistics
-          - page: Large CSV uploads
-            path: ./docs-v2/self-host/configure/large_csv_uploads.mdx
-            slug: large_csv_uploads
           - page: Redis Sentinel
             path: ./docs-v2/self-host/configure/redis-sentinel.mdx
             slug: redis-sentinel
-          - page: Dataset versioning migration
-            path: ./docs-v2/self-host/configure/dataset_versioning_migration.mdx
-            slug: dataset_versioning_migration
           - page: LLM model registry
             path: ./docs-v2/self-host/configure/llm-model-registry.mdx
             slug: llm-model-registry
-          - page: UUIDv7 ingestion validation
-            path: ./docs-v2/self-host/configure/uuid_validation.mdx
-            slug: uuid_validation
-          - page: Querying trace data in ClickHouse
-            path: ./docs-v2/self-host/configure/traces-storage.mdx
-            slug: traces-storage
           - page: MCP OAuth
             path: ./docs-v2/self-host/configure/mcp-oauth.mdx
             slug: mcp-oauth
           - page: Webhook destinations and the admin port
             path: ./docs-v2/self-host/configure/webhooks-and-admin-port.mdx
             slug: webhooks-and-admin-port
+          - page: Large CSV uploads
+            path: ./docs-v2/self-host/configure/large_csv_uploads.mdx
+            slug: large_csv_uploads
+          - page: UUIDv7 ingestion validation
+            path: ./docs-v2/self-host/configure/uuid_validation.mdx
+            slug: uuid_validation
+          - page: Anonymous usage statistics
+            path: ./docs-v2/self-host/configure/anonymous_usage_statistics.mdx
+            slug: anonymous_usage_statistics
+      - section: Operate
+        skip-slug: true
+        contents:
+          - page: Scaling Opik
+            path: ./docs-v2/self-host/scaling.mdx
+            slug: scaling
+          - page: ClickHouse backup
+            path: ./docs-v2/self-host/backup.mdx
+            slug: backup
+          - page: ClickHouse tiered-storage TTL and backfill
+            path: ./docs-v2/self-host/clickhouse-tiered-storage-ttl.mdx
+            slug: clickhouse-tiered-storage-ttl
+          - page: Querying trace data in ClickHouse
+            path: ./docs-v2/self-host/configure/traces-storage.mdx
+            slug: traces-storage
+          - page: Troubleshooting
+            path: ./docs-v2/self-host/troubleshooting.mdx
+            slug: troubleshooting
+      - section: Upgrade and migrate
+        skip-slug: true
+        contents:
+          - page: Move to Opik Cloud
+            path: ./docs-v2/self-host/migrate_to_cloud.mdx
+            slug: migrate-to-cloud
+          - page: ClickHouse cold-tier migration
+            path: ./docs-v2/self-host/clickhouse-cold-tier-migration.mdx
+            slug: clickhouse-cold-tier-migration
+          - page: Migrate from Bitnami charts
+            path: ./docs-v2/self-host/helm.mdx
+            slug: helm
+          - section: Earlier migrations
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Migrating to Opik 2.0
+                path: ./docs-v2/self-host/v1_to_v2_migration.mdx
+                slug: v1-to-v2-migration
+              - page: Dataset versioning migration
+                path: ./docs-v2/self-host/configure/dataset_versioning_migration.mdx
+                slug: dataset_versioning_migration
+      - page: Changelog
+        path: ./docs-v2/self-host/changelog.mdx
+        slug: changelog
   - tab: reference
     layout:
       - page: Overview
@@ -1682,6 +1698,12 @@ redirects:
     permanent: true
   - source: "/docs/opik/self-host/kubernetes/backup"
     destination: "/docs/opik/self-host/backup"
+    permanent: true
+  - source: "/docs/opik/self-host/configure/traces-storage"
+    destination: "/docs/opik/self-host/traces-storage"
+    permanent: true
+  - source: "/docs/opik/self-host/configure/dataset_versioning_migration"
+    destination: "/docs/opik/self-host/dataset_versioning_migration"
     permanent: true
   # HRPO (formerly Hierarchical Reflective Optimizer) redirect
   - source: "/docs/opik/agent_optimization/algorithms/hierarchical_reflective_optimizer"
