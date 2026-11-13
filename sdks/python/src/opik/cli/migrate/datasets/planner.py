@@ -561,11 +561,11 @@ def _build_resume_plan(
     name_after_rename = f"{source.name}{SOURCE_SUFFIX}"
 
     # Destination = the TEMP-named dataset the first run created under
-    # --to-project (promote hasn't run yet).
+    # --to-project (promote hasn't run yet). Bound to a local because mypy
+    # doesn't carry the guard's attribute narrowing into the lambda.
+    temp_dest_name = checkpoint.temp_dest_name
     dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: client.get_dataset(
-            name=checkpoint.temp_dest_name, project_name=to_project
-        )
+        lambda: client.get_dataset(name=temp_dest_name, project_name=to_project)
     )
 
     remaps = reconstruct_remaps(

@@ -528,8 +528,9 @@ HOST_TARGETS: List[HostTarget] = [
         display_name="Claude Code",
         config_path=_claude_config_path,
         top_level_key="mcpServers",
-        is_detected=lambda: shutil.which("claude") is not None
-        or _claude_config_path().exists(),
+        is_detected=lambda: (
+            shutil.which("claude") is not None or _claude_config_path().exists()
+        ),
         install=_install_claude_code,
         sign_in_command=f"claude mcp login {SERVER_NAME}",
         status_command="claude mcp list",
@@ -540,8 +541,9 @@ HOST_TARGETS: List[HostTarget] = [
         config_path=_codex_config_path,
         # Unused: Codex config is TOML, so reads go through `read_block` instead.
         top_level_key="mcp_servers",
-        is_detected=lambda: shutil.which("codex") is not None
-        or _codex_config_path().exists(),
+        is_detected=lambda: (
+            shutil.which("codex") is not None or _codex_config_path().exists()
+        ),
         install=_install_codex,
         read_block=_read_codex_block,
         sign_in_command=f"codex mcp login {SERVER_NAME}",
@@ -569,8 +571,9 @@ HOST_TARGETS: List[HostTarget] = [
         display_name="opencode",
         config_path=_opencode_config_path,
         top_level_key="mcp",
-        is_detected=lambda: shutil.which("opencode") is not None
-        or _opencode_config_dir().exists(),
+        is_detected=lambda: (
+            shutil.which("opencode") is not None or _opencode_config_dir().exists()
+        ),
         install=_install_opencode,
         sign_in_command=f"opencode mcp auth {SERVER_NAME}",
         status_command="opencode mcp list",

@@ -37,14 +37,16 @@ def test_attachments_client__get_attachment_list_for_trace__happyflow(
     attachments_client = opik_client.get_attachment_client()
 
     synchronization.wait_for_done(
-        lambda: len(
-            attachments_client.get_attachment_list(
-                project_name=PROJECT_NAME,
-                entity_id=trace_id,
-                entity_type="trace",
+        lambda: (
+            len(
+                attachments_client.get_attachment_list(
+                    project_name=PROJECT_NAME,
+                    entity_id=trace_id,
+                    entity_type="trace",
+                )
             )
-        )
-        > 0,
+            > 0
+        ),
         timeout=30,
     )
 
@@ -81,14 +83,16 @@ def test_attachments_client__download_attachment_for_trace__happyflow(
     attachments_client = opik_client.get_attachment_client()
 
     synchronization.wait_for_done(
-        lambda: len(
-            attachments_client.get_attachment_list(
-                project_name=PROJECT_NAME,
-                entity_id=trace_id,
-                entity_type="trace",
+        lambda: (
+            len(
+                attachments_client.get_attachment_list(
+                    project_name=PROJECT_NAME,
+                    entity_id=trace_id,
+                    entity_type="trace",
+                )
             )
-        )
-        > 0,
+            > 0
+        ),
         timeout=30,
     )
 
@@ -137,14 +141,16 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
     attachments_client = opik_client.get_attachment_client()
 
     synchronization.wait_for_done(
-        lambda: len(
-            attachments_client.get_attachment_list(
-                project_name=PROJECT_NAME,
-                entity_id=span_id,
-                entity_type="span",
+        lambda: (
+            len(
+                attachments_client.get_attachment_list(
+                    project_name=PROJECT_NAME,
+                    entity_id=span_id,
+                    entity_type="span",
+                )
             )
-        )
-        > 0,
+            > 0
+        ),
         timeout=30,
     )
 

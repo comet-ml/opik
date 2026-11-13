@@ -133,8 +133,9 @@ class TestEvolutionaryOptimizerEarlyStop:
         monkeypatch.setattr(
             population_ops,
             "initialize_population",
-            lambda **_kwargs: [ChatPrompt(system="s", user="u")]
-            * optimizer.population_size,
+            lambda **_kwargs: (
+                [ChatPrompt(system="s", user="u")] * optimizer.population_size
+            ),
         )
 
         prompt = ChatPrompt(system="test", user="{question}")

@@ -117,13 +117,14 @@ class ThreadsClient:
         project_name = self._opik_client._resolve_project_name(project_name)
 
         threads = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._opik_client.rest_client.traces.search_trace_threads(
-                project_name=project_name,
-                filters=filters,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_thread_model_id=last_retrieved_id,
+            read_source=lambda current_batch_size, last_retrieved_id: (
+                self._opik_client.rest_client.traces.search_trace_threads(
+                    project_name=project_name,
+                    filters=filters,
+                    limit=current_batch_size,
+                    truncate=truncate,
+                    last_retrieved_thread_model_id=last_retrieved_id,
+                )
             ),
             max_results=max_results,
             parsed_item_class=TraceThread,

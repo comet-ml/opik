@@ -128,6 +128,69 @@ PY
 )
 check_empty "every configured hook has a description" "$missing"
 
+echo "precommit-bumped-hooks.py:"
+# Fixture configs: a repo whose hook id recurs across scopes (listed once), a
+# repo left at its rev (not listed), a local repo (never bumped), and a pinned
+# docker image entry (tag synced to the bumped rev).
+bump_dir=$(mktemp -d)
+cat >"$bump_dir/old.yaml" <<'EOF'
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ruff
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.0.0
+    hooks:
+      - id: codespell
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ruff
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: spotless
+        entry: scripts/precommit-spotless.sh
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.0.0
+    hooks:
+      - id: hadolint-docker
+        entry: ghcr.io/hadolint/hadolint:v2.0.0 hadolint
+EOF
+sed 's/v0\.1\.0/v0.2.0/' "$bump_dir/old.yaml" >"$bump_dir/new.yaml"
+bumped=$(python3 scripts/precommit-bumped-hooks.py "$bump_dir/old.yaml" "$bump_dir/new.yaml" | tr '\n' ' ')
+# Delimited so the substring check is an exact match.
+check "lists bumped ids once, in order" "|ruff ruff-format |" "|$bumped|"
+check_empty "omits the unbumped repo" "$(printf '%s' "$bumped" | grep -o codespell || true)"
+check_empty "no bump → no ids" \
+	"$(python3 scripts/precommit-bumped-hooks.py "$bump_dir/old.yaml" "$bump_dir/old.yaml")"
+# Bump hadolint's rev only; --sync-entry-tags must move the image tag with it.
+awk '/hadolint\/hadolint$/{h=1} h && /rev:/{sub(/v2\.0\.0/, "v2.1.0"); h=0} {print}' \
+	"$bump_dir/old.yaml" >"$bump_dir/new.yaml"
+bumped=$(python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/old.yaml" "$bump_dir/new.yaml")
+check "bumped docker hook is listed" "hadolint-docker" "$bumped"
+check "entry tag synced to rev" "ghcr.io/hadolint/hadolint:v2.1.0 hadolint" "$(cat "$bump_dir/new.yaml")"
+check "local entry untouched" "entry: scripts/precommit-spotless.sh" "$(cat "$bump_dir/new.yaml")"
+check "codespell rev untouched" "rev: v2.0.0" "$(cat "$bump_dir/new.yaml")"
+# A tag drifted from its rev (no rev bump): the sync rewrites the entry, so the
+# hook must still be reported for a re-scan.
+sed 's/hadolint:v2\.0\.0/hadolint:v1.9.0/' "$bump_dir/old.yaml" >"$bump_dir/drift.yaml"
+cp "$bump_dir/drift.yaml" "$bump_dir/new.yaml"
+check "tag-only resync is reported" "hadolint-docker" \
+	"$(python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/drift.yaml" "$bump_dir/new.yaml")"
+# Quoted revs must not leak their quotes into the image tag.
+sed 's/rev: v2\.0\.0$/rev: "v2.1.0"/' "$bump_dir/old.yaml" >"$bump_dir/new.yaml"
+python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/old.yaml" "$bump_dir/new.yaml" >/dev/null
+check "quoted rev → unquoted tag" "ghcr.io/hadolint/hadolint:v2.1.0 hadolint" "$(cat "$bump_dir/new.yaml")"
+# A config that fails validation (different repo list) is never rewritten.
+sed -e 's|codespell-project/codespell|example/other|' -e 's/hadolint:v2\.0\.0/hadolint:v1.9.0/' \
+	"$bump_dir/old.yaml" >"$bump_dir/new.yaml"
+cp "$bump_dir/new.yaml" "$bump_dir/before.yaml"
+python3 scripts/precommit-bumped-hooks.py --sync-entry-tags "$bump_dir/old.yaml" "$bump_dir/new.yaml" >/dev/null 2>&1 || true
+check_empty "invalid config left unmodified" "$(diff "$bump_dir/before.yaml" "$bump_dir/new.yaml" || true)"
+rm -rf "$bump_dir"
+
 echo "precommit-skipped-table.sh:"
 check_empty "empty skipped → no output"  "$(scripts/precommit-skipped-table.sh '[]')"
 sk=$(scripts/precommit-skipped-table.sh '[{"name":"☕ spotless — java backend","id":"spotless"}]')

@@ -136,8 +136,10 @@ def test_guardrail_from_stored_policies__passing_text__validations_logged(
     )
 
     assert synchronization.until(
-        lambda: {("PII", "passed"), ("TOPIC", "passed")}
-        <= _guardrail_check_results(opik_client, ID_STORAGE["trace-id"])
+        lambda: (
+            {("PII", "passed"), ("TOPIC", "passed")}
+            <= _guardrail_check_results(opik_client, ID_STORAGE["trace-id"])
+        )
     ), "The guardrail results of both policies did not reach the trace"
 
     verifiers.verify_span(

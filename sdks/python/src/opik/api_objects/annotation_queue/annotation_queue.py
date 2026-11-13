@@ -171,8 +171,10 @@ class BaseAnnotationQueue(ABC):
     def _remove_items_batch_with_retry(self, ids: List[str]) -> None:
         """Remove a batch of items with automatic retry on rate limit errors."""
         ensure_rest_api_call_respecting_rate_limit(
-            lambda: self._rest_client.annotation_queues.remove_items_from_annotation_queue(
-                id=self._id, ids=ids
+            lambda: (
+                self._rest_client.annotation_queues.remove_items_from_annotation_queue(
+                    id=self._id, ids=ids
+                )
             )
         )
         LOGGER.debug("Successfully removed %d items from annotation queue", len(ids))
