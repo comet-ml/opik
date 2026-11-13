@@ -23,6 +23,11 @@ In the [Claude Console](https://platform.claude.com/settings/telemetry-destinati
 | Headers | `Authorization: <your-api-key>`<br />`Comet-Workspace: <your-workspace-name>`<br />`projectName: <your-project-name>` |
 | Content | **Full content** |
 
+{/* TODO: replace placeholder with a real screenshot: Claude Console Custom destination form filled in for Opik */}
+<Frame>
+  <img src="/img/tracing/claude_managed_agents/console_add_destination.png" alt="Claude Console Custom destination form filled in for Opik" />
+</Frame>
+
 Start a Managed Agents session in a workspace the destination covers. Within about a minute its
 turns appear as traces in your Opik project, grouped by session thread in the **Threads** tab.
 
@@ -196,6 +201,11 @@ reachable from your deployment.
 | `anthropic.mcp_tool_use <tool>` | A tool span per MCP tool call |
 | `anthropic.session.outcome_evaluation` | One iteration of an outcome grader, with its token usage |
 
+{/* TODO: replace placeholder with a real screenshot: Managed Agents trace in Opik with turn, model request and tool spans */}
+<Frame>
+  <img src="/img/tracing/claude_managed_agents/opik_trace_tree.png" alt="Managed Agents trace in Opik with turn, model request and tool spans" />
+</Frame>
+
 - **Threads:** spans carry the session thread ID as `gen_ai.conversation.id`, which Opik uses as
   the thread ID. A session's turns can arrive in several traces, so open the **Threads** tab to read
   a thread as one conversation. In multiagent sessions, each thread appears as its own Opik thread.
@@ -203,6 +213,11 @@ reachable from your deployment.
   the `anthropic.session.turn` span to see the turn's input and output.
 - **Cost:** Opik estimates cost from the model and token usage on each `anthropic.model_request`
   span.
+
+{/* TODO: replace placeholder with a real screenshot: Opik Threads tab showing a Managed Agents session thread */}
+<Frame>
+  <img src="/img/tracing/claude_managed_agents/opik_threads.png" alt="Opik Threads tab showing a Managed Agents session thread" />
+</Frame>
 
 ## Validation
 
