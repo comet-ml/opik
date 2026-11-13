@@ -1,3 +1,4 @@
+import { MessageUsage } from "../../../usage";
 import PrettyLLMMessage from "@/shared/PrettyLLMMessage";
 import {
   FormatMapper,
@@ -84,11 +85,7 @@ interface OpenAIInputData {
 
 interface OpenAIOutputData {
   choices: OpenAIChoice[];
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
+  usage?: MessageUsage;
 }
 
 interface OpenAICustomInputFormat {
@@ -97,11 +94,7 @@ interface OpenAICustomInputFormat {
 
 interface OpenAICustomOutputFormat {
   text: string;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
+  usage?: MessageUsage;
   finish_reason?: string;
 }
 

@@ -73,6 +73,37 @@ describe("splitOutputForMessages", () => {
   });
 
   describe("full provider responses", () => {
+    it("does not repeat flattened OpenInference fields below Messages", () => {
+      expect(
+        splitOutputForMessages({
+          "llm.output_messages.0.message.role": "assistant",
+          "llm.output_messages.0.message.content": "Answer",
+          "llm.prompts.0.prompt.text": "Question",
+          "llm.choices.0.completion.text": "Completion",
+          "llm.tools.0.tool.name": "weather",
+          "llm.function_call": '{"name":"weather"}',
+          "llm.finish_reason": "stop",
+          sources: ["policy.md"],
+          usage: { total_tokens: 3 },
+        }),
+      ).toEqual({
+        rendersAsMessages: true,
+        remainingOutput: {
+          sources: ["policy.md"],
+          // The OpenInference mapper does not render payload usage.
+          usage: { total_tokens: 3 },
+        },
+      });
+    });
+
+    it("has no remainder for a bare flattened OpenInference answer", () => {
+      expect(
+        splitOutputForMessages({
+          "llm.output_messages.0.message.content": "Answer",
+        }),
+      ).toEqual({ rendersAsMessages: true, remainingOutput: {} });
+    });
+
     it("keeps OpenAI chat completion metadata but not choices or usage", () => {
       expect(
         splitOutputForMessages({

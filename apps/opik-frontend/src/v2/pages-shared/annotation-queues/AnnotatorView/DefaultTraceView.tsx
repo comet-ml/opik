@@ -4,6 +4,7 @@ import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import CodeBlock from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlock";
+import { getPrettifyConfig } from "@/lib/traces";
 
 type DefaultTraceViewProps = {
   trace: Trace;
@@ -11,6 +12,11 @@ type DefaultTraceViewProps = {
 
 const DefaultTraceView: React.FC<DefaultTraceViewProps> = ({ trace }) => {
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(trace);
+  const prettifySource = {
+    metadata: trace.metadata,
+    input: transformedInput,
+    output: transformedOutput,
+  };
 
   return (
     <MediaProvider media={media}>
@@ -19,14 +25,20 @@ const DefaultTraceView: React.FC<DefaultTraceViewProps> = ({ trace }) => {
         <CodeBlock
           title="Input"
           data={transformedInput}
-          prettifyConfig={{ fieldType: "input" }}
+          prettifyConfig={{
+            ...getPrettifyConfig(prettifySource, "input"),
+            fieldType: "input",
+          }}
           preserveKey="syntax-highlighter-annotation-input"
           withSearch
         />
         <CodeBlock
           title="Output"
           data={transformedOutput}
-          prettifyConfig={{ fieldType: "output" }}
+          prettifyConfig={{
+            ...getPrettifyConfig(prettifySource, "output"),
+            fieldType: "output",
+          }}
           preserveKey="syntax-highlighter-annotation-output"
           withSearch
         />
