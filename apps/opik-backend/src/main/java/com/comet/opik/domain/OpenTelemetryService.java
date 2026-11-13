@@ -6,6 +6,8 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
+import com.comet.opik.domain.mapping.otel.ClaudePlatformMappingRules;
+import com.comet.opik.domain.mapping.otel.ClaudePlatformTraces;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.infrastructure.OpenTelemetryConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -112,7 +114,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 .findFirst()
                 .orElse(null);
 
-        Map<String, List<Span>> spansByProjectName = new HashMap<>();
+        Map<String, List<ScopedSpan>> spansByProjectName = new HashMap<>();
         Set<String> skippedProjectNames = new LinkedHashSet<>();
         long skippedSpans = 0;
         for (var resourceSpans : traceRequest.getResourceSpansList()) {
@@ -133,7 +135,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .or(() -> resourceProjectName.filter(OpenTelemetryMapper::isValidProjectName))
                             .orElse(fallbackProjectName);
                     spansByProjectName.computeIfAbsent(WorkspaceUtils.getProjectName(projectName),
-                            name -> new ArrayList<>()).add(span);
+                            name -> new ArrayList<>()).add(new ScopedSpan(span, scopeSpans.getScope().getName()));
                 }
             }
         }
@@ -165,8 +167,8 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private static Map.Entry<Project, List<Span>> mergeSpans(Map.Entry<Project, List<Span>> left,
-            Map.Entry<Project, List<Span>> right) {
+    private static Map.Entry<Project, List<ScopedSpan>> mergeSpans(Map.Entry<Project, List<ScopedSpan>> left,
+            Map.Entry<Project, List<ScopedSpan>> right) {
         return Map.entry(left.getKey(), Stream.concat(left.getValue().stream(), right.getValue().stream()).toList());
     }
 
@@ -179,9 +181,9 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         return hidden > 0 ? described + " and " + hidden + " more" : described;
     }
 
-    private static String describeProjects(Collection<Map.Entry<Project, List<Span>>> spansByProject) {
+    private static String describeProjects(Collection<Map.Entry<Project, List<ScopedSpan>>> spansByProject) {
         var described = spansByProject.stream()
-                .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(List<Span>::size).reversed()))
+                .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(List<ScopedSpan>::size).reversed()))
                 .limit(MAX_LOGGED_PROJECT_NAMES)
                 .map(entry -> spans(entry.getValue().size()) + " to project '" + entry.getKey().name() + "'")
                 .collect(Collectors.joining(", "));
@@ -195,12 +197,13 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         return count + (count == 1 ? " span" : " spans");
     }
 
-    private Mono<Long> storeProjectSpans(List<Span> otelSpans, Project project, String integrationName) {
+    private Mono<Long> storeProjectSpans(List<ScopedSpan> otelSpans, Project project, String integrationName) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // otelTraceId -> minimum timestamp seen with that traceId
             var otelTracesAndMinTimestamp = otelSpans.stream()
+                    .map(ScopedSpan::span)
                     .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
 
             // get or create a mapping of otel trace id -> opik trace id
@@ -217,16 +220,18 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         return "otelTraceId:" + workspaceId + ":" + projectId + ":" + otelId;
     }
 
-    private Mono<Long> doStoreSpans(List<Span> otelSpans, Map<String, UUID> traceIdMapper, String projectName,
+    private Mono<Long> doStoreSpans(List<ScopedSpan> otelSpans, Map<String, UUID> traceIdMapper, String projectName,
             String integrationName) {
 
         // Track trace IDs that came from opik.trace_id attribute overrides.
         // These spans connect to existing OPIK traces, so we must not create new traces for them.
         Set<UUID> overriddenTraceIds = new HashSet<>();
+        List<com.comet.opik.api.Span> claudePlatformSpans = new ArrayList<>();
 
         // converts otel spans into opik spans, using the mapped opik trace id
         var opikSpans = otelSpans.stream()
-                .map(otelSpan -> {
+                .map(scopedSpan -> {
+                    var otelSpan = scopedSpan.span();
                     var otelTraceIdBase64 = base64OtelId(otelSpan.getTraceId());
 
                     var opikTraceId = traceIdMapper.get(otelTraceIdBase64);
@@ -234,11 +239,16 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     OpenTelemetryMapper.extractOpikTraceId(otelSpan)
                             .ifPresent(overriddenTraceIds::add);
 
-                    return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, integrationName);
+                    var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, integrationName,
+                            scopedSpan.scopeName())
+                            .toBuilder()
+                            .projectName(projectName)
+                            .build();
+                    if (ClaudePlatformMappingRules.isClaudePlatformScope(scopedSpan.scopeName())) {
+                        claudePlatformSpans.add(opikSpan);
+                    }
+                    return opikSpan;
                 })
-                .map(opikSpan -> opikSpan.toBuilder()
-                        .projectName(projectName)
-                        .build())
                 .toList();
 
         // Some integrations (e.g. PydanticAI/Logfire) put cumulative usage tokens on parent/agent spans
@@ -310,6 +320,9 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             });
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
+                .thenMany(Flux.fromIterable(ClaudePlatformTraces.traceUpdates(claudePlatformSpans).entrySet()))
+                .concatMap(entry -> traceService.update(
+                        entry.getValue().toBuilder().projectName(projectName).build(), entry.getKey()))
                 .then(Mono.defer(() -> {
                     var spanBatch = SpanBatch.builder().spans(dedupedSpans).build();
 
@@ -318,6 +331,9 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
                     return spanService.create(spanBatch);
                 }));
+    }
+
+    private record ScopedSpan(Span span, String scopeName) {
     }
 
     private Mono<Map<String, UUID>> otelToOpikTraceIdMapper(Map<ByteString, Long> otelTraceIds, UUID projectId,
