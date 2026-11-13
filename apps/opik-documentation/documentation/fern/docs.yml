@@ -1044,6 +1044,9 @@ navigation:
           - page: OpenTelemetry
             path: ./docs-v2/integrations/opentelemetry.mdx
             slug: opentelemetry
+          - page: Claude Managed Agents
+            path: ./docs-v2/integrations/claude-managed-agents.mdx
+            slug: claude-managed-agents
   - tab: cost-intelligence
     layout:
       - page: Overview

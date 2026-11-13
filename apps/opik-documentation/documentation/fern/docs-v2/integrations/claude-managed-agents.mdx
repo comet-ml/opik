@@ -1,0 +1,236 @@
+---
+description: Send Claude Managed Agents traces to Opik over OpenTelemetry, for agents hosted by Anthropic or self-hosted in your own infrastructure.
+headline: Claude Managed Agents
+og:description: Add Opik as an OpenTelemetry destination for Claude Managed Agents and review every session turn, model request and tool call in Opik.
+og:site_name: Opik Documentation
+og:title: Claude Managed Agents Integration - Opik
+title: Observability for Claude Managed Agents with Opik
+---
+
+[Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) runs the agent
+loop and a per-session sandbox for you, or in your own infrastructure when you self-host it. Each
+agent turn, model request and tool call can be exported as an OpenTelemetry trace. Opik ingests
+these traces through its OTLP endpoint, so no Opik SDK or code change is required.
+
+## Quick start
+
+In the [Claude Console](https://platform.claude.com/settings/telemetry-destinations), open
+**Settings → OpenTelemetry → Add destination**, pick **Custom**, and enter:
+
+| Field | Value |
+| --- | --- |
+| Endpoint URL | `https://www.comet.com/opik/api/v1/private/otel` |
+| Headers | `Authorization: <your-api-key>`<br />`Comet-Workspace: <your-workspace-name>`<br />`projectName: <your-project-name>` |
+| Content | **Full content** |
+
+Start a Managed Agents session in a workspace the destination covers. Within about a minute its
+turns appear as traces in your Opik project, grouped by session thread in the **Threads** tab.
+
+## When this guide applies
+
+Use this guide if you build on **Claude Managed Agents** and want to review sessions in Opik: what
+the agent was asked, what each model request returned, which tools ran with which arguments, and
+what each turn cost.
+
+- For direct Messages API calls from Python or TypeScript, the [Anthropic integration](/integrations/anthropic)
+  is simpler.
+- For Claude Code or the Claude Agent SDK, see [Claude Code](/integrations/claude-code) and
+  [Claude Agent SDK](/integrations/claude-agent-sdk).
+
+## How traces reach Opik
+
+Managed Agents traces can come from two independent sources. Each works alone, and together they
+form one trace.
+
+| | Claude Platform tracing | Claude SDK tracing |
+| --- | --- | --- |
+| **Emitted by** | Anthropic's servers | The Claude SDK in your application or sandbox worker |
+| **Setup** | Add a destination in the Claude Console or with the Admin API | Register an OpenTelemetry tracer provider in code |
+| **Agent turns, model requests, token usage** | Yes | No |
+| **Agent toolset and MCP tools run by the platform** | Yes | No |
+| **Tools run in a self-hosted sandbox** | No | Yes |
+| **Your application's own spans around the session** | No | Yes |
+
+Start with Claude Platform tracing: it captures the whole agent loop with no code change. Add SDK
+tracing when you run a self-hosted sandbox, or when you want sessions nested inside your
+application's own traces.
+
+## Option 1: Claude Platform tracing
+
+Anthropic sends the spans of every Managed Agents session (and every Messages API request) in the
+covered workspaces to each enabled destination. Adding a destination requires the **admin** role
+in your Claude organization.
+
+<Warning>
+  Adding a destination sends traces of your organization's Claude activity to Opik, where they are
+  stored under your Opik workspace's access and retention settings. With **Full content**, that
+  includes prompts, model responses and tool results.
+</Warning>
+
+### Destination settings
+
+| Setting | Value |
+| --- | --- |
+| **Endpoint URL** | Opik Cloud: `https://www.comet.com/opik/api/v1/private/otel`<br />Enterprise: `https://<comet-deployment-url>/opik/api/v1/private/otel`<br />Self-hosted: `https://<your-opik-host>/api/v1/private/otel` |
+| **Headers** | `Authorization` (your Opik API key, without a `Bearer ` prefix), `Comet-Workspace` (your workspace name), `projectName` (the Opik project to log to; defaults to `Default Project`). An open-source Opik deployment without authentication needs only `projectName` |
+| **Content mode** | **Full content** (`content`). With **Metadata only**, Opik receives timing, model and token counts but no inputs or outputs |
+| **Maximum content size** | `750000` bytes. Larger values keep more of long prompts; content above the limit is truncated, earliest messages first |
+| **Workspaces** | The Claude workspaces whose sessions should be traced |
+
+<Note>
+  Enter the **base** OTLP URL. Anthropic appends `/v1/traces` itself, so do not add it to the
+  endpoint.
+</Note>
+
+<Tip>
+  Claude Platform destinations must be public `https` URLs on port 443 with a hostname, not an IP
+  address. A self-hosted Opik on `localhost` or a private network cannot receive them; expose it
+  behind HTTPS, or use [SDK tracing](#option-2-claude-sdk-tracing) instead.
+</Tip>
+
+### Add the destination with the Admin API
+
+To script the setup, use the [`ant` CLI](https://platform.claude.com/docs/en/cli-sdks-libraries/cli/quickstart) with an
+admin login (`ant auth login --profile admin --scope "org:admin"`). Keep the Opik API key in a file
+only you can read, so it never appears on the command line:
+
+```bash wordWrap
+test -s ~/.opik-api-key &&
+body=$(jq -n --rawfile key ~/.opik-api-key '{headers: {
+  "Authorization": ($key | rtrimstr("\n")),
+  "Comet-Workspace": "<your-workspace-name>",
+  "projectName": "<your-project-name>"
+}}') &&
+ant --profile admin beta:organization:telemetry-destinations create \
+  --display-name Opik \
+  --endpoint-url https://www.comet.com/opik/api/v1/private/otel \
+  --traces '{content_mode: content, max_content_bytes: 750000}' \
+  --workspaces '{type: all}' <<<"$body"
+```
+
+`--workspaces '{type: all}'` covers every workspace, including ones created later. Use
+`{type: include, workspace_ids: [...]}` to trace only some of them.
+
+To check delivery, list the destinations:
+
+```bash wordWrap
+ant --profile admin beta:organization:telemetry-destinations list
+```
+
+A healthy destination is `enabled` and has a `delivery_health.last_success_at` later than any
+`last_error_at`. In the Console, the **Delivery** column shows **Healthy**.
+
+## Option 2: Claude SDK tracing
+
+The Claude SDKs for Python, TypeScript and Go emit spans for each Sessions API request your
+application makes, and the environment worker of a self-hosted sandbox emits a span for each tool it
+runs. They use the OpenTelemetry tracer provider your process registers, so point an OTLP exporter
+at Opik:
+
+```bash wordWrap
+pip install --upgrade anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+```python
+from anthropic import Anthropic
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="https://www.comet.com/opik/api/v1/private/otel/v1/traces",
+            headers={
+                "Authorization": "<your-api-key>",
+                "Comet-Workspace": "<your-workspace-name>",
+                "projectName": "<your-project-name>",
+            },
+        )
+    )
+)
+trace.set_tracer_provider(provider)  # register before the first Claude call
+
+client = Anthropic()
+tracer = trace.get_tracer("my-service")
+
+with tracer.start_as_current_span("triage_issue"):
+    client.beta.sessions.events.send(
+        "<session-id>",
+        events=[{"type": "user.message", "content": [{"type": "text", "text": "Triage issue 42"}]}],
+    )
+```
+
+The SDK sends a W3C `traceparent` header with each request. When Claude Platform tracing is also
+on, Anthropic's spans for the turn nest under your span in the same Opik trace. Send both sources
+to the **same Opik project** so they join.
+
+To record request content on the SDK's spans, set
+`ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content`.
+
+### Self-hosted sandboxes
+
+With a self-hosted sandbox (`config: {type: "self_hosted"}`), tools run in your environment, so
+Claude Platform tracing has no spans for them. Do the SDK setup above **in the process that runs
+the environment worker**, and allow network traffic from the worker to Opik. Each work item becomes
+an `anthropic.environment.work` span with one `anthropic.tool_use <tool>` span per tool call.
+
+## Self-hosted Claude Managed Agents
+
+When you run Claude Managed Agents in your own cloud or on-premises, the agent harness, sandboxes
+and session history run in your infrastructure, and your deployment exports the traces instead of
+Anthropic's servers. Enable its OpenTelemetry trace export and point it at Opik with the endpoint
+and headers from [Destination settings](#destination-settings). The Opik endpoint only has to be
+reachable from your deployment.
+
+## What you see in Opik
+
+| Span | What it holds in Opik |
+| --- | --- |
+| `anthropic.sessions.<method>` | One span per Sessions API request, such as `anthropic.sessions.events.send` |
+| `anthropic.session.turn` | One agent turn. With Full content, its input holds the user messages and tool results, and its output holds the agent's messages and tool calls |
+| `anthropic.model_request` | An LLM span per model request, with model, token usage and estimated cost |
+| `anthropic.tool_use <tool>` | A tool span per agent toolset call (`bash`, file tools, web tools), with its arguments and result |
+| `anthropic.mcp_tool_use <tool>` | A tool span per MCP tool call |
+| `anthropic.session.outcome_evaluation` | One iteration of an outcome grader, with its token usage |
+
+- **Threads:** spans carry the session thread ID as `gen_ai.conversation.id`, which Opik uses as
+  the thread ID. A session's turns can arrive in several traces, so open the **Threads** tab to read
+  a thread as one conversation. In multiagent sessions, each thread appears as its own Opik thread.
+- **Trace content:** the request span at the top of a trace carries no conversation content. Open
+  the `anthropic.session.turn` span to see the turn's input and output.
+- **Cost:** Opik estimates cost from the model and token usage on each `anthropic.model_request`
+  span.
+
+## Validation
+
+1. Start a short session that uses a tool, for example "list the files in the working directory".
+2. In the Claude Console, confirm the Opik destination shows **Healthy**.
+3. Open your Opik project. Confirm that a trace contains an `anthropic.session.turn` span, an
+   `anthropic.model_request` span with a model and token counts, and an `anthropic.tool_use bash`
+   span with the command it ran.
+4. Open the **Threads** tab and confirm the session's turns are grouped into one thread.
+
+## Troubleshooting
+
+| Problem | Check |
+| --- | --- |
+| No traces in Opik | The destination is **enabled** and covers the Claude workspace the session runs in. Spans can take up to a minute after a destination is added |
+| Delivery shows `401` or `403` | The `Authorization` header holds a valid Opik API key (no `Bearer ` prefix) and `Comet-Workspace` names your workspace |
+| Delivery shows `404` | The endpoint URL ends in `/api/v1/private/otel`, without `/v1/traces` |
+| Destination was disabled | The endpoint redirected (`3xx`) or every delivery failed for 24 hours. Fix the cause, then enable the destination again |
+| Traces have no inputs or outputs | The destination's content mode is **Full content** |
+| Traces land in the wrong project | The `projectName` header is set on the destination (and on the SDK exporter, if you use both sources) |
+| No spans for tools in a self-hosted sandbox | SDK tracing is set up in the worker process, and the worker can reach Opik |
+
+## Source references
+
+- [Claude Managed Agents overview](https://platform.claude.com/docs/en/managed-agents/overview)
+- [Claude OpenTelemetry overview](https://platform.claude.com/docs/en/manage-claude/opentelemetry)
+- [Claude API tracing (destinations)](https://platform.claude.com/docs/en/manage-claude/opentelemetry/api)
+- [Claude SDK tracing](https://platform.claude.com/docs/en/manage-claude/opentelemetry/sdk)
+- [Claude OpenTelemetry span reference](https://platform.claude.com/docs/en/api/opentelemetry/spans)
+- [Self-hosted sandboxes](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes)
+- [Opik OpenTelemetry overview](/integrations/opentelemetry)
