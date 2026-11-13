@@ -655,7 +655,7 @@ GepaOptimizer(
 <ParamField path="name" type="str | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable overriding the optimizer's own prompts. The one supported key is "reflection_prompt_template", passed through to gepa.optimize() as the instruction-proposal prompt; it must contain the <curr_param> and <side_info> markers.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable overriding the optimizer's own prompts. The one supported key is "reflection_prompt_template", passed through to gepa.optimize() as the instruction-proposal prompt; it must contain the `<curr_param>` and `<side_info>` markers.</ParamField>
 
 ### Methods
 #### cleanup

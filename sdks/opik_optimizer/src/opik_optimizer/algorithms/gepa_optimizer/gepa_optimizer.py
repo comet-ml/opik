@@ -453,7 +453,7 @@ class GepaOptimizer(BaseOptimizer):
         prompt_overrides: Optional dict or callable overriding the optimizer's own
             prompts. The one supported key is "reflection_prompt_template", passed
             through to gepa.optimize() as the instruction-proposal prompt; it must
-            contain the <curr_param> and <side_info> markers.
+            contain the `<curr_param>` and `<side_info>` markers.
     """
 
     supports_tool_optimization: bool = True
