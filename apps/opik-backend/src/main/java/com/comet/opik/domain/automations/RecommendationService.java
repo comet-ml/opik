@@ -112,9 +112,21 @@ public class RecommendationService {
                     }
                     return out.stream().filter(recommendation -> !dismissed.contains(recommendation.id())).toList();
                 })
+                // Never empty, but never the item just dismissed either: what is left is a note that
+                // everything open is hidden, which is not itself dismissable.
                 .map(list -> list.isEmpty()
-                        ? List.of(review(workspaceId, projectId, running, 0L))
+                        ? List.of(allDismissed(workspaceId, projectId, dismissed.size()))
                         : list);
+    }
+
+    private static Recommendation allDismissed(String workspaceId, UUID projectId, int hidden) {
+        return Recommendation.builder()
+                .id(id(workspaceId, projectId, Recommendation.Kind.REVIEW, "all-dismissed"))
+                .kind(Recommendation.Kind.REVIEW)
+                .reason("Every open recommendation is dismissed for %d days; %d hidden. Nothing else to do here yet."
+                        .formatted(DISMISSAL.toDays(), hidden))
+                .evidence(JsonUtils.valueToTree(Map.of("dismissed", hidden)))
+                .build();
     }
 
     public void dismiss(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID projectId,

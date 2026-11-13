@@ -384,6 +384,20 @@ class AutomationsResourceTest {
         var after = recommendations(project.id());
         assertThat(after).extracting(Recommendation::kind).contains(Recommendation.Kind.REVIEW);
         assertThat(after).extracting(Recommendation::workflow).doesNotContain("collect");
+
+        // Dismissing everything leaves a note, not the item just dismissed.
+        for (var recommendation : after) {
+            try (var response = request(PATH.formatted(baseURI) + "/recommendations/" + recommendation.id()
+                    + "/dismiss", Map.of()).post(Entity.json(Map.of("project_id", project.id())))) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+        }
+        var remaining = recommendations(project.id());
+        assertThat(remaining).hasSize(1);
+        assertThat(remaining.getFirst().kind()).isEqualTo(Recommendation.Kind.REVIEW);
+        assertThat(remaining).extracting(Recommendation::id)
+                .doesNotContainAnyElementsOf(after.stream().map(Recommendation::id).toList());
+        assertThat(remaining.getFirst().reason()).contains("dismissed");
     }
 
     private Automation definition(UUID projectId, UUID suiteId) {
