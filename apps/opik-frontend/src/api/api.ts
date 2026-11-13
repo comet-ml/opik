@@ -91,6 +91,9 @@ export const THREADS_KEY = "threads";
 export const PROVIDERS_KEYS_KEY = "provider-keys";
 export const ALERTS_KEY = "alerts";
 export const AUTOMATIONS_KEY = "automations";
+// Event-triggered automations, their runs, workflows, recommendations and loop: one
+// key family, because enabling a workflow changes every one of them.
+export const EVENT_AUTOMATIONS_KEY = "event-automations";
 export const PROJECTS_KEY = "projects";
 export const PROJECT_KEY = "project";
 export const PROJECT_STATISTICS_KEY = "project-statistics";

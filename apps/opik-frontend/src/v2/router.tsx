@@ -53,6 +53,8 @@ import TrialsRedirect from "@/v2/pages/OptimizationPage/TrialsRedirect";
 import OptimizationsNewRedirect from "@/v2/pages/OptimizationPage/OptimizationsNewRedirect";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import AlertsPageGuard from "@/v2/layout/AlertsPageGuard";
+import AutomationsPageGuard from "@/v2/layout/AutomationsPageGuard";
+import AutomationRunsPage from "@/v2/pages/AutomationsPage/AutomationRunsPage";
 import PromptsPageGuard from "@/v2/layout/PromptsPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
@@ -550,6 +552,25 @@ const alertEditRoute = createRoute({
   component: AlertEditPageGuard,
 });
 
+// ----------- automations (project-scoped)
+const automationsRoute = createRoute({
+  path: "/automations",
+  getParentRoute: () => projectScopedRoute,
+  staticData: {
+    title: "Automations",
+  },
+  component: AutomationsPageGuard,
+});
+
+const automationRunsRoute = createRoute({
+  path: "/$automationId",
+  getParentRoute: () => automationsRoute,
+  staticData: {
+    param: "automationId",
+  },
+  component: AutomationRunsPage,
+});
+
 // ═══════════════════════════════════════════════════════════════
 // WORKSPACE-LEVEL ROUTES (stay at workspace level)
 // ═══════════════════════════════════════════════════════════════
@@ -713,6 +734,7 @@ const routeTree = rootRoute.addChildren([
             annotationQueueDetailsRoute,
           ]),
           alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
+          automationsRoute.addChildren([automationRunsRoute]),
         ]),
       ]),
 

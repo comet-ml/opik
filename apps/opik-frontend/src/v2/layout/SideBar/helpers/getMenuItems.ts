@@ -17,6 +17,7 @@ import {
   UserPen,
   Brain,
   GitBranch,
+  Workflow,
 } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
@@ -24,6 +25,7 @@ import {
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import PlaygroundNavBadge from "@/v2/layout/SideBar/MenuItem/PlaygroundNavBadge";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
 const getMenuItems = ({
   projectId,
@@ -259,6 +261,15 @@ const getMenuItems = ({
               },
             ]
           : []),
+        {
+          id: "automations",
+          path: projectPath("/automations"),
+          type: MENU_ITEM_TYPE.router,
+          icon: Workflow,
+          label: "Automations",
+          disabled: !projectPrefix,
+          featureFlag: FeatureToggleKeys.AUTOMATIONS_ENABLED,
+        },
       ],
     },
   ].filter((group) => group.items.length > 0);
