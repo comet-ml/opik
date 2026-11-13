@@ -32,6 +32,9 @@ import com.comet.opik.infrastructure.llm.ollama.OllamaModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
+import com.comet.opik.infrastructure.otel.OtelProtobufDropwizardErrorMessageBodyWriter;
+import com.comet.opik.infrastructure.otel.OtelProtobufErrorMessageBodyWriter;
+import com.comet.opik.infrastructure.otel.OtelProtobufValidationErrorMessageBodyWriter;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redaction.RedactionModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
@@ -166,6 +169,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.register(InstantParamConverter.class);
         jersey.register(LocalDateParamConverter.class);
         jersey.register(JsonUploadFormatMessageBodyReader.class);
+        jersey.register(OtelProtobufErrorMessageBodyWriter.class);
+        jersey.register(OtelProtobufDropwizardErrorMessageBodyWriter.class);
+        jersey.register(OtelProtobufValidationErrorMessageBodyWriter.class);
     }
 
     /**
