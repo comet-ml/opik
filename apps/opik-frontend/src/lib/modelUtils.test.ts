@@ -9,12 +9,15 @@ import {
   getOpenAIReasoningEffortOptions,
   getOpenRouterReasoningEffortOptions,
   getThinkingLevelDescription,
+  getCustomParametersReasoningEfforts,
   getThinkingLevelOptions,
   isAnthropicThinkingRequested,
   isReasoningModel,
+  EffortParams,
   resolveEffort,
   resolveSamplingParams,
   resolveThinkingLevel,
+  takesTemperatureAtSomeEffort,
   SamplingParams,
   sanitizeConfigForRequest,
   supportsAnthropicThinkingEffort,
@@ -696,6 +699,22 @@ describe("sanitizeConfigForRequest", () => {
     );
     expect(result.temperature).toBeUndefined();
     expect(result.topP).toBeUndefined();
+  });
+
+  it("sends temperature and topP to a reasoning model at effort none and drops them once it reasons", () => {
+    const atNone = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+      temperature: 0.3,
+      topP: 0.9,
+      reasoningEffort: "none",
+    });
+    const atLow = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+      temperature: 0.3,
+      topP: 0.9,
+      reasoningEffort: "low",
+    });
+
+    expect([atNone.temperature, atNone.topP]).toEqual([0.3, 0.9]);
+    expect([atLow.temperature, atLow.topP]).toEqual([undefined, undefined]);
   });
 
   it("returns the original object when model is empty", () => {
@@ -1702,6 +1721,43 @@ describe("resolveSamplingParams", () => {
     ).toEqual({});
   });
 
+  // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". Probed
+  // 10-22: GPT 5.4 and GPT 6 Luna took both at none, and GPT 5.1/5.4 also with no effort sent.
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, "none"],
+    [PROVIDER_MODEL_TYPE.GPT_5_1, undefined],
+    [PROVIDER_MODEL_TYPE.GPT_5_4, undefined],
+  ] as const)(
+    "keeps both for %s at effort %s, where the model runs without reasoning",
+    (model, reasoningEffort) => {
+      expect(
+        resolveSamplingParams(model, {
+          temperature: 0.3,
+          topP: 0.9,
+          reasoningEffort,
+        }),
+      ).toEqual({ temperature: 0.3, topP: 0.9 });
+    },
+  );
+
+  it.each([
+    [PROVIDER_MODEL_TYPE.GPT_5_4, "low"],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, undefined],
+    [PROVIDER_MODEL_TYPE.GPT_5, "none"],
+  ] as const)(
+    "omits both for %s at effort %s, where the model reasons",
+    (model, reasoningEffort) => {
+      expect(
+        resolveSamplingParams(model, {
+          temperature: 0.3,
+          topP: 0.9,
+          reasoningEffort,
+        }),
+      ).toEqual({});
+    },
+  );
+
   it("passes other providers' values through untouched", () => {
     expect(
       resolveSamplingParams(PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO, {
@@ -1796,6 +1852,97 @@ describe("resolveEffort", () => {
     expect(
       resolveEffort(PROVIDER_MODEL_TYPE.GPT_5, { reasoningEffort: "minimal" }),
     ).toEqual({ reasoningEffort: "minimal" });
+  });
+
+  // A judge rule saves its effort under custom_parameters; the rule form's flat pick wins over it.
+  it.each([
+    [{ custom_parameters: { reasoning_effort: "none" } }, "none"],
+    [
+      {
+        reasoningEffort: "low",
+        custom_parameters: { reasoning_effort: "none" },
+      },
+      "low",
+    ],
+    [
+      {
+        reasoningEffort: "extreme",
+        custom_parameters: { reasoning_effort: "none" },
+      },
+      "none",
+    ],
+    [
+      {
+        reasoningEffort: "low",
+        custom_parameters: { reasoning_effort: "extreme" },
+      },
+      "low",
+    ],
+    [
+      { reasoningEffort: "low", custom_parameters: { reasoning_effort: 1 } },
+      "low",
+    ],
+  ] as const)(
+    "reads an OpenAI effort saved under custom_parameters when the flat one is not offered (%o)",
+    (configs, effort) => {
+      expect(
+        resolveEffort(PROVIDER_MODEL_TYPE.GPT_6_LUNA, configs as EffortParams),
+      ).toEqual({ reasoningEffort: effort });
+    },
+  );
+
+  // The order ParamResolver.reasoningEffort uses: on the Responses API the nested object is what runs.
+  it.each<[Record<string, unknown>, string[]]>([
+    [{ reasoning: { effort: "high", summary: "auto" } }, ["high"]],
+    [
+      { reasoning: { effort: "low" }, reasoning_effort: "none" },
+      ["low", "none"],
+    ],
+    [{ reasoning: { effort: " " }, reasoning_effort: "none" }, ["none"]],
+    [
+      { reasoning: { summary: "auto" }, reasoning_effort: "medium" },
+      ["medium"],
+    ],
+    [{ reasoning: { effort: 1 } }, []],
+    [{ reasoning: "high" }, []],
+  ])(
+    "reads the effort nested under reasoning before the flat one (%o)",
+    (customParameters, efforts) => {
+      expect(getCustomParametersReasoningEfforts(customParameters)).toEqual(
+        efforts,
+      );
+    },
+  );
+
+  it("drops the sampling of a reasoning model whose saved effort is nested next to summary", () => {
+    const configs = {
+      temperature: 0.3,
+      topP: 0.9,
+      custom_parameters: { reasoning: { effort: "high", summary: "auto" } },
+    };
+
+    expect(resolveEffort(PROVIDER_MODEL_TYPE.GPT_5_4, configs)).toEqual({
+      reasoningEffort: "high",
+    });
+    expect(resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_4, configs)).toEqual(
+      {},
+    );
+  });
+
+  it("keeps the temperature of a reasoning model whose saved custom_parameters effort is none", () => {
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_6_LUNA, {
+        temperature: 0,
+        topP: 0.5,
+        custom_parameters: { reasoning_effort: "none" },
+      }),
+    ).toEqual({ temperature: 0, topP: 0.5 });
+    expect(
+      resolveSamplingParams(PROVIDER_MODEL_TYPE.GPT_5_4, {
+        temperature: 0,
+        custom_parameters: { reasoning_effort: "low" },
+      }),
+    ).toEqual({});
   });
 
   it("falls back to the model's default for a reasoningEffort the model does not offer", () => {
@@ -2698,6 +2845,26 @@ describe("an OpenAI or Gemini model reached through OpenRouter", () => {
   ])("supports penalties on %s: %s", (model, expected) => {
     expect(supportsPenaltyParams(model)).toBe(expected);
   });
+
+  // Probed 11-06 on OpenRouter: openai/gpt-5.4 with no reasoning object used 0 reasoning tokens and took
+  // temperature 0.7, so it runs at OpenAI's default, none, like the native model.
+  it.each<[EffortParams, SamplingParams]>([
+    [{}, SAMPLING],
+    [{ reasoningEffort: "none" }, SAMPLING],
+    [{ reasoningEffort: "high" }, {}],
+    [{ custom_parameters: { reasoning: { effort: "high" } } }, {}],
+    [{ custom_parameters: { reasoning: { effort: "none" } } }, SAMPLING],
+  ])(
+    "resolves openai/gpt-5.4 at the effort the config or its custom_parameters set (%o)",
+    (effort, expected) => {
+      expect(
+        resolveSamplingParams(PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4, {
+          ...SAMPLING,
+          ...effort,
+        }),
+      ).toEqual(expected);
+    },
+  );
 
   it("follows the registry for a native id only the registry lists", () => {
     const model = PROVIDER_MODEL_TYPE.OPENAI_O3_PRO;
@@ -3847,5 +4014,18 @@ describe("writeAnthropicRequest", () => {
       temperature: 0.4,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
     });
+  });
+});
+
+describe("takesTemperatureAtSomeEffort", () => {
+  it.each<[PROVIDER_MODEL_TYPE, boolean]>([
+    [PROVIDER_MODEL_TYPE.GPT_5_4, true],
+    [PROVIDER_MODEL_TYPE.GPT_6_LUNA, true],
+    [PROVIDER_MODEL_TYPE.GPT_5, false],
+    [PROVIDER_MODEL_TYPE.GPT_4O, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4, true],
+    [PROVIDER_MODEL_TYPE.OPENAI_GPT_6_ASTRA, false],
+  ])("answers %s: %s", (model, expected) => {
+    expect(takesTemperatureAtSomeEffort(model)).toBe(expected);
   });
 });

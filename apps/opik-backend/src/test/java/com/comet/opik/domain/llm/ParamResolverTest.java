@@ -546,6 +546,172 @@ class ParamResolverTest {
         return resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", model));
     }
 
+    private static ChatCompletionRequest effortRequest(String model, String effort, Map<String, Object> custom) {
+        return ChatCompletionRequest.builder().from(request(model, 0.5, 0.9, custom)).reasoningEffort(effort).build();
+    }
+
+    // OpenAI: "When reasoning effort is not none, remove temperature, top_p, and top_logprobs". Probed 10-22: these
+    // took temperature 0.5 and top_p 0.5 at none, and gpt-5.1/5.2/5.4 also with no effort sent.
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {"gpt-5.4,none", "gpt-6-luna,none", "gpt-5.5,none", "gpt-5.1,null",
+            "gpt-5.2,null", "gpt-5.4,null"})
+    void keepsTemperatureAndTopPWhenAReasoningModelRunsAtEffortNone(String model, String effort) {
+        var request = effortRequest(model, effort, null);
+
+        assertThat(shippedOpenAiResolver(model).resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    // Probed 10-22: each of these got "'temperature' does not support 0.5 with this model".
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {"gpt-5.4,low", "gpt-6-luna,null", "gpt-5.5,null", "gpt-5,none",
+            "o3,null"})
+    void dropsTemperatureAndTopPWhenAReasoningModelReasons(String model, String effort) {
+        var request = effortRequest(model, effort, null);
+
+        assertThat(shippedOpenAiResolver(model).resolve(request, null)).isEqualTo(resolution(
+                ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
+                TEMPERATURE_REFUSED, TOP_P_REFUSED));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "low | {\"reasoning_effort\": \"none\"}",
+            "none | {\"reasoning_effort\": \"\"}",
+            "low | {\"reasoning\": {\"effort\": \"none\"}, \"reasoning_effort\": \"low\"}",
+            "low | {\"reasoning\": {\"effort\": \" \"}, \"reasoning_effort\": \"none\"}"})
+    void readsNestedThenFlatThenTypedEffortAndKeepsSamplingAtNone(String typed, String customParameters) {
+        var request = effortRequest("gpt-5.4", typed, customParameters(customParameters));
+
+        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "none | {\"reasoning_effort\": \"low\"}",
+            "low | {\"reasoning_effort\": \"  \"}",
+            "none | {\"reasoning\": {\"effort\": \"high\"}}",
+            "none | {\"reasoning\": {\"effort\": \"low\", \"summary\": \"auto\"}, \"reasoning_effort\": \"none\"}"})
+    void readsNestedThenFlatThenTypedEffortAndDropsSamplingAboveNone(String typed, String customParameters) {
+        var request = effortRequest("gpt-5.4", typed, customParameters(customParameters));
+
+        assertThat(shippedOpenAiResolver("gpt-5.4").resolve(request, null)).isEqualTo(resolution(
+                ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build(),
+                TEMPERATURE_REFUSED, TOP_P_REFUSED));
+    }
+
+    @Test
+    void stillDropsSamplingARouteRefusesWhenTheModelRunsAtEffortNone() {
+        var accepted = NumberParam.builder().accepted(true).build();
+        var noneFirst = new ModelParams.EffortParam(true, List.of("none", "low"), "none");
+        var route = ModelParams.builder().temperature(REFUSED).topP(accepted).effort(noneFirst)
+                .samplingAtEffortNone(true).build();
+        var params = ModelParams.builder().temperature(accepted).topP(accepted).effort(noneFirst)
+                .samplingAtEffortNone(true).routes(Map.of(ModelParams.RESPONSES_API_ROUTE, route)).build();
+        var request = effortRequest("gpt-5.4", "none", null);
+
+        assertThat(resolverWithOpenAiParams(params).resolve(request, ModelParams.RESPONSES_API_ROUTE))
+                .isEqualTo(resolution(ChatCompletionRequest.builder().from(request).temperature(null).build(),
+                        new ParamChange("temperature", Reason.REFUSED_BY_ROUTE)));
+    }
+
+    @Test
+    void keepsTemperatureAndTopPAtEffortNoneOnTheResponsesRoute() {
+        var request = effortRequest("gpt-6-luna", "none", null);
+
+        assertThat(shippedOpenAiResolver("gpt-6-luna").resolve(request, ModelParams.RESPONSES_API_ROUTE))
+                .isEqualTo(resolution(ChatCompletionRequest.builder().from(request).seed(null).build(),
+                        new ParamChange("seed", Reason.REFUSED_BY_ROUTE)));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "gpt-5.4 | null",
+            "gpt-6-luna | {\"reasoning_effort\": \"none\"}",
+            "gpt-5.4 | {\"reasoning_effort\": \"  \"}",
+            "gpt-5.4 | {\"reasoning\": {\"summary\": \"auto\"}}",
+            "gpt-6-luna | {\"reasoning\": {\"summary\": \"auto\", \"effort\": \"none\"}}",
+            "gpt-6-luna | {\"reasoning\": {\"effort\": \" \"}, \"reasoning_effort\": \"none\"}"})
+    void keepsAJudgeTemperatureWhenTheJudgeRunsAtEffortNone(String model, String customParameters) {
+        var parameters = judge(model, 0.0, customParameters);
+
+        assertThat(shippedOpenAiResolver(model).resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "gpt-6-luna | null",
+            "gpt-5.4 | {\"reasoning_effort\": \"low\"}",
+            "gpt-6-luna | {\"reasoning_effort\": \" \"}",
+            "gpt-5.4 | {\"reasoning\": {\"summary\": \"auto\", \"effort\": \"medium\"}}",
+            "gpt-5.4 | {\"reasoning\": {\"effort\": \"low\"}, \"reasoning_effort\": \"none\"}"})
+    void dropsAJudgeTemperatureWhenTheJudgeReasons(String model, String customParameters) {
+        assertThat(shippedOpenAiResolver(model).resolve(judge(model, 0.0, customParameters)))
+                .isEqualTo(resolution(judge(model, null, customParameters), TEMPERATURE_REFUSED));
+    }
+
+    private static final ParamChange LEVEL_MOVED = new ParamChange("thinking.level", Reason.LEVEL_NOT_OFFERED);
+
+    private static Map<String, Object> thinking(String level) {
+        return Map.of("thinking", Map.of("level", level, "include_thoughts", true));
+    }
+
+    // Probed 10-22 (online-eval check E): "minimal" got a 400 on these, on Gemini and on Vertex AI alike.
+    @ParameterizedTest
+    @CsvSource({"gemini-3.8-flash,minimal,low", "gemini-3.7-flash,MINIMAL,low",
+            "vertex_ai/gemini-3.1-pro-preview,minimal,low", "vertex_ai/gemini-3.8-flash,minimal,low"})
+    void movesAGeminiThinkingLevelTheModelDoesNotOfferToTheNearestOne(String model, String level, String nearest) {
+        assertThat(RESOLVER.resolve(request(model, null, null, thinking(level)), null))
+                .isEqualTo(resolution(request(model, null, null, thinking(nearest)), LEVEL_MOVED));
+    }
+
+    // Before Gemini 3 a level goes out as its budget (GeminiThinkingParams.wireBudgetFor), so minimal stays 512
+    // tokens instead of becoming low's 2048.
+    @ParameterizedTest
+    @CsvSource({"gemini-3.6-flash,minimal", "gemini-3.8-flash,high", "gemini-3.8-flash,off",
+            "gemini-3.8-flash,unknown", "gpt-4o,minimal", "gemini-2.5-pro,minimal", "vertex_ai/gemini-2.5-pro,minimal"})
+    void leavesAThinkingLevelAloneWhenTheModelOffersItOrItIsNotAGeminiLevel(String model, String level) {
+        var request = request(model, null, null, thinking(level));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @Test
+    void leavesALevelAloneNextToAnExplicitBudgetWhichGoesOutInstead() {
+        var request = request("gemini-3.8-flash", null, null,
+                Map.of("thinking", Map.of("level", "minimal", "budget_tokens", 1024)));
+
+        assertThat(RESOLVER.resolve(request, null)).isEqualTo(resolution(request));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "gemini-3.8-flash | {\"thinking\": {\"level\": \"minimal\", \"budget_tokens\": 1024}}",
+            "vertex_ai/gemini-2.5-pro | {\"thinking\": {\"level\": \"minimal\"}}"})
+    void leavesAJudgesThinkingLevelAloneWhereTheLevelIsNotWhatGoesOut(String model, String customParameters) {
+        var parameters = judge(model, null, customParameters);
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @Test
+    void movesAJudgesGeminiThinkingLevelTheModelDoesNotOffer() {
+        var saved = """
+                {"thinking": {"level": "minimal", "include_thoughts": true}, "other": 1}""";
+
+        assertThat(RESOLVER.resolve(judge("gemini-3.8-flash", null, saved))).isEqualTo(resolution(
+                judge("gemini-3.8-flash", null, """
+                        {"thinking": {"level": "low", "include_thoughts": true}, "other": 1}"""),
+                LEVEL_MOVED));
+    }
+
+    @Test
+    void leavesAJudgesGeminiThinkingLevelTheModelOffers() {
+        var parameters = judge("vertex_ai/gemini-3.6-flash", null, """
+                {"thinking": {"level": "minimal"}}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
     @ParameterizedTest
     @CsvSource(delimiter = '|', nullValues = "null", value = {
             "0.7  | {\"reasoning_effort\": \"low\", \"max_completion_tokens\": 400} | {\"max_completion_tokens\": 400} | reasoning_effort",
