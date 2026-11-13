@@ -10,6 +10,7 @@ import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.redis.testcontainers.RedisContainer;
@@ -121,7 +122,8 @@ class AnnotationQueueRoutingIntegrationTest {
         bufferService = new AnnotationQueueRoutingBufferService(redissonClient, publisher, config);
         featureFlags = mock(FeatureFlags.class);
         when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(true);
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags);
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags,
+                mock(AutomationExecutor.class));
     }
 
     static Stream<Arguments> scopes() {

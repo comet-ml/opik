@@ -6,6 +6,7 @@ import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.infrastructure.FeatureFlags;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,7 @@ import static com.comet.opik.api.AnnotationQueue.AnnotationScope;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.after;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -75,7 +77,8 @@ class AnnotationQueueRoutingListenerTest {
         userName = randomString();
         when(featureFlags.isAnnotationQueueAutomationEnabled()).thenReturn(true);
         when(bufferService.add(anyString(), any(), any())).thenReturn(Mono.empty());
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags);
+        listener = new AnnotationQueueRoutingListener(automationService, bufferService, featureFlags,
+                mock(AutomationExecutor.class));
     }
 
     private static String randomString() {

@@ -24,6 +24,8 @@ public class AutomationRuleRowMapper implements RowMapper<AutomationRuleModel> {
             // cannot render. Failing here is louder than returning something half-mapped.
             case ANNOTATION_QUEUE_ROUTER -> throw new IllegalStateException(
                     "Annotation queue automation rules are not served through the automation rules API");
+            case AUTOMATION -> throw new IllegalStateException(
+                    "Automations are not served through the automation rules API");
         };
     }
 }

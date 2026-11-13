@@ -55,7 +55,12 @@ public sealed interface AutomationRule permits AutomationRuleEvaluator {
          * it is deliberately not a subtype of {@link AutomationRule} and never serialised through the
          * automation-rules API.
          */
-        ANNOTATION_QUEUE_ROUTER("annotation_queue_router");
+        ANNOTATION_QUEUE_ROUTER("annotation_queue_router"),
+        /**
+         * When an event happens on an Opik object, run ordered steps. Served through its own resource,
+         * {@code /v1/private/automations}, so like the router it is not a subtype of {@link AutomationRule}.
+         */
+        AUTOMATION("automation");
 
         @JsonValue
         private final String action;

@@ -77,6 +77,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean annotationQueueAutomationEnabled;
     @JsonProperty
+    @NotNull boolean automationsEnabled;
+    @JsonProperty
     @NotNull boolean eventBridgeAlertsEnabled;
 
     @JsonProperty

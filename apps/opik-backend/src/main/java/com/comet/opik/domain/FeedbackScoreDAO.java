@@ -26,6 +26,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -56,6 +57,13 @@ public interface FeedbackScoreDAO {
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
     Flux<EffectiveFeedbackScore> getEffectiveScores(EntityType entityType, Set<UUID> entityIds);
+
+    /**
+     * The effective scores of every entity in a project that carried one of the given names in the window,
+     * capped at {@code limit} (entity, name) rows. What a dry-run estimate replays an automation against.
+     */
+    Flux<EffectiveFeedbackScore> getEffectiveScoresByProject(EntityType entityType, UUID projectId,
+            Set<String> names, Instant since, int limit);
 
     Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
 
@@ -147,6 +155,52 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                    IF(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
             FROM deduped
             GROUP BY entity_id, project_id, name
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_EFFECTIVE_SCORES_BY_PROJECT = """
+            WITH deduped AS (
+                SELECT entity_id, project_id, name, value, author, source_queue_id, last_updated_at
+                FROM (
+                    SELECT entity_id,
+                           project_id,
+                           name,
+                           value,
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id,
+                           last_updated_at
+                    FROM feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = :entity_type
+                      AND project_id = :project_id
+                      AND name IN :names
+                      AND last_updated_at >= parseDateTime64BestEffort(:since, 9)
+                    UNION ALL
+                    SELECT entity_id,
+                           project_id,
+                           name,
+                           value,
+                           author,
+                           source_queue_id,
+                           last_updated_at
+                    FROM authored_feedback_scores
+                    WHERE workspace_id = :workspace_id
+                      AND entity_type = :entity_type
+                      AND project_id = :project_id
+                      AND name IN :names
+                      AND last_updated_at >= parseDateTime64BestEffort(:since, 9)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY entity_id, name, author, source_queue_id
+            )
+            SELECT entity_id,
+                   project_id,
+                   name,
+                   IF(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+            FROM deduped
+            GROUP BY entity_id, project_id, name
+            LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -524,6 +578,36 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("entity_type", entityType.getType())
                     .bind("entity_ids", entityIds.toArray(UUID[]::new));
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> EffectiveFeedbackScore.builder()
+                            .entityId(UUID.fromString(row.get("entity_id", String.class)))
+                            .projectId(UUID.fromString(row.get("project_id", String.class)))
+                            .name(row.get("name", String.class))
+                            .value(row.get("value", BigDecimal.class))
+                            .build()));
+        }));
+    }
+
+    @Override
+    @WithSpan
+    public Flux<EffectiveFeedbackScore> getEffectiveScoresByProject(@NonNull EntityType entityType,
+            @NonNull UUID projectId, Set<String> names, @NonNull Instant since, int limit) {
+        if (CollectionUtils.isEmpty(names)) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_EFFECTIVE_SCORES_BY_PROJECT,
+                    "get_effective_scores_by_project", workspaceId, userName, "");
+
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("entity_type", entityType.getType())
+                    .bind("project_id", projectId.toString())
+                    .bind("names", names.toArray(String[]::new))
+                    .bind("since", since.toString())
+                    .bind("limit", limit);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> EffectiveFeedbackScore.builder()

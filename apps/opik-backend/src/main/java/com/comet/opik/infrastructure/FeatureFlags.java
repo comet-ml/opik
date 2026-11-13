@@ -39,6 +39,14 @@ public class FeatureFlags {
     }
 
     /**
+     * Whether automations run and are served: off, the resource answers 404, and the executor ignores
+     * every automation. Automations ride on the queue routing pipeline, so that toggle has to be on too.
+     */
+    public boolean isAutomationsEnabled() {
+        return isAnnotationQueueAutomationEnabled() && config.getServiceToggles().isAutomationsEnabled();
+    }
+
+    /**
      * Checks if dataset versioning feature is enabled and throws ForbiddenException if not.
      *
      * @throws ForbiddenException if dataset versioning is not enabled

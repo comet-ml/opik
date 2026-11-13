@@ -20,7 +20,9 @@ public enum ScoreConditionOperator {
 
     GREATER_THAN(">"),
     LESS_THAN("<"),
-    EQUAL("=");
+    EQUAL("="),
+    GREATER_THAN_OR_EQUAL(">="),
+    LESS_THAN_OR_EQUAL("<=");
 
     @JsonValue
     private final String value;

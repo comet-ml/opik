@@ -1153,6 +1153,7 @@ serviceToggles:
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
   annotationQueueAutomationEnabled: "true"
+  automationsEnabled: "true"
   # Default: false
   # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
   eventBridgeAlertsEnabled: "false"

@@ -64,6 +64,8 @@ public class AnnotationQueueConditionEvaluator {
             case GREATER_THAN -> comparison > 0;
             case LESS_THAN -> comparison < 0;
             case EQUAL -> comparison == 0;
+            case GREATER_THAN_OR_EQUAL -> comparison >= 0;
+            case LESS_THAN_OR_EQUAL -> comparison <= 0;
         };
     }
 }

@@ -12,6 +12,7 @@ import com.comet.opik.domain.EffectiveFeedbackScore;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -81,7 +83,8 @@ class AnnotationQueueRoutingSubscriberTest {
                 .consumerBatchSize(10)
                 .build();
         subscriber = new AnnotationQueueRoutingSubscriber(config, redisson, featureFlags,
-                automationService, evaluator, annotationQueueService, feedbackScoreDAO, traceDAO, traceThreadDAO);
+                automationService, evaluator, annotationQueueService, feedbackScoreDAO, traceDAO, traceThreadDAO,
+                mock(AutomationExecutor.class));
     }
 
     /**

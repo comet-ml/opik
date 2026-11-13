@@ -12,6 +12,7 @@ import com.comet.opik.domain.EntityFeedbackScores;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.TraceDAO;
+import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -68,6 +69,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     private final FeedbackScoreDAO feedbackScoreDAO;
     private final TraceDAO traceDAO;
     private final TraceThreadDAO traceThreadDAO;
+    private final AutomationExecutor automationExecutor;
 
     @Inject
     public AnnotationQueueRoutingSubscriber(
@@ -79,7 +81,8 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
             @NonNull AnnotationQueueService annotationQueueService,
             @NonNull FeedbackScoreDAO feedbackScoreDAO,
             @NonNull TraceDAO traceDAO,
-            @NonNull TraceThreadDAO traceThreadDAO) {
+            @NonNull TraceThreadDAO traceThreadDAO,
+            @NonNull AutomationExecutor automationExecutor) {
         super(config, redisson, AnnotationQueueRoutingConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.config = config;
         this.featureFlags = featureFlags;
@@ -89,6 +92,12 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         this.feedbackScoreDAO = feedbackScoreDAO;
         this.traceDAO = traceDAO;
         this.traceThreadDAO = traceThreadDAO;
+        this.automationExecutor = automationExecutor;
+    }
+
+    /** Whether any automation of these projects listens to scores; the executor re-reads the full set. */
+    private boolean hasAutomations(AnnotationQueueRoutingMessage message, Set<UUID> projectIds) {
+        return projectIds.stream().anyMatch(projectId -> automationExecutor.listens(message.workspaceId(), projectId));
     }
 
     @Override
@@ -138,12 +147,29 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                             .subscribeOn(Schedulers.boundedElastic())
                             // The listener guarded too, but config can change between publish and
                             // processing — an automation disabled in the meantime must not route.
-                            .flatMap(automations -> automations.isEmpty()
-                                    ? Mono.just(0L)
-                                    : retainProductionEntities(scoresByEntity, projectIds, message)
-                                            .flatMap(production -> production.isEmpty()
+                            .flatMap(automations -> {
+                                boolean runAutomations = featureFlags.isAutomationsEnabled()
+                                        && hasAutomations(message, projectIds);
+                                if (automations.isEmpty() && !runAutomations) {
+                                    return Mono.just(0L);
+                                }
+                                return retainProductionEntities(scoresByEntity, projectIds, message)
+                                        .flatMap(production -> {
+                                            if (production.isEmpty()) {
+                                                return Mono.just(0L);
+                                            }
+                                            Mono<Long> routed = automations.isEmpty()
                                                     ? Mono.just(0L)
-                                                    : addMatches(automations, production, message)));
+                                                    : addMatches(automations, production, message);
+                                            // Automations run on the same production batch, after the
+                                            // routers: one score read and one source gate serve both.
+                                            Mono<Long> written = runAutomations
+                                                    ? automationExecutor.run(message.workspaceId(), message.scope(),
+                                                            production)
+                                                    : Mono.just(0L);
+                                            return routed.flatMap(count -> written.map(items -> count + items));
+                                        });
+                            });
                 });
     }
 

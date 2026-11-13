@@ -5,6 +5,7 @@ import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
 import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -47,14 +48,17 @@ public class AnnotationQueueRoutingListener {
     private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull AnnotationQueueRoutingBufferService bufferService;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull AutomationExecutor automationExecutor;
 
     @Inject
     public AnnotationQueueRoutingListener(@NonNull AnnotationQueueAutomationService automationService,
             @NonNull AnnotationQueueRoutingBufferService bufferService,
-            @NonNull FeatureFlags featureFlags) {
+            @NonNull FeatureFlags featureFlags,
+            @NonNull AutomationExecutor automationExecutor) {
         this.automationService = automationService;
         this.bufferService = bufferService;
         this.featureFlags = featureFlags;
+        this.automationExecutor = automationExecutor;
     }
 
     @Subscribe
@@ -85,7 +89,9 @@ public class AnnotationQueueRoutingListener {
         // the service widens the question to the workspace when it is. Either way it is an index seek on
         // automation_rules_workspace_action_enabled_idx, a lookup rather than a walk.
         Mono.fromCallable(() -> automationService.hasEnabledAutomation(event.workspaceId(),
-                event.projectId(), scope))
+                event.projectId(), scope)
+                || (featureFlags.isAutomationsEnabled()
+                        && automationExecutor.listens(event.workspaceId(), event.projectId())))
                 .subscribeOn(Schedulers.boundedElastic())
                 .filter(Boolean::booleanValue)
                 .flatMap(__ -> bufferService.add(event.workspaceId(), scope, event.entityIds()))

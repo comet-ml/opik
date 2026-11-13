@@ -1765,6 +1765,10 @@ cacheManager:
     #   event. Kept short because a stale negative is silent: the events it turns away are dropped
     #   at the guard and there is no backfill, so this is the floor under the eviction on rule writes.
     annotation_queue_automations: ${CACHE_MANAGER_ANNOTATION_QUEUE_AUTOMATIONS_DURATION:-PT1S}
+    # Default: PT1S
+    # Description: Cache TTL for the automations guard, read once per feedback score event beside the
+    #   routing guard above, and kept short for the same reason.
+    automations: ${CACHE_MANAGER_AUTOMATIONS_DURATION:-PT1S}
     # Default: PT1H
     # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
     # The estimate scans all of the project's spans, so cache misses are expensive by design.
@@ -2027,6 +2031,10 @@ serviceToggles:
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
   #   automation controls on annotation queues.
   annotationQueueAutomationEnabled: ${TOGGLE_ANNOTATION_QUEUE_AUTOMATION_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether automations (event-triggered steps, /v1/private/automations) run and are served.
+  #   They ride on the annotation queue routing pipeline, so that toggle must be on as well.
+  automationsEnabled: ${TOGGLE_AUTOMATIONS_ENABLED:-"false"}
   # Default: false
   # Description: Whether every triggered alert is also published to the deployment's AWS EventBridge bus
   #   (see alertsEventBridge). Publishing is best-effort and never affects webhook delivery.
