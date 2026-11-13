@@ -14,6 +14,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -42,6 +43,42 @@ public interface TopicDAO {
             """)
     List<Topic> findLive(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
+    /**
+     * The nightly update's save of a topic it read. Only {@code retired_at}, {@code retired_reason},
+     * {@code low_nights} and {@code size} can change: the night never changes a topic's id, name, definition or born.
+     */
+    @SqlBatch("""
+            UPDATE topics SET retired_at = :retiredAt, retired_reason = :retiredReason, low_nights = :lowNights,
+                size = :size
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND id = :id
+            """)
+    int[] updateTopics(@BindMethods List<Topic> topics);
+
+    /** The projects among {@code projectIds} of the workspace with at least one live topic. */
+    @SqlQuery("""
+            SELECT DISTINCT project_id FROM topics
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND retired_at IS NULL
+            """)
+    List<UUID> findProjectsWithLiveTopics(@Bind("workspaceId") String workspaceId,
+            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
+    /** The projects of {@code workspaceIds} with at least one live topic: the nightly update's candidates. */
+    @SqlQuery("""
+            SELECT DISTINCT workspace_id, project_id FROM topics
+            WHERE workspace_id IN (<workspaceIds>) AND retired_at IS NULL
+            """)
+    List<ProjectKey> findProjectsWithLiveTopics(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    @SqlUpdate("DELETE FROM topic_prototypes WHERE workspace_id = :workspaceId AND project_id = :projectId")
+    int deletePrototypes(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
+    /**
+     * Deletes the project's state row: a nightly save that leaves no live topic, so the project has no list again and
+     * the first-build job builds it.
+     */
+    @SqlUpdate("DELETE FROM topic_project_states WHERE workspace_id = :workspaceId AND project_id = :projectId")
+    int deleteState(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+
     @SqlBatch("""
             INSERT INTO topic_prototypes (workspace_id, project_id, position, topic_id, vector)
             VALUES (:workspaceId, :projectId, :position, :topicId, :vector)
@@ -63,6 +100,18 @@ public interface TopicDAO {
                 :labelsComplete)
             """)
     void insertState(@BindMethods TopicProjectState state);
+
+    /**
+     * A later save: updates the row only while its {@code last_run_id} is still the one the run read, so a run that
+     * saved meanwhile makes this return 0. The Redis project lock alone can be lost.
+     */
+    @SqlUpdate("""
+            UPDATE topic_project_states
+            SET rebuilds = :rebuilds, first_built_at = :firstBuiltAt, last_run_id = :lastRunId,
+                last_success_at = :lastSuccessAt, window_until = :windowUntil, labels_complete = :labelsComplete
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND last_run_id <=> :expectedRunId
+            """)
+    int updateState(@BindMethods TopicProjectState state, @Bind("expectedRunId") UUID expectedRunId);
 
     /**
      * Marks the labels of the project's last saved run complete. Only while the state still names {@code runId}: a
@@ -143,6 +192,10 @@ public interface TopicDAO {
             """)
     List<ProjectKey> findListlessProjects(@BindList("workspaceIds") Collection<String> workspaceIds,
             @Bind("since") Instant since);
+
+    @SqlQuery("SELECT id FROM projects WHERE workspace_id = :workspaceId AND id IN (<projectIds>)")
+    Set<UUID> findExistingProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     record ProjectKey(@NonNull String workspaceId, @NonNull UUID projectId) {
     }
