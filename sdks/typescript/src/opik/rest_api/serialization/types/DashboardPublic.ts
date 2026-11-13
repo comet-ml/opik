@@ -15,7 +15,6 @@ export const DashboardPublic: core.serialization.ObjectSchema<
     workspaceId: core.serialization.property("workspace_id", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     name: core.serialization.string(),
-    slug: core.serialization.string().optional(),
     type: DashboardPublicType.optional(),
     scope: DashboardPublicScope.optional(),
     description: core.serialization.string().optional(),
@@ -32,7 +31,6 @@ export declare namespace DashboardPublic {
         workspace_id?: string | null;
         project_id?: string | null;
         name: string;
-        slug?: string | null;
         type?: DashboardPublicType.Raw | null;
         scope?: DashboardPublicScope.Raw | null;
         description?: string | null;
