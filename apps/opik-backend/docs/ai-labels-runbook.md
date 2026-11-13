@@ -313,11 +313,13 @@ ORDER BY traces DESC;
 ```
 
 Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, the topics with their
-sizes, the Other share and the phase timings. The algorithm's own numbers (unique texts, k, seed, groups) are in the
-run's `stats` in `topic_runs`. The author prompt and Qwen's raw answer hold users' trace text, so no log level prints
-them: the run logs their length and a SHA-256 of each, which matches the same prompt or answer across runs. Each LLM
-call's request id is `<run_id>:<call>`, for example `<run_id>:author`, so the call can be found in opik-inference's
-logs. Search the logs for `Topics run '<run_id>'`.
+sizes, the Other share and the phase timings. The algorithm's own numbers are in the run's `stats` in `topic_runs`:
+`unique_texts`, `k` (the k-means groups), `seed`, and `other_groups` (the groups the answer placed in Other).
+
+The author prompt and Qwen's raw answer hold users' trace text, so no log level prints them: the run logs their length
+and a SHA-256 of each, with `call '<call>'`, which matches the same prompt or answer across runs. Each LLM call's
+request id is `<run_id>:<call>`, for example `<run_id>:author`, so the call can be found in opik-inference's logs.
+Search the logs for `Topics run '<run_id>'`.
 
 ### Running by hand
 

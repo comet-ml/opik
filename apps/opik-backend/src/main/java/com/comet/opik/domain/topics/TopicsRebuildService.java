@@ -322,7 +322,7 @@ public class TopicsRebuildService {
         public <T> T generate(@NonNull TopicAlgorithm.Call call, @NonNull String tag, @NonNull String prompt,
                 @NonNull JsonNode schema, int maxTokens, @NonNull Function<JsonNode, T> read) {
             // The prompt holds users' trace text: the log gets its size and hash only, never the text.
-            log.info("Topics run '{}' {} prompt, project '{}', chars '{}', sha256 '{}'", runId, tag, projectId,
+            log.info("Topics run '{}' prompt, call '{}', project '{}', chars '{}', sha256 '{}'", runId, tag, projectId,
                     prompt.length(), sha256(prompt));
             return timed("qwen", () -> call(call, tag, prompt, schema, maxTokens, read));
         }
@@ -360,12 +360,14 @@ public class TopicsRebuildService {
                         exception);
             }
             var output = response.result().output();
-            log.info("Topics run '{}' {} answer, project '{}', input tokens '{}', output tokens '{}', cache hit '{}'",
+            log.info(
+                    "Topics run '{}' answer, call '{}', project '{}', input tokens '{}', output tokens '{}', cache hit '{}'",
                     runId, tag, projectId, response.usage().inputTokens(), response.usage().outputTokens(),
                     response.cacheHit());
             // The answer comes from users' trace text: the log gets its size and hash only, never the text.
             var canonical = output == null ? "null" : InferenceJson.canonical(output);
-            log.info("Topics run '{}' {} answer body, project '{}', chars '{}', sha256 '{}'", runId, tag, projectId,
+            log.info("Topics run '{}' answer body, call '{}', project '{}', chars '{}', sha256 '{}'", runId, tag,
+                    projectId,
                     canonical.length(), sha256(canonical));
             add("qwen_input_tokens", response.usage().inputTokens());
             add("qwen_output_tokens", response.usage().outputTokens());
