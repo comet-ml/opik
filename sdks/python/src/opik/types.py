@@ -2,8 +2,8 @@ import enum
 import sys
 from typing import Literal, Optional
 
-from pydantic import StrictStr
-from typing_extensions import TypedDict
+from pydantic import Field, StrictStr
+from typing_extensions import Annotated, TypedDict
 
 if sys.version_info < (3, 11):
     from typing_extensions import NotRequired, Required
@@ -15,6 +15,7 @@ FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
 AttachmentEntityType = Literal["trace", "span"]
 TraceSource = Literal["sdk", "experiment", "optimization"]
+EvaluatorRevision = Annotated[StrictStr, Field(max_length=256)]
 
 
 class LLMProvider(str, enum.Enum):
@@ -83,6 +84,12 @@ class FeedbackScoreDict(TypedDict):
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
 
+    evaluator_revision: NotRequired[Optional[EvaluatorRevision]]
+    """
+    An optional revision of the evaluator that produced the score (for example a
+    prompt version or a commit hash), up to 256 characters.
+    """
+
 
 class BatchFeedbackScoreDict(TypedDict):
     """
@@ -117,6 +124,12 @@ class BatchFeedbackScoreDict(TypedDict):
 
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
+
+    evaluator_revision: NotRequired[Optional[EvaluatorRevision]]
+    """
+    An optional revision of the evaluator that produced the score (for example a
+    prompt version or a commit hash), up to 256 characters.
+    """
 
 
 class BatchAssertionResultDict(TypedDict):

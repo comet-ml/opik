@@ -551,6 +551,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         value: float,
         category_name: Optional[str],
         reason: Optional[str],
+        evaluator_revision: Optional[str] = None,
     ) -> models.FeedbackScoreModel:
         """
         Creates a feedback score model with the specified parameters.
@@ -566,6 +567,8 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             category_name: An optional category name for classifying the score.
             reason: An optional explanation or reason related to the feedback
                 score.
+            evaluator_revision: An optional revision of the evaluator that
+                produced the score.
 
         Returns:
             An instance of FeedbackScoreModel containing the created feedback
@@ -698,6 +701,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 value=feedback_score_message.value,
                 category_name=feedback_score_message.category_name,
                 reason=feedback_score_message.reason,
+                evaluator_revision=feedback_score_message.evaluator_revision,
             )
             self._span_to_feedback_scores[feedback_score_message.id].append(
                 feedback_model
@@ -713,6 +717,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 value=feedback_score_message.value,
                 category_name=feedback_score_message.category_name,
                 reason=feedback_score_message.reason,
+                evaluator_revision=feedback_score_message.evaluator_revision,
             )
             self._trace_to_feedback_scores[feedback_score_message.id].append(
                 feedback_model

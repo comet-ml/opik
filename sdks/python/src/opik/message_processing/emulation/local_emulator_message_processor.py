@@ -160,6 +160,7 @@ class LocalEmulatorMessageProcessor(
         value: float,
         category_name: Optional[str],
         reason: Optional[str],
+        evaluator_revision: Optional[str] = None,
     ) -> models.FeedbackScoreModel:
         return models.FeedbackScoreModel(
             id=score_id,
@@ -167,4 +168,5 @@ class LocalEmulatorMessageProcessor(
             value=value,
             category_name=category_name,
             reason=reason,
+            evaluator_revision=evaluator_revision,
         )

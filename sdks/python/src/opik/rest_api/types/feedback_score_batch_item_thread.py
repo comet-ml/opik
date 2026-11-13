@@ -21,6 +21,11 @@ class FeedbackScoreBatchItemThread(UniversalBaseModel):
     source: FeedbackScoreBatchItemThreadSource
     author: typing.Optional[str] = None
     source_queue_id: typing.Optional[str] = None
+    evaluator_revision: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional caller-supplied revision of the evaluator that produced the score
+    """
+
     thread_id: str
 
     if IS_PYDANTIC_V2:
