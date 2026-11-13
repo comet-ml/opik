@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -24,6 +25,15 @@ public class OpenTelemetryResourceClient {
             String apiKey, int expectedStatus) {
         try (var response = post(payload, mediaType, projectName, workspaceName, apiKey)) {
             assertStatus(response, expectedStatus);
+        }
+    }
+
+    /** Exports a batch the endpoint rejects and asserts the whole error it answers with. */
+    public void exportTraces(Entity<?> payload, String mediaType, String projectName, String workspaceName,
+            String apiKey, ErrorMessage expectedError) {
+        try (var response = post(payload, mediaType, projectName, workspaceName, apiKey)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedError.getCode());
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
         }
     }
 
