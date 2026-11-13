@@ -1,6 +1,6 @@
+from ...utils.prompt_editing import TextEdit
 from typing import Any
 from pydantic import BaseModel, ConfigDict, create_model
-from ...api_objects import types
 
 
 class FewShotPromptMessagesBase(BaseModel):
@@ -58,7 +58,7 @@ def create_few_shot_response_model(prompt_names: list[str]) -> type[BaseModel]:
     Generates a model with explicit fields for each prompt name, with a
     custom JSON schema that satisfies OpenAI's structured output requirements.
     """
-    fields = {name: (list[types.Message], ...) for name in prompt_names}
+    fields = {name: (list[TextEdit], ...) for name in prompt_names}
     DynamicModel = create_model(  # type: ignore[call-overload]
         "FewShotPromptMessages",
         __base__=FewShotPromptMessagesBase,

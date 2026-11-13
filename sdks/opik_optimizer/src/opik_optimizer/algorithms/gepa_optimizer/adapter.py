@@ -1,4 +1,6 @@
 from __future__ import annotations
+from ...core.reasoning import EvidenceCase, render_case_message
+
 
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable
@@ -14,12 +16,12 @@ from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...utils.toolcalling.core import metadata as tool_metadata
-from ...utils.scoring import improves_over
 from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.candidate_selection import select_candidate
+from ...utils.feedback import format_evaluation_feedback, input_fields
 from .ops import candidate_ops
 from .types import OpikDataInst
 
@@ -71,9 +73,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         # Pre-compute item ID sets for fast lookup during evaluate()
         train_items = dataset.get_items()
-        self._train_item_ids: set[str] = {
-            str(item.get("id")) for item in train_items if item.get("id")
-        }
         val_items: list[dict[str, Any]] = []
         self._val_item_ids: set[str] = set()
         if validation_dataset is not None:
@@ -217,6 +216,22 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             extras={"score_label": "per_item"},
         )
 
+    def lineage_callback(self) -> LineageCallback:
+        """A GEPA callback that logs each candidate's real parents."""
+        return LineageCallback(self)
+
+    def prompts_for(
+        self, candidate: dict[str, str]
+    ) -> dict[str, chat_prompt.ChatPrompt]:
+        """The prompts a GEPA candidate stands for, without logging warnings."""
+        prompts, _ = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._allowed_roles,
+            known_placeholder_keys=self._known_placeholder_keys,
+        )
+        return prompts
+
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], list[str]]:
@@ -309,8 +324,11 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             is_single_prompt_optimization=isinstance(
                 prompt_variants, chat_prompt.ChatPrompt
             ),
-            agent=None,
+            agent=self._agent,
             build_optimizer_version=_OPTIMIZER_VERSION,
+        )
+        experiment_config = self._optimizer._tag_lineage(
+            experiment_config, prompt_variants
         )
         project_name = experiment_config.get("project_name") or getattr(
             self._optimizer, "project_name", None
@@ -401,38 +419,46 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 _failed_items.add(dataset_item.get("id", ""))
                 return {"llm_output": ""}
 
-            best_output = candidates[0]
-            best_score = float("-inf")
-            for candidate in candidates:
-                metric_result = self._metric(dataset_item, candidate)
-                if hasattr(metric_result, "value"):
-                    score = float(metric_result.value)  # type: ignore[arg-type]
-                elif hasattr(metric_result, "score"):
-                    score = float(metric_result.score)  # type: ignore[arg-type]
-                else:
-                    score = float(metric_result)  # type: ignore[arg-type]
-                if improves_over(score, best_score):
-                    best_score = score
-                    best_output = candidate
-
-            return {"llm_output": best_output}
-
-        try:
-            _, eval_result = task_evaluator.evaluate_with_result(
-                dataset=target_dataset,
-                evaluated_task=llm_task,
+            # Opik scores the returned output itself; only pass@k needs the metric here.
+            if len(candidates) == 1:
+                return {"llm_output": candidates[0]}
+            selection = select_candidate(
+                candidates=candidates,
+                policy="best_by_metric",
                 metric=self._metric,
-                num_threads=self._optimizer.n_threads,
-                optimization_id=getattr(
-                    self._optimizer, "current_optimization_id", None
-                ),
-                dataset_item_ids=dataset_item_ids,
-                project_name=project_name,
-                n_samples=None,
-                experiment_config=experiment_config,
-                verbose=0,
-                experiment_type=experiment_type,
+                dataset_item=dataset_item,
+                candidate_logprobs=None,
+                rng=random.Random(0),
             )
+            return {"llm_output": selection.output}
+
+        # The seed prompt's validation pass repeats the baseline evaluation.
+        cached = (
+            None
+            if capture_traces
+            else self._optimizer._evaluation_on_items(
+                prompt_variants, target_dataset, dataset_item_ids
+            )
+        )
+        try:
+            if cached is not None:
+                eval_result = cached
+            else:
+                _, eval_result = task_evaluator.evaluate_with_result(
+                    dataset=target_dataset,
+                    evaluated_task=llm_task,
+                    metric=self._metric,
+                    num_threads=self._optimizer.n_threads,
+                    optimization_id=getattr(
+                        self._optimizer, "current_optimization_id", None
+                    ),
+                    dataset_item_ids=dataset_item_ids,
+                    project_name=project_name,
+                    n_samples=None,
+                    experiment_config=experiment_config,
+                    verbose=0,
+                    experiment_type=experiment_type,
+                )
         except Exception:
             logger.exception(
                 "Evaluating GEPA candidate via task_evaluator failed; reverting to local evaluation"
@@ -501,6 +527,16 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                         "input": dataset_item,
                         "output": output_text,
                         "score": score_value,
+                        "reasons": [
+                            {
+                                "name": item.name,
+                                "value": item.value,
+                                "reason": item.reason,
+                            }
+                            for item in test_result.score_results
+                        ]
+                        if test_result is not None
+                        else [],
                     }
                 )
 
@@ -541,21 +577,44 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 base_prompts=self._base_prompts
             )
 
+        from gepa import Image
+
+        prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
+            base_prompts=self._base_prompts,
+            candidate=candidate,
+            allowed_roles=self._context.extra_params.get("optimizable_roles"),
+        )[0]
+
         def _records(component_key: str) -> Iterable[dict[str, Any]]:
             tool_metadata = tool_metadata_by_component.get(component_key)
-            for traj in trajectories:
+            for case_index, traj in enumerate(trajectories):
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
-                feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer', '')}"
+                feedback = format_evaluation_feedback(
+                    dataset_item, output_text, traj.get("reasons") or {"score": score}
+                )
                 if tool_metadata:
                     feedback += f" Tool metadata: {tool_metadata}"
+                case = EvidenceCase(
+                    case_id=str(dataset_item.get("id", case_index)),
+                    inputs=dataset_item,
+                    output=output_text,
+                    scores=traj.get("reasons") or {"score": score},
+                )
+                content = render_case_message(case, prompt_variants)["content"]
+                images = (
+                    [
+                        Image(url=part["image_url"]["url"])
+                        for part in content
+                        if part.get("type") == "image_url"
+                    ]
+                    if isinstance(content, list)
+                    else []
+                )
                 yield {
-                    "Inputs": {
-                        "text": dataset_item.get("input")
-                        or dataset_item.get("question")
-                        or "",
-                    },
+                    "Inputs": input_fields(dataset_item),
+                    "Images": images,
                     "Generated Outputs": output_text,
                     "Feedback": feedback,
                 }
@@ -569,3 +628,30 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         return {
             component: list(_records(component)) for component in components_to_update
         }
+
+
+class LineageCallback:
+    """Tells the run's lineage which GEPA programs a new candidate comes from.
+
+    GEPA announces every evaluation of a new candidate with its parent program
+    indices: one for a reflective proposal, two for a merge. Programs are known
+    by index once GEPA has scored them on the validation set.
+    """
+
+    def __init__(self, adapter: OpikGEPAAdapter) -> None:
+        self._adapter = adapter
+        self._programs: dict[int, dict[str, str]] = {}
+
+    def on_valset_evaluated(self, event: dict[str, Any]) -> None:
+        self._programs[event["candidate_idx"]] = event["candidate"]
+
+    def on_evaluation_start(self, event: dict[str, Any]) -> None:
+        if event["candidate_idx"] is not None or event["is_seed_candidate"]:
+            return  # re-scoring a known program, not proposing one
+        parents = [
+            self._adapter.prompts_for(self._programs[idx])
+            for idx in event["parent_ids"]
+            if idx in self._programs
+        ]
+        if parents:
+            self._adapter._optimizer._lineage.derive_from(*parents)

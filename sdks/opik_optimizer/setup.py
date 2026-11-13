@@ -57,7 +57,7 @@ setup(
             "pytest-cov",
             # "google-adk",
             "langgraph",
-            "gepa>=0.0.7",
+            "gepa>=0.1.4",
         ],
     },
     classifiers=[

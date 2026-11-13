@@ -12,7 +12,7 @@ import json
 from typing import Any, TypeVar, cast
 from collections.abc import Coroutine, Mapping
 
-from .mcp import ToolCallingDependencyError
+from .mcp import MCP_INSTALL_HINT, ToolCallingDependencyError
 from .session_pool import SessionPool
 from ... import throttle as _throttle
 
@@ -89,7 +89,8 @@ def _load_remote_sdk() -> tuple[Any, Any]:
         from mcp.client.session import ClientSession  # type: ignore
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise ToolCallingDependencyError(
-            "Remote MCP support requires the `mcp` Python SDK with streamable HTTP transport."
+            "Remote MCP support requires the `mcp` Python SDK with streamable HTTP "
+            f"transport. {MCP_INSTALL_HINT}"
         ) from exc
     try:
         from mcp.client.streamable_http import streamablehttp_client  # type: ignore
@@ -98,7 +99,8 @@ def _load_remote_sdk() -> tuple[Any, Any]:
             from mcp.client.streamablehttp import streamablehttp_client  # type: ignore
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise ToolCallingDependencyError(
-                "Remote MCP support requires the `mcp` Python SDK with streamable HTTP transport."
+                "Remote MCP support requires the `mcp` Python SDK with streamable "
+                f"HTTP transport. {MCP_INSTALL_HINT}"
             ) from exc
     return ClientSession, streamablehttp_client
 

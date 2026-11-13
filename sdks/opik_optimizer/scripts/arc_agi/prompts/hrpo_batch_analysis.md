@@ -1,12 +1,8 @@
 You are analyzing ARC-AGI puzzle evaluation results. Each item represents a colored-grid transformation performed by an LLM-generated Python solver. Metrics such as exact, approx_match/likeness, label IoU, mismatch counts, and coordinate previews are authoritative.
 
-TEST RESULTS:
+The test results are attached after this message, one evaluation case each.
 
-```
-{formatted_batch}
-```
-
-Important constraint: Base your analysis exclusively on the TEST RESULTS shown above. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results. Use ARC terminology (pixels, palette swaps, connected components, bounding boxes, etc.) when discussing failures.
+Important constraint: Base your analysis exclusively on the attached test results. Do not infer, speculate, or hypothesize failure modes that are not directly evidenced in the provided results. Use ARC terminology (pixels, palette swaps, connected components, bounding boxes, etc.) when discussing failures.
 
 Think through the failures systematically:
 

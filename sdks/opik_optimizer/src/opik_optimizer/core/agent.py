@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from typing import Any, TYPE_CHECKING
 
 from ..agents.optimizable_agent import OptimizableAgent
@@ -54,6 +55,32 @@ def instantiate_agent(
     return bind_optimizer(optimizer, agent)
 
 
+_SECRET_MARKERS = ("key", "secret", "password", "credential", "auth", "header", "token")
+
+
+def _is_secret(key: Any) -> bool:
+    lowered = str(key).lower()
+    return not lowered.endswith("tokens") and any(m in lowered for m in _SECRET_MARKERS)
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            k: "***REDACTED***" if _is_secret(k) else _redact(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact(v) for v in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return type(value).__name__
+
+
+def _loggable_settings(settings: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The agent's model settings as experiment metadata, without credentials."""
+    return _redact(dict(settings or {})) or None
+
+
 def build_agent_config(
     *,
     optimizer: Any,
@@ -61,7 +88,8 @@ def build_agent_config(
 ) -> dict[str, Any]:
     agent_config: dict[str, Any] = dict(prompt.to_dict())
     agent_config["project_name"] = getattr(prompt, "project_name", None)
-    agent_config["model"] = getattr(prompt, "model", None) or optimizer.model
+    agent_config["model"] = getattr(prompt, "model", None)
+    agent_config["model_parameters"] = _loggable_settings(prompt.model_kwargs)
     agent_config["tools"] = serialize_tools(prompt)
     agent_config["optimizer"] = optimizer.__class__.__name__
     return helpers.drop_none(agent_config)

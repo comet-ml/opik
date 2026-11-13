@@ -1,3 +1,4 @@
+from ...core.reasoning import ReasoningEvidence, cases_from_evaluation
 import logging
 import asyncio
 from typing import Any, cast
@@ -63,49 +64,6 @@ class HierarchicalRootCauseAnalyzer:
         self.model_parameters = model_parameters or {}
         self.prompts = prompts
 
-    def _format_test_results_batch(
-        self,
-        test_results: list[Any],
-        batch_start: int,
-        batch_end: int,
-    ) -> str:
-        """
-        Format a batch of test results for analysis.
-
-        Args:
-            test_results: Full list of test results
-            batch_start: Starting index of the batch
-            batch_end: Ending index of the batch (exclusive)
-
-        Returns:
-            Formatted string containing test result details
-        """
-        formatted_results = []
-
-        for idx in range(batch_start, min(batch_end, len(test_results))):
-            test_result = test_results[idx]
-            test_case = test_result.test_case
-            dataset_item_id = test_case.dataset_item_id
-
-            # Extract scores
-            scores_info = []
-            for score in test_result.score_results:
-                score_str = f"  - {score.name}: {score.value:.3f}"
-                if score.reason:
-                    score_str += f"\n    Reason: {score.reason}"
-                if score.scoring_failed:
-                    score_str += " (FAILED)"
-                scores_info.append(score_str)
-
-            # Format this test result
-            result_text = f"""Test Case #{idx + 1} (ID: {dataset_item_id}, Trial: {test_result.trial_id})
-Scores:
-{chr(10).join(scores_info)}"""
-
-            formatted_results.append(result_text)
-
-        return "\n\n" + ("=" * 80 + "\n\n").join(formatted_results)
-
     @staticmethod
     def _extract_first_response(response: Any) -> Any:
         """Normalize list responses to a single response object."""
@@ -120,6 +78,7 @@ Scores:
         batch_start: int,
         batch_end: int,
         project_name: str | None = None,
+        traces: dict[str, Any] | None = None,
     ) -> BatchAnalysis:
         """
         Analyze a single batch of test results asynchronously.
@@ -141,17 +100,19 @@ Scores:
             f"test cases {batch_start + 1} to {actual_end}"
         )
 
-        formatted_batch = self._format_test_results_batch(
-            test_results, batch_start, batch_end
-        )
-
-        batch_analysis_prompt = self.prompts.get(
-            "batch_analysis_prompt",
-            formatted_batch=formatted_batch,
-        )
+        # The cases (inputs, outputs, scores, agent trace, images) are attached
+        # by the shared evidence renderer, once.
+        batch_analysis_prompt = self.prompts.get("batch_analysis_prompt")
 
         # TODO: Check which project this data gets logged to
         root_cause_response = await _llm_calls.call_model_async(
+            metadata={"opik_call_type": "root_cause_analysis"},
+            evidence=ReasoningEvidence(
+                cases=cases_from_evaluation(
+                    test_results[batch_start:actual_end], traces=traces
+                ),
+                editable=False,
+            ),
             model=self.reasoning_model,
             messages=[{"role": "user", "content": batch_analysis_prompt}],
             seed=self.seed,
@@ -212,6 +173,7 @@ Scores:
         )
 
         synthesis_response = await _llm_calls.call_model_async(
+            metadata={"opik_call_type": "root_cause_synthesis"},
             model=self.reasoning_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
             seed=self.seed,
@@ -254,7 +216,10 @@ Scores:
             )
 
     async def analyze_async(
-        self, evaluation_result: EvaluationResult, project_name: str | None = None
+        self,
+        evaluation_result: EvaluationResult,
+        project_name: str | None = None,
+        traces: dict[str, Any] | None = None,
     ) -> HierarchicalRootCauseAnalysis:
         """
         Perform hierarchical root cause analysis on evaluation results asynchronously.
@@ -267,6 +232,8 @@ Scores:
 
         Args:
             evaluation_result: The evaluation result to analyze
+            traces: Optional trace trees by trace id; when present, each test case
+                includes the agent's steps (LLM and tool spans) for the analysis
 
         Returns:
             HierarchicalRootCauseAnalysis with unified failure modes and synthesis notes
@@ -295,6 +262,7 @@ Scores:
                 batch_start=batch_start,
                 batch_end=batch_end,
                 project_name=project_name,
+                traces=traces,
             )
             batch_tasks.append((batch_number, task))
             batch_number += 1
@@ -387,7 +355,10 @@ Scores:
         return hierarchical_analysis
 
     def analyze(
-        self, evaluation_result: EvaluationResult, project_name: str | None = None
+        self,
+        evaluation_result: EvaluationResult,
+        project_name: str | None = None,
+        traces: dict[str, Any] | None = None,
     ) -> HierarchicalRootCauseAnalysis:
         """
         Synchronous wrapper for analyze_async() for backward compatibility.
@@ -398,7 +369,9 @@ Scores:
         Returns:
             HierarchicalRootCauseAnalysis with unified failure modes and synthesis notes
         """
-        coro = self.analyze_async(evaluation_result, project_name=project_name)
+        coro = self.analyze_async(
+            evaluation_result, project_name=project_name, traces=traces
+        )
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:

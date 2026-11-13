@@ -33,11 +33,11 @@ def test_meta_prompt_factory_updates_template() -> None:
 
 def test_hierarchical_prompt_factory_updates_analyzer() -> None:
     def factory(prompts: PromptLibrary) -> None:
-        prompts.set("batch_analysis_prompt", "CUSTOM {formatted_batch}")
+        prompts.set("batch_analysis_prompt", "CUSTOM analysis")
 
     optimizer = HierarchicalReflectiveOptimizer(prompt_overrides=factory)
 
-    assert optimizer.prompts.get("batch_analysis_prompt") == "CUSTOM {formatted_batch}"
+    assert optimizer.prompts.get("batch_analysis_prompt") == "CUSTOM analysis"
     assert optimizer._hierarchical_analyzer.prompts is optimizer.prompts
 
 

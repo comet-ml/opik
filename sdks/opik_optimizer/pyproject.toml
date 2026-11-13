@@ -14,7 +14,7 @@ dependencies = [
     # 0.1.0 introduced the <curr_param>/<side_info> reflection-template markers
     # and the reflection_prompt_template kwarg contract GepaOptimizer relies on;
     # on 0.0.x the optimizer cannot even be constructed.
-    "gepa>=0.1.0",
+    "gepa>=0.1.4",
     "hf_xet",
     # LiteLLM dependency comments:
     # - Exclude 1.81.x: HTTP client closed during concurrent calls
@@ -44,7 +44,6 @@ dependencies = [
     #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
     "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
     "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.106; python_version >= '3.11'",
-    "mcp>=1.0.0",
     "opik>=1.9.7",
     "optuna",
     "pandas",
@@ -76,6 +75,12 @@ dev = [
     "bm25s",
     "PyStemmer",
     "scikit-learn",
+    # MCP tool tests run in the dev setup.
+    "opik_optimizer[mcp]",
+]
+mcp = [ # Extras - pip install "opik-optimizer[mcp]" for MCP tools
+    # v2 changes the HTTP transport constructor and stream tuple API.
+    "mcp>=1.0.0,<2",
 ]
 benchmarks = [ # Extras - pip install opik_optimizer[benchmarks]
     "modal",

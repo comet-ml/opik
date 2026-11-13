@@ -24,7 +24,6 @@ pytest_plugins = [
     f"{PYTEST_PLUGIN_PREFIX}.prompt_fixtures",
     f"{PYTEST_PLUGIN_PREFIX}.common_data_fixtures",
     f"{PYTEST_PLUGIN_PREFIX}.prompt_library_fixtures",
-    f"{PYTEST_PLUGIN_PREFIX}.agent_fixtures",
     f"{PYTEST_PLUGIN_PREFIX}.evaluation_fixtures",
     f"{PYTEST_PLUGIN_PREFIX}.evolutionary_optimizer_fixtures",
     f"{PYTEST_PLUGIN_PREFIX}.optimization_flow_fixtures",

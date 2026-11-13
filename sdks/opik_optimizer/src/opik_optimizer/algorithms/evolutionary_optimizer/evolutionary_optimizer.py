@@ -7,17 +7,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-# DEAP imports
-try:
-    from deap import base, tools
-    from deap import creator as _creator
-
-    _DEAP_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
-    base = None
-    tools = None
-    _creator = None
-    _DEAP_IMPORT_ERROR = exc
+from deap import base, creator, tools
 
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
@@ -29,13 +19,9 @@ from . import prompts as evo_prompts
 from .ops import generation_ops, mutation_ops, result_ops
 
 logger = logging.getLogger(__name__)
-creator = cast(Any, _creator)  # type: ignore[assignment]
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
-    supports_tool_optimization: bool = True
-    supports_prompt_optimization: bool = True
-    supports_multimodal: bool = True
     """
     Evolutionary Optimizer that uses genetic algorithms to evolve and improve prompts over generations.
 
@@ -78,6 +64,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
             Callable: function(prompts: PromptLibrary) -> None to modify prompts programmatically.
     """
 
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
+
     DEFAULT_EARLY_STOPPING_GENERATIONS = (
         constants.EVOLUTIONARY_DEFAULT_EARLY_STOPPING_GENERATIONS
     )
@@ -89,9 +79,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_RESTART_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_RESTART_THRESHOLD
     DEFAULT_RESTART_GENERATIONS = constants.EVOLUTIONARY_DEFAULT_RESTART_GENERATIONS
     DEFAULT_DIVERSITY_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_DIVERSITY_THRESHOLD
-    DEFAULT_ENABLE_SEMANTIC_CROSSOVER = (
-        constants.EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER
-    )
 
     # Prompt templates for this optimizer
     # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
@@ -157,23 +144,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
         Adds "no_improvement" finish reason when generations without improvement
         exceeds the early stopping threshold.
         """
-        if context.finish_reason is None:
-            if context.trials_completed >= context.max_trials:
-                context.finish_reason = "max_trials"
-            elif (
-                self._generations_without_overall_improvement
-                >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
-            ):
-                context.finish_reason = "no_improvement"
-            else:
-                context.finish_reason = "completed"
-
-    def _ensure_deap_available(self) -> None:
-        if base is None or tools is None or _creator is None:
-            raise RuntimeError(
-                "DEAP is required for EvolutionaryOptimizer. "
-                "Install the optimizer extras that include DEAP."
-            ) from _DEAP_IMPORT_ERROR
+        if (
+            context.finish_reason is None
+            and context.trials_completed < context.max_trials
+            and self._generations_without_overall_improvement
+            >= self.DEFAULT_EARLY_STOPPING_GENERATIONS
+        ):
+            context.finish_reason = "no_improvement"
+        super()._finalize_finish_reason(context)
 
     def _seed_rngs(self) -> None:
         """
@@ -213,8 +191,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
-        self._ensure_deap_available()
-
         super().__init__(
             model=model,
             verbose=verbose,
@@ -408,7 +384,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         Returns:
             AlgorithmResult with best prompts, score, history, and metadata.
         """
-        self._ensure_deap_available()
         # Ensure deterministic behavior per optimization run (important when
         # reusing the same optimizer instance across multiple runs).
         self._seed_rngs()
@@ -417,17 +392,19 @@ class EvolutionaryOptimizer(BaseOptimizer):
         max_trials = context.max_trials
         self._optimize_tools = context.extra_params.get("optimize_tools")
         self._tool_names = context.extra_params.get("tool_names")
+        self._tool_names_by_prompt = context.extra_params.get("tool_names_by_prompt")
         self._evaluation_metric = context.metric
 
         # Initialize progress tracking for display
         self._current_round = 0
-        self._total_rounds = self.num_generations
 
         self._history_builder.clear()
         self._best_fitness_history = []
         self._generations_without_improvement = 0
         self._current_population = []
         self._generations_without_overall_improvement = 0
+        self._best_primary_score_history = []
+        self._gens_since_pop_improvement = 0
 
         generation_ops.build_deap_evaluator(
             self, context=context, experiment_config=experiment_config
