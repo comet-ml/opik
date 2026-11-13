@@ -78,15 +78,14 @@ public class RecommendationService {
                     var align = byRecipe(workflows, WorkflowService.ALIGN);
                     var out = new ArrayList<Recommendation>();
 
+                    String judges = collect.availableScoreNames().isEmpty()
+                            ? "No judge writes scores here yet: take one live with online evaluation first."
+                            : "Choose the judge score to act on; this project writes: %s."
+                                    .formatted(String.join(", ", collect.availableScoreNames()));
                     if (!collects) {
                         out.add(setup(workspaceId, projectId, collect,
-                                ("Nothing adds production failures to a test suite. In %d days %d traces were scored "
-                                        + "'%s', %d of them below %s.").formatted(
-                                                collect.estimate().windowDays(), collect.estimate().fired(),
-                                                collect.overrides().scoreName(), collect.estimate().matched(),
-                                                collect.overrides().threshold()),
-                                Map.of("scored", collect.estimate().fired(), "below_threshold",
-                                        collect.estimate().matched(), "window_days", collect.estimate().windowDays(),
+                                "Nothing adds production failures to a test suite. " + judges,
+                                Map.of("available_score_names", collect.availableScoreNames(),
                                         "has_judge", hasJudge)));
                     }
                     // Align ranks after Collect, and last of all while no judge decides anything here.
@@ -96,11 +95,12 @@ public class RecommendationService {
                                     (hasJudge
                                             ? "A judge decides what gets collected, and nobody checks it. "
                                             : "No judge runs on this project yet. ")
-                                            + "Send %d scored traces a day to '%s' so reviewers can check the judge."
+                                            + "Send %d scored traces a day to '%s' so reviewers can check the judge. "
                                                     .formatted(align.overrides().perDay(),
-                                                            align.overrides().annotationQueueName()),
-                                    Map.of("scored", align.estimate().fired(), "has_judge", hasJudge,
-                                            "window_days", align.estimate().windowDays()));
+                                                            align.overrides().annotationQueueName())
+                                            + judges,
+                                    Map.of("available_score_names", align.availableScoreNames(),
+                                            "has_judge", hasJudge));
                     if (alignRecommendation != null && hasJudge) {
                         out.add(alignRecommendation);
                     }

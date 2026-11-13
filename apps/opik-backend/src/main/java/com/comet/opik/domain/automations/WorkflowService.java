@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.domain.automations.AutomationRefusal.SCORE_NAME_REQUIRED;
 import static com.comet.opik.domain.automations.AutomationRefusal.UNKNOWN_RECIPE;
 import static com.comet.opik.domain.automations.AutomationRefusal.refuse;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -53,7 +54,8 @@ public class WorkflowService {
     public static final String COLLECT = "collect";
     public static final String ALIGN = "align";
     public static final int VERSION = 1;
-    public static final String DEFAULT_SCORE_NAME = "resolution";
+    /** Stands in for the judge in a recipe shown before one was chosen; an enable never stores it. */
+    public static final String SCORE_NAME_PLACEHOLDER = "<score_name>";
     public static final double DEFAULT_THRESHOLD = 0.5;
     public static final int DEFAULT_PER_DAY = 10;
     public static final int DEFAULT_MAX_ITEMS_PER_DAY = 200;
@@ -92,7 +94,14 @@ public class WorkflowService {
 
     private Mono<Workflow.Enabled> enable(String workspaceId, String userName, Workflow.EnableRequest request,
             boolean dryRun, Project project, List<Automation> existing, List<String> scoreNames) {
-        var recipe = recipe(request.recipe(), project, request.overrides(), scoreNames);
+        var recipe = recipe(request.recipe(), project, request.overrides());
+        if (recipe.overrides().scoreName() == null) {
+            // The judge is the user's call, never the recipe's: an agent has to ask which score to act on.
+            throw refuse(SCORE_NAME_REQUIRED, scoreNames.isEmpty()
+                    ? "name the judge score in overrides.score_name; this project writes no scores yet, so take a judge live first"
+                    : "name the judge score in overrides.score_name; this project writes: %s".formatted(
+                            String.join(", ", scoreNames)));
+        }
         var templates = templates(recipe, project)
                 .stream()
                 .map(template -> template.toBuilder()
@@ -151,7 +160,7 @@ public class WorkflowService {
 
     private Mono<Workflow> describe(String workspaceId, Project project, String recipeId,
             List<Automation> existing, List<String> scoreNames) {
-        var recipe = recipe(recipeId, project, null, scoreNames);
+        var recipe = recipe(recipeId, project, null);
         var templates = templates(recipe, project);
         var matched = templates.stream()
                 .map(template -> byRecipe(existing, recipe.id(), template).orElse(template))
@@ -166,15 +175,29 @@ public class WorkflowService {
                 .map(automation -> overridesOf(automation, recipe.overrides()))
                 .orElse(recipe.overrides());
 
-        return estimate(workspaceId, project.id(), templates)
-                .map(estimate -> Workflow.builder()
+        // Before a judge is chosen there is nothing to replay, so the estimate stays at zero: the dry run
+        // of the enable, with the chosen score, is where the numbers come from.
+        Mono<AutomationDryRun.Estimate> estimate = overrides.scoreName() == null
+                ? Mono.just(emptyEstimate())
+                : estimate(workspaceId, project.id(), templates(recipe(recipe.id(), project, overrides), project));
+
+        return estimate
+                .map(figures -> Workflow.builder()
                         .recipe(recipe.id()).version(VERSION).name(recipe.name()).description(recipe.description())
-                        .state(state).prerequisitesMet(true).blockedReason(null)
+                        .state(state).prerequisitesMet(true)
+                        .blockedReason(overrides.scoreName() == null && state == Workflow.State.OFF
+                                ? "choose the judge score (overrides.score_name) from available_score_names"
+                                : null)
                         .automations(matched)
-                        .estimate(estimate)
+                        .estimate(figures)
                         .overrides(overrides)
                         .availableScoreNames(scoreNames)
                         .build());
+    }
+
+    private static AutomationDryRun.Estimate emptyEstimate() {
+        return AutomationDryRun.Estimate.builder()
+                .windowDays(AutomationService.ESTIMATE_WINDOW_DAYS).costUsd(java.math.BigDecimal.ZERO).build();
     }
 
     /** The overrides an existing automation embodies, read back from its trigger, step and limits. */
@@ -227,19 +250,15 @@ public class WorkflowService {
                 .findFirst();
     }
 
-    Recipe recipe(String id, Project project, Workflow.Overrides overrides, List<String> scoreNames) {
+    /** The recipe with the caller's overrides over its defaults. The judge has no default: see {@link #enable}. */
+    Recipe recipe(String id, Project project, Workflow.Overrides overrides) {
         var given = Optional.ofNullable(overrides).orElse(Workflow.Overrides.builder().build());
-        // The judge the recipe defaults to: `resolution` when the project has it, else the first score
-        // the project does write, so an apply call taken as offered fires on something real.
-        String defaultScoreName = scoreNames.contains(DEFAULT_SCORE_NAME) || scoreNames.isEmpty()
-                ? DEFAULT_SCORE_NAME
-                : scoreNames.getFirst();
         return switch (id) {
             case COLLECT -> new Recipe(COLLECT, "Collect",
                     "A judge score lands on a production trace: keep the trace in the regression suite when the "
                             + "score is below the threshold.",
                     Workflow.Overrides.builder()
-                            .scoreName(Optional.ofNullable(given.scoreName()).orElse(defaultScoreName))
+                            .scoreName(given.scoreName())
                             .threshold(Optional.ofNullable(given.threshold()).orElse(DEFAULT_THRESHOLD))
                             .testSuiteName(Optional.ofNullable(given.testSuiteName()).orElse(suiteName(project)))
                             .maxItemsPerDay(
@@ -249,7 +268,7 @@ public class WorkflowService {
                     "A judge score lands on a production trace: send a few a day, at random, to a review queue "
                             + "so people can check the judge.",
                     Workflow.Overrides.builder()
-                            .scoreName(Optional.ofNullable(given.scoreName()).orElse(defaultScoreName))
+                            .scoreName(given.scoreName())
                             .annotationQueueName(
                                     Optional.ofNullable(given.annotationQueueName()).orElse(REVIEW_QUEUE_NAME))
                             .perDay(Optional.ofNullable(given.perDay()).orElse(DEFAULT_PER_DAY))
@@ -260,7 +279,9 @@ public class WorkflowService {
 
     /** The automations a recipe creates for a project, as definitions the service resolves and stores. */
     List<Automation> templates(Recipe recipe, Project project) {
-        var overrides = recipe.overrides();
+        var overrides = recipe.overrides().scoreName() == null
+                ? recipe.overrides().toBuilder().scoreName(SCORE_NAME_PLACEHOLDER).build()
+                : recipe.overrides();
         return switch (recipe.id()) {
             case COLLECT -> List.of(Automation.builder()
                     .projectId(project.id()).name("Low %s traces to the suite".formatted(overrides.scoreName()))

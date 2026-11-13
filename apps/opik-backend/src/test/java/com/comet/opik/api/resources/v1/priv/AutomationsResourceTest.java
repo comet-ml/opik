@@ -301,6 +301,16 @@ class AutomationsResourceTest {
         assertThat(workflows).allMatch(workflow -> workflow.state() == Workflow.State.OFF);
         assertThat(workflows.getFirst().overrides().testSuiteName()).isEqualTo("Regression · " + project.name());
 
+        // The judge is never chosen by the recipe: an enable without one is refused, naming the options.
+        try (var response = request(PATH.formatted(baseURI) + "/workflows/enable", Map.of())
+                .post(Entity
+                        .json(Workflow.EnableRequest.builder().recipe("collect").projectId(project.id()).build()))) {
+            assertThat(response.getStatus()).isEqualTo(400);
+            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).startsWith("score_name_required: ");
+        }
+        assertThat(workflows.getFirst().overrides().scoreName()).isNull();
+        assertThat(workflows.getFirst().blockedReason()).contains("score_name");
+
         var request = Workflow.EnableRequest.builder().recipe("collect").projectId(project.id())
                 .overrides(Workflow.Overrides.builder().scoreName("quality").threshold(0.3).build())
                 .createdVia(Automation.CreatedVia.MCP).build();
@@ -346,7 +356,7 @@ class AutomationsResourceTest {
         assertRefused(post(byQueue), "target_not_found");
 
         var enabled = enable(Workflow.EnableRequest.builder().recipe("align").projectId(project.id())
-                .overrides(Workflow.Overrides.builder().perDay(3).build()).build(), false);
+                .overrides(Workflow.Overrides.builder().scoreName(SCORE).perDay(3).build()).build(), false);
         var review = enabled.created().getFirst();
         assertThat(review.recipe().id()).isEqualTo("align");
         assertThat(review.triggers().getFirst().perDay()).isEqualTo(3);
@@ -372,7 +382,11 @@ class AutomationsResourceTest {
         assertThat(collect.workflow()).isEqualTo("collect");
         assertThat(collect.apply().operation()).isEqualTo("workflow.enable");
         assertThat(collect.apply().data().get("recipe").asText()).isEqualTo("collect");
-        assertThat(collect.reason()).doesNotContain("%").contains("14 days");
+        // A fresh project writes no scores yet, so the reason says to take a judge live first; either way
+        // the apply call carries no judge: that choice is the user's.
+        assertThat(collect.reason()).doesNotContain("%").contains("judge");
+        var scoreName = collect.apply().data().get("overrides").get("score_name");
+        assertThat(scoreName == null || scoreName.isNull()).isTrue();
 
         try (var response = request(PATH.formatted(baseURI) + "/recommendations/" + collect.id() + "/dismiss",
                 Map.of()).post(Entity.json(Map.of("project_id", project.id())))) {
@@ -380,7 +394,8 @@ class AutomationsResourceTest {
         }
         assertThat(recommendations(project.id())).extracting(Recommendation::id).doesNotContain(collect.id());
 
-        enable(Workflow.EnableRequest.builder().recipe("collect").projectId(project.id()).build(), false);
+        enable(Workflow.EnableRequest.builder().recipe("collect").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().scoreName(SCORE).build()).build(), false);
         var after = recommendations(project.id());
         assertThat(after).extracting(Recommendation::kind).contains(Recommendation.Kind.REVIEW);
         assertThat(after).extracting(Recommendation::workflow).doesNotContain("collect");
