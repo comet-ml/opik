@@ -5,6 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.annotationqueue.ConditionGroup;
 import com.comet.opik.api.annotationqueue.Conditions;
@@ -339,6 +340,7 @@ class AutomationsResourceTest {
         assertThat(collect.workflow()).isEqualTo("collect");
         assertThat(collect.apply().operation()).isEqualTo("workflow.enable");
         assertThat(collect.apply().data().get("recipe").asText()).isEqualTo("collect");
+        assertThat(collect.reason()).doesNotContain("%").contains("14 days");
 
         try (var response = request(PATH.formatted(baseURI) + "/recommendations/" + collect.id() + "/dismiss",
                 Map.of()).post(Entity.json(Map.of("project_id", project.id())))) {
@@ -399,16 +401,25 @@ class AutomationsResourceTest {
     }
 
     private UUID newTrace(String projectName) {
+        // Pinned to the SDK source: the factory picks any source, and the executor only runs on
+        // production traffic, as queue routing does.
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null).projectName(projectName).startTime(Instant.now()).endTime(Instant.now())
-                .feedbackScores(null).usage(null).build();
+                .source(Source.SDK).feedbackScores(null).usage(null).build();
         return traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
     }
 
+    /** Scores, then waits until the trace reads back with it: what the executor and the test endpoint read. */
     private void score(UUID traceId, double value) {
         traceResourceClient.feedbackScore(traceId, FeedbackScore.builder()
                 .name(SCORE).value(BigDecimal.valueOf(value)).source(ScoreSource.SDK).build(),
                 TEST_WORKSPACE, API_KEY);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(300))
+                .untilAsserted(() -> assertThat(traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY)
+                        .feedbackScores()).anySatisfy(score -> {
+                            assertThat(score.name()).isEqualTo(SCORE);
+                            assertThat(score.value()).isEqualByComparingTo(BigDecimal.valueOf(value));
+                        }));
     }
 
     private List<UUID> suiteItems(UUID suiteId) {

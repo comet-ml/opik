@@ -80,8 +80,8 @@ public class RecommendationService {
 
                     if (!collects) {
                         out.add(setup(workspaceId, projectId, collect,
-                                "Nothing adds production failures to a test suite. In %d days %d traces were scored "
-                                        + "'%s', %d of them below %s.".formatted(
+                                ("Nothing adds production failures to a test suite. In %d days %d traces were scored "
+                                        + "'%s', %d of them below %s.").formatted(
                                                 collect.estimate().windowDays(), collect.estimate().fired(),
                                                 collect.overrides().scoreName(), collect.estimate().matched(),
                                                 collect.overrides().threshold()),
