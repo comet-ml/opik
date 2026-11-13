@@ -54,7 +54,7 @@ non-editable targets and edits that remove template variables are rejected.
 
 Image cost depends on the number, size and detail of images in those cases; the settings above
 control how many cases each request carries. Image evidence requires a vision-capable optimizer
-model; an unsupported model fails the run before any evaluation. For custom model aliases or
+model; an unsupported model fails the run before the optimizer model is called. For custom model aliases or
 deployments, register their vision capability in LiteLLM before the run.
 
 ## Optimizer support

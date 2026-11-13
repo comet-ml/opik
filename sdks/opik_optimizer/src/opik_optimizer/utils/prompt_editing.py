@@ -10,7 +10,7 @@ from ..api_objects.evidence import TextEdit
 
 from ..api_objects.chat_prompt import ChatPrompt
 
-_PLACEHOLDER = re.compile(r"\{([A-Za-z_][\w.\-]*)\}")
+_PLACEHOLDER = re.compile(r"\{([^{}\"':\n]+)\}")
 
 
 def describe_text_segments(

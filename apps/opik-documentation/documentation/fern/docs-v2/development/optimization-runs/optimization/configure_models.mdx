@@ -47,7 +47,7 @@ optimizer = MetaPromptOptimizer(
 
 When an optimization includes images, the optimizer sends them to its model as native image
 blocks. Choose a vision-capable optimizer model independently from the agent model; HRPO's
-`reasoning_model` must support images too. If it doesn't, the run fails before any evaluation.
+`reasoning_model` must support images too. If it doesn't, the run fails before the optimizer model is called.
 There is no automatic model substitution or removal of media. Audio, video and file content is
 named in the optimizer's context but not sent. ParameterOptimizer makes no reasoning calls and
 needs only the agent's evaluation settings.

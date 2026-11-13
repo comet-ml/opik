@@ -68,7 +68,7 @@ Custom agents own their calls and should read each supplied prompt's model and `
 HRPO's `reasoning_model_parameters=None` inherits optimizer parameters; `{}` is an empty override.
 
 Images in prompts, training items or agent traces reach the optimizer model as native image
-blocks, so it must support vision; otherwise the run fails before any evaluation. Audio, video and
+blocks, so it must support vision; otherwise the run fails before the optimizer model is called. Audio, video and
 file content is named but not sent. Agent media and settings are retained. Candidate responses contain targeted text edits
 (`segment_id`, `text`), not full messages. GEPA requires `gepa>=0.1.4` for native reflection images.
 
@@ -92,7 +92,8 @@ Import `EvidenceCase`, `ReasoningEvidence`, `TextEdit`, `describe_text_segments`
 
 Each candidate evaluation is logged as an experiment in the Opik optimization run. Its metadata
 records `candidate_id`, `parent_candidate_ids` (the prompts the candidate was derived from; the
-baseline is the root) and `step_index` (its depth in that tree), which the Opik UI uses to mark
+baseline is the root; a crossover or merge child has two, so lineage is a DAG) and `step_index` (one
+more than its deepest parent), which the Opik UI uses to mark
 trials as Passed or Discarded. A prompt already scored on the same items in the run is not
 scored again. `evaluate_prompt(..., experiment_type="mini-batch")` logs an evaluation that is not a
 ranking trial, such as HRPO's failure analysis on training items, so it stays out of trial scores.

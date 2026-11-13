@@ -29,7 +29,7 @@ Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
 
 Image-based prompt optimization requires a vision-capable optimizer model independently from
-`ChatPrompt.model`; the run fails before any evaluation otherwise. Candidate generation uses
+`ChatPrompt.model`; the run fails before the optimizer model is called otherwise. Candidate generation uses
 targeted text edits, preserving original media and unselected settings. See the
 [multimodal guide](https://www.comet.com/docs/opik/development/optimization-runs/optimization/optimize_multimodal).
 

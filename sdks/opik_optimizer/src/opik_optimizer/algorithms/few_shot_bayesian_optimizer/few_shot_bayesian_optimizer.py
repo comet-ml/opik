@@ -426,12 +426,26 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                         for msg in messages
                     ]
                     continue
-                logger.error(f"Couldn't create prompt with placeholder: {exc}")
+                logger.exception("Couldn't create prompt with placeholder")
                 raise
 
+        image_urls = [
+            str(part["image_url"].get("url", ""))
+            if isinstance(part.get("image_url"), dict)
+            else str(part.get("image_url", ""))
+            for prompt in prompts.values()
+            for message in prompt.get_messages()
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+            if part.get("type") == "image_url"
+        ]
+        fields = [
+            field
+            for field in cast(list[str], user_message["example_fields"])
+            if not any(f"{{{field}}}" in url for url in image_urls)
+        ]
         return new_prompts, _usable_example_template(
-            str(response_content.template),
-            cast(list[str], user_message["example_fields"]),
+            str(response_content.template), fields
         )
 
     def _suggest_example_index(
@@ -1112,17 +1126,17 @@ def _usable_example_template(template: str, fields: list[str]) -> str:
     A template that copies the prompt's messages, or leaves out the answer, shows the
     task model a demonstration without the expected output.
     """
+    inputs = [f for f in fields if f != "id" and not is_label_field(f)]
+    answers = [f for f in fields if f != "id" and is_label_field(f)]
     used = [field for field in fields if f"{{{field}}}" in template]
-    has_answer = any(is_label_field(field) for field in fields if field != "id")
     if (
         used
         and '"role"' not in template
-        and (not has_answer or any(is_label_field(field) for field in used))
+        and (not answers or any(field in used for field in answers))
+        and (not inputs or any(field in used for field in inputs))
     ):
         return template
     logger.warning(
         "Few-shot example template unusable, using a plain one: %r", template
     )
-    inputs = [f for f in fields if f != "id" and not is_label_field(f)]
-    answers = [f for f in fields if f != "id" and is_label_field(f)]
     return "\n".join(f"{field}: {{{field}}}" for field in inputs + answers)

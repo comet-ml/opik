@@ -72,8 +72,11 @@ class CandidateLineage:
     def declare_parents(self, child: _PromptLike, parents: list[_PromptLike]) -> None:
         """Declare the parents of one candidate, ahead of its evaluation."""
         fingerprints = tuple(prompt_fingerprint(parent) for parent in parents)
+        key = prompt_fingerprint(child)
         with self._lock:
-            self._declared[prompt_fingerprint(child)] = fingerprints
+            self._declared[key] = tuple(
+                dict.fromkeys(self._declared.get(key, ()) + fingerprints)
+            )
 
     def tag(
         self, experiment_config: dict[str, Any] | None, prompt: _PromptLike

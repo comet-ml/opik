@@ -4,7 +4,7 @@ Agent-bundle candidate generation for the Meta-Prompt Optimizer.
 
 from ....utils.prompt_editing import apply_text_edits
 
-from ....core.reasoning import EvidenceCase, ReasoningEvidence
+from ....api_objects.evidence import EvidenceCase, ReasoningEvidence
 
 import json
 import logging

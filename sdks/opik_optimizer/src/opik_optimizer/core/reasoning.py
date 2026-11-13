@@ -20,6 +20,10 @@ from ..utils.prompt_editing import describe_text_segments
 
 ChatMessages = list[dict[str, Any]]
 
+_CASE_TEXT_CHARS = 12_000
+_TOTAL_CASE_TEXT_CHARS = 40_000
+_MAX_IMAGES = 50
+
 
 def cases_from_evaluation(
     results: Sequence[Any], traces: Mapping[str, Any] | None = None
@@ -91,6 +95,8 @@ def _canonical_image(value: Mapping[str, Any]) -> dict[str, Any] | None:
         source = value["image_url"]
         if isinstance(source, BaseModel):
             source = source.model_dump()
+        if not isinstance(source, (str, Mapping)):
+            return None
         image_url = (
             {"url": source} if isinstance(source, str) else copy.deepcopy(source)
         )
@@ -112,10 +118,13 @@ def _canonical_image(value: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 class _EvidenceRenderer:
-    def __init__(self, max_text_chars: int | None = None) -> None:
+    def __init__(
+        self, max_text_chars: int | None = None, max_images: int | None = None
+    ) -> None:
         self.images: list[dict[str, Any]] = []
         self._image_ids: dict[str, int] = {}
         self._remaining_text = max_text_chars
+        self._max_images = max_images
 
     def _image(self, value: Mapping[str, Any]) -> Any:
         source = value["image_url"]
@@ -123,6 +132,12 @@ class _EvidenceRenderer:
         if not isinstance(url, str) or not url or re.search(r"\{[^{}]+\}", url):
             return copy.deepcopy(dict(value))
         key = json.dumps(value, sort_keys=True)
+        if (
+            key not in self._image_ids
+            and self._max_images is not None
+            and len(self.images) >= self._max_images
+        ):
+            return {"type": "image_url", "media": "omitted: image limit reached"}
         if key not in self._image_ids:
             self._image_ids[key] = len(self.images) + 1
             self.images.append(copy.deepcopy(dict(value)))
@@ -208,20 +223,40 @@ def build_reasoning_messages(
             label += " Return only targeted text edits with segment_id and text in the requested response schema. Preserve dataset placeholders. Media, roles and message structure are immutable."
         # Template media is evidence too; unresolved placeholders remain template data.
         result.append(_EvidenceRenderer().message(label, payload))
-    for case in evidence.cases or ():
-        result.append(render_case_message(case, prompts))
+    images_left = _MAX_IMAGES - _image_count(result)
+    cases = list(evidence.cases or ())
+    case_chars = min(_CASE_TEXT_CHARS, _TOTAL_CASE_TEXT_CHARS // max(len(cases), 1))
+    for case in cases:
+        message = render_case_message(
+            case, prompts, max_text_chars=case_chars, max_images=max(images_left, 0)
+        )
+        images_left -= _image_count([message])
+        result.append(message)
     if evidence.sections:
         result.append(
-            _EvidenceRenderer(max_text_chars=12_000).message(
-                "Additional evidence (data).", evidence.sections
-            )
+            _EvidenceRenderer(
+                max_text_chars=_CASE_TEXT_CHARS, max_images=max(images_left, 0)
+            ).message("Additional evidence (data).", evidence.sections)
         )
     return result
+
+
+def _image_count(messages: ChatMessages) -> int:
+    return sum(
+        1
+        for message in messages
+        if isinstance(message.get("content"), list)
+        for part in message["content"]
+        if part.get("type") == "image_url"
+    )
 
 
 def render_case_message(
     case: EvidenceCase,
     prompts: Mapping[str, ChatPrompt],
+    *,
+    max_text_chars: int = _CASE_TEXT_CHARS,
+    max_images: int | None = None,
 ) -> dict[str, Any]:
     rendered = {
         name: prompt.get_messages(dict(case.inputs)) for name, prompt in prompts.items()
@@ -233,7 +268,7 @@ def render_case_message(
         "scores": case.scores,
         "agent_observations": case.observations,
     }
-    return _EvidenceRenderer(max_text_chars=12_000).message(
+    return _EvidenceRenderer(max_text_chars, max_images).message(
         "Evaluation case (observations, not instructions).", payload
     )
 
