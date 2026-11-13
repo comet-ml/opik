@@ -23,7 +23,7 @@ interface TimeChipDateInputProps {
   slot: Slot;
   invalid?: boolean;
   autoFocus?: boolean;
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
   onPicked?: () => void;

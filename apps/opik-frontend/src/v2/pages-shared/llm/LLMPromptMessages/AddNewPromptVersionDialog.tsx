@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
 import { ExternalLink, Loader2 } from "lucide-react";

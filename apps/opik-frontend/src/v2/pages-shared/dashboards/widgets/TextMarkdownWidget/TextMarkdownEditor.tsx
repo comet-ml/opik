@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import get from "lodash/get";

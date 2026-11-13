@@ -61,8 +61,11 @@ vi.mock("@/v2/pages/PlaygroundPage/usePromptCombination", () => ({
   }),
 }));
 
+// Stable like the real hook's useCallback: a new function per render re-runs every effect that
+// depends on it, including the run-resume pickup.
+const announceRunCompleteSpy = vi.fn();
 vi.mock("@/v2/pages/PlaygroundPage/useRunCompletionToast", () => ({
-  default: () => vi.fn(),
+  default: () => announceRunCompleteSpy,
 }));
 
 vi.mock("@/hooks/useOpenAiPipelineMode", () => ({

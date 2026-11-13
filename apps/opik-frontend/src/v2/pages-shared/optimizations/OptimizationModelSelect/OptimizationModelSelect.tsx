@@ -54,6 +54,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] =
     useState<COMPOSED_PROVIDER_TYPE | null>(null);
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [openConfigDialog, setOpenConfigDialog] = useState(false);
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -103,9 +104,10 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   const selectedInfo = useMemo(() => resolveInfo(value), [resolveInfo, value]);
 
   const handleOpenChange = useCallback((open: boolean) => {
+    setIsSelectOpen(open);
+    setOpenProviderMenu(null);
     if (!open) {
       setFilterValue("");
-      setOpenProviderMenu(null);
     }
   }, []);
 
@@ -209,7 +211,10 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
         {groupOptions.map((group) => (
           <Popover
             key={group.label}
-            open={group.composedProviderType === openProviderMenu}
+            // The closed list still animates out under the pointer and can re-hover a row.
+            open={
+              isSelectOpen && group.composedProviderType === openProviderMenu
+            }
           >
             <PopoverTrigger asChild>
               <div

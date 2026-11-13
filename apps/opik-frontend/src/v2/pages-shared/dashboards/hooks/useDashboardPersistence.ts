@@ -213,7 +213,9 @@ export const useDashboardPersistence = ({
   const reloadEpochRef = useRef(0);
   const reloadedConfigRef = useRef<DashboardState | null>(null);
   const [saveStatus, setSaveStatus] = useState<DashboardSaveStatus>("idle");
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   const { mutate: updateDashboard } = apiConfig.useUpdateMutationHook({
     skipDefaultError: true,
