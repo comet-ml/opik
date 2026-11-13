@@ -9,11 +9,46 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.filter.JsonPathUtils.hasAmbiguousDottedPlainKey;
 import static com.comet.opik.domain.filter.JsonPathUtils.toAnalyticsDbJsonPath;
+import static com.comet.opik.domain.filter.JsonPathUtils.toLiteralFlatKeyJsonPath;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("JsonPathUtils")
 class JsonPathUtilsTest {
+
+    @Nested
+    @DisplayName("Ambiguous dotted plain keys")
+    class AmbiguousDottedPlainKeys {
+
+        static Stream<Arguments> ambiguousPlainKeyCases() {
+            return Stream.of(
+                    Arguments.of("uni.workflow.id", true),
+                    Arguments.of("a.b.c", true),
+                    Arguments.of("messages.0.content", true),
+                    Arguments.of("service.instance-id", true),
+                    Arguments.of("a.b-c", true),
+                    Arguments.of("environment", false),
+                    Arguments.of("['uni.workflow.id']", false),
+                    Arguments.of("$.a.b", false),
+                    Arguments.of(".a.b", false),
+                    Arguments.of("a[0].b", false),
+                    Arguments.of("a.", false),
+                    Arguments.of("a..b", false));
+        }
+
+        @ParameterizedTest
+        @MethodSource("ambiguousPlainKeyCases")
+        void detectsAmbiguousPlainKeys(String key, boolean expected) {
+            assertThat(hasAmbiguousDottedPlainKey(key)).isEqualTo(expected);
+        }
+
+        @Test
+        void buildsLiteralFlatKeyPath() {
+            assertThat(toLiteralFlatKeyJsonPath("uni.workflow.id")).isEqualTo("$['uni.workflow.id']");
+            assertThat(toLiteralFlatKeyJsonPath("it's.key")).isEqualTo("$['it\\'s.key']");
+        }
+    }
 
     @Nested
     @DisplayName("Keys expressible in dot notation")

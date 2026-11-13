@@ -285,6 +285,77 @@ class GetTracesByProjectResourceTest {
                             traceStreamTestAssertion));
         }
 
+        private Stream<Arguments> ambiguousDottedMetadataFilterArguments() {
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+
+            record OpCase(
+                    Operator operator,
+                    String value,
+                    Function<List<Trace>, List<Trace>> expected,
+                    Function<List<Trace>, List<Trace>> unexpected) {
+            }
+
+            var opCases = List.of(
+                    new OpCase(
+                            Operator.EQUAL,
+                            workflowId,
+                            t -> List.of(t.get(0), t.get(1)),
+                            t -> List.of(t.get(2), t.get(3))),
+                    new OpCase(
+                            Operator.NOT_EQUAL,
+                            workflowId,
+                            t -> List.of(t.get(2), t.get(3)),
+                            t -> List.of(t.get(0), t.get(1))),
+                    new OpCase(
+                            Operator.CONTAINS,
+                            "019e7212",
+                            t -> List.of(t.get(0), t.get(1)),
+                            t -> List.of(t.get(2), t.get(3))),
+                    new OpCase(
+                            Operator.NOT_CONTAINS,
+                            "019e7212",
+                            t -> List.of(t.get(2), t.get(3)),
+                            t -> List.of(t.get(0), t.get(1))),
+                    new OpCase(
+                            Operator.STARTS_WITH,
+                            "019e7212",
+                            t -> List.of(t.get(0), t.get(1)),
+                            t -> List.of(t.get(2), t.get(3))),
+                    new OpCase(
+                            Operator.ENDS_WITH,
+                            "ef18",
+                            t -> List.of(t.get(0), t.get(1)),
+                            t -> List.of(t.get(2), t.get(3))),
+                    new OpCase(
+                            Operator.IS_NOT_EMPTY,
+                            "",
+                            t -> List.of(t.get(0), t.get(1), t.get(2)),
+                            t -> List.of(t.get(3))),
+                    new OpCase(
+                            Operator.IS_EMPTY,
+                            "",
+                            t -> List.of(t.get(3)),
+                            t -> List.of(t.get(0), t.get(1), t.get(2))),
+                    new OpCase(
+                            Operator.GREATER_THAN,
+                            "75",
+                            t -> List.of(t.get(0), t.get(1)),
+                            t -> List.of(t.get(2), t.get(3))),
+                    new OpCase(
+                            Operator.LESS_THAN,
+                            "150",
+                            t -> List.of(t.get(0), t.get(1)),
+                            t -> List.of(t.get(2), t.get(3))));
+
+            return getFilterTestArguments().flatMap(endpointArgs -> {
+                var endpoint = (String) endpointArgs.get()[0];
+                var assertion = (TracePageTestAssertion) endpointArgs.get()[1];
+                return opCases.stream()
+                        .map(op -> Arguments.of(
+                                endpoint, op.operator(), op.value(), op.expected(), op.unexpected(), assertion));
+            });
+        }
+
         private Stream<Arguments> getUsageKeyArgs() {
             return Stream.of(
                     Arguments.of(
@@ -2180,6 +2251,63 @@ class GetTracesByProjectResourceTest {
 
             testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
                     values.all(), List.of(), Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("ambiguousDottedMetadataFilterArguments")
+        void whenFilterAmbiguousDottedMetadataKey__thenReturnMatchingTraces(
+                String endpoint,
+                Operator operator,
+                String filterValue,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workflowId = "019e7212-cbb2-7972-b061-0a703e19ef18";
+            boolean numericComparisons = operator == Operator.GREATER_THAN || operator == Operator.LESS_THAN;
+            var matchValue = numericComparisons ? "100" : workflowId;
+            var otherValue = numericComparisons ? "50" : "other-workflow";
+
+            var flatTrace = setCommonTraceDefaults(createTrace().toBuilder())
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni.workflow.id\":\"%s\"}".formatted(matchValue)))
+                    .build();
+            var nestedTrace = setCommonTraceDefaults(createTrace().toBuilder())
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni\":{\"workflow\":{\"id\":\"%s\"}}}".formatted(matchValue)))
+                    .build();
+            var otherTrace = setCommonTraceDefaults(createTrace().toBuilder())
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"uni.workflow.id\":\"%s\"}".formatted(otherValue)))
+                    .build();
+            var absentTrace = setCommonTraceDefaults(createTrace().toBuilder())
+                    .projectName(projectName)
+                    .metadata(JsonUtils.getJsonNodeFromString("{}"))
+                    .build();
+            var traces = List.of(flatTrace, nestedTrace, otherTrace, absentTrace);
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(operator)
+                    .key("uni.workflow.id")
+                    .value(filterValue)
+                    .build());
+
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
         }
 
         @ParameterizedTest

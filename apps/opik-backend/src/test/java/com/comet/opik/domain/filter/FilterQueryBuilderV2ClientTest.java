@@ -8,13 +8,18 @@ import com.comet.opik.api.filter.TraceFilter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * Unit tests for the v2-client entry points on {@link FilterQueryBuilder}:
@@ -60,6 +65,42 @@ class FilterQueryBuilderV2ClientTest {
         void v2EntryPoint__emptyFilters__returnsEmpty() {
             assertThat(FilterQueryBuilder.toAnalyticsDbFiltersV2Client(List.of(), FilterStrategy.DATASET_ITEM))
                     .isEmpty();
+        }
+
+        @ParameterizedTest
+        @MethodSource("ambiguousDictionaryV2ClientCases")
+        void ambiguousDictionaryFilter__rewritesLiteralKeyAndBindsPaths(Operator operator, String combinator) {
+            var filter = TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(operator)
+                    .key("a.b.c")
+                    .value(operator == Operator.IS_EMPTY ? "" : "x")
+                    .build();
+            var sql = FilterQueryBuilder
+                    .toAnalyticsDbFiltersV2Client(List.of(filter), FilterStrategy.TRACE, false)
+                    .orElseThrow();
+
+            assertThat(sql).contains("{filterKeyLiteral0:String}");
+            assertThat(sql).contains("{filterKey0:String}");
+            assertThat(sql).contains("JSON_VALUE(metadata, {filterKeyLiteral0:String})");
+            assertThat(sql).contains("JSON_VALUE(metadata, {filterKey0:String})");
+            assertThat(sql).contains(" %s ".formatted(combinator));
+
+            Map<String, Object> params = new HashMap<>();
+            FilterQueryBuilder.populateV2ClientParams(params, List.of(filter), FilterStrategy.TRACE);
+
+            assertThat(params)
+                    .containsEntry("filterKey0", "$.a.b.c")
+                    .containsEntry("filterKeyLiteral0", "$['a.b.c']");
+            if (operator != Operator.IS_EMPTY) {
+                assertThat(params).containsEntry("filter0", "x");
+            }
+        }
+
+        private static Stream<Arguments> ambiguousDictionaryV2ClientCases() {
+            return Stream.of(
+                    arguments(Operator.EQUAL, "OR"),
+                    arguments(Operator.NOT_EQUAL, "AND"));
         }
 
         @Test

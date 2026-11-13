@@ -1058,7 +1058,16 @@ public class FilterQueryBuilder {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
         var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, columnsNonNullable);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
-        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
+        var condition = filter.field().getType().buildFilter(template, dbField, i, filter.value(),
+                enumFallbackTemplate);
+        if (JsonPathUtils.isAmbiguousDictionaryFilter(filter)) {
+            var literalTemplate = template.replace(":filterKey%2$d", ":filterKeyLiteral%2$d");
+            var literalCondition = filter.field().getType()
+                    .buildFilter(literalTemplate, dbField, i, filter.value(), enumFallbackTemplate);
+            condition = JsonPathUtils.combineAmbiguousDictionaryConditions(
+                    filter.operator(), condition, literalCondition);
+        }
+        return condition;
     }
 
     private static String getAnalyticsDbField(
@@ -1234,6 +1243,11 @@ public class FilterQueryBuilder {
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);
                     binder.accept("filterKey%d".formatted(i), key);
+                    if (JsonPathUtils.isAmbiguousDictionaryFilter(filter)) {
+                        binder.accept(
+                                "filterKeyLiteral%d".formatted(i),
+                                JsonPathUtils.toLiteralFlatKeyJsonPath(filter.key()));
+                    }
                 }
             }
         }
@@ -1266,6 +1280,7 @@ public class FilterQueryBuilder {
                     : "String";
             out = out.replace(":dynamicJsonPath" + i, "{dynamicJsonPath" + i + ":String}");
             out = out.replace(":dynamicField" + i, "{dynamicField" + i + ":String}");
+            out = out.replace(":filterKeyLiteral" + i, "{filterKeyLiteral" + i + ":String}");
             out = out.replace(":filterKey" + i, "{filterKey" + i + ":String}");
             out = out.replace(":filter" + i, "{filter" + i + ":" + filterType + "}");
         }
