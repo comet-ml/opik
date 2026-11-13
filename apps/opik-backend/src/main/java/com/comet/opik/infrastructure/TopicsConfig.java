@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -51,6 +52,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
 
     @Valid @NotNull @JsonProperty
     private FirstBuildConfig firstBuild;
@@ -149,6 +153,24 @@ public class TopicsConfig {
      * it holds today's traces so far. A project whose first builds failed waits 1 hour, then 6 hours, then a day between
      * attempts.
      */
+    @Data
+    public static class NightlyConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. */
+        @JsonProperty
+        private boolean enabled;
+
+        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project starts after this much of the night has passed; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
+    }
+
     @Data
     public static class FirstBuildConfig {
 

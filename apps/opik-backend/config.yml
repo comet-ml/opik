@@ -2742,6 +2742,17 @@ topics:
     #  Default: 90d
     #  Description: topic_runs rows are deleted after this. At most 365d
     runsRetention: ${TOPICS_BUILD_RUNS_RETENTION:-90d}
+  nightly:
+    #  Default: true
+    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
+    #  topics.enabled
+    enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
+    #  Default: 0 0 2 * * ? (02:00 UTC)
+    #  Description: Quartz cron in UTC. The night is the UTC date the job starts on
+    schedule: ${TOPICS_NIGHTLY_SCHEDULE:-0 0 2 * * ?}
+    #  Default: 2h
+    #  Description: No project starts after this much of the night; the rest run the next night. At most 20h
+    budget: ${TOPICS_NIGHTLY_BUDGET:-2h}
   firstBuild:
     #  Default: true
     #  Description: Runs the first-build job, which builds the list of a project that has none yet, and finishes

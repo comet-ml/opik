@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.internal;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.domain.topics.TopicsFirstBuildService;
+import com.comet.opik.domain.topics.TopicsNightlyService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -29,9 +31,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Starts a project's first topic build by hand instead of waiting for the first-build job. Internal and cross-workspace,
- * so it is reachable only from inside the cluster: like the other {@code /v1/internal} resources it is not authenticated
- * by {@code AuthFilter}. For the runbook.
+ * Starts topics work by hand: a project's first build instead of waiting for the first-build job, or a whole night of
+ * the nightly update. Internal and cross-workspace, so it is reachable only from inside the cluster: like the other
+ * {@code /v1/internal} resources it is not authenticated by {@code AuthFilter}. For the runbook.
  */
 @Path("/v1/internal/topics")
 @Produces(MediaType.APPLICATION_JSON)
@@ -45,6 +47,7 @@ public class TopicsResource {
     private static final int MAX_NIGHT_AGE_DAYS = 365;
 
     private final @NonNull TopicsFirstBuildService firstBuildService;
+    private final @NonNull TopicsNightlyService nightlyService;
     private final @NonNull @Config("topics") TopicsConfig config;
 
     @POST
@@ -68,6 +71,25 @@ public class TopicsResource {
         }
         var runId = firstBuildService.runNow(workspaceId, projectId, night(night), ignoreBackfill);
         return Response.accepted(Map.of("run_id", runId)).build();
+    }
+
+    @POST
+    @Path("/nights/run")
+    @Operation(operationId = "runTopicsNight", summary = "Run the topics night now", description = "Runs the whole night of the nightly update (default today, UTC; at most tomorrow, at least 365 days ago) in the background, as the scheduled job does and under the same lock, which is released when it ends. Each project's outcome is its topic_runs row.", responses = {
+            @ApiResponse(responseCode = "202", description = "The night started"),
+            @ApiResponse(responseCode = "400", description = "The night is not a date, is after tomorrow, or is more than 365 days ago"),
+            @ApiResponse(responseCode = "409", description = "The nightly job is off, or a night is in progress"),
+            @ApiResponse(responseCode = "503", description = "Redis failed or did not answer while the night took its lock; retry after the Retry-After delay"),
+            @ApiResponse(responseCode = "501", description = "Topics are off")})
+    public Response runNight(@QueryParam("night") String night) {
+        if (!config.isEnabled()) {
+            return Response.status(Response.Status.NOT_IMPLEMENTED).build();
+        }
+        var runNight = night(night);
+        if (!nightlyService.runNightNow(runNight)) {
+            throw new ConflictException("A topics night is in progress");
+        }
+        return Response.accepted(Map.of("night", runNight.toString())).build();
     }
 
     /** Default today (UTC). Tomorrow's window ends at tomorrow's start, so it holds today's traces so far; a later
