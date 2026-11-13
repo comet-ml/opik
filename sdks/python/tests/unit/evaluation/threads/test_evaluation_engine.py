@@ -495,6 +495,46 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
                 )
             )
 
+    @patch("opik.decorator.base_track_decorator.opik_client")
+    @patch("opik.evaluation.threads.evaluation_engine.helpers.load_conversation_thread")
+    def test_evaluate_thread__non_finite_score__marked_as_failed(
+        self, load_conversation_thread, decorator_opik_client
+    ):
+        decorator_opik_client.get_global_client.return_value = mock.MagicMock(
+            spec=opik_client.Opik
+        )
+        conversation = conversation_thread.ConversationThread()
+        conversation.add_user_message("Hello")
+        load_conversation_thread.return_value = conversation
+
+        healthy = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
+        healthy.name = "healthy"
+        healthy.score.return_value = score_result.ScoreResult(name="healthy", value=0.8)
+        broken = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
+        broken.name = "broken"
+        broken.score.return_value = score_result.ScoreResult(
+            name="broken", value=float("nan")
+        )
+
+        result = self.engine.evaluate_thread(
+            thread=TraceThread(id="thread_1"),
+            eval_project_name="eval_project",
+            metrics=[healthy, broken],
+            trace_input_transform=lambda x: "",
+            trace_output_transform=lambda x: "",
+            max_traces_per_thread=10,
+        )
+
+        self.assertEqual(
+            [(s.name, s.value, s.scoring_failed) for s in result.scores],
+            [("healthy", 0.8, False), ("broken", 0.0, True)],
+        )
+        self.assertEqual(result.scores[1].metadata, {"original_value": "nan"})
+
 
 def _mock_evaluate_thread_two_test_results(*args, **kwargs):
     # Mock evaluate_thread to return two test results

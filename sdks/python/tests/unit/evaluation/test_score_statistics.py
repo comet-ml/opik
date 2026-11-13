@@ -17,6 +17,7 @@ import re
 from typing import List
 from unittest import mock
 
+import numpy as np
 import pytest
 from opik import _logging
 from opik.evaluation import (
@@ -26,6 +27,7 @@ from opik.evaluation import (
     test_case,
     test_result,
 )
+from opik.evaluation.engine import helpers as engine_helpers
 from opik.evaluation.metrics import score_result
 
 
@@ -279,3 +281,58 @@ def test_the_console_table_shows_the_failed_count(monkeypatch: pytest.MonkeyPatc
     cells = [cell.strip() for cell in re.split(r"[│┃]", row) if cell.strip()]
     assert cells[0] == "hallucination"
     assert cells[-1] == "5"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [np.float32(0.25), np.int64(1)],
+    ids=["np-float32", "np-int64"],
+)
+def test_numpy_scores_are_part_of_the_statistics(value):
+    results = [
+        _result("item-0", 1, [_score("m", 0.5)]),
+        _result("item-1", 1, [_score("m", value)]),
+    ]
+
+    stats = score_statistics.calculate_aggregated_statistics(results)["m"]
+
+    assert stats.values == [0.5, float(value)]
+    assert stats.mean == (0.5 + float(value)) / 2
+
+
+def test_a_nan_score_is_failed_in_every_view(monkeypatch: pytest.MonkeyPatch):
+    # The engine marks the NaN as failed, so the console average, the
+    # statistics and the failed counts all agree.
+    scores = engine_helpers.mark_invalid_score_values_as_failed(
+        [_score("m", 1.0), _score("m", 0.5), _score("m", float("nan"))]
+    )
+    results = [_result(f"item-{i}", 1, [score]) for i, score in enumerate(scores)]
+
+    average_scores, failed_scores = report._compute_average_scores(results)
+    stats = score_statistics.calculate_aggregated_statistics(results)["m"]
+
+    assert average_scores == {"m": "0.7500"}
+    assert failed_scores == {"m": 1}
+    assert (stats.mean, stats.failed_count) == (0.75, 1)
+
+
+def test_a_metric_whose_every_score_is_nan_has_no_average_in_any_view(
+    logger: mock.Mock,
+):
+    # With nothing left to average, the console shows no average next to the
+    # failed count, and the statistics leave the metric out and warn once.
+    scores = engine_helpers.mark_invalid_score_values_as_failed(
+        [_score("m", float("nan")) for _ in range(3)]
+    )
+    results = [_result(f"item-{i}", 1, [score]) for i, score in enumerate(scores)]
+
+    average_scores, failed_scores = report._compute_average_scores(results)
+    statistics_by_name = score_statistics.calculate_aggregated_statistics(results)
+
+    assert average_scores == {"m": "None"}
+    assert failed_scores == {"m": 3}
+    assert "m" not in statistics_by_name
+    assert logger.log.call_count == 1
+    level, message = logger.log.call_args[0]
+    assert level == logging.WARNING
+    assert message == score_statistics.FAILED_SCORES_MESSAGE

@@ -24,7 +24,7 @@ from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_confi
 from opik.evaluation.types import ErrorTolerance, ScoringKeyMappingType
 from opik.message_processing.emulation import models
 
-from . import exception_analyzer
+from . import exception_analyzer, helpers
 
 
 LOGGER = logging.getLogger(__name__)
@@ -351,7 +351,7 @@ def _compute_metric_scores(
 
             score_results.append(_build_failed_score_result(metric.name, exception))
 
-    return score_results
+    return helpers.mark_invalid_score_values_as_failed(score_results)
 
 
 class MetricsEvaluator:
