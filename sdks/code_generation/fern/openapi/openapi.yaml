@@ -74,6 +74,8 @@ tags:
   description: Experiment resources
 - name: Feedback-definitions
   description: Feedback definitions related resources
+- name: Guardrail policies
+  description: Workspace guardrail policy resources
 - name: Guardrails
   description: Guardrails related resources
 - name: Insights Views
@@ -2695,8 +2697,6 @@ paths:
                 $ref: "#/components/schemas/Dashboard_Public"
         "404":
           description: Dashboard not found
-        "409":
-          description: Conflict - dashboard with this name already exists
   /v1/private/dashboards/delete-batch:
     post:
       tags:
@@ -4713,6 +4713,274 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/policies:
+    get:
+      tags:
+      - Guardrail policies
+      summary: Find guardrail policies
+      description: Find guardrail policies in a workspace
+      operationId: findGuardrailPolicies
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter policies by name (partial match, case insensitive)"
+      - name: names
+        in: query
+        schema:
+          type: string
+          description: "Filter policies by exact names, ignoring case, as a JSON array\
+            \ of names"
+      - name: execution_scope
+        in: query
+        schema:
+          type: string
+          description: Filter policies by execution scope
+          enum:
+          - on_request
+          - global
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Guardrail policy page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailPolicyPage_Public"
+        "400":
+          description: "Bad Request: names is not a JSON array of strings"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "403":
+          description: "Guardrails are not enabled for this deployment, or not enabled\
+            \ for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    post:
+      tags:
+      - Guardrail policies
+      summary: Create guardrail policy
+      description: Create a guardrail policy with its rules in a workspace
+      operationId: createGuardrailPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardrailPolicy_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/guardrails/policies/{id}"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrails\
+            \ are not enabled for this deployment or the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: A policy with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/guardrails/policies/{id}:
+    get:
+      tags:
+      - Guardrail policies
+      summary: Get guardrail policy by id
+      description: Get guardrail policy by id
+      operationId: getGuardrailPolicyById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Guardrail policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailPolicy_Public"
+        "403":
+          description: "Guardrails are not enabled for this deployment, or not enabled\
+            \ for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Guardrail policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    put:
+      tags:
+      - Guardrail policies
+      summary: Update guardrail policy
+      description: "Replace a guardrail policy, rules included: a rule left out of\
+        \ the request is removed"
+      operationId: updateGuardrailPolicy
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardrailPolicy_Write"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrails\
+            \ are not enabled for this deployment or the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Guardrail policy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: A policy with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Guardrail policies
+      summary: Delete guardrail policy
+      description: Delete a guardrail policy and its rules
+      operationId: deleteGuardrailPolicy
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: "The caller lacks the workspace settings permission, or guardrails\
+            \ are not enabled for this deployment or the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/guardrails:
     post:
       tags:
@@ -4728,6 +4996,68 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/guardrails/validations:
+    post:
+      tags:
+      - Guardrails
+      summary: Run guardrail checks on a text
+      description: "Runs the requested checks on the text through the Opik inference\
+        \ decision service and returns a verdict per check. Writes nothing: the SDK\
+        \ reports the results to the guardrails batch endpoint, as before."
+      operationId: validateGuardrails
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardrailsValidationRequest"
+      responses:
+        "200":
+          description: A verdict per check
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardrailsValidationResponse"
+        "400":
+          description: "Bad Request: invalid settings for a check, or checks that\
+            \ need more than 64 questions (each PII class and each topic list is one\
+            \ question)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or unknown credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: "Guardrail checks are not enabled for this deployment, or not\
+            \ enabled for the workspace's organization"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "503":
+          description: Could not verify with the platform that guardrails are enabled
+            for the workspace's organization; retry later
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: "Unprocessable Content: blank text, text over the decision\
+            \ service's limit, or a validations list outside 1 to 32 entries"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/insights-views:
     get:
       tags:
@@ -4867,8 +5197,6 @@ paths:
                 $ref: "#/components/schemas/Dashboard_Public"
         "404":
           description: Insights view not found
-        "409":
-          description: Conflict - insights view with this name already exists
   /v1/private/insights-views/delete-batch:
     post:
       tags:
@@ -14579,9 +14907,6 @@ components:
           maxLength: 120
           minLength: 1
           type: string
-        slug:
-          type: string
-          readOnly: true
         type:
           type: string
           enum:
@@ -19211,6 +19536,213 @@ components:
           type: number
         min:
           type: number
+    GuardrailPolicy:
+      required:
+      - name
+      - rules
+      type: object
+      properties:
+        id:
+          type: string
+          description: "Optional on create, generated when missing, as for prompts\
+            \ and datasets. Ignored on update, where the path names the policy"
+          format: uuid
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: "The SDK names policies by name, so it is unique in the workspace,\
+            \ ignoring case"
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        execution_scope:
+          type: string
+          description: "on_request applies the policy when the SDK names it, global\
+            \ applies it to every guardrail built from stored policies in the workspace.\
+            \ Missing or null means on_request"
+          default: on_request
+          enum:
+          - on_request
+          - global
+        rules:
+          minItems: 1
+          type: array
+          description: At most one rule per type
+          items:
+            $ref: "#/components/schemas/GuardrailPolicyRule"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    GuardrailPolicyRule:
+      required:
+      - config
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
+        config:
+          $ref: "#/components/schemas/JsonNode"
+      description: At most one rule per type
+    GuardrailPolicyRule_Write:
+      required:
+      - config
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
+        config:
+          $ref: "#/components/schemas/JsonNode"
+      description: At most one rule per type
+    GuardrailPolicy_Write:
+      required:
+      - name
+      - rules
+      type: object
+      properties:
+        id:
+          type: string
+          description: "Optional on create, generated when missing, as for prompts\
+            \ and datasets. Ignored on update, where the path names the policy"
+          format: uuid
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: "The SDK names policies by name, so it is unique in the workspace,\
+            \ ignoring case"
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        execution_scope:
+          type: string
+          description: "on_request applies the policy when the SDK names it, global\
+            \ applies it to every guardrail built from stored policies in the workspace.\
+            \ Missing or null means on_request"
+          default: on_request
+          enum:
+          - on_request
+          - global
+        rules:
+          minItems: 1
+          type: array
+          description: At most one rule per type
+          items:
+            $ref: "#/components/schemas/GuardrailPolicyRule_Write"
+    GuardrailPolicyPage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuardrailPolicy_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        sortable_by:
+          type: array
+          items:
+            type: string
+    GuardrailPolicyRule_Public:
+      required:
+      - config
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
+        config:
+          $ref: "#/components/schemas/JsonNode"
+      description: At most one rule per type
+    GuardrailPolicy_Public:
+      required:
+      - name
+      - rules
+      type: object
+      properties:
+        id:
+          type: string
+          description: "Optional on create, generated when missing, as for prompts\
+            \ and datasets. Ignored on update, where the path names the policy"
+          format: uuid
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: "The SDK names policies by name, so it is unique in the workspace,\
+            \ ignoring case"
+        description:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        execution_scope:
+          type: string
+          description: "on_request applies the policy when the SDK names it, global\
+            \ applies it to every guardrail built from stored policies in the workspace.\
+            \ Missing or null means on_request"
+          default: on_request
+          enum:
+          - on_request
+          - global
+        rules:
+          minItems: 1
+          type: array
+          description: At most one rule per type
+          items:
+            $ref: "#/components/schemas/GuardrailPolicyRule_Public"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
     Guardrail:
       required:
       - config
@@ -19321,6 +19853,85 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    GuardrailsValidationResponse:
+      required:
+      - validations
+      type: object
+      properties:
+        validation_passed:
+          type: boolean
+        validations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationResult"
+    ValidationResult:
+      required:
+      - type
+      - validation_config
+      - validation_details
+      type: object
+      properties:
+        validation_passed:
+          type: boolean
+        type:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
+        validation_config:
+          $ref: "#/components/schemas/JsonNode"
+        validation_details:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          type: string
+          description: Set when the check could not run; the entry then passes
+    GuardrailsValidationRequest:
+      required:
+      - text
+      - validations
+      type: object
+      properties:
+        text:
+          minLength: 1
+          type: string
+          description: "The text to check, at most 16384 characters as the decision\
+            \ service counts them: on the text's JSON encoding, so the two quotes\
+            \ count, a quote, backslash or line break counts as 2, and any other control\
+            \ or non-ASCII character as 6 (an emoji as 12). In practice about 16,380\
+            \ characters of English text fit, about 2,730 of text in Cyrillic, Greek,\
+            \ Hebrew, Arabic, Chinese or Japanese, and about 1,365 emoji. A longer\
+            \ text is rejected rather than cut."
+        validations:
+          maxItems: 32
+          minItems: 1
+          type: array
+          description: "The checks to run. Together they must fit in 64 questions\
+            \ to the decision service, asked in up to two calls of 32: each PII class\
+            \ and each topic list is one question, prompt injection is one"
+          items:
+            $ref: "#/components/schemas/ValidationDescriptor"
+    ValidationDescriptor:
+      required:
+      - config
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - TOPIC
+          - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
+        config:
+          $ref: "#/components/schemas/JsonNode"
+      description: "The checks to run. Together they must fit in 64 questions to the\
+        \ decision service, asked in up to two calls of 32: each PII class and each\
+        \ topic list is one question, prompt injection is one"
     EffortParam:
       type: object
       properties:
@@ -22544,6 +23155,7 @@ components:
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
+      - guardrailsValidationsEnabled
       - ollamaProviderEnabled
       - ollieEnabled
       - openaiProviderEnabled
@@ -22567,6 +23179,8 @@ components:
         spanUserDefinedMetricPythonEnabled:
           type: boolean
         guardrailsEnabled:
+          type: boolean
+        guardrailsValidationsEnabled:
           type: boolean
         opikAIEnabled:
           type: boolean

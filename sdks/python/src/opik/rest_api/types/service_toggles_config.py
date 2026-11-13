@@ -18,6 +18,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
         bool, FieldMetadata(alias="spanUserDefinedMetricPythonEnabled")
     ]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
+    guardrails_validations_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="guardrailsValidationsEnabled")
+    ]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]

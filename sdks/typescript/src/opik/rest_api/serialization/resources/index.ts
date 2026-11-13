@@ -30,6 +30,8 @@ export * as experiments from "./experiments/index.js";
 export * from "./experiments/types/index.js";
 export * as feedbackDefinitions from "./feedbackDefinitions/index.js";
 export * from "./feedbackDefinitions/types/index.js";
+export * as guardrailPolicies from "./guardrailPolicies/index.js";
+export * from "./guardrailPolicies/types/index.js";
 export * from "./guardrails/client/requests/index.js";
 export * as guardrails from "./guardrails/index.js";
 export * as llmModels from "./llmModels/index.js";

@@ -13,6 +13,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     spanLlmAsJudgeEnabled: core.serialization.boolean(),
     spanUserDefinedMetricPythonEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
+    guardrailsValidationsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
@@ -46,6 +47,7 @@ export declare namespace ServiceTogglesConfig {
         spanLlmAsJudgeEnabled: boolean;
         spanUserDefinedMetricPythonEnabled: boolean;
         guardrailsEnabled: boolean;
+        guardrailsValidationsEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
