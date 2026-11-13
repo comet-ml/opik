@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.OpenTelemetryMapper;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.mapping.otel.ClaudePlatformMappingRules;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -38,6 +39,7 @@ import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.common.v1.AnyValue;
+import io.opentelemetry.proto.common.v1.InstrumentationScope;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.resource.v1.Resource;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
@@ -1632,6 +1634,94 @@ class OpenTelemetryResourceTest {
 
             var expectedSpans = Stream.concat(Stream.of(firstSpan), laterSpans.stream()).toList();
             assertTraceStoredInProject(expectedSpans, projectName, workspaceName);
+        }
+
+        @Test
+        void claudeManagedAgentsTurnFillsTheTraceOfItsRequest() {
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var projectName = "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
+            var sessionId = "sesn_" + RandomStringUtils.secure().nextAlphanumeric(24);
+            var now = System.currentTimeMillis();
+
+            var request = claudePlatformSpan(otelTraceId, null, "anthropic.sessions.events.send", now - 5_000)
+                    .addAttributes(stringAttribute("anthropic.session.id", sessionId))
+                    .addAttributes(stringAttribute("url.full", "https://api.anthropic.com/v1/sessions/events"))
+                    .build();
+            var turn = claudePlatformSpan(otelTraceId, request.getSpanId(), "anthropic.session.turn", now - 4_000)
+                    .addAttributes(stringAttribute("gen_ai.operation.name", "invoke_agent"))
+                    .addAttributes(stringAttribute("anthropic.session.id", sessionId))
+                    .addAttributes(stringAttribute("gen_ai.conversation.id", "sthr_primary"))
+                    .addAttributes(stringAttribute("gen_ai.input.messages", """
+                            [{"role":"user","parts":[{"type":"text","content":"Which region grew most?"}]}]"""))
+                    .addAttributes(stringAttribute("gen_ai.output.messages", """
+                            [{"role":"assistant","parts":[{"type":"text","content":"Let me check."},
+                              {"type":"tool_call","id":"t1","name":"bash","arguments":{"command":"ls"}}]},
+                             {"role":"tool","parts":[{"type":"tool_call_response","id":"t1","response":[]}]},
+                             {"role":"assistant","parts":[{"type":"text","content":"APAC grew most."}]}]"""))
+                    .build();
+            var tool = claudePlatformSpan(otelTraceId, turn.getSpanId(), "anthropic.tool_use bash", now - 3_000)
+                    .addAttributes(stringAttribute("gen_ai.operation.name", "execute_tool"))
+                    .addAttributes(stringAttribute("gen_ai.tool.call.arguments", "{\"command\":\"ls\"}"))
+                    .addAttributes(stringAttribute("anthropic.tool_result.content",
+                            "[{\"type\":\"text\",\"text\":\"sales.csv\"}]"))
+                    .build();
+
+            var modelRequest = claudePlatformSpan(otelTraceId, turn.getSpanId(), "anthropic.model_request", now - 3_500)
+                    .addAttributes(stringAttribute("gen_ai.operation.name", "chat"))
+                    .addAttributes(intAttribute("gen_ai.usage.input_tokens", 4608))
+                    .addAttributes(intAttribute("gen_ai.usage.cache_read.input_tokens", 4394))
+                    .addAttributes(intAttribute("gen_ai.usage.cache_write.input_tokens", 212))
+                    .build();
+
+            sendClaudePlatformSpans(List.of(request), projectName, workspaceName);
+            sendClaudePlatformSpans(List.of(turn, modelRequest, tool), projectName, workspaceName);
+
+            var traceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId.toByteArray(), now - 5_000);
+            var trace = traceResourceClient.getById(traceId, workspaceName, okApikey);
+            assertThat(trace.threadId()).isEqualTo(sessionId);
+            assertThat(trace.input())
+                    .isEqualTo(JsonUtils.getJsonNodeFromString("{\"input\":\"Which region grew most?\"}"));
+            assertThat(trace.output()).isEqualTo(JsonUtils.getJsonNodeFromString("{\"output\":\"APAC grew most.\"}"));
+            assertThat(trace.metadata().get("url.full").asText()).startsWith("https://api.anthropic.com");
+
+            var spans = spanResourceClient.getByTraceIdAndProject(traceId, projectName, workspaceName, okApikey)
+                    .content();
+            var storedTurn = spans.stream().filter(span -> span.name().equals(turn.getName())).findFirst()
+                    .orElseThrow();
+            assertThat(storedTurn.output().get("messages")).hasSize(3);
+            var storedModelRequest = spans.stream().filter(span -> span.name().equals(modelRequest.getName()))
+                    .findFirst().orElseThrow();
+            assertThat(storedModelRequest.usage()).containsEntry("cache_creation.input_tokens", 212);
+            var storedTool = spans.stream().filter(span -> span.name().equals(tool.getName())).findFirst()
+                    .orElseThrow();
+            assertThat(storedTool.type()).isEqualTo(SpanType.tool);
+            assertThat(storedTool.output()).isEqualTo(
+                    JsonUtils.getJsonNodeFromString("{\"content\":[{\"type\":\"text\",\"text\":\"sales.csv\"}]}"));
+        }
+
+        private Span.Builder claudePlatformSpan(ByteString otelTraceId, ByteString parentSpanId, String name,
+                long startTimeMs) {
+            var span = Span.newBuilder()
+                    .setName(name)
+                    .setTraceId(otelTraceId)
+                    .setSpanId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(8)))
+                    .setStartTimeUnixNano(startTimeMs * 1_000_000L)
+                    .setEndTimeUnixNano((startTimeMs + 500) * 1_000_000L);
+            return parentSpanId == null ? span : span.setParentSpanId(parentSpanId);
+        }
+
+        private void sendClaudePlatformSpans(List<Span> spans, String projectName, String workspaceName) {
+            var request = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .setScope(InstrumentationScope.newBuilder()
+                                            .setName(ClaudePlatformMappingRules.INSTRUMENTATION_SCOPE))
+                                    .addAllSpans(spans)))
+                    .build();
+            sendBatch(Entity.entity(request.toByteArray(), "application/x-protobuf"), "application/x-protobuf",
+                    projectName, workspaceName, okApikey, HttpStatus.SC_OK, null);
         }
 
         private Span topLevelSpan(ByteString otelTraceId, long startTimeMs) {

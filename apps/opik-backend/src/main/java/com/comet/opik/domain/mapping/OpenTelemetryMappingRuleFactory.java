@@ -1,6 +1,7 @@
 package com.comet.opik.domain.mapping;
 
 import com.comet.opik.domain.mapping.otel.ClaudeCodeMappingRules;
+import com.comet.opik.domain.mapping.otel.ClaudePlatformMappingRules;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.LangFuseMappingRules;
@@ -80,6 +81,14 @@ public class OpenTelemetryMappingRuleFactory {
             return findRule(key);
         }
         return ClaudeCodeMappingRules.findRule(key).or(() -> findRule(key));
+    }
+
+    /**
+     * Finds the matching rule for an attribute of a span that the Claude API exports, applying
+     * {@link ClaudePlatformMappingRules} first. Falls back to the global rules.
+     */
+    public static Optional<OpenTelemetryMappingRule> findClaudePlatformRule(String key) {
+        return ClaudePlatformMappingRules.findRule(key).or(() -> findRule(key));
     }
 
     /**
