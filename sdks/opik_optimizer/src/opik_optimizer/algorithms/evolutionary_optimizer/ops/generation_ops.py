@@ -8,6 +8,7 @@ import logging
 
 from deap import tools
 
+from ....core.lineage import prompt_fingerprint
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
 from ....utils import rng as rng_utils
@@ -287,8 +288,7 @@ def run_generation(
     mut_rate = optimizer._get_adaptive_mutation_rate()
     for i, ind in enumerate(offspring):
         if gen_rng.random() < mut_rate:
-            # A crossover child was never evaluated, so keep its parents.
-            parents_of.setdefault(i, [optimizer._individual_to_prompts(ind)])
+            before = optimizer._individual_to_prompts(ind)
             new_ind = mutation_ops.deap_mutation(
                 individual=ind,
                 optimizer=optimizer,
@@ -304,6 +304,12 @@ def run_generation(
                 allowed_roles=getattr(optimizer, "_optimizable_roles", None),
                 rng=mutation_rng,
             )
+            if prompt_fingerprint(
+                optimizer._individual_to_prompts(new_ind)
+            ) == prompt_fingerprint(before):
+                continue
+            # A crossover child was never evaluated, so keep its parents.
+            parents_of.setdefault(i, [before])
             offspring[i] = new_ind
             del offspring[i].fitness.values
 

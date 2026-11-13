@@ -298,8 +298,10 @@ def validate_reasoning_messages(messages: ChatMessages, model: str) -> None:
             litellm.get_model_info(model=model)
         except Exception:
             logger.warning(
-                "Can't tell whether optimizer model %r reads images; sending them anyway.",
+                "LiteLLM has no capability entry for optimizer model %r, so its image "
+                "support is unconfirmed; sending images anyway.",
                 model,
+                exc_info=True,
             )
             return
         raise ValueError(
