@@ -7,11 +7,16 @@ import com.comet.opik.api.automations.AutomationDryRun;
 import com.comet.opik.api.automations.AutomationRun;
 import com.comet.opik.api.automations.AutomationTestRequest;
 import com.comet.opik.api.automations.AutomationUpdate;
+import com.comet.opik.api.automations.CiRunEvent;
+import com.comet.opik.api.automations.GithubIntegration;
 import com.comet.opik.api.automations.Recommendation;
 import com.comet.opik.api.automations.Workflow;
+import com.comet.opik.domain.automations.AutomationEvent;
+import com.comet.opik.domain.automations.AutomationEventPublisher;
 import com.comet.opik.domain.automations.AutomationExecutor;
 import com.comet.opik.domain.automations.AutomationRunService;
 import com.comet.opik.domain.automations.AutomationService;
+import com.comet.opik.domain.automations.GithubIntegrationService;
 import com.comet.opik.domain.automations.RecommendationService;
 import com.comet.opik.domain.automations.WorkflowService;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -28,11 +33,13 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -49,6 +56,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -72,6 +80,8 @@ public class AutomationsResource {
     private final @NonNull WorkflowService workflowService;
     private final @NonNull RecommendationService recommendationService;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull AutomationEventPublisher eventPublisher;
+    private final @NonNull GithubIntegrationService githubIntegrationService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
@@ -245,6 +255,65 @@ public class AutomationsResource {
             throw new jakarta.ws.rs.BadRequestException("project_id is required");
         }
         recommendationService.dismiss(workspaceId(), userName(), projectId, id);
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/events/ci")
+    @Operation(operationId = "automationCiRun", summary = "Tell Opik a CI job ran", description = "Fires ci:run for the project's automations; a GitHub Action calls it with the workspace API key", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted")})
+    @RateLimited
+    public Response ciRun(@NotNull @Valid CiRunEvent event) {
+        checkEnabled();
+        var context = requestContext.get();
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("repository", event.repository());
+        payload.put("commit", event.commit());
+        if (event.branch() != null) {
+            payload.put("branch", event.branch());
+        }
+        if (event.runUrl() != null) {
+            payload.put("run_url", event.runUrl());
+        }
+        eventPublisher.enqueue(AutomationEvent.builder()
+                .workspaceId(context.getWorkspaceId())
+                .workspaceName(Optional.ofNullable(context.getWorkspaceName()).orElse(context.getWorkspaceId()))
+                .userName(context.getUserName())
+                .projectId(event.projectId())
+                .event(Automation.Event.CI_RUN.getValue())
+                .itemId("%s@%s".formatted(event.repository(), event.commit()))
+                .payload(payload)
+                .depth(0)
+                .build()).block();
+        return Response.accepted().build();
+    }
+
+    @PUT
+    @Path("/integrations/github")
+    @Operation(operationId = "setGithubIntegration", summary = "Set the workspace's GitHub token", description = "Stored encrypted and never returned; github.check posts commit statuses with it", responses = {
+            @ApiResponse(responseCode = "204", description = "Saved")})
+    public Response setGithubIntegration(@NotNull @Valid GithubIntegration integration) {
+        checkEnabled();
+        githubIntegrationService.save(workspaceId(), userName(), integration.token());
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/integrations/github")
+    @Operation(operationId = "getGithubIntegration", summary = "Whether the workspace has a GitHub token", description = "Whether the workspace has a GitHub token, and when it was set", responses = {
+            @ApiResponse(responseCode = "200", description = "Status", content = @Content(schema = @Schema(implementation = GithubIntegration.class)))})
+    public Response getGithubIntegration() {
+        checkEnabled();
+        return Response.ok(githubIntegrationService.status(workspaceId())).build();
+    }
+
+    @DELETE
+    @Path("/integrations/github")
+    @Operation(operationId = "deleteGithubIntegration", summary = "Remove the workspace's GitHub token", description = "Remove the workspace's GitHub token", responses = {
+            @ApiResponse(responseCode = "204", description = "Removed")})
+    public Response deleteGithubIntegration() {
+        checkEnabled();
+        githubIntegrationService.delete(workspaceId());
         return Response.noContent().build();
     }
 

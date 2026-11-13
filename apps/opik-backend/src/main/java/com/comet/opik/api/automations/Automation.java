@@ -80,7 +80,13 @@ public record Automation(
             @NotBlank String event,
             @Nullable Scope scope,
             @Nullable @Valid Conditions conditions,
-            @Nullable @Positive Integer perDay) {
+            @Nullable @Positive Integer perDay,
+            @Nullable UUID promptId,
+            @Nullable String promptName,
+            @Nullable UUID testSuiteId,
+            @Nullable String testSuiteName,
+            @Nullable String repository,
+            @Nullable String branch) {
     }
 
     /**
@@ -100,7 +106,33 @@ public record Automation(
             @Nullable UUID datasetId,
             @Nullable String datasetName,
             @Nullable @Valid EvaluatorItem assertion,
+            @Nullable String model,
+            @Nullable UUID promptId,
+            @Nullable String promptName,
+            @Nullable String repository,
+            @Nullable String context,
+            @Nullable String url,
+            @Nullable NotifyKind kind,
+            @Nullable String message,
             @Nullable @Valid StepConditions onlyIf) {
+    }
+
+    @Getter
+    @RequiredArgsConstructor
+    public enum NotifyKind {
+        WEBHOOK("webhook"),
+        SLACK("slack");
+
+        @JsonValue
+        private final String value;
+
+        @JsonCreator
+        public static NotifyKind fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(kind -> kind.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown notify kind '%s'".formatted(value)));
+        }
     }
 
     /** Daily ceilings. Hitting one pauses the automation until midnight UTC. */
@@ -191,9 +223,17 @@ public record Automation(
     @Getter
     @RequiredArgsConstructor
     public enum Event {
-        FEEDBACK_SCORE_CREATED("feedback_score:created");
+        FEEDBACK_SCORE_CREATED("feedback_score:created"),
+        PROMPT_COMMITTED("prompt:committed"),
+        EXPERIMENT_FINISHED("experiment:finished"),
+        CI_RUN("ci:run");
 
         private final String value;
+
+        /** Score events roll up by the hour; every other event is one firing, one run. */
+        public boolean isScoreEvent() {
+            return this == FEEDBACK_SCORE_CREATED;
+        }
 
         public static @Nullable Event fromString(String value) {
             return Arrays.stream(values())
@@ -203,15 +243,23 @@ public record Automation(
         }
     }
 
-    /** The steps an automation can run. Only the ones with a handler today are listed. */
+    /**
+     * The steps an automation can run, each with the outputs a later step's {@code only_if} may name.
+     * Only the ones with a handler today are listed.
+     */
     @Getter
     @RequiredArgsConstructor
     public enum StepType {
-        ANNOTATION_QUEUE_ADD("annotation_queue.add"),
-        TEST_SUITE_ADD("test_suite.add"),
-        DATASET_ADD("dataset.add");
+        ANNOTATION_QUEUE_ADD("annotation_queue.add", java.util.Set.of()),
+        TEST_SUITE_ADD("test_suite.add", java.util.Set.of()),
+        DATASET_ADD("dataset.add", java.util.Set.of()),
+        TEST_SUITE_RUN("test_suite.run",
+                java.util.Set.of("pass_rate", "baseline_pass_rate", "regressions", "experiment_id")),
+        GITHUB_CHECK("github.check", java.util.Set.of()),
+        NOTIFY("notify", java.util.Set.of());
 
         private final String value;
+        private final java.util.Set<String> outputs;
 
         public static @Nullable StepType fromString(String value) {
             return Arrays.stream(values())

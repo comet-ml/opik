@@ -36,6 +36,12 @@ public record AutomationRun(
         BigDecimal costUsd,
         @Nullable UUID parentRunId,
         List<UUID> childRunIds,
+        @Nullable String itemId,
+        @Nullable JsonNode triggerPayload,
+        @Nullable JsonNode outputs,
+        @Nullable Integer resumeStep,
+        @Nullable String waitingOn,
+        int depth,
         @Nullable String lastError,
         Instant windowStart,
         Instant windowEnd,
@@ -72,6 +78,7 @@ public record AutomationRun(
     @Getter
     @RequiredArgsConstructor
     public enum Status {
+        PENDING("pending"),
         DONE("done"),
         PARTIAL("partial"),
         FAILED("failed");

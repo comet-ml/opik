@@ -2,6 +2,9 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ScoreSource;
@@ -29,13 +32,16 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.automations.WorkflowService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -101,7 +107,15 @@ class AutomationsResourceTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .redisUrl(REDIS.getRedisURI())
+                        // github.check posts to the stub instead of GitHub.
+                        .customConfigs(List.of(new TestDropwizardAppExtensionUtils.CustomConfig(
+                                "automationEvents.githubApiUrl", wireMock.runtimeInfo().getHttpBaseUrl())))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -111,6 +125,8 @@ class AutomationsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private TraceResourceClient traceResourceClient;
+    private PromptResourceClient promptResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -120,6 +136,8 @@ class AutomationsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
+        this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
     }
 
@@ -297,7 +315,7 @@ class AutomationsResourceTest {
         var project = newProject();
 
         var workflows = workflows(project.id());
-        assertThat(workflows).extracting(Workflow::recipe).containsExactly("collect", "align");
+        assertThat(workflows).extracting(Workflow::recipe).containsExactly("collect", "gate", "align");
         assertThat(workflows).allMatch(workflow -> workflow.state() == Workflow.State.OFF);
         assertThat(workflows.getFirst().overrides().testSuiteName()).isEqualTo("Regression · " + project.name());
 
@@ -362,7 +380,8 @@ class AutomationsResourceTest {
         assertThat(review.triggers().getFirst().perDay()).isEqualTo(3);
         assertThat(review.steps().getFirst().annotationQueueName()).isEqualTo(WorkflowService.REVIEW_QUEUE_NAME);
         assertThat(review.steps().getFirst().annotationQueueId()).isNotNull();
-        assertThat(workflows(project.id()).get(1).state()).isEqualTo(Workflow.State.ON);
+        assertThat(workflows(project.id()).stream().filter(w -> w.recipe().equals("align")).findFirst().orElseThrow()
+                .state()).isEqualTo(Workflow.State.ON);
 
         var custom = create(byQueue);
         assertThat(custom.steps().getFirst().annotationQueueId())
@@ -413,6 +432,135 @@ class AutomationsResourceTest {
         assertThat(remaining).extracting(Recommendation::id)
                 .doesNotContainAnyElementsOf(after.stream().map(Recommendation::id).toList());
         assertThat(remaining.getFirst().reason()).contains("dismissed");
+    }
+
+    @Test
+    @DisplayName("Gate is blocked until the suite has cases, and refuses until the prompt and model are named")
+    void gateIsBlockedThenRefusesUntilNamed() {
+        var project = newProject();
+        var blocked = workflows(project.id()).stream().filter(w -> w.recipe().equals("gate")).findFirst().orElseThrow();
+        assertThat(blocked.prerequisitesMet()).isFalse();
+        assertThat(blocked.blockedReason()).contains("no cases");
+
+        var suiteId = newSuite(project.id(), "Regression · " + project.name());
+        addSuiteCase(suiteId);
+        var ready = workflows(project.id()).stream().filter(w -> w.recipe().equals("gate")).findFirst().orElseThrow();
+        assertThat(ready.prerequisitesMet()).isTrue();
+        assertThat(ready.blockedReason()).contains("prompt_name");
+
+        try (var response = request(PATH.formatted(baseURI) + "/workflows/enable", Map.of())
+                .post(Entity.json(Workflow.EnableRequest.builder().recipe("gate").projectId(project.id()).build()))) {
+            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst())
+                    .startsWith("prompt_name_required: ");
+        }
+        try (var response = request(PATH.formatted(baseURI) + "/workflows/enable", Map.of())
+                .post(Entity.json(Workflow.EnableRequest.builder().recipe("gate").projectId(project.id())
+                        .overrides(Workflow.Overrides.builder().promptName("support").build()).build()))) {
+            assertThat(response.readEntity(ErrorMessage.class).errors().getFirst()).startsWith("model_required: ");
+        }
+    }
+
+    @Test
+    @DisplayName("A CI run fires Gate: the suite is run, a GitHub check is posted, and the run records every step")
+    void ciRunFiresGateAndPostsTheCheck() {
+        var project = newProject();
+        var suiteId = newSuite(project.id(), "Regression · " + project.name());
+        addSuiteCase(suiteId);
+        var prompt = com.comet.opik.api.Prompt.builder().name("support-" + UUID.randomUUID()).build();
+        promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+        promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+        try (var response = request(PATH.formatted(baseURI) + "/integrations/github", Map.of())
+                .put(Entity.json(Map.of("token", "ghp_test")))) {
+            assertThat(response.getStatus()).isEqualTo(204);
+        }
+        wireMock.server().stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(
+                com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching("/repos/acme/demo/statuses/.*"))
+                .willReturn(com.github.tomakehurst.wiremock.client.WireMock.created()));
+        wireMock.server().stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(
+                com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo("/hook"))
+                .willReturn(com.github.tomakehurst.wiremock.client.WireMock.ok()));
+
+        var enabled = enable(Workflow.EnableRequest.builder().recipe("gate").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().promptName(prompt.name()).model("gpt-4o-mini")
+                        .repository("acme/demo").notifyUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/hook").build())
+                .build(), false);
+        var gate = enabled.created().getFirst();
+        assertThat(enabled.setup().githubAction()).contains("/v1/private/automations/events/ci");
+        assertThat(gate.steps()).extracting(Automation.Step::type)
+                .containsExactly("test_suite.run", "github.check", "notify");
+        assertThat(gate.steps().get(2).onlyIf()).isNotNull();
+
+        try (var response = request(PATH.formatted(baseURI) + "/events/ci", Map.of())
+                .post(Entity.json(com.comet.opik.api.automations.CiRunEvent.builder().projectId(project.id())
+                        .repository("acme/demo").branch("main").commit("abc123").build()))) {
+            assertThat(response.getStatus()).isEqualTo(202);
+        }
+
+        // The suite run starts and the run parks until the experiment finishes. No judge can run here, so
+        // the test finishes the experiment the way an SDK run would, through the API.
+        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> assertThat(runs(gate.id()).content())
+                        .anySatisfy(run -> assertThat(run.waitingOn()).startsWith("experiment:finished:")));
+        var pending = runs(gate.id()).content().getFirst();
+        assertThat(pending.status()).isEqualTo(AutomationRun.Status.PENDING);
+        assertThat(pending.outputs().get("run.experiment_id").asText()).isNotBlank();
+        UUID experimentId = UUID.fromString(pending.waitingOn().substring("experiment:finished:".length()));
+        experimentResourceClient.finishExperiments(Set.of(experimentId), API_KEY, TEST_WORKSPACE);
+
+        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> wireMock.server().verify(
+                        com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
+                                com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo(
+                                        "/repos/acme/demo/statuses/abc123"))));
+        var runs = runs(gate.id());
+        assertThat(runs.total()).isEqualTo(1);
+        var run = runs.content().getFirst();
+        assertThat(run.kind()).isEqualTo(AutomationRun.Kind.SINGLE);
+        assertThat(run.status()).isEqualTo(AutomationRun.Status.DONE);
+        assertThat(run.trigger().event()).isEqualTo("ci:run");
+        assertThat(run.itemId()).isEqualTo("acme/demo@abc123");
+        assertThat(run.waitingOn()).isNull();
+        assertThat(run.outputs().get("run.regressions").asLong()).isZero();
+        assertThat(run.steps()).extracting(AutomationRun.Step::id).containsExactly("run", "check", "notify");
+        assertThat(run.steps().get(0).done()).isEqualTo(1);
+        assertThat(run.steps().get(1).done()).isEqualTo(1);
+        // Nothing regressed (or the suite could not run here), so the notify did not hold.
+        assertThat(run.steps().get(2).skipped()).isEqualTo(1);
+        wireMock.server().verify(0, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
+                com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo("/hook")));
+    }
+
+    @Test
+    @DisplayName("Saving a prompt version fires Gate too, without a commit to check")
+    void promptCommitFiresGate() {
+        var project = newProject();
+        var suiteId = newSuite(project.id(), "Regression · " + project.name());
+        addSuiteCase(suiteId);
+        var prompt = com.comet.opik.api.Prompt.builder().name("support-" + UUID.randomUUID()).build();
+        promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+        promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+        var gate = enable(Workflow.EnableRequest.builder().recipe("gate").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().promptName(prompt.name()).model("gpt-4o-mini").build())
+                .build(), false).created().getFirst();
+        assertThat(gate.steps()).extracting(Automation.Step::type).containsExactly("test_suite.run");
+
+        promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+
+        Awaitility.await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> assertThat(runs(gate.id()).total()).isEqualTo(1));
+        var run = runs(gate.id()).content().getFirst();
+        assertThat(run.trigger().event()).isEqualTo("prompt:committed");
+        assertThat(run.status()).isEqualTo(AutomationRun.Status.PENDING);
+        assertThat(run.waitingOn()).startsWith("experiment:finished:");
+        assertThat(run.depth()).isZero();
+        assertThat(run.parentRunId()).isNull();
+    }
+
+    private void addSuiteCase(UUID suiteId) {
+        datasetResourceClient.createDatasetItems(DatasetItemBatch.builder().datasetId(suiteId)
+                .items(List.of(DatasetItem.builder().data(Map.of("input", JsonUtils.valueToTree("hello")))
+                        .source(DatasetItemSource.MANUAL).build()))
+                .build(), TEST_WORKSPACE, API_KEY);
     }
 
     private Automation definition(UUID projectId, UUID suiteId) {

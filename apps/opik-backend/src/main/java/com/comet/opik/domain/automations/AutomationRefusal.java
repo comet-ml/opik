@@ -25,6 +25,9 @@ public class AutomationRefusal {
     public static final String DUPLICATE_STEP_ID = "duplicate_step_id";
     public static final String UNKNOWN_RECIPE = "unknown_recipe";
     public static final String SCORE_NAME_REQUIRED = "score_name_required";
+    public static final String INTEGRATION_REQUIRED = "integration_required";
+    public static final String PROMPT_NAME_REQUIRED = "prompt_name_required";
+    public static final String MODEL_REQUIRED = "model_required";
 
     public static ClientErrorException refuse(String code, String message) {
         return new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)

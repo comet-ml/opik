@@ -19,6 +19,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.PromptService;
 import com.comet.opik.domain.evaluators.AutomationRuleAutomationDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleAutomationModel;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
@@ -44,7 +45,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +57,7 @@ import java.util.stream.Collectors;
 import static com.comet.opik.domain.automations.AutomationRefusal.CONDITION_UNKNOWN_OUTPUT;
 import static com.comet.opik.domain.automations.AutomationRefusal.CONDITION_UNKNOWN_STEP;
 import static com.comet.opik.domain.automations.AutomationRefusal.DUPLICATE_STEP_ID;
+import static com.comet.opik.domain.automations.AutomationRefusal.INTEGRATION_REQUIRED;
 import static com.comet.opik.domain.automations.AutomationRefusal.STEP_SCOPE_MISMATCH;
 import static com.comet.opik.domain.automations.AutomationRefusal.TARGET_NOT_FOUND;
 import static com.comet.opik.domain.automations.AutomationRefusal.UNKNOWN_EVENT;
@@ -95,6 +96,8 @@ public class AutomationService {
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull AnnotationQueueConditionEvaluator evaluator;
     private final @NonNull AutomationRunService runService;
+    private final @NonNull PromptService promptService;
+    private final @NonNull GithubIntegrationService githubIntegrationService;
 
     public Automation get(@NonNull String workspaceId, @NonNull UUID id) {
         var model = transactionTemplate.inTransaction(READ_ONLY, handle -> {
@@ -139,6 +142,16 @@ public class AutomationService {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             try (var rows = handle.attach(AutomationRuleAutomationDAO.class)
                     .findEnabledByProjects(workspaceId, List.copyOf(projectIds), event.getValue())) {
+                return rows.map(this::toApi).toList();
+            }
+        });
+    }
+
+    /** Enabled automations anywhere in the workspace listening to the event: for events that name no project. */
+    public List<Automation> findEnabledByWorkspace(@NonNull String workspaceId, @NonNull Automation.Event event) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            try (var rows = handle.attach(AutomationRuleAutomationDAO.class)
+                    .findEnabledByWorkspace(workspaceId, event.getValue())) {
                 return rows.map(this::toApi).toList();
             }
         });
@@ -229,8 +242,19 @@ public class AutomationService {
             }
         }
 
+        // Score triggers roll up over traces and feed the add-steps; every other event is one firing and
+        // feeds the run-steps. One automation listens to one family.
+        boolean scoreTriggers = triggers.stream()
+                .allMatch(
+                        trigger -> Objects.requireNonNull(Automation.Event.fromString(trigger.event())).isScoreEvent());
+        boolean eventTriggers = triggers.stream()
+                .noneMatch(
+                        trigger -> Objects.requireNonNull(Automation.Event.fromString(trigger.event())).isScoreEvent());
+        if (!scoreTriggers && !eventTriggers) {
+            throw refuse(STEP_SCOPE_MISMATCH, "an automation listens to either score events or other events, not both");
+        }
+
         var seen = new HashSet<String>();
-        var stepTypes = new ArrayList<Automation.StepType>();
         for (var step : definition.steps()) {
             if (!seen.add(step.id())) {
                 throw refuse(DUPLICATE_STEP_ID, "step id '%s' is used twice".formatted(step.id()));
@@ -240,18 +264,39 @@ public class AutomationService {
                 throw refuse(UNKNOWN_STEP, "'%s' is not a step; known: %s".formatted(step.type(),
                         names(Automation.StepType.values())));
             }
-            stepTypes.add(type);
+            boolean addStep = switch (type) {
+                case ANNOTATION_QUEUE_ADD, TEST_SUITE_ADD, DATASET_ADD -> true;
+                case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY -> false;
+            };
+            if (addStep != scoreTriggers) {
+                throw refuse(STEP_SCOPE_MISMATCH, addStep
+                        ? "step '%s' (%s) adds a scored trace, which only a feedback_score:created trigger carries"
+                                .formatted(step.id(), step.type())
+                        : "step '%s' (%s) runs once per event, not on a batch of scored traces".formatted(step.id(),
+                                step.type()));
+            }
+            if (type == Automation.StepType.TEST_SUITE_RUN && step.model() == null) {
+                throw refuse(TARGET_NOT_FOUND,
+                        "step '%s' needs the model to run the suite with (model)".formatted(step.id()));
+            }
+            if (type == Automation.StepType.NOTIFY && step.url() == null) {
+                throw refuse(TARGET_NOT_FOUND, "step '%s' needs a url to notify".formatted(step.id()));
+            }
             validateOnlyIf(step, definition.steps());
         }
 
         var scopes = triggers.stream().map(Automation.Trigger::scope).collect(Collectors.toSet());
 
-        return Flux.fromIterable(definition.steps())
-                .concatMap(step -> resolveStep(workspaceId, definition.projectId(), step, scopes))
+        return Flux.fromIterable(triggers)
+                .concatMap(trigger -> resolveTrigger(workspaceId, definition.projectId(), trigger))
                 .collectList()
-                .map(steps -> definition.toBuilder()
-                        .triggers(triggers)
-                        .steps(steps)
+                .flatMap(resolvedTriggers -> Flux.fromIterable(definition.steps())
+                        .concatMap(step -> resolveStep(workspaceId, definition.projectId(), step, scopes))
+                        .collectList()
+                        .map(steps -> Map.entry(resolvedTriggers, steps)))
+                .map(resolved -> definition.toBuilder()
+                        .triggers(resolved.getKey())
+                        .steps(resolved.getValue())
                         .enabled(Optional.ofNullable(definition.enabled()).orElse(true))
                         .createdVia(Optional.ofNullable(definition.createdVia()).orElse(Automation.CreatedVia.API))
                         .build());
@@ -335,25 +380,70 @@ public class AutomationService {
         if (step.onlyIf() == null) {
             return;
         }
-        // No step declares an output yet, so every reference is to an unknown step or an unknown output;
-        // the two codes still tell the caller which half of "<step>.<output>" is wrong.
         var earlier = steps.stream().takeWhile(other -> !other.id().equals(step.id()))
-                .map(Automation.Step::id).collect(Collectors.toSet());
+                .collect(Collectors.toMap(Automation.Step::id, other -> other));
         for (var group : step.onlyIf().groups()) {
             for (var condition : group.conditions()) {
                 String reference = condition.stepOutput();
                 int dot = reference.indexOf('.');
                 String stepId = dot > 0 ? reference.substring(0, dot) : reference;
-                if (!earlier.contains(stepId)) {
+                String output = dot > 0 ? reference.substring(dot + 1) : "";
+                var named = earlier.get(stepId);
+                if (named == null) {
                     throw refuse(CONDITION_UNKNOWN_STEP,
                             "only_if on step '%s' names '%s', which is not an earlier step".formatted(step.id(),
                                     stepId));
                 }
-                throw refuse(CONDITION_UNKNOWN_OUTPUT,
-                        "only_if on step '%s' names '%s', but step '%s' has no outputs".formatted(step.id(),
-                                reference, stepId));
+                var outputs = Optional.ofNullable(Automation.StepType.fromString(named.type()))
+                        .map(Automation.StepType::getOutputs).orElse(Set.of());
+                if (!outputs.contains(output)) {
+                    throw refuse(CONDITION_UNKNOWN_OUTPUT,
+                            "only_if on step '%s' names '%s', but step '%s' outputs %s".formatted(step.id(),
+                                    reference, stepId, outputs.isEmpty() ? "nothing" : outputs));
+                }
             }
         }
+    }
+
+    /** Resolves what an event trigger names: a prompt or a suite by name becomes an id, and both come back. */
+    private Mono<Automation.Trigger> resolveTrigger(String workspaceId, UUID projectId, Automation.Trigger trigger) {
+        return switch (Objects.requireNonNull(Automation.Event.fromString(trigger.event()))) {
+            case FEEDBACK_SCORE_CREATED, CI_RUN -> Mono.just(trigger);
+            case PROMPT_COMMITTED -> Mono.fromCallable(() -> {
+                if (trigger.promptId() == null && trigger.promptName() == null) {
+                    return trigger;
+                }
+                var prompt = trigger.promptId() != null
+                        ? promptService.findById(workspaceId, trigger.promptId())
+                        : promptService.findByName(workspaceId, trigger.promptName());
+                if (prompt == null) {
+                    throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found".formatted(
+                            trigger.promptName() != null ? trigger.promptName() : trigger.promptId()));
+                }
+                return trigger.toBuilder().promptId(prompt.id()).promptName(prompt.name()).build();
+            }).subscribeOn(Schedulers.boundedElastic());
+            case EXPERIMENT_FINISHED -> Mono.fromCallable(() -> {
+                if (trigger.testSuiteId() == null && trigger.testSuiteName() == null) {
+                    return trigger;
+                }
+                var suite = findDataset(workspaceId, projectId, trigger.testSuiteId(), trigger.testSuiteName(),
+                        DatasetType.TEST_SUITE, "test suite");
+                return trigger.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name()).build();
+            }).subscribeOn(Schedulers.boundedElastic());
+        };
+    }
+
+    private Dataset findDataset(String workspaceId, UUID projectId, UUID id, String name, DatasetType type,
+            String noun) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return id != null
+                    ? dao.findById(id, workspaceId)
+                    : dao.findByName(workspaceId, name, projectId).or(() -> dao.findByName(workspaceId, name, null));
+        })
+                .filter(found -> typeOf(found) == type)
+                .orElseThrow(() -> refuse(TARGET_NOT_FOUND, "%s '%s' not found".formatted(noun,
+                        name != null ? name : id)));
     }
 
     private Mono<Automation.Step> resolveStep(String workspaceId, UUID projectId, Automation.Step step,
@@ -364,6 +454,34 @@ public class AutomationService {
                     DatasetType.TEST_SUITE, scopes)).subscribeOn(Schedulers.boundedElastic());
             case DATASET_ADD -> Mono.fromCallable(() -> resolveDataset(workspaceId, projectId, step,
                     DatasetType.DATASET, scopes)).subscribeOn(Schedulers.boundedElastic());
+            case TEST_SUITE_RUN -> Mono.fromCallable(() -> {
+                if (step.testSuiteId() == null && step.testSuiteName() == null) {
+                    throw refuse(TARGET_NOT_FOUND, "step '%s' needs a test suite id or name".formatted(step.id()));
+                }
+                var suite = findDataset(workspaceId, projectId, step.testSuiteId(), step.testSuiteName(),
+                        DatasetType.TEST_SUITE, "test suite");
+                var resolved = step.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name());
+                if (step.promptId() != null || step.promptName() != null) {
+                    var prompt = step.promptId() != null
+                            ? promptService.findById(workspaceId, step.promptId())
+                            : promptService.findByName(workspaceId, step.promptName());
+                    if (prompt == null) {
+                        throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found".formatted(
+                                step.promptName() != null ? step.promptName() : step.promptId()));
+                    }
+                    resolved.promptId(prompt.id()).promptName(prompt.name());
+                }
+                return resolved.build();
+            }).subscribeOn(Schedulers.boundedElastic());
+            case GITHUB_CHECK -> Mono.fromCallable(() -> {
+                if (githubIntegrationService.status(workspaceId).configured() != Boolean.TRUE) {
+                    throw refuse(INTEGRATION_REQUIRED,
+                            "step '%s' posts to GitHub, and this workspace has no GitHub token: set one with "
+                                    + "PUT /v1/private/automations/integrations/github".formatted(step.id()));
+                }
+                return step;
+            }).subscribeOn(Schedulers.boundedElastic());
+            case NOTIFY -> Mono.just(step);
         };
     }
 

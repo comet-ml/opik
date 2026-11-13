@@ -1479,3 +1479,16 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
+
+automationEvents:
+  streamName: 'automation-events'
+  consumerGroupName: 'automation-events-consumers'
+  consumerBatchSize: 10
+  poolingInterval: 1s
+  longPollingDuration: 5s
+  maxRetries: 3
+  claimIntervalRatio: 10
+  pendingMessageDuration: 5m
+  streamMaxLen: 100000
+  streamTrimLimit: 1000
+  githubApiUrl: https://api.github.com

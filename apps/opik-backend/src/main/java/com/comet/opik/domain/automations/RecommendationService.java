@@ -76,6 +76,9 @@ public class RecommendationService {
                     long casesWritten = tuple.getT2();
                     var collect = byRecipe(workflows, WorkflowService.COLLECT);
                     var align = byRecipe(workflows, WorkflowService.ALIGN);
+                    var gate = byRecipe(workflows, WorkflowService.GATE);
+                    boolean gates = running.stream().anyMatch(automation -> hasStep(automation,
+                            Automation.StepType.TEST_SUITE_RUN));
                     var out = new ArrayList<Recommendation>();
 
                     String judges = collect.availableScoreNames().isEmpty()
@@ -87,6 +90,22 @@ public class RecommendationService {
                                 "Nothing adds production failures to a test suite. " + judges,
                                 Map.of("available_score_names", collect.availableScoreNames(),
                                         "has_judge", hasJudge)));
+                    }
+                    // Gate comes once something fills the suite and nothing runs it on new versions.
+                    Recommendation gateRecommendation = gates
+                            ? null
+                            : setup(workspaceId, projectId, gate,
+                                    (casesWritten > 0
+                                            ? "Automation added %d cases to '%s' in %d days. ".formatted(casesWritten,
+                                                    gate.overrides().testSuiteName(),
+                                                    AutomationService.ESTIMATE_WINDOW_DAYS)
+                                            : "'%s' has cases. ".formatted(gate.overrides().testSuiteName()))
+                                            + "Nothing runs the suite on new versions: name the prompt and the model, "
+                                            + "and Gate tests every version saved or CI run.",
+                                    Map.of("cases_written_14d", casesWritten, "suite",
+                                            gate.overrides().testSuiteName()));
+                    if (gateRecommendation != null && gate.prerequisitesMet()) {
+                        out.add(gateRecommendation);
                     }
                     // Align ranks after Collect, and last of all while no judge decides anything here.
                     var alignRecommendation = samples
@@ -109,6 +128,10 @@ public class RecommendationService {
                     }
                     if (alignRecommendation != null && !hasJudge) {
                         out.add(alignRecommendation);
+                    }
+                    // Setup steps still blocked come last, so the agent can say what unblocks them.
+                    if (gateRecommendation != null && !gate.prerequisitesMet()) {
+                        out.add(gateRecommendation.toBuilder().blockedUntil(gate.blockedReason()).build());
                     }
                     return out.stream().filter(recommendation -> !dismissed.contains(recommendation.id())).toList();
                 })

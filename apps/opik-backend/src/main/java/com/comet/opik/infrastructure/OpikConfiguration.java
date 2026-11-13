@@ -110,6 +110,9 @@ public class OpikConfiguration extends JobConfiguration {
     private AnnotationQueueRoutingConfig annotationQueueRouting = new AnnotationQueueRoutingConfig();
 
     @Valid @NotNull @JsonProperty
+    private AutomationEventsConfig automationEvents = new AutomationEventsConfig();
+
+    @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
     @Valid @NotNull @JsonProperty

@@ -2,6 +2,7 @@ package com.comet.opik.domain.automations;
 
 import com.comet.opik.api.automations.Automation;
 import com.comet.opik.api.automations.AutomationRun;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -74,6 +75,59 @@ public class AutomationRunService {
         });
     }
 
+    /** A new single run, pending until its steps finish or it waits on something. */
+    public UUID startSingle(@NonNull String workspaceId, @NonNull Automation automation, @NonNull String event,
+            @NonNull String itemId, @NonNull Map<String, Object> triggerPayload, @Nullable UUID parentRunId,
+            int depth) {
+        Instant now = Instant.now();
+        UUID id = UUID.randomUUID();
+        var run = AutomationRunDAO.RunRow.builder()
+                .id(id).workspaceId(workspaceId).automationId(automation.id()).projectId(automation.projectId())
+                .kind(AutomationRun.Kind.SINGLE.getValue()).status(AutomationRun.Status.PENDING.getValue())
+                .windowStart(now).windowEnd(now)
+                .triggerEvent(event).triggerScope(Automation.Scope.TRACE.getValue())
+                .itemId(itemId).triggerPayload(JsonUtils.writeValueAsString(triggerPayload))
+                .depth(depth).fired(1).matched(1).sampled(1)
+                .costUsd(BigDecimal.ZERO).parentRunId(parentRunId)
+                .startedAt(now).finishedAt(now)
+                .build();
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(AutomationRunDAO.class).insertSingle(run);
+            return null;
+        });
+        return id;
+    }
+
+    public void finishSingle(@NonNull String workspaceId, @NonNull UUID runId, @NonNull AutomationRun.Status status,
+            @NonNull Map<String, Object> outputs, @NonNull List<StepOutcome> steps, @Nullable Integer resumeStep,
+            @Nullable String waitingOn, @Nullable String lastError) {
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(AutomationRunDAO.class);
+            dao.updateSingle(workspaceId, runId, status.getValue(), JsonUtils.writeValueAsString(outputs), resumeStep,
+                    waitingOn, lastError, Instant.now());
+            int position = 0;
+            for (var step : steps) {
+                dao.upsertStep(AutomationRunDAO.StepRow.builder()
+                        .runId(runId).stepId(step.id()).stepType(step.type()).position(position++)
+                        .done(step.done()).skipped(step.skipped()).failed(step.failed()).lastError(step.lastError())
+                        .build());
+            }
+            return null;
+        });
+    }
+
+    /** The runs waiting on an object, with their stored outputs. */
+    public List<AutomationRun> findWaiting(@NonNull String workspaceId, @NonNull String waitingOn) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRunDAO.class);
+            var runs = dao.findWaiting(workspaceId, waitingOn);
+            var steps = runs.isEmpty()
+                    ? List.<AutomationRunDAO.StepRow>of()
+                    : dao.findStepsByRunIds(runs.stream().map(AutomationRunDAO.RunRow::id).toList());
+            return toApi(runs, steps);
+        });
+    }
+
     public AutomationRun.AutomationRunPage find(@NonNull String workspaceId, @Nullable UUID projectId,
             @Nullable UUID automationId, @Nullable AutomationRun.Status status, @Nullable Instant since,
             @Nullable UUID parentRunId, int page, int size) {
@@ -141,10 +195,18 @@ public class AutomationRunService {
                             .lastError(step.lastError())
                             .build())
                     .toList();
+            boolean single = AutomationRun.Kind.SINGLE.getValue().equals(run.kind());
             return AutomationRun.builder()
                     .id(run.id()).automationId(run.automationId()).projectId(run.projectId())
-                    .kind(AutomationRun.Kind.ROLLUP)
-                    .status(statusOf(runSteps))
+                    .kind(single ? AutomationRun.Kind.SINGLE : AutomationRun.Kind.ROLLUP)
+                    .status(single ? AutomationRun.Status.fromString(run.status()) : statusOf(runSteps))
+                    .itemId(run.itemId())
+                    .triggerPayload(
+                            run.triggerPayload() == null ? null : JsonUtils.getJsonNodeFromString(run.triggerPayload()))
+                    .outputs(run.stepOutputs() == null ? null : JsonUtils.getJsonNodeFromString(run.stepOutputs()))
+                    .resumeStep(run.resumeStep())
+                    .waitingOn(run.waitingOn())
+                    .depth(run.depth())
                     .trigger(AutomationRun.Trigger.builder()
                             .event(run.triggerEvent()).scope(Automation.Scope.fromString(run.triggerScope()))
                             .fired(run.fired()).matched(run.matched()).sampled(run.sampled())

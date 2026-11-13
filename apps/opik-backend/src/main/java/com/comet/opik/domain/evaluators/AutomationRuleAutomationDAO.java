@@ -107,6 +107,14 @@ public interface AutomationRuleAutomationDAO {
             @BindList("projectIds") List<UUID> projectIds,
             @Bind("event") String event);
 
+    @SqlQuery(SELECT + """
+            WHERE rule.workspace_id = :workspaceId
+              AND rule.enabled = TRUE
+              AND JSON_SEARCH(a.triggers, 'one', :event, NULL, '$[*].event') IS NOT NULL
+            """)
+    Stream<AutomationRuleAutomationModel> findEnabledByWorkspace(@Bind("workspaceId") String workspaceId,
+            @Bind("event") String event);
+
     @SqlQuery("""
             SELECT EXISTS (
                 SELECT 1

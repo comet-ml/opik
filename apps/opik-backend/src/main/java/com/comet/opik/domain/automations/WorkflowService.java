@@ -5,6 +5,7 @@ import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.annotationqueue.ConditionGroup;
 import com.comet.opik.api.annotationqueue.Conditions;
 import com.comet.opik.api.annotationqueue.ScoreCondition;
@@ -15,9 +16,13 @@ import com.comet.opik.api.automations.AutomationUpdate;
 import com.comet.opik.api.automations.Workflow;
 import com.comet.opik.domain.AnnotationQueueService;
 import com.comet.opik.domain.DatasetDAO;
+import com.comet.opik.domain.DatasetItemSearchCriteria;
+import com.comet.opik.domain.DatasetItemService;
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -30,12 +35,17 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.domain.automations.AutomationRefusal.MODEL_REQUIRED;
+import static com.comet.opik.domain.automations.AutomationRefusal.PROMPT_NAME_REQUIRED;
 import static com.comet.opik.domain.automations.AutomationRefusal.SCORE_NAME_REQUIRED;
 import static com.comet.opik.domain.automations.AutomationRefusal.UNKNOWN_RECIPE;
 import static com.comet.opik.domain.automations.AutomationRefusal.refuse;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
@@ -53,6 +63,7 @@ public class WorkflowService {
 
     public static final String COLLECT = "collect";
     public static final String ALIGN = "align";
+    public static final String GATE = "gate";
     public static final int VERSION = 1;
     /** Stands in for the judge in a recipe shown before one was chosen; an enable never stores it. */
     public static final String SCORE_NAME_PLACEHOLDER = "<score_name>";
@@ -60,7 +71,20 @@ public class WorkflowService {
     public static final int DEFAULT_PER_DAY = 10;
     public static final int DEFAULT_MAX_ITEMS_PER_DAY = 200;
     public static final String REVIEW_QUEUE_NAME = "Judge review";
-    private static final List<String> RECIPES = List.of(COLLECT, ALIGN);
+    private static final List<String> RECIPES = List.of(COLLECT, GATE, ALIGN);
+    static final String GITHUB_ACTION = """
+            # Opik Gate: tell Opik this commit ran, so the regression suite runs and a check comes back.
+            - name: Opik gate
+              env:
+                OPIK_API_KEY: ${{ secrets.OPIK_API_KEY }}
+                OPIK_WORKSPACE: %s
+                OPIK_URL: %s
+              run: |
+                curl -sS -X POST "$OPIK_URL/v1/private/automations/events/ci" \\
+                  -H "Authorization: $OPIK_API_KEY" -H "Comet-Workspace: $OPIK_WORKSPACE" \\
+                  -H "Content-Type: application/json" \\
+                  -d "{\\"project_id\\":\\"%s\\",\\"repository\\":\\"${{ github.repository }}\\",\\"branch\\":\\"${{ github.ref_name }}\\",\\"commit\\":\\"${{ github.sha }}\\",\\"run_url\\":\\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\\"}"
+            """;
 
     private final @NonNull AutomationService automationService;
     private final @NonNull ProjectService projectService;
@@ -68,6 +92,7 @@ public class WorkflowService {
     private final @NonNull AnnotationQueueService annotationQueueService;
     private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
     private final @NonNull TransactionTemplate transactionTemplate;
+    private final @NonNull DatasetItemService datasetItemService;
 
     @Builder(toBuilder = true)
     record Recipe(String id, String name, String description, Workflow.Overrides overrides) {
@@ -95,7 +120,15 @@ public class WorkflowService {
     private Mono<Workflow.Enabled> enable(String workspaceId, String userName, Workflow.EnableRequest request,
             boolean dryRun, Project project, List<Automation> existing, List<String> scoreNames) {
         var recipe = recipe(request.recipe(), project, request.overrides());
-        if (recipe.overrides().scoreName() == null) {
+        if (GATE.equals(recipe.id())) {
+            if (recipe.overrides().promptName() == null) {
+                throw refuse(PROMPT_NAME_REQUIRED, "name the prompt Gate tests in overrides.prompt_name");
+            }
+            if (recipe.overrides().model() == null) {
+                throw refuse(MODEL_REQUIRED,
+                        "name the model the suite runs with in overrides.model (for example gpt-4o-mini)");
+            }
+        } else if (recipe.overrides().scoreName() == null) {
             // The judge is the user's call, never the recipe's: an agent has to ask which score to act on.
             throw refuse(SCORE_NAME_REQUIRED, scoreNames.isEmpty()
                     ? "name the judge score in overrides.score_name; this project writes no scores yet, so take a judge live first"
@@ -140,8 +173,18 @@ public class WorkflowService {
                                 .created(automations)
                                 .wouldCreate(toCreate.stream().map(Automation::name).toList())
                                 .estimate(estimate)
+                                .setup(GATE.equals(recipe.id())
+                                        ? Workflow.Setup.builder().githubAction(githubAction(workspaceId, project))
+                                                .build()
+                                        : null)
                                 .warnings(List.of())
                                 .build()));
+    }
+
+    /** The step a GitHub workflow adds so CI runs fire Gate. The URL and workspace are the caller's to fill. */
+    static String githubAction(String workspaceId, Project project) {
+        return GITHUB_ACTION.formatted("<your workspace>", "<your Opik URL, e.g. https://www.comet.com/opik/api>",
+                project.id());
     }
 
     public Workflow.Disabled disable(@NonNull String workspaceId, @NonNull String userName,
@@ -177,22 +220,48 @@ public class WorkflowService {
 
         // Before a judge is chosen there is nothing to replay, so the estimate stays at zero: the dry run
         // of the enable, with the chosen score, is where the numbers come from.
-        Mono<AutomationDryRun.Estimate> estimate = overrides.scoreName() == null
+        boolean gate = GATE.equals(recipe.id());
+        Mono<AutomationDryRun.Estimate> estimate = gate || overrides.scoreName() == null
                 ? Mono.just(emptyEstimate())
                 : estimate(workspaceId, project.id(), templates(recipe(recipe.id(), project, overrides), project));
+        boolean suiteHasCases = gate && suiteHasCases(workspaceId, project, overrides.testSuiteName());
+        String blockedReason = gate
+                ? (suiteHasCases
+                        ? (state == Workflow.State.OFF && (overrides.promptName() == null || overrides.model() == null)
+                                ? "name the prompt to test (overrides.prompt_name) and the model to run with (overrides.model)"
+                                : null)
+                        : "the suite has no cases yet: turn Collect on first")
+                : (overrides.scoreName() == null && state == Workflow.State.OFF
+                        ? "choose the judge score (overrides.score_name) from available_score_names"
+                        : null);
 
         return estimate
                 .map(figures -> Workflow.builder()
                         .recipe(recipe.id()).version(VERSION).name(recipe.name()).description(recipe.description())
-                        .state(state).prerequisitesMet(true)
-                        .blockedReason(overrides.scoreName() == null && state == Workflow.State.OFF
-                                ? "choose the judge score (overrides.score_name) from available_score_names"
-                                : null)
+                        .state(state).prerequisitesMet(!gate || suiteHasCases)
+                        .blockedReason(blockedReason)
                         .automations(matched)
                         .estimate(figures)
                         .overrides(overrides)
                         .availableScoreNames(scoreNames)
                         .build());
+    }
+
+    /** Gate's prerequisite: the suite exists and holds at least one case. */
+    private boolean suiteHasCases(String workspaceId, Project project, String suiteName) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            return dao.findByName(workspaceId, suiteName, project.id())
+                    .or(() -> dao.findByName(workspaceId, suiteName, null));
+        }).map(suite -> datasetItemService.getItems(1, 1, DatasetItemSearchCriteria.builder()
+                .datasetId(suite.id()).experimentIds(Set.of()).entityType(EntityType.TRACE)
+                .filters(List.of()).sortingFields(List.of()).truncate(true).build())
+                .map(page -> page.total() > 0)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER)
+                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
+                .blockOptional().orElse(false))
+                .orElse(false);
     }
 
     private static AutomationDryRun.Estimate emptyEstimate() {
@@ -218,6 +287,14 @@ public class WorkflowService {
                         ? step.annotationQueueName()
                         : defaults.annotationQueueName())
                 .perDay(trigger.perDay() != null ? trigger.perDay() : defaults.perDay())
+                .promptName(automation.steps().stream().map(Automation.Step::promptName).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.promptName()))
+                .model(automation.steps().stream().map(Automation.Step::model).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.model()))
+                .repository(automation.triggers().stream().map(Automation.Trigger::repository).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.repository()))
+                .notifyUrl(automation.steps().stream().map(Automation.Step::url).filter(Objects::nonNull)
+                        .findFirst().orElse(defaults.notifyUrl()))
                 .maxItemsPerDay(defaults.maxItemsPerDay() == null
                         ? null
                         : Optional.ofNullable(automation.limits()).map(Automation.Limits::maxItemsPerDay)
@@ -264,6 +341,16 @@ public class WorkflowService {
                             .maxItemsPerDay(
                                     Optional.ofNullable(given.maxItemsPerDay()).orElse(DEFAULT_MAX_ITEMS_PER_DAY))
                             .build());
+            case GATE -> new Recipe(GATE, "Gate",
+                    "A prompt version is saved, or CI runs: run the regression suite on it, post a GitHub check, "
+                            + "and notify when there are regressions.",
+                    Workflow.Overrides.builder()
+                            .promptName(given.promptName())
+                            .model(given.model())
+                            .testSuiteName(Optional.ofNullable(given.testSuiteName()).orElse(suiteName(project)))
+                            .repository(given.repository())
+                            .notifyUrl(given.notifyUrl())
+                            .build());
             case ALIGN -> new Recipe(ALIGN, "Align",
                     "A judge score lands on a production trace: send a few a day, at random, to a review queue "
                             + "so people can check the judge.",
@@ -297,6 +384,23 @@ public class WorkflowService {
                             .build()))
                     .limits(Automation.Limits.builder().maxItemsPerDay(overrides.maxItemsPerDay()).build())
                     .build());
+            case GATE -> List.of(Automation.builder()
+                    .projectId(project.id()).name("Test new versions of %s".formatted(
+                            Optional.ofNullable(overrides.promptName()).orElse("the prompt")))
+                    .enabled(true)
+                    .recipe(Automation.Recipe.builder().id(GATE).version(VERSION).build())
+                    .triggers(List.of(
+                            Automation.Trigger.builder()
+                                    .event(Automation.Event.PROMPT_COMMITTED.getValue())
+                                    .promptName(overrides.promptName())
+                                    .build(),
+                            Automation.Trigger.builder()
+                                    .event(Automation.Event.CI_RUN.getValue())
+                                    .repository(overrides.repository())
+                                    .build()))
+                    .steps(gateSteps(overrides))
+                    .limits(Automation.Limits.builder().maxRunsPerDay(50).build())
+                    .build());
             case ALIGN -> List.of(Automation.builder()
                     .projectId(project.id()).name("Random %s traces to review".formatted(overrides.scoreName()))
                     .enabled(true)
@@ -317,6 +421,41 @@ public class WorkflowService {
         };
     }
 
+    /** Run the suite, post the check, and notify only when something regressed. */
+    private static List<Automation.Step> gateSteps(Workflow.Overrides overrides) {
+        var steps = new java.util.ArrayList<Automation.Step>();
+        steps.add(Automation.Step.builder()
+                .id("run").type(Automation.StepType.TEST_SUITE_RUN.getValue())
+                .testSuiteName(overrides.testSuiteName())
+                .promptName(overrides.promptName())
+                .model(overrides.model())
+                .build());
+        if (overrides.repository() != null) {
+            steps.add(Automation.Step.builder()
+                    .id("check").type(Automation.StepType.GITHUB_CHECK.getValue())
+                    .repository(overrides.repository())
+                    .context("opik/regression-suite")
+                    .build());
+        }
+        if (overrides.notifyUrl() != null) {
+            steps.add(Automation.Step.builder()
+                    .id("notify").type(Automation.StepType.NOTIFY.getValue())
+                    .url(overrides.notifyUrl())
+                    .kind(overrides.notifyUrl().contains("hooks.slack.com")
+                            ? Automation.NotifyKind.SLACK
+                            : Automation.NotifyKind.WEBHOOK)
+                    .onlyIf(Automation.StepConditions.builder().groups(List.of(
+                            Automation.StepConditions.Group.builder().conditions(List.of(
+                                    Automation.StepConditions.Condition.builder()
+                                            .stepOutput("run.regressions")
+                                            .operator(ScoreConditionOperator.GREATER_THAN).value(0.0).build()))
+                                    .build()))
+                            .build())
+                    .build());
+        }
+        return steps;
+    }
+
     /** Creates the suite or queue a template names when the project has none yet. */
     private Mono<Void> ensureTargets(String workspaceId, String userName, Project project,
             List<Automation> templates) {
@@ -328,6 +467,7 @@ public class WorkflowService {
                     case DATASET_ADD -> Mono.fromRunnable(() -> ensureDataset(workspaceId, userName, project,
                             step.datasetName(), DatasetType.DATASET)).subscribeOn(Schedulers.boundedElastic());
                     case ANNOTATION_QUEUE_ADD -> ensureQueue(project, step.annotationQueueName());
+                    case TEST_SUITE_RUN, GITHUB_CHECK, NOTIFY -> Mono.empty();
                     case null -> Mono.empty();
                 })
                 .then();

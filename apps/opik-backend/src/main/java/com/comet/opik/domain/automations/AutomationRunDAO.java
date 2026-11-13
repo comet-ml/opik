@@ -31,10 +31,12 @@ import java.util.UUID;
 public interface AutomationRunDAO {
 
     @Builder(toBuilder = true)
-    record RunRow(UUID id, String workspaceId, UUID automationId, UUID projectId, Instant windowStart,
-            Instant windowEnd, String triggerEvent, String triggerScope, long fired, long matched, long sampled,
-            BigDecimal costUsd, @Nullable UUID parentRunId, @Nullable String lastError, Instant startedAt,
-            Instant finishedAt) {
+    record RunRow(UUID id, String workspaceId, UUID automationId, UUID projectId, String kind, String status,
+            Instant windowStart, Instant windowEnd, String triggerEvent, String triggerScope,
+            @Nullable String itemId, @Nullable String triggerPayload, @Nullable String stepOutputs,
+            @Nullable Integer resumeStep, @Nullable String waitingOn, int depth, long fired, long matched,
+            long sampled, BigDecimal costUsd, @Nullable UUID parentRunId, @Nullable String lastError,
+            Instant startedAt, Instant finishedAt) {
     }
 
     @Builder(toBuilder = true)
@@ -57,11 +59,11 @@ public interface AutomationRunDAO {
 
     @SqlUpdate("""
             INSERT INTO automation_runs
-                (id, workspace_id, automation_id, project_id, window_start, window_end, trigger_event,
+                (id, workspace_id, automation_id, project_id, kind, status, window_start, window_end, trigger_event,
                  trigger_scope, fired, matched, sampled, cost_usd, parent_run_id, last_error, started_at, finished_at)
-            VALUES (:run.id, :run.workspaceId, :run.automationId, :run.projectId, :run.windowStart, :run.windowEnd,
-                    :run.triggerEvent, :run.triggerScope, :run.fired, :run.matched, :run.sampled, :run.costUsd,
-                    :run.parentRunId, :run.lastError, :run.startedAt, :run.finishedAt) AS new
+            VALUES (:run.id, :run.workspaceId, :run.automationId, :run.projectId, 'rollup', 'done', :run.windowStart,
+                    :run.windowEnd, :run.triggerEvent, :run.triggerScope, :run.fired, :run.matched, :run.sampled,
+                    :run.costUsd, :run.parentRunId, :run.lastError, :run.startedAt, :run.finishedAt) AS new
             ON DUPLICATE KEY UPDATE
                 fired = automation_runs.fired + new.fired,
                 matched = automation_runs.matched + new.matched,
@@ -83,6 +85,34 @@ public interface AutomationRunDAO {
                 last_error = COALESCE(new.last_error, automation_run_steps.last_error)
             """)
     void upsertStep(@BindMethods("step") StepRow step);
+
+    /** One row per firing, for event triggers. The window is the instant it started. */
+    @SqlUpdate("""
+            INSERT INTO automation_runs
+                (id, workspace_id, automation_id, project_id, kind, status, window_start, window_end, trigger_event,
+                 trigger_scope, item_id, trigger_payload, step_outputs, resume_step, waiting_on, depth,
+                 fired, matched, sampled, cost_usd, parent_run_id, last_error, started_at, finished_at)
+            VALUES (:run.id, :run.workspaceId, :run.automationId, :run.projectId, 'single', :run.status,
+                    :run.windowStart, :run.windowEnd, :run.triggerEvent, :run.triggerScope, :run.itemId,
+                    :run.triggerPayload, :run.stepOutputs, :run.resumeStep, :run.waitingOn, :run.depth,
+                    :run.fired, :run.matched, :run.sampled, :run.costUsd, :run.parentRunId, :run.lastError,
+                    :run.startedAt, :run.finishedAt)
+            """)
+    void insertSingle(@BindMethods("run") RunRow run);
+
+    @SqlUpdate("""
+            UPDATE automation_runs
+            SET status = :status, step_outputs = :stepOutputs, resume_step = :resumeStep, waiting_on = :waitingOn,
+                last_error = :lastError, finished_at = :finishedAt
+            WHERE id = :id AND workspace_id = :workspaceId
+            """)
+    void updateSingle(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id, @Bind("status") String status,
+            @Bind("stepOutputs") String stepOutputs, @Bind("resumeStep") Integer resumeStep,
+            @Bind("waitingOn") String waitingOn, @Bind("lastError") String lastError,
+            @Bind("finishedAt") Instant finishedAt);
+
+    @SqlQuery("SELECT * FROM automation_runs WHERE workspace_id = :workspaceId AND waiting_on = :waitingOn")
+    List<RunRow> findWaiting(@Bind("workspaceId") String workspaceId, @Bind("waitingOn") String waitingOn);
 
     @SqlQuery("SELECT * FROM automation_runs " + FILTERS + " ORDER BY window_start DESC LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine

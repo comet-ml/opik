@@ -104,6 +104,15 @@ public interface PromptService {
 
     PromptVersion getVersionById(UUID id);
 
+    /** For callers outside a request, such as automations: the workspace is explicit. */
+    PromptVersion getVersionById(String workspaceId, UUID id);
+
+    PromptVersion getLatestVersion(String workspaceId, UUID promptId);
+
+    Prompt findByName(String workspaceId, String name);
+
+    Prompt findById(String workspaceId, UUID id);
+
     PromptVersion getVersionByNumber(UUID promptId, String versionNumber);
 
     int updateVersions(PromptVersionBatchUpdate update);
@@ -817,6 +826,25 @@ class PromptServiceImpl implements PromptService {
                 .subscribeOn(Schedulers.boundedElastic()));
     }
 
+    @Override
+    public PromptVersion getLatestVersion(@NonNull String workspaceId, @NonNull UUID promptId) {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(PromptVersionDAO.class).findLatestVersion(workspaceId, promptId));
+    }
+
+    @Override
+    public Prompt findById(@NonNull String workspaceId, @NonNull UUID id) {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(PromptDAO.class).findById(id, workspaceId));
+    }
+
+    @Override
+    public Prompt findByName(@NonNull String workspaceId, @NonNull String name) {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(PromptDAO.class).findByNameWithoutProject(name, workspaceId));
+    }
+
+    @Override
     public PromptVersion getVersionById(@NonNull String workspaceId, @NonNull UUID id) {
         PromptVersion promptVersion = transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);

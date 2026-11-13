@@ -1438,6 +1438,43 @@ annotationQueueRouting:
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: ${ANNOTATION_QUEUE_ROUTING_STREAM_TRIM_LIMIT:-1000}
 
+automationEvents:
+  # Mechanics only. Whether automations run at all is serviceToggles.automationsEnabled.
+  # Default: automation-events
+  # Description: Redis stream name for non-score automation events (prompt committed, experiment finished, CI run)
+  streamName: ${AUTOMATION_EVENTS_STREAM_NAME:-'automation-events'}
+  # Default: automation-events-consumers
+  # Description: Consumer group name for automation events
+  consumerGroupName: ${AUTOMATION_EVENTS_CONSUMER_GROUP_NAME:-'automation-events-consumers'}
+  # Default: 10
+  # Description: Messages read per tick and processed concurrently. One message is one firing, and processing it
+  #   may start an experiment or call a webhook, so this stays in the range the other external-call consumers use.
+  consumerBatchSize: ${AUTOMATION_EVENTS_CONSUMER_BATCH_SIZE:-10}
+  # Default: 1s
+  # Description: Interval between stream reads
+  poolingInterval: ${AUTOMATION_EVENTS_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Long polling duration for stream reads
+  longPollingDuration: ${AUTOMATION_EVENTS_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Retries per message before it is dropped
+  maxRetries: ${AUTOMATION_EVENTS_MAX_RETRIES:-3}
+  # Default: 10
+  # Description: Every Nth tick claims pending messages from dead consumers
+  claimIntervalRatio: ${AUTOMATION_EVENTS_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 5m
+  # Description: How long a message may stay pending before another consumer claims it
+  pendingMessageDuration: ${AUTOMATION_EVENTS_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 100000
+  # Description: Approximate maximum stream length before trimming
+  streamMaxLen: ${AUTOMATION_EVENTS_STREAM_MAX_LEN:-100000}
+  # Default: 1000
+  # Description: Entries trimmed per add once over the maximum
+  streamTrimLimit: ${AUTOMATION_EVENTS_STREAM_TRIM_LIMIT:-1000}
+  # Default: https://api.github.com
+  # Description: GitHub API base the github.check step posts commit statuses to
+  githubApiUrl: ${AUTOMATION_EVENTS_GITHUB_API_URL:-https://api.github.com}
+
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
   # Default: true

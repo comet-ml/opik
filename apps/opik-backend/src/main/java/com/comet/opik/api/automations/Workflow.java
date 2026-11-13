@@ -46,7 +46,11 @@ public record Workflow(
             @Nullable String testSuiteName,
             @Nullable String annotationQueueName,
             @Nullable Integer perDay,
-            @Nullable Integer maxItemsPerDay) {
+            @Nullable Integer maxItemsPerDay,
+            @Nullable String promptName,
+            @Nullable String model,
+            @Nullable String repository,
+            @Nullable String notifyUrl) {
     }
 
     @Getter
