@@ -97,8 +97,8 @@ def _canonical_image(value: Mapping[str, Any]) -> dict[str, Any] | None:
             source = source.model_dump()
         if not isinstance(source, (str, Mapping)):
             return None
-        image_url = (
-            {"url": source} if isinstance(source, str) else copy.deepcopy(source)
+        image_url: dict[str, Any] = (
+            {"url": source} if isinstance(source, str) else copy.deepcopy(dict(source))
         )
         if value.get("detail") is not None:
             image_url["detail"] = value["detail"]
