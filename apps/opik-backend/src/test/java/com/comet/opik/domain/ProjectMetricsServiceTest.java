@@ -9,6 +9,7 @@ import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +40,8 @@ class ProjectMetricsServiceTest {
     private ProjectMetricsDAO dao;
     @Mock
     private ProjectService projectService;
+    @Mock
+    private TopicReadService topicReadService;
 
     @ParameterizedTest
     @EnumSource(value = MetricType.class, names = {"COST", "SPAN_COST"})
@@ -61,6 +65,7 @@ class ProjectMetricsServiceTest {
         results.add(result("__others__",
                 List.of(point(first, "0.300000000000000003"), point(second, "0.3"), point(third, "0.4"))));
         when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
+        when(topicReadService.filterScope(any(), eq(projectId))).thenReturn(Mono.just(Optional.empty()));
         if (metricType == MetricType.SPAN_COST) {
             when(dao.getSpanCost(eq(projectId), any())).thenReturn(Mono.just(entries));
         } else {
@@ -71,7 +76,8 @@ class ProjectMetricsServiceTest {
                 .breakdown(BreakdownConfig.builder().field(BreakdownField.NAME).build()).build();
         var expected = ProjectMetricResponse.<Number>builder().projectId(projectId).metricType(metricType)
                 .interval(TimeInterval.HOURLY).results(results).build();
-        var service = new ProjectMetricsServiceImpl(dao, projectService, new InstantToUUIDMapper());
+        var service = new ProjectMetricsServiceImpl(dao, projectService, new InstantToUUIDMapper(),
+                topicReadService);
         assertThat(service.getProjectMetrics(projectId, request).block()).usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class).isEqualTo(expected);
     }

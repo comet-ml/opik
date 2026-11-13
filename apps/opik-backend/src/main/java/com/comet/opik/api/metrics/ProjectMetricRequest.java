@@ -5,6 +5,7 @@ import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.validation.BreakdownConfigValidation;
+import com.comet.opik.domain.topics.TopicFilterScope;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -33,7 +34,8 @@ public record ProjectMetricRequest(
         List<@NotNull @Valid TraceThreadFilter> threadFilters,
         @Valid BreakdownConfig breakdown,
         @JsonIgnore UUID uuidFromTime,
-        @JsonIgnore UUID uuidToTime) {
+        @JsonIgnore UUID uuidToTime,
+        @JsonIgnore TopicFilterScope topicScope) {
 
     /**
      * Check if breakdown is enabled for this request.

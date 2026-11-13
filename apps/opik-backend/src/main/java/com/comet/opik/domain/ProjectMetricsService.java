@@ -6,6 +6,8 @@ import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.domain.topics.TopicReadService;
+import com.comet.opik.domain.topics.TopicsReadErrors;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -40,11 +42,13 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull ProjectService projectService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
+    private final @NonNull TopicReadService topicReadService;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
             @NonNull ProjectService projectService,
-            @NonNull InstantToUUIDMapper instantToUUIDMapper) {
+            @NonNull InstantToUUIDMapper instantToUUIDMapper,
+            @NonNull TopicReadService topicReadService) {
         projectMetricHandler = Map.ofEntries(
                 Map.entry(MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount),
                 Map.entry(MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount),
@@ -69,6 +73,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         this.projectService = projectService;
         this.instantToUUIDMapper = instantToUUIDMapper;
         this.projectMetricsDAO = projectMetricsDAO;
+        this.topicReadService = topicReadService;
     }
 
     @Override
@@ -80,8 +85,10 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         // No requested end means no upper id bound, so far-future ids count like they do in the list
                         .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
                         .build())))
-                .flatMap(enrichedRequest -> getMetricHandler(enrichedRequest.metricType())
-                        .apply(projectId, enrichedRequest)
+                .flatMap(enrichedRequest -> topicReadService.filterScope(enrichedRequest.traceFilters(), projectId)
+                        .map(topicScope -> enrichedRequest.toBuilder().topicScope(topicScope.orElse(null)).build()))
+                .flatMap(enrichedRequest -> TopicsReadErrors.busyOnFilterGuard(enrichedRequest.topicScope() != null,
+                        getMetricHandler(enrichedRequest.metricType()).apply(projectId, enrichedRequest))
                         .map(dataPoints -> buildResponse(projectId, enrichedRequest, dataPoints)));
     }
 
