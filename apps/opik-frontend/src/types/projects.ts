@@ -5,6 +5,7 @@ import {
 } from "@/types/shared";
 
 export const DEFAULT_PROJECT_NAME = "Default Project";
+export const PROJECT_NAME_MAX_LENGTH = 150;
 
 export interface Project {
   id: string;

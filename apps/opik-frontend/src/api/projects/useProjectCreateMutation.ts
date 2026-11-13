@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import get from "lodash/get";
 import api, {
   PROJECT_STATISTICS_KEY,
   PROJECTS_KEY,
@@ -9,6 +8,7 @@ import { Project } from "@/types/projects";
 import { AxiosError, HttpStatusCode } from "axios";
 import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type UseProjectCreateMutationParams = {
   project: Partial<Project>;
@@ -41,7 +41,7 @@ const useProjectCreateMutation = ({
       const message =
         error.response?.status === HttpStatusCode.Conflict
           ? "Project with this name already exists"
-          : get(error, ["response", "data", "message"], error.message);
+          : getApiErrorMessage(error);
 
       toast({
         title: "Error",

@@ -18,7 +18,8 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
  * mean anything. A spec that only asserted the 409 string would pass against a
  * hook that returned it unconditionally.
  *
- * The non-409 vector is an over-long name. It is asserted to have failed, and
+ * The non-409 vector is a whitespace-only name, refused by bean validation
+ * with a 422 whose detail is in `errors`, not `message`. It is asserted to have failed, and
  * to have failed with something other than a 409, before its message is
  * compared — a vector that started succeeding (or that started answering 409)
  * would otherwise quietly stop testing the fall-through while still passing.
@@ -28,7 +29,9 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
  * wording would make a copy-edit in the backend look like a regression in the
  * frontend.
  *
- * Both halves also assert no project was created, which neither toast says.
+ * The duplicate half also asserts no project was created, which the toast does
+ * not say. The whitespace half instead asserts the dialog stayed open with the
+ * typed name, so a refused name is not lost.
  *
  * The shared mutation hook is used by every create-project entry point; this
  * drives the Projects page's own dialog, which is the one a user reaches first.
@@ -44,19 +47,17 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
 const DUPLICATE_NAME_MESSAGE = 'Project with this name already exists';
 
 /**
- * Long enough that the write fails on the name alone.
- *
- * The API declares no `@Size` on a project name, so the limit is the column's;
- * 400 characters clears it comfortably. The test asserts the failure rather
- * than assuming it, and says why if it stops failing.
+ * Non-empty, so the dialog enables Create, yet blank to the backend's
+ * `@NotBlank`. An over-long name no longer works here: the input caps it at the
+ * backend's 150, so it would be accepted.
  */
-const OVERLONG_NAME_LENGTH = 400;
+const BLANK_NAME = '   ';
 
 test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects'] }, () => {
   test(
     'a duplicate name shows the translated message, while a different failure keeps the server\'s own',
     { tag: ['@cap:projects.create-project'] },
-    async ({ project, backendClient, testNamespace, page }) => {
+    async ({ project, backendClient, page }) => {
       const projects = new ProjectsPage(page);
       // Installed before the first navigation: the recorder is an init script,
       // and Radix dismisses a toast on its own 5s timer — a point-in-time
@@ -123,12 +124,11 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         ).toEqual([project.id]);
       });
 
-      const overlongName = `${testNamespace}-${'x'.repeat(OVERLONG_NAME_LENGTH)}`;
       const other = await test.step('Submit a name that fails for another reason', async () => {
         await page.reload();
         await projects.waitForReady();
         await projects.openCreateProjectDialog();
-        return projects.submitNewProject(overlongName);
+        return projects.submitNewProject(BLANK_NAME);
       });
 
       await test.step('It failed, and not as a conflict', async () => {
@@ -138,7 +138,7 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         // nothing about the fall-through.
         expect(
           other.status,
-          `an ${OVERLONG_NAME_LENGTH}-character name must still be refused — if the backend now ` +
+          'a whitespace-only name must still be refused — if the backend now ' +
             'accepts it, this vector no longer tests the non-conflict branch and needs replacing',
         ).toBeGreaterThanOrEqual(400);
         expect(
@@ -167,11 +167,11 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         ).not.toContain(DUPLICATE_NAME_MESSAGE);
       });
 
-      await test.step('The second failure created nothing either', async () => {
-        expect(
-          await backendClient.listProjectsWithPrefix(overlongName),
-          'the refused over-long name left no project behind',
-        ).toEqual([]);
+      await test.step('The dialog stayed open with the typed name', async () => {
+        await expect(
+          projects.createProjectDialog.getByLabel('Name', { exact: true }),
+          'a refused name stays in the dialog for the user to fix',
+        ).toHaveValue(BLANK_NAME);
       });
     },
   );
