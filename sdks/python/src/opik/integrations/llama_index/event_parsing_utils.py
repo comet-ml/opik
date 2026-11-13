@@ -87,9 +87,9 @@ def get_span_output_from_event(
 
     if (
         event_type == llama_index_schema.CBEventType.CHUNKING
-        and llama_index_schema.EventPayload.CHUNKS in payload
+        and llama_index_schema.EventPayload.CHUNKS in payload_copy
     ):
-        chunks = payload.pop(llama_index_schema.EventPayload.CHUNKS)
+        chunks = payload_copy.pop(llama_index_schema.EventPayload.CHUNKS)
         payload_copy["num_chunks"] = len(chunks)
 
     if llama_index_schema.EventPayload.COMPLETION in payload:
