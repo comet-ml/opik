@@ -302,6 +302,7 @@ class AutomationsResourceTest {
         assertThat(workflows.getFirst().overrides().testSuiteName()).isEqualTo("Regression · " + project.name());
 
         var request = Workflow.EnableRequest.builder().recipe("collect").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().scoreName("quality").threshold(0.3).build())
                 .createdVia(Automation.CreatedVia.MCP).build();
         var preview = enable(request, true);
         assertThat(preview.created()).isEmpty();
@@ -315,7 +316,11 @@ class AutomationsResourceTest {
         assertThat(created.steps().getFirst().testSuiteName()).isEqualTo("Regression · " + project.name());
         assertThat(created.steps().getFirst().testSuiteId()).isNotNull();
         assertThat(created.limits().maxItemsPerDay()).isEqualTo(WorkflowService.DEFAULT_MAX_ITEMS_PER_DAY);
-        assertThat(workflows(project.id()).getFirst().state()).isEqualTo(Workflow.State.ON);
+        var on = workflows(project.id()).getFirst();
+        assertThat(on.state()).isEqualTo(Workflow.State.ON);
+        assertThat(on.overrides().scoreName()).isEqualTo("quality");
+        assertThat(on.overrides().threshold()).isEqualTo(0.3);
+        assertThat(on.automations().getFirst().name()).isEqualTo("Low quality traces to the suite");
         assertThat(enable(request, false).created()).isEmpty();
         assertThat(list(Map.of("project_id", project.id(), "recipe", "collect")).total()).isEqualTo(1);
 
@@ -326,6 +331,33 @@ class AutomationsResourceTest {
             assertThat(response.readEntity(Workflow.Disabled.class).disabled()).containsExactly(created.id());
         }
         assertThat(workflows(project.id()).getFirst().state()).isEqualTo(Workflow.State.OFF);
+    }
+
+    @Test
+    @DisplayName("Align creates its review queue, and a custom automation can then name that queue")
+    void alignCreatesTheQueueACustomAutomationCanName() {
+        var project = newProject();
+        var byQueue = Automation.builder()
+                .projectId(project.id()).name("Low scores to review")
+                .triggers(List.of(trigger()))
+                .steps(List.of(Automation.Step.builder().id("review").type("annotation_queue.add")
+                        .annotationQueueName(WorkflowService.REVIEW_QUEUE_NAME).build()))
+                .build();
+        assertRefused(post(byQueue), "target_not_found");
+
+        var enabled = enable(Workflow.EnableRequest.builder().recipe("align").projectId(project.id())
+                .overrides(Workflow.Overrides.builder().perDay(3).build()).build(), false);
+        var review = enabled.created().getFirst();
+        assertThat(review.recipe().id()).isEqualTo("align");
+        assertThat(review.triggers().getFirst().perDay()).isEqualTo(3);
+        assertThat(review.steps().getFirst().annotationQueueName()).isEqualTo(WorkflowService.REVIEW_QUEUE_NAME);
+        assertThat(review.steps().getFirst().annotationQueueId()).isNotNull();
+        assertThat(workflows(project.id()).get(1).state()).isEqualTo(Workflow.State.ON);
+
+        var custom = create(byQueue);
+        assertThat(custom.steps().getFirst().annotationQueueId())
+                .isEqualTo(review.steps().getFirst().annotationQueueId());
+        assertThat(custom.recipe()).isNull();
     }
 
     @Test

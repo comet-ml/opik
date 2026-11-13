@@ -375,7 +375,9 @@ public class AutomationService {
                     .filter(found -> projectId.equals(found.projectId()));
         } else if (step.annotationQueueName() != null) {
             queue = annotationQueueDAO
-                    .find(1, 100, AnnotationQueueSearchCriteria.builder().name(step.annotationQueueName()).build())
+                    .find(1, 100,
+                            AnnotationQueueSearchCriteria.builder().name(step.annotationQueueName()).filters(List.of())
+                                    .sortingFields(List.of()).build())
                     .flatMapIterable(AnnotationQueue.AnnotationQueuePage::content)
                     .filter(found -> projectId.equals(found.projectId())
                             && step.annotationQueueName().equals(found.name()))

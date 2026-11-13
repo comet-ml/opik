@@ -77,7 +77,7 @@ public class WorkflowService {
 
         return feedbackScoreDAO.getTraceFeedbackScoreNames(projectId)
                 .flatMap(scoreNames -> Flux.fromIterable(RECIPES)
-                        .concatMap(recipe -> describe(workspaceId, project, recipe, null, existing, scoreNames))
+                        .concatMap(recipe -> describe(workspaceId, project, recipe, existing, scoreNames))
                         .collectList());
     }
 
@@ -85,7 +85,14 @@ public class WorkflowService {
             @NonNull Workflow.EnableRequest request, boolean dryRun) {
         Project project = projectService.get(request.projectId(), workspaceId);
         List<Automation> existing = automationService.findByProject(workspaceId, project.id(), null);
-        var recipe = recipe(request.recipe(), project, request.overrides());
+        return feedbackScoreDAO.getTraceFeedbackScoreNames(project.id())
+                .flatMap(scoreNames -> enable(workspaceId, userName, request, dryRun, project, existing,
+                        scoreNames));
+    }
+
+    private Mono<Workflow.Enabled> enable(String workspaceId, String userName, Workflow.EnableRequest request,
+            boolean dryRun, Project project, List<Automation> existing, List<String> scoreNames) {
+        var recipe = recipe(request.recipe(), project, request.overrides(), scoreNames);
         var templates = templates(recipe, project)
                 .stream()
                 .map(template -> template.toBuilder()
@@ -96,11 +103,11 @@ public class WorkflowService {
         // Already on: enabling again is idempotent and returns what runs, so an agent asking twice does
         // not get two copies of the automation.
         var alreadyOn = templates.stream()
-                .map(template -> byRecipeAndName(existing, recipe.id(), template.name()))
+                .map(template -> byRecipe(existing, recipe.id(), template))
                 .flatMap(Optional::stream)
                 .toList();
         var toCreate = templates.stream()
-                .filter(template -> byRecipeAndName(existing, recipe.id(), template.name()).isEmpty())
+                .filter(template -> byRecipe(existing, recipe.id(), template).isEmpty())
                 .toList();
 
         Mono<List<Automation>> created = dryRun
@@ -143,15 +150,21 @@ public class WorkflowService {
     }
 
     private Mono<Workflow> describe(String workspaceId, Project project, String recipeId,
-            Workflow.Overrides overrides, List<Automation> existing, List<String> scoreNames) {
-        var recipe = recipe(recipeId, project, overrides);
+            List<Automation> existing, List<String> scoreNames) {
+        var recipe = recipe(recipeId, project, null, scoreNames);
         var templates = templates(recipe, project);
         var matched = templates.stream()
-                .map(template -> byRecipeAndName(existing, recipe.id(), template.name()).orElse(template))
+                .map(template -> byRecipe(existing, recipe.id(), template).orElse(template))
                 .toList();
         long on = matched.stream().filter(automation -> automation.id() != null
                 && Boolean.TRUE.equals(automation.enabled())).count();
         var state = on == 0 ? Workflow.State.OFF : on == matched.size() ? Workflow.State.ON : Workflow.State.PARTLY_ON;
+        // What runs, when something does: the overrides it was enabled with, not the recipe's defaults.
+        var overrides = matched.stream()
+                .filter(automation -> automation.id() != null)
+                .findFirst()
+                .map(automation -> overridesOf(automation, recipe.overrides()))
+                .orElse(recipe.overrides());
 
         return estimate(workspaceId, project.id(), templates)
                 .map(estimate -> Workflow.builder()
@@ -159,9 +172,34 @@ public class WorkflowService {
                         .state(state).prerequisitesMet(true).blockedReason(null)
                         .automations(matched)
                         .estimate(estimate)
-                        .overrides(recipe.overrides())
+                        .overrides(overrides)
                         .availableScoreNames(scoreNames)
                         .build());
+    }
+
+    /** The overrides an existing automation embodies, read back from its trigger, step and limits. */
+    private static Workflow.Overrides overridesOf(Automation automation, Workflow.Overrides defaults) {
+        var trigger = automation.triggers().getFirst();
+        var condition = Optional.ofNullable(trigger.conditions())
+                .map(Conditions::groups).filter(groups -> !groups.isEmpty())
+                .map(List::getFirst).map(ConditionGroup::conditions).filter(conditions -> !conditions.isEmpty())
+                .map(List::getFirst);
+        var step = automation.steps().getFirst();
+        return Workflow.Overrides.builder()
+                .scoreName(condition.map(ScoreCondition::scoreName).orElse(defaults.scoreName()))
+                .threshold(defaults.threshold() == null
+                        ? null
+                        : condition.map(ScoreCondition::value).orElse(defaults.threshold()))
+                .testSuiteName(step.testSuiteName() != null ? step.testSuiteName() : defaults.testSuiteName())
+                .annotationQueueName(step.annotationQueueName() != null
+                        ? step.annotationQueueName()
+                        : defaults.annotationQueueName())
+                .perDay(trigger.perDay() != null ? trigger.perDay() : defaults.perDay())
+                .maxItemsPerDay(defaults.maxItemsPerDay() == null
+                        ? null
+                        : Optional.ofNullable(automation.limits()).map(Automation.Limits::maxItemsPerDay)
+                                .orElse(defaults.maxItemsPerDay()))
+                .build();
     }
 
     private Mono<AutomationDryRun.Estimate> estimate(String workspaceId, UUID projectId, List<Automation> templates) {
@@ -177,21 +215,31 @@ public class WorkflowService {
                         .windowDays(AutomationService.ESTIMATE_WINDOW_DAYS).costUsd(java.math.BigDecimal.ZERO).build());
     }
 
-    private static Optional<Automation> byRecipeAndName(List<Automation> existing, String recipeId, String name) {
+    /**
+     * The automation a recipe created for this job, whatever it was named: the recipe id and the step it
+     * writes with identify it, since a name carries the score it was enabled on.
+     */
+    private static Optional<Automation> byRecipe(List<Automation> existing, String recipeId, Automation template) {
+        String stepType = template.steps().getFirst().type();
         return existing.stream()
                 .filter(automation -> automation.recipe() != null && recipeId.equals(automation.recipe().id()))
-                .filter(automation -> name.equals(automation.name()))
+                .filter(automation -> automation.steps().stream().anyMatch(step -> stepType.equals(step.type())))
                 .findFirst();
     }
 
-    Recipe recipe(String id, Project project, Workflow.Overrides overrides) {
+    Recipe recipe(String id, Project project, Workflow.Overrides overrides, List<String> scoreNames) {
         var given = Optional.ofNullable(overrides).orElse(Workflow.Overrides.builder().build());
+        // The judge the recipe defaults to: `resolution` when the project has it, else the first score
+        // the project does write, so an apply call taken as offered fires on something real.
+        String defaultScoreName = scoreNames.contains(DEFAULT_SCORE_NAME) || scoreNames.isEmpty()
+                ? DEFAULT_SCORE_NAME
+                : scoreNames.getFirst();
         return switch (id) {
             case COLLECT -> new Recipe(COLLECT, "Collect",
                     "A judge score lands on a production trace: keep the trace in the regression suite when the "
                             + "score is below the threshold.",
                     Workflow.Overrides.builder()
-                            .scoreName(Optional.ofNullable(given.scoreName()).orElse(DEFAULT_SCORE_NAME))
+                            .scoreName(Optional.ofNullable(given.scoreName()).orElse(defaultScoreName))
                             .threshold(Optional.ofNullable(given.threshold()).orElse(DEFAULT_THRESHOLD))
                             .testSuiteName(Optional.ofNullable(given.testSuiteName()).orElse(suiteName(project)))
                             .maxItemsPerDay(
@@ -201,7 +249,7 @@ public class WorkflowService {
                     "A judge score lands on a production trace: send a few a day, at random, to a review queue "
                             + "so people can check the judge.",
                     Workflow.Overrides.builder()
-                            .scoreName(Optional.ofNullable(given.scoreName()).orElse(DEFAULT_SCORE_NAME))
+                            .scoreName(Optional.ofNullable(given.scoreName()).orElse(defaultScoreName))
                             .annotationQueueName(
                                     Optional.ofNullable(given.annotationQueueName()).orElse(REVIEW_QUEUE_NAME))
                             .perDay(Optional.ofNullable(given.perDay()).orElse(DEFAULT_PER_DAY))
@@ -292,7 +340,10 @@ public class WorkflowService {
         if (name == null) {
             return Mono.empty();
         }
-        return annotationQueueService.find(1, 100, AnnotationQueueSearchCriteria.builder().name(name).build())
+        return annotationQueueService
+                .find(1, 100,
+                        AnnotationQueueSearchCriteria.builder().name(name).filters(List.of()).sortingFields(List.of())
+                                .build())
                 .flatMapIterable(AnnotationQueue.AnnotationQueuePage::content)
                 .filter(queue -> project.id().equals(queue.projectId()) && name.equals(queue.name()))
                 .hasElements()
