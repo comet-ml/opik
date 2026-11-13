@@ -123,21 +123,21 @@ async function readStreamPage<T>(
   cursorField: string,
   limit: number
 ) {
-  let recordsSent = 0;
-  let lastIdSent: string | undefined;
+  let recordsRead = 0;
+  let lastCursorRead: string | undefined;
   const items = await parseNdjsonStreamToArray<T>(
     stream,
     serializer,
     limit,
     (record) => {
-      recordsSent++;
+      recordsRead++;
       const id = (record as Record<string, unknown> | null)?.[cursorField];
       if (typeof id === "string") {
-        lastIdSent = id;
+        lastCursorRead = id;
       }
     }
   );
-  return { items, recordsSent, lastIdSent };
+  return { items, recordsRead, lastCursorRead };
 }
 
 export async function readAllStreamPages<T>(
@@ -147,10 +147,13 @@ export async function readAllStreamPages<T>(
   ) => Promise<ReadableStream<Uint8Array>>,
   serializer: core.serialization.Schema<unknown, T>,
   cursorField: string,
-  maxResults: number = Number.POSITIVE_INFINITY
+  {
+    maxResults = Number.POSITIVE_INFINITY,
+    startAfter,
+  }: { maxResults?: number; startAfter?: string } = {}
 ): Promise<T[]> {
   const results: T[] = [];
-  let cursor: string | undefined;
+  let cursor = startAfter;
 
   while (results.length < maxResults) {
     const limit = Math.min(maxResults - results.length, MAX_STREAM_PAGE_SIZE);
@@ -162,13 +165,13 @@ export async function readAllStreamPages<T>(
     );
     results.push(...page.items);
 
-    const isLastPage = page.recordsSent < limit;
+    const isLastPage = page.recordsRead < limit;
     const cursorMoved =
-      page.lastIdSent !== undefined && page.lastIdSent !== cursor;
+      page.lastCursorRead !== undefined && page.lastCursorRead !== cursor;
     if (isLastPage || !cursorMoved) {
       break;
     }
-    cursor = page.lastIdSent;
+    cursor = page.lastCursorRead;
   }
 
   return results;

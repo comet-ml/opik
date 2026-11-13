@@ -27,7 +27,7 @@ export async function searchTracesWithFilters(
       }),
     serialization.TracePublic,
     "id",
-    maxResults
+    { maxResults }
   );
 }
 
@@ -88,7 +88,7 @@ export async function searchThreadsWithFilters(
       }),
     serialization.TraceThread,
     "thread_model_id",
-    maxResults
+    { maxResults }
   );
 }
 
@@ -186,7 +186,7 @@ export async function searchSpansWithFilters(
       }),
     serialization.SpanPublic,
     "id",
-    maxResults
+    { maxResults }
   );
 }
 
