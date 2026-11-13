@@ -119,4 +119,40 @@ class TopicsConfigTest {
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
+
+    static Stream<Arguments> buildSettings() {
+        return Stream.of(
+                arguments("config-test.yml", (Consumer<TopicsConfig>) topics -> {
+                }, List.of()),
+                arguments("Qwen deadline equal to the project timeout", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setProjectTimeout(Duration.minutes(2));
+                    topics.getBuild().setQwenDeadline(Duration.minutes(2));
+                }, List.of("build.qwenDeadlineValid")),
+                arguments("max vectors under the min vectors", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setMinVectors(500);
+                    topics.getBuild().setMaxVectors(400);
+                }, List.of("build.maxVectorsValid")),
+                arguments("max vectors equal to the min vectors", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setMinVectors(500);
+                    topics.getBuild().setMaxVectors(500);
+                }, List.of()),
+                arguments("first-build budget equal to its interval", (Consumer<TopicsConfig>) topics -> {
+                    topics.getFirstBuild().setInterval(Duration.minutes(10));
+                    topics.getFirstBuild().setBudget(Duration.minutes(10));
+                }, List.of("firstBuild.budgetValid")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("buildSettings")
+    void buildCrossFieldRules(String description, Consumer<TopicsConfig> change, List<String> expectedViolations) {
+        var topics = TestConfigUtils.loadConfigTest().getTopics();
+        change.accept(topics);
+
+        var violations = VALIDATOR.validate(topics).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .filter(path -> path.startsWith("build.") || path.startsWith("firstBuild."))
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
 }
