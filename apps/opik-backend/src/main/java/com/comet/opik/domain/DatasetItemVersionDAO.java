@@ -1924,7 +1924,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                             v.6,
                                                             v.7,
                                                             v.8,
-                                                            v.9
+                                                            v.9,
+                                                            v.10
                                                         ),
                                                         'Tuple(
                                                             value Decimal(18,9),
@@ -1935,7 +1936,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                             span_type String,
                                                             span_id String,
                                                             source_queue_id String,
-                                                            author String
+                                                            author String,
+                                                            evaluator_revision String
                                                         )'
                                                     ),
                                                     mapValues(value_by_author)
@@ -1963,7 +1965,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                     span_type String,
                                                     span_id String,
                                                     source_queue_id String,
-                                                    author String
+                                                    author String,
+                                                    evaluator_revision String
                                                 )
                                             )
                                         )'
