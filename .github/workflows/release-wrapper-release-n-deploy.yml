@@ -22,6 +22,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   trigger-release:
     # A called reusable workflow can only narrow its caller's token, never widen
