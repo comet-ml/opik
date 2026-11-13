@@ -60,8 +60,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 5.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_5_5_PRO,
+      label: "GPT 5.5 Pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5_4,
       label: "GPT 5.4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_4_PRO,
+      label: "GPT 5.4 Pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_5_4_MINI,
@@ -72,8 +80,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 5.4 Nano",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_5_3_CODEX,
+      label: "GPT 5.3 Codex",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5_2,
       label: "GPT 5.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_2_PRO,
+      label: "GPT 5.2 Pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_5_1,
@@ -82,6 +98,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_5,
       label: "GPT 5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_PRO,
+      label: "GPT 5 Pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.GPT_5_MINI,
@@ -110,6 +130,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GPT_O3,
       label: "GPT o3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_O3_PRO,
+      label: "GPT o3 Pro",
     },
   ],
 

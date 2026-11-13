@@ -18,7 +18,11 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { getRoutableProviderModelValue } from "@/lib/modelUtils";
-import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
+import {
+  isServedOnKeyApi,
+  useModelOptions,
+  useModelParamsIndex,
+} from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 import { X } from "lucide-react";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -123,6 +127,7 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     providerModels,
     "",
   );
+  const modelParams = useModelParamsIndex();
   const pickerModels = useMemo(
     () => [
       ...(freeModelOption ? [freeModelOption] : []),
@@ -156,6 +161,9 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
       const provider = calculateModelProvider(
         savedModel as PROVIDER_MODEL_TYPE,
       );
+      const configuredProvider = configuredProvidersList.find(
+        (p) => p.ui_composed_provider === provider,
+      );
       // A Vertex run saved with the bare id resolves here only by suffix, but the backend and
       // getProviderFromModel know it only as vertex_ai/<id>, so it could not run under that name.
       // OpenRouter serves a `:batch` id only through its batch API, so every request of the run
@@ -167,7 +175,8 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
           savedModel.endsWith(":batch")
         ) &&
         getRoutableProviderModelValue(provider, savedModel) === savedModel &&
-        configuredProvidersList.some((p) => p.ui_composed_provider === provider)
+        configuredProvider !== undefined &&
+        isServedOnKeyApi(configuredProvider, savedModel, modelParams)
       );
     });
     const runnableModels = [...models, ...servedSavedModels];
@@ -183,6 +192,7 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
     isRegistryUnavailable,
     calculateModelProvider,
     configuredProvidersList,
+    modelParams,
   ]);
 
   // Only resolve the default once providers are genuinely known: the keys query
