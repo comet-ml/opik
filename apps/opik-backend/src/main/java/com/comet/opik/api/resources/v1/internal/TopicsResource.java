@@ -40,7 +40,7 @@ import java.util.UUID;
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Topics", description = "Internal topics operations")
+@Tag(name = "Topics", description = "Project topics and internal topics operations")
 public class TopicsResource {
 
     /** The oldest window end a run may take, in days before today. */

@@ -2659,8 +2659,8 @@ aiLabels:
 # Calls aiLabels.inference's deployment with its credential (/v1/embed).
 topics:
   #  Default: false
-  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
-  #  never exposed to the UI
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. With
+  #  enabledWorkspaces, it sets the UI toggle topics_enabled for the caller's workspace
   enabled: ${TOPICS_ENABLED:-false}
   #  Default: empty (no workspace)
   #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in

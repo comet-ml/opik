@@ -51,6 +51,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -500,6 +502,38 @@ class TopicsReadResourceTest {
         try (var response = request(caller, UUID.randomUUID()).get()) {
             assertThat(response.getStatus()).isEqualTo(501);
             assertThat(response.hasEntity()).isFalse();
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true, true, true", "true, false, false", "false, true, false", "false, false, false"})
+    @DisplayName("the toggles' topics_enabled is topics.enabled and the caller's workspace eligible; when false, the "
+            + "API answers 501 or status disabled")
+    void togglesTopicsEnabled(boolean enabled, boolean eligible, boolean expected) {
+        var caller = caller();
+        var projectId = project(caller);
+        if (eligible) {
+            optIn(caller.workspaceId());
+        }
+        opikConfig.getTopics().setEnabled(enabled);
+
+        try (var response = client.target("%s/v1/private/toggles/".formatted(baseUrl))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, caller.apiKey())
+                .header(RequestContext.WORKSPACE_HEADER, caller.workspaceName())
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.readEntity(JsonNode.class).get("topics_enabled").asBoolean()).isEqualTo(expected);
+        }
+        try (var response = request(caller, projectId).get()) {
+            if (!enabled) {
+                assertThat(response.getStatus()).isEqualTo(501);
+                return;
+            }
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(response.readEntity(ProjectTopics.class).status()).isEqualTo(expected
+                    ? ProjectTopics.Status.COLLECTING
+                    : ProjectTopics.Status.DISABLED);
         }
     }
 
