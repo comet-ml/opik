@@ -619,7 +619,7 @@ public class TopicsRebuildService {
                 // messages or stack. The answer's length and SHA-256 are logged when it arrives.
                 log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}'", runId, projectId,
                         code.getValue(), ExceptionUtils.getThrowableList(exception).stream()
-                                .map(TopicsRebuildService::errorType).toList());
+                                .map(TopicsRebuildService::formatError).toList());
             } else {
                 log.warn("Topics run '{}' failed, project '{}', code '{}'", runId, projectId, code.getValue(),
                         exception);
@@ -649,7 +649,7 @@ public class TopicsRebuildService {
         }
     }
 
-    static String errorType(Throwable throwable) {
+    static String formatError(Throwable throwable) {
         return throwable instanceof SQLException sql
                 ? "%s(state %s, code %s)".formatted(sql.getClass().getName(), sql.getSQLState(), sql.getErrorCode())
                 : throwable.getClass().getName();

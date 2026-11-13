@@ -165,7 +165,7 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass could not mark run '{}' complete, project '{}', errors '{}'; the "
                     + "first-build job runs the pass again", runId, projectId,
                     ExceptionUtils
-                            .getThrowableList(exception).stream().map(TopicsRebuildService::errorType).toList());
+                            .getThrowableList(exception).stream().map(TopicsRebuildService::formatError).toList());
         }
     }
 
