@@ -194,6 +194,7 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "200", description = "Experiment groups", content = @Content(schema = @Schema(implementation = ExperimentGroupResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     public Response findGroups(
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
@@ -236,6 +237,7 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "200", description = "Experiment groups with aggregations", content = @Content(schema = @Schema(implementation = ExperimentGroupAggregationsResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     public Response findGroupsAggregations(
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
@@ -318,6 +320,7 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     @RateLimited
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull @Valid ExperimentUpdate experimentUpdate) {
@@ -335,6 +338,7 @@ public class ExperimentsResource {
     @Operation(operationId = "batchUpdateExperiments", summary = "Batch update experiments", description = "Update multiple experiments", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     @RateLimited
     public Response batchUpdate(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentBatchUpdate.class))) @Valid @NotNull ExperimentBatchUpdate batchUpdate) {
@@ -356,6 +360,7 @@ public class ExperimentsResource {
     @Path("/delete")
     @Operation(operationId = "deleteExperimentsById", summary = "Delete experiments by id", description = "Delete experiments by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     public Response deleteExperimentsById(
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid DeleteIdsHolder request) {
 
@@ -373,6 +378,7 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     @RateLimited
     public Response finishExperiments(
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteIdsHolder.class))) @NotNull @Valid IdsHolder request) {
@@ -395,6 +401,7 @@ public class ExperimentsResource {
                     ErrorMessage.class
             }), maxItems = 2000)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     @JsonView(Experiment.View.Public.class)
     public ChunkedOutput<JsonNode> streamExperiments(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentStreamRequest.class))) @NotNull @Valid ExperimentStreamRequest request) {
@@ -416,6 +423,7 @@ public class ExperimentsResource {
     @Operation(operationId = "getExperimentItemById", summary = "Get experiment item by id", description = "Get experiment item by id", responses = {
             @ApiResponse(responseCode = "200", description = "Experiment item resource", content = @Content(schema = @Schema(implementation = ExperimentItem.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     @JsonView(ExperimentItem.View.Public.class)
     public Response getExperimentItem(@PathParam("id") UUID id) {
 
@@ -441,6 +449,7 @@ public class ExperimentsResource {
                     ErrorMessage.class
             }), maxItems = 2000)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     public ChunkedOutput<JsonNode> streamExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemStreamRequest.class))) @NotNull @Valid ExperimentItemStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -465,6 +474,7 @@ public class ExperimentsResource {
     @Path("/items")
     @Operation(operationId = "createExperimentItems", summary = "Create experiment items", description = "Create experiment items", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     @RateLimited
     @UsageLimited
     public Response createExperimentItems(
@@ -494,6 +504,7 @@ public class ExperimentsResource {
     @Operation(operationId = "deleteExperimentItems", summary = "Delete experiment items", description = "Delete experiment items", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_CREATE)
     public Response deleteExperimentItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemsDelete.class))) @NotNull @Valid ExperimentItemsDelete request) {
 
@@ -515,6 +526,7 @@ public class ExperimentsResource {
                     @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
+    @RequiredPermissions({WorkspaceUserPermission.EXPERIMENT_CREATE, WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG})
     @RateLimited
     @UsageLimited
     public Response experimentItemsBulk(
@@ -577,6 +589,7 @@ public class ExperimentsResource {
     @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
             @QueryParam("experiment_ids") String experimentIdsQueryParam,

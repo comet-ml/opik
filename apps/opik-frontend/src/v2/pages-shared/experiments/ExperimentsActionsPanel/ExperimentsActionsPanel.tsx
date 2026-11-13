@@ -14,6 +14,7 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Separator } from "@/ui/separator";
 import AddTagDialog from "@/v2/pages-shared/experiments/AddTagDialog/AddTagDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
@@ -29,6 +30,9 @@ const ExperimentsActionsPanel: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const disabled = !experiments?.length;
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
 
   const navigateToCompare = (datasetId: string, experimentsIds: string[]) => {
     navigate({
@@ -95,23 +99,27 @@ const ExperimentsActionsPanel: React.FunctionComponent<
           onCompare={(ids) => navigateToCompare(experiments[0].dataset_id, ids)}
         />
       )}
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 2}
-        setOpen={setOpen}
-        onConfirm={deleteExperimentsHandler}
-        title="Delete experiments"
-        description="Deleting experiments will remove all samples in these experiments. Related traces won't be affected. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete experiments"
-        confirmButtonVariant="destructive"
-      />
-      <AddTagDialog
-        key={`tag-${resetKeyRef.current}`}
-        experiments={experiments}
-        open={open === 3}
-        setOpen={setOpen}
-        onSuccess={onTagsAdded}
-      />
+      {canCreateExperiments && (
+        <>
+          <ConfirmDialog
+            key={`delete-${resetKeyRef.current}`}
+            open={open === 2}
+            setOpen={setOpen}
+            onConfirm={deleteExperimentsHandler}
+            title="Delete experiments"
+            description="Deleting experiments will remove all samples in these experiments. Related traces won't be affected. This action cannot be undone. Are you sure you want to continue?"
+            confirmText="Delete experiments"
+            confirmButtonVariant="destructive"
+          />
+          <AddTagDialog
+            key={`tag-${resetKeyRef.current}`}
+            experiments={experiments}
+            open={open === 3}
+            setOpen={setOpen}
+            onSuccess={onTagsAdded}
+          />
+        </>
+      )}
       <div className="inline-flex items-center gap-2">
         <TooltipWrapper content="Compare experiments">
           <Button size="sm" onClick={handleCompareClick} disabled={disabled}>
@@ -125,34 +133,42 @@ const ExperimentsActionsPanel: React.FunctionComponent<
             EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
           ]}
         />
-        <Separator orientation="vertical" className="mx-2 h-4" />
+        {canCreateExperiments && (
+          <Separator orientation="vertical" className="mx-2 h-4" />
+        )}
       </div>
-      <TooltipWrapper content="Manage tags">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={() => {
-            setOpen(3);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Tag />
-        </Button>
-      </TooltipWrapper>
-      <TooltipWrapper content="Delete">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={() => {
-            setOpen(2);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Trash />
-        </Button>
-      </TooltipWrapper>
+      {canCreateExperiments && (
+        <>
+          <TooltipWrapper content="Manage tags">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="Manage tags"
+              onClick={() => {
+                setOpen(3);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+              disabled={disabled}
+            >
+              <Tag />
+            </Button>
+          </TooltipWrapper>
+          <TooltipWrapper content="Delete">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="Delete"
+              onClick={() => {
+                setOpen(2);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+              disabled={disabled}
+            >
+              <Trash />
+            </Button>
+          </TooltipWrapper>
+        </>
+      )}
     </div>
   );
 };

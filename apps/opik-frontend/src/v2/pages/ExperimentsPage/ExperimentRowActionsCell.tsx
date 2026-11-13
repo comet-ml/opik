@@ -15,12 +15,16 @@ import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { UpdateExperimentDialog } from "@/shared/UpdateExperimentDialog/UpdateExperimentDialog";
 import useExperimentUpdateMutation from "@/api/datasets/useExperimentUpdate";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const ExperimentRowActionsCell: React.FunctionComponent<
   CellContext<GroupedExperiment, unknown>
 > = (context) => {
   const resetKeyRef = useRef(0);
   const experiment = context.row.original;
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
   const [open, setOpen] = useState<boolean | number>(false);
 
   const experimentBatchDeleteMutation = useExperimentBatchDeleteMutation();
@@ -45,6 +49,10 @@ const ExperimentRowActionsCell: React.FunctionComponent<
     },
     [experiment, experimentUpdateMutation],
   );
+
+  if (!canCreateExperiments) {
+    return null;
+  }
 
   return (
     <CellWrapper

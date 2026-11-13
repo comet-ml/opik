@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TooltipProvider } from "@/ui/tooltip";
 import { Experiment } from "@/types/datasets";
+import PermissionsTestProvider from "@/testing/PermissionsTestProvider";
 import ExperimentsActionsPanel from "./ExperimentsActionsPanel";
 
 const mockNavigate = vi.fn();
@@ -44,27 +45,29 @@ vi.mock("@/api/datasets/useExperimentsList", () => ({
   default: (...args: unknown[]) => mockUseExperimentsList(...args),
 }));
 
-const renderPanel = (experiments: Experiment[]) =>
+const renderPanel = (experiments: Experiment[], canCreateExperiments = true) =>
   render(
-    <TooltipProvider>
-      <ExperimentsActionsPanel experiments={experiments} />
-    </TooltipProvider>,
+    <PermissionsTestProvider permissions={{ canCreateExperiments }}>
+      <TooltipProvider>
+        <ExperimentsActionsPanel experiments={experiments} />
+      </TooltipProvider>
+    </PermissionsTestProvider>,
   );
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseExperimentsList.mockReturnValue({
+    data: {
+      content: [buildExperiment("exp-1"), buildExperiment("exp-2")],
+      total: 2,
+    },
+    isPending: false,
+  });
+});
 
 const getCompareButton = () => screen.getByRole("button", { name: "Compare" });
 
 describe("ExperimentsActionsPanel Compare button", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseExperimentsList.mockReturnValue({
-      data: {
-        content: [buildExperiment("exp-1"), buildExperiment("exp-2")],
-        total: 2,
-      },
-      isPending: false,
-    });
-  });
-
   it("is disabled when no experiment is selected", () => {
     renderPanel([]);
 
@@ -121,5 +124,24 @@ describe("ExperimentsActionsPanel Compare button", () => {
         search: { experiments: ["exp-1", "exp-2", "exp-3"] },
       }),
     );
+  });
+});
+
+describe("ExperimentsActionsPanel permissions", () => {
+  it("shows the tag and delete buttons when the user can create experiments", () => {
+    renderPanel([buildExperiment("exp-1")]);
+
+    expect(
+      screen.getByRole("button", { name: "Manage tags" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("hides the tag and delete buttons but keeps Compare without experiment create permission", () => {
+    renderPanel([buildExperiment("exp-1")], false);
+
+    expect(screen.queryByRole("button", { name: "Manage tags" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(getCompareButton()).toBeInTheDocument();
   });
 });
