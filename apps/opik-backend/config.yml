@@ -2732,6 +2732,13 @@ topics:
     #  Default: 120s
     #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
     qwenDeadline: ${TOPICS_BUILD_QWEN_DEADLINE:-120s}
+    #  Default: 30s
+    #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
+    #  projectTimeout
+    namingDeadline: ${TOPICS_BUILD_NAMING_DEADLINE:-30s}
+    #  Default: 60s
+    #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
+    verifyDeadline: ${TOPICS_BUILD_VERIFY_DEADLINE:-60s}
     #  Default: 90d
     #  Description: topic_runs rows are deleted after this. At most 365d
     runsRetention: ${TOPICS_BUILD_RUNS_RETENTION:-90d}

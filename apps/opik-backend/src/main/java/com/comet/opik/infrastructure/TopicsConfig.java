@@ -101,6 +101,18 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration qwenDeadline;
 
+        /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration namingDeadline;
+
+        /** The deadline of a nightly update's verify call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration verifyDeadline;
+
         /** {@code topic_runs} rows are deleted after this. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.DAYS)
@@ -111,6 +123,18 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
             return qwenDeadline == null || projectTimeout == null
                     || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.namingDeadline must be shorter than topics.build.projectTimeout") public boolean isNamingDeadlineValid() {
+            return namingDeadline == null || projectTimeout == null
+                    || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.verifyDeadline must be shorter than topics.build.projectTimeout") public boolean isVerifyDeadlineValid() {
+            return verifyDeadline == null || projectTimeout == null
+                    || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */

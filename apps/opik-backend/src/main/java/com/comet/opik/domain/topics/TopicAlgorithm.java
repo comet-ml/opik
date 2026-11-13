@@ -73,7 +73,11 @@ public interface TopicAlgorithm {
     @RequiredArgsConstructor
     enum Call {
         /** Names the topics over the groups. Deadline {@code topics.build.qwenDeadline}. */
-        AUTHOR("author");
+        AUTHOR("author"),
+        /** Names a nightly update's new groups. Deadline {@code topics.build.namingDeadline}. */
+        NAMING("naming"),
+        /** Checks a nightly update's new names. Deadline {@code topics.build.verifyDeadline}. */
+        VERIFY("verify");
 
         private final String value;
     }
@@ -83,8 +87,9 @@ public interface TopicAlgorithm {
 
         /**
          * One LLM call. {@code read} turns the answer into what the algorithm needs; when it cannot, it throws a
-         * {@code qwen_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A failed call
-         * throws and fails the run.
+         * {@code qwen_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A {@code read}
+         * that returns null instead counts the call as {@code bad_answer} too, and the run goes on: {@code generate}
+         * returns null. A failed call throws and fails the run.
          *
          * @param call the kind of call: picks its deadline and metric label
          * @param tag  names the call in its request id ({@code <runId>:<tag>}) and the logs

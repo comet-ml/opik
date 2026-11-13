@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.Message;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -38,7 +39,12 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -48,6 +54,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
@@ -62,6 +69,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * the rest of the window with the saved list, until the run's timeout comes near; it also labels the traces of an
  * insert that still failed. The topics' sizes and the run's Other share are those of the traces it read: on a sampled
  * window, of the sample.
+ *
+ * <p>A nightly update reads the same window and the project's saved list, runs {@link NightlyUpdate} over them and saves
+ * the changed list the same way: one transaction that checks no other run saved the project since this one read it,
+ * then the {@code trace_topics} insert, then the labelling pass. A save that leaves no live topic deletes the project's
+ * state and prototypes instead, so the first-build job builds the project again.
  */
 @Slf4j
 @Singleton
@@ -201,6 +213,35 @@ public class TopicsRebuildService {
     }
 
     /**
+     * Updates the project's topic list for {@code night}, then labels the rest of the window as {@link #firstBuild}
+     * does. Never throws: a failure is recorded on the run and returned, and the previous list stays.
+     */
+    public Outcome nightlyUpdate(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull LocalDate night) {
+        var deadline = Instant.now().plus(config.getBuild().getProjectTimeout().toJavaDuration()).minus(LABEL_SLACK);
+        var run = new Run(runId, workspaceId, projectId, night);
+        boolean listKept;
+        try {
+            listKept = run.update();
+        } catch (TopicsRunException exception) {
+            return run.failed(exception.getCode(), exception);
+        } catch (CancellationException exception) {
+            return run.failed(Code.TIMEOUT, exception);
+        } catch (RuntimeException exception) {
+            return run.failed(Thread.currentThread().isInterrupted() ? Code.TIMEOUT : Code.INTERNAL, exception);
+        }
+        if (listKept) {
+            var pass = labelService.labelWindow(workspaceId, projectId, deadline,
+                    TopicWindowLabelService.Trigger.RUN);
+            if (!pass.complete()) {
+                log.info("Topics run '{}' saved, project '{}', but its labelling pass did not finish; the "
+                        + "first-build job goes on with it", runId, projectId);
+            }
+        }
+        return Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
+    }
+
+    /**
      * One run's state while it builds: the stats it records and the phase timings. It is the algorithm's
      * {@link TopicAlgorithm.Context}.
      */
@@ -209,6 +250,8 @@ public class TopicsRebuildService {
         private final UUID runId;
         private final String workspaceId;
         private final UUID projectId;
+        /** The night the run is for: a nightly update's {@code retired_at} and its new topics' {@code born}. */
+        private final LocalDate night;
         /**
          * The topics' {@code born}: the day the window ends on, but never after the UTC day the run started. The
          * first-build job's window ends at tomorrow's start (it holds today's traces), and its topics are born today.
@@ -218,11 +261,14 @@ public class TopicsRebuildService {
         private final Instant to;
         private final ObjectNode stats = JsonUtils.createObjectNode();
         private final ObjectNode seconds = JsonUtils.createObjectNode();
+        /** A nightly update's project state as it read it: its save checks that no other run saved since. */
+        private Optional<TopicProjectState> startState = Optional.empty();
 
         Run(UUID runId, String workspaceId, UUID projectId, LocalDate night) {
             this.runId = runId;
             this.workspaceId = workspaceId;
             this.projectId = projectId;
+            this.night = night;
             var started = LocalDate.now(ZoneOffset.UTC);
             this.born = night.isAfter(started) ? started : night;
             this.to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -261,6 +307,145 @@ public class TopicsRebuildService {
                 save(window.traces(), built.labels(), topics, prototypes);
                 return null;
             });
+        }
+
+        /**
+         * The nightly update. True when the list was saved with at least one live topic; false when no topic stayed
+         * live and the save deleted the project's state and prototypes.
+         */
+        boolean update() {
+            stats.put("mode", TopicRun.Mode.NIGHTLY_UPDATE.getValue());
+            var flat = flatten(timed("window", this::readWindow));
+            int n = flat.texts().length;
+            var createdAt = new Instant[n];
+            for (int i = 0; i < n; i++) {
+                createdAt[i] = flat.traces().get(i).traceCreatedAt();
+            }
+            var versionShares = stats.putObject("task_version_shares");
+            flat.versions().forEach((version, count) -> versionShares.put(String.valueOf(version),
+                    (double) count / n));
+            stats.put("vectors", n);
+
+            var saved = timed("state", this::readState);
+            startState = Optional.of(saved.projectState());
+            var state = saved.state();
+            stats.put("rebuilds_before", state.getRebuilds());
+            stats.put("topics_before", state.liveCount());
+            var window = NightWindow.builder().texts(flat.texts()).vectors(flat.vectors()).createdAt(createdAt)
+                    .from(from).night(to).dimensions(DIMENSIONS).build();
+
+            var result = timed("update", () -> NightlyUpdate.run(state, window, MAX_TOPICS, this::generate));
+            NightInvariants.check(state, DIMENSIONS);
+
+            var labels = new UUID[n];
+            int other = 0;
+            for (int i = 0; i < n; i++) {
+                int label = result.labels()[i];
+                other += label == PrototypeAssigner.OTHER ? 1 : 0;
+                labels[i] = label == PrototypeAssigner.OTHER ? TraceTopic.OTHER : state.topic(label).getId();
+            }
+            var churn = TopicChurn.of(result.before(), result.labels());
+
+            stats.put("unassigned", result.unassigned());
+            stats.put("candidates", result.candidates().size());
+            stats.put("big", result.big().size());
+            var forced = stats.putObject("forced");
+            result.forced().forEach(outcome -> forced.put(outcome.result().name().toLowerCase(Locale.ROOT),
+                    forced.path(outcome.result().name().toLowerCase(Locale.ROOT)).asInt() + 1));
+            int bornTonight = (int) state.getTopics().stream()
+                    .filter(topic -> !saved.names().containsKey(topic.getId()))
+                    .count();
+            var retired = stats.putObject("retired");
+            for (var topic : state.getTopics()) {
+                if (night.equals(topic.getRetiredAt())) {
+                    var reason = topic.getRetiredReason().value();
+                    retired.put(reason, retired.path(reason).asInt() + 1);
+                }
+            }
+            stats.put("born", bornTonight);
+            stats.put("topics", state.liveCount());
+            stats.put("other_share", (double) other / n);
+            stats.put("other_prototypes", state.getOtherPrototypes().size());
+            stats.put("churn", churn.churn());
+            stats.put("churn_any", churn.churnAny());
+            stats.set("seconds", seconds);
+            log.info("Topics run '{}' updated, project '{}', window ['{}', '{}'), vectors '{}', unassigned '{}', "
+                    + "candidates '{}', big '{}', born '{}', retired '{}', topics '{}', Other share '{}', churn '{}', "
+                    + "seconds '{}'", runId, projectId, from, to, n, result.unassigned(), result.candidates().size(),
+                    result.big().size(), bornTonight, retired, state.liveCount(),
+                    TopicText.fixed((double) other / n, 3), churn, seconds);
+
+            boolean kept = timed("save", () -> saveUpdate(flat.traces(), labels, state, saved, bornTonight));
+            metrics.churn(workspaceId, churn);
+            return kept;
+        }
+
+        /**
+         * The saved list as the night reads it: live topics ordered by born, then id (creation), with their prototypes,
+         * and the known-Other prototypes.
+         */
+        private SavedList readState() {
+            return template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(TopicDAO.class);
+                var states = dao.findStates(workspaceId, Set.of(projectId));
+                var live = dao.findLive(workspaceId, projectId);
+                if (states.isEmpty() || live.isEmpty()) {
+                    throw new TopicsRunException(Code.INTERNAL, "the project has no saved topic list");
+                }
+                var byTopic = new LinkedHashMap<UUID, List<float[]>>();
+                live.forEach(topic -> byTopic.put(topic.id(), new ArrayList<>()));
+                var other = new ArrayList<float[]>();
+                for (var prototype : dao.findPrototypes(workspaceId, projectId)) {
+                    if (prototype.topicId() == null) {
+                        other.add(prototype.values());
+                    } else if (byTopic.containsKey(prototype.topicId())) {
+                        byTopic.get(prototype.topicId()).add(prototype.values());
+                    }
+                }
+                var topics = new ArrayList<NightState.Topic>();
+                var names = new HashMap<UUID, String>();
+                for (var topic : live) {
+                    names.put(topic.id(), topic.name());
+                    topics.add(nightTopic(topic, byTopic.get(topic.id())));
+                }
+                var state = NightState.builder()
+                        .topics(topics)
+                        .otherPrototypes(other)
+                        .rebuilds(states.getFirst().rebuilds())
+                        .night(night)
+                        .ids(idGenerator::generateId)
+                        .build();
+                return new SavedList(state, states.getFirst(), names);
+            });
+        }
+
+        private NightState.Topic nightTopic(Topic topic, List<float[]> prototypes) {
+            return NightState.Topic.builder()
+                    .id(topic.id())
+                    .name(topic.name())
+                    .definition(topic.definition())
+                    .born(topic.born())
+                    .prototypes(prototypes)
+                    .lowNights(topic.lowNights())
+                    .retiredAt(topic.retiredAt())
+                    .retiredReason(topic.retiredReason() == null
+                            ? null
+                            : NightState.RetiredReason.of(topic.retiredReason()))
+                    .size(topic.size())
+                    .build();
+        }
+
+        /**
+         * {@link NightLlm} for the nightly update, through {@link #generate(TopicAlgorithm.Call, String, String,
+         * JsonNode, int, java.util.function.Function)}: verify and naming have their own deadlines. A failed call
+         * throws and fails the run, whichever call it is; the project keeps its list. The answer must be a JSON
+         * object, as for {@link AuthorAnswer#parse}; text is not parsed. An answer that is not an object is counted
+         * {@code bad_answer} and passed on as null, so its groups stay in Other.
+         */
+        private JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens) {
+            var call = ForcedBirth.VERIFY_TAG.equals(tag) ? TopicAlgorithm.Call.VERIFY : TopicAlgorithm.Call.NAMING;
+            var answer = generate(call, tag, prompt, schema, maxTokens, NightJson::object);
+            return answer == null ? NullNode.getInstance() : answer;
         }
 
         /**
@@ -380,6 +565,12 @@ public class TopicsRebuildService {
             try {
                 // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
                 var answer = read.apply(output);
+                if (answer == null) {
+                    metrics.qwen(workspaceId, call, "bad_answer");
+                    log.warn("Topics run '{}' answer could not be read, call '{}', project '{}'", runId, tag,
+                            projectId);
+                    return null;
+                }
                 metrics.qwen(workspaceId, call, "ok");
                 return answer;
             } catch (TopicsRunException exception) {
@@ -391,6 +582,8 @@ public class TopicsRebuildService {
         private Duration deadline(TopicAlgorithm.Call call) {
             return switch (call) {
                 case AUTHOR -> config.getBuild().getQwenDeadline().toJavaDuration();
+                case NAMING -> config.getBuild().getNamingDeadline().toJavaDuration();
+                case VERIFY -> config.getBuild().getVerifyDeadline().toJavaDuration();
             };
         }
 
@@ -487,15 +680,22 @@ public class TopicsRebuildService {
         }
 
         /**
-         * Inserts the project's state row. A first build saves a project that has no row: the first-build job and a run
-         * by hand both check that under the project's lock. If another run saved the project anyway (a
-         * Redis failover, or a timed-out run that outlives its lock), the primary key fails this save as a conflict.
+         * Writes the project's state row. A first build saves a project that has no row: the first-build job and a run
+         * by hand both check that under the project's lock. If another run saved the project anyway (a Redis failover,
+         * or a timed-out run that outlives its lock), the primary key fails this save as a conflict. A nightly update
+         * updates the row only while it still names the run the update read, else the save fails as a conflict.
          * It first locks the project's row: a project deleted during the run fails the save, and a delete that comes
          * later waits for this transaction, so its cleanup removes what the run saved.
          */
         private void writeState(TopicDAO topicDAO, TopicProjectState state) {
             if (topicDAO.lockProject(workspaceId, projectId) == 0) {
                 throw new TopicsRunException(Code.SAVE, "the project was deleted during the run");
+            }
+            if (startState.isPresent()) {
+                if (topicDAO.updateState(state, startState.get().lastRunId()) != 1) {
+                    throw conflict(null);
+                }
+                return;
             }
             try {
                 topicDAO.insertState(state);
@@ -568,6 +768,119 @@ public class TopicsRebuildService {
                     projectId, inserted, topics.size(), prototypes.size());
         }
 
+        /**
+         * As {@link #save}: one MySQL transaction first: the state (rebuilds + 1, labels not complete), tonight's new
+         * topics inserted, the ones read updated (lifecycle columns, size, retirement), the prototypes replaced (live
+         * topics in list order, then known Other; a retired topic keeps none), the run saved. Then the
+         * {@code trace_topics} insert, retried up to {@value #INSERT_RETRIES} times.
+         *
+         * <p>When no topic stays live, the transaction deletes the project's state row and its prototypes instead of
+         * writing them, and nothing goes to {@code trace_topics}: the project has no list again, and the first-build
+         * job builds it. Returns false then.
+         */
+        private boolean saveUpdate(List<WindowTrace> traces, UUID[] labels, NightState state, SavedList saved,
+                int bornTonight) {
+            boolean keep = state.liveCount() > 0;
+            var traceTopics = new ArrayList<TraceTopic>(traces.size());
+            if (keep) {
+                for (int i = 0; i < traces.size(); i++) {
+                    traceTopics.add(TraceTopic.builder()
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .traceId(traces.get(i).traceId())
+                            .traceCreatedAt(traces.get(i).traceCreatedAt())
+                            .topicId(labels[i])
+                            .source(TraceTopic.Source.RUN)
+                            .runId(runId.toString())
+                            .build());
+                }
+            }
+            var inserted = new ArrayList<Topic>();
+            var updated = new ArrayList<Topic>();
+            for (var topic : state.getTopics()) {
+                var row = Topic.builder()
+                        .id(topic.getId())
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .name(topic.getName())
+                        .definition(topic.getDefinition())
+                        .born(topic.getBorn())
+                        .retiredAt(topic.getRetiredAt())
+                        .retiredReason(topic.getRetiredReason() == null ? null : topic.getRetiredReason().value())
+                        .lowNights(topic.getLowNights())
+                        .size(topic.getSize())
+                        .build();
+                (saved.names().containsKey(topic.getId()) ? updated : inserted).add(row);
+            }
+            var prototypes = new ArrayList<TopicPrototype>();
+            if (keep) {
+                for (int t : state.live()) {
+                    for (var vector : state.topic(t).getPrototypes()) {
+                        prototypes.add(prototype(prototypes.size(), state.topic(t).getId(), vector));
+                    }
+                }
+                for (var vector : state.getOtherPrototypes()) {
+                    prototypes.add(prototype(prototypes.size(), null, vector));
+                }
+            }
+            var statsJson = stats.toString();
+            try {
+                var now = Instant.now();
+                template.inTransaction(WRITE, handle -> {
+                    var topicDAO = handle.attach(TopicDAO.class);
+                    // First, so a run that saved this project meanwhile fails the save before anything else.
+                    writeState(topicDAO, saved.projectState().toBuilder()
+                            .rebuilds(state.getRebuilds() + 1)
+                            .lastRunId(runId)
+                            .lastSuccessAt(now)
+                            .windowUntil(to)
+                            .labelsComplete(false)
+                            .build());
+                    if (!inserted.isEmpty()) {
+                        topicDAO.insertTopics(inserted);
+                    }
+                    if (!updated.isEmpty()) {
+                        topicDAO.updateTopics(updated);
+                    }
+                    topicDAO.deletePrototypes(workspaceId, projectId);
+                    if (!prototypes.isEmpty()) {
+                        topicDAO.insertPrototypes(prototypes);
+                    }
+                    if (!keep) {
+                        topicDAO.deleteState(workspaceId, projectId);
+                    }
+                    if (handle.attach(TopicRunDAO.class).markSaved(workspaceId, runId, now, statsJson) != 1) {
+                        // Failed meanwhile, by its timeout: roll the save back.
+                        throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
+                    }
+                    return null;
+                });
+            } catch (TopicsRunException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                throw new TopicsRunException(Code.SAVE, "the save failed", exception);
+            }
+            metrics.run(workspaceId, TopicRun.Status.SAVED, null);
+            metrics.saved(workspaceId, "topics", inserted.size() + updated.size());
+            metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
+            metrics.topics(workspaceId, state.liveCount(), bornTonight);
+            state.getTopics().stream().filter(topic -> night.equals(topic.getRetiredAt()))
+                    .forEach(topic -> metrics.retired(workspaceId, topic.getRetiredReason().value()));
+            // The value the run saved in its stats, not computed again.
+            metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
+            if (!keep) {
+                log.info("Topics run '{}' saved, project '{}', no topic stayed live: its state and prototypes are "
+                        + "deleted, so the first-build job builds it again; topics updated '{}'", runId, projectId,
+                        updated.size());
+                return false;
+            }
+            int written = insertTraceTopics(traceTopics) ? traceTopics.size() : 0;
+            log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics inserted '{}', updated '{}', "
+                    + "prototypes '{}'", runId, projectId, written, inserted.size(), updated.size(),
+                    prototypes.size());
+            return true;
+        }
+
         Outcome failed(Code code, Exception exception) {
             stats.set("seconds", seconds);
             var message = StringUtils.defaultIfBlank(ExceptionUtils.getMessage(exception), code.getValue());
@@ -613,6 +926,10 @@ public class TopicsRebuildService {
         return throwable instanceof SQLException sql
                 ? "%s(state %s, code %s)".formatted(sql.getClass().getName(), sql.getSQLState(), sql.getErrorCode())
                 : throwable.getClass().getName();
+    }
+
+    /** The saved list as a nightly update reads it, the state row it read, and the names of the topics it read. */
+    private record SavedList(NightState state, TopicProjectState projectState, Map<UUID, String> names) {
     }
 
     /** The window as the build reads it: per trace, in time order, its text and vector. */

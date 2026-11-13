@@ -116,12 +116,15 @@ public class TopicsProjectRunner {
     }
 
     /**
-     * Runs the project's first build for {@code night} on its own thread of {@code executor}, and stops it after the
-     * project timeout. The caller holds the project's lock. True when the run was saved.
+     * Runs the project's first build or nightly update ({@code mode}) for {@code night} on its own thread of
+     * {@code executor}, and stops it after the project timeout. The caller holds the project's lock. True when the run
+     * was saved.
      */
     public boolean run(@NonNull ExecutorService executor, @NonNull UUID runId, @NonNull String workspaceId,
-            @NonNull UUID projectId, @NonNull LocalDate night) {
-        var future = executor.submit(() -> rebuildService.firstBuild(runId, workspaceId, projectId, night));
+            @NonNull UUID projectId, @NonNull LocalDate night, @NonNull TopicRun.Mode mode) {
+        var future = executor.submit(() -> mode == TopicRun.Mode.NIGHTLY_UPDATE
+                ? rebuildService.nightlyUpdate(runId, workspaceId, projectId, night)
+                : rebuildService.firstBuild(runId, workspaceId, projectId, night));
         var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
         try {
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicRun.Status.SAVED;
@@ -132,7 +135,7 @@ public class TopicsProjectRunner {
             Thread.currentThread().interrupt();
             return stop(runId, workspaceId, projectId, future, Code.TIMEOUT, "the job was interrupted");
         } catch (ExecutionException exception) {
-            // firstBuild records its own failures; this is a bug in it.
+            // firstBuild and nightlyUpdate record their own failures; this is a bug in them.
             log.error("Topics run '{}' threw, project '{}'", runId, projectId, exception.getCause());
             return stop(runId, workspaceId, projectId, future, Code.INTERNAL, String.valueOf(exception.getCause()));
         }

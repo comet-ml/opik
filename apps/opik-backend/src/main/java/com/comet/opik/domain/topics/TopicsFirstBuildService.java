@@ -207,7 +207,9 @@ public class TopicsFirstBuildService {
             }
             log.info("Topics run '{}' started, workspace '{}', project '{}', vectors '{}'", runId, workspaceId,
                     projectId, candidate.vectors());
-            return runner.run(executor, runId, workspaceId, projectId, night) ? Outcome.SAVED : Outcome.FAILED;
+            return runner.run(executor, runId, workspaceId, projectId, night, TopicRun.Mode.FIRST_BUILD)
+                    ? Outcome.SAVED
+                    : Outcome.FAILED;
         } finally {
             runner.unlockProject(projectId);
         }
@@ -398,7 +400,7 @@ public class TopicsFirstBuildService {
                 var executor = Executors.newThreadPerTaskExecutor(
                         Thread.ofPlatform().name("topics-by-hand-run-", 0).daemon(true).factory());
                 try {
-                    runner.run(executor, runId, workspaceId, projectId, night);
+                    runner.run(executor, runId, workspaceId, projectId, night, TopicRun.Mode.FIRST_BUILD);
                 } finally {
                     executor.shutdownNow();
                     runner.unlockProject(projectId);
