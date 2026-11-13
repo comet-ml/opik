@@ -1,0 +1,3 @@
+## Bug Fixes & Improvements
+
+- **OpenTelemetry cost currency is preserved** — A span that reported `gen_ai.usage.cost` together with `gen_ai.usage.cost.currency` (an ISO 4217 code such as `EUR`) used to treat the currency as a token-usage field. Non-numeric currency codes then failed JSON parsing and aborted ingest. The currency is now stored on the span's metadata, the amount still lands on estimated cost, and spans that omit the currency (typical USD data) are unchanged.

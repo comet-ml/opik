@@ -160,7 +160,7 @@ smolagents, LiveKit and Langfuse.
 | Provider | `gen_ai.system`, `gen_ai.provider.name` | | |
 | Token usage | `gen_ai.usage.*` | `llm.token_count.*` | |
 | Cost | `gen_ai.usage.cost` | | |
-| Metadata | `gen_ai.request.temperature`, `gen_ai.response.id`, `gen_ai.response.finish_reasons`, `gen_ai.operation.name`, `gen_ai.agent.*`, `gen_ai.tool.*`, `gen_ai.cost.*` | | `opik.metadata.*` |
+| Metadata | `gen_ai.request.temperature`, `gen_ai.response.id`, `gen_ai.response.finish_reasons`, `gen_ai.operation.name`, `gen_ai.agent.*`, `gen_ai.tool.*`, `gen_ai.cost.*`, `gen_ai.usage.cost.currency` | | `opik.metadata.*` |
 | Tags | | | `opik.tags` |
 | Thread ID | `gen_ai.conversation.id` | | `thread_id` |
 
@@ -168,6 +168,8 @@ Some other rules apply:
 
 - A more specific attribute has priority over a prefix. For example, `gen_ai.request.model` sets the model, and the
   other `gen_ai.request.*` attributes go to the input.
+- `gen_ai.usage.cost` sets the span's estimated cost. `gen_ai.usage.cost.currency` is stored in metadata so the amount
+  keeps its ISO 4217 unit. Spans that omit the currency are unchanged.
 - Opik renames the `input_tokens` and `output_tokens` usage keys to `prompt_tokens` and `completion_tokens`. If the span
   has no `total_tokens`, Opik calculates it.
 - Opik sets the span type to `llm` when the span has a GenAI or OpenInference model or token usage attribute. Opik sets

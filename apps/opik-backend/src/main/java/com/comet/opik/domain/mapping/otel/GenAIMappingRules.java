@@ -64,6 +64,12 @@ public final class GenAIMappingRules {
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.cost").source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.COST).spanType(SpanType.llm).build(),
+            // Must precede the `gen_ai.usage.` USAGE prefix: a string ISO 4217 code
+            // would otherwise be treated as a usage field, fail JSON parsing, and
+            // abort span enrichment. METADATA keeps the unit with the amount.
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.usage.cost.currency").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
