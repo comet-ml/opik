@@ -6,6 +6,7 @@ import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
@@ -29,6 +30,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * This service listens to a Redis stream for Spans to be scored using Python evaluators. It will prepare the Python
@@ -43,6 +45,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
+    private final OnlineScorePublisher onlineScorePublisher;
     private final Logger userFacingLogger;
 
     @Inject
@@ -52,11 +55,13 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
             @NonNull SpanService spanService,
-            @NonNull PythonEvaluatorService pythonEvaluatorService) {
+            @NonNull PythonEvaluatorService pythonEvaluatorService,
+            @NonNull OnlineScorePublisher onlineScorePublisher) {
         super(config, redisson, feedbackScoreService, traceService, spanService, SPAN_USER_DEFINED_METRIC_PYTHON,
                 Constants.SPAN_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.onlineScorePublisher = onlineScorePublisher;
         this.userFacingLogger = UserFacingLoggingFactory
                 .getLogger(OnlineScoringSpanUserDefinedMetricPythonScorer.class);
     }
@@ -68,6 +73,32 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
         } else {
             log.warn("Online Scoring Span Python evaluator consumer won't start as it is disabled.");
         }
+    }
+
+    @Override
+    protected Mono<Void> onRetired(SpanToScoreUserDefinedMetricPython message, Throwable error) {
+        var span = message.span();
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, message.workspaceId(),
+                UserLog.SPAN_ID, span.id().toString(),
+                UserLog.RULE_ID, message.ruleId().toString());
+        return requeueIfRetryable(onlineScorePublisher, message, error,
+                () -> {
+                    try (var logContext = wrapWithMdc(mdc)) {
+                        userFacingLogger.warn(
+                                "Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers",
+                                span.id(), message.ruleName(), message.workspaceId(),
+                                message.requeueAttempt() + 1, onlineScoringConfig.getMaxRequeueAttempts());
+                    }
+                },
+                () -> {
+                    try (var logContext = wrapWithMdc(mdc)) {
+                        userFacingLogger.warn(
+                                "Retries exhausted while scoring spanId '{}' with rule '{}' in workspace '{}'; dropped after {} re-queues",
+                                span.id(), message.ruleName(), message.workspaceId(), message.requeueAttempt());
+                    }
+                });
     }
 
     @Override

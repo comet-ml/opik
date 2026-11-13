@@ -6,6 +6,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanForLlm;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -15,6 +16,7 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
@@ -26,6 +28,8 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -97,6 +101,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
     @Mock
     private SpanService spanService;
+    @Mock
+    private OnlineScorePublisher onlineScorePublisher;
 
     private OnlineScoringTraceThreadUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -131,6 +137,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
 
         when(onlineScoringConfig.getStreams()).thenReturn(List.of(streamConfig));
         when(onlineScoringConfig.getConsumerGroupName()).thenReturn("online_scoring");
+        lenient().when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(3);
 
         // Real AgenticScoringServiceImpl (not a mock) so the bounded span preload runs for real over the
         // stubbed spanService.getByTraceIds Flux — toggle-on tests exercise the actual preload path.
@@ -148,7 +155,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 projectService,
                 automationRuleEvaluatorService,
                 spanService,
-                agenticScoringService);
+                agenticScoringService,
+                onlineScorePublisher);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -562,6 +570,78 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         }
     }
 
+    @Nested
+    class RetirementTests {
+
+        @Test
+        void requeuesRetryExhaustedJobAndDoesNotStoreAScore() {
+            var message = sampleMessage();
+            when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher).enqueueMessage(List.of(message.toBuilder().requeueAttempt(1).build()),
+                    AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
+                    eq(List.of(threadId)),
+                    eq(ruleId),
+                    eq(workspaceId),
+                    eq(1),
+                    eq(3));
+        }
+
+        @Test
+        void doesNotRequeueAPermanentFailureOrStoreAScore() {
+            var message = sampleMessage();
+
+            scorer.onRetired(message, new BadRequestException("invalid metric")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+            verify(userFacingLogger, never()).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues"),
+                    any(), any(), any(), any());
+        }
+
+        @Test
+        void dropsTheJobAfterTheRequeueBoundAndDoesNotStoreAScore() {
+            var message = sampleMessage().toBuilder().requeueAttempt(3).build();
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues"),
+                    eq(List.of(threadId)),
+                    eq(ruleId),
+                    eq(workspaceId),
+                    eq(3));
+        }
+
+        @Test
+        void dropsTheJobWhenMaxRequeueAttemptsIsZeroAndDoesNotStoreAScore() {
+            when(onlineScoringConfig.getMaxRequeueAttempts()).thenReturn(0);
+            var message = sampleMessage();
+
+            scorer.onRetired(message, new InternalServerErrorException("python-backend unavailable")).block();
+
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+            verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+            verify(userFacingLogger).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues"),
+                    eq(List.of(threadId)),
+                    eq(ruleId),
+                    eq(workspaceId),
+                    eq(0));
+            verify(userFacingLogger, never()).warn(
+                    eq("Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers"),
+                    any(), any(), any(), any(), any());
+        }
+    }
+
     private TraceThreadToScoreUserDefinedMetricPython sampleMessage() {
         return podamFactory.manufacturePojo(TraceThreadToScoreUserDefinedMetricPython.class).toBuilder()
                 .ruleId(ruleId)
@@ -570,6 +650,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 .code(new TraceThreadUserDefinedMetricPythonCode("def score(context): return []"))
                 .workspaceId(workspaceId)
                 .userName(userName)
+                .requeueAttempt(0)
                 .build();
     }
 

@@ -20,10 +20,16 @@ public record TraceThreadToScoreUserDefinedMetricPython(
         @NotNull TraceThreadUserDefinedMetricPythonCode code,
         @NotNull String workspaceId,
         @NotNull String userName,
-        @Nullable String workspaceName) implements RedisSubscriberMessage {
+        @Nullable String workspaceName,
+        int requeueAttempt) implements RedisSubscriberMessage {
 
     @Override
     public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
         return toBuilder().workspaceName(workspaceName).build();
+    }
+
+    @Override
+    public RedisSubscriberMessage withRequeueAttempt(int requeueAttempt) {
+        return toBuilder().requeueAttempt(requeueAttempt).build();
     }
 }

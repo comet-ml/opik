@@ -12,6 +12,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -57,6 +58,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
+    private final OnlineScorePublisher onlineScorePublisher;
     private final TraceThreadService traceThreadService;
     private final Logger userFacingLogger;
     private final ProjectService projectService;
@@ -75,12 +77,14 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull SpanService spanService,
-            @NonNull AgenticScoringService agenticScoringService) {
+            @NonNull AgenticScoringService agenticScoringService,
+            @NonNull OnlineScorePublisher onlineScorePublisher) {
         super(config, redisson, feedbackScoreService, traceService, spanService,
                 TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.onlineScorePublisher = onlineScorePublisher;
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
@@ -96,6 +100,31 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         } else {
             log.warn("Online Scoring Python evaluator consumer won't start as it is disabled.");
         }
+    }
+
+    @Override
+    protected Mono<Void> onRetired(TraceThreadToScoreUserDefinedMetricPython message, Throwable error) {
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, message.workspaceId(),
+                UserLog.RULE_ID, message.ruleId().toString());
+        return requeueIfRetryable(onlineScorePublisher, message, error,
+                () -> {
+                    try (var logContext = wrapWithMdc(mdc)) {
+                        userFacingLogger.warn(
+                                "Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; re-queueing ({}/{}) so it can be scored when the evaluator recovers",
+                                message.threadIds(), message.ruleId(), message.workspaceId(),
+                                message.requeueAttempt() + 1, onlineScoringConfig.getMaxRequeueAttempts());
+                    }
+                },
+                () -> {
+                    try (var logContext = wrapWithMdc(mdc)) {
+                        userFacingLogger.warn(
+                                "Retries exhausted while scoring threadIds '{}' with ruleId '{}' in workspace '{}'; dropped after {} re-queues",
+                                message.threadIds(), message.ruleId(), message.workspaceId(),
+                                message.requeueAttempt());
+                    }
+                });
     }
 
     @Override
