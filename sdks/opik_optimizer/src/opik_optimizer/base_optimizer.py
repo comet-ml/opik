@@ -119,6 +119,8 @@ class BaseOptimizer(ABC):
     # Input validation & setup
     # ------------------------------------------------------------------
 
+    _reasoning_model_attributes: tuple[str, ...] = ("model",)
+
     def __init__(
         self,
         model: str,
@@ -598,15 +600,15 @@ class BaseOptimizer(ABC):
 
         sample = [
             EvidenceCase(case_id=str(index), inputs=item)
-            for index, item in enumerate(dataset.get_items()[:10])
+            for index, item in enumerate(dataset.get_items(nb_samples=10))
         ]
         rendered = build_reasoning_messages(
             [],
             evidence=ReasoningEvidence(prompts=prompts, cases=sample),
             allowed_roles=allowed_roles,
         )
-        for optimizer_model in {self.model, self.reasoning_model}:
-            validate_reasoning_messages(rendered, optimizer_model)
+        for attribute in self._reasoning_model_attributes:
+            validate_reasoning_messages(rendered, getattr(self, attribute))
 
     def _prepare_tool_optimization(
         self,

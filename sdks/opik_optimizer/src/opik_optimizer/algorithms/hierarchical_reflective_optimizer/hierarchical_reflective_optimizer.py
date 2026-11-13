@@ -95,6 +95,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         "improve_prompt_template": hierarchical_prompts.IMPROVE_PROMPT_TEMPLATE,
     }
 
+    _reasoning_model_attributes = ("reasoning_model",)
+
     def __init__(
         self,
         model: str = constants.DEFAULT_MODEL,

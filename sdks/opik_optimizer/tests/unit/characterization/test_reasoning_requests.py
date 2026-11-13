@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
 
 from opik_optimizer.core import llm_calls
+from opik_optimizer.core.reasoning import build_reasoning_messages
 from opik_optimizer.utils.multimodal import text_only_messages
 from tests.unit.characterization import harness
+
+
+def _prepared(kwargs: dict[str, Any]) -> Any:
+    return build_reasoning_messages(kwargs["messages"], evidence=kwargs.get("evidence"))
 
 
 def _capture_reasoning_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -18,11 +24,11 @@ def _capture_reasoning_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     original_call, original_async = llm_calls.call_model, llm_calls.call_model_async
 
     def call(**kwargs: Any) -> Any:
-        calls.append(json.dumps(text_only_messages(kwargs["messages"]), default=str))
+        calls.append(json.dumps(text_only_messages(_prepared(kwargs)), default=str))
         return original_call(**kwargs)
 
     async def call_async(**kwargs: Any) -> Any:
-        calls.append(json.dumps(text_only_messages(kwargs["messages"]), default=str))
+        calls.append(json.dumps(text_only_messages(_prepared(kwargs)), default=str))
         return await original_async(**kwargs)
 
     monkeypatch.setattr(llm_calls, "call_model", call)
@@ -41,7 +47,8 @@ def test_meta_prompt_generation_requests_carry_no_dataset_labels(
     harness.run_optimizer("MetaPromptOptimizer", scenario)
 
     assert calls
-    assert not [call for call in calls if "SECRET_" in call]
+    metric_reasons = re.compile(r"expected SECRET_\w+")
+    assert not [call for call in calls if "SECRET_" in metric_reasons.sub("", call)]
 
 
 def test_gepa_reflective_inputs_are_bounded_and_exclude_labels(
