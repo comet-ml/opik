@@ -80,7 +80,7 @@ class KnowledgeRetentionMetric(ConversationThreadMetric):
         ...     {"role": "user", "content": "Please remind me about the Netgear router setup."},
         ...     {
         ...         "role": "assistant",
-        ...         "content": "Be sure to update the Netgear Nighthawk firmware first.",
+        ...         "content": "Be sure to update the Netgear Nighthawk router firmware first.",
         ...     },
         ... ]
         >>> metric = KnowledgeRetentionMetric(turns_to_consider=3)
