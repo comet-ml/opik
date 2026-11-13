@@ -1685,6 +1685,14 @@ def _resolve_resume_items(
     return list(items_iter)
 
 
+def _dict_item_id(index: int, item: Dict[str, Any]) -> Any:
+    """The item's own id as given, unless it is None or a blank string; then a placeholder."""
+    item_id = item.get("id")
+    if item_id is None or (isinstance(item_id, str) and not item_id.strip()):
+        return f"temp_item_{index}"
+    return item_id
+
+
 def evaluate_on_dict_items(
     items: List[Dict[str, Any]],
     task: LLMTask,
@@ -1705,6 +1713,10 @@ def evaluate_on_dict_items(
 
     Args:
         items: List of dataset item contents (dictionaries with the data to evaluate).
+            An ``id`` key, as in the dicts ``Dataset.get_items()`` returns, is used as the
+            item's id as given. An id that is missing, ``None`` or a blank string is
+            replaced by ``temp_item_<i>``. Either way the id is part of the dict passed
+            to ``task``.
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
@@ -1781,7 +1793,7 @@ def evaluate_on_dict_items(
 
     with asyncio_support.async_http_connections_expire_immediately():
         dataset_items = [
-            dataset_item.DatasetItem(id=f"temp_item_{i}", **item)
+            dataset_item.DatasetItem(**{**item, "id": _dict_item_id(i, item)})
             for i, item in enumerate(items)
         ]
         policy = dataset_execution_policy.ExecutionPolicy(
