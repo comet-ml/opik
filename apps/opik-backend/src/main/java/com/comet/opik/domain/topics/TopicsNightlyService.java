@@ -150,21 +150,32 @@ public class TopicsNightlyService {
                     record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
                     continue;
                 }
-                if (!runner.lockProject(candidate.projectId())) {
-                    log.info("Topics night skipped project '{}', its lock is held by another run or Redis is down",
+                if (!runner.acquireRun(budgetEnd)) {
+                    log.info("Topics night skipped project '{}', another run on this pod held its run slot",
                             candidate.projectId());
                     skipped++;
                     record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_LOCKED, null);
                     continue;
                 }
                 try {
-                    switch (runOne(executor, candidate, night, record)) {
-                        case SAVED -> saved++;
-                        case FAILED -> failed++;
-                        case SKIPPED -> skipped++;
+                    if (!runner.lockProject(candidate.projectId())) {
+                        log.info("Topics night skipped project '{}', its lock is held by another run or Redis is down",
+                                candidate.projectId());
+                        skipped++;
+                        record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_LOCKED, null);
+                        continue;
+                    }
+                    try {
+                        switch (runOne(executor, candidate, night, record)) {
+                            case SAVED -> saved++;
+                            case FAILED -> failed++;
+                            case SKIPPED -> skipped++;
+                        }
+                    } finally {
+                        runner.unlockProject(candidate.projectId());
                     }
                 } finally {
-                    runner.unlockProject(candidate.projectId());
+                    runner.releaseRun();
                 }
             }
         } finally {

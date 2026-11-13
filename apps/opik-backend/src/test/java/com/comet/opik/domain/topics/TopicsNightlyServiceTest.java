@@ -39,9 +39,11 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -78,6 +80,7 @@ class TopicsNightlyServiceTest {
     private TopicsRebuildService rebuildService;
     private LockService lockService;
     private TopicsNightlyService service;
+    private TopicsProjectRunner runner;
 
     @BeforeEach
     void setUp() {
@@ -143,7 +146,7 @@ class TopicsNightlyServiceTest {
 
         TopicsConfig config = TestConfigUtils.loadConfigTest().getTopics();
         var metrics = new TopicsMetrics(meter.meter);
-        var runner = new TopicsProjectRunner(config, template, rebuildService, metrics, lockService);
+        runner = spy(new TopicsProjectRunner(config, template, rebuildService, metrics, lockService));
         service = new TopicsNightlyService(config, template, workspaceService, windowDAO, rebuildService, runner,
                 metrics, lockService, idGenerator);
     }
@@ -201,6 +204,45 @@ class TopicsNightlyServiceTest {
         assertThat(rows()).filteredOn(row -> BROKEN_WORKSPACE_ID.equals(row.workspaceId()))
                 .extracting(TopicNightProject::projectId, TopicNightProject::decision)
                 .containsExactlyInAnyOrder(tuple(broken, "count_failed"), tuple(other, "nightly_update"));
+    }
+
+    @Test
+    @DisplayName("while another run on the pod holds the run slot past one run limit, the night skips the project as "
+            + "locked before its lock and its run row; once the slot is free, the project is updated and the slot is "
+            + "given back")
+    void runSlotHeld() {
+        doReturn(Duration.ofMillis(50)).when(runner).runLimit();
+        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(UUID.randomUUID());
+        assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
+        try {
+            assertThat(service.runNight(START).saved()).isZero();
+        } finally {
+            runner.releaseRun();
+        }
+        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(lockService, never()).lockUsingToken(eq(TopicsProjectRunner.projectLock(started)), any());
+        assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
+                .extracting(TopicNightProject::decision, TopicNightProject::reason)
+                .containsExactly(tuple("skip", "locked"));
+
+        assertThat(service.runNight(START).saved()).isEqualTo(1);
+        assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
+    }
+
+    @Test
+    @DisplayName("the wait for a held run slot ends at the budget's end, not one run limit later: a project starts "
+            + "within the budget, so the night's lease covers its run")
+    void runSlotWaitEndsAtBudgetEnd() {
+        assertThat(runner.runLimit()).isGreaterThan(Duration.ofMinutes(1));
+        assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
+        try {
+            long began = System.nanoTime();
+            assertThat(runner.acquireRun(Instant.now().plusMillis(100))).isFalse();
+            assertThat(Duration.ofNanos(System.nanoTime() - began)).isLessThan(Duration.ofSeconds(5));
+            assertThat(runner.acquireRun(Instant.now().minusSeconds(1))).isFalse();
+        } finally {
+            runner.releaseRun();
+        }
     }
 
     @Test
