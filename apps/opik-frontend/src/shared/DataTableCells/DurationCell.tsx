@@ -73,7 +73,7 @@ const DurationTextAggregationCell = <TData,>(
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "-";
+  let value = "";
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue);

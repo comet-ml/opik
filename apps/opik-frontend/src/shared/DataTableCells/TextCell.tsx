@@ -3,6 +3,7 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
 import { formatNumericData, toString } from "@/lib/utils";
+import { formatExperimentCount } from "@/lib/experiments";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
@@ -54,7 +55,7 @@ const TextAggregationCell = <TData,>(context: CellContext<TData, string>) => {
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "-";
+  let value = "";
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue);
@@ -98,36 +99,27 @@ const GroupTextCell = <TData,>(context: CellContext<TData, unknown>) => {
       : undefined;
 
   const hasValue = Boolean(label || value);
+  const text = hasValue
+    ? toString((label || value) as string | number | boolean | null | undefined)
+    : "Undefined";
 
-  const countText = isNumber(count) ? ` (${count})` : "";
-
-  if (!hasValue) {
-    const text = "Undefined";
-
-    return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        <CellTooltipWrapper content={text}>
-          <span className="truncate">
-            {text}
-            {countText}
-          </span>
-          {explainer && <ExplainerIcon {...explainer} className="ml-1" />}
-        </CellTooltipWrapper>
-      </CellWrapper>
-    );
-  }
-
-  const textContext = {
-    ...context,
-    getValue: () =>
-      toString(
-        (label || value) as string | number | boolean | null | undefined,
-      ) + countText,
-  } as CellContext<TData, string>;
-  return <TextCell {...textContext} />;
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="items-center gap-1 overflow-hidden"
+    >
+      <CellTooltipWrapper content={text}>
+        <span className="min-w-0 flex-1 truncate">{text}</span>
+      </CellTooltipWrapper>
+      {isNumber(count) && (
+        <span className="shrink-0 text-light-slate">
+          {formatExperimentCount(count)}
+        </span>
+      )}
+      {!hasValue && explainer && <ExplainerIcon {...explainer} />}
+    </CellWrapper>
+  );
 };
 
 TextCell.Group = GroupTextCell;

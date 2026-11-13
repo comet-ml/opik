@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildExperimentName,
   EXPERIMENT_TAB,
+  formatExperimentCount,
   formatExperimentPromptVersions,
   formatPromptVersionLabel,
   getAvailableExperimentTabs,
@@ -322,5 +323,15 @@ describe("suggestNextExperimentName", () => {
 
   it("trims before suggesting", () => {
     expect(suggestNextExperimentName("  concise  ", null)).toBe("concise_02");
+  });
+});
+
+describe("formatExperimentCount", () => {
+  it.each([
+    [1, "1 exp"],
+    [3, "3 exps"],
+    [0, "0 exps"],
+  ])("formats %i as %s", (count, expected) => {
+    expect(formatExperimentCount(count)).toBe(expected);
   });
 });
