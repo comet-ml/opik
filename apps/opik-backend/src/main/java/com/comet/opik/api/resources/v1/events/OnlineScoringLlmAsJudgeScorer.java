@@ -24,12 +24,13 @@ import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.HttpStatusRetryability;
 import com.comet.opik.utils.JsonUtils;
@@ -290,28 +291,25 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",
+                        .error("Unexpected error while scoring traceId '{}' with rule '{}', error type '{}'",
                                 trace.id(), message.ruleName(),
-                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
-                                        .orElse(error.getMessage()))))
+                                // the type only: a provider's text can be in any message of the chain
+                                ProviderFailures.rootType(error))))
                 .then();
     }
 
     // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
-    // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
-    // exactly as before with no extra writes.
+    // evaluation, one llm span per LLM round.
     private EvaluationRecorder beginRecorder(TraceToScoreLlmAsJudge message) {
-        return serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(message.trace(), message.ruleId(), message.ruleName(),
-                        message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
-                : EvaluationRecorder.NOOP;
+        return onlineEvaluationRecorder.begin(message.trace(), message.ruleId(), message.ruleName(),
+                message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName());
     }
 
     private Mono<List<FeedbackScoreBatchItem>> judge(TraceToScoreLlmAsJudge message, List<Span> spans,
             Map<String, String> mdc, EvaluationRecorder recorder) {
-        // Decisions models (Jev) have no chat, tools or structured output: one Decisions API call answers every
-        // score, so they skip the chat judge's agentic routing. Rule validation keeps {{trace}} out of their prompts.
-        boolean decisionModel = OpenRouterDecisionModel.isDecisionModel(message.llmAsJudgeCode().model().name());
+        // Decisions models have no chat, tools or structured output: one Decisions API call answers every score, so
+        // they skip the chat judge's agentic routing. Rule validation keeps {{trace}} out of their prompts.
+        boolean decisionModel = DecisionModels.isDecisionsRule(message.llmAsJudgeCode().model());
         return recorder.monitor(decisionModel
                 ? evaluateWithDecisionModel(message, spans, mdc, recorder)
                 : evaluateWithChatModel(message, spans, mdc, recorder));
@@ -523,11 +521,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 int estimatedTokens = DecisionScoringService.estimateTokens(request,
                         onlineScoringConfig.getAgenticToolsCharsPerToken());
                 recorder.recordPreparation(spans.size(), estimatedTokens, false);
-                if (DecisionScoringService.exceedsContext(estimatedTokens)) {
+                if (DecisionScoringService.exceedsContext(code.model().name(), estimatedTokens)) {
                     userFacingLogger.warn("Skipped evaluation, the prompt is too large for the decision model,"
                             + " traceId '{}', model '{}', estimated tokens '{}', limit '{}'", trace.id(),
                             code.model().name(),
-                            estimatedTokens, DecisionScoringService.MAX_CONTEXT_TOKENS);
+                            estimatedTokens, DecisionScoringService.maxContextTokens(code.model().name()));
                     return null;
                 }
                 userFacingLogger.info("Sending traceId '{}' to decision model '{}' with '{}' questions", trace.id(),
@@ -656,7 +654,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 // be forced to call a tool. Providers that reject a forced choice outright get
                 // AUTO here too — see firstRoundToolChoice.
                 scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
-                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
+                        agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName),
+                                message.llmAsJudgeCode().model()));
             }
 
             // summarizeRequest is cheap (no per-message toString streaming since the chars-count
@@ -718,7 +717,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     boolean shouldFetchSpans(TraceToScoreLlmAsJudge message) {
         String modelName = message.llmAsJudgeCode().model().name();
         // Decisions models never take the agentic path, so only the template can need spans.
-        boolean agenticToolsPathPossible = !OpenRouterDecisionModel.isDecisionModel(modelName)
+        boolean agenticToolsPathPossible = !DecisionModels.isDecisionsRule(message.llmAsJudgeCode().model())
                 && agenticScoringService.supportsToolCalling(llmProviderFactory.getLlmProvider(modelName));
         boolean templateNeedsSpans = OnlineScoringEngine.templateReferencesSpans(
                 message.llmAsJudgeCode().messages(),

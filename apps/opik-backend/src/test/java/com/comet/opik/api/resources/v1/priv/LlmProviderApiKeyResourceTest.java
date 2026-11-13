@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -413,14 +414,16 @@ class LlmProviderApiKeyResourceTest {
                         RandomStringUtils.secure().nextAlphanumeric(20)))
                 .build();
 
-        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
-                HttpStatus.SC_NO_CONTENT);
-
-        getAndAssertProviderApiKey(created.toBuilder()
+        var expectedProviderApiKey = created.toBuilder()
                 .baseUrl(update.baseUrl())
                 .apiKey(update.apiKey())
                 .headers(update.headers())
-                .build(), apiKey, workspaceName);
+                .build();
+
+        llmProviderApiKeyResourceClient.updateProviderApiKey(created.id(), update, apiKey, workspaceName,
+                HttpStatus.SC_NO_CONTENT);
+
+        getAndAssertProviderApiKey(expectedProviderApiKey, apiKey, workspaceName);
     }
 
     @Test
@@ -467,6 +470,48 @@ class LlmProviderApiKeyResourceTest {
                 .provider(LlmProvider.OPEN_AI) // avoid using a custom provider as it has additional requirements
                 .providerName(null)
                 .build();
+    }
+
+    Stream<Arguments> headersThatCannotBeSentAreRejected() {
+        return Stream.of(
+                arguments(named("a header without a value", "{\"X-Route\": null}"),
+                        "header value must not be null, header 'X-Route'"),
+                arguments(named("a header with a blank name", "{\" \": \"value\"}"),
+                        "header names must not be blank"),
+                arguments(named("names differing only in case", "{\"X-Route\": \"a\", \"x-route\": \"b\"}"),
+                        "header names must differ in more than case, header 'x-route'"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("Create and update provider Api Key - headers that can't be sent are rejected")
+    void headersThatCannotBeSentAreRejected(String headers, String expectedMessage) {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+        var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, expectedMessage);
+        var created = llmProviderApiKeyResourceClient.createProviderApiKey(createProviderApiKey(), apiKey,
+                workspaceName, HttpStatus.SC_CREATED);
+        var createBody = JsonUtils.getMapper().<ObjectNode>valueToTree(createProviderApiKey());
+        createBody.set("headers", JsonUtils.getJsonNodeFromString(headers));
+        var updateBody = """
+                {"api_key": "%s", "headers": %s}""".formatted(UUID.randomUUID(), headers);
+
+        ErrorMessage actualCreateError;
+        try (var response = llmProviderApiKeyResourceClient.createProviderApiKey(createBody.toString(), apiKey,
+                workspaceName, HttpStatus.SC_BAD_REQUEST)) {
+            actualCreateError = response.readEntity(ErrorMessage.class);
+        }
+        ErrorMessage actualUpdateError;
+        try (var response = llmProviderApiKeyResourceClient.callUpdateProviderApiKey(created.id(), updateBody,
+                apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            actualUpdateError = response.readEntity(ErrorMessage.class);
+        }
+
+        assertThat(actualCreateError).isEqualTo(expectedError);
+        assertThat(actualUpdateError).isEqualTo(expectedError);
+        getAndAssertProviderApiKey(created, apiKey, workspaceName);
     }
 
     @Test

@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.123](https://img.shields.io/badge/Version-2.2.123-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.123](https://img.shields.io/badge/AppVersion-2.2.123-informational?style=flat-square)
+![Version: 2.2.143](https://img.shields.io/badge/Version-2.2.143-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.143](https://img.shields.io/badge/AppVersion-2.2.143-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -95,7 +95,7 @@ Call opik api on http://localhost:5173/api
 | alerts.awsEventBridge.eventBus | string | `""` |  |
 | alerts.awsEventBridge.region | string | `""` |  |
 | altinity-clickhouse-operator.crdHook.image.repository | string | `"alpine/kubectl"` |  |
-| altinity-clickhouse-operator.crdHook.image.tag | string | `"1.35.0"` |  |
+| altinity-clickhouse-operator.crdHook.image.tag | string | `"1.37.2"` |  |
 | altinity-clickhouse-operator.enabled | bool | `true` |  |
 | altinity-clickhouse-operator.metrics.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
@@ -108,7 +108,7 @@ Call opik api on http://localhost:5173/api
 | caCerts.overwriteJavaCATrustStore.subPath | string | `"cacerts"` | The sub-path of the valid Java Trust Store to mount from the volume. |
 | caCerts.overwriteJavaCATrustStore.volume | object | `{}` | A Kubernetes Volume definition which will contain a valid Java Trust Store. See https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/ for valid parameters. |
 | chartMigration.enabled | bool | `true` |  |
-| chartMigration.image | string | `"alpine/kubectl:1.35.0"` |  |
+| chartMigration.image | string | `"alpine/kubectl:1.37.2"` |  |
 | chartMigration.nodeSelector | object | `{}` |  |
 | chartMigration.serviceAccountName | string | `""` |  |
 | chartMigration.tolerations | list | `[]` |  |
@@ -126,7 +126,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backup.restore.backupName | string | `""` | Name of the backup to restore, REQUIRED when createJob is true (Helm rendering fails otherwise). Must be a `name` from the backup server's `/backup/list`, e.g. "2026-01-16" — a backup the backup server created. Backups written by the SQL-based CronJob above cannot be restored by it. |
 | clickhouse.backup.restore.createJob | bool | `false` |  |
 | clickhouse.backup.restore.extraEnv | object | `{}` |  |
-| clickhouse.backup.restore.image | string | `"amazon/aws-cli:2.27.49"` |  |
+| clickhouse.backup.restore.image | string | `"amazon/aws-cli:2.39.3"` |  |
 | clickhouse.backup.restore.nodeSelector | object | `{}` |  |
 | clickhouse.backup.restore.resources.limits.cpu | string | `"10m"` |  |
 | clickhouse.backup.restore.resources.limits.memory | string | `"64Mi"` |  |
@@ -145,7 +145,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
 | clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
 | clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.7.4"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.8.3"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
@@ -183,7 +183,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.forceMerge.minAgeSeconds | int | `604800` | A part quiet for this long becomes eligible for force-merge (min_age_to_force_merge_seconds). |
 | clickhouse.forceMerge.numberOfFreeEntriesInPoolToLowerMaxSizeOfMerge | int | `8` | Below this many free pool slots, the largest merges are throttled so they cannot starve the pool (number_of_free_entries_in_pool_to_lower_max_size_of_merge). |
 | clickhouse.forceMerge.onPartitionOnly | bool | `false` | false: per part. true: only once the whole partition is quiet, so a partition still taking writes never becomes eligible (min_age_to_force_merge_on_partition_only). |
-| clickhouse.image | string | `"altinity/clickhouse-server:26.3.16.10001.altinitystable"` |  |
+| clickhouse.image | string | `"clickhouse/clickhouse-server:26.3.62.3"` |  |
 | clickhouse.lifecycle | object | `{}` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
@@ -192,6 +192,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.livenessProbe.periodSeconds | int | `30` |  |
 | clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
+| clickhouse.logsMaxCount | int | `3` | Rotated file logs kept (applies to both the server and error log) |
+| clickhouse.logsMaxSize | string | `"100M"` | Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
@@ -235,7 +237,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.terminationGracePeriodSeconds | int | `nil` | Pod termination grace period in seconds. Unset keeps the Kubernetes default (30). |
-| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"coldTierMigration":{"activeDeadlineSeconds":1320,"enabled":true,"image":"alpine/kubectl:1.35.0","nodeSelector":{},"pollTimeoutSeconds":1200,"serviceAccountName":"","tolerations":[]},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"},"ttl":{"activeDeadlineSeconds":600,"enabled":false,"materialize":{"enabled":false},"nodeSelector":{},"resources":{},"tables":[{"moveAfterWeeks":13,"name":"traces_local"}],"tolerations":[]}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until the `tiered_replicated` policy is attached to a table (see `ttl`), so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
+| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"coldTierMigration":{"activeDeadlineSeconds":1320,"enabled":true,"image":"alpine/kubectl:1.37.2","nodeSelector":{},"pollTimeoutSeconds":1200,"serviceAccountName":"","tolerations":[]},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"},"ttl":{"activeDeadlineSeconds":600,"enabled":false,"materialize":{"enabled":false},"nodeSelector":{},"resources":{},"tables":[{"moveAfterWeeks":13,"name":"traces_local"}],"tolerations":[]}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until the `tiered_replicated` policy is attached to a table (see `ttl`), so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. With `backupServer` on, set `backupServer.env.S3_OBJECT_DISK_PATH` (outside `S3_PATH`) before any part reaches cold, or every backup after that fails. |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
@@ -279,13 +281,13 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage,b3"` |  |
 | component.backend.env.OTEL_VERSION | string | `"2.12.0"` |  |
 | component.backend.env.PYTHON_EVALUATOR_URL | string | `"http://opik-python-backend:8000"` |  |
-| component.backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
+| component.backend.env.WEBHOOK_DESTINATION_GUARD | string | `"relaxed"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
@@ -328,12 +330,12 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.clickhouse.protocol | string | `"http"` |  |
 | component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
-| component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
+| component.backend.waitForClickhouse.image.tag | string | `"8.23.0"` |  |
 | component.backend.waitForClickhouse.resources | object | `{}` |  |
 | component.backend.waitForMysql.enabled | bool | `false` |  |
 | component.backend.waitForMysql.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForMysql.image.repository | string | `"busybox"` |  |
-| component.backend.waitForMysql.image.tag | float | `1.36` |  |
+| component.backend.waitForMysql.image.tag | float | `1.38` |  |
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
 | component.backend.waitForMysql.resources | object | `{}` |  |
@@ -451,11 +453,13 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_MAX_RESULT_SIZE_IN_BYTES | string | `"67108864"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS | string | `"60"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_READY_TIMEOUT_SECONDS | string | `"10"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
-| component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.registry | string | `nil` | Registry for this component only. Defaults to the chart-wide `registry`. Set it when one component is pulled from a different registry. |
@@ -503,7 +507,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.waitForRedis.enabled | bool | `true` |  |
 | component.python-backend.waitForRedis.image.registry | string | `"docker.io"` |  |
 | component.python-backend.waitForRedis.image.repository | string | `"busybox"` |  |
-| component.python-backend.waitForRedis.image.tag | string | `"1.36"` |  |
+| component.python-backend.waitForRedis.image.tag | string | `"1.38"` |  |
 | component.python-backend.waitForRedis.redis.host | string | `""` |  |
 | component.python-backend.waitForRedis.redis.port | int | `6379` |  |
 | component.python-backend.waitForRedis.resources | object | `{}` |  |
@@ -516,7 +520,6 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.spanWeeksBackfillEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.spanWeeksReadEnabled | bool | `false` |  |
-| databaseAnalyticsDataModel.spanWeeksWriteEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.spansDistributedWrapEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
@@ -588,7 +591,7 @@ Call opik api on http://localhost:5173/api
 | zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | zookeeper.image.registry | string | `"docker.io"` |  |
 | zookeeper.image.repository | string | `"zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.4"` |  |
+| zookeeper.image.tag | string | `"3.9.6"` |  |
 | zookeeper.persistence.dataDir | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper"` |  |

@@ -26,6 +26,7 @@ type PluginStore = {
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
+    hidden?: boolean;
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;
@@ -45,6 +46,9 @@ type PluginStore = {
   BillingLink: React.ComponentType<BillingLinkProps> | null;
   sendOnboardingEmail: ((email: string) => Promise<void>) | null;
   getOllieCredits:
+    | ((workspaceName: string, signal?: AbortSignal) => Promise<boolean>)
+    | null;
+  getGuardrailsEnabled:
     | ((workspaceName: string, signal?: AbortSignal) => Promise<boolean>)
     | null;
   init: unknown;
@@ -76,6 +80,7 @@ const PLUGIN_NAMES = [
   "BillingLink",
   "sendOnboardingEmail",
   "getOllieCredits",
+  "getGuardrailsEnabled",
   "init",
 ];
 
@@ -123,6 +128,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   BillingLink: null,
   sendOnboardingEmail: null,
   getOllieCredits: null,
+  getGuardrailsEnabled: null,
   init: null,
   collectRoutes: (parents) =>
     ACTIVE_MANIFESTS.flatMap((manifest) => manifest.routes?.(parents) ?? []),

@@ -29,7 +29,7 @@ class OpenAIClientGeneratorTemperatureTest {
 
     private ChatRequestParameters judgeParametersFor(String modelName) {
         var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(),
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")
@@ -56,7 +56,7 @@ class OpenAIClientGeneratorTemperatureTest {
 
     private ChatRequestParameters responsesJudgeParametersFor(String modelName) {
         var generator = new OpenAIClientGenerator(new LlmProviderClientConfig(),
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey("test-key")
                 .baseUrl("https://openrouter.ai/api/v1")

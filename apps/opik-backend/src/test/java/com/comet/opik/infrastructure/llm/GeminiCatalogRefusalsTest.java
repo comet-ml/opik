@@ -11,6 +11,7 @@ import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.ParamResolver;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange;
 import com.comet.opik.domain.llm.ParamResolver.ParamChange.Reason;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
@@ -27,11 +28,11 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import lombok.NonNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -97,7 +98,7 @@ class GeminiCatalogRefusalsTest {
 
         paramResolver = new ParamResolver(llmProviderFactory, registryService);
         chatCompletionService = new ChatCompletionService(config.getLlmProviderClient(), llmProviderFactory,
-                paramResolver);
+                paramResolver, new ProviderErrorMessageValidator(config.getLlmProviderClient()));
     }
 
     @BeforeEach
@@ -139,11 +140,10 @@ class GeminiCatalogRefusalsTest {
                 : parameters.toBuilder().temperature(null).build());
     }
 
-    @Test
-    void theChangeListNamesEachRefusedSettingForAModelWithoutACuratedRow() {
-        assertThat(paramResolver.resolve(request("gemini-4-argon"), null).changes()).isEqualTo(REFUSALS);
-        assertThat(paramResolver.resolve(request("vertex_ai/gemini-3.8-flash-cyber"), null).changes())
-                .isEqualTo(REFUSALS);
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"gemini-5-pro", "vertex_ai/gemini-3.8-flash-cyber"})
+    void theChangeListNamesEachRefusedSettingForAModelWithoutACuratedRow(String model) {
+        assertThat(paramResolver.resolve(request(model), null).changes()).isEqualTo(REFUSALS);
     }
 
     private static Stream<Arguments> models() {

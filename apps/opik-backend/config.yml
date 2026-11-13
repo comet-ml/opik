@@ -11,6 +11,16 @@ logging:
     # Default: INFO
     # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
     com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
+    # Default: ERROR
+    # Description: langchain4j logs each retry of a model's own retry loop with the provider's response; Opik logs its
+    #   own retries without it
+    dev.langchain4j.internal.RetryUtils: ERROR
+    # Default: WARN
+    # Description: pinned so a DEBUG root level (GENERAL_LOG_LEVEL) can't enable them; at DEBUG they log full HTTP
+    #   headers and bodies, including authorization headers. Set the logger by name to debug the wire deliberately
+    org.eclipse.jetty.http.HttpParser: WARN
+    org.apache.hc.client5.http.wire: WARN
+    org.apache.hc.client5.http.headers: WARN
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -200,14 +210,8 @@ databaseAnalyticsDataModel:
   #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
   #  Default: false
-  #  Description: Register each written span's weekly partition in the span_weeks index (OPIK-8706). Leave false at
-  #   deploy time; turn true before the span weeks backfill starts, so every span written after its snapshot is
-  #   indexed. Off writes nothing.
-  spanWeeksWriteEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_WRITE_ENABLED:-false}
-  #  Default: false
   #  Description: Schedule the span weeks backfill job (tuned under spanWeeksBackfill), which fills span_weeks from the
-  #   spans already written, one range of weeks at a time. Turn true only once spanWeeksWriteEnabled is live on every
-  #   instance: the backfill covers the spans written until its first run, live registration the rest.
+  #   spans written before span_weeks_mv, one range of weeks at a time. The MV registers every span inserted since.
   spanWeeksBackfillEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_BACKFILL_ENABLED:-false}
   #  Default: false
   #  Description: Bound the spans reads keyed by traces or by a project to the weeks the span_weeks index holds for
@@ -215,19 +219,6 @@ databaseAnalyticsDataModel:
   #   spans are indexed by span_weeks_mv in their insert, older ones by the span weeks backfill: turn true once the
   #   backfill logs that it is complete, as spans it has not indexed yet would be skipped.
   spanWeeksReadEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_WEEKS_READ_ENABLED:-false}
-
-# Span weeks registration (OPIK-8706): retry of a failed span weeks write, with exponential backoff. Registration is
-# switched on by databaseAnalyticsDataModel.spanWeeksWriteEnabled.
-spanWeeksRegistration:
-  #  Default: 3
-  #  Description: Retries after the first attempt; a repeat registration collapses in span_weeks
-  maxRetries: ${SPAN_WEEKS_REGISTRATION_MAX_RETRIES:-3}
-  #  Default: 200ms
-  #  Description: First backoff; it doubles on each retry, with jitter, up to maxBackoff
-  minBackoff: ${SPAN_WEEKS_REGISTRATION_MIN_BACKOFF:-200ms}
-  #  Default: 2s
-  #  Description: Upper bound of the exponential backoff
-  maxBackoff: ${SPAN_WEEKS_REGISTRATION_MAX_BACKOFF:-2s}
 
 # Span weeks backfill (OPIK-8706) tuning; the job is switched on by databaseAnalyticsDataModel.spanWeeksBackfillEnabled.
 # It tiles the span ids into ranges of weeks, from the install week (the first project's created_at) to the plan's own
@@ -618,6 +609,13 @@ cipxTokenValidation:
   # Default: http://ai-cost-backend
   # Description: Base URL of the cost-api service that validates device tokens; the validator endpoint is appended to it. The in-cluster service name, not the public front door: the validator is reached only from inside the cluster
   url: ${CIPX_TOKEN_VALIDATION_URL:-http://ai-cost-backend}
+
+# The admin server: Dropwizard's tasks (log level, gc), /healthcheck, /metrics, /threads and /ping, on the port of
+# server.adminConnectors. The probes use /health-check on the application port, which stays.
+adminServer:
+  # Default: true
+  # Description: Whether the admin server runs. When false, nothing listens on the admin port, on any interface
+  enabled: ${SERVER_ADMIN_ENABLED:-true}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -1593,7 +1591,7 @@ llmProviderTokenAuth:
   # Description: Refresh the cached token once its remaining lifetime drops below this fraction of the total lifetime
   refreshFraction: ${LLM_PROVIDER_TOKEN_AUTH_REFRESH_FRACTION:-0.25}
   # Default: 10s
-  # Description: Timeout for the token fetch call to the configured auth service
+  # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
   # Description: Lease time for the cross-pod single-flight lock around a token fetch
@@ -1663,14 +1661,52 @@ llmProviderClient:
   #   detects the MIME type of an extensionless video URL, and the download of the image, audio, video and PDF URLs
   #   that Gemini and Vertex AI receive as inline data
   videoUrlDestinationGuard: ${LLM_PROVIDER_VIDEO_URL_DESTINATION_GUARD:-strict}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for the image, audio, video and PDF URLs that Gemini and Vertex AI receive as inline
+  #   data, checked in strict mode only; a URL that isn't http or https is refused in every mode
+  mediaUrlDestinationScheme: ${LLM_PROVIDER_MEDIA_URL_DESTINATION_SCHEME:-plaintext_or_tls}
   # Default: 30s
   # Description: Time allowed for downloading one media URL that Gemini or Vertex AI receives as inline data,
-  #   connecting included
+  #   connecting included; at most 2m
   mediaDownloadTimeout: ${LLM_PROVIDER_MEDIA_DOWNLOAD_TIMEOUT:-30s}
   # Default: 20MB
-  # Description: Largest media file downloaded for Gemini or Vertex AI; a Gemini request carries at most 20 MB of
-  #   inline data
+  # Description: Most bytes downloaded for all the media of one Gemini or Vertex AI request, which carries at most
+  #   20 MB of inline data; at most 100MB
   mediaDownloadMaxSize: ${LLM_PROVIDER_MEDIA_DOWNLOAD_MAX_SIZE:-20MB}
+  # Default: 300
+  # Description: Longest provider error message passed on to a caller. Provider error messages are one or two
+  #   sentences; a longer, multi-line or markup-bearing message is replaced by "Unexpected error calling LLM provider";
+  #   at most 1000
+  providerErrorMessageMaxLength: ${LLM_PROVIDER_ERROR_MESSAGE_MAX_LENGTH:-300}
+  # Default: 64KB
+  # Description: Most bytes read from a custom provider's error response body; the rest is discarded, as only a
+  #   short message parsed from it reaches callers; at most 1MiB
+  providerErrorBodyMaxSize: ${LLM_PROVIDER_ERROR_BODY_MAX_SIZE:-64KB}
+  # Default: 120s
+  # Description: Longest a provider's stream may stay silent, before its headers or between reads of its body: a
+  #   stream waits for its headers up to the longer of this and readTimeout, a call that isn't one up to readTimeout
+  #   only. Above the 90s ingress idle timeout, as models that reason before answering can be silent for a while;
+  #   between 1s and 10m
+  streamReadTimeout: ${LLM_PROVIDER_STREAM_READ_TIMEOUT:-120s}
+  # Default: 1024
+  # Description: Most threads of the shared HTTP client for LLM provider calls. A call made asynchronously, a stream
+  #   included, holds one from start to end, so it must be at least httpClientMaxRequests; at most 2048
+  httpClientMaxThreads: ${LLM_PROVIDER_CLIENT_MAX_THREADS:-1024}
+  # Default: 60s
+  # Description: How long an idle thread of the shared LLM HTTP client lives before it ends, so the pool shrinks
+  #   back after a burst; between 1s and 5m
+  httpClientThreadKeepAlive: ${LLM_PROVIDER_CLIENT_THREAD_KEEP_ALIVE:-60s}
+  # Default: 1024
+  # Description: Most LLM provider calls made asynchronously, streams included, that run at once on the shared
+  #   client. Further calls wait in order for one to end, and their timeouts start once they run; at most 2048
+  httpClientMaxRequests: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS:-1024}
+  # Default: 1024
+  # Description: Most of httpClientMaxRequests that run at once to a single host. Most calls go to a few hosts, such
+  #   as one provider's API, so it defaults to the overall limit and can't exceed it
+  httpClientMaxRequestsPerHost: ${LLM_PROVIDER_CLIENT_MAX_REQUESTS_PER_HOST:-1024}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
@@ -1754,6 +1790,18 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: ${CLICKHOUSE_LOG_APPENDER_FLUSH_INTERVAL_DURATION:-PT0.500S}
 
+  # Default: 10
+  # Description: Number of batches the log queue holds (batchSize * maxQueuedBatches logs). Past it, new logs are dropped
+  maxQueuedBatches: ${CLICKHOUSE_LOG_APPENDER_MAX_QUEUED_BATCHES:-10}
+
+  # Default: PT5S or 5s
+  # Description: On shutdown, how long to wait for the flush thread to stop and for queued logs to be inserted (max PT1M)
+  shutdownTimeout: ${CLICKHOUSE_LOG_APPENDER_SHUTDOWN_TIMEOUT:-PT5S}
+
+  # Default: PT1M or 1 minute
+  # Description: Upper bound on one log insert; past it the insert is abandoned so later flushes can run (max PT10M)
+  insertTimeout: ${CLICKHOUSE_LOG_APPENDER_INSERT_TIMEOUT:-PT1M}
+
 workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting.
@@ -1820,6 +1868,13 @@ attachmentsConfig:
   # Description: Minimum size (bytes) for base64 strings to be considered attachments
   # Default: 256000 (256KB)
   stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
+
+# Per-organization features the platform switches on (guardrails today), asked for on demand by the endpoints that
+# need them, and only when authentication is enabled.
+workspaceFeatures:
+  # Default: 5s
+  # Description: How long one workspace's answer for a feature is cached in Redis; a feature switched on or off in the platform is seen within it. 0s asks the platform on every call
+  cacheTtl: ${WORKSPACE_FEATURES_CACHE_TTL:-5s}
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1888,6 +1943,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the backend runs guardrails itself: the checks on opik-inference (POST /v1/private/guardrails/validations) and the guardrail policies API
+  guardrailsValidationsEnabled: ${TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
@@ -1964,11 +2022,6 @@ serviceToggles:
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
-  # Default: true
-  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
-  #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
-  #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
-  onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not automatic annotation queue population is enabled. When false the score
   #   listener, the Redis buffer flush job and the routing consumer all stay dormant, and the UI hides the
@@ -2209,6 +2262,15 @@ webhook:
   #   link-local, private and unresolvable destinations; 'relaxed' allows them, as self-hosted
   #   deployments legitimately point webhooks at internal services
   destinationGuard: ${WEBHOOK_DESTINATION_GUARD:-relaxed}
+  # Default: plaintext_or_tls
+  # Values: ['plaintext_or_tls', 'https_only']
+  #   - plaintext_or_tls: http and https
+  #   - https_only: https only
+  # Description: Schemes allowed for webhook URLs, checked in strict mode only
+  destinationScheme: ${WEBHOOK_DESTINATION_SCHEME:-plaintext_or_tls}
+  # Default: 512B
+  # Description: Maximum bytes read from a webhook response body, which is only logged; the rest is discarded (at most 64KiB)
+  responseBodyMaxSize: ${WEBHOOK_RESPONSE_BODY_MAX_SIZE:-512B}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}
@@ -2452,6 +2514,18 @@ aiLabels:
     #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
     #  sends get past tickBudget, so it lengthens the leader lease
     readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
+    #  Default: 256
+    #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
+    #  retries after a short backoff, then fails
+    maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
+    #  Default: 30s
+    #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
+    #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+    decideKeepAlive: ${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}
+    #  Default: 5m
+    #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
+    #  upstream instances after a rollout
+    decideTimeToLive: ${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
@@ -2555,3 +2629,16 @@ aiLabels:
     #  Description: Per sweep query on the shared ClickHouse; a trip skips that bucket for the tick. Lengthens the leader
     #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
+# server-side only; the validations endpoint rejects a threshold sent by the caller.
+guardrails:
+  # Default: 0.5
+  # Description: A PII check fails when any selected class scores at or above this
+  piiThreshold: ${GUARDRAILS_PII_THRESHOLD:-0.5}
+  # Default: 0.3
+  # Description: A topic counts as matched when its probability is at or above this
+  topicThreshold: ${GUARDRAILS_TOPIC_THRESHOLD:-0.3}
+  # Default: 0.4
+  # Description: A prompt injection check fails when the probability is at or above this
+  promptInjectionThreshold: ${GUARDRAILS_PROMPT_INJECTION_THRESHOLD:-0.4}

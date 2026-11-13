@@ -2438,6 +2438,21 @@ class TracesResourceTest {
     class CreateTrace {
 
         @Test
+        void create__whenProjectNameTooLong__thenReturnUnprocessableEntity() {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callCreateTrace(trace, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("projectName cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         @DisplayName("Success")
         void testCreateTrace() {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -2940,6 +2955,22 @@ class TracesResourceTest {
                     expectedTraces.reversed(),
                     List.of(),
                     API_KEY);
+        }
+
+        @Test
+        void batch__whenProjectNameTooLong__thenReturnUnprocessableEntity() {
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("traces[0].projectName cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
         }
 
         @ParameterizedTest
@@ -4113,6 +4144,65 @@ class TracesResourceTest {
                 var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(actualEntity).isEqualTo(expectedEntity);
             }
+        }
+
+        // The payload columns travel in the FORMAT Values row, so the Values input format, not the SQL lexer,
+        // unescapes them: quotes, escaped quotes, newlines, backslashes and non-ASCII must round-trip unchanged.
+        private JsonNode escapingPayload() {
+            return JsonUtils.readTree("{\"q\": \"it's a \\\"quote\\\"\\nline\\\\2 ✓ 日本 "
+                    + RandomStringUtils.secure().nextAlphanumeric(16) + "\"}");
+        }
+
+        @Test
+        @DisplayName("when an update payload carries quotes, escapes and non-ASCII, then it round-trips unchanged")
+        void update__whenPayloadNeedsEscaping__thenRoundTripsUnchanged() {
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .input(escapingPayload())
+                    .output(escapingPayload())
+                    .metadata(escapingPayload())
+                    .build();
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            getAndAssert(trace.toBuilder()
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .metadata(traceUpdate.metadata())
+                    .build(), null, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when an update before create carries quotes, escapes and non-ASCII, then it round-trips unchanged")
+        void update__whenTraceDoesNotExistAndPayloadNeedsEscaping__thenRoundTripsUnchanged() {
+            var id = generator.generate();
+            var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .projectId(null)
+                    .name(null)
+                    .input(escapingPayload())
+                    .output(escapingPayload())
+                    .metadata(escapingPayload())
+                    .build();
+            var expectedTrace = Trace.builder()
+                    .id(id)
+                    .name(null)
+                    .startTime(Instant.EPOCH)
+                    .endTime(traceUpdate.endTime())
+                    .input(traceUpdate.input())
+                    .output(traceUpdate.output())
+                    .metadata(traceUpdate.metadata())
+                    .tags(traceUpdate.tags())
+                    .createdAt(Instant.now())
+                    .errorInfo(traceUpdate.errorInfo())
+                    .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
+                    .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
+                    .build();
+
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var projectId = projectResourceClient.getByName(traceUpdate.projectName(), API_KEY, TEST_WORKSPACE).id();
+            getAndAssert(expectedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
 
         @Test

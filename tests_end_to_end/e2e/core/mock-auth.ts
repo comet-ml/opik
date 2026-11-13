@@ -27,8 +27,14 @@ export const mockAuthBaseUrlForBackend =
 /** Fixed identities the mock accepts (see mock_token_auth_service.py). */
 export const MOCK_AUTH_CLIENT_ID = 'opik-test';
 export const MOCK_AUTH_CLIENT_SECRET = 'opik-secret';
+export const MOCK_AUTH_SA_USERNAME = 'opik-service-account';
+export const MOCK_AUTH_SA_PASSWORD = 'opik-sa-password'; // betterleaks:allow — fixed credential of the local mock service
+/** The bearer the mock gateway accepts without a token fetch (STATIC_API_KEY in the service). */
+export const MOCK_STATIC_API_KEY = 'mock-static-key';
 
 export const mockTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/oauth/token`;
+/** Replies with the bare token as text/plain and no lifetime (SA_USERNAME/SA_PASSWORD in the service). */
+export const mockServiceAccountTokenUrlForBackend = `${mockAuthBaseUrlForBackend}/service-account/token`;
 export const mockGatewayUrlForBackend = `${mockAuthBaseUrlForBackend}/v1`;
 
 /**
@@ -63,16 +69,44 @@ export async function mockAuthRevokeAll(): Promise<void> {
 }
 
 /**
+ * The error-body shape the gateway answers a forced status with.
+ *
+ * The backend keeps a provider's own message only when the envelope names an error the
+ * provider documents (`ProviderErrorMessageValidator.DocumentedErrors`), and replaces it
+ * with a generic line otherwise — so which of these two a gateway answers decides what a
+ * user has to debug with, and the two must be drivable separately.
+ *
+ *  - `documented` — `{"error": {"type": "invalid_request_error", "message": …}}`, the
+ *    shape OpenAI, Azure OpenAI and APIM-style gateways use. The message survives.
+ *  - `bare` — `{"message": …, "status": …}` with no `error` key, which is a very common
+ *    gateway shape (GitHub's API among them). The backend cannot parse it as a provider
+ *    envelope at all, so only the wire status survives.
+ */
+export type MockAuthErrorEnvelope = 'documented' | 'bare';
+
+export interface MockAuthForcedError {
+  /** Body shape. Omit to keep the gateway's legacy undocumented body. */
+  envelope?: MockAuthErrorEnvelope;
+  /** The text the body carries. Omit for the gateway's own default line. */
+  message?: string;
+}
+
+/**
  * Make the gateway answer `status` for every chat request naming `modelName`.
  *
  * Scoped to a model rather than the process so one provider can serve several statuses
  * at once — which is what lets a spec compare two classifications over a single trace,
- * with the rule shape held constant.
+ * with the rule shape held constant. `error` additionally picks the body SHAPE and text;
+ * omitting it leaves the gateway's pre-existing body untouched.
  *
  * Prefer `providerKeys.forceChatStatus`, which registers the reset for teardown.
  */
-export async function mockAuthForceChatStatus(modelName: string, status: number): Promise<void> {
-  await postChatStatus({ model: modelName, status });
+export async function mockAuthForceChatStatus(
+  modelName: string,
+  status: number,
+  error: MockAuthForcedError = {},
+): Promise<void> {
+  await postChatStatus({ model: modelName, status, ...error });
 }
 
 /** Drops a forced status, so the model is served normally again. */
@@ -80,7 +114,12 @@ export async function mockAuthClearChatStatus(modelName: string): Promise<void> 
   await postChatStatus({ model: modelName });
 }
 
-async function postChatStatus(body: { model: string; status?: number }): Promise<void> {
+async function postChatStatus(body: {
+  model: string;
+  status?: number;
+  envelope?: MockAuthErrorEnvelope;
+  message?: string;
+}): Promise<void> {
   const response = await fetch(`${mockAuthBaseUrl}/chat-status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -28,6 +28,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "GPT 6.1 Sol",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GPT_6_1_TERRA,
+      label: "GPT 6.1 Terra",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_6_ASTRA,
       label: "GPT 6 Astra",
     },
@@ -282,10 +286,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-sonnet-5.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING,
-      label: "arcee-ai/trinity-large-thinking",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_1_6,
       label: "bytedance-seed/seed-1.6",
     },
@@ -359,6 +359,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-r1-0528",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_1_TERMINUS,
+      label: "deepseek/deepseek-v3.1-terminus",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_2,
+      label: "deepseek/deepseek-v3.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_2_EXP,
+      label: "deepseek/deepseek-v3.2-exp",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH,
       label: "deepseek/deepseek-v4-flash",
     },
@@ -399,8 +411,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "fireworks/ember-1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH,
+      label: "google/gemini-2.5-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_IMAGE,
       label: "google/gemini-2.5-flash-image",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE,
+      label: "google/gemini-2.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO,
+      label: "google/gemini-2.5-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_PREVIEW,
@@ -475,6 +499,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-nano-banana-2.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_OMNI_1_1_FLASH,
+      label: "google/gemini-omni-1.1-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_OMNI_1_2_FLASH,
+      label: "google/gemini-omni-1.2-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -511,10 +543,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "gryphe/mythomax-l2-13b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.IBM_GRANITE_GRANITE_4_0_H_MICRO,
-      label: "ibm-granite/granite-4.0-h-micro",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.IBM_GRANITE_GRANITE_4_2_8B,
       label: "ibm-granite/granite-4.2-8b",
     },
@@ -539,6 +567,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-flash-vl",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_TINY,
+      label: "inclusionai/ling-3.0-tiny",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_1_FLASH,
       label: "inclusionai/ling-3.1-flash",
     },
@@ -549,6 +581,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INFERENCE_NET_SCHEMATRON_V2_TURBO,
       label: "inference-net/schematron-v2-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_2_6B,
+      label: "liquid/lfm-2.5-2.6b",
     },
     {
       value: PROVIDER_MODEL_TYPE.LIQUID_LFM_2_5_2_6B_FREE,
@@ -565,10 +601,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MEITUAN_LONGCAT_2_0,
       label: "meituan/longcat-2.0",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
-      label: "meta-llama/llama-3.1-70b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
@@ -593,10 +625,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
       label: "meta-llama/llama-4-scout",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
-      label: "meta-llama/llama-guard-4-12b",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_MUSE_GLIMMER_30B,
@@ -633,18 +661,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4,
       label: "microsoft/phi-4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_01,
-      label: "minimax/minimax-01",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2,
-      label: "minimax/minimax-m2",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_HER,
-      label: "minimax/minimax-m2-her",
     },
     {
       value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M2_5,
@@ -779,6 +795,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K3_1_PRO,
+      label: "moonshotai/kimi-k3.1-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_FAST,
       label: "morph/morph-v3-fast",
     },
@@ -793,10 +813,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_5_PRO,
       label: "nex-agi/nex-n2.5-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B,
-      label: "nousresearch/hermes-3-llama-3.1-405b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_HERMES_4_405B,
@@ -816,24 +832,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-super-120b-a12b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE,
-      label: "nvidia/nemotron-3-super-120b-a12b:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B,
       label: "nvidia/nemotron-3-ultra-550b-a55b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
       label: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY,
-      label: "nvidia/nemotron-3.5-content-safety",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
-      label: "nvidia/nemotron-3.5-content-safety:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_LIGHTNING,
@@ -856,10 +860,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/switchyard",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO,
-      label: "openai/gpt-3.5-turbo",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_3_5_TURBO_0613,
       label: "openai/gpt-3.5-turbo-0613",
     },
@@ -870,10 +870,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4,
       label: "openai/gpt-4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_TURBO,
-      label: "openai/gpt-4-turbo",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_4_1,
@@ -1044,6 +1040,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-6.1-sol-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_1_TERRA,
+      label: "openai/gpt-6.1-terra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_1_TERRA_PRO,
+      label: "openai/gpt-6.1-terra-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_CHAT_LATEST,
       label: "openai/gpt-chat-latest",
     },
@@ -1060,36 +1064,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-oss-safeguard-20b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1,
-      label: "openai/o1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1_PRO,
-      label: "openai/o1-pro",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3,
       label: "openai/o3",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI,
-      label: "openai/o3-mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
-      label: "openai/o3-mini-high",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_O3_PRO,
       label: "openai/o3-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI,
-      label: "openai/o4-mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH,
-      label: "openai/o4-mini-high",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO,
@@ -1100,8 +1080,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/auto-beta",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENROUTER_BODYBUILDER,
-      label: "openrouter/bodybuilder",
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO_CODE,
+      label: "openrouter/auto-code",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
@@ -1114,6 +1094,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
       label: "openrouter/pareto-code",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PARTICLE_AI_PARTICLE_1,
+      label: "particle-ai/particle-1",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERCEPTRON_PERCEPTRON_MK1,
@@ -1144,24 +1128,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "perplexity/sonar-reasoning-pro",
     },
     {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
-      label: "poolside/laguna-s-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
-      label: "poolside/laguna-s-2.1:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
-      label: "poolside/laguna-xs-2.1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1_FREE,
-      label: "poolside/laguna-xs-2.1:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.PRISM_ML_TERNARY_BONSAI_2_27B,
       label: "prism-ml/ternary-bonsai-2-27b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PRISM_ML_TERNARY_BONSAI_2_9B,
+      label: "prism-ml/ternary-bonsai-2-9b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_72B_INSTRUCT,
@@ -1184,8 +1156,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen2.5-vl-72b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B,
+      label: "qwen/qwen3-14b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_2507,
       label: "qwen/qwen3-235b-a22b-2507",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_235B_A22B_THINKING_2507,
+      label: "qwen/qwen3-235b-a22b-thinking-2507",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B,
+      label: "qwen/qwen3-30b-a3b",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_30B_A3B_INSTRUCT_2507,
@@ -1222,6 +1206,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_INSTRUCT,
       label: "qwen/qwen3-vl-30b-a3b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_30B_A3B_THINKING,
+      label: "qwen/qwen3-vl-30b-a3b-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_VL_8B_INSTRUCT,
+      label: "qwen/qwen3-vl-8b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_5_122B_A10B,
@@ -1328,6 +1320,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "relace/relace-search",
     },
     {
+      value: PROVIDER_MODEL_TYPE.RICURSIVEAI_RIPPLE_65B_PREVIEW,
+      label: "ricursiveai/ripple-65b-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_MAX,
       label: "sakana/fugu-max",
     },
@@ -1358,6 +1354,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.SCALEDOWN_SUMMARIZE,
       label: "scaledown/summarize",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEALTH_CROUTON_ALPHA,
+      label: "stealth/crouton-alpha",
     },
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_5_FLASH,
@@ -1394,6 +1394,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY4,
+      label: "tencent/hy4",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY4_PREVIEW,
@@ -1438,10 +1442,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_MINI4,
       label: "upstage/solar-mini4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO_3,
-      label: "upstage/solar-pro-3",
     },
     {
       value: PROVIDER_MODEL_TYPE.UPSTAGE_SOLAR_PRO4,
@@ -1558,6 +1558,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASHX,
       label: "z-ai/glm-5.3-flashx",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASHX_LEGAL,
+      label: "z-ai/glm-5.3-flashx-legal",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_PRIME,
@@ -1709,6 +1713,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_ARGON,
+      label: "Gemini 4 Argon",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_ARGON_CYBER_PERMISSIVE,
+      label: "Gemini 4 Argon Cyber Permissive",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       label: "Gemini 3.8 Flash",

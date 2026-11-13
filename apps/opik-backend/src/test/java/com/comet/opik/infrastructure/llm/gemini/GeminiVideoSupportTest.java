@@ -9,7 +9,9 @@ import com.comet.opik.domain.llm.langchain4j.VideoUrl;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmTestClients;
 import com.comet.opik.infrastructure.llm.RemoteMediaInliner;
+import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
 import com.comet.opik.infrastructure.net.DestinationGuard;
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -21,6 +23,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
@@ -32,12 +35,15 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.URI;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.head;
+import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,13 +64,15 @@ class GeminiVideoSupportTest {
     @Captor
     private ArgumentCaptor<ChatRequest> chatRequestCaptor;
 
-    // media URLs are downloaded and inlined before Gemini sees them, so they are served locally
+    /** Media URLs are downloaded and inlined before Gemini sees them, so they are served locally. */
     private static final WireMockUtils.WireMockRuntime WIRE_MOCK = WireMockUtils.startWireMock();
     private static final byte[] VIDEO_BYTES = RandomUtils.secure().randomBytes(64);
     private static final ImageContent INLINED_VIDEO = ImageContent.from(
             Base64.getEncoder().encodeToString(VIDEO_BYTES), "video/mp4");
 
     private static final RemoteMediaInliner REMOTE_MEDIA_INLINER = LlmTestClients.remoteMediaInliner(
+            DestinationGuard.Mode.RELAXED);
+    private static final VideoMimeTypeUtils VIDEO_MIME_TYPE_UTILS = LlmTestClients.videoMimeTypeUtils(
             DestinationGuard.Mode.RELAXED);
 
     @AfterAll
@@ -98,7 +106,8 @@ class GeminiVideoSupportTest {
                     .build();
 
             // When: Convert using GeminiLangChainMapper
-            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage);
+            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
 
             // Then: Should be UserMessage with ImageContent (not VideoContent)
             assertThat(result).isInstanceOf(UserMessage.class);
@@ -113,6 +122,55 @@ class GeminiVideoSupportTest {
         }
 
         @Test
+        @DisplayName("an extensionless video URL takes the MIME type its HEAD response reports")
+        void extensionlessVideoUrlTakesTheMimeTypeFromHead() {
+            var path = "/" + UUID.randomUUID();
+            var mimeType = "video/" + RandomStringUtils.secure().nextAlphabetic(10).toLowerCase();
+            WIRE_MOCK.server().stubFor(head(urlPathEqualTo(path))
+                    .willReturn(aResponse().withHeader("Content-Type", mimeType + "; charset=utf-8")));
+            var videoUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + path;
+            var expectedMessage = UserMessage.from(ImageContent.from(Image.builder()
+                    .url(URI.create(videoUrl))
+                    .mimeType(mimeType)
+                    .build()));
+
+            var actualMessage = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(videoMessage(videoUrl),
+                    VIDEO_MIME_TYPE_UTILS);
+
+            assertThat(actualMessage).isEqualTo(expectedMessage);
+        }
+
+        @Test
+        @DisplayName("an extensionless video URL whose HEAD response redirects gets no MIME type, and the redirect isn't followed")
+        void redirectedHeadGivesNoMimeType() {
+            var path = "/" + UUID.randomUUID();
+            var target = "/" + UUID.randomUUID();
+            WIRE_MOCK.server().stubFor(head(urlPathEqualTo(path))
+                    .willReturn(aResponse().withStatus(302).withHeader("Location", target)));
+            WIRE_MOCK.server().stubFor(head(urlPathEqualTo(target))
+                    .willReturn(aResponse().withHeader("Content-Type", "video/mp4")));
+            var videoUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + path;
+            var expectedMessage = UserMessage.from(ImageContent.from(Image.builder()
+                    .url(URI.create(videoUrl))
+                    .build()));
+
+            var actualMessage = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(videoMessage(videoUrl),
+                    VIDEO_MIME_TYPE_UTILS);
+
+            assertThat(actualMessage).isEqualTo(expectedMessage);
+            WIRE_MOCK.server().verify(0, headRequestedFor(urlPathEqualTo(target)));
+        }
+
+        private static OpikUserMessage videoMessage(String videoUrl) {
+            return OpikUserMessage.builder()
+                    .content(List.of(OpikContent.builder()
+                            .type(OpikContentType.VIDEO_URL)
+                            .videoUrl(VideoUrl.builder().url(videoUrl).build())
+                            .build()))
+                    .build();
+        }
+
+        @Test
         @DisplayName("Should convert a base64 data URI VIDEO_URL to inline ImageContent for Gemini")
         void shouldConvertBase64VideoUrlToInlineImageContentForGemini() {
             var base64Data = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAACKBtZGF0";
@@ -124,7 +182,8 @@ class GeminiVideoSupportTest {
                     .content(List.of(videoContent))
                     .build();
 
-            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage);
+            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
 
             assertThat(result).isEqualTo(UserMessage.from(ImageContent.from(base64Data, "video/mp4")));
         }
@@ -143,7 +202,8 @@ class GeminiVideoSupportTest {
                     .build();
 
             // When: Convert using GeminiLangChainMapper
-            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage);
+            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
 
             // Then: Should be UserMessage with TextContent
             assertThat(result).isInstanceOf(UserMessage.class);
@@ -174,7 +234,8 @@ class GeminiVideoSupportTest {
                     .build();
 
             // When: Convert using GeminiLangChainMapper
-            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage);
+            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
 
             // Then: Should be UserMessage with ImageContent
             assertThat(result).isInstanceOf(UserMessage.class);
@@ -208,7 +269,8 @@ class GeminiVideoSupportTest {
                     .build();
 
             // When: Convert using GeminiLangChainMapper
-            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage);
+            ChatMessage result = GeminiLangChainMapper.INSTANCE.toChatMessageForGemini(opikMessage,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS);
 
             // Then: Should be UserMessage with TextContent and ImageContent
             assertThat(result).isInstanceOf(UserMessage.class);
@@ -246,7 +308,8 @@ class GeminiVideoSupportTest {
                     .build();
 
             // When: Convert using GeminiLangChainMapper
-            List<ChatMessage> results = new GeminiClientGenerator(new LlmProviderClientConfig(), REMOTE_MEDIA_INLINER)
+            List<ChatMessage> results = new GeminiClientGenerator(new LlmProviderClientConfig(), REMOTE_MEDIA_INLINER,
+                    LlmTestClients.VIDEO_MIME_TYPE_UTILS, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS)
                     .mapMessages(request);
 
             // Then: Should convert message with VIDEO_URL to ImageContent
@@ -425,10 +488,12 @@ class GeminiVideoSupportTest {
             verify(mockDelegate).chat(chatRequestCaptor.capture());
             var processedUserMessage = (UserMessage) chatRequestCaptor.getValue().messages().get(0);
 
-            assertThat(processedUserMessage.contents()).hasSize(2);
-            assertThat(processedUserMessage.contents().get(0)).isEqualTo(AudioContent.from(
-                    INLINED_VIDEO.image().base64Data(), INLINED_VIDEO.image().mimeType()));
-            assertThat(processedUserMessage.contents().get(1)).isEqualTo(INLINED_VIDEO);
+            var expectedContents = List.of(
+                    AudioContent.from(INLINED_VIDEO.image().base64Data(), INLINED_VIDEO.image().mimeType()),
+                    INLINED_VIDEO);
+            var actualContents = processedUserMessage.contents();
+
+            assertThat(actualContents).isEqualTo(expectedContents);
         }
 
         @Test

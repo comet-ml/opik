@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
-// Streaming counterpart to CloseableVertexAiChatModel: owns the genai Client and closes it (caller closes on stream terminal).
+// Streaming counterpart to CloseableVertexAiChatModel; the caller closes it on the stream terminal.
 @Slf4j
 @RequiredArgsConstructor
 @Accessors(fluent = true)
@@ -25,7 +25,14 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
     private final @NonNull StreamingChatModel delegate;
     @Getter
     private final @NonNull Client client;
+    /** The calls {@link #client} makes, and only its; see {@link #cancel()}. */
+    private final @NonNull CancellableCalls calls;
     private final @NonNull RemoteMediaInliner remoteMediaInliner;
+
+    /** Ends the stream's call, which also ends a read blocked on it: the SDK's stream has no cancel of its own. */
+    void cancel() {
+        calls.cancelAll();
+    }
 
     @Override
     public void chat(ChatRequest chatRequest, StreamingChatResponseHandler handler) {
@@ -49,14 +56,14 @@ class CloseableVertexAiStreamingChatModel implements StreamingChatModel, AutoClo
         return delegate.supportedCapabilities();
     }
 
-    // Best-effort: a close failure must never surface on an otherwise-successful call.
+    /**
+     * Closes the delegate only. The client is left open: closing it would shut the dispatcher and empty the connection
+     * pool that every Vertex AI call shares, see {@link VertexAIClientGenerator}, and it holds nothing else. The
+     * per-request close of OPIK-7847 targeted the old {@code VertexAI} client's GAX executor, which google-genai on the
+     * shared HTTP client doesn't have.
+     */
     @Override
     public void close() {
-        try {
-            client.close();
-        } catch (Exception e) {
-            log.warn("Failed to close Vertex AI streaming client", e);
-        }
         // A no-op with today's delegate, but only it can release anything it owns.
         try {
             if (delegate instanceof AutoCloseable closeable) {

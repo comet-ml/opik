@@ -55,11 +55,11 @@ test.describe(
      * Every request that would mean a run had started, from before the page is
      * opened.
      *
-     * All three paths, because the Playground reaches the model through
-     * different ones depending on mode and the gate has to close all of them:
-     * dataset mode posts an experiment per variant to the bare `/experiments`
-     * collection and then streams completions, suite mode posts one
-     * `/experiments/execute`. Anchored on the end of the path — `/experiments`,
+     * All three paths, so a run is caught whichever way it starts: a dataset
+     * or suite run posts one `/experiments/execute`, a run with no source
+     * streams `/chat/completions` from the browser, and the bare `/experiments`
+     * collection is the browser-side write path dataset runs used before they
+     * moved to the server. Anchored on the end of the path — `/experiments`,
      * `/experiments/items` and `/experiments/execute` share a prefix.
      */
     const collectRunRequests = (page: Page): string[] => {
@@ -90,8 +90,14 @@ test.describe(
      * label comes out of that same response, so it being painted is what makes
      * every assertion below a statement about the emptied version rather than
      * about a page still loading it.
+     *
+     * It also waits for the page's own `GET /datasets/{id}`. The header takes
+     * the source's name from that request, which only starts once the selection
+     * commits, and until it answers the header's reason is "Your dataset has
+     * been removed" — for either source type.
      */
     const openOnEmptiedSource = async (
+      page: Page,
       playground: PlaygroundPage,
       source: EmptiedSourceRef,
       mode: 'dataset' | 'test_suite',
@@ -100,11 +106,17 @@ test.describe(
       await playground.goto();
       await playground.waitForReady();
       await playground.configureVariant(0, { userPrompt: '{{input}}', modelDisplayName });
-      await playground.duplicateLastVariant();
+      await playground.duplicateVariant(0);
       await playground.clickRunExperiment();
+      const sourceRead = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          new URL(response.url()).pathname.endsWith(`/v1/private/datasets/${source.id}`),
+      );
       await playground.selectRunExperimentSource({ mode, entityName: source.name });
       await expect(playground.loadedSourcePill()).toContainText(source.name);
       await expect(playground.loadedSourceVersionLabel()).toHaveText(source.emptied.name);
+      await (await sourceRead).finished();
     };
 
     /**
@@ -117,7 +129,7 @@ test.describe(
      *
      * The negative is only meaningful because the same gesture is shown to WORK
      * elsewhere: `playground-run-gate-selected-version.spec.ts` presses
-     * Shift+Enter on a version that does have items and asserts a run starts.
+     * Cmd/Ctrl+Enter on a version that does have items and asserts a run starts.
      * Without that control, a shortcut that had been removed entirely would pass
      * here.
      */
@@ -160,14 +172,16 @@ test.describe(
         const runRequests = collectRunRequests(page);
 
         await test.step('Load the emptied dataset into the Playground', async () => {
-          await openOnEmptiedSource(playground, emptiedDataset, 'dataset', modelDisplayName);
+          await openOnEmptiedSource(page, playground, emptiedDataset, 'dataset', modelDisplayName);
         });
 
         await test.step('The header Run is disabled, and says why', async () => {
           await expect(playground.headerRunButton()).toBeDisabled();
           // The whole reason, compared exactly. A substring match would also
           // pass on the generic "Run experiment on dataset" tooltip's absence,
-          // and the point of the change is this specific sentence.
+          // and the point of the change is this specific sentence. Read once,
+          // not polled: Radix reopens a tooltip only after the pointer has left
+          // its trigger, so re-hovering in place never opens it again.
           expect(await playground.headerRunTooltipText()).toBe(DATASET_REASON);
         });
 
@@ -252,7 +266,7 @@ test.describe(
         const runRequests = collectRunRequests(page);
 
         await test.step('Load the emptied test suite into the Playground', async () => {
-          await openOnEmptiedSource(playground, emptiedTestSuite, 'test_suite', modelDisplayName);
+          await openOnEmptiedSource(page, playground, emptiedTestSuite, 'test_suite', modelDisplayName);
         });
 
         await test.step('Both Run surfaces are disabled, and name the test suite', async () => {

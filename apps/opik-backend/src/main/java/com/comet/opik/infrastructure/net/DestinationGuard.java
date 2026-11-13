@@ -109,6 +109,16 @@ public class DestinationGuard {
     @Builder.Default
     private final @NonNull Scheme scheme = Scheme.HTTPS_ONLY;
 
+    /** How a host is resolved: the system resolver, unless a test needs answers that change between lookups. */
+    @Builder.Default
+    private final @NonNull HostResolver resolver = InetAddress::getAllByName;
+
+    /** Resolves a host to its addresses, as {@link InetAddress#getAllByName(String)} does. */
+    @FunctionalInterface
+    public interface HostResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
+    }
+
     /**
      * @throws DestinationGuardException with a user-facing message when the destination is refused
      */
@@ -129,7 +139,7 @@ public class DestinationGuard {
     public List<InetAddress> lookup(@NonNull String host) {
         InetAddress[] addresses;
         try {
-            addresses = InetAddress.getAllByName(host);
+            addresses = resolver.resolve(host);
         } catch (UnknownHostException exception) {
             throw new DestinationGuardException(
                     "destination host could not be resolved, host '%s'".formatted(host), exception);

@@ -23,6 +23,7 @@ import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
@@ -128,23 +129,25 @@ class LlmProviderFactoryTest {
         VertexAIModule vertexAIModule = new VertexAIModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig,
-                registryService);
+                registryService, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig,
-                LlmTestClients.REMOTE_MEDIA_INLINER);
+                LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
 
         OpenAIClientGenerator openAIClientGenerator = openAIModule.clientGenerator(llmProviderClientConfig,
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         openAIModule.llmServiceProvider(llmProviderFactory, openAIClientGenerator);
 
         OpenAIClientGenerator openRouterClientGenerator = openRouterModule.clientGenerator(llmProviderClientConfig,
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         openRouterModule.llmServiceProvider(llmProviderFactory, openRouterClientGenerator);
 
         VertexAIClientGenerator vertexAIClientGenerator = vertexAIModule.clientGenerator(llmProviderClientConfig,
-                registryService, LlmTestClients.REMOTE_MEDIA_INLINER);
+                registryService, LlmTestClients.REMOTE_MEDIA_INLINER,
+                LlmTestClients.VIDEO_MIME_TYPE_UTILS);
         vertexAIModule.llmServiceProvider(llmProviderFactory, vertexAIClientGenerator);
 
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, model);
@@ -203,8 +206,11 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                RELAXED_GUARD, mock(AuthTokenProvider.class));
-        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
+                RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
+        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator,
+                new AnthropicClientGenerator(llmProviderClientConfig, registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
 
         // When & Then - Should successfully get the service
         LlmProviderService actual = llmProviderFactory.getService(workspaceId, modelToRequest);
@@ -241,8 +247,11 @@ class LlmProviderFactoryTest {
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
         CustomLlmClientGenerator customLlmClientGenerator = customLlmModule.clientGenerator(llmProviderClientConfig,
-                RELAXED_GUARD, mock(AuthTokenProvider.class));
-        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator);
+                RELAXED_GUARD, mock(AuthTokenProvider.class), LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
+        customLlmModule.llmServiceProvider(llmProviderFactory, customLlmClientGenerator,
+                new AnthropicClientGenerator(llmProviderClientConfig, registryService,
+                        LlmTestClients.LLM_HTTP_CLIENT_BUILDERS),
+                registryService);
 
         // When & Then - Should throw BadRequestException
         assertThatThrownBy(() -> llmProviderFactory.getService(workspaceId, modelToRequest))
@@ -475,6 +484,20 @@ class LlmProviderFactoryTest {
         assertThat(llmProviderFactory.getLlmProvider(model.toString())).isEqualTo(LlmProvider.OPEN_ROUTER);
     }
 
+    @ParameterizedTest
+    @MethodSource("decisionModels")
+    @DisplayName("getLlmProvider returns the provider the decisions catalog names, so the key matches the client")
+    void testGetLlmProvider_matchesTheDecisionsCatalog(DecisionModels.DecisionModel model) {
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class),
+                createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai"), registryService, RELAXED_GUARD);
+
+        assertThat(llmProviderFactory.getLlmProvider(model.name())).isEqualTo(model.provider());
+    }
+
+    static Stream<DecisionModels.DecisionModel> decisionModels() {
+        return DecisionModels.ALL.stream();
+    }
+
     @Test
     @DisplayName("getClientApiConfig returns the decrypted workspace key for the model's provider")
     void testGetClientApiConfig_returnsDecryptedKey() {
@@ -588,7 +611,8 @@ class LlmProviderFactoryTest {
                 RELAXED_GUARD);
         var vertexAIModule = new VertexAIModule();
         vertexAIModule.llmServiceProvider(llmProviderFactory,
-                vertexAIModule.clientGenerator(llmProviderClientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER));
+                vertexAIModule.clientGenerator(llmProviderClientConfig, registry, LlmTestClients.REMOTE_MEDIA_INLINER,
+                        LlmTestClients.VIDEO_MIME_TYPE_UTILS));
 
         assertThat(llmProviderFactory.getService(workspaceId, model)).isInstanceOf(LlmProviderVertexAI.class);
     }

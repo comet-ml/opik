@@ -13,6 +13,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,6 +25,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
@@ -109,6 +111,23 @@ class AuthModuleCache2E2Test {
 
             wireMock.server().verify(2, WireMock.postRequestedFor(WireMock.urlEqualTo(AUTH_PATH)));
         }
+    }
+
+    @Test
+    void testOrganizationResolver__whenAuthIsEnabled__thenAnswerNoOrganizationWithoutCallingComet(
+            OrganizationResolver resolver) {
+        assertThat(resolver).isInstanceOf(RemoteOrganizationResolver.class);
+        var cometRequestsBefore = wireMock.server().getAllServeEvents().size();
+
+        StepVerifier.create(resolver.organizationId()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)))
+                .verifyComplete();
+        StepVerifier.create(resolver.requireOrganizationAdmin()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)))
+                .expectError(ForbiddenException.class)
+                .verify();
+
+        assertThat(wireMock.server().getAllServeEvents()).hasSize(cometRequestsBefore);
     }
 
     private Response callEndpoint() {

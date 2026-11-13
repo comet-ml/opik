@@ -31,6 +31,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
+    @NotNull boolean guardrailsValidationsEnabled;
+    @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
     @NotNull boolean alertsEnabled;
@@ -72,8 +74,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean agentInsightsGuidanceEnabled;
     @JsonProperty
     @NotNull boolean projectHomepageEnabled;
-    @JsonProperty
-    @NotNull boolean onlineScoringTracingEnabled;
     @JsonProperty
     @NotNull boolean annotationQueueAutomationEnabled;
     @JsonProperty

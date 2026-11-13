@@ -85,7 +85,7 @@ class OpenRouterLlmServiceProviderTest {
         clientConfig.setOpenRouterUrl(wireMock.baseUrl() + "/api/v1");
 
         var clientGenerator = new OpenRouterModule().clientGenerator(clientConfig,
-                LlmTestClients.RESPONSES_API_HTTP_CLIENT);
+                LlmTestClients.RESPONSES_API_HTTP_CLIENT, LlmTestClients.LLM_HTTP_CLIENT_BUILDERS);
         serviceProvider = new OpenRouterLlmServiceProvider(clientGenerator, mock(LlmProviderFactory.class));
         provider = serviceProvider.getService(LlmProviderClientApiConfig.builder().apiKey("test-key").build());
     }

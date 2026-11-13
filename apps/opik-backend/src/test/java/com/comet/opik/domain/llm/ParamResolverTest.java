@@ -541,4 +541,50 @@ class ParamResolverTest {
 
         assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
     }
+
+    private static ParamResolver shippedOpenAiResolver(String model) {
+        return resolverWithOpenAiParams(bundledRegistry().paramsOf("openai", model));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', nullValues = "null", value = {
+            "0.7  | {\"reasoning_effort\": \"low\", \"max_completion_tokens\": 400} | {\"max_completion_tokens\": 400} | reasoning_effort",
+            "null | {\"reasoning_effort\": \"low\"}                                 | null                           | reasoning_effort",
+            "null | {\"reasoning\": {\"effort\": \"low\"}, \"seed\": 7}                 | {\"seed\": 7}                  | reasoning.effort",
+            "null | {\"reasoning\": {\"effort\": \"low\", \"summary\": \"auto\"}}       | {\"reasoning\": {\"summary\": \"auto\"}} | reasoning.effort"})
+    void dropsAJudgeEffortTheModelRefusesAndKeepsTheRest(Double temperature, String saved, String kept,
+            String dropped) {
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(judge("gpt-4o-mini", temperature, saved)))
+                .isEqualTo(resolution(judge("gpt-4o-mini", temperature, kept),
+                        new ParamChange(dropped, Reason.REFUSED_BY_MODEL)));
+    }
+
+    @Test
+    void dropsBothShapesOfAJudgeEffortTheModelRefuses() {
+        var parameters = judge("gpt-4o-mini", null, """
+                {"reasoning_effort": "low", "reasoning": {"effort": "low"}}""");
+
+        assertThat(shippedOpenAiResolver("gpt-4o-mini").resolve(parameters))
+                .isEqualTo(resolution(judge("gpt-4o-mini", null, null),
+                        new ParamChange("reasoning_effort", Reason.REFUSED_BY_MODEL),
+                        new ParamChange("reasoning.effort", Reason.REFUSED_BY_MODEL)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.4-mini", "o3", "gpt-6-luna"})
+    void keepsAJudgeEffortTheModelTakes(String model) {
+        var parameters = judge(model, null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(shippedOpenAiResolver(model).resolve(parameters)).isEqualTo(resolution(parameters));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"openai/gpt-4o-mini", "custom-llm/gw/gpt-4o-mini", "claude-haiku-4-5-20251001"})
+    void keepsAJudgeEffortOnModelsTheOpenAiCatalogDoesNotPlace(String model) {
+        var parameters = judge(model, null, """
+                {"reasoning_effort": "low"}""");
+
+        assertThat(RESOLVER.resolve(parameters)).isEqualTo(resolution(parameters));
+    }
 }

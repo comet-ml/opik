@@ -2,6 +2,7 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.token_usage.SpanUsageFactory;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
@@ -25,6 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 
+/**
+ * These tests guard what every span is billed: add a case for each cost path and each bug found, and never remove one.
+ * When a fix shows a case expected the wrong cost, correct that case in the same change and say why.
+ */
 class CostServiceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -242,6 +247,25 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
 
+    /**
+     * A gpt-6-luna Decisions call as its online-evaluation span records it: OpenAI's usage, no output tokens and no
+     * reported cost. Its Decisions rates equal its chat rates, so the chat price applies, under the dated model id
+     * the response names.
+     */
+    @Test
+    void calculateCostPricesGpt6LunaDecisionsUsage() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 2_000,
+                "completion_tokens", 0,
+                "total_tokens", 2_000,
+                "cache_read_input_tokens", 1_024);
+
+        BigDecimal cost = CostService.calculateCost("gpt-6-luna-2026-09-22", "openai", usage, null);
+
+        // (2_000 - 1_024) * 1e-7 + 1_024 * 1e-8
+        assertThat(cost).isEqualByComparingTo("0.00010784");
+    }
+
     private static Stream<Arguments> provideGpt54Above272kTierCases() {
         // gpt-5.4 base: input 2.5e-6 / output 1.5e-5; above_272k: input 5e-6 / output 2.25e-5.
         return Stream.of(
@@ -249,6 +273,81 @@ class CostServiceTest {
                 Arguments.of("at threshold uses base rate", 272_000, "0.695"),
                 // 300_000 * 5e-6 + 1_000 * 2.25e-5 = 1.5 + 0.0225 = 1.5225
                 Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
+    }
+
+    /**
+     * Tier thresholds are parsed while the price table loads. An int overflow would bill every prompt at the tier rate,
+     * and a NumberFormatException would stop the price table, and with it span ingestion, from loading. So a threshold
+     * of seven digits or more, too large for any prompt, isn't read as a tier.
+     */
+    @Test
+    void promptTierRateSkipsAThresholdTooLargeForAnyPrompt() {
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_99999999999k_tokens").matches())
+                .isFalse();
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_1000000k_tokens").matches())
+                .isFalse();
+        assertThat(ModelPriceTable.PROMPT_TIER_RATE.matcher("input_cost_per_token_above_999999k_tokens").matches())
+                .isTrue();
+
+        var modelCost = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString("""
+                {"litellm_provider": "openai", "input_cost_per_token": 1e-06,
+                 "input_cost_per_token_above_999999k_tokens": 2e-06,
+                 "input_cost_per_token_above_1000000k_tokens": 3e-06,
+                 "input_cost_per_token_above_99999999999k_tokens": 4e-06}"""), ModelCostData.class);
+
+        assertThat(ModelPriceTable.buildModelPrice("gpt-huge-tiers", modelCost).promptTiers())
+                .singleElement()
+                .satisfies(tier -> {
+                    assertThat(tier.threshold()).isEqualTo(999_999_000);
+                    assertThat(tier.inputPrice()).isEqualByComparingTo("2e-06");
+                });
+    }
+
+    /** A price row that doesn't read as one would stop the price table from loading, and with it span ingestion. */
+    @Test
+    void aPriceRowThatDoesNotReadAsAPriceSkipsOnlyItsModel() {
+        var rows = Map.of(
+                "gpt-good", JsonUtils.getJsonNodeFromString(
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": 1e-06}"),
+                "gpt-rate-as-object", JsonUtils.getJsonNodeFromString(
+                        "{\"litellm_provider\": \"openai\", \"input_cost_per_token\": {\"usd\": 1e-06}}"),
+                "gpt-null-row", JsonUtils.getJsonNodeFromString("null"),
+                "gpt-number-row", JsonUtils.getJsonNodeFromString("1e-06"));
+
+        assertThat(ModelPriceTable.toModelCosts("test prices", rows)).containsOnlyKeys("gpt-good");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"n/a", ""})
+    void aRateThatIsNotANumberSkipsOnlyItsModel(String rate) {
+        var modelCost = ModelCostData.builder().litellmProvider("openai").inputCostPerToken(rate).build();
+
+        assertThat(ModelPriceTable.buildModelPrice("gpt-bad-rate", modelCost)).isNull();
+    }
+
+    /** Base rates are read as strings, so a tier rate written as one is billed like them, not dropped. */
+    @Test
+    void aTierRateWrittenAsAStringIsBilled() {
+        var modelCost = JsonUtils.treeToValue(JsonUtils.getJsonNodeFromString("""
+                {"litellm_provider": "anthropic", "input_cost_per_token": "3e-06",
+                 "input_cost_per_token_above_200k_tokens": "6e-06"}"""), ModelCostData.class);
+
+        assertThat(ModelPriceTable.buildModelPrice("claude-string-tier", modelCost).promptTiers())
+                .singleElement()
+                .satisfies(tier -> {
+                    assertThat(tier.threshold()).isEqualTo(200_000);
+                    assertThat(tier.inputPrice()).isEqualByComparingTo("6e-06");
+                });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"n/a", ""})
+    void aTierRateThatIsNotANumberSkipsOnlyItsModel(String rate) {
+        var modelCost = ModelCostData.builder().litellmProvider("anthropic").inputCostPerToken("3e-06")
+                .otherFields(Map.of("input_cost_per_token_above_200k_tokens", JsonUtils.valueToTree(rate)))
+                .build();
+
+        assertThat(ModelPriceTable.buildModelPrice("claude-bad-tier-rate", modelCost)).isNull();
     }
 
     @Test
@@ -488,6 +587,41 @@ class CostServiceTest {
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
 
+    /**
+     * Before the fix these priced at $0: each lower-case retry was skipped when the name differed from its
+     * lower-case form only in letter case, and these providers' price table keys are lower case.
+     */
+    @ParameterizedTest
+    @MethodSource("provideUpperCaseModelNames")
+    void calculateCost_upperCaseNamePricesLikeLowerCase(String upperCaseName, String lowerCaseName,
+            String provider, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal lowerCaseCost = CostService.calculateCost(lowerCaseName, provider, usage, null);
+        BigDecimal upperCaseCost = CostService.calculateCost(upperCaseName, provider, usage, null);
+
+        assertThat(lowerCaseCost).isEqualByComparingTo(expectedCost);
+        assertThat(upperCaseCost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideUpperCaseModelNames() {
+        return Stream.of(
+                // 1000*2.5e-7 + 500*2e-6
+                Arguments.of("GPT-5-MINI", "gpt-5-mini", "openai", "0.00125"),
+                // 1000*2.5e-6 + 500*1e-5
+                Arguments.of("Gpt-4o", "gpt-4o", "openai", "0.0075"),
+                // 1000*2e-6 + 500*8e-6
+                Arguments.of("GPT-4.1", "gpt-4.1", "openai", "0.006"),
+                // 1000*1.75e-6 + 500*1.4e-5
+                Arguments.of("GPT-5.2", "gpt-5.2", "openai", "0.00875"),
+                Arguments.of("openai/GPT-5-MINI", "gpt-5-mini", "openai", "0.00125"),
+                // 1000*5e-6 + 500*2.5e-5
+                Arguments.of("ANTHROPIC.CLAUDE-OPUS-4-6-V1", "anthropic.claude-opus-4-6-v1", "bedrock", "0.0175"),
+                Arguments.of("GPT-5-MINI-2025-08-07", "gpt-5-mini-2025-08-07", "openai", "0.00125"));
+    }
+
     @ParameterizedTest
     @MethodSource("provideModelNamesWithDateSuffixes")
     void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
@@ -695,16 +829,14 @@ class CostServiceTest {
                 Arguments.of("elser_model_2", "elastic"),
                 Arguments.of("gemini-3-flash", "google_ai"),
                 Arguments.of("gemini-3.1-pro", "google_ai"),
-                Arguments.of("gemini-embedding-002", "google_ai"),
-                Arguments.of("mistral-medium-3-5", "mistral"),
-                Arguments.of("mistral-small-2603", "mistral"));
+                Arguments.of("gemini-embedding-002", "google_ai"));
     }
 
     /**
      * Mistral cost tracking: until `mistral` was registered in CostService the entire set of
      * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
-     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
-     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     * Mistral span returned cost = 0. This locks in the upstream rows, Medium 3.5 and Small 4
+     * among them, which Opik's overrides priced until upstream did.
      */
     @ParameterizedTest
     @MethodSource("provideMistralModels")
@@ -729,9 +861,9 @@ class CostServiceTest {
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
                 Arguments.of("codestral-2508", "1.20"),
-                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                // Upstream LiteLLM row: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
                 Arguments.of("mistral-medium-3-5", "9.00"),
-                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                // Upstream LiteLLM row: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
                 Arguments.of("mistral-small-2603", "0.75"));
     }
 

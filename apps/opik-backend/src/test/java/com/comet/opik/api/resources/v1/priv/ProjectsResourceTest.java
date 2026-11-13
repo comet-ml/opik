@@ -23,6 +23,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -41,6 +42,7 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -198,6 +200,7 @@ class ProjectsResourceTest {
     private SpanResourceClient spanResourceClient;
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
+    private WorkspaceResourceClient workspaceResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
 
     @BeforeAll
@@ -215,6 +218,7 @@ class ProjectsResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
+        this.workspaceResourceClient = new WorkspaceResourceClient(this.client, baseURI, factory);
         this.guardrailsGenerator = new GuardrailsGenerator();
     }
 
@@ -2918,6 +2922,60 @@ class ProjectsResourceTest {
         }
 
         @Test
+        void create__whenNameAtMaxLength__thenAcceptCreate() {
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH))
+                    .build();
+
+            var id = createProject(project);
+
+            assertProject(project.toBuilder().lastUpdatedTraceAt(null).id(id).build());
+        }
+
+        @Test
+        void create__whenNameHasSurroundingWhitespace__thenStoreStrippedName() {
+            var name = RandomStringUtils.secure().nextAlphanumeric(32);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("  " + name + " ")
+                    .build();
+
+            var id = createProject(project);
+
+            assertProject(project.toBuilder().name(name).lastUpdatedTraceAt(null).id(id).build());
+        }
+
+        @Test
+        void create__whenNameHasLeadingWhitespace__thenTracesWithSameNameUseTheProject() {
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name("  " + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .build();
+            var expectedProjectId = createProject(project);
+
+            var traceId = traceResourceClient.createTrace(factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.projectId()).isEqualTo(expectedProjectId);
+        }
+
+        @Test
+        void create__whenNameTooLong__thenRejectCreate() {
+            var project = Project.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI)).request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(project))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         @DisplayName("when project name already exists, then reject the request")
         void create__whenProjectNameAlreadyExists__thenRejectNameCreate() {
 
@@ -3136,6 +3194,85 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("name must not be blank");
             }
         }
+
+        @Test
+        void update__whenNameTooLong__thenRejectTheUpdate() {
+            var expectedProject = getProject(projectId);
+            var projectUpdate = ProjectUpdate.builder().name(RandomStringUtils.secure().nextAlphanumeric(151)).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH, Entity.json(projectUpdate))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("name cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject).isEqualTo(expectedProject);
+        }
+
+        @Test
+        void update__whenNameAtMaxLength__thenAcceptTheUpdate() {
+            var newName = RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH);
+            var expectedProject = getProject(projectId).toBuilder().name(newName).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH, Entity.json(ProjectUpdate.builder().name(newName).build()))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject)
+                    .usingRecursiveComparison()
+                    .ignoringFields("lastUpdatedAt")
+                    .isEqualTo(expectedProject);
+        }
+
+        @Test
+        void update__whenNameHasSurroundingWhitespace__thenStoreStrippedName() {
+            var newName = "Test Project: " + UUID.randomUUID();
+            var expectedProject = getProject(projectId).toBuilder().name(newName).build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(projectId.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .method(HttpMethod.PATCH,
+                            Entity.json(ProjectUpdate.builder().name(" " + newName + "  ").build()))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var actualProject = getProject(projectId);
+            assertThat(actualProject)
+                    .usingRecursiveComparison()
+                    .ignoringFields("lastUpdatedAt")
+                    .isEqualTo(expectedProject);
+        }
+
+        private Project getProject(UUID id) {
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path(id.toString())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                return actualResponse.readEntity(Project.class);
+            }
+        }
     }
 
     @Nested
@@ -3220,6 +3357,104 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringCollectionOrder()
                     .isEqualTo(notDeletedIds);
+        }
+
+        @Test
+        void deleteProject__whenProjectHasTraces__thenDeletesItsTracesAndSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var deletedProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
+            assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProject(deletedProjectId, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(deletedProjectId, apiKey, workspaceName)).isZero());
+            assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
+        }
+
+        @Test
+        void deleteProjectsBatch__whenProjectsHaveTraces__thenDeletesTheirTracesAndSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Two deleted projects, so their traces are deleted in one batch spanning both.
+            var deletedProjectIds = Set.of(createProjectWithTracedSpans(apiKey, workspaceName),
+                    createProjectWithTracedSpans(apiKey, workspaceName));
+            var keptProjectId = createProjectWithTracedSpans(apiKey, workspaceName);
+            var keptProjectCost = getProjectCost(keptProjectId, apiKey, workspaceName);
+            deletedProjectIds.forEach(projectId -> assertThat(getProjectCost(projectId, apiKey, workspaceName))
+                    .isPositive());
+
+            projectResourceClient.deleteProjectsBatch(deletedProjectIds, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(() -> deletedProjectIds.forEach(
+                    projectId -> assertThat(getProjectCost(projectId, apiKey, workspaceName)).isZero()));
+            assertThat(getProjectCost(keptProjectId, apiKey, workspaceName)).isEqualTo(keptProjectCost);
+        }
+
+        @Test
+        void deleteProject__whenProjectHasSpansWithoutTraces__thenDeletesTheSpans() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            // Spans whose trace was never logged, so no traces row leads to them.
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(project.name())
+                            .traceId(idGenerator.generateId())
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            assertThat(getProjectCost(projectId, apiKey, workspaceName)).isPositive();
+
+            projectResourceClient.deleteProject(projectId, apiKey, workspaceName);
+
+            Awaitility.await().untilAsserted(
+                    () -> assertThat(getProjectCost(projectId, apiKey, workspaceName)).isZero());
+        }
+
+        private UUID createProjectWithTracedSpans(String apiKey, String workspaceName) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = createProject(project, apiKey, workspaceName);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder().projectName(project.name()).build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(project.name())
+                                    .traceId(trace.id())
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            return projectId;
+        }
+
+        /**
+         * The project's span cost, read by project id. The trace and span endpoints 404 once the project is gone,
+         * whatever is left of its data, so they can't show it was deleted. Spans are deleted in the cascade of their
+         * traces' delete, so the cost reaching zero also shows the traces' delete ran.
+         */
+        private double getProjectCost(UUID projectId, String apiKey, String workspaceName) {
+            var now = Instant.now();
+            return workspaceResourceClient.getCostsSummary(WorkspaceMetricsSummaryRequest.builder()
+                    .projectIds(Set.of(projectId))
+                    .intervalStart(now.minus(1, ChronoUnit.DAYS))
+                    .intervalEnd(now.plus(1, ChronoUnit.DAYS))
+                    .build(), apiKey, workspaceName).current();
         }
     }
 
