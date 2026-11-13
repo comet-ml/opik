@@ -44,6 +44,21 @@ export default defineConfig(({ mode }) => {
       environment: "happy-dom",
       setupFiles: ".vitest/setup",
       include: ["**/*.test.{ts,tsx}"],
+      // Runs each test file in a fresh VM context inside a long-lived worker,
+      // instead of a new worker and happy-dom per file: ~3.5x faster.
+      pool: "vmThreads",
+      // A worker frees its VM contexts only when it is recycled at this limit.
+      // The default (1/maxWorkers of system memory) lets the workers fill a CI
+      // runner; 512MB keeps a 4-worker run near 2.5GB at the same speed.
+      vmMemoryLimit: "512MB",
+      server: {
+        deps: {
+          // khroma, a mermaid dependency, imports ".//index.js". The VM module
+          // loader keeps the empty path segment and then cannot resolve the
+          // module's own relative imports, so let Vite load both packages.
+          inline: ["mermaid", "khroma"],
+        },
+      },
     },
     resolve: {
       preserveSymlinks: true,
