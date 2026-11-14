@@ -26,8 +26,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.comet.opik.infrastructure.lock.LockService.Lock;
-
 /**
  * The topics nightly job, on {@code topics.nightly.schedule} (UTC). Every pod fires it. Two locks make that one night
  * per date across the cluster:
@@ -35,8 +33,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * <li>the night lock ({@link TopicsNightlyService#NIGHT_LOCK}), held for the night and released when it ends, so two
  * nights never overlap, a night started by hand included; its lease ({@link TopicsNightlyService#lease()}) only matters
  * when the pod dies mid-night;</li>
- * <li>the date's run lock, taken by the night lock's holder before it runs and never released: it expires after a day,
- * so a pod whose trigger fires later for the same date skips.</li>
+ * <li>the date's run lock ({@link TopicsNightlyService#runLock}), taken by the night lock's holder before it runs and
+ * never released: it expires after a day, so a pod whose trigger fires later for the same date skips. A night started
+ * by hand takes it too, except for tomorrow's date.</li>
  * </ul>
  * The night itself is {@link TopicsNightlyService#runNight(Instant)}. A shutdown interrupts the job: it cancels the
  * night and releases the night lock, so the night can be run again by hand, and the job starts no new night.
@@ -47,17 +46,11 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsNightlyJob extends Job implements InterruptableJob {
 
-    private static final Duration RUN_SLOT = Duration.ofDays(1);
-
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicsNightlyService nightlyService;
     private final @NonNull LockService lockService;
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Disposable> subscription = new AtomicReference<>();
-
-    static Lock runLock(LocalDate night) {
-        return new Lock("topics:nightly:run:" + night);
-    }
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -96,9 +89,9 @@ public class TopicsNightlyJob extends Job implements InterruptableJob {
      * lock service, which would take a Redis error for a lock held by another pod.
      */
     void runIfDue(Instant start) {
-        var lock = runLock(LocalDate.ofInstant(start, ZoneOffset.UTC));
+        var lock = TopicsNightlyService.runLock(LocalDate.ofInstant(start, ZoneOffset.UTC));
         try {
-            if (Boolean.TRUE.equals(lockService.lockUsingToken(lock, RUN_SLOT).block())) {
+            if (Boolean.TRUE.equals(lockService.lockUsingToken(lock, TopicsNightlyService.RUN_SLOT).block())) {
                 nightlyService.runNight(start);
             } else {
                 log.info("Topics night skipped, lock '{}' is held: the night already ran", lock.key());

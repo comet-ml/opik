@@ -716,6 +716,9 @@ Each project's outcome is its `topic_night_projects` and `topic_runs` rows.
 A night run again for a date replaces that date's record. A project whose last saved run already covers the night is
 skipped as `already_saved`, so a second run of the same date runs only the projects the first one did not save.
 
+A night run by hand for today or an earlier date also takes the date's lock `topics:nightly:run:<date>`, so the
+scheduled job skips that date. A run for tomorrow does not: tomorrow's scheduled night still reads the rest of today.
+
 There is no endpoint for one project's nightly update. The project endpoint builds first lists only: for a project
 with a list it answers `409`.
 

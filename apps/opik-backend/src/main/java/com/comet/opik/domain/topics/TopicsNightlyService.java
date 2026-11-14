@@ -63,6 +63,11 @@ public class TopicsNightlyService {
 
     /** The night's lock: one night at a time across the cluster, scheduled or started by hand. */
     public static final Lock NIGHT_LOCK = new Lock("topics:nightly:lock");
+    /**
+     * How long a date's run lock lasts: {@link #runLock} is taken for a night and never released, so a trigger that
+     * fires later for the same date skips.
+     */
+    public static final Duration RUN_SLOT = Duration.ofDays(1);
 
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
@@ -203,6 +208,11 @@ public class TopicsNightlyService {
      * @throws ServiceUnavailableException when Redis fails or does not answer within {@link #LOCK_WAIT}, with a
      *                                     {@code Retry-After}
      */
+    /** The lock that marks a date's night as run, by the scheduled job or by hand. */
+    public static Lock runLock(@NonNull LocalDate night) {
+        return new Lock("topics:nightly:run:" + night);
+    }
+
     public boolean runNightNow(@NonNull LocalDate night) {
         if (!config.getNightly().isEnabled()) {
             throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
@@ -213,6 +223,7 @@ public class TopicsNightlyService {
                 Mono.fromRunnable(() -> {
                     started.complete(true);
                     log.info("Topics night '{}' started by hand", night);
+                    markRun(night);
                     runNight(night.atStartOfDay(ZoneOffset.UTC).toInstant());
                 }).subscribeOn(Schedulers.boundedElastic()),
                 Mono.fromRunnable(() -> started.complete(false)),
@@ -234,6 +245,23 @@ public class TopicsNightlyService {
         } catch (ExecutionException | TimeoutException exception) {
             log.warn("Topics lock unavailable, lock '{}'", NIGHT_LOCK.key(), exception);
             throw lockUnavailable();
+        }
+    }
+
+    /**
+     * Takes the date's run lock, so the scheduled trigger skips a date already run by hand. Held already (the
+     * scheduled night ran) is fine. Not for tomorrow: tomorrow's scheduled night still reads the rest of today. A Redis
+     * failure is logged, and the night goes on.
+     */
+    private void markRun(LocalDate night) {
+        if (night.isAfter(LocalDate.now(ZoneOffset.UTC))) {
+            return;
+        }
+        try {
+            lockService.lockUsingToken(runLock(night), RUN_SLOT).block(LOCK_WAIT);
+        } catch (RuntimeException exception) {
+            log.warn("Topics night '{}' could not take its run lock '{}'; the scheduled job may run the date again",
+                    night, runLock(night).key(), exception);
         }
     }
 

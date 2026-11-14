@@ -22,6 +22,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -164,12 +165,13 @@ class TopicsNightlyJobTest {
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private GuiceJobManager jobManager;
+    private LockService lockService;
     private ClientSupport client;
     private String baseUrl;
 
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
-            TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager,
+            TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
             @Jit TopicsNightlyService nightlyService, @Jit TopicsFirstBuildService firstBuildService,
             @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO) {
         this.client = client;
@@ -178,6 +180,7 @@ class TopicsNightlyJobTest {
         this.template = template;
         this.clickHouseTemplate = clickHouseTemplate;
         this.jobManager = jobManager;
+        this.lockService = lockService;
         this.nightlyService = nightlyService;
         this.firstBuildService = firstBuildService;
         this.runner = runner;
@@ -722,8 +725,8 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("the night endpoint runs the whole night now and updates the project with a list; a night that is "
-            + "not a date is refused")
+    @DisplayName("the night endpoint runs the whole night now and updates the project with a list, and marks the date "
+            + "as run so the scheduled job skips it; a night that is not a date is refused")
     void runNightByHand() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
@@ -734,8 +737,11 @@ class TopicsNightlyJobTest {
             assertThat(response.readEntity(JsonNode.class).path("night").asText())
                     .isEqualTo(secondNight().toString());
         }
-        Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> assertThat(nightlyRun(projectId)
-                .status()).isEqualTo(TopicRun.Status.SAVED));
+        // The night runs in the background: its run row may not exist yet at the first poll.
+        Awaitility.await().atMost(Duration.ofSeconds(60)).ignoreExceptions()
+                .untilAsserted(() -> assertThat(nightlyRun(projectId).status()).isEqualTo(TopicRun.Status.SAVED));
+        assertThat(lockService.lockUsingToken(TopicsNightlyService.runLock(secondNight()), Duration.ofMinutes(1))
+                .block()).isFalse();
         // Released when the night ended: a second night can start.
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             try (var response = runNightEndpoint(secondNight().toString())) {
