@@ -39,6 +39,7 @@ import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -820,6 +821,13 @@ public class AutomationExecutor {
      * the poll job resumes it when the optimization reaches a terminal status. Needs the python backend
      * worker, and on cloud an API key the automation does not have.
      */
+    /** The Studio's reference metrics read the reference under "answer" by default; Opik datasets keep it in expected_output. */
+    private static JsonNode metricParameters(String metric) {
+        return Set.of("levenshtein_ratio", "equals").contains(metric)
+                ? JsonUtils.createObjectNode().put("reference_key", "expected_output")
+                : null;
+    }
+
     private Mono<StepResult> runOptimizer(RunContext context, Automation.Step step) {
         String workspaceId = context.event().workspaceId();
         return Mono.fromCallable(() -> {
@@ -841,6 +849,7 @@ public class AutomationExecutor {
                                             : message.content().toString())
                                     .build())
                             .toList();
+                    var metric = Optional.ofNullable(step.metric()).orElse(WorkflowService.DEFAULT_METRIC);
                     var optimization = Optimization.builder()
                             .name("%s · %s".formatted(context.automation().name(),
                                     Optional.ofNullable(version.commit()).orElse(version.id().toString())))
@@ -855,8 +864,8 @@ public class AutomationExecutor {
                                             .build())
                                     .evaluation(OptimizationStudioConfig.StudioEvaluation.builder()
                                             .metrics(List.of(OptimizationStudioConfig.StudioMetric.builder()
-                                                    .type(Optional.ofNullable(step.metric())
-                                                            .orElse(WorkflowService.DEFAULT_METRIC))
+                                                    .type(metric)
+                                                    .parameters(metricParameters(metric))
                                                     .build()))
                                             .build())
                                     .optimizer(OptimizationStudioConfig.StudioOptimizer.builder()
