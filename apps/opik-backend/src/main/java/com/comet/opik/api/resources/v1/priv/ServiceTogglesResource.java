@@ -1,14 +1,17 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.domain.topics.TopicWorkspaceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -27,6 +30,8 @@ import lombok.extern.slf4j.Slf4j;
 public class ServiceTogglesResource {
 
     private final @NonNull OpikConfiguration config;
+    private final @NonNull TopicWorkspaceService topicWorkspaces;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @GET
     @Operation(operationId = "getServiceToggles", summary = "Get Service Toggles", description = "Get Service Toggles", responses = {
@@ -34,7 +39,16 @@ public class ServiceTogglesResource {
     public Response getToggles() {
         ServiceTogglesConfig toggles = config.getServiceToggles();
         return Response.ok()
-                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles)))
+                .entity(toggles.withCustomChartsEnabledForWorkspace(config.getCustomCharts().isEnabled(toggles))
+                        .withTopicsEnabled(isTopicsEnabled()))
                 .build();
+    }
+
+    /**
+     * The same rule as the topics read API: topics on, and the caller's workspace eligible. Otherwise the API answers
+     * 501 or status disabled. The eligibility check reads MySQL only for a workspace in the Helm list.
+     */
+    private boolean isTopicsEnabled() {
+        return config.getTopics().isEnabled() && topicWorkspaces.isEligible(requestContext.get().getWorkspaceId());
     }
 }

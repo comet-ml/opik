@@ -916,6 +916,20 @@ rateLimit:
       userFacingBucketName: get_traces
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    getProjectTopics:
+      # Default: 60
+      # Description: how many getProjectTopics requests are allowed per workspace in the specified time bucket; each
+      # ready request not in the cache runs one ClickHouse query over the window of the project's trace topics
+      limit: ${RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT:-60}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Get-Project-Topics
+      # Description: User facing bucket name
+      userFacingBucketName: get_project_topics
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     searchTraces:
       # Default: 30
       # Description: how many searchTraces queries are allowed per workspace in the specified time bucket
@@ -1779,6 +1793,10 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: ${CACHE_MANAGER_EXPERIMENT_COMPARE_TARGET_PROJECTS_DURATION:-PT10S}
+    # Default: PT5M
+    # Description: Cache TTL for the topics read API's counts per topic and day of a ready project. A saved run starts
+    # a new entry, so the TTL is how old the counts of traces labelled since can be
+    topics_day_counts: ${CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION:-PT5M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -2641,8 +2659,8 @@ aiLabels:
 # Calls aiLabels.inference's deployment with its credential (/v1/embed).
 topics:
   #  Default: false
-  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
-  #  never exposed to the UI
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. With
+  #  enabledWorkspaces, it sets the UI toggle topics_enabled for the caller's workspace
   enabled: ${TOPICS_ENABLED:-false}
   #  Default: empty (no workspace)
   #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
