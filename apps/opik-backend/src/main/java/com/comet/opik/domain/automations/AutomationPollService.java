@@ -1,6 +1,7 @@
 package com.comet.opik.domain.automations;
 
 import com.comet.opik.api.automations.Automation;
+import com.comet.opik.api.automations.AutomationRun;
 import com.comet.opik.domain.OptimizationDAO;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.evaluators.AutomationRuleAutomationDAO;
@@ -185,8 +186,24 @@ public class AutomationPollService {
                     return optimizationDAO.getRowById(optimizationId)
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, run.workspaceId())
                                     .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
-                            .filter(optimization -> optimization.status() != null && optimization.status().isTerminal())
-                            .flatMap(optimization -> {
+                            .map(Optional::of)
+                            .defaultIfEmpty(Optional.empty())
+                            .flatMap(found -> {
+                                if (found.isEmpty()) {
+                                    // The optimization is gone (deleted, or never persisted): the run can't resume.
+                                    return Mono.fromRunnable(() -> runService.finishSingle(run.workspaceId(), run.id(),
+                                            AutomationRun.Status.FAILED,
+                                            run.outputs() == null
+                                                    ? Map.of()
+                                                    : JsonUtils.treeToValue(run.outputs(), Map.class),
+                                            List.of(), null, null,
+                                            "optimization '%s' no longer exists".formatted(optimizationId)))
+                                            .subscribeOn(Schedulers.boundedElastic()).then();
+                                }
+                                var optimization = found.get();
+                                if (optimization.status() == null || !optimization.status().isTerminal()) {
+                                    return Mono.empty();
+                                }
                                 Map<String, Object> payload = new HashMap<>();
                                 payload.put("optimization_id", optimizationId.toString());
                                 payload.put("status", optimization.status().getValue());
