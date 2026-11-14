@@ -7,6 +7,8 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Set;
@@ -18,6 +20,7 @@ import java.util.concurrent.TimeoutException;
  * in a runtime exception), not with the v2 client's {@link com.clickhouse.client.api.ServerException}. Both are
  * recognised.
  */
+@Slf4j
 @UtilityClass
 public class TopicsReadErrors {
 
@@ -48,6 +51,21 @@ public class TopicsReadErrors {
     static boolean isLimit(@NonNull Throwable error) {
         return hasCode(error, LIMIT_CODES) || Throwables.getCausalChain(error).stream()
                 .anyMatch(TimeoutException.class::isInstance);
+    }
+
+    /**
+     * The read of a trace query, with a guard trip of {@code topics.filter} ({@link #isLimit}) answered as a 503 with
+     * Retry-After when the query is filtered by topic ({@code topicFiltered}). Other errors, the rows and bytes limits
+     * included, pass as they are. A query without a topic filter is returned as it is.
+     */
+    public static <T> Mono<T> busyOnFilterGuard(boolean topicFiltered, @NonNull Mono<T> read) {
+        if (!topicFiltered) {
+            return read;
+        }
+        return read.onErrorMap(TopicsReadErrors::isLimit, error -> {
+            log.warn("Trace query filtered by topic hit a guard", error);
+            return busy();
+        });
     }
 
     /** A 503 with Retry-After: the read can pass on a retry. */

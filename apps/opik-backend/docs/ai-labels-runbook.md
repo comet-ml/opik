@@ -978,6 +978,48 @@ with the API, run the query on the same UTC date and at least `CACHE_MANAGER_TOP
 project's last API call, or the API can answer from its cache. A run that saves between the two reads changes the
 counts.
 
+### Traces filtered by topic
+
+The traces list takes a `topic_id` filter. "View all logs" on a topic opens the list with it. The value is a topic's
+`id` from this endpoint, or Other's all-zeros id. The field is `STRING_EXACT`, the type of the other id fields: the
+value is compared exactly, and ids are lower case. The page and the Logs chip use `=`. A value that is not an id
+matches no trace. The filter applies to the list and its `total`, to `GET /v1/private/traces/stats`, to the search
+stream (`POST /v1/private/traces/search`), to the trace KPI cards (`POST /v1/private/projects/{id}/kpi-cards`) and to
+the trace metrics (`POST /v1/private/projects/{id}/metrics`, `trace_filters`). `GET /v1/private/projects/stats`
+ignores it: it spans many projects, and a topic belongs to one.
+
+```json
+[{"field": "topic_id", "operator": "=", "value": "<topic_id>"}]
+```
+
+The filter uses the rules of [How it counts](#how-it-counts). Every row counts, each trace goes by its latest row,
+and a topic that is not live is Other. A trace with no counted row fails every operator, `!=` included: `!=` keeps
+only traces that have a topic row, so it is not the opposite of `=`. With topics off, a workspace not opted in, or a
+project with no live topic, the filter returns no trace and no error.
+
+The page's link opens Logs with the time range, which bounds the list by the time in the trace id. The read API counts
+by the trace's `created_at`. So the list's `total` can differ from the topic's `count` for traces whose id time is
+outside the window (late or imported traces), and around UTC midnight. For an exact match, add two `created_at`
+filters, `>=` the start of `window_from` and `<` the start of the day after `today`, both in UTC
+(`2026-10-06T00:00:00Z`), and the Logs page's filters `source = sdk` and `visibility_mode = default`. With these, the
+list's `total` equals the topic's `count`, and with the Other filter, the sum of `other.series`. A run that saves
+between the two requests can change both.
+
+The backend reads MySQL first: whether the workspace is eligible, then the project's live topics. Then each trace
+query gets `AND id IN (<subquery>)`, as score filters do. The subquery reads the project's `trace_topics` rows, keeps
+the latest row of each trace, and returns the ids that pass the filter. It is bounded only by the trace id range of
+the list: its time range and its cursor. With neither, it reads the project's whole history in `trace_topics`. It has
+no `log_comment` of its own: in `system.query_log` it is part of the list's queries (`find_traces_by_project_id`,
+`count_traces_by_project`). The KPI cards and the metrics carry the same subquery, bounded by their own id range.
+
+A query with a topic filter has two guards on the whole query, the trace read and the subquery together:
+`max_execution_time` from `TOPICS_FILTER_MAX_EXECUTION_TIME` (30 s) and `max_memory_usage` from
+`TOPICS_FILTER_MAX_MEMORY_USAGE` (4 GiB). The list, its count, the stats, the KPI cards and the trace metrics have them;
+a query without a topic filter has neither. A query that stops at a guard answers `503` with `Retry-After: 5` (see
+"Errors"). The search stream has already sent its status then, so it ends with an error, as for any ClickHouse error.
+A project whose "All time" filter trips a guard on every retry needs a narrower date range, or a higher limit if
+ClickHouse has the memory.
+
 ### Errors
 
 | Code | When |
@@ -986,6 +1028,7 @@ counts.
 | 404 | The project is not in the workspace. |
 | 400, `This project is too large for topics` | The ClickHouse read hit its rows or bytes limit: code 158 (rows), 307 (bytes) or 396 (rows or bytes). The same project fails the same way on a retry, so there is no `Retry-After`. The backend logs a WARN `Topics read is too large` with the workspace and the project. Raise `TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` if the project should fit. A 400 without this message is a request without `project_id`. |
 | 503, `Retry-After: 5` | A ClickHouse read stopped at its time (159) or memory (241) limit, or the backend waited 11 s for it. A retry can pass. The backend logs a WARN `Topics read hit a ClickHouse limit` with the workspace and the project. |
+| 503, `Retry-After: 5`, traces filtered by topic | A trace query with a topic filter (list, count, stats, KPI cards, trace metrics) stopped at a guard: time (159, `TOPICS_FILTER_MAX_EXECUTION_TIME`) or memory (241, `TOPICS_FILTER_MAX_MEMORY_USAGE`). A retry can pass. The backend logs a WARN `Trace query filtered by topic hit a guard`. |
 | 429 | More than `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` requests from one workspace in `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` (60 s). |
 | 500 | Any other error. |
 

@@ -1145,6 +1145,15 @@ topics:
     #  backfill has run for longer than this, the list is built anyway when at least 99 percent of the backfill's traces
     #  have a vector; with fewer it keeps waiting, and topics.first_build.gate counts it as timed_out_waiting. At most 30d
     backfillMaxWait: 72h
+  # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
+  # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
+  filter:
+    #  Default: 30s
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 10m
+    maxExecutionTime: 30s
+    #  Default: 4294967296 (4 GiB)
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together
+    maxMemoryUsage: 4294967296
 
 # Python evaluator configuration
 pythonEvaluator:

@@ -1052,6 +1052,27 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE 1 = 1
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(topic_filters)>topic_trace_ids AS (
+                SELECT trace_id
+                FROM (
+                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
+                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
+                    FROM trace_topics
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :topic_project_id
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                    <if(last_received_id)> AND trace_id \\< :last_received_id
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                    GROUP BY trace_id
+                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                )
+                WHERE <topic_filters>
             ), <endif><if(trace_span_weeks)>trace_span_weeks AS (
                 <if(span_weeks_bound)>
                 SELECT DISTINCT id_week AS week
@@ -1569,6 +1590,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                <if(topic_filters)> AND id IN (SELECT trace_id FROM topic_trace_ids) <endif>
+                <if(topic_no_match)> AND 0 <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT entity_id
@@ -1688,7 +1711,7 @@ class TraceDAOImpl implements TraceDAO {
              <if(sort_has_experiment || !exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
              <if(!exclude_annotation_queues)>LEFT JOIN trace_annotation_queue_ids taqi ON taqi.trace_id = t.id<endif>
              ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>
             ;
             """;
 
@@ -1812,6 +1835,27 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE 1 = 1
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(topic_filters)>topic_trace_ids AS (
+                SELECT trace_id
+                FROM (
+                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
+                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
+                    FROM trace_topics
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :topic_project_id
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                    <if(last_received_id)> AND trace_id \\< :last_received_id
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                    GROUP BY trace_id
+                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                )
+                WHERE <topic_filters>
             ), <endif><if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
                 FROM traces
@@ -2109,6 +2153,8 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                     <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                    <if(topic_filters)> AND id IN (SELECT trace_id FROM topic_trace_ids) <endif>
+                    <if(topic_no_match)> AND 0 <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
                         SELECT entity_id
@@ -2177,7 +2223,7 @@ class TraceDAOImpl implements TraceDAO {
                 HAVING <trace_aggregation_filters>
                 <endif>
             ) AS latest_rows
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>
             ;
             """;
 
@@ -2660,6 +2706,27 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE 1 = 1
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(topic_filters)>topic_trace_ids AS (
+                SELECT trace_id
+                FROM (
+                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
+                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
+                    FROM trace_topics
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :topic_project_id
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                    <if(last_received_id)> AND trace_id \\< :last_received_id
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                    GROUP BY trace_id
+                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                )
+                WHERE <topic_filters>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
                 <if(span_weeks_bound)>
@@ -3012,6 +3079,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                <if(topic_filters)> AND id IN (SELECT trace_id FROM topic_trace_ids) <endif>
+                <if(topic_no_match)> AND 0 <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -3097,7 +3166,7 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
             GROUP BY t.workspace_id, t.project_id
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>
             ;
             """;
 
@@ -3130,6 +3199,27 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE 1 = 1
                 <if(!annotation_queue_filters_match_unqueued)><if(annotation_queue_filters)> AND <annotation_queue_filters><endif><endif>
                 <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id)<endif>
+            ), <endif><if(topic_filters)>topic_trace_ids AS (
+                SELECT trace_id
+                FROM (
+                    SELECT trace_id, argMax(topic_id, (last_updated_at, run_id)) AS latest_topic,
+                        if(latest_topic IN :topic_live_ids, latest_topic, '00000000-0000-0000-0000-000000000000') AS topic
+                    FROM trace_topics
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :topic_project_id
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                    <if(last_received_id)> AND trace_id \\< :last_received_id
+                        AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                            \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC'), 1))) <endif>
+                    GROUP BY trace_id
+                    HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                )
+                WHERE <topic_filters>
             ), <endif><if(spans_partitioned)>
             trace_span_weeks AS (
                 <if(span_weeks_bound)>
@@ -3405,6 +3495,8 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(annotation_queue_narrows)> AND id IN (SELECT trace_id FROM annotation_queue_trace_ids) <endif>
                 <if(annotation_queue_filters_match_unqueued)> AND id NOT IN (SELECT trace_id FROM annotation_queue_memberships AS taqi WHERE NOT (<annotation_queue_filters>)) <endif>
+                <if(topic_filters)> AND id IN (SELECT trace_id FROM topic_trace_ids) <endif>
+                <if(topic_no_match)> AND 0 <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -3553,7 +3645,7 @@ class TraceDAOImpl implements TraceDAO {
                 s.span_feedback_scores AS span_feedback_scores
             FROM trace_feedback_scores t
             FULL OUTER JOIN span_feedback_scores s ON t.project_id = s.project_id
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>'<if(topic_filters)>, max_execution_time = <topic_max_execution_time>, max_memory_usage = <topic_max_memory_usage><endif>
             ;
             """;
 
@@ -5180,6 +5272,8 @@ class TraceDAOImpl implements TraceDAO {
                 || template.getAttribute("span_feedback_scores_filters") != null
                 || template.getAttribute("trace_aggregation_filters") != null
                 || template.getAttribute("experiment_filters") != null
+                || template.getAttribute("topic_filters") != null
+                || template.getAttribute("topic_no_match") != null
                 || template.getAttribute("feedback_scores_empty_filters") != null
                 || template.getAttribute("span_feedback_scores_empty_filters") != null
                 || template.getAttribute("guardrails_filters") != null;

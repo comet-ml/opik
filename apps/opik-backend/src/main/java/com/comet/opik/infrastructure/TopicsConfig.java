@@ -59,6 +59,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private FirstBuildConfig firstBuild;
 
+    @Valid @NotNull @JsonProperty
+    private FilterConfig filter;
+
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
      * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
@@ -202,6 +205,30 @@ public class TopicsConfig {
         @JsonIgnore
         @AssertTrue(message = "topics.firstBuild.budget must be shorter than topics.firstBuild.interval") public boolean isBudgetValid() {
             return budget == null || interval == null || budget.toMilliseconds() < interval.toMilliseconds();
+        }
+    }
+
+    /**
+     * The guards of a trace query filtered by topic (the trace list, count and stats, the trace KPI cards and the trace
+     * metrics): ClickHouse settings on the whole query, added only when the filters have a topic. A query that trips
+     * one answers 503 with Retry-After. Queries without a topic filter keep their settings.
+     */
+    @Data
+    public static class FilterConfig {
+
+        /** ClickHouse's {@code max_execution_time}, in whole seconds. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+        private Duration maxExecutionTime;
+
+        /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
+            return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
         }
     }
 

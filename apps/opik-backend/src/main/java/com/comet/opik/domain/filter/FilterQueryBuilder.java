@@ -148,6 +148,8 @@ public class FilterQueryBuilder {
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String EXPERIMENT_ID_DB = "experiment_id";
+    // A trace's topic in the topic subquery of a trace query, which the TOPICS strategy filters
+    private static final String TOPIC_ANALYTICS_DB = "topic";
     // Comments reference the trace id and the thread model id (not the user-facing thread id)
     private static final String TRACE_HAS_COMMENTS_DB = "id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'trace')";
     private static final String THREAD_HAS_COMMENTS_DB = "thread_model_id IN (SELECT entity_id FROM comments WHERE workspace_id = :workspace_id AND entity_type = 'thread')";
@@ -389,6 +391,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(TraceField.SOURCE, SOURCE_DB)
                     .put(TraceField.ENVIRONMENT, ENVIRONMENT_DB)
+                    .put(TraceField.TOPIC_ID, TOPIC_ANALYTICS_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -642,6 +645,8 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
                 TraceField.ANNOTATION_QUEUE_IDS,
                 TraceThreadField.ANNOTATION_QUEUE_IDS));
+
+        map.put(FilterStrategy.TOPICS, Set.of(TraceField.TOPIC_ID));
 
         map.put(FilterStrategy.SPAN, Set.of(
                 SpanField.ID,

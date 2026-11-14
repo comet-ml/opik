@@ -11,6 +11,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.topics.TopicFilterScope;
 import com.comet.opik.utils.template.TemplateUtils;
 import io.dropwizard.db.DataSourceFactory;
 import io.r2dbc.spi.Statement;
@@ -168,6 +169,7 @@ public class FilterUtils {
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_AGGREGATION)
                             .ifPresent(traceExperimentFilters -> template.add("experiment_filters",
                                     traceExperimentFilters));
+                    addTopicFilters(template, filters, traceSearchCriteria.topicScope());
                     FilterQueryBuilder.toAnalyticsDbFilters(
                             filters, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable)
                             .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
@@ -218,6 +220,8 @@ public class FilterUtils {
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_AGGREGATION);
+                    bindTopicFilters(statement, filters, traceSearchCriteria.projectId(),
+                            traceSearchCriteria.topicScope());
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY);
@@ -238,6 +242,43 @@ public class FilterUtils {
 
         Optional.ofNullable(traceSearchCriteria.searchText())
                 .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
+    }
+
+    /**
+     * The topic filter of a trace query: the trace list, count and stats (TraceDAO's {@code topic_trace_ids} CTE), the
+     * trace KPI cards and the trace metrics (the same subquery inline). The subquery keeps the ids of the project's
+     * traces whose topic matches {@code <topic_filters>}. A trace's topic is its latest {@code trace_topics} row, as in
+     * the topics read API's counts, and a topic that is not live is Other. A trace with no row has no topic, so no
+     * operator keeps it, {@code !=} included. The query's id range bounds the subquery; with none, it reads the
+     * project's whole history. The scope's guards go to the query's {@code SETTINGS}. With a topic filter and no scope
+     * (topics off, a workspace not eligible, a project with no live topic) it adds {@code topic_no_match}: the query
+     * keeps no trace and its response keeps its shape. Without a topic filter it adds nothing.
+     */
+    public static void addTopicFilters(ST template, List<? extends Filter> filters, TopicFilterScope scope) {
+        if (filters == null) {
+            return;
+        }
+        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TOPICS).ifPresent(topicFilters -> {
+            if (scope == null) {
+                template.add("topic_no_match", true);
+                return;
+            }
+            template.add("topic_filters", topicFilters);
+            template.add("topic_max_execution_time", scope.maxExecutionSeconds());
+            template.add("topic_max_memory_usage", scope.maxMemoryUsage());
+        });
+    }
+
+    /** Binds what {@link #addTopicFilters} added; nothing without a topic filter or a scope. */
+    public static void bindTopicFilters(Statement statement, List<? extends Filter> filters, UUID projectId,
+            TopicFilterScope scope) {
+        if (filters == null || scope == null
+                || FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TOPICS).isEmpty()) {
+            return;
+        }
+        FilterQueryBuilder.bind(statement, filters, FilterStrategy.TOPICS);
+        statement.bind("topic_project_id", projectId.toString())
+                .bind("topic_live_ids", scope.liveIds().toArray(String[]::new));
     }
 
     // EQUAL only: the pushdown SQL template is hardcoded to `thread_id = :thread_id_pushdown`,

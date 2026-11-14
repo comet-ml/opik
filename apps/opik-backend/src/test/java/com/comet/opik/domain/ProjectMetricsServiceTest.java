@@ -1,14 +1,19 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.api.ServerException;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.TimeInterval;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.metrics.BreakdownConfig;
 import com.comet.opik.api.metrics.BreakdownField;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,11 +27,14 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,6 +46,8 @@ class ProjectMetricsServiceTest {
     private ProjectMetricsDAO dao;
     @Mock
     private ProjectService projectService;
+    @Mock
+    private TopicReadService topicReadService;
 
     @ParameterizedTest
     @EnumSource(value = MetricType.class, names = {"COST", "SPAN_COST"})
@@ -61,6 +71,7 @@ class ProjectMetricsServiceTest {
         results.add(result("__others__",
                 List.of(point(first, "0.300000000000000003"), point(second, "0.3"), point(third, "0.4"))));
         when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
+        when(topicReadService.filterScope(any(), eq(projectId))).thenReturn(Mono.just(Optional.empty()));
         if (metricType == MetricType.SPAN_COST) {
             when(dao.getSpanCost(eq(projectId), any())).thenReturn(Mono.just(entries));
         } else {
@@ -71,9 +82,36 @@ class ProjectMetricsServiceTest {
                 .breakdown(BreakdownConfig.builder().field(BreakdownField.NAME).build()).build();
         var expected = ProjectMetricResponse.<Number>builder().projectId(projectId).metricType(metricType)
                 .interval(TimeInterval.HOURLY).results(results).build();
-        var service = new ProjectMetricsServiceImpl(dao, projectService, new InstantToUUIDMapper());
+        var service = new ProjectMetricsServiceImpl(dao, projectService, new InstantToUUIDMapper(),
+                topicReadService);
         assertThat(service.getProjectMetrics(projectId, request).block()).usingRecursiveComparison()
                 .withComparatorForType(BigDecimal::compareTo, BigDecimal.class).isEqualTo(expected);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = MetricType.class, names = {"THREAD_COST", "SPAN_COUNT"})
+    void threadAndSpanMetricsIgnoreATopicInTraceFilters(MetricType metricType) {
+        var projectId = UUID.randomUUID();
+        var limit = new RuntimeException(new ServerException(159, "time limit", 500, "query-id"));
+        when(projectService.getOrFail(projectId)).thenReturn(Mono.just(Project.builder().id(projectId).build()));
+        // Strict stubs: the call fails the test if the service passes the trace filters on
+        when(topicReadService.filterScope(isNull(), eq(projectId))).thenReturn(Mono.just(Optional.empty()));
+        if (metricType == MetricType.THREAD_COST) {
+            when(dao.getThreadCost(eq(projectId), any())).thenReturn(Mono.error(limit));
+        } else {
+            when(dao.getSpanCount(eq(projectId), any())).thenReturn(Mono.error(limit));
+        }
+        var start = Instant.parse("2026-01-01T00:00:00Z");
+        var request = ProjectMetricRequest.builder().metricType(metricType).interval(TimeInterval.HOURLY)
+                .intervalStart(start).intervalEnd(start.plusSeconds(3600))
+                .traceFilters(List.of(TraceFilter.builder().field(TraceField.TOPIC_ID).operator(Operator.EQUAL)
+                        .value(UUID.randomUUID().toString()).build()))
+                .build();
+        var service = new ProjectMetricsServiceImpl(dao, projectService, new InstantToUUIDMapper(),
+                topicReadService);
+
+        // The ClickHouse error stays as it is: no 503 "Topics are busy"
+        assertThatThrownBy(() -> service.getProjectMetrics(projectId, request).block()).isSameAs(limit);
     }
 
     private ProjectMetricsDAO.Entry entry(String group, Instant time, String cost) {
