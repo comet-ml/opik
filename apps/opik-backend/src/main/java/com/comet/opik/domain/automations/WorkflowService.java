@@ -226,6 +226,12 @@ public class WorkflowService {
                 .findFirst()
                 .map(automation -> overridesOf(automation, recipe.overrides()))
                 .orElse(recipe.overrides());
+        // The half still to create is described with the judge and targets the running half uses.
+        var described = state != Workflow.State.PARTLY_ON
+                ? matched
+                : templates(recipe(recipe.id(), project, overrides), project).stream()
+                        .map(template -> byRecipe(existing, recipe.id(), template).orElse(template))
+                        .toList();
 
         // Before a judge is chosen there is nothing to replay, so the estimate stays at zero: the dry run
         // of the enable, with the chosen score, is where the numbers come from.
@@ -249,7 +255,7 @@ public class WorkflowService {
                         .recipe(recipe.id()).version(VERSION).name(recipe.name()).description(recipe.description())
                         .state(state).prerequisitesMet(!gate || suiteHasCases)
                         .blockedReason(blockedReason)
-                        .automations(matched)
+                        .automations(described)
                         .estimate(figures)
                         .overrides(overrides)
                         .availableScoreNames(scoreNames)
@@ -290,7 +296,12 @@ public class WorkflowService {
                 .scoreName(condition.map(ScoreCondition::scoreName).orElse(defaults.scoreName()))
                 .threshold(defaults.threshold() == null
                         ? null
-                        : condition.map(ScoreCondition::value).orElse(defaults.threshold()))
+                        : automation.steps().stream().map(Automation.Step::threshold).filter(Objects::nonNull)
+                                .findFirst()
+                                .or(() -> condition
+                                        .filter(found -> found.operator() == ScoreConditionOperator.LESS_THAN)
+                                        .map(ScoreCondition::value))
+                                .orElse(defaults.threshold()))
                 .testSuiteName(step.testSuiteName() != null ? step.testSuiteName() : defaults.testSuiteName())
                 .annotationQueueName(step.annotationQueueName() != null
                         ? step.annotationQueueName()

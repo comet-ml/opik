@@ -401,6 +401,18 @@ class AutomationsResourceTest {
         assertThat(custom.steps().getFirst().annotationQueueId())
                 .isEqualTo(review.steps().getFirst().annotationQueueId());
         assertThat(custom.recipe()).isNull();
+
+        // With the check turned off, the recipe is partly on and describes the half to recreate with the
+        // judge the running half uses, and the threshold is the recipe's, not the sample's any-value condition.
+        try (var response = request(PATH.formatted(baseURI) + "/" + agreement.id(), Map.of())
+                .method("PATCH", Entity.json(AutomationUpdate.builder().enabled(false).build()))) {
+            assertThat(response.getStatus()).isEqualTo(204);
+        }
+        var partly = workflows(project.id()).stream().filter(w -> w.recipe().equals("align")).findFirst().orElseThrow();
+        assertThat(partly.state()).isEqualTo(Workflow.State.PARTLY_ON);
+        assertThat(partly.overrides().threshold()).isEqualTo(WorkflowService.DEFAULT_THRESHOLD);
+        assertThat(partly.automations()).extracting(Automation::name)
+                .containsExactly("Random " + SCORE + " traces to review", "Check " + SCORE + " against reviewers");
     }
 
     @Test
