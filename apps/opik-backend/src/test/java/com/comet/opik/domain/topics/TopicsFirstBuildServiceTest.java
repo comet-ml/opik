@@ -52,6 +52,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -91,6 +92,7 @@ class TopicsFirstBuildServiceTest {
     private LockService lockService;
     private TopicsConfig config;
     private TopicsFirstBuildService service;
+    private TopicsProjectRunner runner;
 
     @BeforeEach
     void setUp() {
@@ -150,7 +152,7 @@ class TopicsFirstBuildServiceTest {
 
         config = TestConfigUtils.loadConfigTest().getTopics();
         var metrics = new TopicsMetrics(meter.meter);
-        var runner = new TopicsProjectRunner(config, template, rebuildService, metrics, lockService);
+        runner = spy(new TopicsProjectRunner(config, template, rebuildService, metrics, lockService));
         service = new TopicsFirstBuildService(config, template, workspaceService, windowDAO, rebuildService, runner,
                 metrics, new TopicsBackfillGate(config, template), labelService);
     }
@@ -511,6 +513,30 @@ class TopicsFirstBuildServiceTest {
         verify(topicDAO).deleteTopicsOfMissingProjects(List.of(WORKSPACE_ID, OTHER_WORKSPACE_ID));
         verify(workspaceService).eligibleWorkspaceIds();
         verify(rebuildService).firstBuild(any(), eq(WORKSPACE_ID), eq(started), any());
+    }
+
+    @Test
+    @DisplayName("while another run on the pod holds the run slot past its wait, the job skips the project before its "
+            + "lock and its run row, and a run by hand answers 409; once the slot is free, the project is built and the "
+            + "slot is given back")
+    void runSlotHeld() {
+        doReturn(Duration.ofMillis(50)).when(runner).runLimit();
+        project(WORKSPACE_ID, started, 140);
+        assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
+        try {
+            service.run(START);
+            assertThatThrownBy(() -> service.runNow(WORKSPACE_ID, started, NIGHT, false))
+                    .isInstanceOf(ConflictException.class);
+        } finally {
+            runner.releaseRun();
+        }
+        verify(rebuildService, never()).startRun(any(), any(), any());
+        verify(lockService, never()).lockUsingToken(eq(TopicsProjectRunner.projectLock(started)), any());
+
+        service.run(START);
+
+        verify(rebuildService).firstBuild(any(), eq(WORKSPACE_ID), eq(started), any());
+        assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
     }
 
     @Test

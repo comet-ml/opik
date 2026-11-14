@@ -1,11 +1,13 @@
 package com.comet.opik.domain.topics;
 
+import com.fasterxml.jackson.databind.node.NullNode;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,8 +16,8 @@ import static com.comet.opik.domain.topics.TopicsRebuildService.DIMENSIONS;
 /**
  * The topic algorithm in use. A first build merges identical texts, k-means them into fine groups, has Qwen name topics
  * over the groups, and assigns every trace to its nearest prototype with {@link PrototypeAssigner}: the topic
- * prototypes are the centres of each topic's groups, the known-Other ones the centres of the Other groups. The
- * labeller applies the same assigner to a saved list.
+ * prototypes are the centres of each topic's groups, the known-Other ones the centres of the Other groups. A nightly
+ * update is {@link NightlyUpdate}. The labeller applies the same assigner to a saved list.
  */
 @Singleton
 public class KMeansTopicAlgorithm implements TopicAlgorithm {
@@ -112,6 +114,30 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                     .otherPrototypes(assigner.keptOther())
                     .build();
         });
+    }
+
+    /**
+     * {@link NightlyUpdate} over the saved list. Its naming and verify calls go through {@code context}; an answer that
+     * is not a JSON object counts as {@code bad_answer} and leaves its groups in Other.
+     */
+    @Override
+    public Update update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
+            @NonNull Context context) {
+        var result = NightlyUpdate.run(state, window, maxTopics, (tag, prompt, schema, maxTokens) -> {
+            var call = ForcedBirth.VERIFY_TAG.equals(tag) ? Call.VERIFY : Call.NAMING;
+            var answer = context.generate(call, tag, prompt, schema, maxTokens, NightJson::object);
+            return answer == null ? NullNode.getInstance() : answer;
+        });
+        var stats = context.stats();
+        stats.put("unassigned", result.unassigned());
+        stats.put("candidates", result.candidates().size());
+        stats.put("big", result.big().size());
+        var forced = stats.putObject("forced");
+        result.forced().forEach(outcome -> {
+            var key = outcome.result().name().toLowerCase(Locale.ROOT);
+            forced.put(key, forced.path(key).asInt() + 1);
+        });
+        return Update.builder().before(result.before()).labels(result.labels()).build();
     }
 
     /**

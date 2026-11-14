@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.google.common.base.Preconditions;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -10,16 +11,23 @@ import java.util.List;
 import java.util.TreeMap;
 
 /**
- * Per k-means group, what the author prompt shows: its size and share of the window, and its example texts, with
- * stable tie-breaks.
+ * Per k-means group, what a prompt shows. For the author prompt (the first build), its size and share of the window
+ * ({@link #summarize(int[], int)}); the examples come from {@link #authorExamples}. For the nightly naming and verify
+ * prompts, also its tightness (mean cosine of the members to the centre) and up to {@value #EXAMPLES} examples: up to
+ * {@value #FREQUENT} repeated texts, then the most typical ones ({@link #summarize(String[], float[], int[], float[],
+ * int)}). The recent share stays 0: {@link CandidateGrouper} sets both shares itself, over the whole window.
  */
 @UtilityClass
 public class GroupSummaries {
 
     /** A text takes a "repeated" example slot only when it occurs at least this often in its group. */
     static final int MIN_REPEATS = 2;
+    static final int EXAMPLES = 5;
+    static final int FREQUENT = Math.max(2, EXAMPLES - 2);
 
     /**
+     * Sizes and shares only: what the author prompt reads.
+     *
      * @param labels per trace, the group in {@code [0, k)}
      * @param k      the number of groups
      */
@@ -35,6 +43,47 @@ public class GroupSummaries {
                     .group(j)
                     .size(sizes[j])
                     .share(sizes[j] == 0 ? 0 : (double) sizes[j] / n)
+                    .examples(List.of())
+                    .build());
+        }
+        return out;
+    }
+
+    /**
+     * Sizes, shares, tightness and examples: what the nightly naming and verify prompts read.
+     *
+     * @param texts   per trace
+     * @param vectors per trace, unit length, {@code texts.length * dimensions}
+     * @param labels  per trace, the group in {@code [0, k)}
+     * @param centres {@code k * dimensions}, unit length
+     */
+    public static List<GroupSummary> summarize(@NonNull String[] texts, @NonNull float[] vectors,
+            @NonNull int[] labels, @NonNull float[] centres, int dimensions) {
+        int n = texts.length;
+        int k = centres.length / dimensions;
+        Preconditions.checkArgument(labels.length == n && vectors.length == n * dimensions,
+                "per-trace arrays must have one entry per text, texts '%s'", n);
+        var members = members(labels, k);
+        var out = new ArrayList<GroupSummary>(k);
+        // One array for all groups: a group's sort reads only its own members' scores, which it writes first.
+        var sims = new double[n];
+        for (int j = 0; j < k; j++) {
+            var idx = members.get(j);
+            if (idx.isEmpty()) {
+                out.add(GroupSummary.builder().group(j).examples(List.of()).build());
+                continue;
+            }
+            double simSum = 0;
+            for (int i : idx) {
+                sims[i] = dot(vectors, i, centres, j, dimensions);
+                simSum += sims[i];
+            }
+            out.add(GroupSummary.builder()
+                    .group(j)
+                    .size(idx.size())
+                    .share((double) idx.size() / n)
+                    .tightness(simSum / idx.size())
+                    .examples(pick(texts, idx, sims, FREQUENT, EXAMPLES))
                     .build());
         }
         return out;
@@ -82,13 +131,14 @@ public class GroupSummaries {
 
     /**
      * One group's examples: up to {@code frequent} texts that occur at least {@value #MIN_REPEATS} times, most frequent
-     * first (ties by code point order), then the texts nearest to the centre not already listed (ties by trace order),
-     * up to {@code total} in all. A text seen once is not "frequent": its slot goes to the nearest texts.
+     * first (ties by code point order), then the most similar texts not already listed (ties by trace order), up to
+     * {@code total} in all. A text seen once is not "frequent": its slot goes to the most similar texts.
      *
      * @param members the group's traces, in trace order
-     * @param sims    per trace, its dot product with the group's centre; read for the members only
+     * @param sims    per trace, its similarity to the group: for a k-means group, its dot product with the centre;
+     *                read for the members only
      */
-    private static List<String> pick(String[] texts, List<Integer> members, double[] sims, int frequent, int total) {
+    static List<String> pick(String[] texts, List<Integer> members, double[] sims, int frequent, int total) {
         var counts = new TreeMap<String, Integer>(TopicText.CODE_POINT_ORDER);
         for (int i : members) {
             counts.merge(texts[i], 1, Integer::sum);
@@ -125,7 +175,8 @@ public class GroupSummaries {
         return s;
     }
 
-    @Builder
-    public record GroupSummary(int group, int size, double share) {
+    @Builder(toBuilder = true)
+    public record GroupSummary(int group, int size, double share, double recentShare, double tightness,
+            @NonNull List<String> examples) {
     }
 }

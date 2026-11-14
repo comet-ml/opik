@@ -16,6 +16,8 @@ import java.util.List;
 public class PrototypeAssigner {
 
     public static final int OTHER = TopicAlgorithm.OTHER;
+    /** A trace with no prototype at {@value #ASSIGN_MIN_COSINE} or more has no winner. */
+    static final int NO_WINNER = -1;
     static final double ASSIGN_MIN_COSINE = 0.75;
     static final double OTHER_GATE = 0.95;
 
@@ -69,27 +71,39 @@ public class PrototypeAssigner {
 
     /** The owner per trace: a topic index or {@link #OTHER}. */
     public int[] assign(@NonNull float[] vectors) {
+        return owners(winners(vectors));
+    }
+
+    /**
+     * The winning prototype per trace: its index in prototype order (the topic prototypes in the given order, then
+     * {@link #keptOther}), or {@link #NO_WINNER} below {@value #ASSIGN_MIN_COSINE}.
+     */
+    int[] winners(@NonNull float[] vectors) {
         Preconditions.checkArgument(vectors.length % dimensions == 0, "vectors must be whole rows");
         int n = vectors.length / dimensions;
         var out = new int[n];
         for (int i = 0; i < n; i++) {
-            out[i] = nearest(vectors, i);
+            int best = NO_WINNER;
+            double bestCosine = Double.NEGATIVE_INFINITY;
+            for (int p = 0; p < owners.length; p++) {
+                double cosine = dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
+                if (cosine > bestCosine) {
+                    bestCosine = cosine;
+                    best = p;
+                }
+            }
+            out[i] = bestCosine < ASSIGN_MIN_COSINE ? NO_WINNER : best;
         }
         return out;
     }
 
-    /** The owner of trace {@code i}'s nearest prototype; {@link #OTHER} below {@value #ASSIGN_MIN_COSINE}. */
-    int nearest(float[] vectors, int i) {
-        int best = -1;
-        double bestCosine = Double.NEGATIVE_INFINITY;
-        for (int p = 0; p < owners.length; p++) {
-            double cosine = dot(vectors, i * dimensions, prototypes, p * dimensions, dimensions);
-            if (cosine > bestCosine) {
-                bestCosine = cosine;
-                best = p;
-            }
+    /** The owner per winner: a topic index, or {@link #OTHER} for a known-Other prototype or no winner. */
+    int[] owners(@NonNull int[] winners) {
+        var out = new int[winners.length];
+        for (int i = 0; i < winners.length; i++) {
+            out[i] = winners[i] == NO_WINNER ? OTHER : owners[winners[i]];
         }
-        return best < 0 || bestCosine < ASSIGN_MIN_COSINE ? OTHER : owners[best];
+        return out;
     }
 
     public int prototypeCount() {

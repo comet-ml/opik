@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -30,7 +31,8 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
  * How one project's build runs, whoever starts it: under the project's lock, on its own thread, stopped and failed with
- * {@code timeout} after {@code topics.build.projectTimeout}. Also the runs' housekeeping.
+ * {@code timeout} after {@code topics.build.projectTimeout}. One run at a time per pod ({@link #acquireRun}). Also the
+ * runs' housekeeping.
  */
 @Slf4j
 @Singleton
@@ -49,6 +51,11 @@ public class TopicsProjectRunner {
     private final @NonNull TopicsRebuildService rebuildService;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull LockService lockService;
+    /**
+     * The pod's one run slot: a first build or a nightly update holds its window in memory, so the first-build job, the
+     * night and a run by hand on one pod take turns.
+     */
+    private final Semaphore runSlot = new Semaphore(1, true);
 
     /**
      * The longest one run holds its locks: its timeout, then the trace_topics insert of a run that saved just before
@@ -65,6 +72,33 @@ public class TopicsProjectRunner {
 
     static Lock projectLock(@NonNull UUID projectId) {
         return new Lock("topics:project:" + projectId);
+    }
+
+    /**
+     * Takes the pod's run slot, waiting up to one {@link #runLimit} (the longest a run on this pod holds it), and never
+     * past {@code budgetEnd}: a project still starts within its job's budget, so the job's lock lease covers its run.
+     * False when it stays taken; the caller then skips the project as locked. Taken before the project's lock and
+     * before the run starts, so a skipped project holds no lock and leaves no run row. The caller gives it back with
+     * {@link #releaseRun}.
+     */
+    public boolean acquireRun(@NonNull Instant budgetEnd) {
+        var untilBudgetEnd = Duration.between(Instant.now(), budgetEnd);
+        var limit = runLimit();
+        return acquireRun(untilBudgetEnd.compareTo(limit) < 0 ? untilBudgetEnd : limit);
+    }
+
+    /** As {@link #acquireRun(Instant)}, waiting up to {@code wait}, none when it is not positive. */
+    public boolean acquireRun(@NonNull Duration wait) {
+        try {
+            return runSlot.tryAcquire(wait.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    public void releaseRun() {
+        runSlot.release();
     }
 
     /** Takes the project's lock, held for one run. False when another run holds it, or Redis fails. */
@@ -116,12 +150,15 @@ public class TopicsProjectRunner {
     }
 
     /**
-     * Runs the project's first build for {@code night} on its own thread of {@code executor}, and stops it after the
-     * project timeout. The caller holds the project's lock. True when the run was saved.
+     * Runs the project's first build or nightly update ({@code mode}) for {@code night} on its own thread of
+     * {@code executor}, and stops it after the project timeout. The caller holds the project's lock. True when the run
+     * was saved.
      */
     public boolean run(@NonNull ExecutorService executor, @NonNull UUID runId, @NonNull String workspaceId,
-            @NonNull UUID projectId, @NonNull LocalDate night) {
-        var future = executor.submit(() -> rebuildService.firstBuild(runId, workspaceId, projectId, night));
+            @NonNull UUID projectId, @NonNull LocalDate night, @NonNull TopicRun.Mode mode) {
+        var future = executor.submit(() -> mode == TopicRun.Mode.NIGHTLY_UPDATE
+                ? rebuildService.nightlyUpdate(runId, workspaceId, projectId, night)
+                : rebuildService.firstBuild(runId, workspaceId, projectId, night));
         var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
         try {
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicRun.Status.SAVED;
@@ -132,7 +169,7 @@ public class TopicsProjectRunner {
             Thread.currentThread().interrupt();
             return stop(runId, workspaceId, projectId, future, Code.TIMEOUT, "the job was interrupted");
         } catch (ExecutionException exception) {
-            // firstBuild records its own failures; this is a bug in it.
+            // firstBuild and nightlyUpdate record their own failures; this is a bug in them.
             log.error("Topics run '{}' threw, project '{}'", runId, projectId, exception.getCause());
             return stop(runId, workspaceId, projectId, future, Code.INTERNAL, String.valueOf(exception.getCause()));
         }

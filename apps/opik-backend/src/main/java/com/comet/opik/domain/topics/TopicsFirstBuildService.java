@@ -119,7 +119,7 @@ public class TopicsFirstBuildService {
                 if (Thread.currentThread().isInterrupted() || !Instant.now().isBefore(budgetEnd)) {
                     break;
                 }
-                switch (runOne(executor, candidate, night)) {
+                switch (runOne(executor, candidate, night, budgetEnd)) {
                     case SAVED -> saved++;
                     case FAILED -> failed++;
                     case SKIPPED -> skipped++;
@@ -181,11 +181,25 @@ public class TopicsFirstBuildService {
     }
 
     /**
-     * Builds the project under its lock. Skipped when another run holds the lock or the project got a list since it
-     * was listed. A run that cannot start (the read or its {@code topic_runs} insert fails) has no row to fail, so it
-     * is counted here, as {@code start_failed}.
+     * Builds the project under the pod's run slot and the project's lock. Skipped when another run on this pod holds
+     * the slot past its wait (up to one run limit, never past {@code budgetEnd}), another run holds the lock, or the
+     * project got a list since it was listed. A run that cannot start (the read or its {@code topic_runs} insert fails)
+     * has no row to fail, so it is counted here, as {@code start_failed}.
      */
-    private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night) {
+    private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night, Instant budgetEnd) {
+        var projectId = candidate.projectId();
+        if (!runner.acquireRun(budgetEnd)) {
+            log.info("Topics first build skipped project '{}', another run on this pod held its run slot", projectId);
+            return Outcome.SKIPPED;
+        }
+        try {
+            return runLocked(executor, candidate, night);
+        } finally {
+            runner.releaseRun();
+        }
+    }
+
+    private Outcome runLocked(ExecutorService executor, Candidate candidate, LocalDate night) {
         var workspaceId = candidate.workspaceId();
         var projectId = candidate.projectId();
         if (!runner.lockProject(projectId)) {
@@ -207,7 +221,9 @@ public class TopicsFirstBuildService {
             }
             log.info("Topics run '{}' started, workspace '{}', project '{}', vectors '{}'", runId, workspaceId,
                     projectId, candidate.vectors());
-            return runner.run(executor, runId, workspaceId, projectId, night) ? Outcome.SAVED : Outcome.FAILED;
+            return runner.run(executor, runId, workspaceId, projectId, night, TopicRun.Mode.FIRST_BUILD)
+                    ? Outcome.SAVED
+                    : Outcome.FAILED;
         } finally {
             runner.unlockProject(projectId);
         }
@@ -337,14 +353,14 @@ public class TopicsFirstBuildService {
      * Starts the project's first build now and returns its run id. The run goes on in the background with the same
      * timeout, and its outcome is its {@code topic_runs} row. The window ends at {@code night}'s start (UTC). The
      * workspace must be opted in to topics, the window must hold {@code minVectors} traces with a vector, and only one
-     * run by hand goes at a time across the cluster. The project's vectors backfill must have drained, unless
-     * {@code ignoreBackfill}: the operator's way to build a project whose backfill cannot drain. A failed first build's
-     * wait does not apply.
+     * run by hand goes at a time across the cluster. No other run may hold this pod's run slot: a run by hand does not
+     * wait for it. The project's vectors backfill must have drained, unless {@code ignoreBackfill}: the operator's way
+     * to build a project whose backfill cannot drain. A failed first build's wait does not apply.
      *
      * @throws ConflictException           when the workspace is not opted in, the window is too small, a run of the
-     *                                     project or another run by hand is in progress, the project already has a
-     *                                     list, or its vectors backfill has not drained and {@code ignoreBackfill} is
-     *                                     false
+     *                                     project, another run by hand or another run on this pod is in progress, the
+     *                                     project already has a list, or its vectors backfill has not drained and
+     *                                     {@code ignoreBackfill} is false
      * @throws ServiceUnavailableException when Redis fails or does not answer while the run takes its locks, with a
      *                                     {@code Retry-After}
      */
@@ -360,6 +376,19 @@ public class TopicsFirstBuildService {
                     "Project '%s' has '%d' vectors in the window until '%s', the minimum is '%d'".formatted(projectId,
                             vectors, night, config.getBuild().getMinVectors()));
         }
+        if (!runner.acquireRun(Duration.ZERO)) {
+            throw new ConflictException("Another topics run is in progress on this pod");
+        }
+        try {
+            return startByHand(workspaceId, projectId, night, ignoreBackfill);
+        } catch (RuntimeException exception) {
+            runner.releaseRun();
+            throw exception;
+        }
+    }
+
+    /** {@link #runNow} once it holds the pod's run slot; the run's thread gives the slot back when the run ends. */
+    private UUID startByHand(String workspaceId, UUID projectId, LocalDate night, boolean ignoreBackfill) {
         if (!runner.lockByHand(BY_HAND_LOCK)) {
             throw new ConflictException("Another topics run started by hand is in progress");
         }
@@ -398,11 +427,12 @@ public class TopicsFirstBuildService {
                 var executor = Executors.newThreadPerTaskExecutor(
                         Thread.ofPlatform().name("topics-by-hand-run-", 0).daemon(true).factory());
                 try {
-                    runner.run(executor, runId, workspaceId, projectId, night);
+                    runner.run(executor, runId, workspaceId, projectId, night, TopicRun.Mode.FIRST_BUILD);
                 } finally {
                     executor.shutdownNow();
                     runner.unlockProject(projectId);
                     runner.unlock(BY_HAND_LOCK);
+                    runner.releaseRun();
                 }
             });
             return runId;

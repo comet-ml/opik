@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -51,6 +52,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
 
     @Valid @NotNull @JsonProperty
     private FirstBuildConfig firstBuild;
@@ -101,6 +105,18 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration qwenDeadline;
 
+        /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration namingDeadline;
+
+        /** The deadline of a nightly update's verify call. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration verifyDeadline;
+
         /** {@code topic_runs} rows are deleted after this. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.DAYS)
@@ -111,6 +127,18 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
             return qwenDeadline == null || projectTimeout == null
                     || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.namingDeadline must be shorter than topics.build.projectTimeout") public boolean isNamingDeadlineValid() {
+            return namingDeadline == null || projectTimeout == null
+                    || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.verifyDeadline must be shorter than topics.build.projectTimeout") public boolean isVerifyDeadlineValid() {
+            return verifyDeadline == null || projectTimeout == null
+                    || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
@@ -125,6 +153,24 @@ public class TopicsConfig {
      * it holds today's traces so far. A project whose first builds failed waits 1 hour, then 6 hours, then a day between
      * attempts.
      */
+    @Data
+    public static class NightlyConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. */
+        @JsonProperty
+        private boolean enabled;
+
+        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project starts after this much of the night has passed; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
+    }
+
     @Data
     public static class FirstBuildConfig {
 

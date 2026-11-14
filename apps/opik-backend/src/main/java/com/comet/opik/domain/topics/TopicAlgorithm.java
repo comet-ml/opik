@@ -15,9 +15,10 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * The topic algorithm: how a project's window of vectors becomes its topic list, and the rule that labels a trace by a
- * saved list. {@link TopicsRebuildService} does everything around a build: it reads the window, makes the LLM calls the
- * algorithm asks for, checks the prototypes, saves and counts. {@link TopicWindowLabelService} labels the window's
+ * The topic algorithm: how a project's window of vectors becomes its topic list, how a nightly update changes that list,
+ * and the rule that labels a trace by a saved list. {@link TopicsRebuildService} does everything around a run: it reads
+ * the window and the saved list, makes the LLM calls the algorithm asks for, checks what the algorithm returns, saves,
+ * computes the churn and counts. {@link TopicWindowLabelService} labels the window's
  * other traces with {@link #labeller}. To try another algorithm, implement this interface and bind it in place of
  * {@link KMeansTopicAlgorithm}.
  *
@@ -41,6 +42,14 @@ public interface TopicAlgorithm {
      * @param maxTopics the most topics the list may hold
      */
     FirstBuild firstBuild(Window window, int maxTopics, Context context);
+
+    /**
+     * Updates a project's saved list for one night's window. It changes {@code state} in place: topics born and
+     * retired, prototypes, lifecycle columns and sizes. A retired topic keeps no prototype. It labels every window trace.
+     *
+     * @param maxTopics the most live topics the list may hold
+     */
+    Update update(NightState state, NightWindow window, int maxTopics, Context context);
 
     /**
      * The rule that labels vectors by a project's saved list. Empty when the list has no topic prototype: then it
@@ -73,7 +82,11 @@ public interface TopicAlgorithm {
     @RequiredArgsConstructor
     enum Call {
         /** Names the topics over the groups. Deadline {@code topics.build.qwenDeadline}. */
-        AUTHOR("author");
+        AUTHOR("author"),
+        /** Names a nightly update's new groups. Deadline {@code topics.build.namingDeadline}. */
+        NAMING("naming"),
+        /** Checks a nightly update's new names. Deadline {@code topics.build.verifyDeadline}. */
+        VERIFY("verify");
 
         private final String value;
     }
@@ -83,8 +96,9 @@ public interface TopicAlgorithm {
 
         /**
          * One LLM call. {@code read} turns the answer into what the algorithm needs; when it cannot, it throws a
-         * {@code qwen_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A failed call
-         * throws and fails the run.
+         * {@code qwen_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A {@code read}
+         * that returns null instead counts the call as {@code bad_answer} too, and the run goes on: {@code generate}
+         * returns null. A failed call throws and fails the run.
          *
          * @param call the kind of call: picks its deadline and metric label
          * @param tag  names the call in its request id ({@code <runId>:<tag>}) and the logs
@@ -123,5 +137,14 @@ public interface TopicAlgorithm {
     @Builder(toBuilder = true)
     record FirstBuild(@NonNull List<NewTopic> topics, @NonNull int[] labels, @NonNull List<float[]> topicPrototypes,
             @NonNull List<Integer> owners, @NonNull List<float[]> otherPrototypes) {
+    }
+
+    /**
+     * A nightly update's labels, per window trace an index in the state's topics or {@link #OTHER}: {@code before} by
+     * the list as saved before tonight, {@code labels} by the list after tonight's changes. The service computes the
+     * churn from the two.
+     */
+    @Builder(toBuilder = true)
+    record Update(@NonNull int[] before, @NonNull int[] labels) {
     }
 }
