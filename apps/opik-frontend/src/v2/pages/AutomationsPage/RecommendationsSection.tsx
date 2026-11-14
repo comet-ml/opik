@@ -80,13 +80,14 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   const handleConfirm = () => {
     if (!confirming?.apply) return;
     const { operation, data: payload } = confirming.apply;
-    const { id, ...rest } = payload;
-    if (typeof id !== "string") {
+    // The apply data is spelled in the MCP write's words: automation_id, then the update's own fields.
+    const { automation_id: automationId, ...rest } = payload;
+    if (typeof automationId !== "string") {
       refuse("This recommendation names no automation.");
       return;
     }
     update.mutate({
-      automationId: id,
+      automationId,
       update:
         operation === "automation.disable"
           ? { enabled: false }
