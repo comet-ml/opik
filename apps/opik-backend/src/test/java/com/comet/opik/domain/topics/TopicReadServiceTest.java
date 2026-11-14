@@ -144,11 +144,10 @@ class TopicReadServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("disabled"));
     }
 
-    @Test
-    @DisplayName("a time limit (code 159) is a 503 with Retry-After, status error")
-    void clickHouseLimit() {
-        readyWithCounts(
-                Flux.error(new RuntimeException(new ServerException(159, "Timeout exceeded", 500, "query-id"))));
+    @ParameterizedTest(name = "a {1} limit (code {0}) is a 503 with Retry-After, status error: a retry can pass")
+    @CsvSource({"159, time", "241, memory"})
+    void timeOrMemoryLimit(int code, String limit) {
+        readyWithCounts(Flux.error(new RuntimeException(new ServerException(code, limit + " limit", 500, "query-id"))));
 
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
@@ -156,16 +155,6 @@ class TopicReadServiceTest {
                         .isEqualTo(TopicsReadErrors.RETRY_AFTER_SECONDS));
         assertThat(meter.points(DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
-    }
-
-    @Test
-    @DisplayName("a memory limit (code 241) is a 503 too: a retry can pass")
-    void memoryLimit() {
-        readyWithCounts(Flux.error(
-                new RuntimeException(new ServerException(241, "Memory limit exceeded", 500, "query-id"))));
-
-        assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOf(ServiceUnavailableException.class);
     }
 
     @Test
