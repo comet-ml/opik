@@ -81,6 +81,8 @@ class TopicsNightlyServiceTest {
     private LockService lockService;
     private TopicsNightlyService service;
     private TopicsProjectRunner runner;
+    private TopicsConfig config;
+    private TopicWindowDAO windowDAO;
 
     @BeforeEach
     void setUp() {
@@ -121,7 +123,7 @@ class TopicsNightlyServiceTest {
             ids.remove(deleted);
             return ids;
         });
-        var windowDAO = mock(TopicWindowDAO.class);
+        windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.countByProject(anyString(), any(), any(), any(), anyLong())).thenAnswer(invocation -> {
             var ids = invocation.<Collection<UUID>>getArgument(1);
             if (ids.stream().anyMatch(failedCounts::contains)) {
@@ -144,7 +146,7 @@ class TopicsNightlyServiceTest {
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
 
-        TopicsConfig config = TestConfigUtils.loadConfigTest().getTopics();
+        config = TestConfigUtils.loadConfigTest().getTopics();
         var metrics = new TopicsMetrics(meter.meter);
         runner = spy(new TopicsProjectRunner(config, template, rebuildService, metrics, lockService));
         service = new TopicsNightlyService(config, template, workspaceService, windowDAO, rebuildService, runner,
@@ -309,6 +311,22 @@ class TopicsNightlyServiceTest {
 
         assertThat(meter.sum("topics.runs", "error_code", "abandoned", "workspace_id", WORKSPACE_ID)).isEqualTo(2);
         assertThat(meter.sum("topics.runs", "error_code", "abandoned", "workspace_id", "ws-2")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("no window count starts after the budget's end: the projects left get a not_reached row each, so the "
+            + "scan ends within the night lock's lease")
+    void countScanStopsAtBudgetEnd() {
+        config.getNightly().setBudget(io.dropwizard.util.Duration.milliseconds(0));
+
+        var result = service.runNight(START);
+
+        assertThat(result.notReached()).isEqualTo(listed.size());
+        verify(windowDAO, never()).countByProject(anyString(), any(), any(), any(), anyLong());
+        verify(rebuildService, never()).startRun(any(), any(), any());
+        assertThat(rows()).extracting(TopicNightProject::decision).containsOnly("not_reached");
+        assertThat(rows()).extracting(TopicNightProject::projectId)
+                .containsExactlyInAnyOrderElementsOf(listed.stream().map(TopicDAO.ProjectKey::projectId).toList());
     }
 
     @Test

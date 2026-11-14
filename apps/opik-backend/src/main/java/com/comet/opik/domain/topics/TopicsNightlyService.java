@@ -132,15 +132,20 @@ public class TopicsNightlyService {
     private NightResult runNight(LocalDate night, Instant began, NightRecord record) {
         runner.housekeeping(began);
         nightsHousekeeping(began);
-        var candidates = new ArrayList<Candidate>();
-        int skipped = eligible(night, candidates, record);
-        log.info("Topics night '{}' started, projects to update '{}', skipped '{}'", night, candidates.size(),
-                skipped);
-
         var budgetEnd = began.plus(config.getNightly().getBudget().toJavaDuration());
+        var candidates = new ArrayList<Candidate>();
+        var uncounted = new ArrayList<Candidate>();
+        int skipped = eligible(night, budgetEnd, candidates, uncounted, record);
+        log.info("Topics night '{}' started, projects to update '{}', skipped '{}', not counted '{}'", night,
+                candidates.size(), skipped, uncounted.size());
+
         int saved = 0;
         int failed = 0;
         int notReached = 0;
+        for (var candidate : uncounted) {
+            notReached++;
+            record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
+        }
         var executor = Executors.newThreadPerTaskExecutor(
                 Thread.ofPlatform().name("topics-nightly-", 0).daemon(true).factory());
         try {
@@ -298,8 +303,11 @@ public class TopicsNightlyService {
      * live topic. Each is counted on its own: the count's {@code max_rows_to_read} applies to one query, so a large
      * project fails only its own count, never its workspace's. A project whose count read fails gets a
      * {@code count_failed} row and is left for the next night. A read that fails otherwise throws, and fails the night.
+     * No count starts after {@code budgetEnd}: the projects left go to {@code uncounted}, and get a {@code not_reached}
+     * row. So the scan ends within the budget, and the night lock's lease (budget + one run) still covers the night.
      */
-    private int eligible(LocalDate night, List<Candidate> candidates, NightRecord record) {
+    private int eligible(LocalDate night, Instant budgetEnd, List<Candidate> candidates, List<Candidate> uncounted,
+            NightRecord record) {
         var build = config.getBuild();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(build.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -312,6 +320,10 @@ public class TopicsNightlyService {
         var skipped = new ArrayList<Skipped>();
         var found = new ArrayList<Candidate>();
         for (var project : listed) {
+            if (!Instant.now().isBefore(budgetEnd)) {
+                uncounted.add(new Candidate(project.workspaceId(), project.projectId(), 0));
+                continue;
+            }
             try {
                 long traces = windowVectors(project.workspaceId(), project.projectId(), from, to);
                 var candidate = new Candidate(project.workspaceId(), project.projectId(), traces);

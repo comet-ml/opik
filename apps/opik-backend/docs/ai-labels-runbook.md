@@ -560,7 +560,9 @@ flowchart TD
   set to `failed`, and records older than the retention are deleted.
 - It lists the projects with a live topic in the opted-in workspaces. A project without a list is the first-build
   job's. ClickHouse counts each project's vectors in the window, one query per project. A failed count gives the
-  project a `count_failed` row; the project runs the next night, and the other projects are not affected.
+  project a `count_failed` row; the project runs the next night, and the other projects are not affected. No count
+  starts after the budget's end: the projects left get a `not_reached` row, so the night ends within the night lock's
+  lease.
 - It skips a project under `TOPICS_BUILD_MIN_VECTORS` (`small`), a deleted project (`deleted`), and a paused project
   (`paused`). A project whose last 3 runs all failed (`abandoned` included) is paused for 7 nights from the night of
   the last failure, so it does not take the budget every night. A saved run ends the pause.
