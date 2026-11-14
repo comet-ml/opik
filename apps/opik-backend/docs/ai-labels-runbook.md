@@ -855,9 +855,8 @@ curl "http://<opik-backend>:8080/v1/private/topics?project_id=<project_id>" \
   -H "Comet-Workspace: <workspace_name>"
 ```
 
-The caller needs `PROJECT_DATA_VIEW` in the workspace, so the endpoint answers only for our own workspaces. For a
-customer's project, run the queries under [Reading a project by hand](#reading-a-project-by-hand). They apply the same
-rules.
+The caller needs `PROJECT_DATA_VIEW` in the workspace. For a project in a workspace you cannot view, run the queries
+under [Reading a project by hand](#reading-a-project-by-hand). They apply the same rules.
 
 ### Status
 
@@ -909,7 +908,7 @@ row as it is.
 
 ### Reading a project by hand
 
-The queries read only, so agentro can run them for any workspace. Run the MySQL ones first: the ClickHouse query
+The queries only read, so a read-only database user can run them for any workspace. Run the MySQL ones first: the ClickHouse query
 takes their output.
 
 ```sql
