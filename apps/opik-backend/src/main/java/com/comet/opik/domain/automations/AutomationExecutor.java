@@ -856,11 +856,12 @@ public class AutomationExecutor {
                                     .evaluation(OptimizationStudioConfig.StudioEvaluation.builder()
                                             .metrics(List.of(OptimizationStudioConfig.StudioMetric.builder()
                                                     .type(Optional.ofNullable(step.metric())
-                                                            .orElse("levenshtein_ratio"))
+                                                            .orElse(WorkflowService.DEFAULT_METRIC))
                                                     .build()))
                                             .build())
                                     .optimizer(OptimizationStudioConfig.StudioOptimizer.builder()
-                                            .type(Optional.ofNullable(step.optimizer()).orElse("metaprompt"))
+                                            .type(Optional.ofNullable(step.optimizer())
+                                                    .orElse(WorkflowService.DEFAULT_OPTIMIZER))
                                             .build())
                                     .build())
                             .build();
@@ -888,7 +889,8 @@ public class AutomationExecutor {
         String optimizationId = String.valueOf(finished.get("optimization_id"));
         String status = String.valueOf(finished.get("status"));
         if (!OptimizationStatus.COMPLETED.getValue().equals(status)) {
-            return Mono.just(StepResult.failed("optimization ended as %s".formatted(status)));
+            return Mono.just(StepResult.failed("optimization ended as %s%s".formatted(status,
+                    finished.get("error") instanceof String error ? ": " + error : "")));
         }
         String objective = finished.get("objective_name") instanceof String name ? name : null;
         return trials(context, UUID.fromString(optimizationId))

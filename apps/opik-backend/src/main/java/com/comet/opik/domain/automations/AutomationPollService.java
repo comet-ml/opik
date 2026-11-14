@@ -209,6 +209,9 @@ public class AutomationPollService {
                                 payload.put("status", optimization.status().getValue());
                                 payload.put("dataset_id", String.valueOf(optimization.datasetId()));
                                 payload.put("objective_name", optimization.objectiveName());
+                                if (optimization.errorInfo() != null && optimization.errorInfo().message() != null) {
+                                    payload.put("error", optimization.errorInfo().message());
+                                }
                                 return publisher.enqueue(AutomationEvent.builder()
                                         .workspaceId(run.workspaceId())
                                         .workspaceName(workspaceName(run.workspaceId()))

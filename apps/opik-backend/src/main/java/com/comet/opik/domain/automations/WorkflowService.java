@@ -79,7 +79,8 @@ public class WorkflowService {
     public static final double DEFAULT_MIN_GAIN = 0.05;
     public static final double DEFAULT_MIN_AGREEMENT = 0.8;
     public static final String DEFAULT_METRIC = "levenshtein_ratio";
-    public static final String DEFAULT_OPTIMIZER = "metaprompt";
+    /** The Studio's own default; the python backend knows gepa, evolutionary and hierarchical_reflective. */
+    public static final String DEFAULT_OPTIMIZER = "hierarchical_reflective";
     private static final List<String> RECIPES = List.of(COLLECT, GATE, ALIGN, IMPROVE);
     static final String GITHUB_ACTION = """
             # Opik Gate: tell Opik this commit ran, so the regression suite runs and a check comes back.
