@@ -228,7 +228,7 @@ public class RecommendationService {
                                         automation.pausedReason().until(), raised),
                         Map.of("limit", automation.pausedReason().limit(), "until",
                                 String.valueOf(automation.pausedReason().until())),
-                        "automation.update", Map.of("id", automation.id(), "limits",
+                        "automation.update", Map.of("automation_id", automation.id(), "limits",
                                 Map.of("max_items_per_day", raised))));
             } else if (figures.fired() >= 50 && figures.matched() == 0) {
                 out.add(upkeepRecommendation(workspaceId, projectId, Recommendation.Kind.TUNE, automation,
@@ -242,7 +242,7 @@ public class RecommendationService {
                         "Every step of '%s' failed in %d days (%d failures). Disable it until the target is fixed."
                                 .formatted(automation.name(), figures.windowDays(), figures.stepsFailed()),
                         Map.of("steps_failed", figures.stepsFailed()),
-                        "automation.disable", Map.of("id", automation.id())));
+                        "automation.disable", Map.of("automation_id", automation.id())));
             }
         }
         return out;
