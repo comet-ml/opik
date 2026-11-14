@@ -5,9 +5,6 @@ import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -27,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -331,41 +327,6 @@ class TopicWindowLabelServiceTest {
         for (int i = 1; i < bounds.size(); i++) {
             assertThat(bounds.get(i)[0]).isEqualTo(bounds.get(i - 1)[1]);
         }
-    }
-
-    @ParameterizedTest(name = "saved {0} after the window end: the pass reads up to {1} after it")
-    @MethodSource
-    @DisplayName("the pass reads up to the save, and at most one day past the window end: a run by hand for an "
-            + "earlier date labels near the window it was asked for")
-    void passEndsAtTheSaveOrOneDayAfter(Duration savedAfter, Duration readsUntil) {
-        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(WORKSPACE_ID)
-                .rebuilds(1)
-                .lastRunId(runId)
-                .windowUntil(NIGHT)
-                .lastSuccessAt(NIGHT.plus(savedAfter))
-                .build()));
-        var bounds = new CopyOnWriteArrayList<Instant[]>();
-        when(windowDAO.readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong()))
-                .thenAnswer(invocation -> {
-                    if ("".equals(invocation.getArgument(5))) {
-                        bounds.add(new Instant[]{invocation.getArgument(3), invocation.getArgument(4)});
-                    }
-                    return Flux.empty();
-                });
-
-        label(Instant.now().plus(Duration.ofMinutes(5)));
-
-        assertThat(bounds.getFirst()[0]).isEqualTo(NIGHT.minus(Duration.ofDays(WINDOW_DAYS)));
-        assertThat(bounds.getLast()[1]).isEqualTo(NIGHT.plus(readsUntil));
-    }
-
-    static Stream<Arguments> passEndsAtTheSaveOrOneDayAfter() {
-        return Stream.of(
-                Arguments.of(Duration.ofHours(-3), Duration.ZERO),
-                Arguments.of(Duration.ofHours(3), Duration.ofHours(3)),
-                Arguments.of(Duration.ofDays(40), TopicWindowLabelService.SAVE_GAP));
     }
 
     private TopicWindowLabelService.Pass label(Instant deadline) {

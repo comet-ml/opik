@@ -237,10 +237,9 @@ from ClickHouse in pages of 10,000 traces (`topics:read_unlabelled` in `system.q
 and inserts each page. It stops 30 seconds before the run's timeout and logs `labelling pass ended` with `complete`.
 The run's Other share stays that of the traces it read.
 
-The pass reads from the window's start up to the later of `window_until` and the save (`last_success_at`), and at
-most one day past `window_until`. A first build by the job saves before its window ends. A nightly update's window ends at the night's start, so its pass also
-labels the traces vectored between then and the save: arrival labelled them by the old list. A run by hand for an
-earlier date saves long after its window; the one-day cap keeps its pass near the window it was asked for.
+The pass reads from the window's start up to the later of `window_until` and the save (`last_success_at`). A first
+build by the job saves before its window ends. A nightly update's window ends at the night's start, so its pass also
+labels the traces vectored between then and the save: arrival labelled them by the old list.
 
 The save writes `labels_complete = false` on the project's `topic_project_states` row. A pass that reaches the end of
 the window sets it to true, but only while `last_run_id` still names its run: a pass of an older run never marks a
