@@ -55,6 +55,10 @@ public class TopicWindowLabelService {
     static final int SLICE_TRACES = 50_000;
     /** No page starts with less time than this to the deadline. */
     static final Duration MIN_PAGE_TIME = Duration.ofSeconds(10);
+    /**
+     * How far past the window end a pass labels: a night saves within hours of its window's end, so a day covers it.
+     */
+    static final Duration SAVE_GAP = Duration.ofDays(1);
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -172,9 +176,11 @@ public class TopicWindowLabelService {
 
     /**
      * The project's last saved run, the traces it labels and the labeller of its prototypes, read in one transaction.
-     * The traces run from the run's window start to its window end or its save, whichever is later. A nightly update
-     * saves after its window's end: its pass also labels the traces vectored since, which arrival labelled by the list
-     * before the save. A first build's window ends at tomorrow's start, after its save.
+     * The traces run from the run's window start to its window end or its save, whichever is later, and at most
+     * {@link #SAVE_GAP} past the window end. A nightly update saves after its window's end: its pass also labels the
+     * traces vectored since, which arrival labelled by the list before the save. A first build's window ends at
+     * tomorrow's start, after its save. A run by hand for an earlier date saves long after its window: the cap keeps its
+     * pass near the window it was asked for.
      */
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> {
@@ -185,7 +191,10 @@ public class TopicWindowLabelService {
             }
             var windowUntil = state.get().windowUntil();
             var lastSuccessAt = state.get().lastSuccessAt();
-            var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
+            var latest = windowUntil.plus(SAVE_GAP);
+            var to = lastSuccessAt == null || !lastSuccessAt.isAfter(windowUntil)
+                    ? windowUntil
+                    : lastSuccessAt.isBefore(latest) ? lastSuccessAt : latest;
             var from = windowUntil.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             var labeller = algorithm.labeller(topicDAO.findPrototypes(workspaceId, projectId))
                     .orElse(TopicWindowLabelService::allOther);
