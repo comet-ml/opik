@@ -92,6 +92,18 @@ public interface TopicDAO {
             """)
     List<TopicPrototype> findPrototypes(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
+    /**
+     * The prototype rows of several projects of one workspace, in one query on the primary key: by project, each in
+     * {@code position} order. Topic on arrival reads its projects' saved lists with it.
+     */
+    @SqlQuery("""
+            SELECT * FROM topic_prototypes
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            ORDER BY project_id, position
+            """)
+    List<TopicPrototype> findPrototypes(@Bind("workspaceId") String workspaceId,
+            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+
     /** The first save of a project: a second run that saved meanwhile fails it on the primary key. */
     @SqlUpdate("""
             INSERT INTO topic_project_states (project_id, workspace_id, rebuilds, first_built_at, last_run_id,

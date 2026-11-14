@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.inference.EmbedResult;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.lock.LockService;
+import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleGaugeBuilder;
@@ -39,6 +40,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -46,11 +49,13 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -224,7 +229,7 @@ class TopicVectorsTickServiceTest {
             clock = new TestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
-                    registry, names(), meter.meter, clock);
+                    registry, names(), noArrival(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
             // The long-window pass is not due unless a test says so.
@@ -593,6 +598,52 @@ class TopicVectorsTickServiceTest {
                 Thread.interrupted();
             }
             assertThat(inserted).extracting(TopicVector::workspaceId).doesNotContain("second");
+            assertThat(requests).flatExtracting(EmbedRequest::inputs).containsExactly("first text");
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("an interrupt during the arrival read or insert stops the tick: the next workspace's traces are "
+                + "not embedded")
+        void interruptDuringArrivalStopsTheTick(boolean duringRead) {
+            var interrupt = reactor.core.Exceptions.propagate(new InterruptedException());
+            var arrivalTemplate = mock(TransactionTemplate.class);
+            var traceTopicsDAO = mock(TraceTopicsDAO.class);
+            var algorithm = mock(TopicAlgorithm.class);
+            if (duringRead) {
+                when(arrivalTemplate.inTransaction(any(TxConfig.class), any())).thenThrow(interrupt);
+            } else {
+                when(arrivalTemplate.inTransaction(any(TxConfig.class), any())).thenReturn(List.of());
+                when(algorithm.labeller(anyList())).thenReturn(Optional.of(vectors -> {
+                    var topics = new UUID[vectors.length / TopicsRebuildService.DIMENSIONS];
+                    Arrays.fill(topics, TraceTopic.OTHER);
+                    return topics;
+                }));
+                when(traceTopicsDAO.insert(anyList())).thenReturn(Mono.error(interrupt));
+            }
+            var arrival = new TopicsArrivalService(config, arrivalTemplate, traceTopicsDAO, algorithm,
+                    new TestMeter().meter, clock);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService, registry, names(), arrival, meter.meter, clock);
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(false));
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("first", "second"));
+            var first = candidate("first", NOW.minusSeconds(10));
+            var second = candidate("second", NOW.minusSeconds(10));
+            when(findUnvectored(dao, "first", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(first));
+            when(findUnvectored(dao, "second", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(second));
+            stubSummaries("first", List.of(first), candidate -> "first text", BUDGET_SECONDS);
+            stubSummaries("second", List.of(second), candidate -> "second text", BUDGET_SECONDS);
+
+            try {
+                assertThatThrownBy(() -> service.tick(NOW))
+                        .satisfies(error -> assertThat(reactor.core.Exceptions.unwrap(error))
+                                .isInstanceOf(InterruptedException.class));
+                assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            } finally {
+                Thread.interrupted();
+            }
+            assertThat(inserted).extracting(TopicVector::workspaceId).containsExactly("first");
             assertThat(requests).flatExtracting(EmbedRequest::inputs).containsExactly("first text");
         }
 
@@ -1033,7 +1084,7 @@ class TopicVectorsTickServiceTest {
                     registry, new TopicsWorkspaceNames(id -> {
                         lookups.incrementAndGet();
                         return "name-" + id;
-                    }, clock), meter.meter, clock);
+                    }, clock), noArrival(), meter.meter, clock);
             stub(List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5))), candidate -> "intent");
 
             assertThat(service.tick(NOW).written()).isOne();
@@ -1056,7 +1107,7 @@ class TopicVectorsTickServiceTest {
                     lockService,
                     registry, new TopicsWorkspaceNames(id -> {
                         throw new IllegalStateException("react service down");
-                    }, clock), meter.meter, clock);
+                    }, clock), noArrival(), meter.meter, clock);
             stub(List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5))), candidate -> "intent");
 
             assertThat(service.tick(NOW).written()).isOne();
@@ -1079,7 +1130,7 @@ class TopicVectorsTickServiceTest {
             looked.clear();
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
-                    registry, names, meter.meter, clock);
+                    registry, names, noArrival(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
             var budget = config.getVectors().getTickBudget().toJavaDuration();
 
@@ -1198,7 +1249,7 @@ class TopicVectorsTickServiceTest {
             clock = new TestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
-                    registry, names(), new TestMeter().meter, clock);
+                    registry, names(), noArrival(), new TestMeter().meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
             // SET NX PX and DEL on the test clock: any lock and TTL, because the TTLs are what the tests are about.
@@ -1418,7 +1469,7 @@ class TopicVectorsTickServiceTest {
             meter = new TestMeter();
             clock = new TestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
-                    lockService, registry, names(), meter.meter, clock);
+                    lockService, registry, names(), noArrival(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
             // The daily pass is not due unless a test says so; it ends by setting the lock again, for any time.
@@ -2051,7 +2102,7 @@ class TopicVectorsTickServiceTest {
             var registry = mock(AiLabelTaskRegistry.class);
             clock = new TestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, allDrained(), client,
-                    lockService, registry, names(), new TestMeter().meter, clock);
+                    lockService, registry, names(), noArrival(), new TestMeter().meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
             when(lockService.lockUsingToken(eq(TopicVectorsTickService.LONG_WINDOW_LOCK), any(Duration.class)))
@@ -2479,6 +2530,16 @@ class TopicVectorsTickServiceTest {
     }
 
     /** Workspace names as the tests expect them: {@code name-} and the id, never failing. */
+    /** Topic on arrival, turned off: the tests of the tick without it. */
+    static TopicsArrivalService noArrival() {
+        var topics = new TopicsConfig();
+        var arrival = new TopicsConfig.ArrivalConfig();
+        arrival.setEnabled(false);
+        topics.setArrival(arrival);
+        return new TopicsArrivalService(topics, mock(TransactionTemplate.class), mock(TraceTopicsDAO.class),
+                new KMeansTopicAlgorithm(), OpenTelemetry.noop().getMeter("test"), Clock.systemUTC());
+    }
+
     static TopicsWorkspaceNames names() {
         return new TopicsWorkspaceNames(workspaceId -> "name-" + workspaceId, Clock.systemUTC());
     }

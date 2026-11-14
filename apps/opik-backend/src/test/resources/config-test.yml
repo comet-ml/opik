@@ -1019,6 +1019,17 @@ topics:
   #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
   #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
   enabledWorkspaces: ""
+  arrival:
+    #  Default: true
+    #  Description: After each vectors insert, gives every trace of a project with a saved topic list the topic of its
+    #  nearest saved prototype (trace_topics, source arrival, empty run_id). The next run's row for the trace wins.
+    #  Needs topics.enabled. Off: no read, no write
+    enabled: true
+    #  Default: 5s
+    #  Description: All the arrival steps of one vectors tick (the prototypes read and the trace_topics insert after
+    #  each vectors insert) end within this in total, and before the tick's budget ends. A step that would start with
+    #  less than 1s left is skipped (over_budget). Any failure stops arrival for the rest of the tick
+    timeout: 5s
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. A tick

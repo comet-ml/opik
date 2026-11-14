@@ -163,6 +163,8 @@ class TopicsNightlyJobTest {
     private TopicsTestData data;
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
+    private TopicWindowDAO windowDAO;
+    private TopicAlgorithm algorithm;
     private GuiceJobManager jobManager;
     private ClientSupport client;
     private String baseUrl;
@@ -171,7 +173,10 @@ class TopicsNightlyJobTest {
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager,
             @Jit TopicsNightlyService nightlyService, @Jit TopicsFirstBuildService firstBuildService,
-            @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO) {
+            @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO,
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm) {
+        this.windowDAO = windowDAO;
+        this.algorithm = algorithm;
         this.client = client;
         this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
@@ -226,6 +231,7 @@ class TopicsNightlyJobTest {
     void nightlyUpdate() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
+        assertArrivalEqualsTheRun(workspaceId, projectId, firstBuildRun(projectId).runId());
         var before = data.topics(projectId);
         plant(workspaceId, projectId);
         stubNightly(NAMED, sameAnswers());
@@ -275,6 +281,7 @@ class TopicsNightlyJobTest {
             assertThat(state.lastRunId()).isEqualTo(update.runId());
             assertThat(state.labelsComplete()).isTrue();
         });
+        assertArrivalEqualsTheRun(workspaceId, projectId, update.runId());
     }
 
     @Test
@@ -951,6 +958,37 @@ class TopicsNightlyJobTest {
         }
         answer.putArray("other");
         return answer;
+    }
+
+    private TopicRun firstBuildRun(UUID projectId) {
+        return data.runs(projectId).stream().filter(run -> run.mode() == TopicRun.Mode.FIRST_BUILD).findFirst()
+                .orElseThrow();
+    }
+
+    /**
+     * What topic on arrival relies on: the bound algorithm's labeller, made from the prototypes the run saved in MySQL,
+     * gives every trace the run labelled the label the run wrote to {@code trace_topics}.
+     */
+    private void assertArrivalEqualsTheRun(String workspaceId, UUID projectId, UUID runId) {
+        var labels = labels(workspaceId, projectId, runId).stream()
+                .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
+        // Wider than any window of these tests: only the run's traces are compared.
+        var from = night().minusDays(90).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var to = secondNight().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var window = windowDAO.readWindow(workspaceId, projectId, from, to, 100_000, 120).collectList().block()
+                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
+        assertThat(window).hasSize(labels.size()).isNotEmpty();
+
+        int dimensions = TopicsRebuildService.DIMENSIONS;
+        var vectors = new float[window.size() * dimensions];
+        for (int i = 0; i < window.size(); i++) {
+            System.arraycopy(window.get(i).vector(), 0, vectors, i * dimensions, dimensions);
+        }
+        var arrived = algorithm.labeller(data.prototypes(projectId)).orElseThrow().label(vectors);
+        for (int i = 0; i < window.size(); i++) {
+            assertThat(arrived[i]).as("trace '%s'", window.get(i).traceId())
+                    .isEqualTo(labels.get(window.get(i).traceId()));
+        }
     }
 
     private TopicRun nightlyRun(UUID projectId) {
