@@ -69,6 +69,11 @@ public class TopicsNightlyService {
      */
     public static final Duration RUN_SLOT = Duration.ofDays(1);
 
+    /** The lock that marks a date's night as run, by the scheduled job or by hand. */
+    public static Lock runLock(@NonNull LocalDate night) {
+        return new Lock("topics:nightly:run:" + night);
+    }
+
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
 
@@ -208,11 +213,6 @@ public class TopicsNightlyService {
      * @throws ServiceUnavailableException when Redis fails or does not answer within {@link #LOCK_WAIT}, with a
      *                                     {@code Retry-After}
      */
-    /** The lock that marks a date's night as run, by the scheduled job or by hand. */
-    public static Lock runLock(@NonNull LocalDate night) {
-        return new Lock("topics:nightly:run:" + night);
-    }
-
     public boolean runNightNow(@NonNull LocalDate night) {
         if (!config.getNightly().isEnabled()) {
             throw new ConflictException("The topics nightly job is off: topics.nightly.enabled is false");
