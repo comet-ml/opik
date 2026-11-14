@@ -1430,7 +1430,7 @@ def test_llama_index__stream_chat__event_outputs_are_released(fake_backend):
 
 
 def test_llama_index__event_ends_after_end_trace_in_copied_context__output_is_not_kept(
-    fake_backend,
+    fake_backend, monkeypatch
 ):
     """A task created while the trace was active keeps the root in its context; an
     event it ends after end_trace must not leave its output behind."""
@@ -1443,7 +1443,7 @@ def test_llama_index__event_ends_after_end_trace_in_copied_context__output_is_no
     )
     from llama_index.core.llms import MockLLM
 
-    Settings.llm = MockLLM(max_tokens=4)
+    monkeypatch.setattr(Settings, "_llm", MockLLM(max_tokens=4))
     opik_callback_handler = LlamaIndexCallbackHandler()
     opik_callback_handler.start_trace("query")
     event_id = opik_callback_handler.on_event_start(
