@@ -5,6 +5,7 @@ import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Prompt;
 import com.comet.opik.api.annotationqueue.Conditions;
 import com.comet.opik.api.automations.Automation;
 import com.comet.opik.api.automations.AutomationDryRun;
@@ -447,13 +448,7 @@ public class AutomationService {
                 if (trigger.promptId() == null && trigger.promptName() == null) {
                     return trigger;
                 }
-                var prompt = trigger.promptId() != null
-                        ? promptService.findById(workspaceId, trigger.promptId())
-                        : promptService.findByName(workspaceId, trigger.promptName());
-                if (prompt == null) {
-                    throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found".formatted(
-                            trigger.promptName() != null ? trigger.promptName() : trigger.promptId()));
-                }
+                var prompt = findPrompt(workspaceId, projectId, trigger.promptId(), trigger.promptName());
                 return trigger.toBuilder().promptId(prompt.id()).promptName(prompt.name()).build();
             }).subscribeOn(Schedulers.boundedElastic());
             case EXPERIMENT_FINISHED -> Mono.fromCallable(() -> {
@@ -465,6 +460,18 @@ public class AutomationService {
                 return trigger.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name()).build();
             }).subscribeOn(Schedulers.boundedElastic());
         };
+    }
+
+    /** By id, else by name in the project and then at workspace level: a prompt from another project is not found. */
+    private Prompt findPrompt(String workspaceId, UUID projectId, UUID id, String name) {
+        var prompt = id != null
+                ? promptService.findById(workspaceId, id)
+                : promptService.findByNameInProjectOrWorkspace(workspaceId, name, projectId);
+        if (prompt == null) {
+            throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found in this project or at workspace level"
+                    .formatted(name != null ? name : id));
+        }
+        return prompt;
     }
 
     private Mono<AnnotationQueue> findQueue(String workspaceId, UUID projectId, UUID id, String name) {
@@ -517,13 +524,7 @@ public class AutomationService {
                         DatasetType.TEST_SUITE, "test suite");
                 var resolved = step.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name());
                 if (step.promptId() != null || step.promptName() != null) {
-                    var prompt = step.promptId() != null
-                            ? promptService.findById(workspaceId, step.promptId())
-                            : promptService.findByName(workspaceId, step.promptName());
-                    if (prompt == null) {
-                        throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found".formatted(
-                                step.promptName() != null ? step.promptName() : step.promptId()));
-                    }
+                    var prompt = findPrompt(workspaceId, projectId, step.promptId(), step.promptName());
                     resolved.promptId(prompt.id()).promptName(prompt.name());
                 }
                 return resolved.build();
@@ -531,17 +532,16 @@ public class AutomationService {
             case OPTIMIZER_RUN -> Mono.fromCallable(() -> {
                 var suite = findDataset(workspaceId, projectId, step.testSuiteId(), step.testSuiteName(),
                         DatasetType.TEST_SUITE, "test suite");
-                var prompt = step.promptId() != null
-                        ? promptService.findById(workspaceId, step.promptId())
-                        : promptService.findByName(workspaceId, step.promptName());
-                if (prompt == null) {
-                    throw refuse(TARGET_NOT_FOUND, "prompt '%s' not found".formatted(
-                            step.promptName() != null ? step.promptName() : step.promptId()));
-                }
+                var prompt = findPrompt(workspaceId, projectId, step.promptId(), step.promptName());
                 return step.toBuilder().testSuiteId(suite.id()).testSuiteName(suite.name())
                         .promptId(prompt.id()).promptName(prompt.name()).build();
             }).subscribeOn(Schedulers.boundedElastic());
-            case PROMPT_VERSION_SAVE -> Mono.just(step);
+            case PROMPT_VERSION_SAVE -> step.promptId() == null && step.promptName() == null
+                    ? Mono.just(step)
+                    : Mono.fromCallable(() -> {
+                        var prompt = findPrompt(workspaceId, projectId, step.promptId(), step.promptName());
+                        return step.toBuilder().promptId(prompt.id()).promptName(prompt.name()).build();
+                    }).subscribeOn(Schedulers.boundedElastic());
             case JUDGE_AGREEMENT ->
                 findQueue(workspaceId, projectId, step.annotationQueueId(), step.annotationQueueName())
                         .map(queue -> step.toBuilder().annotationQueueId(queue.id()).annotationQueueName(queue.name())

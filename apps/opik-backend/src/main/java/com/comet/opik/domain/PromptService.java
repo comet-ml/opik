@@ -109,7 +109,8 @@ public interface PromptService {
 
     PromptVersion getLatestVersion(String workspaceId, UUID promptId);
 
-    Prompt findByName(String workspaceId, String name);
+    /** The project's prompt of that name, else the workspace-level one; never another project's. */
+    Prompt findByNameInProjectOrWorkspace(String workspaceId, String name, UUID projectId);
 
     Prompt findById(String workspaceId, UUID id);
 
@@ -846,9 +847,12 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Prompt findByName(@NonNull String workspaceId, @NonNull String name) {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(PromptDAO.class).findByNameWithoutProject(name, workspaceId));
+    public Prompt findByNameInProjectOrWorkspace(@NonNull String workspaceId, @NonNull String name, UUID projectId) {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+            Prompt scoped = projectId == null ? null : promptDAO.findByName(name, workspaceId, projectId);
+            return scoped != null ? scoped : promptDAO.findByNameWithoutProject(name, workspaceId);
+        });
     }
 
     @Override

@@ -1,12 +1,14 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
@@ -492,9 +494,16 @@ class AutomationsResourceTest {
         var project = newProject();
         var suiteId = newSuite(project.id(), "Regression · " + project.name());
         addSuiteCase(suiteId);
-        var prompt = com.comet.opik.api.Prompt.builder().name("support-" + UUID.randomUUID()).build();
+        // A prompt created inside the project, as the prompt library does: Gate must find it by name.
+        var prompt = com.comet.opik.api.Prompt.builder().name("support-" + UUID.randomUUID())
+                .projectId(project.id()).build();
         promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
-        promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+        try (var response = promptResourceClient.callCreatePromptVersion(CreatePromptVersion.builder()
+                .name(prompt.name()).projectId(project.id())
+                .version(PromptVersion.builder().template("You are {{role}}").build()).build(), API_KEY,
+                TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
         try (var response = request(PATH.formatted(baseURI) + "/integrations/github", Map.of())
                 .put(Entity.json(Map.of("token", "ghp_test")))) {
             assertThat(response.getStatus()).isEqualTo(204);

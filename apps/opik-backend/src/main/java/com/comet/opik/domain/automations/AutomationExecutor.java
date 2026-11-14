@@ -949,8 +949,17 @@ public class AutomationExecutor {
         if (optimizationId == null) {
             return Mono.just(StepResult.failed("nothing to save: no optimizer.run output in this run"));
         }
-        if (step.promptName() == null) {
+        if (step.promptId() == null && step.promptName() == null) {
             return Mono.just(StepResult.failed("prompt_version.save needs the prompt to save under (prompt_name)"));
+        }
+        // Saved onto the prompt resolved at creation, in its own project scope: a bare name would start a new one.
+        var prompt = step.promptId() != null
+                ? promptService.findById(context.event().workspaceId(), step.promptId())
+                : promptService.findByNameInProjectOrWorkspace(context.event().workspaceId(), step.promptName(),
+                        context.automation().projectId());
+        if (prompt == null) {
+            return Mono.just(StepResult.failed("prompt '%s' no longer exists"
+                    .formatted(step.promptName() != null ? step.promptName() : step.promptId())));
         }
         return trials(context, UUID.fromString(optimizationId))
                 .filter(experiment -> experiment.metadata() != null
@@ -962,7 +971,8 @@ public class AutomationExecutor {
                     var version = promptService.createPromptVersion(context.event().workspaceId(),
                             context.event().workspaceName(), context.event().userName(),
                             CreatePromptVersion.builder()
-                                    .name(step.promptName())
+                                    .name(prompt.name())
+                                    .projectId(prompt.projectId())
                                     .templateStructure(TemplateStructure.CHAT)
                                     .version(PromptVersion.builder()
                                             .template(messages.toString())
