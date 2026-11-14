@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -35,7 +36,7 @@ public record ProjectMetricRequest(
         @Valid BreakdownConfig breakdown,
         @JsonIgnore UUID uuidFromTime,
         @JsonIgnore UUID uuidToTime,
-        @JsonIgnore TopicFilterScope topicScope) {
+        @JsonIgnore @Nullable TopicFilterScope topicScope) {
 
     /**
      * Check if breakdown is enabled for this request.

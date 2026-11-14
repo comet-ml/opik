@@ -85,7 +85,13 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                         // No requested end means no upper id bound, so far-future ids count like they do in the list
                         .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
                         .build())))
-                .flatMap(enrichedRequest -> topicReadService.filterScope(enrichedRequest.traceFilters(), projectId)
+                // Thread and span metrics do not read trace_filters, so a topic_id there neither reads MySQL nor maps
+                // their ClickHouse errors to 503
+                .flatMap(enrichedRequest -> topicReadService.filterScope(
+                        ProjectMetricsDAO.readsTraceFilters(enrichedRequest.metricType())
+                                ? enrichedRequest.traceFilters()
+                                : null,
+                        projectId)
                         .map(topicScope -> enrichedRequest.toBuilder().topicScope(topicScope.orElse(null)).build()))
                 .flatMap(enrichedRequest -> TopicsReadErrors.busyOnFilterGuard(enrichedRequest.topicScope() != null,
                         getMetricHandler(enrichedRequest.metricType()).apply(projectId, enrichedRequest))

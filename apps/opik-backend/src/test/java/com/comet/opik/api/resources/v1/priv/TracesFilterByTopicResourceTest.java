@@ -61,6 +61,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -97,6 +100,7 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * The traces filter by topic, in the trace list, count, stats and stream, the trace KPI cards and the trace metrics,
@@ -370,56 +374,43 @@ class TracesFilterByTopicResourceTest {
         assertThat(metricCount(seed, notAnId)).isZero();
     }
 
-    @Test
-    @DisplayName("guards: the trace list and its count trip the memory guard (max_memory_usage) only with a topic "
-            + "filter, and answer 503 with Retry-After")
-    void listGuardTrips() {
-        assertGuardTrips((seed, filters) -> traces(seed, "", filters));
-    }
-
-    @Test
-    @DisplayName("guards: the trace stats trip the memory guard only with a topic filter, and answer 503 with "
-            + "Retry-After")
-    void statsGuardTrips() {
-        assertGuardTrips((seed, filters) -> traces(seed, "/stats", filters));
-    }
-
-    @Test
-    @DisplayName("guards: the trace KPI cards trip the memory guard only with a topic filter, and answer 503 with "
-            + "Retry-After")
-    void kpiCardsGuardTrips() {
-        assertGuardTrips((seed, filters) -> projectClient.getKpiCardsRaw(seed.projectId(),
-                KpiCardRequest.builder()
-                        .entityType(KpiCardRequest.EntityType.TRACES)
-                        .filters(JsonUtils.writeValueAsString(filters))
-                        .intervalStart(Instant.now().minus(Duration.ofDays(1)))
-                        .build(),
-                seed.caller().apiKey(), seed.caller().workspaceName()));
-    }
-
-    @Test
-    @DisplayName("guards: the trace metrics trip the memory guard only with a topic filter, and answer 503 with "
-            + "Retry-After")
-    void projectMetricsGuardTrips() {
-        assertGuardTrips((seed, filters) -> client
-                .target("%s/v1/private/projects/%s/metrics".formatted(baseUrl, seed.projectId()))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, seed.caller().apiKey())
-                .header(RequestContext.WORKSPACE_HEADER, seed.caller().workspaceName())
-                .post(Entity.json(ProjectMetricRequest.builder()
-                        .metricType(MetricType.TRACE_COUNT)
-                        .interval(TimeInterval.DAILY)
-                        .intervalStart(Instant.now().minus(Duration.ofDays(1)))
-                        .traceFilters(filters)
-                        .build())));
+    Stream<Arguments> guardedEndpoints() {
+        return Stream.of(
+                arguments("the trace list and its count", (BiFunction<Seed, List<TraceFilter>, Response>) (
+                        seed, filters) -> traces(seed, "", filters)),
+                arguments("the trace stats", (BiFunction<Seed, List<TraceFilter>, Response>) (
+                        seed, filters) -> traces(seed, "/stats", filters)),
+                arguments("the trace KPI cards", (BiFunction<Seed, List<TraceFilter>, Response>) (
+                        seed, filters) -> projectClient.getKpiCardsRaw(seed.projectId(),
+                                KpiCardRequest.builder()
+                                        .entityType(KpiCardRequest.EntityType.TRACES)
+                                        .filters(JsonUtils.writeValueAsString(filters))
+                                        .intervalStart(Instant.now().minus(Duration.ofDays(1)))
+                                        .build(),
+                                seed.caller().apiKey(), seed.caller().workspaceName())),
+                arguments("the trace metrics", (BiFunction<Seed, List<TraceFilter>, Response>) (
+                        seed, filters) -> client
+                                .target("%s/v1/private/projects/%s/metrics".formatted(baseUrl, seed.projectId()))
+                                .request()
+                                .header(HttpHeaders.AUTHORIZATION, seed.caller().apiKey())
+                                .header(RequestContext.WORKSPACE_HEADER, seed.caller().workspaceName())
+                                .post(Entity.json(ProjectMetricRequest.builder()
+                                        .metricType(MetricType.TRACE_COUNT)
+                                        .interval(TimeInterval.DAILY)
+                                        .intervalStart(Instant.now().minus(Duration.ofDays(1)))
+                                        .traceFilters(filters)
+                                        .build()))));
     }
 
     /**
-     * A real ClickHouse trip: {@code topics.filter.maxMemoryUsage} of 1 byte stops the query with
-     * {@code MEMORY_LIMIT_EXCEEDED}. Without a topic filter the query carries no guard, so the same setting
+     * A real ClickHouse trip on each guarded endpoint: {@code topics.filter.maxMemoryUsage} of 1 byte stops the query
+     * with {@code MEMORY_LIMIT_EXCEEDED}. Without a topic filter the query carries no guard, so the same setting
      * changes nothing; with the setting back, the topic filter answers again.
      */
-    private void assertGuardTrips(BiFunction<Seed, List<TraceFilter>, Response> call) {
+    @ParameterizedTest(name = "guards: {0} trip the memory guard (max_memory_usage) only with a topic filter, and "
+            + "answer 503 with Retry-After")
+    @MethodSource("guardedEndpoints")
+    void guardTrips(String endpoint, BiFunction<Seed, List<TraceFilter>, Response> call) {
         var seed = seed();
         var topicFilter = List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, seed.labelled().id().toString()));
         var guards = opikConfig.getTopics().getFilter();

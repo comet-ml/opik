@@ -146,6 +146,12 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getThreadCost(UUID projectId, ProjectMetricRequest request);
 
     Mono<List<String>> getProjectTokenUsageNames(String workspaceId, UUID projectId);
+
+    /** Whether the metric reads {@code trace_filters}: thread and span metrics read only their own filters. */
+    static boolean readsTraceFilters(@NonNull MetricType metricType) {
+        return !ProjectMetricsDAOImpl.THREAD_METRICS.contains(metricType)
+                && !ProjectMetricsDAOImpl.SPAN_TIME_METRICS.contains(metricType);
+    }
 }
 
 @Slf4j
@@ -1884,7 +1890,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
     }
 
-    private static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(
+    static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(
             MetricType.SPAN_COUNT,
             MetricType.SPAN_DURATION,
             MetricType.SPAN_TOKEN_USAGE,
@@ -1893,7 +1899,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_COST,
             MetricType.SPAN_ERROR_RATE);
 
-    private static final Set<MetricType> THREAD_METRICS = EnumSet.of(
+    static final Set<MetricType> THREAD_METRICS = EnumSet.of(
             MetricType.THREAD_COUNT,
             MetricType.THREAD_DURATION,
             MetricType.THREAD_FEEDBACK_SCORES,

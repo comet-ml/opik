@@ -12,7 +12,7 @@ import java.util.List;
  *
  * <p>{@link #toString()} prints the number of ids only: a trace search logs its criteria.
  */
-@Builder
+@Builder(toBuilder = true)
 public record TopicFilterScope(@NonNull List<String> liveIds, long maxExecutionSeconds, long maxMemoryUsage) {
 
     public TopicFilterScope {

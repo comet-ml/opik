@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.metrics.KpiCardRequest.EntityType;
 import com.comet.opik.domain.topics.TopicFilterScope;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -18,5 +19,5 @@ public record KpiCardCriteria(
         @NonNull Instant intervalStart,
         Instant intervalEnd,
         /** Set by {@code KpiCardService} for trace cards with a {@code topic_id} filter and a scope; else null. */
-        TopicFilterScope topicScope) {
+        @Nullable TopicFilterScope topicScope) {
 }
