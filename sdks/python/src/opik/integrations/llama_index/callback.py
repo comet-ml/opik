@@ -1,5 +1,6 @@
 import contextvars
 import logging
+import threading
 from typing import Optional, Dict, Any, List, Union
 import uuid
 
@@ -68,9 +69,11 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         # Event tracking - shared across contexts, but events have unique IDs
         self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_event_id_to_output: Dict[str, Any] = {}
-        # Events whose output is stored, per root, so that end_trace can drop them
-        # once it has read the output it needs.
+        # Events whose output is stored, per active root, so that end_trace can drop
+        # them once it has read the output it needs. A root's entry exists from
+        # start_trace to end_trace; events ending after that store nothing.
         self._map_root_id_to_event_ids: Dict[str, List[str]] = {}
+        self._event_outputs_lock = threading.Lock()
 
         # For streaming: end_trace may be called before event_end, so we need to
         # defer the trace output update until the event output is available
@@ -126,6 +129,11 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             )
             _llama_root.set(span_creation_result.span_data)
 
+        root = _llama_root.get()
+        if root is not None:
+            with self._event_outputs_lock:
+                self._map_root_id_to_event_ids[root.id] = []
+
     def end_trace(
         self,
         trace_id: Optional[str] = None,
@@ -158,8 +166,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             # the last event ends, not when LlamaIndex calls end_trace().
             self._pending_root_output_updates[last_event] = root
 
-        for event_id in self._map_root_id_to_event_ids.pop(root.id, []):
-            self._map_event_id_to_output.pop(event_id, None)
+        with self._event_outputs_lock:
+            for event_id in self._map_root_id_to_event_ids.pop(root.id, []):
+                self._map_event_id_to_output.pop(event_id, None)
 
         # Clean up context storage
         if isinstance(root, span.SpanData):
@@ -255,14 +264,16 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         if not event_id:
             return
 
-        # Store output for end_trace. Once the root has ended (a streamed last event
-        # ends after end_trace) nothing reads it; the pending update below uses it.
+        # Store output for end_trace, only while the root is active. An event that
+        # ends after end_trace (a streamed last event, possibly in a task whose
+        # context still holds the ended root) is handled by the pending update below.
         current_root = _llama_root.get()
         if current_root is not None:
-            self._map_event_id_to_output[event_id] = span_output
-            self._map_root_id_to_event_ids.setdefault(current_root.id, []).append(
-                event_id
-            )
+            with self._event_outputs_lock:
+                root_event_ids = self._map_root_id_to_event_ids.get(current_root.id)
+                if root_event_ids is not None:
+                    root_event_ids.append(event_id)
+                    self._map_event_id_to_output[event_id] = span_output
 
         # Check if there's a pending root trace/span output update for this event.
         # This happens when end_trace() was called before event_end() (streaming scenario).

@@ -1427,3 +1427,44 @@ def test_llama_index__stream_chat__event_outputs_are_released(fake_backend):
 
     assert opik_callback_handler._map_event_id_to_output == {}
     assert opik_callback_handler._map_root_id_to_event_ids == {}
+
+
+def test_llama_index__event_ends_after_end_trace_in_copied_context__output_is_not_kept(
+    fake_backend,
+):
+    """A task created while the trace was active keeps the root in its context; an
+    event it ends after end_trace must not leave its output behind."""
+    import contextvars
+
+    from llama_index.core.callbacks.schema import (
+        BASE_TRACE_EVENT,
+        CBEventType,
+        EventPayload,
+    )
+    from llama_index.core.llms import MockLLM
+
+    Settings.llm = MockLLM(max_tokens=4)
+    opik_callback_handler = LlamaIndexCallbackHandler()
+    opik_callback_handler.start_trace("query")
+    event_id = opik_callback_handler.on_event_start(
+        CBEventType.LLM,
+        payload={EventPayload.PROMPT: "Hi"},
+        parent_id=BASE_TRACE_EVENT,
+    )
+    task_context = contextvars.copy_context()
+
+    opik_callback_handler.end_trace("query", trace_map={BASE_TRACE_EVENT: [event_id]})
+    task_context.run(
+        opik_callback_handler.on_event_end,
+        CBEventType.LLM,
+        payload={EventPayload.COMPLETION: "Hello"},
+        event_id=event_id,
+    )
+
+    opik_callback_handler.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].output == {"output": "Hello"}
+
+    assert opik_callback_handler._map_event_id_to_output == {}
+    assert opik_callback_handler._map_root_id_to_event_ids == {}
