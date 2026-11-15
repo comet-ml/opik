@@ -140,6 +140,22 @@ class TestExtractLMInfoFromHistory:
         assert result.usage is None
         assert result.cache_hit is None
 
+    def test_none_call_input__does_not_match_entry_with_missing_keys(self):
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [{"role": "user", "content": "unrelated call"}],
+                "request": ("frozen-request", "unrelated call"),
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, None)
+
+        assert result.usage is None
+        assert result.cache_hit is None
+
     def test_dspy35_cached_request__no_usage_and_cache_hit_true(self):
         request = ("frozen-request", "cached")
         mock_lm = MagicMock()

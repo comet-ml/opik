@@ -6,7 +6,7 @@ extracting relevant information like usage, provider, and cost data.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 import logging
 
 import dspy
@@ -65,16 +65,6 @@ def get_span_type(instance: Any) -> types.SpanType:
     return "general"
 
 
-def _history_entry_matches(entry: Dict[str, Any], expected_call_input: Any) -> bool:
-    # dspy<3.5 stores the caller's `messages`/`prompt` as given. dspy>=3.5 adapters
-    # pass an lm15 Request as `prompt`, which history keeps under "request" while
-    # "messages" is re-derived from it, so any of the three can hold the call input.
-    return any(
-        entry.get(key) == expected_call_input
-        for key in ("messages", "prompt", "request")
-    )
-
-
 def extract_lm_info_from_history(
     lm_instance: Any,
     expected_call_input: Optional[Any],
@@ -115,7 +105,15 @@ def extract_lm_info_from_history(
     try:
         last_entry = lm_instance.history[-1]
 
-        if not _history_entry_matches(last_entry, expected_call_input):
+        # dspy<3.5 stores the caller's `messages`/`prompt` as given. dspy>=3.5 adapters
+        # pass an lm15 Request as `prompt`, which history keeps under "request" while
+        # "messages" is re-derived from it, so any of the three can hold the call input.
+        # A None input would equal every missing key (3.5 entries always carry
+        # "prompt": None), so it never identifies an entry.
+        if expected_call_input is None or not any(
+            last_entry.get(key) == expected_call_input
+            for key in ("messages", "prompt", "request")
+        ):
             LOGGER.debug(
                 "History entry doesn't match the LM call input, "
                 "skipping usage extraction (possibly due to concurrent LM calls)"

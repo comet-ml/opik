@@ -53,9 +53,8 @@ def _lm_spans(trace_tree):
 
 def test_dspy_offline__adapter_call__lm_span_has_usage(fake_backend):
     opik_callback = OpikCallback()
-    dspy.configure(lm=_stub_lm(cache=False), callbacks=[opik_callback])
-
-    dspy.Predict("question -> answer")(question="What is 2+2?")
+    with dspy.context(lm=_stub_lm(cache=False), callbacks=[opik_callback]):
+        dspy.Predict("question -> answer")(question="What is 2+2?")
     opik_callback.flush()
 
     assert len(fake_backend.trace_trees) == 1
@@ -68,13 +67,13 @@ def test_dspy_offline__adapter_call__lm_span_has_usage(fake_backend):
 def test_dspy_offline__string_prompt_call__lm_span_has_usage(fake_backend):
     lm = _stub_lm(cache=False)
     opik_callback = OpikCallback()
-    dspy.configure(lm=lm, callbacks=[opik_callback])
 
     @opik.track
     def call_lm():
         return lm("What is 2+2?")
 
-    call_lm()
+    with dspy.context(lm=lm, callbacks=[opik_callback]):
+        call_lm()
     opik_callback.flush()
     opik.flush_tracker()
 
@@ -85,12 +84,11 @@ def test_dspy_offline__string_prompt_call__lm_span_has_usage(fake_backend):
 
 def test_dspy_offline__cached_call__cache_hit_true_and_no_usage(fake_backend):
     opik_callback = OpikCallback()
-    dspy.configure(lm=_stub_lm(cache=True), callbacks=[opik_callback])
-
     predict = dspy.Predict("question -> answer")
     question = f"What is {uuid.uuid4().hex}?"
-    predict(question=question)
-    predict(question=question)
+    with dspy.context(lm=_stub_lm(cache=True), callbacks=[opik_callback]):
+        predict(question=question)
+        predict(question=question)
     opik_callback.flush()
 
     assert len(fake_backend.trace_trees) == 2
