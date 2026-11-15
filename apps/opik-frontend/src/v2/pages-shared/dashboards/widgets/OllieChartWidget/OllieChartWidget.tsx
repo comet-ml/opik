@@ -1,6 +1,8 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import isArray from "lodash/isArray";
+import isObject from "lodash/isObject";
+import isString from "lodash/isString";
 import { useShallow } from "zustand/react/shallow";
 import { RefreshCw } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -221,8 +223,10 @@ const OllieChartWidget: React.FunctionComponent<
       updateWidget(sectionId, widgetId, { config: { ...config, ...patch } });
     };
     return {
-      // The dashboards API stores the config as is, so a hand-edited sort may not be a list.
-      sorting: isArray(config.sorting) ? config.sorting : undefined,
+      // The dashboards API stores the config as is, so a hand-edited sort may be malformed.
+      sorting: isArray(config.sorting)
+        ? config.sorting.filter((sort) => isObject(sort) && isString(sort.id))
+        : undefined,
       columnsWidth: config.columnsWidth,
       onSortingChange: (sorting: Sorting) => saveConfig({ sorting }),
       onColumnsWidthChange: (columnsWidth: Record<string, number>) =>
