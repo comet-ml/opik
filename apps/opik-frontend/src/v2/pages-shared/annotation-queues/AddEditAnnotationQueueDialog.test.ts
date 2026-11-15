@@ -1,3 +1,4 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -159,5 +160,33 @@ describe("the automation payload", () => {
     expect(ticked).not.toHaveProperty("clear_max_items_in_queue");
     const unticked = build({ enabled: true });
     expect(unticked).not.toHaveProperty("max_items_in_queue");
+  });
+});
+
+// A zod / @hookform/resolvers mismatch makes the resolver throw instead of returning field errors.
+describe("AddEditAnnotationQueueDialog zodResolver", () => {
+  const resolve = (values: Record<string, unknown>) =>
+    zodResolver(formSchema)(form(values) as never, undefined, {
+      fields: {},
+      shouldUseNativeValidation: false,
+    });
+
+  it("returns field errors for invalid input", async () => {
+    const { errors } = await resolve({ name: "", annotators_per_item: 0 });
+    expect(errors.name?.message).toBe("Name is required");
+    expect(errors.annotators_per_item).toBeDefined();
+  });
+
+  it("submits the stepper inputs' text as numbers", async () => {
+    const { values } = await resolve({
+      annotators_per_item: "3",
+      lock_timeout_minutes: "10",
+    });
+    expect(values).toEqual(
+      expect.objectContaining({
+        annotators_per_item: 3,
+        lock_timeout_minutes: 10,
+      }),
+    );
   });
 });

@@ -173,7 +173,7 @@ const RetentionBanner = ({ onChangeHeight, hidden }: RetentionBannerProps) => {
     if (isTrialExpired) return getTrialExpiredLabel();
     if (isExceededLimit) return getExceededLabel();
     return (
-      `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure` +
+      `You're at 80% of your ${spanQuota?.limit} free spans. Upgrade to ensure ` +
       "uninterrupted monitoring"
     );
   };

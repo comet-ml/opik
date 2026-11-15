@@ -10,6 +10,7 @@ import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.QuotaLimitTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -25,11 +26,14 @@ import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
@@ -82,6 +86,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_LIMIT_EXCEEDED;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
@@ -251,6 +256,79 @@ class OpenTelemetryResourceTest {
                             Entity.json("{\"resourceSpans\":[{\"scopeSpans\":[{}]}]}")));
         }
 
+    }
+
+    @Nested
+    @DisplayName("Usage limit:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UsageLimit {
+
+        private final String apiKey = UUID.randomUUID().toString();
+
+        Stream<Arguments> quotasByContentType() {
+            return Stream.of("application/x-protobuf", MediaType.APPLICATION_JSON)
+                    .flatMap(mediaType -> QuotaLimitTestUtils.quotaLimitsTestProvider()
+                            .map(args -> arguments(mediaType, args.get()[0], args.get()[1])));
+        }
+
+        @ParameterizedTest(name = "{0}, quotas {1}, limit reached {2}")
+        @MethodSource("quotasByContentType")
+        @DisplayName("reject ingestion with 402 once the span quota is reached")
+        void testOtelIngestionRespectsSpanQuota(String mediaType, List<Quota> quotas, boolean isLimitReached) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName,
+                    UUID.randomUUID().toString(), USER, quotas);
+
+            // OTel trace and span ids are 128-bit and 64-bit
+            var otelTraceId = RandomUtils.insecure().randomBytes(16);
+            var startTimeMs = System.currentTimeMillis() - 1_000;
+
+            var request = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder()
+                                    .addSpans(Span.newBuilder()
+                                            .setName("span")
+                                            .setTraceId(ByteString.copyFrom(otelTraceId))
+                                            .setSpanId(ByteString.copyFrom(RandomUtils.insecure().randomBytes(8)))
+                                            .setStartTimeUnixNano(startTimeMs * 1_000_000L)
+                                            .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                                            .build())
+                                    .build())
+                            .build())
+                    .build();
+            Entity<?> payload = MediaType.APPLICATION_JSON.equals(mediaType)
+                    ? Entity.json(toJson(request))
+                    : Entity.entity(request.toByteArray(), mediaType);
+
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request(mediaType)
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(payload)) {
+
+                if (isLimitReached) {
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
+                    assertThat(response.readEntity(ErrorMessage.class))
+                            .isEqualTo(new ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED, ERR_USAGE_LIMIT_EXCEEDED));
+                    return;
+                }
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            // below the limit, ingestion must actually go through and store the span
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, startTimeMs);
+            var spanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    ProjectService.DEFAULT_PROJECT, workspaceName, apiKey);
+            assertThat(spanPage.content()).extracting(span -> span.name()).containsExactly("span");
+        }
+
+        private String toJson(ExportTraceServiceRequest request) {
+            try {
+                return JsonFormat.printer().print(request);
+            } catch (InvalidProtocolBufferException e) {
+                throw new IllegalStateException(e);
+            }
+        }
     }
 
     @Nested

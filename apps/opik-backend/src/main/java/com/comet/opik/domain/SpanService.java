@@ -14,7 +14,6 @@ import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUs
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
-import com.comet.opik.api.events.PartialSpanCreated;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.events.SpansDeleted;
 import com.comet.opik.api.events.SpansUpdated;
@@ -295,9 +294,7 @@ public class SpanService {
             // Strip attachments OUTSIDE the database transaction
             return attachmentStripperService.stripAttachments(
                     spanUpdate, id, workspaceId, userName, projectName)
-                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate))
-                    .doOnSuccess(__ -> eventBus.post(
-                            new PartialSpanCreated(id, spanUpdate.traceId(), project.id(), workspaceId, userName)));
+                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
         });
     }
 

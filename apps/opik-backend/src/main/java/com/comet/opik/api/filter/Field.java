@@ -31,6 +31,7 @@ public interface Field {
     String DATASET_ID_QUERY_PARAM = "dataset_id";
     String PROJECT_ID_QUERY_PARAM = "project_id";
     String PROMPT_IDS_QUERY_PARAM = "prompt_ids";
+    String EVALUATION_METHOD_QUERY_PARAM = "evaluation_method";
     String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";
     String FIRST_MESSAGE_QUERY_PARAM = "first_message";
     String LAST_MESSAGE_QUERY_PARAM = "last_message";

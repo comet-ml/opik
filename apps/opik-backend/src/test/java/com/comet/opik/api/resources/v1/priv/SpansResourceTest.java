@@ -1467,6 +1467,21 @@ class SpansResourceTest {
     class CreateSpan {
 
         @Test
+        void create__whenProjectNameTooLong__thenReturnUnprocessableEntity() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callCreateSpan(span, API_KEY, TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("projectName cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+        }
+
+        @Test
         void createAndGetById() {
             var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .feedbackScores(null)
@@ -2159,6 +2174,22 @@ class SpansResourceTest {
                     API_KEY,
                     List.of(),
                     List.of());
+        }
+
+        @Test
+        void batch__whenProjectNameTooLong__thenReturnUnprocessableEntity() {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+
+            try (var actualResponse = spanResourceClient.callBatchCreateSpans(List.of(span), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                var expectedError = new ErrorMessage(List.of("spans[0].projectName cannot exceed 150 characters"));
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
         }
 
         @ParameterizedTest

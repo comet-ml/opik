@@ -135,6 +135,7 @@ spec:
             runAsUser: 101
             runAsGroup: 101
             fsGroup: 101
+            fsGroupChangePolicy: OnRootMismatch
           {{- with .Values.clickhouse.terminationGracePeriodSeconds }}
           terminationGracePeriodSeconds: {{ . }}
           {{- end }}

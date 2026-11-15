@@ -846,9 +846,10 @@ class DatasetsClient:
         self,
         id: str,
         *,
-        experiment_ids: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        experiment_ids: typing.Optional[str] = None,
+        dataset_version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -862,11 +863,13 @@ class DatasetsClient:
         ----------
         id : str
 
-        experiment_ids : str
-
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        experiment_ids : typing.Optional[str]
+
+        dataset_version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -888,13 +891,14 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.find_dataset_items_with_experiment_items(id='id', experiment_ids='experiment_ids', )
+        client.datasets.find_dataset_items_with_experiment_items(id='id', )
         """
         _response = self._raw_client.find_dataset_items_with_experiment_items(
             id,
-            experiment_ids=experiment_ids,
             page=page,
             size=size,
+            experiment_ids=experiment_ids,
+            dataset_version=dataset_version,
             filters=filters,
             sorting=sorting,
             search=search,
@@ -2442,9 +2446,10 @@ class AsyncDatasetsClient:
         self,
         id: str,
         *,
-        experiment_ids: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        experiment_ids: typing.Optional[str] = None,
+        dataset_version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -2458,11 +2463,13 @@ class AsyncDatasetsClient:
         ----------
         id : str
 
-        experiment_ids : str
-
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        experiment_ids : typing.Optional[str]
+
+        dataset_version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -2486,14 +2493,15 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.find_dataset_items_with_experiment_items(id='id', experiment_ids='experiment_ids', )
+            await client.datasets.find_dataset_items_with_experiment_items(id='id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.find_dataset_items_with_experiment_items(
             id,
-            experiment_ids=experiment_ids,
             page=page,
             size=size,
+            experiment_ids=experiment_ids,
+            dataset_version=dataset_version,
             filters=filters,
             sorting=sorting,
             search=search,

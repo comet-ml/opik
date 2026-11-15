@@ -9,8 +9,8 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.infrastructure.ResponseFormattingConfig;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -87,8 +87,9 @@ class EvaluationEntityFactory {
 
     /**
      * One {@code llm} span per Decisions API call. The model reported by the response (the dated slug that
-     * answered) wins over the configured alias, and the cost is the one OpenRouter reports: decisions models
-     * aren't in the price table under their OpenRouter slugs.
+     * answered) wins over the configured alias. The cost is the one OpenRouter reports for Jev, which isn't in the
+     * price table under its OpenRouter slug; OpenAI reports none, so gpt-6-luna is priced from the price table
+     * when the span is stored.
      */
     Span decisionSpan(EvaluationContext eval, DecisionsRequest request, DecisionsResponse response,
             Throwable error, Instant start) {
@@ -133,6 +134,9 @@ class EvaluationEntityFactory {
         }
         if (usage.inputTokens() != null && usage.outputTokens() != null) {
             usageMap.put("total_tokens", usage.inputTokens() + usage.outputTokens());
+        }
+        if (usage.cachedInputTokens() != null && usage.cachedInputTokens() > 0) {
+            usageMap.put("cache_read_input_tokens", usage.cachedInputTokens());
         }
         return usageMap.isEmpty() ? null : usageMap;
     }

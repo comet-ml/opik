@@ -2,14 +2,13 @@
 
 /**
  * @example
- *     {
- *         experimentIds: "experiment_ids"
- *     }
+ *     {}
  */
 export interface FindDatasetItemsWithExperimentItemsRequest {
     page?: number;
     size?: number;
-    experimentIds: string;
+    experimentIds?: string;
+    datasetVersion?: string;
     filters?: string;
     sorting?: string;
     search?: string;

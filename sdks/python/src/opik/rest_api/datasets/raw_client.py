@@ -1131,9 +1131,10 @@ class RawDatasetsClient:
         self,
         id: str,
         *,
-        experiment_ids: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        experiment_ids: typing.Optional[str] = None,
+        dataset_version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -1147,11 +1148,13 @@ class RawDatasetsClient:
         ----------
         id : str
 
-        experiment_ids : str
-
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        experiment_ids : typing.Optional[str]
+
+        dataset_version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1176,6 +1179,7 @@ class RawDatasetsClient:
                 "page": page,
                 "size": size,
                 "experiment_ids": experiment_ids,
+                "dataset_version": dataset_version,
                 "filters": filters,
                 "sorting": sorting,
                 "search": search,
@@ -3370,9 +3374,10 @@ class AsyncRawDatasetsClient:
         self,
         id: str,
         *,
-        experiment_ids: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        experiment_ids: typing.Optional[str] = None,
+        dataset_version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -3386,11 +3391,13 @@ class AsyncRawDatasetsClient:
         ----------
         id : str
 
-        experiment_ids : str
-
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        experiment_ids : typing.Optional[str]
+
+        dataset_version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -3415,6 +3422,7 @@ class AsyncRawDatasetsClient:
                 "page": page,
                 "size": size,
                 "experiment_ids": experiment_ids,
+                "dataset_version": dataset_version,
                 "filters": filters,
                 "sorting": sorting,
                 "search": search,

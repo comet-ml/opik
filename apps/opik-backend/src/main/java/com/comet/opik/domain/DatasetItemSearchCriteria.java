@@ -18,5 +18,8 @@ public record DatasetItemSearchCriteria(
         List<SortingField> sortingFields,
         String search,
         boolean truncate,
-        String versionHashOrTag) {
+        String versionHashOrTag,
+        // Resolve experimentIds to every experiment on the dataset, optionally only those run against this version
+        boolean allDatasetExperiments,
+        String experimentsVersionHashOrTag) {
 }

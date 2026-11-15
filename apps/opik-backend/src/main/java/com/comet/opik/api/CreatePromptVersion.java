@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -26,7 +27,7 @@ public record CreatePromptVersion(@JsonView({
         @JsonView({
                 PromptVersion.View.Detail.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({
-                PromptVersion.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If provided, scopes the prompt to the specified project. Ignored when project_id is provided.") String projectName) {
+                PromptVersion.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "If provided, scopes the prompt to the specified project. Ignored when project_id is provided.") String projectName) {
 
     /**
      * Returns the template structure, defaulting to TEXT if not provided.

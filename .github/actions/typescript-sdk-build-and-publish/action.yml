@@ -52,16 +52,11 @@ runs:
     - name: Setup Node.js
       uses: actions/setup-node@v7
       with:
-        # npm trusted publishing (OIDC) requires Node >= 22.14.0 and npm >= 11.5.1.
-        # Node 22.14.0 ships npm 10.x, so the npm CLI is bumped explicitly below.
-        node-version: "22.23.4"
+        # npm trusted publishing (OIDC) needs npm >= 11.5.1, which Node 26 bundles.
+        node-version: "26"
         registry-url: "https://registry.npmjs.org"
         cache: ${{ inputs.enable_cache == 'true' && 'npm' || '' }}
         cache-dependency-path: ${{ inputs.cache_dependency_path }}
-
-    - name: Setup npm
-      shell: bash
-      run: npm install -g npm@11.6.2
 
     - name: Install dependencies
       shell: bash

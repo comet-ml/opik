@@ -1461,6 +1461,96 @@ class FindTraceThreadsResourceTest {
                     List.of(traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE)));
         }
 
+        /**
+         * Both traces start at the epoch sentinel: the first message is the input of the lowest trace id, the last
+         * message the output of the trace that ends last, and start, end and duration stay unset.
+         */
+        @Test
+        void whenAllThreadTracesHaveSentinelStart__thenMessagesBreakTiesOnTraceId() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var firstTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(Instant.EPOCH)
+                    .endTime(ranAt.plus(1000, ChronoUnit.MILLIS))
+                    .build();
+            var lastTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(firstTrace.environment())
+                    .startTime(Instant.EPOCH)
+                    .endTime(ranAt.plus(2000, ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(lastTrace, firstTrace), API_KEY, TEST_WORKSPACE);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var expectedThread = getExpectedThreads(List.of(firstTrace, lastTrace), projectId, threadId, List.of(),
+                    TraceThreadStatus.ACTIVE).getFirst().toBuilder()
+                    .startTime(Instant.EPOCH)
+                    .endTime(null)
+                    .duration(null)
+                    .firstMessage(firstTrace.input())
+                    .lastMessage(lastTrace.output())
+                    .build();
+
+            assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        /**
+         * The two last traces end at the same time: the last message is the output of the higher trace id of the two.
+         */
+        @Test
+        void whenLastTracesTieOnEndTime__thenLastMessageBreaksTheTieOnTraceId() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+            var ranAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            var endedAt = ranAt.plus(1000, ChronoUnit.MILLIS);
+            var firstTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(100, ChronoUnit.MILLIS))
+                    .build();
+            var lowerTiedTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(firstTrace.environment())
+                    .startTime(ranAt.plus(200, ChronoUnit.MILLIS))
+                    .endTime(endedAt)
+                    .build();
+            var higherTiedTrace = createTrace().toBuilder()
+                    .id(idGenerator.generateId(ranAt.plusMillis(2)))
+                    .projectName(projectName)
+                    .usage(null)
+                    .threadId(threadId)
+                    .environment(firstTrace.environment())
+                    .startTime(ranAt.plus(300, ChronoUnit.MILLIS))
+                    .endTime(endedAt)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(higherTiedTrace, firstTrace, lowerTiedTrace), API_KEY,
+                    TEST_WORKSPACE);
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var expectedThread = getExpectedThreads(List.of(firstTrace, lowerTiedTrace, higherTiedTrace), projectId,
+                    threadId, List.of(), TraceThreadStatus.ACTIVE).getFirst().toBuilder()
+                    .lastMessage(higherTiedTrace.output())
+                    .build();
+
+            assertThreadPage(projectName, null, List.of(expectedThread), List.of(), Map.of(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
         @ParameterizedTest(name = "truncate={0}")
         @ValueSource(booleans = {false, true})
         @DisplayName("When an update-before-create placeholder trace joins a thread after a real trace, then the first message is the real trace's input")
