@@ -6,7 +6,7 @@ extracting relevant information like usage, provider, and cost data.
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 import logging
 
 import dspy
@@ -65,16 +65,26 @@ def get_span_type(instance: Any) -> types.SpanType:
     return "general"
 
 
+def _history_entry_matches(entry: Dict[str, Any], expected_call_input: Any) -> bool:
+    # dspy<3.5 stores the caller's `messages`/`prompt` as given. dspy>=3.5 adapters
+    # pass an lm15 Request as `prompt`, which history keeps under "request" while
+    # "messages" is re-derived from it, so any of the three can hold the call input.
+    return any(
+        entry.get(key) == expected_call_input
+        for key in ("messages", "prompt", "request")
+    )
+
+
 def extract_lm_info_from_history(
     lm_instance: Any,
-    expected_messages: Optional[Any],
+    expected_call_input: Optional[Any],
 ) -> LMHistoryInfo:
     """
     Extract token usage, cache status, actual provider, and cost from the LM's history.
 
     DSPy stores usage information in the LM's history after each call.
-    We verify the history entry matches our expected messages to handle
-    potential race conditions with concurrent LM calls.
+    We verify the history entry matches the call's input (messages or prompt)
+    to handle potential race conditions with concurrent LM calls.
 
     For routers like OpenRouter, the response contains the actual provider
     that served the request (e.g., "Novita", "Together"), which differs from
@@ -85,7 +95,8 @@ def extract_lm_info_from_history(
 
     Args:
         lm_instance: The DSPy LM instance that has the history.
-        expected_messages: The expected messages to match in the history entry.
+        expected_call_input: The messages or prompt the LM was called with,
+            used to match the history entry.
 
     Returns:
         LMHistoryInfo containing usage, cache_hit, actual_provider, and total_cost.
@@ -104,10 +115,9 @@ def extract_lm_info_from_history(
     try:
         last_entry = lm_instance.history[-1]
 
-        # Verify we have the correct history entry by checking messages match
-        if last_entry.get("messages") != expected_messages:
+        if not _history_entry_matches(last_entry, expected_call_input):
             LOGGER.debug(
-                "History entry messages don't match expected messages, "
+                "History entry doesn't match the LM call input, "
                 "skipping usage extraction (possibly due to concurrent LM calls)"
             )
             return empty_result

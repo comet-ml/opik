@@ -85,6 +85,80 @@ class TestExtractLMInfoFromHistory:
         assert result.usage is None
         assert result.cache_hit is None
 
+    def test_dspy35_request_prompt__matches_history_request__usage_extracted(self):
+        # dspy>=3.5 adapters call the LM with an lm15 Request as `prompt`; history
+        # stores it under "request" with "prompt" None and "messages" re-derived.
+        request = ("frozen-request", ("user", "What is 2+2?"))
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+                "request": request,
+                "response": None,
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.usage is not None
+        assert result.usage.prompt_tokens == 11
+        assert result.usage.completion_tokens == 7
+        assert result.cache_hit is False
+
+    def test_dspy35_string_prompt__matches_history_prompt__usage_extracted(self):
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": "What is 2+2?",
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+                "request": ("frozen-request",),
+                "response": None,
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, "What is 2+2?")
+
+        assert result.usage is not None
+        assert result.usage.prompt_tokens == 11
+
+    def test_dspy35_request_mismatch__returns_empty_info(self):
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [{"role": "user", "content": "other"}],
+                "request": ("frozen-request", "other"),
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, ("frozen-request", "expected"))
+
+        assert result.usage is None
+        assert result.cache_hit is None
+
+    def test_dspy35_cached_request__no_usage_and_cache_hit_true(self):
+        request = ("frozen-request", "cached")
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [],
+                "request": request,
+                "response": None,
+                "usage": {},
+                "cost": None,
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.usage is None
+        assert result.cache_hit is True
+
     def test_extracts_provider_from_response(self):
         """Should extract actual_provider from response.provider attribute."""
         mock_response = MagicMock()
