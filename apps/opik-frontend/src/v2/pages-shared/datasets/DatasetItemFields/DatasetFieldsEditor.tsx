@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Plus, Workflow } from "lucide-react";
 
+import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
 import OpikLeaf from "@/icons/opik-leaf.svg?react";
 import OpikLeafDark from "@/icons/opik-leaf-dark.svg?react";
@@ -42,14 +43,15 @@ const DatasetFieldsEditor: React.FunctionComponent<
   };
 
   const addFieldButton = (
-    <button
-      type="button"
-      className="comet-body-xs flex h-8 w-full items-center justify-center gap-1 rounded-md border border-dashed border-border bg-soft-background text-foreground hover:bg-primary-foreground"
+    <Button
+      variant="outline"
+      size="sm"
+      className="comet-body-xs w-full gap-1 border-dashed bg-soft-background"
       onClick={() => addRow("", "name")}
     >
       <Plus className="size-3" />
       Add field
-    </button>
+    </Button>
   );
 
   if (rows.length === 0) {

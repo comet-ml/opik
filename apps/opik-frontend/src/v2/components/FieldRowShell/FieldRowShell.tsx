@@ -1,8 +1,8 @@
 import React from "react";
 import { MoveRight, Trash } from "lucide-react";
 
+import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { cn } from "@/lib/utils";
 
 type FieldRowShellProps = {
   name: React.ReactNode;
@@ -37,20 +37,16 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
         <div className="min-w-0 flex-1">{value}</div>
       </div>
       <TooltipWrapper content={onRemove ? removeTooltip : undefined}>
-        <button
-          type="button"
+        <Button
+          variant="minimal"
+          size="icon-2xs"
           aria-label={removeLabel}
           disabled={!onRemove}
           onClick={onRemove}
-          className={cn(
-            "flex w-6 shrink-0 items-center justify-center border-l border-border text-muted-slate",
-            onRemove
-              ? "hover:bg-primary-foreground hover:text-foreground"
-              : "cursor-default opacity-50",
-          )}
+          className="h-auto shrink-0 self-stretch rounded-none border-l border-border hover:bg-primary-foreground"
         >
-          <Trash className="size-3" />
-        </button>
+          <Trash />
+        </Button>
       </TooltipWrapper>
     </div>
     {message}

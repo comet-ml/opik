@@ -130,6 +130,28 @@ describe("AddDatasetItemPanel", () => {
       expect(addedItems()[0].data).toEqual({ question: "" });
     });
 
+    it("closes without asking when nothing was changed", () => {
+      const onClose = vi.fn();
+      renderPanel(columns, { onClose });
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it("asks before discarding a renamed empty field", () => {
+      const onClose = vi.fn();
+      renderPanel(columns, { onClose });
+
+      fireEvent.change(screen.getAllByLabelText("Field name")[0], {
+        target: { value: "question" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByText("Discard changes?")).toBeInTheDocument();
+    });
+
     it("blocks saving while a field name is duplicated", () => {
       renderPanel(columns);
 
