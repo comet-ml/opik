@@ -315,6 +315,27 @@ class TopicWindowLabelServiceTest {
     }
 
     @Test
+    @DisplayName("an interrupt during the count cuts the pass: nothing is marked complete, no counts are saved, and "
+            + "the interrupt is kept")
+    void interruptedCountCutsThePass() {
+        when(traceTopicsDAO.countByTopic(any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new IllegalStateException(new InterruptedException("stop"))));
+
+        TopicWindowLabelService.Pass pass;
+        boolean interrupted;
+        try {
+            pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        } finally {
+            interrupted = Thread.interrupted();
+        }
+
+        assertThat(interrupted).isTrue();
+        assertThat(pass.complete()).isFalse();
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
+        verify(runDAO, never()).setTopicCounts(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("a pass of a run that is no longer the project's last saved run saves no counts")
     void olderRunSavesNoCounts() {
         when(topicDAO.markLabelsComplete(WORKSPACE_ID, projectId, runId)).thenReturn(0);
