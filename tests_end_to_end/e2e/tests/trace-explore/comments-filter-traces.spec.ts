@@ -197,7 +197,15 @@ test.describe('Trace filters — comments', { tag: ['@t2-cuj', '@area:traces'] }
         await logs.gotoTraces(project.id, { timeRange: TIME_RANGE, size: 100 });
         await logs.waitForReady();
         expect(await logs.activeLogsTab(), 'the Traces table is the one on screen').toBe('traces');
-        await expect(logs.traceRows).toHaveCount(seed.traces.length);
+        // A longer wait than the 10s default, and not a looser assertion — the
+        // count and the exact ids below are unchanged. The table's read is
+        // WINDOWED (`past24hours`) while the poll above is not, and on staging
+        // under four workers the windowed query lagged the unwindowed one by
+        // more than 10s, so the table rendered 0 of 6 rows and the step failed
+        // on ingestion rather than on what it is asserting. The Logs page
+        // refetches on its own interval, so the extra time is spent waiting for
+        // data to arrive, not for a render.
+        await expect(logs.traceRows).toHaveCount(seed.traces.length, { timeout: 60_000 });
         expect(
           (await logs.readRowIdsOnPage()).slice().sort(),
           'the unfiltered table shows exactly the seeded traces',

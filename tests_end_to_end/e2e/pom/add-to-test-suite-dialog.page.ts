@@ -60,9 +60,24 @@ export class AddToTestSuiteDialogPage {
    */
   async selectSuite(name: string): Promise<void> {
     return test.step(`Pick the test suite "${name}"`, async () => {
-      await this.picker('Select a test suite').click();
-      await this.page.getByRole('option', { name, exact: false }).click();
-      await expect(this.picker(name), 'the picker shows the chosen suite').toBeVisible();
+      const selected = this.picker(name);
+      const placeholder = this.picker('Select a test suite');
+      // The dialog may already hold the suite. `useAddToDatasetForm` restores
+      // the last dataset used, so a second open in the same browser context can
+      // arrive pre-selected — and then the "Select a test suite" placeholder
+      // never exists to click, which is how this timed out under four workers
+      // while passing in a single worker: whether the restore beats the click
+      // is a race. Both states are legitimate, so the END state is what is
+      // waited for and only the transition is conditional.
+      await expect(
+        selected.or(placeholder),
+        'the suite picker has rendered, either empty or already holding a selection',
+      ).toBeVisible();
+      if (!(await selected.isVisible())) {
+        await placeholder.click();
+        await this.page.getByRole('option', { name, exact: false }).click();
+      }
+      await expect(selected, 'the picker shows the chosen suite').toBeVisible();
       await this.runsPerItemInput.waitFor({ state: 'visible' });
     });
   }
