@@ -93,8 +93,7 @@ const PromptPage: React.FunctionComponent = () => {
         </div>
       </PageBodyStickyContainer>
       <Tabs
-        defaultValue="prompt"
-        value={tab as string}
+        value={(tab as string) ?? "prompt"}
         onValueChange={setTab}
         className="min-w-min"
       >

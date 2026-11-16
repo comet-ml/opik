@@ -14,13 +14,13 @@ const HIDE_DELAY = 100;
 
 interface PopoverState {
   content: ReactNode | null;
-  triggerRef: React.RefObject<HTMLElement> | null;
+  triggerRef: React.RefObject<HTMLElement | null> | null;
 }
 
 interface TablePopoverContextValue {
   showPopover: (
     content: ReactNode,
-    triggerRef: React.RefObject<HTMLElement>,
+    triggerRef: React.RefObject<HTMLElement | null>,
   ) => void;
   hidePopover: () => void;
 }
@@ -45,7 +45,7 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
     content: null,
     triggerRef: null,
   });
-  const timeoutRef = React.useRef<NodeJS.Timeout>();
+  const timeoutRef = React.useRef<NodeJS.Timeout | undefined>(undefined);
   const previousTriggerRef = React.useRef<HTMLElement | null>(null);
   const isMouseOverPopoverRef = React.useRef(false);
   const isMouseOverTriggerRef = React.useRef(false);
@@ -62,7 +62,7 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
   }, []);
 
   const showPopover = useCallback(
-    (content: ReactNode, triggerRef: React.RefObject<HTMLElement>) => {
+    (content: ReactNode, triggerRef: React.RefObject<HTMLElement | null>) => {
       isMouseOverTriggerRef.current = true;
       // Check if it's the same trigger
       if (previousTriggerRef.current !== triggerRef.current) {

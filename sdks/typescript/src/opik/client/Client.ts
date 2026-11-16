@@ -26,7 +26,7 @@ import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
 import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
-import { parseNdjsonStreamToArray } from "@/utils/stream";
+import { readAllStreamPages } from "@/utils/stream";
 import {
   Prompt,
   CreatePromptOptions,
@@ -1017,14 +1017,16 @@ export class OpikClient {
     logger.debug(`Getting experiments with name "${name}"`);
 
     try {
-      const streamResponse = await this.api.experiments.streamExperiments({
-        name,
-        projectName: resolvedProjectName,
-      });
-
-      const rawItems = await parseNdjsonStreamToArray<ExperimentPublic>(
-        streamResponse,
-        serialization.ExperimentPublic
+      const rawItems = await readAllStreamPages<ExperimentPublic>(
+        (limit, lastRetrievedId) =>
+          this.api.experiments.streamExperiments({
+            name,
+            projectName: resolvedProjectName,
+            limit,
+            lastRetrievedId,
+          }),
+        serialization.ExperimentPublic,
+        "id"
       );
 
       return rawItems.map(
@@ -1778,16 +1780,19 @@ export class OpikClient {
         return [];
       }
 
-      const response = await this.api.prompts.getPrompts(
-        {
-          filters,
-          projectId,
-          size: 1000,
-        },
-        this.api.requestOptions
-      );
-
-      const prompts = response.content ?? [];
+      const pageSize = 1000;
+      const prompts: OpikApi.PromptPublic[] = [];
+      for (let page = 1; ; page++) {
+        const response = await this.api.prompts.getPrompts(
+          { filters, projectId, page, size: pageSize },
+          this.api.requestOptions
+        );
+        const content = response.content ?? [];
+        prompts.push(...content);
+        if (content.length < pageSize) {
+          break;
+        }
+      }
 
       // Map each prompt to get its latest version and create appropriate instance
       const promptsWithVersions = await Promise.all(
