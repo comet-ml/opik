@@ -75,7 +75,7 @@ const AddDatasetItemForm: React.FC<AddDatasetItemFormProps> = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5">
         <DatasetFieldsEditor
           rows={rows}
           focus={focus}
@@ -84,7 +84,7 @@ const AddDatasetItemForm: React.FC<AddDatasetItemFormProps> = ({
         />
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-6 py-4">
+      <div className="mx-6 flex shrink-0 flex-wrap items-center gap-2 border-t py-4">
         <span className="comet-body-xs min-w-48 flex-1 text-muted-slate">
           {status}
         </span>
