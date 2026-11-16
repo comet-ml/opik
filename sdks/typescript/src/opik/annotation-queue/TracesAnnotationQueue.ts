@@ -1,7 +1,7 @@
 import { OpikClient } from "@/client/Client";
 import { TracePublic, AnnotationQueuePublic } from "@/rest_api/api";
 import { serialization } from "@/rest_api";
-import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
+import { readAllStreamPages, splitIntoBatches } from "@/utils/stream";
 import { parseFilterString } from "@/utils/searchHelpers";
 import { logger } from "@/utils/logger";
 import { AnnotationQueueItemMissingIdError } from "./errors";
@@ -63,23 +63,17 @@ export class TracesAnnotationQueue extends BaseAnnotationQueue {
 
     logger.debug(`Fetching items from annotation queue "${this.name}"`);
 
-    const traces = await this.fetchAllItems<TracePublic>(
-      async (limit, lastRetrievedId) => {
-        const streamResponse = await this.opik.api.traces.searchTraces({
+    const traces = await readAllStreamPages<TracePublic>(
+      (limit, lastRetrievedId) =>
+        this.opik.api.traces.searchTraces({
           projectId: this.projectId,
           filters: filters ?? undefined,
           limit,
           lastRetrievedId,
           truncate,
-        });
-
-        return parseNdjsonStreamToArray<TracePublic>(
-          streamResponse,
-          serialization.TracePublic,
-          limit
-        );
-      },
-      (trace) => trace.id
+        }),
+      serialization.TracePublic,
+      "id"
     );
 
     logger.debug(
