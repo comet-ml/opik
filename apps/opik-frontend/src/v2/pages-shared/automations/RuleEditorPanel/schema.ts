@@ -340,7 +340,6 @@ const LLMJudgeBaseSchema = z.object({
         unsaved: z
           .boolean()
           .optional()
-          // Annotated so TS doesn't infer `value is false` and narrow the field's type.
           .refine((value): boolean => !value, {
             message: "Changes not saved",
           }),
