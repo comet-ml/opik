@@ -14,6 +14,9 @@ import useFieldMappings from "./useFieldMappings";
 
 const ADD_FIELD_TRIGGER_HEIGHT = 32;
 
+const EXISTING_FIELD_TOOLTIP =
+  "This field belongs to the dataset. You can leave it unmapped, but not remove it.";
+
 type FieldMappingSectionProps = {
   advanced: boolean;
   setAdvanced: (advanced: boolean) => void;
@@ -43,27 +46,21 @@ const FieldMappingSection: React.FunctionComponent<
     fixedRows,
     additionalRows,
     availableChips,
-    datasetChips,
     rowErrors,
     setFixedPath,
     addRow,
-    addNamedRow,
+    setExistingPath,
     removeRow,
     renameRow,
     setRowPath,
     setManagedOption,
-    canUseBasicMode,
   } = mappings;
 
   const entityLabel = hasOnlySpans ? "spans" : "traces";
-  const lockedInAdvanced = advanced && !canUseBasicMode;
 
   const [focusNameRowId, setFocusNameRowId] = useState<string | null>(null);
-  const [openSourceRowId, setOpenSourceRowId] = useState<string | null>(null);
 
   const existingColumns = new Set(datasetColumns);
-  const addFromDataset = (column: string) =>
-    setOpenSourceRowId(addNamedRow(column));
 
   return (
     <div className="mb-4 overflow-hidden rounded-md border border-border bg-soft-background">
@@ -82,8 +79,8 @@ const FieldMappingSection: React.FunctionComponent<
           </div>
           <TooltipWrapper
             content={
-              lockedInAdvanced
-                ? "Basic mode can't represent this mapping. Reset the fields to their defaults to switch back."
+              advanced
+                ? "Advanced mapping stays on once it's turned on. Close the dialog to start again in basic mode."
                 : undefined
             }
           >
@@ -92,7 +89,7 @@ const FieldMappingSection: React.FunctionComponent<
                 id="advanced-mapping"
                 size="xs"
                 checked={advanced}
-                disabled={lockedInAdvanced}
+                disabled={advanced}
                 onCheckedChange={setAdvanced}
               />
             </div>
@@ -124,7 +121,19 @@ const FieldMappingSection: React.FunctionComponent<
           <div className="flex flex-col gap-1.5">
             <span className="comet-body-xs-accented">Additional fields</span>
             {additionalRows.map((row) =>
-              row.kind === "managed" ? (
+              row.kind === "existing" ? (
+                <MappingRow
+                  key={row.id}
+                  row={row}
+                  treeData={treeData}
+                  coverage={coverage[row.id]}
+                  isPending={isPendingTree}
+                  entityLabel={entityLabel}
+                  onPathSelect={(path) => setExistingPath(row.name, path)}
+                  onPathClear={() => setExistingPath(row.name)}
+                  removeDisabledReason={EXISTING_FIELD_TOOLTIP}
+                />
+              ) : row.kind === "managed" ? (
                 <MappingRow
                   key={row.id}
                   row={row}
@@ -151,7 +160,6 @@ const FieldMappingSection: React.FunctionComponent<
                   isPending={isPendingTree}
                   entityLabel={entityLabel}
                   autoFocusName={row.id === focusNameRowId}
-                  autoOpenSource={row.id === openSourceRowId}
                   onRename={(name) => renameRow(row.id, name)}
                   onPathSelect={(path) => setRowPath(row.id, path)}
                   onRemove={() => removeRow(row.id)}
@@ -176,10 +184,8 @@ const FieldMappingSection: React.FunctionComponent<
           </div>
 
           <QuickAddChips
-            managedChips={availableChips}
-            datasetChips={datasetChips}
-            onAddManaged={(option) => setManagedOption(option, true)}
-            onAddDatasetColumn={addFromDataset}
+            chips={availableChips}
+            onAdd={(option) => setManagedOption(option, true)}
           />
         </div>
       )}
