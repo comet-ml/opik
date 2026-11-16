@@ -68,9 +68,9 @@ class PriceFileTest {
             "image and video tokens, cached audio and Perplexity's citations: no usage format reads those counts, so "
                     + "they bill at the text rates",
             Pattern.compile("(input_|output_)?cost_per_(image|pixel|second|character)(_[\\w.]+)?"
-                    + "|input_cost_per_(video|audio)_per_second(_\\w+)?"),
-            "per-image, per-pixel, per-second and per-character prices: spans report tokens, and video and speech "
-                    + "models are billed by their own calculators",
+                    + "|input_cost_per_(video|audio)_per_second(_\\w+)?|output_cost_per_(video|billable_unit)"),
+            "per-image, per-pixel, per-second, per-character, per-video and per-unit prices: spans report tokens, and "
+                    + "video and speech models are billed by their own calculators",
             Pattern.compile("search_context_cost_per_query|google_maps_grounding_cost_per_query|input_cost_per_query"
                     + "|input_cost_per_request|code_interpreter_cost_per_session|guardrail_cost_per_unit"
                     + "|annotation_cost_per_page|ocr_cost_per_page|ocr_cost_per_credit|input_cost_per_text_message"),
@@ -82,7 +82,7 @@ class PriceFileTest {
             Format.GEMINI, Map.of(
                     Pattern.compile("cache_creation_input_token_cost(_above_\\d+k?_tokens)?"),
                     "Gemini's usage has no cache-write count: explicit caches are created by a separate call",
-                    Pattern.compile("(input|output)_cost_per_audio_token"),
+                    Pattern.compile("(input|output)_cost_per_audio_token(_above_\\d+k?_tokens)?"),
                     "Gemini reports audio tokens only in its per-modality list, which no usage format reads, so they "
                             + "bill at the text rates"),
             Format.BEDROCK_CONVERSE, Map.of(

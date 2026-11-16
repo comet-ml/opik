@@ -149,7 +149,7 @@ describe("OpenRouter max output tokens", () => {
       9000,
       "8192",
     ],
-    [PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE, 9000, "8192"],
+    [PROVIDER_MODEL_TYPE.LIQUID_LFM_3_1_7B_FREE, 9000, "8192"],
     [PROVIDER_MODEL_TYPE.OPENAI_GPT_4O_MINI, 4000, "4000"],
   ] as const)(
     "on %s shows a stored %d as %s, never above OpenRouter's own limit for the model",
