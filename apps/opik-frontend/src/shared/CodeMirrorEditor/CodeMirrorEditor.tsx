@@ -21,6 +21,9 @@ const isUserUpdate = (update: ViewUpdate) =>
  * built from older state, so typed characters get lost or handled by the wrong state. Committing
  * user edits synchronously runs those effects at once. Updates the editor makes itself, such as
  * reconfiguring from inside those effects, keep the normal path.
+ *
+ * Upstream issue: https://github.com/uiwjs/react-codemirror/issues/694. Remove this wrapper once it is
+ * fixed there and the typing tests pass without it.
  */
 const CodeMirrorEditor = forwardRef<ReactCodeMirrorRef, ReactCodeMirrorProps>(
   ({ onChange, onUpdate, ...props }, ref) => {
