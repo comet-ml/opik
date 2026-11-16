@@ -243,8 +243,8 @@ class StreamingExecutor(Generic[T]):
         with self._callbacks_done:
             self._callbacks_done.wait_for(lambda: self._pending_callbacks == 0)
 
-        # Re-raise first exception if any task failed; past this point every
-        # task succeeded.
+        # future.result() re-raises the first task's exception, so results are
+        # returned only when every task succeeded.
         return [future.result() for future in self._submitted_futures]
 
 
