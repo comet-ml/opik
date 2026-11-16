@@ -67,4 +67,11 @@ def track_cerebras(
 
 
 def _extract_metadata_from_client(client: CerebrasClient) -> Dict[str, Any]:
-    return {"base_url": str(client.base_url)}
+    # A caller-supplied base_url may carry credentials in the userinfo, query or
+    # fragment, and span metadata reaches the Opik backend. copy_with drops those
+    # while keeping the path, which self-hosted deployments route on, and leaving
+    # the original percent-encoding and any IPv6 brackets untouched.
+    url = client.base_url.copy_with(
+        username=None, password=None, query=None, fragment=None
+    )
+    return {"base_url": str(url)}
