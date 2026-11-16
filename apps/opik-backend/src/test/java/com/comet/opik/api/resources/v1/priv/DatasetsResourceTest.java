@@ -201,6 +201,7 @@ import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIM
 import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.PROJECT_DATA_VIEW;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -646,8 +647,9 @@ class DatasetsResourceTest {
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(datasetViewDeniedApikey))
-                            .withRequestBody(matchingJsonPath(
-                                    "$.requiredPermissions[?(@ == '%s')]".formatted(DATASET_VIEW.getValue())))
+                            .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(TEST_WORKSPACE)))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions",
+                                    equalToJson(JsonUtils.valueToTree(List.of(DATASET_VIEW.getValue())).toString())))
                             .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(
