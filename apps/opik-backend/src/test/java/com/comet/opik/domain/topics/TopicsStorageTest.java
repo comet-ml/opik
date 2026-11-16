@@ -9,12 +9,15 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.api.resources.v1.events.TopicsProjectDeletedListener;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
 import org.jdbi.v3.core.mapper.reflect.ConstructorMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +56,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * The topics tables and their reads against real ClickHouse and MySQL: the {@code topic_vectors} window reads, the
@@ -73,6 +77,17 @@ class TopicsStorageTest {
     private static final int SAMPLE = 150;
     private static final TopicsTestData.Traces SPREAD_TRACES = TopicsTestData.Traces.spread(SPREAD, NIGHT,
             WINDOW_DAYS, 3);
+    /** The runbook's query of a topic's share run by run ("Saving and labelling"). */
+    private static final String SHARE_QUERY = """
+            SELECT r.started_at,
+                JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') AS traces,
+                JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') / SUM(c.traces) AS share
+            FROM topic_runs r,
+                JSON_TABLE(JSON_EXTRACT(r.stats, '$.topic_counts.*'), '$[*]' COLUMNS (traces BIGINT PATH '$')) AS c
+            WHERE r.workspace_id = '<workspace_id>' AND r.project_id = '<project_id>'
+            GROUP BY r.run_id
+            ORDER BY r.started_at
+            """;
 
     // The app needs Redis to start; no test here uses it.
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
@@ -113,6 +128,7 @@ class TopicsStorageTest {
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService labelService;
     private TopicsProjectDeletedListener projectDeletedListener;
+    private ConnectionFactory connectionFactory;
     private TopicsTestData data;
     private TopicsTestData spreadData;
 
@@ -120,7 +136,9 @@ class TopicsStorageTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TopicWindowDAO windowDAO, @Jit TraceTopicsDAO traceTopicsDAO,
-            @Jit TopicWindowLabelService labelService, @Jit TopicsProjectDeletedListener projectDeletedListener) {
+            @Jit TopicWindowLabelService labelService, @Jit TopicsProjectDeletedListener projectDeletedListener,
+            ConnectionFactory connectionFactory) {
+        this.connectionFactory = connectionFactory;
         this.opikConfig = opikConfig;
         this.template = template;
         this.clickHouseTemplate = clickHouseTemplate;
@@ -360,34 +378,7 @@ class TopicsStorageTest {
         var runId = UUID.randomUUID();
         var topicId = UUID.randomUUID();
         int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
-        // Trace 0 and trace 2 are the topic's prototypes, trace 1 a known-Other one.
-        var vectors = new ArrayList<float[]>();
-        for (int i = 0; i < 3; i++) {
-            vectors.add(Arrays.copyOfRange(TRACES.vectors(), i * dimensions, (i + 1) * dimensions));
-        }
-        template.inTransaction(WRITE, handle -> {
-            var topicDAO = handle.attach(TopicDAO.class);
-            topicDAO.insertState(TopicProjectState.builder()
-                    .projectId(projectId)
-                    .workspaceId(workspaceId)
-                    .rebuilds(1)
-                    .lastRunId(runId)
-                    .windowUntil(NIGHT)
-                    .build());
-            topicDAO.insertTopics(List.of(Topic.builder()
-                    .id(topicId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .name("Billing")
-                    .definition("Requests about invoices")
-                    .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
-                    .build()));
-            topicDAO.insertPrototypes(List.of(
-                    prototype(workspaceId, projectId, 0, topicId, vectors.get(0)),
-                    prototype(workspaceId, projectId, 1, null, vectors.get(1)),
-                    prototype(workspaceId, projectId, 2, topicId, vectors.get(2))));
-            return null;
-        });
+        var vectors = saveList(workspaceId, projectId, runId, topicId);
         // The run's own insert, or an earlier cut pass, labelled 30 traces.
         var labelledBefore = UUID.randomUUID();
         traceTopicsDAO.insert(IntStream.range(3, 33)
@@ -437,6 +428,75 @@ class TopicsStorageTest {
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
         assertThat(guards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
+    }
+
+    @Test
+    @DisplayName("the pass that ends complete saves the run's counts in its stats, leaving the other keys as they are: "
+            + "per topic and Other, each trace by its latest row, only the traces Logs lists; a trace from an "
+            + "experiment or a hidden one is left out")
+    void runCountsAreOfWhatLogsLists() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var runId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        saveList(workspaceId, projectId, runId, topicId);
+        var stats = "{\"vectors\": 120, \"other_share\": 0.25, \"task_version_shares\": {\"1\": 1.0}}";
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
+                    .runId(runId)
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .mode(TopicRun.Mode.FIRST_BUILD)
+                    .status(TopicRun.Status.SAVED)
+                    .startedAt(NIGHT)
+                    .finishedAt(NIGHT)
+                    .stats(stats)
+                    .build());
+            return null;
+        });
+        var experiment = TRACES.traceIds().get(5);
+        var hidden = TRACES.traceIds().get(6);
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, BUILT)
+                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, TRACES.traceIds().get(i),
+                        TRACES.createdAt().get(i)))
+                .map(row -> row.id().equals(experiment) ? row.toBuilder().source("experiment").build() : row)
+                .map(row -> row.id().equals(hidden) ? row.toBuilder().visibilityMode("hidden").build() : row)
+                .toList());
+
+        var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
+                TopicWindowLabelService.Trigger.RUN, 7, 20);
+
+        assertThat(pass.complete()).isTrue();
+        var expected = new HashMap<UUID, Long>(Map.of(topicId, 0L, TraceTopic.OTHER, 0L));
+        data.traceTopics(workspaceId, projectId).stream()
+                .filter(row -> !row.traceId().equals(experiment) && !row.traceId().equals(hidden))
+                .forEach(row -> expected.merge(row.topicId(), 1L, Long::sum));
+        assertThat(expected.get(topicId)).isPositive();
+        assertThat(expected.get(TraceTopic.OTHER)).isPositive();
+        assertThat(expected.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(BUILT - 2);
+        assertThat(data.runCounts(workspaceId, runId)).isEqualTo(expected);
+        // The runbook's query reads the topic's share of the run's counted traces.
+        var share = template.inTransaction(READ_ONLY, handle -> handle.createQuery(SHARE_QUERY
+                .replace("<workspace_id>", workspaceId)
+                .replace("<project_id>", projectId.toString())
+                .replace("<topic_id>", topicId.toString()))
+                .mapToMap()
+                .list());
+        assertThat(share).singleElement().satisfies(row -> {
+            // traces is a JSON value: the driver gives its text.
+            assertThat(Long.parseLong(String.valueOf(row.get("traces")))).isEqualTo(expected.get(topicId));
+            assertThat(Double.parseDouble(String.valueOf(row.get("share"))))
+                    .isCloseTo((double) expected.get(topicId) / (BUILT - 2), within(1e-9));
+        });
+        var saved = (ObjectNode) TopicsTestData.json(data.runs(projectId).getFirst().stats());
+        saved.remove("topic_counts");
+        assertThat(saved).isEqualTo(TopicsTestData.json(stats));
+        var find = opikConfig.getTopics().getVectors().getFind();
+        assertThat(guards("topics:count_by_topic", workspaceId))
+                .containsExactly(List.of("2", String.valueOf(find.getMaxRowsToRead()), "", "120"));
+        assertThat(settings("topics:count_by_topic", workspaceId, "max_memory_usage", "max_threads"))
+                .containsExactly(List.of(String.valueOf(find.getMaxMemoryUsage()), "2"));
     }
 
     @Test
@@ -679,6 +739,42 @@ class TopicsStorageTest {
                 .map(TopicWindowRow::traceId)
                 .collectList()
                 .block();
+    }
+
+    /**
+     * A saved list of one topic: its state names {@code runId}, trace 0 and trace 2 are the topic's prototypes, trace 1
+     * a known-Other one. Returns the three vectors.
+     */
+    private List<float[]> saveList(String workspaceId, UUID projectId, UUID runId, UUID topicId) {
+        int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+        var vectors = new ArrayList<float[]>();
+        for (int i = 0; i < 3; i++) {
+            vectors.add(Arrays.copyOfRange(TRACES.vectors(), i * dimensions, (i + 1) * dimensions));
+        }
+        template.inTransaction(WRITE, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            topicDAO.insertState(TopicProjectState.builder()
+                    .projectId(projectId)
+                    .workspaceId(workspaceId)
+                    .rebuilds(1)
+                    .lastRunId(runId)
+                    .windowUntil(NIGHT)
+                    .build());
+            topicDAO.insertTopics(List.of(Topic.builder()
+                    .id(topicId)
+                    .workspaceId(workspaceId)
+                    .projectId(projectId)
+                    .name("Billing")
+                    .definition("Requests about invoices")
+                    .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
+                    .build()));
+            topicDAO.insertPrototypes(List.of(
+                    prototype(workspaceId, projectId, 0, topicId, vectors.get(0)),
+                    prototype(workspaceId, projectId, 1, null, vectors.get(1)),
+                    prototype(workspaceId, projectId, 2, topicId, vectors.get(2))));
+            return null;
+        });
+        return vectors;
     }
 
     private static TopicPrototype prototype(String workspaceId, UUID projectId, int position, UUID topicId,
