@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import useFieldMappings from "./useFieldMappings";
 import { EnrichmentOptions } from "./useAddToDatasetForm";
-import { MAX_FIELD_NAME_LENGTH } from "./fieldMappingTypes";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 
 const ALL_OFF: EnrichmentOptions = {
   includeSpans: false,
@@ -164,36 +164,6 @@ describe("useFieldMappings", () => {
     });
   });
 
-  it("keeps basic mode available while nothing deviates from the defaults", () => {
-    const { result } = renderMappings();
-
-    expect(result.current.canUseBasicMode).toBe(true);
-
-    act(() => result.current.setManagedOption("includeTags", true));
-
-    expect(result.current.canUseBasicMode).toBe(true);
-  });
-
-  it("locks advanced mode once a fixed path leaves its default", () => {
-    const { result } = renderMappings();
-
-    act(() => result.current.setFixedPath("input", "input.input_text"));
-    expect(result.current.canUseBasicMode).toBe(false);
-
-    act(() => result.current.setFixedPath("input", "input"));
-    expect(result.current.canUseBasicMode).toBe(true);
-  });
-
-  it("locks advanced mode while a custom row exists", () => {
-    const { result } = renderMappings();
-
-    act(() => result.current.addRow("input.tone"));
-    expect(result.current.canUseBasicMode).toBe(false);
-
-    act(() => result.current.removeRow(result.current.customRows[0].id));
-    expect(result.current.canUseBasicMode).toBe(true);
-  });
-
   it("flags a name that collides with a managed field", () => {
     const { result } = renderMappings();
 
@@ -245,7 +215,7 @@ describe("useFieldMappings", () => {
     );
   });
 
-  it("offers dataset columns as chips, minus fixed and managed keys", () => {
+  it("lists dataset columns as existing rows, minus fixed and managed keys", () => {
     const { result } = renderMappings(false, [
       "input",
       "expected_output",
@@ -254,38 +224,37 @@ describe("useFieldMappings", () => {
       "tone",
     ]);
 
-    expect(result.current.datasetChips).toEqual(["bucket", "tone"]);
+    expect(result.current.existingRows.map((row) => row.name)).toEqual([
+      "bucket",
+      "tone",
+    ]);
+    expect(result.current.existingRows.every((row) => !row.path)).toBe(true);
   });
 
-  it("drops a dataset chip once a row uses its name and restores it after removal", () => {
-    const { result } = renderMappings(false, ["bucket", "tone"]);
-
-    let id = "";
-    act(() => {
-      id = result.current.addNamedRow("bucket");
-    });
-
-    expect(result.current.datasetChips).toEqual(["tone"]);
-
-    act(() => result.current.removeRow(id));
-
-    expect(result.current.datasetChips).toEqual(["bucket", "tone"]);
-  });
-
-  it("adds a named row without a path and keeps it out of the mappings", () => {
+  it("leaves existing columns out of the mappings until they are mapped", () => {
     const { result } = renderMappings(false, ["bucket"]);
 
-    act(() => {
-      result.current.addNamedRow("bucket");
-    });
-
-    expect(result.current.customRows).toHaveLength(1);
-    expect(result.current.customRows[0].name).toBe("bucket");
-    expect(result.current.customRows[0].path).toBeUndefined();
+    expect(result.current.isValid).toBe(true);
     expect(result.current.fieldMappings).toEqual({
       input: "input",
       expected_output: "output",
     });
+
+    act(() => result.current.setExistingPath("bucket", "input.bucket"));
+    expect(result.current.fieldMappings.bucket).toBe("input.bucket");
+
+    act(() => result.current.setExistingPath("bucket"));
+    expect(result.current.fieldMappings.bucket).toBeUndefined();
+  });
+
+  it("flags a custom row that reuses an existing column's name", () => {
+    const { result } = renderMappings(false, ["bucket"]);
+
+    act(() => {
+      result.current.addRow("input.bucket");
+    });
+
+    expect(result.current.rowErrors["custom-1"]).toBe("duplicate");
   });
 
   it("appends a re-enabled managed row at the end instead of its chip position", () => {
@@ -324,29 +293,13 @@ describe("useFieldMappings", () => {
     ]);
   });
 
-  it("blocks submit while a named row has no source path", () => {
-    const { result } = renderMappings(false, ["bucket"]);
-
-    act(() => {
-      result.current.addNamedRow("bucket");
-    });
-
-    expect(result.current.rowErrors["custom-1"]).toBe("no_path");
-    expect(result.current.isValid).toBe(false);
-
-    act(() => result.current.setRowPath("custom-1", "input.bucket"));
-
-    expect(result.current.rowErrors["custom-1"]).toBeUndefined();
-    expect(result.current.isValid).toBe(true);
-    expect(result.current.fieldMappings.bucket).toBe("input.bucket");
-  });
-
-  it("reports a blank name before a missing path", () => {
+  it("reports a blank name", () => {
     const { result } = renderMappings();
 
     act(() => {
-      result.current.addNamedRow("");
+      result.current.addRow("input.tone");
     });
+    act(() => result.current.renameRow("custom-1", ""));
 
     expect(result.current.rowErrors["custom-1"]).toBe("blank");
   });
