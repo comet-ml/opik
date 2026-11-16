@@ -9246,11 +9246,13 @@ class DatasetsResourceTest {
             var rawExperimentId = createExperiment(dataset);
             createVersion(dataset.id(), version2);
             var outOfScopeExperimentId = createExperiment(dataset);
-            createExperimentItems(datasetItems.stream()
+            var expectedExperimentItems = datasetItems.stream()
                     .flatMap(item -> Stream.of(createExperimentItem(aggregatedExperimentId, item),
-                            createExperimentItem(rawExperimentId, item),
-                            createExperimentItem(outOfScopeExperimentId, item)))
-                    .toArray(ExperimentItem[]::new));
+                            createExperimentItem(rawExperimentId, item)))
+                    .toList();
+            var allExperimentItems = new ArrayList<>(expectedExperimentItems);
+            datasetItems.forEach(item -> allExperimentItems.add(createExperimentItem(outOfScopeExperimentId, item)));
+            createExperimentItems(allExperimentItems.toArray(ExperimentItem[]::new));
             experimentAggregatesService.populateAggregations(aggregatedExperimentId)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.USER_NAME, USER)
@@ -9267,12 +9269,12 @@ class DatasetsResourceTest {
             var pagedExperimentItems = getPage(dataset.id(), datasetVersions, null).content().stream()
                     .flatMap(item -> item.experimentItems().stream())
                     .toList();
-            assertThat(pagedExperimentItems).hasSize(6)
-                    .extracting(ExperimentItem::experimentId)
-                    .containsOnly(aggregatedExperimentId, rawExperimentId);
+            assertThat(pagedExperimentItems)
+                    .extracting(ExperimentItem::id)
+                    .containsExactlyInAnyOrderElementsOf(inStreamOrder(expectedExperimentItems));
             assertThat(actualExperimentItems)
                     .extracting(ExperimentItem::id)
-                    .containsExactlyElementsOf(inStreamOrder(pagedExperimentItems));
+                    .containsExactlyElementsOf(inStreamOrder(expectedExperimentItems));
             assertThat(actualExperimentItems)
                     .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
                             .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
