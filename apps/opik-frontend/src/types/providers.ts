@@ -90,6 +90,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_IMAGE_2 = "gpt-image-2",
   GPT_IMAGE_2_5_FLARE = "gpt-image-2.5-flare",
   GPT_IMAGE_2_5_SUNBURST = "gpt-image-2.5-sunburst",
+  GPT_IMAGE_2_6_FLARE = "gpt-image-2.6-flare",
+  GPT_IMAGE_2_6_SUNBURST = "gpt-image-2.6-sunburst",
   GPT_LIVE_1 = "gpt-live-1",
   GPT_O1 = "o1",
   GPT_O1_2024_12_17 = "o1-2024-12-17",
@@ -104,8 +106,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
-  GPT_IMAGE_2_6_FLARE = "gpt-image-2.6-flare",
-  GPT_IMAGE_2_6_SUNBURST = "gpt-image-2.6-sunburst",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -323,6 +323,8 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_4_ARGON = "google/gemini-4-argon",
   GOOGLE_GEMINI_4_ARGON_BATCH = "google/gemini-4-argon:batch",
   GOOGLE_GEMINI_NANO_BANANA_2_1 = "google/gemini-nano-banana-2.1",
+  GOOGLE_GEMINI_OMNI_1_1_FLASH = "google/gemini-omni-1.1-flash",
+  GOOGLE_GEMINI_OMNI_1_2_FLASH = "google/gemini-omni-1.2-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -362,6 +364,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_3_0_FLASH_VL = "inclusionai/ling-3.0-flash-vl",
   INCLUSIONAI_LING_3_0_FLASH_VL_FREE = "inclusionai/ling-3.0-flash-vl:free",
   INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
+  INCLUSIONAI_LING_3_0_TINY = "inclusionai/ling-3.0-tiny",
   INCLUSIONAI_LING_3_0_TINY_FREE = "inclusionai/ling-3.0-tiny:free",
   INCLUSIONAI_LING_3_1_FLASH = "inclusionai/ling-3.1-flash",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
@@ -683,6 +686,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENGVLAB_INTERNVL3_78B = "opengvlab/internvl3-78b",
   OPENROUTER_AUTO = "openrouter/auto",
   OPENROUTER_AUTO_BETA = "openrouter/auto-beta",
+  OPENROUTER_AUTO_CODE = "openrouter/auto-code",
   OPENROUTER_BODYBUILDER = "openrouter/bodybuilder",
   OPENROUTER_ELEPHANT_ALPHA = "openrouter/elephant-alpha",
   OPENROUTER_FREE = "openrouter/free",
@@ -973,6 +977,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_OMNI_1_2_FLASH = "gemini-omni-1.2-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

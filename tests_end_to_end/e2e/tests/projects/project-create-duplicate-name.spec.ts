@@ -18,32 +18,20 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
  * mean anything. A spec that only asserted the 409 string would pass against a
  * hook that returned it unconditionally.
  *
- * The non-409 vector is an over-long name. It is asserted to have failed, and
- * to have failed with something other than a 409, before anything is read off
- * its toast — a vector that started succeeding (or that started answering 409)
+ * The non-409 vector is a whitespace-only name, refused by bean validation
+ * with a 422 whose detail is in `errors`, not `message`. It is asserted to have failed, and
+ * to have failed with something other than a 409, before its message is
+ * compared — a vector that started succeeding (or that started answering 409)
  * would otherwise quietly stop testing the fall-through while still passing.
+ * What the toast is compared against is the server's OWN message, read off the
+ * failing response in the same test, rather than a string pinned here: the
+ * claim is "the user is shown what the server said", and hard-coding today's
+ * wording would make a copy-edit in the backend look like a regression in the
+ * frontend.
  *
- * ## What this spec no longer compares, and where that claim went
- *
- * It used to read the server's own message off the failing response and assert
- * the toast contained it. opik#9308 (2.2.142) put a `@Size` on `Project.name`,
- * so the over-long vector moved from a `{"message":…}`-carrying 500 to a
- * `422 {"errors":[…]}` — and `useProjectCreateMutation` reads only
- * `response.data.message`, so there is no longer a server message for the toast
- * to show. That comparison was failing here against 2.2.142+.
- *
- * The claim is not dropped, it is RELOCATED to the spec whose subject it is:
- * `project-name-length-limit.spec.ts` asserts the toast must name the limit,
- * against the correct behaviour, marked `test.fail()` with the defect written
- * out. Asserting it in both places would mean two `test.fail()`s on one bug.
- *
- * What stays here is this spec's own subject, undiminished: a 409 is translated
- * exactly, and a NON-409 is not translated — which is the regression opik#9187's
- * special case could introduce. The response's shape is pinned in its place, so
- * the day the backend starts sending `message` alongside `errors` this test
- * fails and prompts someone to restore the toast comparison above.
- *
- * Both halves also assert no project was created, which neither toast says.
+ * The duplicate half also asserts no project was created, which the toast does
+ * not say. The whitespace half instead asserts the dialog stayed open with the
+ * typed name, so a refused name is not lost.
  *
  * The shared mutation hook is used by every create-project entry point; this
  * drives the Projects page's own dialog, which is the one a user reaches first.
@@ -59,22 +47,17 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
 const DUPLICATE_NAME_MESSAGE = 'Project with this name already exists';
 
 /**
- * Long enough that the write fails on the name alone.
- *
- * `Project.name` carries `@Size(max = 150)` as of opik#9308, and the column is
- * `VARCHAR(150)` behind it; 400 characters clears both comfortably. The test
- * asserts the failure rather than assuming it, and says why if it stops
- * failing. The exact limit is not pinned here on purpose — that is
- * `project-name-length-limit.spec.ts`'s subject, and this vector only needs to
- * be refused for some reason other than a name clash.
+ * Non-empty, so the dialog enables Create, yet blank to the backend's
+ * `@NotBlank`. An over-long name no longer works here: the input caps it at the
+ * backend's 150, so it would be accepted.
  */
-const OVERLONG_NAME_LENGTH = 400;
+const BLANK_NAME = '   ';
 
 test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects'] }, () => {
   test(
-    'a duplicate name shows the translated message, while a different failure is not reported as one',
+    'a duplicate name shows the translated message, while a different failure keeps the server\'s own',
     { tag: ['@cap:projects.create-project'] },
-    async ({ project, backendClient, testNamespace, page }) => {
+    async ({ project, backendClient, page }) => {
       const projects = new ProjectsPage(page);
       // Installed before the first navigation: the recorder is an init script,
       // and Radix dismisses a toast on its own 5s timer — a point-in-time
@@ -141,12 +124,11 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         ).toEqual([project.id]);
       });
 
-      const overlongName = `${testNamespace}-${'x'.repeat(OVERLONG_NAME_LENGTH)}`;
       const other = await test.step('Submit a name that fails for another reason', async () => {
         await page.reload();
         await projects.waitForReady();
         await projects.openCreateProjectDialog();
-        return projects.submitNewProject(overlongName);
+        return projects.submitNewProject(BLANK_NAME);
       });
 
       await test.step('It failed, and not as a conflict', async () => {
@@ -156,7 +138,7 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         // nothing about the fall-through.
         expect(
           other.status,
-          `an ${OVERLONG_NAME_LENGTH}-character name must still be refused — if the backend now ` +
+          'a whitespace-only name must still be refused — if the backend now ' +
             'accepts it, this vector no longer tests the non-conflict branch and needs replacing',
         ).toBeGreaterThanOrEqual(400);
         expect(
@@ -165,42 +147,31 @@ test.describe('Projects — create errors', { tag: ['@t2-cuj', '@area:projects']
         ).not.toBe(409);
       });
 
-      await test.step('The refusal arrives in the errors envelope, which the toast cannot read', async () => {
-        // The shape, pinned in place of the message comparison this step used to
-        // make — see the file header. Both halves are asserted, because it is
-        // the PAIR that explains why the user is shown a transport status:
-        // the server did say why, and it said it under a key the frontend's
-        // `response.data.message` read cannot reach.
-        expect(
-          other.errors,
-          'the 422 carries its reason in the errors envelope',
-        ).not.toBeNull();
-        expect(
-          other.message,
-          'and NOT under `message`, the only key useProjectCreateMutation reads — the day this ' +
-            'fails, the toast can show the reason again and ' +
-            'project-name-length-limit.spec.ts can drop its test.fail()',
-        ).toBeNull();
-      });
-
-      await test.step('The toast does not report it as a name clash', async () => {
+      await test.step('The toast carries the server\'s own message, not the duplicate-name string', async () => {
         // The reload reset the recorder (it is a per-document init script), so
         // this is the toast raised by the second submit alone.
         const toasts = await readRecordedToasts(page);
         expect(toasts, 'exactly one toast was raised by the second submit').toHaveLength(1);
         expect(
+          other.message,
+          'the failing response carried a message for the toast to show',
+        ).not.toBeNull();
+        expect(
+          toasts[0],
+          'a non-conflict failure shows what the server said',
+        ).toContain(other.message!);
+        expect(
           toasts[0],
           'a non-conflict failure must NOT be reported as a name clash — that is the ' +
-            'regression the 409 special case could introduce, and the whole reason this vector ' +
-            'sits in the same test as the 409 one',
+            'regression the 409 special case could introduce',
         ).not.toContain(DUPLICATE_NAME_MESSAGE);
       });
 
-      await test.step('The second failure created nothing either', async () => {
-        expect(
-          await backendClient.listProjectsWithPrefix(overlongName),
-          'the refused over-long name left no project behind',
-        ).toEqual([]);
+      await test.step('The dialog stayed open with the typed name', async () => {
+        await expect(
+          projects.createProjectDialog.getByLabel('Name', { exact: true }),
+          'a refused name stays in the dialog for the user to fix',
+        ).toHaveValue(BLANK_NAME);
       });
     },
   );
