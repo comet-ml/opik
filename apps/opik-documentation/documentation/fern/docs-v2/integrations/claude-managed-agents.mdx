@@ -97,13 +97,9 @@ This step is optional.
 
 Your application, for example a backend server, receives a message from a user and sends it to a Managed Agents session through the Claude API. The Claude API sends the agent's spans to Opik. Your application can also send its own spans to Opik:
 
-```mermaid
-flowchart LR
-    U([User]) --> A["Your application"]
-    A -- "user message + trace context" --> C["Claude API<br/>Managed Agents session"]
-    A -- "application spans" --> O[("Opik")]
-    C -- "agent spans" --> O
-```
+<Frame>
+  <img src="/img/tracing/claude_managed_agents/application_tracing.png" />
+</Frame>
 
 Without application spans, each user message that you send to a session starts a new trace in Opik, with only the agent's spans. To see a request from end to end in one trace, create a span in your application for each user message. The Anthropic SDK sends the trace context with each request, so the agent's spans become children of your span.
 
