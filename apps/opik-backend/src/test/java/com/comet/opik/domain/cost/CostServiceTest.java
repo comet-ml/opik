@@ -247,6 +247,25 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo(expectedCost);
     }
 
+    /**
+     * A gpt-6-luna Decisions call as its online-evaluation span records it: OpenAI's usage, no output tokens and no
+     * reported cost. Its Decisions rates equal its chat rates, so the chat price applies, under the dated model id
+     * the response names.
+     */
+    @Test
+    void calculateCostPricesGpt6LunaDecisionsUsage() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 2_000,
+                "completion_tokens", 0,
+                "total_tokens", 2_000,
+                "cache_read_input_tokens", 1_024);
+
+        BigDecimal cost = CostService.calculateCost("gpt-6-luna-2026-09-22", "openai", usage, null);
+
+        // (2_000 - 1_024) * 1e-7 + 1_024 * 1e-8
+        assertThat(cost).isEqualByComparingTo("0.00010784");
+    }
+
     private static Stream<Arguments> provideGpt54Above272kTierCases() {
         // gpt-5.4 base: input 2.5e-6 / output 1.5e-5; above_272k: input 5e-6 / output 2.25e-5.
         return Stream.of(

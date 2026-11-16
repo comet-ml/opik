@@ -7,8 +7,10 @@ from unittest.mock import Mock, patch
 import pytest
 
 from opik.api_objects import constants
-from opik.api_objects.dataset import dataset_item
+from opik.api_objects.dataset import dataset_item, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
+from opik.rest_api.core.api_error import ApiError
+from opik.rest_api.types import dataset_item as rest_dataset_item
 
 from .upload_capture import UploadCapture, make_dataset
 
@@ -662,3 +664,152 @@ def test_insert__typed_dataset_items__accepted_like_dicts():
         "dict",
         "typed",
     ]
+
+
+class _StoringCapture(UploadCapture):
+    """An upload capture that also keeps what the backend accepted.
+
+    Lets a hash re-sync read back only the items that were actually persisted, so a
+    retry can be checked against the backend's state rather than against what the
+    client attempted. `reject_once` names an input key whose batch is answered with a
+    400 the first time it arrives -- by content, not by arrival order, so the same
+    batch is rejected whichever worker sends it first.
+    """
+
+    def __init__(self, reject_once: Optional[str] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._lock = threading.Lock()
+        self._reject_once = reject_once
+        self.stored: list = []
+
+    def request(self, method, url, **kwargs):
+        with self._lock:
+            response = super().request(method, url, **kwargs)
+            batch = self.batches[-1]
+            keys = {item["data"]["input"].get("key") for item in batch}
+            if self._reject_once is not None and self._reject_once in keys:
+                self._reject_once = None
+                response.status_code = 400
+            if response.status_code < 300:
+                self.stored.extend(batch)
+        return response
+
+
+def _serve_stored_items(capture: _StoringCapture):
+    """Patch the backend read so a hash sync streams what `capture` stored."""
+
+    def read_page(**_kwargs) -> list:
+        return [
+            rest_dataset_item.DatasetItem(
+                **{key: value for key, value in item.items() if value is not None}
+            )
+            for item in capture.stored
+        ]
+
+    return patch(
+        "opik.api_objects.dataset.rest_operations.rest_stream_parser.read_and_parse_stream",
+        side_effect=read_page,
+    )
+
+
+def _sent_inputs(capture: UploadCapture, first_request: int = 0) -> list:
+    return [
+        item["data"]["input"]["key"]
+        for batch in capture.batches[first_request:]
+        for item in batch
+    ]
+
+
+def test_insert__failed_on_unserializable_item__retry_sends_items_hashed_before_it():
+    capture = _StoringCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+    item_a = {"input": {"key": "a"}}
+    item_c = {"input": {"key": "c"}}
+
+    with _serve_stored_items(capture):
+        with pytest.raises(streaming_writer.ItemNotSerializableError):
+            dataset.insert(
+                [item_a, {"input": {"key": object()}}, item_c], num_threads=1
+            )
+        assert capture.request_count == 0, "Nothing reached the backend"
+
+        dataset.insert([item_a, {"input": {"key": "b"}}, item_c], num_threads=1)
+
+    assert _sent_inputs(capture) == ["a", "b", "c"], (
+        "Item a was hashed but never sent, so the retry must send it"
+    )
+    assert set(dataset._id_to_hash) == {item["id"] for item in capture.stored}, (
+        "The id cache must not keep the id of the attempt that never landed"
+    )
+
+
+def test_insert__source_raises_part_way__retry_sends_items_hashed_before_it():
+    capture = _StoringCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    def source():
+        yield {"input": {"key": "a"}}
+        raise RuntimeError("source failed")
+
+    with _serve_stored_items(capture):
+        with pytest.raises(RuntimeError, match="source failed"):
+            dataset.insert(source(), num_threads=1)
+
+        dataset.insert([{"input": {"key": "a"}}], num_threads=1)
+
+    assert _sent_inputs(capture) == ["a"]
+
+
+@pytest.mark.parametrize("num_threads", [1, 4])
+def test_insert__second_batch_rejected__retry_sends_only_the_rejected_batch(
+    monkeypatch, num_threads
+):
+    _small_batches(monkeypatch, size=2)
+    capture = _StoringCapture(reject_once="c")
+    dataset = make_dataset(Dataset, _mock_rest_client(), capture)
+    items = [{"input": {"key": key}} for key in ("a", "b", "c")]
+
+    with _serve_stored_items(capture):
+        with pytest.raises(ApiError):
+            dataset.insert(items, num_threads=num_threads)
+        assert capture.request_count == 2
+        assert sorted(item["data"]["input"]["key"] for item in capture.stored) == [
+            "a",
+            "b",
+        ], "The first batch landed, the second was rejected"
+
+        dataset.insert(items, num_threads=num_threads)
+
+    assert _sent_inputs(capture, first_request=2) == ["c"], (
+        "The retry must send the rejected item and deduplicate the stored ones"
+    )
+
+
+def test_update__failed_on_unserializable_item__retry_sends_items_hashed_before_it():
+    capture = _StoringCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+    item_id = "0199a5b4-8f2e-7c3d-9a1b-2c3d4e5f6a7b"
+    dataset.insert([{"id": item_id, "input": {"key": "original"}}])
+    updated = {"id": item_id, "input": {"key": "updated"}}
+
+    with _serve_stored_items(capture):
+        with pytest.raises(streaming_writer.ItemNotSerializableError):
+            dataset.update([updated, {"id": item_id, "input": {"key": object()}}])
+
+        dataset.update([updated])
+
+    assert _sent_inputs(capture, first_request=1) == ["updated"], (
+        "The update was hashed but never sent, so the retry must send it"
+    )
+
+
+def test_insert__succeeded__next_deduplicated_insert_does_not_resync():
+    capture = _StoringCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    with _serve_stored_items(capture) as read_page:
+        dataset.insert(_make_items(3))
+        dataset.insert(_make_items(3))
+
+    read_page.assert_not_called()
+    assert capture.request_count == 1, "The repeat insert is all duplicates"

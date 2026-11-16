@@ -94,12 +94,6 @@
       "separateMajorMinor": false,
       "schedule": ["* * * * 1-5"],
       "commitMessagePrefix": "chore(deps):"
-    },
-    {
-      "description": "Runtimes set in a setup action's with: (node-version, python-version, pnpm version) are the toolchain a job builds or tests with, often deliberately the oldest supported; they move by hand",
-      "matchManagers": ["github-actions"],
-      "matchDepTypes": ["uses-with"],
-      "enabled": false
     }
   ]
 }

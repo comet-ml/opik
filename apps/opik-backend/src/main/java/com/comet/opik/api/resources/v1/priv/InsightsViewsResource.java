@@ -88,8 +88,8 @@ public class InsightsViewsResource {
 
         Dashboard savedDashboard = service.create(dashboard, DashboardScope.INSIGHTS);
 
-        log.info("Created insights view with id '{}', name '{}', slug '{}' in workspace '{}'",
-                savedDashboard.id(), savedDashboard.name(), savedDashboard.slug(), workspaceId);
+        log.info("Created insights view with id '{}', name '{}' in workspace '{}'",
+                savedDashboard.id(), savedDashboard.name(), workspaceId);
 
         URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDashboard.id().toString())).build();
         return Response.created(uri).entity(savedDashboard).build();
@@ -147,8 +147,7 @@ public class InsightsViewsResource {
     @Path("/{insightsViewId}")
     @Operation(operationId = "updateInsightsView", summary = "Update insights view", description = "Update insights view by id. Partial updates are supported - only provided fields will be updated.", responses = {
             @ApiResponse(responseCode = "200", description = "Updated insights view", content = @Content(schema = @Schema(implementation = Dashboard.class))),
-            @ApiResponse(responseCode = "404", description = "Insights view not found"),
-            @ApiResponse(responseCode = "409", description = "Conflict - insights view with this name already exists")
+            @ApiResponse(responseCode = "404", description = "Insights view not found")
     })
     @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_EDIT)
     @JsonView(Dashboard.View.Public.class)

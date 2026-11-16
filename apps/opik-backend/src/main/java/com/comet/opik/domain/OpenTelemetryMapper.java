@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
@@ -42,8 +43,6 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.storageKey
 @UtilityClass
 @Slf4j
 public class OpenTelemetryMapper {
-
-    public static final int MAX_PROJECT_NAME_LENGTH = 150;
 
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
@@ -553,7 +552,7 @@ public class OpenTelemetryMapper {
 
     public static boolean isValidProjectName(String projectName) {
         var stripped = projectName.strip();
-        return stripped.codePointCount(0, stripped.length()) <= MAX_PROJECT_NAME_LENGTH;
+        return stripped.codePointCount(0, stripped.length()) <= Project.NAME_MAX_LENGTH;
     }
 
     private static Optional<String> extractStringAttribute(Span otelSpan, String key) {

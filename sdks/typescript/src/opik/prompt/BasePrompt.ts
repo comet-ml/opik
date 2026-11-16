@@ -393,8 +393,8 @@ export abstract class BasePrompt {
   ): Promise<OpikApi.PromptVersionDetail | null> {
     const isVersionNumber = /^v\d+$/.test(version);
     const request = isVersionNumber
-      ? { name: this.name, versionNumber: version }
-      : { name: this.name, commit: version };
+      ? { name: this.name, projectName: this._projectName, versionNumber: version }
+      : { name: this.name, projectName: this._projectName, commit: version };
 
     try {
       const response = await this.opik.api.prompts.retrievePromptVersion(

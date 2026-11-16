@@ -69,7 +69,7 @@ const isFieldRequired = (field: AgentParam): boolean => {
 };
 
 const buildSchema = (fields: AgentParam[]) => {
-  const shape: Record<string, z.ZodTypeAny> = {};
+  const shape: Record<string, z.ZodType<string>> = {};
   for (const field of fields) {
     // Boolean fields are always valid (Switch is always "true"/"false")
     if (normalizeType(field.type) === "boolean" || !isFieldRequired(field)) {

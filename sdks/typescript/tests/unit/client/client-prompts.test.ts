@@ -699,6 +699,13 @@ describe("Opik prompt operations", () => {
   });
 
   describe("searchPrompts", () => {
+    beforeEach(() => {
+      retrieveProjectSpy.mockResolvedValue({
+        id: "project-id",
+        name: "opik-sdk-typescript",
+      } as OpikApi.ProjectPublic);
+    });
+
     it("should search all prompts without filters", async () => {
       const mockPromptsResponse = {
         content: [
@@ -745,17 +752,59 @@ describe("Opik prompt operations", () => {
 
       const results = await client.searchPrompts();
 
+      expect(retrieveProjectSpy).toHaveBeenCalledWith({
+        name: "opik-sdk-typescript",
+      });
       expect(getPromptsSpy).toHaveBeenCalledWith(
         {
           filters: undefined,
+          projectId: "project-id",
           size: 1000,
         },
+        client.api.requestOptions
+      );
+      expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
+        { name: "prompt-one", projectName: "opik-sdk-typescript" },
         client.api.requestOptions
       );
       expect(results).toHaveLength(2);
       expect(results[0]).toBeInstanceOf(Prompt);
       expect(results[0].name).toBe("prompt-one");
       expect(results[1].name).toBe("prompt-two");
+    });
+
+    it("should search the given project", async () => {
+      getPromptsSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise({ content: [] })
+      );
+
+      await client.searchPrompts(undefined, "other-project");
+
+      expect(retrieveProjectSpy).toHaveBeenCalledWith({ name: "other-project" });
+      expect(getPromptsSpy).toHaveBeenCalledWith(
+        { filters: undefined, projectId: "project-id", size: 1000 },
+        client.api.requestOptions
+      );
+    });
+
+    it("should return no prompts when the project does not exist", async () => {
+      retrieveProjectSpy.mockRejectedValue(
+        new OpikApiError({ message: "Not found", statusCode: 404 })
+      );
+
+      const results = await client.searchPrompts();
+
+      expect(results).toEqual([]);
+      expect(getPromptsSpy).not.toHaveBeenCalled();
+    });
+
+    it("should rethrow project lookup failures other than not found", async () => {
+      retrieveProjectSpy.mockRejectedValue(
+        new OpikApiError({ message: "Server error", statusCode: 500 })
+      );
+
+      await expect(client.searchPrompts()).rejects.toThrow();
+      expect(getPromptsSpy).not.toHaveBeenCalled();
     });
 
     it("should search prompts with simple OQL filter", async () => {

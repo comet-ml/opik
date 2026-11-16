@@ -42,6 +42,7 @@ import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.error.ErrorMessage;
@@ -77,6 +78,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
+import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
@@ -110,7 +112,9 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.AfterAll;
@@ -124,6 +128,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
@@ -144,6 +149,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -229,6 +235,9 @@ class DatasetsResourceTest {
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
+    // The sub-microsecond part is dropped by ClickHouse, so the expected duration is the truncated literal
+    private static final Duration TRACE_DURATION = Duration.ofNanos(1_500_250_700);
+    private static final double EXPECTED_TRACE_DURATION_MILLIS = 1500.25;
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -1495,6 +1504,25 @@ class DatasetsResourceTest {
                     .build();
 
             createAndAssert(dataset);
+        }
+
+        @Test
+        @DisplayName("when project name has leading whitespace, then datasets reuse the same project")
+        void create__whenProjectNameHasLeadingWhitespace__thenReuseTheProject() {
+            var projectName = "  project-" + UUID.randomUUID();
+            var dataset1 = buildDataset().toBuilder().id(null).projectId(null).projectName(projectName).build();
+            var dataset2 = buildDataset().toBuilder().id(null).projectId(null).projectName(projectName).build();
+
+            var datasetId1 = datasetResourceClient.createDataset(dataset1, API_KEY, TEST_WORKSPACE);
+            var datasetId2 = datasetResourceClient.createDataset(dataset2, API_KEY, TEST_WORKSPACE);
+
+            var projectId = datasetResourceClient.getDatasetById(datasetId1, API_KEY, TEST_WORKSPACE).projectId();
+            var expectedDataset = dataset2.toBuilder().id(datasetId2).projectId(projectId).build();
+            var actualDataset = datasetResourceClient.getDatasetById(datasetId2, API_KEY, TEST_WORKSPACE);
+            assertThat(projectId).isNotNull();
+            assertThat(actualDataset).usingRecursiveComparison()
+                    .ignoringFields(DATASET_IGNORED_FIELDS)
+                    .isEqualTo(expectedDataset);
         }
 
         @Test
@@ -7593,60 +7621,34 @@ class DatasetsResourceTest {
         private void createExperimentItems(List<DatasetItem> items, List<Trace> traces,
                 List<FeedbackScoreBatchItem> scores, UUID experimentId, List<ExperimentItem> experimentItems) {
             for (int i = 0; i < items.size(); i++) {
-                var item = items.get(i);
-                var trace = traces.get(i);
-                var score = scores.get(i);
-
-                var experimentItem = ExperimentItem.builder()
-                        .id(GENERATOR.generate())
-                        .datasetItemId(item.id())
-                        .traceId(trace.id())
-                        .experimentId(experimentId)
-                        .input(trace.input())
-                        .output(trace.output())
-                        .traceVisibilityMode(VisibilityMode.DEFAULT)
-                        .executionPolicy(ExecutionPolicy.DEFAULT)
-                        .feedbackScores(score == null
-                                ? null
-                                : Stream.of(score)
-                                        .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
-                                        .toList())
-                        .description(item.description())
-                        .build();
-
-                experimentItems.add(experimentItem);
+                experimentItems.add(expectedExperimentItem(experimentId, items.get(i), traces.get(i), scores.get(i)));
             }
         }
 
         private void createScores(List<Trace> traces, String projectName, List<FeedbackScoreBatchItem> scores) {
             for (int i = 0; i < traces.size(); i++) {
-                var trace = traces.get(i);
-
-                var score = FeedbackScoreBatchItem.builder()
+                scores.add(factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traces.get(i).id())
+                        .projectName(projectName)
+                        .projectId(null)
                         .name("sql_cost")
                         .value(BigDecimal.valueOf(i == 0 ? 10 : i))
                         .source(ScoreSource.SDK)
-                        .id(trace.id())
-                        .projectName(projectName)
-                        .build();
-
-                scores.add(score);
+                        .build());
             }
         }
 
         private void createTraces(List<DatasetItem> items, String projectName, String workspaceName, String apiKey,
                 List<Trace> traces) {
-            for (int i = 0; i < items.size(); i++) {
-                var item = items.get(i);
-                var trace = Trace.builder()
-                        .id(GENERATOR.generate())
+            for (var item : items) {
+                var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
                         .input(item.data().get("input"))
                         .output(item.data().get("expected_output"))
                         .projectName(projectName)
-                        .startTime(Instant.now())
-                        .name("trace-" + i)
+                        .startTime(startTime)
+                        .endTime(startTime.plus(TRACE_DURATION))
                         .build();
-
                 createAndAssert(trace, workspaceName, apiKey);
                 traces.add(trace);
             }
@@ -8930,6 +8932,312 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("when a raw experiment trace has several versions, then return the latest trace payload")
+        void find__rawExperimentTraceUpdated__thenReturnLatestTracePayload() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var updatedPayload = factory.manufacturePojo(Trace.class);
+            traceResourceClient.updateTrace(trace.id(), TraceUpdate.builder()
+                    .projectName(trace.projectName())
+                    .input(updatedPayload.input())
+                    .output(updatedPayload.output())
+                    .metadata(updatedPayload.metadata())
+                    .build(), apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentId = experimentResourceClient.create(experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build(), apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+            var expectedExperimentItems = List.of(experimentItem.toBuilder()
+                    .input(updatedPayload.input())
+                    .output(updatedPayload.output())
+                    .traceMetadata(updatedPayload.metadata())
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .description(datasetItem.description())
+                    .build());
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            assertThat(actualPage.content().getFirst().experimentItems())
+                    .usingRecursiveComparison()
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .ignoringFields("feedbackScores", "createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+                            "comments", "projectName")
+                    .isEqualTo(expectedExperimentItems);
+        }
+
+    }
+
+    @DisplayName("Find dataset items with experiment items across all dataset experiments")
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindDatasetItemsWithAllDatasetExperimentItems {
+
+        private String apiKey;
+        private String workspaceName;
+        private String workspaceId;
+
+        @BeforeAll
+        void setUp() {
+            apiKey = UUID.randomUUID().toString();
+            workspaceName = UUID.randomUUID().toString();
+            workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        }
+
+        private Dataset createDatasetWithItems(List<DatasetItem> items) {
+            var dataset = buildDataset();
+            dataset = dataset.toBuilder().id(createAndAssert(dataset, apiKey, workspaceName)).build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetName(dataset.name()).items(items).build(),
+                    workspaceName, apiKey);
+            return dataset;
+        }
+
+        private UUID createExperiment(Dataset dataset) {
+            return createExperiment(dataset, ExperimentType.REGULAR);
+        }
+
+        private UUID createExperiment(Dataset dataset, ExperimentType type) {
+            return experimentResourceClient.create(
+                    experimentResourceClient.createPartialExperiment().datasetName(dataset.name()).type(type).build(),
+                    apiKey, workspaceName);
+        }
+
+        private ExperimentItem createExperimentItem(UUID experimentId, DatasetItem datasetItem) {
+            var projectName = RandomStringUtils.secure().nextAlphabetic(20);
+            var startTime = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .startTime(startTime)
+                    .endTime(startTime.plus(TRACE_DURATION))
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var score = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace.id())
+                    .projectName(projectName)
+                    .projectId(null)
+                    .value(BigDecimal.valueOf(RandomUtils.secure().randomInt(0, 100)))
+                    .build();
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(score)).build(), apiKey, workspaceName);
+
+            return expectedExperimentItem(experimentId, datasetItem, trace, score);
+        }
+
+        private void createExperimentItems(ExperimentItem... experimentItems) {
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItems)), apiKey, workspaceName);
+        }
+
+        private List<ExperimentsComparisonFilter> idFilter(UUID datasetItemId) {
+            return List.of(new ExperimentsComparisonFilter(
+                    "id", FieldType.STRING_EXACT, Operator.EQUAL, null, datasetItemId.toString()));
+        }
+
+        private DatasetItemPage getPage(UUID datasetId, String datasetVersion,
+                List<ExperimentsComparisonFilter> filters) {
+            try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
+                    datasetId, null, datasetVersion, 100, filters, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                return response.readEntity(DatasetItemPage.class);
+            }
+        }
+
+        private void assertItemWithExperimentItems(DatasetItemPage actualPage, DatasetItem expectedItem,
+                ExperimentItem... expectedExperimentItems) {
+            assertPage(List.of(expectedItem), actualPage.content());
+
+            var actualExperimentItems = actualPage.content().getFirst().experimentItems();
+            assertThat(actualExperimentItems)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_LIST)
+                    .containsExactlyInAnyOrder(expectedExperimentItems);
+
+            var expectedById = Arrays.stream(expectedExperimentItems)
+                    .collect(toMap(ExperimentItem::id, Function.identity()));
+            for (var actualExperimentItem : actualExperimentItems) {
+                var actualFeedbackScores = assertFeedbackScoresIgnoredFieldsAndSetThemToNull(
+                        actualExperimentItem, USER).feedbackScores();
+                assertThat(actualFeedbackScores)
+                        .usingRecursiveFieldByFieldElementComparator(RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
+                                .build())
+                        .isEqualTo(expectedById.get(actualExperimentItem.id()).feedbackScores());
+            }
+        }
+
+        @Test
+        @DisplayName("when experiment_ids is omitted, then return results from every experiment on the dataset")
+        void findWhenExperimentIdsOmitted() {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var otherItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem, otherItem));
+
+            var experimentId1 = createExperiment(dataset);
+            var experimentId2 = createExperiment(dataset);
+            var otherDatasetExperimentId = createExperiment(
+                    createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory))));
+
+            var expectedExperimentItem1 = createExperimentItem(experimentId1, targetItem);
+            var expectedExperimentItem2 = createExperimentItem(experimentId2, targetItem);
+            createExperimentItems(
+                    expectedExperimentItem1,
+                    expectedExperimentItem2,
+                    createExperimentItem(experimentId1, otherItem),
+                    createExperimentItem(otherDatasetExperimentId, targetItem));
+
+            var actualPage = getPage(dataset.id(), null, idFilter(targetItem.id()));
+
+            assertItemWithExperimentItems(actualPage, targetItem, expectedExperimentItem1, expectedExperimentItem2);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = ExperimentType.class, names = "REGULAR", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("when experiment_ids is omitted, then exclude optimizer experiments")
+        void findWhenExperimentIdsOmittedThenExcludeOptimizerExperiments(ExperimentType optimizerType) {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem));
+            var regularExperimentId = createExperiment(dataset);
+            var optimizerExperimentId = createExperiment(dataset, optimizerType);
+
+            var expectedExperimentItem = createExperimentItem(regularExperimentId, targetItem);
+            createExperimentItems(expectedExperimentItem, createExperimentItem(optimizerExperimentId, targetItem));
+
+            var actualPage = getPage(dataset.id(), null, idFilter(targetItem.id()));
+
+            assertItemWithExperimentItems(actualPage, targetItem, expectedExperimentItem);
+        }
+
+        @Test
+        @DisplayName("when dataset_version is set, then return results only from experiments run against it")
+        void findWhenDatasetVersionSet() {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem));
+            var datasetId = dataset.id();
+            var experimentOnVersion1 = createExperiment(dataset);
+
+            var version1 = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content()
+                    .getFirst();
+            var version2 = datasetResourceClient.applyDatasetItemChanges(datasetId,
+                    DatasetItemChanges.builder()
+                            .baseVersion(version1.id())
+                            .addedItems(List.of(DatasetResourceClient.buildDatasetItem(factory)))
+                            .build(),
+                    false, apiKey, workspaceName);
+            var experimentOnVersion2 = createExperiment(dataset);
+
+            var expectedOnVersion1 = createExperimentItem(experimentOnVersion1, targetItem);
+            var expectedOnVersion2 = createExperimentItem(experimentOnVersion2, targetItem);
+            createExperimentItems(expectedOnVersion1, expectedOnVersion2);
+
+            assertItemWithExperimentItems(getPage(datasetId, version1.versionHash(), idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion1);
+            assertItemWithExperimentItems(getPage(datasetId, version2.versionHash(), idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion2);
+            assertItemWithExperimentItems(
+                    getPage(datasetId, DatasetVersionService.LATEST_TAG, idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion2);
+            assertItemWithExperimentItems(getPage(datasetId, null, idFilter(targetItem.id())),
+                    targetItem, expectedOnVersion1, expectedOnVersion2);
+        }
+
+        @Test
+        @DisplayName("when dataset_version does not exist, then return not found")
+        void findWhenDatasetVersionNotFound() {
+            var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
+
+            try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
+                    dataset.id(), null, "unknown-version", null, null, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("when the dataset has no experiments, then return an empty page")
+        void findWhenDatasetHasNoExperiments() {
+            var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
+            var datasetId = dataset.id();
+
+            var actualPage = getPage(datasetId, null, null);
+
+            assertThat(actualPage.content()).isEmpty();
+            assertThat(actualPage.total()).isZero();
+        }
+
+        @Test
+        @DisplayName("when experiment_ids is set, then size is not bound by the all-experiments cap")
+        void findWhenExperimentIdsSetThenSizeAboveAllExperimentsCapAccepted() {
+            var targetItem = DatasetResourceClient.buildDatasetItem(factory);
+            var dataset = createDatasetWithItems(List.of(targetItem));
+            var experimentId = createExperiment(dataset);
+            var expectedExperimentItem = createExperimentItem(experimentId, targetItem);
+            createExperimentItems(expectedExperimentItem);
+
+            // The SDK pages this endpoint at 2000 with explicit experiment_ids
+            try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
+                    dataset.id(), JsonUtils.writeValueAsString(List.of(experimentId)), null, 2000, null,
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertItemWithExperimentItems(response.readEntity(DatasetItemPage.class), targetItem,
+                        expectedExperimentItem);
+            }
+        }
+
+        Stream<Arguments> findWhenInvalidParams() {
+            return Stream.of(
+                    arguments("[]", null, null, "experiment_ids cannot be empty"),
+                    arguments(" ", null, null, "experiment_ids cannot be empty"),
+                    arguments(JsonUtils.writeValueAsString(List.of(GENERATOR.generate())), "v1", null,
+                            "dataset_version can only be used when experiment_ids is omitted"),
+                    arguments(null, null, 101, "size must be at most 100 when experiment_ids is omitted"));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when params are invalid, then return bad request")
+        void findWhenInvalidParams(String experimentIds, String datasetVersion, Integer size,
+                String expectedError) {
+            try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
+                    GENERATOR.generate(), experimentIds, datasetVersion, size, null, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo(expectedError);
+            }
+        }
     }
 
     @DisplayName("Find dataset items with experiment items sorting test")
@@ -9903,6 +10211,30 @@ class DatasetsResourceTest {
             case NULL -> ColumnType.NULL;
             default -> ColumnType.NULL;
         };
+    }
+
+    private ExperimentItem expectedExperimentItem(UUID experimentId, DatasetItem datasetItem, Trace trace,
+            FeedbackScoreBatchItem score) {
+        return factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .datasetItemId(datasetItem.id())
+                .traceId(trace.id())
+                .projectId(null)
+                .projectName(null)
+                .input(trace.input())
+                .output(trace.output())
+                .traceMetadata(null)
+                .feedbackScores(score == null ? null : List.of(FeedbackScoreMapper.INSTANCE.toFeedbackScore(score)))
+                .comments(null)
+                .totalEstimatedCost(null)
+                .usage(null)
+                .duration(EXPECTED_TRACE_DURATION_MILLIS)
+                .traceVisibilityMode(VisibilityMode.DEFAULT)
+                .description(datasetItem.description())
+                .executionPolicy(ExecutionPolicy.DEFAULT)
+                .assertionResults(null)
+                .status(null)
+                .build();
     }
 
     private void assertDatasetItemExperiments(DatasetItemPage actualPage, List<DatasetItem> datasetItems,

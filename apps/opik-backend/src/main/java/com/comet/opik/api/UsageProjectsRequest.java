@@ -19,7 +19,7 @@ import java.util.UUID;
 public record UsageProjectsRequest(
         @NotNull @Size(min = 1, max = 1000) Set<@NotBlank String> workspaceIds,
         @Size(max = 100) Set<@NotNull UUID> projectIds,
-        @Size(max = 150) String name,
+        @Size(max = Project.NAME_MAX_LENGTH) String name,
         @Min(1) @Max(1000) Integer limit) {
 
     public static final int DEFAULT_LIMIT = 100;

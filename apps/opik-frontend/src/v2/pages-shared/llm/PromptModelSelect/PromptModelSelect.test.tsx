@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import PromptModelSelect from "./PromptModelSelect";
@@ -77,10 +85,10 @@ const makeOverflow = (listViewport: HTMLElement) => {
 };
 
 describe("PromptModelSelect", () => {
-  let scrollBy: ReturnType<typeof vi.fn>;
+  let scrollBy: Mock<Element["scrollBy"]>;
 
   beforeEach(() => {
-    scrollBy = vi.fn();
+    scrollBy = vi.fn<Element["scrollBy"]>();
     vi.spyOn(Element.prototype, "scrollBy").mockImplementation(scrollBy);
   });
 

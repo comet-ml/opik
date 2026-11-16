@@ -516,6 +516,23 @@ class LlmModelCatalogTest {
                     Arguments.of("vertex-ai", "gemini-2.5-flash-lite-preview-06-17"));
         }
 
+        @ParameterizedTest(name = "{0}/{1}")
+        @MethodSource("gemini4ArgonRows")
+        void gemini4ArgonCapsOutputAtGooglesLimitNotItsContextWindow(String provider, String id) {
+            assertThat(registry.get(provider))
+                    .filteredOn(model -> model.id().equals(id))
+                    .singleElement()
+                    .extracting(model -> model.params().maxOutputTokens().max().intValueExact())
+                    .isEqualTo(32768);
+        }
+
+        static Stream<Arguments> gemini4ArgonRows() {
+            return Stream.of(
+                    Arguments.of("gemini", "gemini-4-argon"),
+                    Arguments.of("vertex-ai", "gemini-4-argon"),
+                    Arguments.of("vertex-ai", "gemini-4-argon-cyber-permissive"));
+        }
+
         private static Stream<ModelParams> allVariants(ModelParams params) {
             var routes = params.routes() == null ? Stream.<ModelParams>empty() : params.routes().values().stream();
             return Stream.concat(Stream.of(params), routes);

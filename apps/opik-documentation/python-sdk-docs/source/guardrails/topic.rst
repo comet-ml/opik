@@ -1,7 +1,7 @@
 Topic guardrail
 ===============
 
-.. automodule:: opik.guardrails.guards.topic
+.. automodule:: opik.guardrails.rules.topic
     :members:
     :undoc-members:
     :show-inheritance:
