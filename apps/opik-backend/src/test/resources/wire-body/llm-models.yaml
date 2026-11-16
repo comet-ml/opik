@@ -30,6 +30,8 @@ anthropic:
     structuredOutput: true
   - id: "claude-fable-5-1"
     structuredOutput: true
+  - id: "claude-fable-5-2"
+    structuredOutput: true
   - id: "claude-mythos-5"
     structuredOutput: true
   - id: "claude-mythos-5-1"
