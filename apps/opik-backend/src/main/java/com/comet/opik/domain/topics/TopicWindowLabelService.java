@@ -49,9 +49,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  *
  * <p>Counted: the pass that ends complete counts the window's traces per topic and saves the counts in its run's
  * {@code stats.topic_counts}, in the transaction that marks the labels complete. Later runs relabel the window, so
- * these counts are the only record of the run's. They cover the run's window, also for a nightly update whose pass
- * labels past it. They are written once per run, and not for a list with no topic
+ * these counts are the only record of the run's. They are written once per run, and not for a list with no topic
  * prototype. A failed count read is logged and saves no counts: the labels are still marked complete.
+ *
+ * <p>The counts cover the run's window exactly, {@code [window_from, window_until)} as its {@code stats} name it,
+ * whatever range the pass labels, so two runs' counts compare like with like. The Topics page counts a sliding window
+ * that includes today, so its counts can differ from a run's by the traces of the days at the window's edges.
  */
 @Slf4j
 @Singleton
@@ -92,9 +95,10 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * The saved list a pass labels with. The pass labels {@code [from, to)}; the run's window, which its counts cover,
-     * is {@code [from, windowUntil)}. {@code topicIds} are its live topics. {@code count} is true when a complete pass
-     * saves the run's counts: the list has a topic prototype and the run's labels are not complete yet.
+     * The saved list a pass labels with. The pass labels the traces created in {@code [from, to)}; the run's window is
+     * {@code [from, windowUntil)}, which the counts cover. {@code topicIds} are its live topics. {@code count} is true
+     * when a complete pass saves the run's counts: the list has a topic prototype and the run's labels are not complete
+     * yet.
      */
     private record Saved(UUID runId, Instant from, Instant to, Instant windowUntil, TopicAlgorithm.Labeller labeller,
             List<UUID> topicIds, boolean count) {
@@ -211,7 +215,7 @@ public class TopicWindowLabelService {
             var from = windowUntil.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             var labeller = algorithm.labeller(topicDAO.findPrototypes(workspaceId, projectId));
             var topicIds = topicDAO.findLive(workspaceId, projectId).stream().map(Topic::id).toList();
-            return Optional.of(new Saved(state.get().lastRunId(), from, to, windowUntil,
+            return Optional.of(new Saved(state.get().lastRunId(), from, to, state.get().windowUntil(),
                     labeller.orElse(TopicWindowLabelService::allOther), topicIds,
                     labeller.isPresent() && !state.get().labelsComplete()));
         });
@@ -268,10 +272,8 @@ public class TopicWindowLabelService {
         }
 
         /**
-         * The run's window's traces per live topic and Other, zero for one with none: {@code [from, windowUntil)}, the
-         * {@code window_from} and {@code window_until} of the run's stats, not the longer range a nightly pass labels.
-         * Too little time left cuts the pass, as
-         * a page does, so a later pass counts. A failed read is logged and gives no counts.
+         * The run's window's traces per live topic and Other, zero for one with none. Too little time left cuts the
+         * pass, as a page does, so a later pass counts. A failed read is logged and gives no counts.
          */
         private Map<UUID, Long> count() {
             var left = timeLeft();
