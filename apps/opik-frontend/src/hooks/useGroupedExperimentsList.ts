@@ -566,7 +566,7 @@ export default function useGroupedExperimentsList(
         // Fall back to params.projectId (page context) when no project filter or group metadata
         projectId: isOrphanProject
           ? undefined
-          : projectIdValue ?? params.projectId,
+          : (projectIdValue ?? params.projectId),
         projectDeleted: isOrphanProject || undefined,
         page: 1,
         size: extractPageSize(id, params.groupLimit),
@@ -710,13 +710,13 @@ export default function useGroupedExperimentsList(
     () => ({
       content: hasGroups
         ? groupedData.content
-        : (data?.content as GroupedExperiment[]) ?? [],
+        : ((data?.content as GroupedExperiment[]) ?? []),
       flattenGroups: hasGroups ? groupedData.flattenGroups : [],
       aggregationMap: hasGroups ? aggregationMap : {},
       sortable_by: hasGroups
         ? groupedData.sortable_by
-        : data?.sortable_by ?? [],
-      total: hasGroups ? groupedData.total : data?.total ?? 0,
+        : (data?.sortable_by ?? []),
+      total: hasGroups ? groupedData.total : (data?.total ?? 0),
       datasetTypeMap,
     }),
     [

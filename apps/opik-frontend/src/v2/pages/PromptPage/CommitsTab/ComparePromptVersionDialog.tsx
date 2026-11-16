@@ -401,10 +401,10 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   }, [open]);
 
   const baseLabel = baseVersion
-    ? versionLabelByCommit.get(baseVersion.commit) ?? ""
+    ? (versionLabelByCommit.get(baseVersion.commit) ?? "")
     : "";
   const diffLabel = diffVersion
-    ? versionLabelByCommit.get(diffVersion.commit) ?? ""
+    ? (versionLabelByCommit.get(diffVersion.commit) ?? "")
     : "";
   const sheetTitle =
     baseLabel && diffLabel

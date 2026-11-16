@@ -8,7 +8,7 @@ interface ProjectAvatarProps {
 
 const ProjectAvatar = ({ projectId, size = "sm" }: ProjectAvatarProps) => {
   const iconIndices = useProjectIconIndices();
-  const index = projectId ? iconIndices.get(projectId) ?? 0 : 0;
+  const index = projectId ? (iconIndices.get(projectId) ?? 0) : 0;
 
   return <ProjectIcon index={index} size={size} />;
 };

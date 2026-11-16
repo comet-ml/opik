@@ -57,7 +57,7 @@ const InteractiveMermaidDiagram: React.FC<InteractiveMermaidDiagramProps> = ({
     (event: React.MouseEvent) => {
       const index = getMermaidNodeIndex(event.target, event.currentTarget);
       setHoveredNodeId(
-        index === null ? null : interactiveSvg.nodes[index]?.id ?? null,
+        index === null ? null : (interactiveSvg.nodes[index]?.id ?? null),
       );
     },
     [interactiveSvg.nodes],
