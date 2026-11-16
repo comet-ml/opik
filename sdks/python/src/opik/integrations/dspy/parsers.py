@@ -123,21 +123,30 @@ def extract_lm_info_from_history(
         response = last_entry.get("response")
         usage_dict = last_entry.get("usage")
 
-        # Extract actual provider and model from response (useful for routers like OpenRouter)
-        # The response is a LiteLLM ModelResponse object with 'provider' and 'model' attributes
-        # when using routers like OpenRouter
+        # Routers like OpenRouter report the provider that actually served the call.
+        # dspy<3.5 returns a LiteLLM ModelResponse with a `provider` attribute. dspy>=3.5
+        # returns an lm15 Response, which keeps the raw OpenAI-compatible reply (with its
+        # top-level "provider") in `provider_data`.
+        provider_data = getattr(response, "provider_data", None)
+        if not isinstance(provider_data, dict):
+            provider_data = {}
         actual_provider: Optional[str] = None
         actual_model: Optional[str] = None
         if response is not None:
             if hasattr(response, "provider"):
                 actual_provider = response.provider
+            else:
+                actual_provider = provider_data.get("provider")
             if hasattr(response, "model"):
                 actual_model = response.model
 
-        # Extract cost from history entry or usage dict
-        # OpenRouter and other providers return accurate cost including all token types
+        # Prefer the cost the provider billed (e.g. OpenRouter includes all token types).
+        # dspy>=3.5 only records a LiteLLM-reported cost in the entry and otherwise
+        # stores its own price-table estimate, so read the billed cost from the raw reply first.
         total_cost: Optional[float] = None
-        if (cost := last_entry.get("cost") or 0) > 0:
+        if (cost := (provider_data.get("usage") or {}).get("cost") or 0) > 0:
+            total_cost = cost
+        elif (cost := last_entry.get("cost") or 0) > 0:
             total_cost = cost
         elif usage_dict and (cost := usage_dict.get("cost") or 0) > 0:
             total_cost = cost

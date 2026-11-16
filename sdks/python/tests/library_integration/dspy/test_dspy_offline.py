@@ -9,6 +9,7 @@ import uuid
 
 import dspy
 import opik
+import pytest
 from packaging.version import Version
 
 from opik.integrations.dspy.callback import OpikCallback
@@ -44,6 +45,45 @@ def _stub_lm(cache: bool) -> dspy.LM:
         mock_response="[[ ## answer ## ]]\n4\n\n[[ ## completed ## ]]",
         cache=cache,
     )
+
+
+@pytest.mark.skipif(
+    Version(dspy.__version__) < Version("3.5.0"),
+    reason="dspy<3.5 exposes the routed provider on the LiteLLM response instead",
+)
+def test_dspy_offline__openrouter_reply__span_has_routed_provider_and_billed_cost(
+    fake_backend,
+):
+    from dspy import lm15
+
+    class OpenRouterStubEngine:
+        def complete(self, request):
+            return lm15.Response(
+                id="gen_stub",
+                model="qwen/qwen3-8b",
+                message=lm15.Message.assistant("<answer>\n4\n</answer>"),
+                finish_reason="stop",
+                usage=lm15.Usage(input_tokens=11, output_tokens=7, total_tokens=18),
+                provider_data={
+                    "provider": "Novita",
+                    "usage": {
+                        "prompt_tokens": 11,
+                        "completion_tokens": 7,
+                        "cost": 9.5e-06,
+                    },
+                },
+            )
+
+    lm = dspy.LM("openrouter/qwen/qwen3-8b", engine=OpenRouterStubEngine(), cache=False)
+    opik_callback = OpikCallback()
+    with dspy.context(lm=lm, callbacks=[opik_callback]):
+        dspy.Predict("question -> answer")(question="What is 2+2?")
+    opik_callback.flush()
+
+    lm_span = _lm_spans(fake_backend.trace_trees[0])[0]
+    assert lm_span.provider == "novita"
+    assert lm_span.metadata["llm_router"] == "openrouter"
+    assert lm_span.total_cost == 9.5e-06
 
 
 def _lm_spans(trace_tree):
