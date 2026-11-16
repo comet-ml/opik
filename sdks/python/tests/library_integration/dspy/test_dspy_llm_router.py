@@ -197,7 +197,8 @@ class TestExtractLMInfoFromHistory:
         [
             # Free endpoint: OpenRouter billed 0, so the call really cost nothing.
             ({"prompt_tokens": 10, "completion_tokens": 20, "cost": 0}, 0),
-            # BYOK: `cost` is only OpenRouter's fee; the model is billed upstream.
+            # BYOK: `cost` is only OpenRouter's fee; the model is billed upstream, so
+            # no cost is sent and the backend prices the call from its table.
             (
                 {
                     "prompt_tokens": 10,
@@ -206,10 +207,24 @@ class TestExtractLMInfoFromHistory:
                     "is_byok": True,
                     "cost_details": {"upstream_inference_cost": 2.0e-05},
                 },
-                1.2e-05,
+                None,
+            ),
+            (
+                {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "cost": 1.0e-06,
+                    "is_byok": True,
+                    "cost_details": {"upstream_inference_cost": 2.0e-05},
+                },
+                None,
             ),
         ],
-        ids=["free_endpoint_keeps_billed_zero", "byok_falls_back_to_estimate"],
+        ids=[
+            "free_endpoint_keeps_billed_zero",
+            "byok_zero_fee_left_to_backend",
+            "byok_nonzero_fee_left_to_backend",
+        ],
     )
     def test_dspy35_openrouter_billed_zero_cost(
         self, provider_usage, expected_total_cost
