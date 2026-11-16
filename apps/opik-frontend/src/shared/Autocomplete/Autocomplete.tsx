@@ -97,16 +97,11 @@ const AutoComplete = <T extends string>({
 
     handleDebouncedValueChange.flush();
 
-    setLocalValue((state) => {
-      if (state !== pendingValueRef.current) {
-        const newValue = pendingValueRef.current;
-        pendingValueRef.current = undefined;
-        return newValue;
-      }
-
-      return state;
-    });
-  }, [handleDebouncedValueChange]);
+    if (localValue !== pendingValueRef.current) {
+      setLocalValue(pendingValueRef.current);
+      pendingValueRef.current = undefined;
+    }
+  }, [handleDebouncedValueChange, localValue]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Escape") {

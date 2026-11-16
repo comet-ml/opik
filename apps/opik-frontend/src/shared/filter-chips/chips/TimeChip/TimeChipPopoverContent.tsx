@@ -249,7 +249,7 @@ interface SlotRowProps {
   slot: Slot;
   invalid?: boolean;
   autoFocus?: boolean;
-  dateInputRef: React.RefObject<HTMLInputElement>;
+  dateInputRef: React.RefObject<HTMLInputElement | null>;
   calendarDefaultTime: SimpleTime;
   onChange: (patch: SlotPatch) => void;
 }

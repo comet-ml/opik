@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { EditorView } from "@codemirror/view";
 import { EditorState, Extension } from "@codemirror/state";
 import { jsonLanguage } from "@codemirror/lang-json";
