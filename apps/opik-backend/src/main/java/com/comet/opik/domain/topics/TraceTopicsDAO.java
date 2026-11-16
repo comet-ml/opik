@@ -60,71 +60,54 @@ public class TraceTopicsDAO {
     private static final String LOGS_VISIBILITY_MODE = VisibilityMode.DEFAULT.getValue();
 
     /**
-     * Traces per topic and UTC day among the project's traces created in the window that Logs lists, each by its
-     * latest row. Topics are built from every labelled trace, but the counts take only the traces Logs lists
-     * ({@link #LOGS_SOURCES}), so a topic's count is the number of traces Logs lists for it; any version of a trace
-     * that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows. The latest row is the
-     * greatest (last_updated_at, run_id). A trace whose latest row is a tombstone is left out ({@code HAVING}).
+     * The counting rule of the read API and of a run's topic counts, shared so the two cannot drift: the project's
+     * traces created in the window that Logs lists ({@link #LOGS_SOURCES}), each by its latest row. Topics are built
+     * from every labelled trace, but the counts take only the traces Logs lists, so a topic's count is the number of
+     * traces Logs lists for it; any version of a trace that matches keeps it, as in the traces list. Every row counts,
+     * run rows and arrival rows. The latest row is the greatest (last_updated_at, run_id). A trace whose latest row is a
+     * tombstone is left out ({@code HAVING}). The FROM to HAVING part of a select of one row per trace.
      */
+    private static final String LATEST_ROW_PER_TRACE_IN_WINDOW = """
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND trace_id IN (
+                    SELECT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    AND source IN :logs_sources
+                    AND visibility_mode = :logs_visibility_mode
+                )
+                GROUP BY trace_id
+                HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+            """;
+
+    /** Traces per topic and UTC day, by {@link #LATEST_ROW_PER_TRACE_IN_WINDOW}. */
     private static final String COUNT_BY_TOPIC_AND_DAY = """
             SELECT latest_topic AS topic_id, toDate(created_at, 'UTC') AS day, count() AS traces
             FROM (
                 SELECT argMax(topic_id, (last_updated_at, run_id)) AS latest_topic, any(trace_created_at) AS created_at
-                FROM trace_topics
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                AND trace_id IN (
-                    SELECT id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                    AND source IN :logs_sources
-                    AND visibility_mode = :logs_visibility_mode
-                )
-                GROUP BY trace_id
-                HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
-            )
+            %s)
             GROUP BY topic_id, day
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
-            """;
+            """.formatted(LATEST_ROW_PER_TRACE_IN_WINDOW);
 
-    /**
-     * Traces per topic among the project's traces created in the window that Logs lists, each by its latest row. Any
-     * version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows. The
-     * latest row is the greatest (last_updated_at, run_id). A trace whose latest row is a tombstone is left out
-     * ({@code HAVING}).
-     */
+    /** Traces per topic, by {@link #LATEST_ROW_PER_TRACE_IN_WINDOW}. */
     private static final String COUNT_BY_TOPIC = """
             SELECT latest_topic AS topic_id, count() AS traces
             FROM (
                 SELECT argMax(topic_id, (last_updated_at, run_id)) AS latest_topic
-                FROM trace_topics
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                AND trace_id IN (
-                    SELECT id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
-                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
-                    AND source IN :logs_sources
-                    AND visibility_mode = :logs_visibility_mode
-                )
-                GROUP BY trace_id
-                HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
-            )
+            %s)
             GROUP BY topic_id
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
-            """;
+            """.formatted(LATEST_ROW_PER_TRACE_IN_WINDOW);
 
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM trace_topics
