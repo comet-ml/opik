@@ -56,8 +56,9 @@ class StreamingExecutor(Generic[T]):
 
         # Callback state — accessed from worker threads under lock
         self._lock = threading.Lock()
-        # A future wakes its waiters before it runs its done-callbacks, so get_results also waits
-        # for the callbacks still in flight before it reads the state they update.
+        # A future wakes its waiters before it runs its done-callbacks, so
+        # get_results also waits for the callbacks still in flight before it
+        # reads the state they update.
         self._callbacks_done = threading.Condition(self._lock)
         self._pending_callbacks = 0
         self._score_totals: Dict[str, float] = defaultdict(float)
@@ -242,7 +243,8 @@ class StreamingExecutor(Generic[T]):
         with self._callbacks_done:
             self._callbacks_done.wait_for(lambda: self._pending_callbacks == 0)
 
-        # Re-raise first exception if any task failed; past this point every task succeeded.
+        # Re-raise first exception if any task failed; past this point every
+        # task succeeded.
         return [future.result() for future in self._submitted_futures]
 
 

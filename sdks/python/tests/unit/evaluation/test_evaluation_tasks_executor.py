@@ -5,10 +5,11 @@ from opik.evaluation.engine import evaluation_tasks_executor
 
 
 def test_get_results__done_callbacks_still_running__waits_for_them_and_returns_every_result():
-    # A future wakes its waiters before it runs its done-callbacks. Block both callbacks, check that
-    # get_results is still waiting for them, then release them.
+    # A future wakes its waiters before it runs its done-callbacks. Block both
+    # callbacks, check that get_results is still waiting for them, then release them.
     tasks_may_finish = threading.Event()
     release_callbacks = threading.Event()
+    calling_get_results = threading.Event()
     callbacks_started = threading.Semaphore(0)
     completed_callbacks = []
     on_future_done = evaluation_tasks_executor.StreamingExecutor._on_future_done
@@ -22,6 +23,7 @@ def test_get_results__done_callbacks_still_running__waits_for_them_and_returns_e
     returned = {}
 
     def collect_results(executor):
+        calling_get_results.set()
         returned["results"] = executor.get_results()
         returned["callbacks_completed"] = len(completed_callbacks)
 
@@ -36,7 +38,8 @@ def test_get_results__done_callbacks_still_running__waits_for_them_and_returns_e
         with evaluation_tasks_executor.StreamingExecutor[str](
             workers=2, verbose=0, client=mock.Mock(), total=2
         ) as executor:
-            # Tasks finish only after both are submitted, so their callbacks run on the pool's threads.
+            # Tasks finish only after both are submitted, so their callbacks
+            # run on the pool's threads.
             executor.submit(lambda: tasks_may_finish.wait(timeout=5) and "first")
             executor.submit(lambda: tasks_may_finish.wait(timeout=5) and "second")
             tasks_may_finish.set()
@@ -47,12 +50,17 @@ def test_get_results__done_callbacks_still_running__waits_for_them_and_returns_e
                 both_started = callbacks_started.acquire(
                     timeout=5
                 ) and callbacks_started.acquire(timeout=5)
+                get_results_called = calling_get_results.wait(timeout=5)
                 collector.join(timeout=0.2)
                 returned_while_callbacks_blocked = not collector.is_alive()
             finally:
                 release_callbacks.set()
-                collector.join(timeout=5)
+                collector.join(timeout=10)
+
+            collector_finished = not collector.is_alive()
 
     assert both_started
+    assert get_results_called
     assert not returned_while_callbacks_blocked
+    assert collector_finished
     assert returned == {"results": ["first", "second"], "callbacks_completed": 2}
