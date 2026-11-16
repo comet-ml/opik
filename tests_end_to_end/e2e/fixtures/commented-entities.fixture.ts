@@ -154,6 +154,34 @@ export const test = baseTest.extend<CommentedEntitiesFixtures>({
         .toBe(true);
     };
 
+    /**
+     * A comment just written, read back by id — polled rather than read once.
+     *
+     * The 201 and the by-id read settle independently, so a comment can still
+     * come back `null` immediately after its write: observed twice in one
+     * staging run, in both the trace and the span arm, which made the whole
+     * spec flaky for a reason that has nothing to do with the comments filter.
+     *
+     * Polled for the exact TEXT, not merely for non-null — a comment that
+     * landed with the wrong body would otherwise satisfy this and then quietly
+     * fail a downstream assertion about the filter instead.
+     */
+    const waitUntilCommentReads = async (
+      label: string,
+      read: () => Promise<string | null>,
+      expected: string,
+    ): Promise<void> => {
+      await expect
+        .poll(read, {
+          timeout: ENTITY_READABLE_TIMEOUT_MS,
+          intervals: [250, 500, 1_000, 2_000],
+          message:
+            `${label} — a timeout here is the comment write still settling, not an answer ` +
+            'about the comments filter',
+        })
+        .toBe(expected);
+    };
+
     try {
       for (const seed of SEEDS) {
         const traceId = uuid7();
@@ -196,10 +224,11 @@ export const test = baseTest.extend<CommentedEntitiesFixtures>({
           // Read back by id rather than trusting the 201. A comment that did
           // not land looks exactly like a correctly-excluded row to every
           // assertion downstream, so the seed proves itself here instead.
-          expect(
-            await backendClient.getTraceComment(ref.id, commentId),
+          await waitUntilCommentReads(
             `the trace comment seeded on ${ref.key} must be readable back`,
-          ).toBe(`trace comment on ${ref.key}`);
+            () => backendClient.getTraceComment(ref.id, commentId),
+            `trace comment on ${ref.key}`,
+          );
         }
 
         if (ref.commentedOn === 'span') {
@@ -222,11 +251,12 @@ export const test = baseTest.extend<CommentedEntitiesFixtures>({
             entityId: spanId,
             text: `span comment on ${ref.key}`,
           });
-          expect(
-            await backendClient.getSpanComment(spanId, commentId),
+          await waitUntilCommentReads(
             `the span comment seeded on ${ref.key} must be readable back — it is the control ` +
               'for the traces filter, so a seed that silently failed would read as a pass',
-          ).toBe(`span comment on ${ref.key}`);
+            () => backendClient.getSpanComment(spanId, commentId),
+            `span comment on ${ref.key}`,
+          );
         }
       }
 
@@ -270,10 +300,11 @@ export const test = baseTest.extend<CommentedEntitiesFixtures>({
             text: `thread comment on ${ref.key}`,
           });
           threadCommentIds.push(commentId);
-          expect(
-            await backendClient.getThreadComment(ref.threadModelId!, commentId),
+          await waitUntilCommentReads(
             `the thread comment seeded on ${ref.key} must be readable back`,
-          ).toBe(`thread comment on ${ref.key}`);
+            () => backendClient.getThreadComment(ref.threadModelId!, commentId),
+            `thread comment on ${ref.key}`,
+          );
         }
       }
 
