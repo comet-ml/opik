@@ -15,6 +15,13 @@
                 <path>/var/lib/clickhouse/disks/cold_cache/</path>
                 <max_size>100Mi</max_size>
             </cold>
+            <!-- Made read-only by the suite, so moves onto it fail. -->
+            <broken_blob>
+                <type>object_storage</type>
+                <object_storage_type>local_blob_storage</object_storage_type>
+                <metadata_type>local</metadata_type>
+                <path>/var/lib/clickhouse/disks/broken_blob/</path>
+            </broken_blob>
         </disks>
         <policies>
             <tiered>
@@ -27,6 +34,16 @@
                     </cold>
                 </volumes>
             </tiered>
+            <broken>
+                <volumes>
+                    <hot>
+                        <disk>default</disk>
+                    </hot>
+                    <cold>
+                        <disk>broken_blob</disk>
+                    </cold>
+                </volumes>
+            </broken>
         </policies>
     </storage_configuration>
 </clickhouse>

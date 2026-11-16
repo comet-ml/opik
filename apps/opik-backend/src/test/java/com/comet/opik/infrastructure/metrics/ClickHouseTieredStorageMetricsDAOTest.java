@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.metrics;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.MoveErrorStat;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.TieredReadFailureStat;
 import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.TieredReadStat;
 import io.r2dbc.spi.ConnectionFactory;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -66,6 +68,16 @@ class ClickHouseTieredStorageMetricsDAOTest {
         execute("ALTER TABLE %s.tiered_reads MOVE PARTITION 0 TO VOLUME 'cold'".formatted(DATABASE_NAME));
     }
 
+    @AfterAll
+    void tearDownAll() {
+        try {
+            clickHouseContainer.stop();
+            zookeeperContainer.stop();
+        } finally {
+            network.close();
+        }
+    }
+
     @Test
     void countsReadsOfTieredTablesAndWhichOfThemReadTheColdTier() {
         for (int i = 0; i < 3; i++) {
@@ -94,6 +106,10 @@ class ClickHouseTieredStorageMetricsDAOTest {
                             + " SETTINGS allow_custom_error_code_in_throwif = 1").formatted(DATABASE_NAME));
             executeIgnoringFailure("SELECT throwIf(id >= 0) FROM %s.tiered_failures".formatted(DATABASE_NAME));
         }
+        // A failed write with the same code isn't a read.
+        executeIgnoringFailure(
+                ("INSERT INTO %s.tiered_failures SELECT throwIf(number >= 0, 'simulated', toInt32(499)), 0"
+                        + " FROM numbers(1) SETTINGS allow_custom_error_code_in_throwif = 1").formatted(DATABASE_NAME));
 
         Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).untilAsserted(
                 () -> assertThat(dao.getTieredReadFailures(WINDOW).block()).containsExactly(
@@ -110,6 +126,21 @@ class ClickHouseTieredStorageMetricsDAOTest {
                     + " AND event_time < now() - INTERVAL 15 SECOND").formatted(DATABASE_NAME))).isPositive();
             assertThat(dao.getMoveErrors(WINDOW).block()).isEmpty();
         });
+    }
+
+    @Test
+    void countsFailedMoves() throws Exception {
+        execute("CREATE TABLE %s.failed_moves (id UInt64, p UInt8) ENGINE = MergeTree PARTITION BY p ORDER BY id"
+                .formatted(DATABASE_NAME) + " SETTINGS storage_policy = 'broken'");
+        execute("INSERT INTO %s.failed_moves SELECT number, 0 FROM numbers(100)".formatted(DATABASE_NAME));
+        assertThat(clickHouseContainer.execInContainer("chmod", "-R", "a-w", "/var/lib/clickhouse/disks/broken_blob")
+                .getExitCode()).isZero();
+        executeIgnoringFailure(
+                "ALTER TABLE %s.failed_moves MOVE PARTITION 0 TO VOLUME 'cold'".formatted(DATABASE_NAME));
+
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).untilAsserted(
+                () -> assertThat(dao.getMoveErrors(WINDOW).block()).containsExactly(
+                        MoveErrorStat.builder().table("failed_moves").moveErrors(1).build()));
     }
 
     private void execute(String sql) {

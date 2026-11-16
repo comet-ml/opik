@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.metrics;
 
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
+import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -145,7 +146,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * {@code database.table} the way {@code system.query_log.tables} lists them. Evaluated once on the node that
      * answers, then used as a constant by the replica fan-out.
      */
-    private static final String TIERED_TABLES = """
+    private static final String TIERED_TABLES_CTE = """
             WITH
                 (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks,
                 (SELECT groupArray(policy_name) FROM system.storage_policies
@@ -156,11 +157,13 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
 
     /**
      * The window ends {@code LOG_FLUSH_LAG} in the past so rows still buffered for the system log (7.5 s flush by
-     * default) land in the next window instead of being skipped. Consecutive polls then tile time without gaps.
+     * default) land in the next window instead of being skipped. The end is exclusive so consecutive polls tile time
+     * without gaps or overlap; {@code less()} because the templates use {@code <>} as delimiters.
      */
     private static final String WINDOW = """
             event_date >= toDate(now() - INTERVAL <window_start> SECOND)
-                AND event_time BETWEEN now() - INTERVAL <window_start> SECOND AND now() - INTERVAL <window_end> SECOND
+                AND event_time >= now() - INTERVAL <window_start> SECOND
+                AND less(event_time, now() - INTERVAL <window_end> SECOND)
             """;
 
     private static final Duration LOG_FLUSH_LAG = Duration.ofSeconds(15);
@@ -171,7 +174,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * policy, so each read is counted once. A read touched the cold tier when the cold disk's cache served any bytes,
      * from the cache or from object storage.
      */
-    private static final String TIERED_READ_STATS_SQL = TIERED_TABLES + """
+    private static final String TIERED_READ_STATS_SQL = TIERED_TABLES_CTE + """
             SELECT
                 qualified_table,
                 toInt64(count()) AS queries,
@@ -196,7 +199,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * RECEIVED_ERROR_FROM_REMOTE_IO_SERVER (86), CORRUPTED_DATA (246), S3_ERROR (499) and POCO_EXCEPTION (1000).
      * Client disconnects and cancellations are routine on these tables, so the codes are an allowlist.
      */
-    private static final String TIERED_READ_FAILURES_SQL = TIERED_TABLES + """
+    private static final String TIERED_READ_FAILURES_SQL = TIERED_TABLES_CTE + """
             SELECT
                 qualified_table,
                 errorCodeToName(exception_code) AS code,
@@ -204,7 +207,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
             FROM (
                 SELECT arrayJoin(arrayIntersect(tables, tiered_tables)) AS qualified_table, exception_code
                 FROM clusterAllReplicas('{cluster}', system.query_log)
-                WHERE <window> AND type = 'ExceptionWhileProcessing'
+                WHERE <window> AND type = 'ExceptionWhileProcessing' AND query_kind = 'Select'
                     AND exception_code IN (33, 40, 86, 246, 499, 1000) AND hasAny(tables, tiered_tables)
             )
             GROUP BY qualified_table, code
@@ -322,11 +325,12 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                         .render())
                 .add("log_comment", logComment)
                 .render();
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(query)
+        return Flux.usingWhen(connectionFactory.create(),
+                connection -> Flux.from(connection.createStatement(query)
                         .bind("database_name", databaseName)
                         .execute())
-                .flatMap(result -> result.map(mapper))
+                        .flatMap(result -> result.map(mapper)),
+                Connection::close)
                 .collectList();
     }
 
