@@ -16,6 +16,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.BeforeAll;
@@ -431,8 +432,8 @@ class TopicsStorageTest {
 
     @Test
     @DisplayName("the pass that ends complete saves the run's counts in its stats, leaving the other keys as they are: "
-            + "per topic and Other, each trace by its latest row, only the traces Logs lists; a trace from an "
-            + "experiment or a hidden one is left out")
+            + "per topic and Other, each trace by its latest row, only the traces Logs lists, only the run's window; "
+            + "a trace from an experiment, a hidden one, or a labelled one just outside the window is left out")
     void runCountsAreOfWhatLogsLists() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -462,6 +463,27 @@ class TopicsStorageTest {
                 .map(row -> row.id().equals(experiment) ? row.toBuilder().source("experiment").build() : row)
                 .map(row -> row.id().equals(hidden) ? row.toBuilder().visibilityMode("hidden").build() : row)
                 .toList());
+        // Logs lists them and they have a row of the run, but they are outside its window: one created at its end
+        // (labelled before the save, as a nightly update's pass does), one just before its start.
+        var atEnd = NIGHT;
+        var beforeStart = from().minusSeconds(1);
+        var outside = List.of(Generators.timeBasedEpochGenerator().construct(atEnd.toEpochMilli()),
+                Generators.timeBasedEpochGenerator().construct(beforeStart.toEpochMilli()));
+        var outsideAt = List.of(atEnd, beforeStart);
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, 2)
+                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, outside.get(i), outsideAt.get(i)))
+                .toList());
+        traceTopicsDAO.insert(IntStream.range(0, 2)
+                .mapToObj(i -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(outside.get(i))
+                        .traceCreatedAt(outsideAt.get(i))
+                        .topicId(topicId)
+                        .source(TraceTopic.Source.RUN)
+                        .runId(runId.toString())
+                        .build())
+                .toList()).block();
 
         var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
                 TopicWindowLabelService.Trigger.RUN, 7, 20);
@@ -470,6 +492,7 @@ class TopicsStorageTest {
         var expected = new HashMap<UUID, Long>(Map.of(topicId, 0L, TraceTopic.OTHER, 0L));
         data.traceTopics(workspaceId, projectId).stream()
                 .filter(row -> !row.traceId().equals(experiment) && !row.traceId().equals(hidden))
+                .filter(row -> !outside.contains(row.traceId()))
                 .forEach(row -> expected.merge(row.topicId(), 1L, Long::sum));
         assertThat(expected.get(topicId)).isPositive();
         assertThat(expected.get(TraceTopic.OTHER)).isPositive();

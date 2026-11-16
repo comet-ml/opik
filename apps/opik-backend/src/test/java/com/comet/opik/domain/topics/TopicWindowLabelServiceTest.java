@@ -233,8 +233,18 @@ class TopicWindowLabelServiceTest {
 
     @Test
     @DisplayName("a complete pass saves the run's counts with the labels complete, in one transaction: one entry per "
-            + "live topic and Other, each the traces counted over the run's window")
+            + "live topic and Other, each the traces counted over the run's window, even when the run saved after "
+            + "its window's end")
     void completePassSavesTheCounts() {
+        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
+                .projectId(projectId)
+                .workspaceId(WORKSPACE_ID)
+                .rebuilds(1)
+                .lastRunId(runId)
+                .lastSuccessAt(NIGHT.plus(Duration.ofHours(2)))
+                .windowUntil(NIGHT)
+                .build()));
+
         var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
 
         assertThat(pass.complete()).isTrue();

@@ -248,8 +248,10 @@ then: change that setting while passes are unfinished, and they label the new wi
 The pass that ends complete also counts the window's traces per topic and writes the counts to the run's
 `stats.topic_counts`, in the transaction that sets `labels_complete`: one entry per topic of the run and one for Other.
 It counts the traces the Logs page lists (source `sdk`, visibility `default`), each by its latest `trace_topics` row
-(`topics:count_by_topic` in `system.query_log`). Later runs relabel the window, so these counts are the only record of
-a past run's. A failed count read logs `could not count run` as a WARN; the labels are still marked complete, and that
+(`topics:count_by_topic` in `system.query_log`). The counts cover the run's window exactly, from `window_from` to
+`window_until` in its `stats`, so two runs' counts compare like with like. The Topics page counts a sliding window
+that includes today, so its counts can differ from a run's by the traces of the days at the window's edges. Later
+runs relabel the window, so these counts are the only record of a past run's. A failed count read logs `could not count run` as a WARN; the labels are still marked complete, and that
 run has no `topic_counts`. The counts go when their `topic_runs` row goes. To see a topic's share run by run:
 
 ```sql
