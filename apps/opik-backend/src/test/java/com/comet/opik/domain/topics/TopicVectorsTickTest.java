@@ -616,6 +616,11 @@ class TopicVectorsTickTest {
                 .add(4, TopicVectorsTickServiceTest.workspace(workspaceId)
                         .put(stringKey("reason"), TopicVectorsTickService.EMBED_FAILED).build());
         verifyNoInteractions(meter.counter("topics.vectors.written"));
+        // WireMock journals a request only after the stub's delay ends, after this test. Wait for it, so the entry
+        // cannot land after the next test's resetAll and show up in that test's journal.
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> assertThat(wireMock.findAll(postRequestedFor(urlEqualTo(EMBED_PATH))))
+                        .hasSize(embedStub.calls.get()));
     }
 
     @Test
