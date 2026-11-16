@@ -245,6 +245,25 @@ window that needs more time is finished over several runs, one every `TOPICS_FIR
 behind the projects saved before it. A resumed pass takes the window's start from `TOPICS_BUILD_WINDOW_DAYS` as it is
 then: change that setting while passes are unfinished, and they label the new window.
 
+The pass that ends complete also counts the window's traces per topic and writes the counts to the run's
+`stats.topic_counts`, in the transaction that sets `labels_complete`: one entry per topic of the run and one for Other.
+It counts the traces the Logs page lists (source `sdk`, visibility `default`), each by its latest `trace_topics` row
+(`topics:count_by_topic` in `system.query_log`). Later runs relabel the window, so these counts are the only record of
+a past run's. A failed count read logs `could not count run` as a WARN; the labels are still marked complete, and that
+run has no `topic_counts`. The counts go when their `topic_runs` row goes. To see a topic's share run by run:
+
+```sql
+-- MySQL: one topic's traces and share of the run's counted traces, run by run.
+SELECT r.started_at,
+    JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') AS traces,
+    JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') / SUM(c.traces) AS share
+FROM topic_runs r,
+    JSON_TABLE(JSON_EXTRACT(r.stats, '$.topic_counts.*'), '$[*]' COLUMNS (traces BIGINT PATH '$')) AS c
+WHERE r.workspace_id = '<workspace_id>' AND r.project_id = '<project_id>'
+GROUP BY r.run_id
+ORDER BY r.started_at;
+```
+
 To see the projects that wait:
 
 ```sql
@@ -314,7 +333,9 @@ ORDER BY traces DESC;
 
 Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, the topics with their
 sizes, the Other share and the phase timings. The algorithm's own numbers are in the run's `stats` in `topic_runs`:
-`unique_texts`, `k` (the k-means groups), `seed`, and `other_groups` (the groups the answer placed in Other).
+`unique_texts`, `k` (the k-means groups), `seed`, and `other_groups` (the groups the answer placed in Other). Once
+the run's labelling pass ends complete, `stats.topic_counts` holds its traces per topic id, Other under the all-zeros
+id (see "Saving and labelling").
 
 The author prompt and Qwen's raw answer hold users' trace text, so no log level prints them: the run logs their length
 and a SHA-256 of each, with `call '<call>'`, which matches the same prompt or answer across runs. Each LLM call's
