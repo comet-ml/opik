@@ -1,4 +1,4 @@
-export { detectLLMMessages } from "./detectLLMMessages";
+export { canShowLLMMessages, detectLLMMessages } from "./detectLLMMessages";
 export { mapAndCombineMessages } from "./mapAndCombineMessages";
 
 export type {
@@ -9,6 +9,7 @@ export type {
   LLMMapperResult,
   FormatDetector,
   FormatMapper,
+  LLMMessagePrettifyConfig,
   LLMMessageFormatImplementation,
 } from "./types";
 

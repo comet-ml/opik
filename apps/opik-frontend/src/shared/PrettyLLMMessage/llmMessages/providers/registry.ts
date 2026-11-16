@@ -2,6 +2,7 @@ import { LLMMessageFormat, LLMMessageFormatImplementation } from "../types";
 import { openaiFormat } from "./openai";
 import { langchainFormat } from "./langchain";
 import { playgroundFormat } from "./playground";
+import { openinferenceFormat } from "./openinference";
 
 const FORMAT_REGISTRY: Record<
   LLMMessageFormat,
@@ -12,6 +13,7 @@ const FORMAT_REGISTRY: Record<
   anthropic: null,
   google: null,
   playground: playgroundFormat,
+  openinference: openinferenceFormat,
 };
 
 export const getFormat = (

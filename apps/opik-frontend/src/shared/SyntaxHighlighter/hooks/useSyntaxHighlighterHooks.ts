@@ -40,9 +40,19 @@ export const useSyntaxHighlighterCode = (
   mode: MODE_TYPE,
   prettifyConfig?: PrettifyConfig,
 ): CodeOutput => {
+  const fieldType = prettifyConfig?.fieldType;
+  const openInferenceHint = prettifyConfig?.openInferenceHint;
+  const openInferenceInput = prettifyConfig?.openInferenceInput;
   return useMemo(
-    () => generateSyntaxHighlighterCode(data, mode, prettifyConfig),
-    [mode, data, prettifyConfig],
+    () =>
+      generateSyntaxHighlighterCode(
+        data,
+        mode,
+        fieldType
+          ? { fieldType, openInferenceHint, openInferenceInput }
+          : undefined,
+      ),
+    [mode, data, fieldType, openInferenceHint, openInferenceInput],
   );
 };
 
@@ -50,9 +60,14 @@ export const useSyntaxHighlighterOptions = (
   prettifyConfig?: PrettifyConfig,
   canBePrettified: boolean = false,
 ) => {
+  const fieldType = prettifyConfig?.fieldType;
   return useMemo(
-    () => generateSelectOptions(prettifyConfig, canBePrettified),
-    [prettifyConfig, canBePrettified],
+    () =>
+      generateSelectOptions(
+        fieldType ? { fieldType } : undefined,
+        canBePrettified,
+      ),
+    [fieldType, canBePrettified],
   );
 };
 

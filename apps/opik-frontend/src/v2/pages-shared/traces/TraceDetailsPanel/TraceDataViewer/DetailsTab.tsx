@@ -1,5 +1,6 @@
 import React from "react";
 import { Span, Trace } from "@/types/traces";
+import { getPrettifyConfig } from "@/lib/traces";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
 import CollapsibleSection from "@/v2/pages-shared/traces/TraceDetailsPanel/CollapsibleSection";
@@ -21,6 +22,12 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
 }) => {
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
+  const prettifySource = {
+    metadata: data.metadata,
+    input: transformedInput,
+    output: transformedOutput,
+  };
+
   const hasMetadata = Boolean(data.metadata);
   const hasTokenUsage = Boolean(data.usage);
 
@@ -36,7 +43,10 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
           <CodeBlock
             title="Input"
             data={transformedInput}
-            prettifyConfig={{ fieldType: "input" }}
+            prettifyConfig={{
+              ...getPrettifyConfig(prettifySource, "input"),
+              fieldType: "input",
+            }}
             preserveKey="syntax-highlighter-trace-sidebar-input"
             search={search}
             withSearch
@@ -51,7 +61,10 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
           <CodeBlock
             title="Output"
             data={transformedOutput}
-            prettifyConfig={{ fieldType: "output" }}
+            prettifyConfig={{
+              ...getPrettifyConfig(prettifySource, "output"),
+              fieldType: "output",
+            }}
             preserveKey="syntax-highlighter-trace-sidebar-output"
             search={search}
             withSearch

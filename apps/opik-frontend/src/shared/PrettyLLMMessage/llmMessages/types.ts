@@ -1,3 +1,4 @@
+import { MessageUsage } from "../usage";
 import { ComponentType } from "react";
 import {
   PrettyLLMMessageTextBlockProps,
@@ -5,7 +6,6 @@ import {
   PrettyLLMMessageVideoBlockProps,
   PrettyLLMMessageAudioPlayerBlockProps,
   PrettyLLMMessageCodeBlockProps,
-  PrettyLLMMessageUsageProps,
   MessageRole,
 } from "@/shared/PrettyLLMMessage/types";
 
@@ -15,7 +15,14 @@ export type LLMMessageFormat =
   | "langchain"
   | "anthropic"
   | "google"
-  | "playground";
+  | "playground"
+  | "openinference";
+
+export type LLMMessagePrettifyConfig = {
+  fieldType?: "input" | "output";
+  formatHint?: LLMMessageFormat;
+  formatHintIsAuthoritative?: boolean;
+};
 
 // Detection result
 export interface LLMMessageFormatDetectionResult {
@@ -24,6 +31,11 @@ export interface LLMMessageFormatDetectionResult {
   format?: LLMMessageFormat;
   confidence?: "high" | "medium" | "low";
 }
+
+export type LLMMessagePairDetections = {
+  input: LLMMessageFormatDetectionResult;
+  output: LLMMessageFormatDetectionResult;
+};
 
 // Block descriptor with component reference (Component-as-Data pattern)
 export type LLMBlockDescriptor =
@@ -66,19 +78,19 @@ export interface LLMMessageDescriptor {
 // Mapper result with messages and shared usage
 export interface LLMMapperResult {
   messages: LLMMessageDescriptor[];
-  usage?: PrettyLLMMessageUsageProps["usage"];
+  usage?: MessageUsage;
 }
 
 // Format detector contract
 export type FormatDetector = (
   data: unknown,
-  prettifyConfig?: { fieldType?: "input" | "output" },
+  prettifyConfig?: LLMMessagePrettifyConfig,
 ) => boolean;
 
 // Format mapper contract
 export type FormatMapper = (
   data: unknown,
-  prettifyConfig?: { fieldType?: "input" | "output" },
+  prettifyConfig?: LLMMessagePrettifyConfig,
 ) => LLMMapperResult;
 
 // Format combiner contract
@@ -87,10 +99,25 @@ export type FormatCombiner = (
   output: { raw: unknown; mapped: LLMMapperResult },
 ) => LLMMapperResult;
 
+export type FormatPairMapper = (
+  input: { raw: unknown; detection: LLMMessageFormatDetectionResult },
+  output: { raw: unknown; detection: LLMMessageFormatDetectionResult },
+  config: LLMMessagePrettifyConfig,
+) => LLMMapperResult | null;
+
+export type FormatHintResolver = (
+  input: unknown,
+  output: unknown,
+) =>
+  | Pick<LLMMessagePrettifyConfig, "formatHint" | "formatHintIsAuthoritative">
+  | undefined;
+
 // Format interface
 export interface LLMMessageFormatImplementation {
   name: LLMMessageFormat;
   detector: FormatDetector;
   mapper: FormatMapper;
   combiner?: FormatCombiner;
+  pairMapper?: FormatPairMapper;
+  resolveHint?: FormatHintResolver;
 }
