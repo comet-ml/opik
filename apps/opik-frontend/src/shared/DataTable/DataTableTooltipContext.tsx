@@ -54,7 +54,7 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
     // Only hide if a mouse is not over either trigger or popover
     setTimeout(() => {
       if (!isMouseOverPopoverRef.current && !isMouseOverTriggerRef.current) {
-        timeoutRef.current && clearTimeout(timeoutRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setPopoverState({ content: null, triggerRef: null });
         previousTriggerRef.current = null;
       }
@@ -66,7 +66,7 @@ const DataTableTooltipContext: React.FC<DataTableTooltipContextProps> = ({
       isMouseOverTriggerRef.current = true;
       // Check if it's the same trigger
       if (previousTriggerRef.current !== triggerRef.current) {
-        timeoutRef.current && clearTimeout(timeoutRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
           setPopoverState({ content, triggerRef });
         }, delayDuration);
