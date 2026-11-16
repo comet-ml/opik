@@ -463,7 +463,7 @@ const DataTable = <TData, TValue>({
             <TableHeader
               className={cn(stickyHeader && "sticky z-10")}
               {...(stickyHeader && {
-                ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
+                [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical,
               })}
             >
               {table.getHeaderGroups().map((headerGroup, index, groups) => {

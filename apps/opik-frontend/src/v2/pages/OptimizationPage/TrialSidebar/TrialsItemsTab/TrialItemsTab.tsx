@@ -373,37 +373,33 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   });
 
   const datasetColumnsData = useMemo(() => {
-    return [
-      ...dynamicDatasetColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            accessorFn: (row: FlattenedTrialItem) =>
-              get(row, ["data", label], ""),
-            cell: AutodetectCell as never,
-            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-          }) as ColumnData<FlattenedTrialItem>,
-      ),
-    ];
+    return dynamicDatasetColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          accessorFn: (row: FlattenedTrialItem) =>
+            get(row, ["data", label], ""),
+          cell: AutodetectCell as never,
+          ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+        }) as ColumnData<FlattenedTrialItem>,
+    );
   }, [dynamicDatasetColumns]);
 
   const outputColumnsData = useMemo(() => {
-    return [
-      ...dynamicOutputColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            accessorFn: (row: FlattenedTrialItem) =>
-              get(row.experimentItem.output, label, ""),
-            cell: AutodetectCell as never,
-            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-          }) as ColumnData<FlattenedTrialItem>,
-      ),
-    ];
+    return dynamicOutputColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          accessorFn: (row: FlattenedTrialItem) =>
+            get(row.experimentItem.output, label, ""),
+          cell: AutodetectCell as never,
+          ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+        }) as ColumnData<FlattenedTrialItem>,
+    );
   }, [dynamicOutputColumns]);
 
   const scoresColumnsData = useMemo(() => {
