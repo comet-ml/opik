@@ -195,7 +195,10 @@ test.describe('Trace filters — comments', { tag: ['@t2-cuj', '@area:traces'] }
         // time range is stated for the same reason — it is persisted too, and
         // it decides whether the read is windowed at all.
         await logs.gotoTraces(project.id, { timeRange: TIME_RANGE, size: 100 });
-        await logs.waitForReady();
+        // The same 60s the count assertion below gets, and for the same reason:
+        // the table's windowed read can lag the unwindowed one, and the default
+        // 15s put this wait — not the assertion — first past the post.
+        await logs.waitForReady({ timeout: 60_000 });
         expect(await logs.activeLogsTab(), 'the Traces table is the one on screen').toBe('traces');
         // A longer wait than the 10s default, and not a looser assertion — the
         // count and the exact ids below are unchanged. The table's read is

@@ -65,20 +65,21 @@ export class AddToTestSuiteDialogPage {
       // The dialog may already hold the suite. `useAddToDatasetForm` restores
       // the last dataset used, so a second open in the same browser context can
       // arrive pre-selected — and then the "Select a test suite" placeholder
-      // never exists to click, which is how this timed out under four workers
-      // while passing in a single worker: whether the restore beats the click
-      // is a race. Both states are legitimate, so the END state is what is
-      // waited for and only the transition is conditional.
-      await expect(
-        selected.or(placeholder),
-        'the suite picker has rendered, either empty or already holding a selection',
-      ).toBeVisible();
-      if (!(await selected.isVisible())) {
-        await placeholder.click();
-        await this.page.getByRole('option', { name, exact: false }).click();
-      }
-      await expect(selected, 'the picker shows the chosen suite').toBeVisible();
-      await this.runsPerItemInput.waitFor({ state: 'visible' });
+      // never exists to click.
+      //
+      // Retried as a whole rather than branched on a snapshot: the restore can
+      // land BETWEEN reading which state the picker is in and acting on it, so a
+      // plain `if` either clicks a placeholder that has just been replaced or
+      // skips a pick that had not happened yet. Both were observed on staging,
+      // in different runs. `toPass` re-reads the state on each attempt, and the
+      // only way out is the picker genuinely showing the suite.
+      await expect(async () => {
+        if (await selected.isVisible()) return;
+        await placeholder.click({ timeout: 5_000 });
+        await this.page.getByRole('option', { name, exact: false }).click({ timeout: 5_000 });
+        await expect(selected).toBeVisible({ timeout: 5_000 });
+      }, `the picker settles on "${name}"`).toPass({ timeout: 45_000 });
+      await this.runsPerItemInput.waitFor({ state: 'visible', timeout: 30_000 });
     });
   }
 

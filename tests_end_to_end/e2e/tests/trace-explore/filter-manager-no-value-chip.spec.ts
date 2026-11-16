@@ -126,11 +126,18 @@ test.describe(
           // are both persisted per project, so a spec that inherited them could
           // be driving the wrong table over the wrong window.
           await logs.gotoTraces(project.id, { timeRange: TIME_RANGE, size: 100 });
-          await logs.waitForReady();
+          // Longer than the POM's deliberately short default, which exists so a
+          // genuinely empty project fails fast. This project is NOT empty — the
+          // step above has already confirmed the seed server-side — so the only
+          // thing being waited for here is the table's own WINDOWED read
+          // catching up, and on staging that exceeded 15s. The assertions are
+          // unchanged; a project that really had no rows still fails, just
+          // later.
+          await logs.waitForReady({ timeout: 60_000 });
           expect(await logs.activeLogsTab(), 'the Traces table is the one on screen').toBe(
             'traces',
           );
-          await expect(logs.traceRows).toHaveCount(seeded.length);
+          await expect(logs.traceRows).toHaveCount(seeded.length, { timeout: 60_000 });
           expect(
             (await logs.readRowIdsOnPage()).slice().sort(),
             'the unfiltered table shows exactly the seeded traces',
