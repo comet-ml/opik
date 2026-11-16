@@ -169,6 +169,24 @@ test.describe('Trace filters — comments', { tag: ['@t2-cuj', '@area:traces'] }
             },
           )
           .toBe(seed.tracesWithTraceComment.length);
+
+        // And the UNFILTERED listing, which is what the next step reads off the
+        // table. The poll above says the comments landed; it says nothing about
+        // every trace being in the listing index yet, and the two settle
+        // independently — the comment reads are by id, the table's read is a
+        // project listing. Observed on staging under four workers: the filtered
+        // read answered while the table rendered 0 of 6 rows for the full 10s
+        // of the count assertion, which reads as a rendering bug rather than as
+        // ingestion still catching up.
+        await expect
+          .poll(async () => (await backendClient.listTracePage({ projectId: project.id })).total, {
+            timeout: 60_000,
+            intervals: [500, 1_000, 2_000],
+            message:
+              'the server to list all six seeded traces — a timeout here is ingestion still ' +
+              'catching up, not the table rendering the wrong rows',
+          })
+          .toBe(seed.traces.length);
       });
 
       await test.step('Open the Traces tab and confirm every seeded trace is listed', async () => {
