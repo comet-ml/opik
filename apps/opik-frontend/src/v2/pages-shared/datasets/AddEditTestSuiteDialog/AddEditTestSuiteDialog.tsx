@@ -38,7 +38,7 @@ const AddEditTestSuiteDialog: React.FunctionComponent<
 
   const {
     isEdit,
-    canEditItems,
+    canEditDatasets,
     assertions,
     setAssertions,
     runsPerItem,
@@ -53,7 +53,7 @@ const AddEditTestSuiteDialog: React.FunctionComponent<
       form={form}
       idPrefix="testSuite"
     >
-      {!isEdit && canEditItems && (
+      {!isEdit && canEditDatasets && (
         <>
           <Separator className="mb-4" />
           <div className="mb-4">

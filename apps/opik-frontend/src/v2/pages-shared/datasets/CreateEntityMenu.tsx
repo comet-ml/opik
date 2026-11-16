@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Code2, FileTerminal, LucideIcon } from "lucide-react";
 
 import {
@@ -42,13 +42,9 @@ export const useCreateEntityOptions = (): CreateEntityOption[] => {
     permissions: { canEditDatasets },
   } = usePermissions();
 
-  return useMemo(
-    () =>
-      canEditDatasets
-        ? CREATE_ENTITY_OPTIONS
-        : CREATE_ENTITY_OPTIONS.filter((option) => option.mode !== "upload"),
-    [canEditDatasets],
-  );
+  return canEditDatasets
+    ? CREATE_ENTITY_OPTIONS
+    : CREATE_ENTITY_OPTIONS.filter((option) => option.mode !== "upload");
 };
 
 type CreateEntityMenuProps = {

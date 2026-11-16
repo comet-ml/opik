@@ -174,7 +174,7 @@ describe("useDatasetForm without dataset edit permission", () => {
     const { result } = setupForm({ permissions });
 
     expect(result.current.hideUpload).toBe(true);
-    expect(result.current.canEditItems).toBe(false);
+    expect(result.current.canEditDatasets).toBe(false);
   });
 
   it("does not block creation on a required CSV when upload is hidden", () => {
@@ -221,7 +221,7 @@ describe("useDatasetForm with dataset edit permission", () => {
     const { result } = setupForm();
 
     expect(result.current.hideUpload).toBe(false);
-    expect(result.current.canEditItems).toBe(true);
+    expect(result.current.canEditDatasets).toBe(true);
   });
 
   it("requires a CSV when csvRequired is set", () => {

@@ -59,9 +59,8 @@ const useDatasetForm = ({
   } = usePermissions();
 
   // Items, assertions and run policy are saved with edit rights, not create.
-  const canEditItems = canEditDatasets;
-  const hideUpload = hideUploadProp || !canEditItems;
-  const skipEvaluationCriteria = skipEvaluationCriteriaProp || !canEditItems;
+  const hideUpload = hideUploadProp || !canEditDatasets;
+  const skipEvaluationCriteria = skipEvaluationCriteriaProp || !canEditDatasets;
 
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
@@ -431,7 +430,7 @@ const useDatasetForm = ({
     submitHandler,
     handleFileSelect,
     hideUpload,
-    canEditItems,
+    canEditDatasets,
   };
 };
 
