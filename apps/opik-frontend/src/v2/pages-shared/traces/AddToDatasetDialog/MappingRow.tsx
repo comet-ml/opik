@@ -1,5 +1,5 @@
 import React from "react";
-import { MessageCircleWarning, X } from "lucide-react";
+import { MessageCircleWarning, Pencil, X } from "lucide-react";
 
 import { Input } from "@/ui/input";
 import { Tag } from "@/ui/tag";
@@ -78,18 +78,21 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
     }
 
     return (
-      <Input
-        dimension="xs"
-        value={row.name}
-        placeholder="Field name"
-        className={cn(
-          "px-2",
-          rowError && rowError !== "no_path" && "border-destructive",
-        )}
-        autoFocus={autoFocusName}
-        onFocus={(event) => autoFocusName && event.currentTarget.select()}
-        onChange={(event) => onRename?.(event.target.value)}
-      />
+      <div className="relative">
+        <Input
+          dimension="xs"
+          value={row.name}
+          placeholder="Field name"
+          className={cn(
+            "pl-2 pr-6",
+            rowError && rowError !== "no_path" && "border-destructive",
+          )}
+          autoFocus={autoFocusName}
+          onFocus={(event) => autoFocusName && event.currentTarget.select()}
+          onChange={(event) => onRename?.(event.target.value)}
+        />
+        <Pencil className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-light-slate" />
+      </div>
     );
   };
 
@@ -127,24 +130,26 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
       value={renderSource()}
       removeLabel={`Remove ${row.name || "field"}`}
       removeIcon={<X />}
+      removeVariant="inline"
       onRemove={onRemove}
+      note={
+        !rowError &&
+        Boolean(newColumnItemCount) && (
+          <div className="flex items-center gap-1 rounded-md bg-muted p-2">
+            <MessageCircleWarning className="size-3 shrink-0 text-muted-slate" />
+            <span className="comet-body-xs text-muted-slate">
+              New field — the {newColumnItemCount} items already in this dataset
+              will display this field as empty.
+            </span>
+          </div>
+        )
+      }
       message={
-        <>
-          {rowError && (
-            <p className="comet-body-xs mt-1 text-destructive">
-              {ROW_ERROR_TEXT[rowError]}
-            </p>
-          )}
-          {!rowError && Boolean(newColumnItemCount) && (
-            <div className="flex items-center gap-1.5 py-2">
-              <MessageCircleWarning className="size-3 shrink-0 text-muted-slate" />
-              <span className="comet-body-xs text-muted-slate">
-                New field — the {newColumnItemCount} items already in this
-                dataset will display this field as empty.
-              </span>
-            </div>
-          )}
-        </>
+        rowError && (
+          <p className="comet-body-xs mt-1 text-destructive">
+            {ROW_ERROR_TEXT[rowError]}
+          </p>
+        )
       }
     />
   );

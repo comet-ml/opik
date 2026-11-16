@@ -36,6 +36,19 @@ const QuickAddChips: React.FunctionComponent<QuickAddChipsProps> = ({
     >
       <span className="comet-body-xs text-muted-slate">Quick add:</span>
 
+      {managedChips.map((chip) => (
+        <button
+          key={chip.option}
+          type="button"
+          className="flex"
+          onClick={() => onAddManaged(chip.option)}
+        >
+          <Tag variant="gray" className="text-foreground">
+            {chip.label}
+          </Tag>
+        </button>
+      ))}
+
       {visibleColumns.map((column) => (
         <TooltipWrapper key={column} content={DATASET_CHIP_TOOLTIP}>
           <button
@@ -63,19 +76,6 @@ const QuickAddChips: React.FunctionComponent<QuickAddChipsProps> = ({
           }
         />
       )}
-
-      {managedChips.map((chip) => (
-        <button
-          key={chip.option}
-          type="button"
-          className="flex"
-          onClick={() => onAddManaged(chip.option)}
-        >
-          <Tag variant="gray" className="text-foreground">
-            {chip.label}
-          </Tag>
-        </button>
-      ))}
     </div>
   );
 };

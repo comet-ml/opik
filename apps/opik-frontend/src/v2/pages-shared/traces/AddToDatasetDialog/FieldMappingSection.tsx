@@ -52,11 +52,9 @@ const FieldMappingSection: React.FunctionComponent<
     renameRow,
     setRowPath,
     setManagedOption,
-    canUseBasicMode,
   } = mappings;
 
   const entityLabel = hasOnlySpans ? "spans" : "traces";
-  const lockedInAdvanced = advanced && !canUseBasicMode;
 
   const [focusNameRowId, setFocusNameRowId] = useState<string | null>(null);
   const [openSourceRowId, setOpenSourceRowId] = useState<string | null>(null);
@@ -82,8 +80,8 @@ const FieldMappingSection: React.FunctionComponent<
           </div>
           <TooltipWrapper
             content={
-              lockedInAdvanced
-                ? "Basic mode can't represent this mapping. Reset the fields to their defaults to switch back."
+              advanced
+                ? "Advanced mapping stays on once it's turned on. Close the dialog to start again in basic mode."
                 : undefined
             }
           >
@@ -92,7 +90,7 @@ const FieldMappingSection: React.FunctionComponent<
                 id="advanced-mapping"
                 size="xs"
                 checked={advanced}
-                disabled={lockedInAdvanced}
+                disabled={advanced}
                 onCheckedChange={setAdvanced}
               />
             </div>

@@ -97,7 +97,7 @@ const DatasetPickerSection: React.FunctionComponent<
           {...EXPLAINERS_MAP[noSelectionExplainerId]}
         />
       )}
-      <div className="my-2">
+      <div className="mb-4">
         <Label className="comet-body-s-accented mb-1">
           {capitalize(entityName)}
         </Label>

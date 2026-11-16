@@ -166,15 +166,6 @@ const useFieldMappings = ({
     return mappings;
   }, [fixedPaths, customRows, rowErrors]);
 
-  const canUseBasicMode = useMemo(
-    () =>
-      isEmpty(customRows) &&
-      FIXED_MAPPING_FIELDS.every(
-        ({ key, defaultPath }) => fixedPaths[key] === defaultPath,
-      ),
-    [customRows, fixedPaths],
-  );
-
   const setFixedPath = useCallback((key: string, path: string) => {
     setFixedPaths((prev) => ({ ...prev, [key]: path }));
   }, []);
@@ -238,7 +229,6 @@ const useFieldMappings = ({
     datasetChips,
     rowErrors,
     isValid: isEmpty(rowErrors),
-    canUseBasicMode,
     fieldMappings,
     setFixedPath,
     addRow,

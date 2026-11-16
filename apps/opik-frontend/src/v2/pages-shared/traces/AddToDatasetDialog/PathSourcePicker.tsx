@@ -57,16 +57,11 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
     </button>
   );
 
-  const header = name ? (
+  const header = (
     <div className="border-b px-3 py-2">
-      <span className="comet-body-xs text-muted-slate">
-        Select a field to map to:{" "}
+      <span className="comet-body-xs-accented">
+        {name ? `Select a field to map to: ${name}` : "Add field"}
       </span>
-      <span className="comet-body-xs-accented">{name}</span>
-    </div>
-  ) : (
-    <div className="border-b px-3 py-2">
-      <span className="comet-body-xs text-muted-slate">Add field</span>
     </div>
   );
 

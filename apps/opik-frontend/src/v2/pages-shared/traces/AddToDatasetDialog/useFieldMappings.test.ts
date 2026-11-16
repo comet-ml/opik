@@ -164,36 +164,6 @@ describe("useFieldMappings", () => {
     });
   });
 
-  it("keeps basic mode available while nothing deviates from the defaults", () => {
-    const { result } = renderMappings();
-
-    expect(result.current.canUseBasicMode).toBe(true);
-
-    act(() => result.current.setManagedOption("includeTags", true));
-
-    expect(result.current.canUseBasicMode).toBe(true);
-  });
-
-  it("locks advanced mode once a fixed path leaves its default", () => {
-    const { result } = renderMappings();
-
-    act(() => result.current.setFixedPath("input", "input.input_text"));
-    expect(result.current.canUseBasicMode).toBe(false);
-
-    act(() => result.current.setFixedPath("input", "input"));
-    expect(result.current.canUseBasicMode).toBe(true);
-  });
-
-  it("locks advanced mode while a custom row exists", () => {
-    const { result } = renderMappings();
-
-    act(() => result.current.addRow("input.tone"));
-    expect(result.current.canUseBasicMode).toBe(false);
-
-    act(() => result.current.removeRow(result.current.customRows[0].id));
-    expect(result.current.canUseBasicMode).toBe(true);
-  });
-
   it("flags a name that collides with a managed field", () => {
     const { result } = renderMappings();
 
