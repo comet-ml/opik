@@ -30,8 +30,7 @@ const ConfigurationPage = () => {
 
       <div className="mt-6">
         <Tabs
-          defaultValue="feedback-definitions"
-          value={tab as string}
+          value={(tab as string) ?? "feedback-definitions"}
           onValueChange={setTab}
         >
           <TabsList variant="underline">

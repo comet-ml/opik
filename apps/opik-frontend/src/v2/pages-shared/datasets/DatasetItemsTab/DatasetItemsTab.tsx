@@ -59,6 +59,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import { useRowSelectionChange } from "./hooks/useRowSelectionChange";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   useIsDraftMode,
@@ -367,25 +368,11 @@ function DatasetItemsTab({
     [rowSelection, rows],
   );
 
-  const handleRowSelectionChange: typeof setRowSelection = useCallback(
-    (updaterOrValue) => {
-      setRowSelection((prev) => {
-        const next =
-          typeof updaterOrValue === "function"
-            ? updaterOrValue(prev)
-            : updaterOrValue;
-
-        if (
-          isAllItemsSelected &&
-          Object.keys(next).length < Object.keys(prev).length
-        ) {
-          setIsAllItemsSelected(false);
-        }
-
-        return next;
-      });
-    },
-    [isAllItemsSelected, setIsAllItemsSelected],
+  const handleRowSelectionChange = useRowSelectionChange(
+    rowSelection,
+    setRowSelection,
+    isAllItemsSelected,
+    setIsAllItemsSelected,
   );
 
   const effectiveIsAllItemsSelected = useMemo(
