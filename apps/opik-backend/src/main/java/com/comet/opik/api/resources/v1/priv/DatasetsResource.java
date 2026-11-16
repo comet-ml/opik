@@ -539,8 +539,8 @@ public class DatasetsResource {
                         .projectName(request.projectName())
                         .build()).id();
 
-        log.info("Streaming experiment items for dataset '{}', version '{}', limit '{}' on workspaceId '{}'",
-                datasetId, request.datasetVersion(), request.limit(), workspaceId);
+        log.info("Streaming experiment items for dataset '{}', versions '{}', limit '{}' on workspaceId '{}'",
+                datasetId, request.datasetVersions(), request.limit(), workspaceId);
 
         var items = itemService.streamExperimentItems(datasetId, request, queryFilters, workspaceId)
                 .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
@@ -831,7 +831,7 @@ public class DatasetsResource {
                     + ALL_EXPERIMENTS_MAX_PAGE_SIZE
                     + " when experiment_ids is omitted, since each item then carries a result per experiment") int size,
             @QueryParam("experiment_ids") @Schema(description = "JSON array of experiment IDs. Omit to include every regular experiment on the dataset (optimizer trial, mini-batch and mutation experiments are excluded); item filters are then evaluated against the newest version of each item that those experiments reference") String experimentIdsQueryParam,
-            @QueryParam("dataset_version") @Schema(description = "Dataset version hash or tag. Only experiments run against this version are included. Requires experiment_ids to be omitted. Returns 404 if the version does not exist") String datasetVersion,
+            @QueryParam("dataset_versions") @Schema(description = "JSON array of dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Requires experiment_ids to be omitted. Returns 404 if any version does not exist") String datasetVersionsQueryParam,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
             @QueryParam("search") String search,
@@ -841,17 +841,22 @@ public class DatasetsResource {
         Set<UUID> experimentIds = allDatasetExperiments || StringUtils.isBlank(experimentIdsQueryParam)
                 ? Set.of()
                 : ParamsValidator.getIds(experimentIdsQueryParam);
+        Set<String> datasetVersions = datasetVersionsQueryParam == null
+                ? null
+                : ParamsValidator.get(datasetVersionsQueryParam, String.class, "dataset_versions");
 
         String validationError = null;
         if (!allDatasetExperiments && experimentIds.isEmpty()) {
             validationError = "experiment_ids cannot be empty";
-        } else if (!allDatasetExperiments && StringUtils.isNotBlank(datasetVersion)) {
-            validationError = "dataset_version can only be used when experiment_ids is omitted";
+        } else if (!allDatasetExperiments && datasetVersions != null) {
+            validationError = "dataset_versions can only be used when experiment_ids is omitted";
         } else if (allDatasetExperiments && !featureFlags.isDatasetVersioningEnabled()) {
             validationError = "experiment_ids is required when dataset versioning is disabled";
         } else if (allDatasetExperiments && size > ALL_EXPERIMENTS_MAX_PAGE_SIZE) {
             validationError = "size must be at most %d when experiment_ids is omitted"
                     .formatted(ALL_EXPERIMENTS_MAX_PAGE_SIZE);
+        } else if (datasetVersions != null) {
+            validationError = validateDatasetVersions(datasetVersions);
         }
 
         if (validationError != null) {
@@ -874,7 +879,7 @@ public class DatasetsResource {
                 .truncate(truncate)
                 .versionHashOrTag(null) // Service layer will resolve to experiment's version when experimentIds present
                 .allDatasetExperiments(allDatasetExperiments)
-                .experimentsVersionHashOrTag(datasetVersion)
+                .experimentsDatasetVersions(datasetVersions)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -890,6 +895,21 @@ public class DatasetsResource {
                 "Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}' on workspaceId '{}'",
                 datasetItemSearchCriteria, datasetItemPage.content().size(), page, size, workspaceId);
         return Response.ok(datasetItemPage).build();
+    }
+
+    // Same rules as DatasetExperimentItemStreamRequest.datasetVersions, which bean validation enforces there
+    private static String validateDatasetVersions(Set<String> datasetVersions) {
+        if (datasetVersions.isEmpty()) {
+            return "dataset_versions cannot be empty";
+        }
+        if (datasetVersions.stream().anyMatch(StringUtils::isBlank)) {
+            return "dataset_versions must not contain blank values";
+        }
+        if (datasetVersions.size() > DatasetExperimentItemStreamRequest.MAX_DATASET_VERSIONS) {
+            return "dataset_versions must have at most %d values"
+                    .formatted(DatasetExperimentItemStreamRequest.MAX_DATASET_VERSIONS);
+        }
+        return null;
     }
 
     @Timed

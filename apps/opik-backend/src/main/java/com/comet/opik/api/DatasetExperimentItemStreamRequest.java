@@ -8,9 +8,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
@@ -22,12 +25,14 @@ public record DatasetExperimentItemStreamRequest(
         @Schema(description = "Dataset ID. Set this or dataset_name") UUID datasetId,
         @Schema(description = "Dataset name. Set this or dataset_id") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String datasetName,
         @Schema(description = "Project of the dataset, used with dataset_name") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
-        @Schema(description = "Dataset version hash or tag. Only experiments run against this version are included. Returns 404 if the version does not exist") @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String datasetVersion,
+        @Schema(description = "Dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Returns 404 if any version does not exist") @Size(min = 1, max = MAX_DATASET_VERSIONS) Set<@NotBlank String> datasetVersions,
         @Schema(description = "JSON array of dataset item filters, evaluated against the newest version of each item that the experiments reference") String filters,
         @Schema(description = "Maximum number of experiment items to return", defaultValue = "2000") @Min(1) @Max(2000) Integer limit,
         @Schema(description = "experiment_id of the last experiment item received. Set together with last_retrieved_id") UUID lastRetrievedExperimentId,
         @Schema(description = "id of the last experiment item received. Set together with last_retrieved_experiment_id") UUID lastRetrievedId,
         @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") Boolean truncate) {
+
+    public static final int MAX_DATASET_VERSIONS = 20;
 
     private static final int DEFAULT_LIMIT = 2000;
 

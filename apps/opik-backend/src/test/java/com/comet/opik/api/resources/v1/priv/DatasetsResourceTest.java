@@ -19,6 +19,7 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
@@ -8977,15 +8978,29 @@ class DatasetsResourceTest {
             createAndAssert(new ExperimentItemsBatch(Set.of(experimentItems)), apiKey, workspaceName);
         }
 
+        private DatasetVersion firstVersion(UUID datasetId) {
+            return datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content().getFirst();
+        }
+
+        private DatasetVersion createVersion(UUID datasetId, DatasetVersion baseVersion) {
+            return datasetResourceClient.applyDatasetItemChanges(datasetId,
+                    DatasetItemChanges.builder()
+                            .baseVersion(baseVersion.id())
+                            .addedItems(List.of(DatasetResourceClient.buildDatasetItem(factory)))
+                            .build(),
+                    false, apiKey, workspaceName);
+        }
+
         private List<ExperimentsComparisonFilter> idFilter(UUID datasetItemId) {
             return List.of(new ExperimentsComparisonFilter(
                     "id", FieldType.STRING_EXACT, Operator.EQUAL, null, datasetItemId.toString()));
         }
 
-        private DatasetItemPage getPage(UUID datasetId, String datasetVersion,
+        private DatasetItemPage getPage(UUID datasetId, List<String> datasetVersions,
                 List<ExperimentsComparisonFilter> filters) {
+            var datasetVersionsParam = datasetVersions == null ? null : JsonUtils.writeValueAsString(datasetVersions);
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    datasetId, null, datasetVersion, 100, filters, apiKey, workspaceName)) {
+                    datasetId, null, datasetVersionsParam, 100, filters, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
                 return response.readEntity(DatasetItemPage.class);
             }
@@ -9059,45 +9074,44 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when dataset_version is set, then return results only from experiments run against it")
-        void findWhenDatasetVersionSet() {
+        @DisplayName("when dataset_versions is set, then return results only from experiments run against them")
+        void findWhenDatasetVersionsSet() {
             var targetItem = DatasetResourceClient.buildDatasetItem(factory);
             var dataset = createDatasetWithItems(List.of(targetItem));
             var datasetId = dataset.id();
             var experimentOnVersion1 = createExperiment(dataset);
-
-            var version1 = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content()
-                    .getFirst();
-            var version2 = datasetResourceClient.applyDatasetItemChanges(datasetId,
-                    DatasetItemChanges.builder()
-                            .baseVersion(version1.id())
-                            .addedItems(List.of(DatasetResourceClient.buildDatasetItem(factory)))
-                            .build(),
-                    false, apiKey, workspaceName);
+            var version1 = firstVersion(datasetId);
+            var version2 = createVersion(datasetId, version1);
             var experimentOnVersion2 = createExperiment(dataset);
+            createVersion(datasetId, version2);
+            var experimentOnVersion3 = createExperiment(dataset);
 
             var expectedOnVersion1 = createExperimentItem(experimentOnVersion1, targetItem);
             var expectedOnVersion2 = createExperimentItem(experimentOnVersion2, targetItem);
-            createExperimentItems(expectedOnVersion1, expectedOnVersion2);
+            var expectedOnVersion3 = createExperimentItem(experimentOnVersion3, targetItem);
+            createExperimentItems(expectedOnVersion1, expectedOnVersion2, expectedOnVersion3);
 
-            assertItemWithExperimentItems(getPage(datasetId, version1.versionHash(), idFilter(targetItem.id())),
+            var filters = idFilter(targetItem.id());
+            assertItemWithExperimentItems(getPage(datasetId, List.of(version1.versionHash()), filters),
                     targetItem, expectedOnVersion1);
-            assertItemWithExperimentItems(getPage(datasetId, version2.versionHash(), idFilter(targetItem.id())),
-                    targetItem, expectedOnVersion2);
             assertItemWithExperimentItems(
-                    getPage(datasetId, DatasetVersionService.LATEST_TAG, idFilter(targetItem.id())),
-                    targetItem, expectedOnVersion2);
-            assertItemWithExperimentItems(getPage(datasetId, null, idFilter(targetItem.id())),
+                    getPage(datasetId, List.of(version1.versionHash(), version2.versionHash()), filters),
                     targetItem, expectedOnVersion1, expectedOnVersion2);
+            assertItemWithExperimentItems(
+                    getPage(datasetId, List.of(version2.versionHash(), DatasetVersionService.LATEST_TAG), filters),
+                    targetItem, expectedOnVersion2, expectedOnVersion3);
+            assertItemWithExperimentItems(getPage(datasetId, null, filters),
+                    targetItem, expectedOnVersion1, expectedOnVersion2, expectedOnVersion3);
         }
 
-        @Test
-        @DisplayName("when dataset_version does not exist, then return not found")
-        void findWhenDatasetVersionNotFound() {
+        @ParameterizedTest
+        @ValueSource(strings = {"[\"unknown-version\"]", "[\"latest\", \"unknown-version\"]"})
+        @DisplayName("when any of dataset_versions does not exist, then return not found")
+        void findWhenDatasetVersionNotFound(String datasetVersions) {
             var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
 
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    dataset.id(), null, "unknown-version", null, null, apiKey, workspaceName)) {
+                    dataset.id(), null, datasetVersions, null, null, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
@@ -9137,18 +9151,23 @@ class DatasetsResourceTest {
             return Stream.of(
                     arguments("[]", null, null, "experiment_ids cannot be empty"),
                     arguments(" ", null, null, "experiment_ids cannot be empty"),
-                    arguments(JsonUtils.writeValueAsString(List.of(GENERATOR.generate())), "v1", null,
-                            "dataset_version can only be used when experiment_ids is omitted"),
+                    arguments(JsonUtils.writeValueAsString(List.of(GENERATOR.generate())), "[\"v1\"]", null,
+                            "dataset_versions can only be used when experiment_ids is omitted"),
+                    arguments(null, "[]", null, "dataset_versions cannot be empty"),
+                    arguments(null, "[\" \"]", null, "dataset_versions must not contain blank values"),
+                    arguments(null, JsonUtils.writeValueAsString(IntStream.rangeClosed(0, 20)
+                            .mapToObj(i -> "v" + i).toList()), null, "dataset_versions must have at most 20 values"),
+                    arguments(null, "v1", null, "Invalid query param dataset_versions 'v1'"),
                     arguments(null, null, 101, "size must be at most 100 when experiment_ids is omitted"));
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("when params are invalid, then return bad request")
-        void findWhenInvalidParams(String experimentIds, String datasetVersion, Integer size,
+        void findWhenInvalidParams(String experimentIds, String datasetVersions, Integer size,
                 String expectedError) {
             try (var response = datasetResourceClient.callGetDatasetItemsWithExperimentItems(
-                    GENERATOR.generate(), experimentIds, datasetVersion, size, null, apiKey, workspaceName)) {
+                    GENERATOR.generate(), experimentIds, datasetVersions, size, null, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
                         .isEqualTo(expectedError);
@@ -9222,10 +9241,15 @@ class DatasetsResourceTest {
                     .toList();
             var dataset = createDatasetWithItems(datasetItems);
             var aggregatedExperimentId = createExperiment(dataset);
+            var version1 = firstVersion(dataset.id());
+            var version2 = createVersion(dataset.id(), version1);
             var rawExperimentId = createExperiment(dataset);
+            createVersion(dataset.id(), version2);
+            var outOfScopeExperimentId = createExperiment(dataset);
             createExperimentItems(datasetItems.stream()
                     .flatMap(item -> Stream.of(createExperimentItem(aggregatedExperimentId, item),
-                            createExperimentItem(rawExperimentId, item)))
+                            createExperimentItem(rawExperimentId, item),
+                            createExperimentItem(outOfScopeExperimentId, item)))
                     .toArray(ExperimentItem[]::new));
             experimentAggregatesService.populateAggregations(aggregatedExperimentId)
                     .contextWrite(ctx -> ctx
@@ -9233,15 +9257,19 @@ class DatasetsResourceTest {
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
                     .block();
 
+            var datasetVersions = List.of(version1.versionHash(), version2.versionHash());
             var actualExperimentItems = streamAll(DatasetExperimentItemStreamRequest.builder()
                     .datasetId(dataset.id())
+                    .datasetVersions(Set.copyOf(datasetVersions))
                     .limit(2)
                     .build());
 
-            var pagedExperimentItems = getPage(dataset.id(), null, null).content().stream()
+            var pagedExperimentItems = getPage(dataset.id(), datasetVersions, null).content().stream()
                     .flatMap(item -> item.experimentItems().stream())
                     .toList();
-            assertThat(pagedExperimentItems).hasSize(6);
+            assertThat(pagedExperimentItems).hasSize(6)
+                    .extracting(ExperimentItem::experimentId)
+                    .containsOnly(aggregatedExperimentId, rawExperimentId);
             assertThat(actualExperimentItems)
                     .extracting(ExperimentItem::id)
                     .containsExactlyElementsOf(inStreamOrder(pagedExperimentItems));
@@ -9253,27 +9281,23 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when dataset_version and an id filter are set, then stream only those experiment items")
-        void streamWhenDatasetVersionAndIdFilterSet() {
+        @DisplayName("when dataset_versions and an id filter are set, then stream only those experiment items")
+        void streamWhenDatasetVersionsAndIdFilterSet() {
             var targetItem = DatasetResourceClient.buildDatasetItem(factory);
             var otherItem = DatasetResourceClient.buildDatasetItem(factory);
             var dataset = createDatasetWithItems(List.of(targetItem, otherItem));
             var datasetId = dataset.id();
             var experimentOnVersion1 = createExperiment(dataset);
-
-            var version1 = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName).content()
-                    .getFirst();
-            var version2 = datasetResourceClient.applyDatasetItemChanges(datasetId,
-                    DatasetItemChanges.builder()
-                            .baseVersion(version1.id())
-                            .addedItems(List.of(DatasetResourceClient.buildDatasetItem(factory)))
-                            .build(),
-                    false, apiKey, workspaceName);
+            var version1 = firstVersion(datasetId);
+            var version2 = createVersion(datasetId, version1);
             var experimentOnVersion2 = createExperiment(dataset);
+            createVersion(datasetId, version2);
+            var experimentOnVersion3 = createExperiment(dataset);
 
             var expectedOnVersion1 = createExperimentItem(experimentOnVersion1, targetItem);
             var expectedOnVersion2 = createExperimentItem(experimentOnVersion2, targetItem);
-            createExperimentItems(expectedOnVersion1, expectedOnVersion2,
+            var expectedOnVersion3 = createExperimentItem(experimentOnVersion3, targetItem);
+            createExperimentItems(expectedOnVersion1, expectedOnVersion2, expectedOnVersion3,
                     createExperimentItem(experimentOnVersion1, otherItem),
                     createExperimentItem(experimentOnVersion2, otherItem));
 
@@ -9282,14 +9306,19 @@ class DatasetsResourceTest {
                     .filters(JsonUtils.writeValueAsString(idFilter(targetItem.id())))
                     .build();
 
-            assertExperimentItems(streamAll(request.toBuilder().datasetVersion(version1.versionHash()).build()),
-                    expectedOnVersion1);
-            assertExperimentItems(streamAll(request.toBuilder().datasetVersion(version2.versionHash()).build()),
-                    expectedOnVersion2);
             assertExperimentItems(
-                    streamAll(request.toBuilder().datasetVersion(DatasetVersionService.LATEST_TAG).build()),
-                    expectedOnVersion2);
-            assertExperimentItems(streamAll(request), expectedOnVersion1, expectedOnVersion2);
+                    streamAll(request.toBuilder().datasetVersions(Set.of(version1.versionHash())).build()),
+                    expectedOnVersion1);
+            assertExperimentItems(
+                    streamAll(request.toBuilder()
+                            .datasetVersions(Set.of(version1.versionHash(), version2.versionHash())).build()),
+                    expectedOnVersion1, expectedOnVersion2);
+            assertExperimentItems(
+                    streamAll(request.toBuilder()
+                            .datasetVersions(Set.of(version2.versionHash(), DatasetVersionService.LATEST_TAG))
+                            .build()),
+                    expectedOnVersion2, expectedOnVersion3);
+            assertExperimentItems(streamAll(request), expectedOnVersion1, expectedOnVersion2, expectedOnVersion3);
         }
 
         @ParameterizedTest
@@ -9365,12 +9394,12 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when dataset_version does not exist, then return not found")
+        @DisplayName("when any of dataset_versions does not exist, then return not found")
         void streamWhenDatasetVersionNotFound() {
             var dataset = createDatasetWithItems(List.of(DatasetResourceClient.buildDatasetItem(factory)));
             var request = DatasetExperimentItemStreamRequest.builder()
                     .datasetId(dataset.id())
-                    .datasetVersion("unknown-version")
+                    .datasetVersions(Set.of(DatasetVersionService.LATEST_TAG, "unknown-version"))
                     .build();
 
             try (var response = datasetResourceClient.callStreamDatasetExperimentItems(request, apiKey,
@@ -9394,7 +9423,13 @@ class DatasetsResourceTest {
                     arguments(valid.toBuilder().datasetId(null).datasetName(" ").build(),
                             "datasetName must not be blank"),
                     arguments(valid.toBuilder().projectName("").build(), "projectName must not be blank"),
-                    arguments(valid.toBuilder().datasetVersion(" ").build(), "datasetVersion must not be blank"));
+                    arguments(valid.toBuilder().datasetVersions(Set.of()).build(),
+                            "datasetVersions size must be between 1 and 20"),
+                    arguments(valid.toBuilder().datasetVersions(IntStream.rangeClosed(0, 20)
+                            .mapToObj(i -> "v" + i).collect(Collectors.toSet())).build(),
+                            "datasetVersions size must be between 1 and 20"),
+                    arguments(valid.toBuilder().datasetVersions(Set.of(" ")).build(),
+                            "datasetVersions[].<iterable element> must not be blank"));
         }
 
         @ParameterizedTest
