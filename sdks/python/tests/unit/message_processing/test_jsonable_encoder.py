@@ -122,6 +122,64 @@ def test_jsonable_encoder__converted_to_list(obj):
 @pytest.mark.parametrize(
     "obj,expected",
     [
+        (np.int64(6), 6),
+        (np.int32(-7), -7),
+        (np.uint8(200), 200),
+        (np.float32(2.5), 2.5),
+        (np.float16(0.5), 0.5),
+        (np.bool_(True), True),
+        (np.bool_(False), False),
+    ],
+)
+def test_jsonable_encoder__numpy_scalar__converted_to_python_primitive(obj, expected):
+    encoded = jsonable_encoder.encode(obj)
+
+    assert encoded == expected
+
+
+def test_jsonable_encoder__numpy_scalar_types__are_exact_python_types():
+    assert type(jsonable_encoder.encode(np.int64(6))) is int
+    assert type(jsonable_encoder.encode(np.float32(2.0))) is float
+    assert type(jsonable_encoder.encode(np.bool_(True))) is bool
+
+
+def test_jsonable_encoder__numpy_longdouble__converted_to_float():
+    encoded = jsonable_encoder.encode(np.longdouble(1.5))
+
+    assert encoded == 1.5
+    assert type(encoded) is float
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_jsonable_encoder__numpy_non_finite_float__same_as_python_float(value):
+    encoded_numpy_float32 = jsonable_encoder.encode(np.float32(value))
+    encoded_numpy_float64 = jsonable_encoder.encode(np.float64(value))
+    encoded_python_float = jsonable_encoder.encode(float(value))
+
+    assert type(encoded_numpy_float32) is float
+    assert str(encoded_numpy_float32) == str(encoded_python_float)
+    assert str(encoded_numpy_float64) == str(encoded_python_float)
+
+
+def test_jsonable_encoder__numpy_datetime64__stays_readable_text():
+    encoded = jsonable_encoder.encode(np.datetime64("2020-01-01T00:00:00", "ns"))
+
+    assert encoded == "2020-01-01T00:00:00.000000000"
+
+
+def test_jsonable_encoder__numpy_scalars_inside_containers__converted():
+    encoded = jsonable_encoder.encode(
+        {"total": np.int64(6), "flags": [np.bool_(True)], "mean": np.float32(2.0)}
+    )
+
+    assert encoded == {"total": 6, "flags": [True], "mean": 2.0}
+    assert type(encoded["total"]) is int
+    assert type(encoded["flags"][0]) is bool
+
+
+@pytest.mark.parametrize(
+    "obj,expected",
+    [
         (
             date(2020, 1, 1),
             "2020-01-01",
