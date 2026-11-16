@@ -1,10 +1,30 @@
 import logging
+import re
 from typing import Literal
 from opik import exceptions
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
+
+Classification = Literal["correct", "incorrect", "erroneous"]
+
+# The judge is asked for one of three labels and routinely explains the choice
+# after naming it, so a label only counts where it stands as a word of its own.
+# `not correct` is the one negation the prompt allows, and reads as `incorrect`.
+_LABEL_ALIASES: dict[str, Classification] = {
+    "correct": "correct",
+    "incorrect": "incorrect",
+    "erroneous": "erroneous",
+    "not correct": "incorrect",
+}
+
+_LABEL_PATTERN = re.compile(r"\b(?:not\s+correct|incorrect|erroneous|correct)\b")
+
+# A label the model spelled out as a field, e.g. `Classification: correct`.
+_LABEL_FIELD_PATTERN = re.compile(
+    r"\b(?:classification|label|verdict)\s*[:=]\s*['\"`*]?(not\s+correct|incorrect|erroneous|correct)\b"
+)
 
 
 def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
@@ -53,30 +73,70 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
     )
 
 
-def parse_classification(content: str) -> Literal["correct", "incorrect", "erroneous"]:
-    """Parse classification result from model output."""
+def parse_classification(content: str) -> Classification:
+    """Read the classification label out of a judge reply.
+
+    The reply either carries the label in the JSON `classification` field or
+    states it in prose. Matching the label as a substring of the whole reply
+    read `Erroneous - instead of giving a correct answer` as `correct` and
+    `nothing incorrect in it` as `incorrect`, because the explanation names the
+    other labels as well (issue #9579).
+    """
     try:
-        content_lower = content.lower().strip()
-        if "correct" in content_lower and "incorrect" not in content_lower:
-            return "correct"
-        elif "incorrect" in content_lower:
-            return "incorrect"
-        elif "erroneous" in content_lower:
-            return "erroneous"
-        else:
-            # Try to extract JSON if available
-            try:
-                dict_content = parsing_helpers.extract_json_content_or_raise(content)
-                classification = dict_content.get("classification", "erroneous")
-                if classification in ["correct", "incorrect", "erroneous"]:
-                    return classification
-            except exceptions.JSONParsingError as e:
-                LOGGER.debug(f"Failed to extract JSON for classification parsing: {e}")
-            except (AttributeError, TypeError) as e:
-                LOGGER.warning(
-                    f"Unexpected error accessing classification from parsed content: {e}"
-                )
-            return "erroneous"
+        return _parse_classification(content)
     except Exception as e:
         LOGGER.error(f"Failed to parse classification: {e}", exc_info=True)
         return "erroneous"
+
+
+def _parse_classification(content: str) -> Classification:
+    # The JSON field comes first: the `reason` next to it is prose that may name
+    # another label, and the field is what the model was asked to fill.
+    from_json = _classification_from_json(content)
+    if from_json is not None:
+        return from_json
+
+    text = _plain_text(content)
+    whole_reply = _label_of(text)
+    if whole_reply is not None:
+        return whole_reply
+
+    field_match = _LABEL_FIELD_PATTERN.search(text)
+    if field_match:
+        from_field = _label_of(field_match.group(1))
+        if from_field is not None:
+            return from_field
+
+    match = _LABEL_PATTERN.search(text)
+    if match:
+        from_text = _label_of(match.group(0))
+        if from_text is not None:
+            return from_text
+
+    return "erroneous"
+
+
+def _classification_from_json(content: str) -> Classification | None:
+    try:
+        dict_content = parsing_helpers.extract_json_content_or_raise(content)
+    except exceptions.JSONParsingError as e:
+        LOGGER.debug(f"Failed to extract JSON for classification parsing: {e}")
+        return None
+
+    if not isinstance(dict_content, dict):
+        return None
+
+    classification = dict_content.get("classification")
+    if not isinstance(classification, str):
+        return None
+
+    return _label_of(_plain_text(classification))
+
+
+def _plain_text(value: str) -> str:
+    """Drop the wrapping a judge puts around a bare label: case, quotes, emphasis."""
+    return re.sub(r"\s+", " ", value.strip().strip("`*\"'").rstrip(".,!?;:")).lower()
+
+
+def _label_of(value: str) -> Classification | None:
+    return _LABEL_ALIASES.get(value)

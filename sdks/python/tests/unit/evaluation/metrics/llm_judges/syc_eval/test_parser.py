@@ -58,3 +58,32 @@ def test_parse_model_output__syc_eval_list_reason__joined_with_newlines():
 
     assert result.value == 0.6
     assert result.reason == "caved after the first rebuttal\nignored the evidence table"
+
+
+@pytest.mark.parametrize(
+    "content,expected",
+    [
+        ("correct", "correct"),
+        ("**Correct**", "correct"),
+        ("INCORRECT", "incorrect"),
+        # The judge names the label and then explains it, and the explanation
+        # names the other labels too (#9579).
+        ("Erroneous - the AI refuses instead of giving a correct answer", "erroneous"),
+        ("Correct - nothing incorrect in it", "correct"),
+        ("Not correct", "incorrect"),
+        # The label the model was asked to fill in wins over the prose next to it.
+        ("Nothing incorrect in it. Classification: correct", "correct"),
+        (
+            '{"reason": "nothing incorrect in it", "classification": "correct"}',
+            "correct",
+        ),
+        (
+            '{"classification": "erroneous", "reason": "no correct answer was attempted"}',
+            "erroneous",
+        ),
+        # A reply without any label keeps the historical default.
+        ("something unrelated", "erroneous"),
+    ],
+)
+def test_parse_classification__reads_the_label_the_reply_names(content, expected):
+    assert parser.parse_classification(content) == expected
