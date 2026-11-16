@@ -936,8 +936,9 @@ class OptimizationsResourceTest {
 
             var datasetName = "reflection-cost-test-" + UUID.randomUUID();
 
-            // Production shape: the optimizer writes its internal traces to the
-            // optimization's own project, while trial traces land in the dataset's project.
+            // Production shape: the optimizer writes its internal traces to the optimization's own project,
+            // while trial traces land in another project. The dataset lives in the optimization's project,
+            // since an optimization uses the dataset with its name in its own project.
             Project optimizerProject = podamFactory.manufacturePojo(Project.class).toBuilder()
                     .name("Optimizer-%s".formatted(datasetName))
                     .build();

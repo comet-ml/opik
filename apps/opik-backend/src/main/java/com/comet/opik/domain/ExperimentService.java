@@ -651,19 +651,17 @@ public class ExperimentService {
     }
 
     /**
-     * The experiment's dataset: the one an internal caller already resolved, else the dataset of the given version
-     * when it has the experiment's dataset name, else the dataset with that name in the experiment's project, created
-     * if missing. The version decides when it matches, as the experiment can live in another project than its
-     * dataset; a version of a differently named dataset still fails the version check.
+     * The experiment's dataset: the one an internal caller already resolved, else the dataset of the given version,
+     * else the dataset with that name in the experiment's project, created if missing. The version decides, as the
+     * experiment can live in another project than its dataset. A version that is missing or belongs to a differently
+     * named dataset is rejected before anything is created.
      */
     private Mono<UUID> resolveDatasetId(Experiment experiment) {
         if (experiment.datasetId() != null) {
             return Mono.just(experiment.datasetId());
         }
-        Mono<UUID> byName = Mono
-                .defer(() -> datasetService.getOrCreateDataset(experiment.datasetName(), experiment.projectId()));
         if (experiment.datasetVersionId() == null) {
-            return byName;
+            return datasetService.getOrCreateDataset(experiment.datasetName(), experiment.projectId());
         }
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -676,7 +674,8 @@ public class ExperimentService {
                     .map(Dataset::id))
                     .subscribeOn(Schedulers.boundedElastic());
         })
-                .flatMap(datasetId -> datasetId.map(Mono::just).orElse(byName));
+                .flatMap(datasetId -> datasetId.map(Mono::just).orElseGet(() -> Mono.error(
+                        new ClientErrorException("Dataset version not found", Response.Status.CONFLICT))));
     }
 
     private Mono<Experiment> resolveProjectId(Experiment experiment) {

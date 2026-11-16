@@ -56,6 +56,10 @@ class StreamingExecutor(Generic[T]):
 
         # Callback state — accessed from worker threads under lock
         self._lock = threading.Lock()
+        # A future wakes its waiters before it runs its done-callbacks, so get_results also waits
+        # for the callbacks still in flight before it reads the state they update.
+        self._callbacks_done = threading.Condition(self._lock)
+        self._pending_callbacks = 0
         self._score_totals: Dict[str, float] = defaultdict(float)
         self._score_counts: Dict[str, int] = defaultdict(int)
         self._group_completed: Dict[str, int] = defaultdict(int)
@@ -140,7 +144,17 @@ class StreamingExecutor(Generic[T]):
         if group_id is not None:
             self._future_to_group[future] = group_id
 
-        future.add_done_callback(self._on_future_done)
+        with self._lock:
+            self._pending_callbacks += 1
+        future.add_done_callback(self._on_pool_future_done)
+
+    def _on_pool_future_done(self, future: futures.Future[T]) -> None:
+        try:
+            self._on_future_done(future)
+        finally:
+            with self._callbacks_done:
+                self._pending_callbacks -= 1
+                self._callbacks_done.notify_all()
 
     def _on_future_done(self, future: futures.Future[T]) -> None:
         """Callback fired by worker thread when a task completes."""
@@ -225,9 +239,10 @@ class StreamingExecutor(Generic[T]):
             elapsed,
         )
 
-        # Re-raise first exception if any task failed. Past this point every task succeeded, so the
-        # results come from the futures: a future wakes its waiters before running its done-callbacks,
-        # so the list the callbacks append to can still be missing the last results here.
+        with self._callbacks_done:
+            self._callbacks_done.wait_for(lambda: self._pending_callbacks == 0)
+
+        # Re-raise first exception if any task failed; past this point every task succeeded.
         return [future.result() for future in self._submitted_futures]
 
 

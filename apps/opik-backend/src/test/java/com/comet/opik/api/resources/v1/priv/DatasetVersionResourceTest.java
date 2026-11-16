@@ -4,6 +4,7 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemBatchUpdate;
@@ -3340,6 +3341,31 @@ class DatasetVersionResourceTest {
             // then - should fail with 409 (aligned with legacy behavior - version doesn't belong to dataset2)
             try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: version of another dataset does not create the named dataset")
+        void createExperiment_whenVersionFromDifferentDatasetAndNamedDatasetMissing_thenConflictWithoutCreatingIt() {
+            // given - a version of one dataset, and a dataset name nothing uses yet
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var version = getLatestVersion(datasetId);
+            var missingDatasetName = UUID.randomUUID().toString();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(missingDatasetName)
+                    .datasetVersionId(version.id())
+                    .build();
+
+            // when / then - rejected, and the named dataset is not created on the way
+            try (var response = experimentResourceClient.callCreate(experiment, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
+            var identifier = DatasetIdentifier.builder().datasetName(missingDatasetName).build();
+            try (var response = datasetResourceClient.callGetDatasetByIdentifier(identifier, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 
