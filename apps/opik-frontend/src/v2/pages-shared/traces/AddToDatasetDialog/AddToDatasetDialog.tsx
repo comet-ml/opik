@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 import { Span, Trace } from "@/types/traces";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -91,9 +91,14 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     enabled: advanced && Boolean(selectedDataset),
   });
 
+  const pathRows = useMemo(
+    () => [...mappings.existingRows, ...mappings.customRows],
+    [mappings.existingRows, mappings.customRows],
+  );
+
   const coverage = useFieldCoverage({
     fixedRows: mappings.fixedRows,
-    customRows: mappings.customRows,
+    customRows: pathRows,
     managedRows: mappings.managedRows,
     selectedEntities: hasOnlySpans ? validSpans : validTraces,
     sampleEntities: entities,
@@ -101,7 +106,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const { columns, rows } = useMappingPreview({
     fixedRows: mappings.fixedRows,
-    customRows: mappings.customRows,
+    customRows: pathRows,
     managedRows: mappings.managedRows,
     rowErrors: mappings.rowErrors,
     entities,

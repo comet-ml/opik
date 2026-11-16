@@ -13,6 +13,7 @@ type FieldRowShellProps = {
   removeTooltip?: string;
   removeIcon?: React.ReactNode;
   removeVariant?: "divided" | "inline";
+  removeDisabledReason?: string;
   onRemove?: () => void;
   className?: string;
   "data-testid"?: string;
@@ -29,6 +30,7 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
   removeTooltip,
   removeIcon = <Trash />,
   removeVariant = "divided",
+  removeDisabledReason,
   onRemove,
   className,
   "data-testid": testId,
@@ -42,19 +44,37 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
             <MoveRight className="size-3" />
           </div>
           <div className="min-w-0 flex-1">{value}</div>
-          {onRemove && removeVariant === "inline" && (
-            <TooltipWrapper content={removeTooltip}>
-              <Button
-                variant="minimal"
-                size="icon-2xs"
-                aria-label={removeLabel}
-                onClick={onRemove}
-                className="shrink-0"
-              >
-                {removeIcon}
-              </Button>
-            </TooltipWrapper>
-          )}
+          {removeVariant === "inline" &&
+            (onRemove ? (
+              <TooltipWrapper content={removeTooltip}>
+                <Button
+                  variant="minimal"
+                  size="icon-2xs"
+                  aria-label={removeLabel}
+                  onClick={onRemove}
+                  className="shrink-0"
+                >
+                  {removeIcon}
+                </Button>
+              </TooltipWrapper>
+            ) : (
+              removeDisabledReason && (
+                <TooltipWrapper content={removeDisabledReason}>
+                  {/* Disabled buttons swallow hover, so the wrapper carries the tooltip. */}
+                  <span className="flex shrink-0" tabIndex={0}>
+                    <Button
+                      variant="minimal"
+                      size="icon-2xs"
+                      aria-label={removeLabel}
+                      disabled
+                      className="disabled:opacity-50"
+                    >
+                      {removeIcon}
+                    </Button>
+                  </span>
+                </TooltipWrapper>
+              )
+            ))}
         </div>
         {onRemove && removeVariant === "divided" && (
           <TooltipWrapper content={removeTooltip}>

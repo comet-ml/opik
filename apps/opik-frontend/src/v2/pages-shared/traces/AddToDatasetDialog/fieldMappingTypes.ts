@@ -1,6 +1,6 @@
 import { EnrichmentOptions } from "./useAddToDatasetForm";
 
-export type MappingRowKind = "fixed" | "custom" | "managed";
+export type MappingRowKind = "fixed" | "existing" | "custom" | "managed";
 
 export type MappingRow = {
   id: string;

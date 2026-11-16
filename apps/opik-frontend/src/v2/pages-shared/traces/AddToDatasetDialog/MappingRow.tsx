@@ -29,10 +29,11 @@ type MappingRowProps = {
   isPending?: boolean;
   entityLabel?: string;
   autoFocusName?: boolean;
-  autoOpenSource?: boolean;
   onRename?: (name: string) => void;
   onPathSelect?: (path: string) => void;
+  onPathClear?: () => void;
   onRemove?: () => void;
+  removeDisabledReason?: string;
 };
 
 const MappingRow: React.FunctionComponent<MappingRowProps> = ({
@@ -44,10 +45,11 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   isPending,
   entityLabel,
   autoFocusName,
-  autoOpenSource,
   onRename,
   onPathSelect,
+  onPathClear,
   onRemove,
+  removeDisabledReason,
 }) => {
   const isManaged = row.kind === "managed";
   const isCustom = row.kind === "custom";
@@ -112,13 +114,14 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
       <PathSourcePicker
         fieldName={row.name}
         path={row.path}
+        placeholder={onPathClear ? "Not mapped" : undefined}
         badge={renderCoverage()}
         invalid={rowError === "no_path"}
-        defaultOpen={autoOpenSource}
         treeData={treeData}
         isPending={isPending}
         entityLabel={entityLabel}
         onSelect={(path) => onPathSelect?.(path)}
+        onClear={onPathClear}
       />
     );
   };
@@ -131,6 +134,7 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
       removeLabel={`Remove ${row.name || "field"}`}
       removeIcon={<X />}
       removeVariant="inline"
+      removeDisabledReason={removeDisabledReason}
       onRemove={onRemove}
       note={
         !rowError &&
