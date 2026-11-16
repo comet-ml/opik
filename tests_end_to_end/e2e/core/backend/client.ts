@@ -3426,6 +3426,155 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/experiments/{id}`'s `feedback_scores`, as name/value
+     * pairs sorted by name.
+     *
+     * The aggregate the experiment header renders, and the collection that says
+     * which scores were UPLOADED at all. That is the half a per-score read
+     * cannot answer: a score the evaluation engine marked failed is not sent to
+     * the backend, so its absence here — not merely a flag on the SDK's own
+     * result — is what proves it never reached the feedback batch (opik#9396).
+     *
+     * The WHOLE collection, sorted, rather than a lookup by name: a caller
+     * asserting "only this metric scored" needs the length pinned, and a
+     * by-name read would pass over a build that had also uploaded the failed
+     * ones under their own names.
+     *
+     * Through `rawFetch` because the value arrives as a decimal string on the
+     * wire for some scores and a number for others; parsing it in one place
+     * keeps every caller comparing numbers.
+     */
+    async experimentFeedbackScores(
+      experimentId: string,
+    ): Promise<Array<{ name: string; value: number }>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${experimentId}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `experimentFeedbackScores(${experimentId}): answered ${status}: ${message}`,
+        );
+      }
+      const scores = (json as { feedback_scores?: unknown } | null)?.feedback_scores;
+      // An experiment with no scores answers `[]`, so a missing key means this
+      // read is looking at something other than an experiment payload.
+      if (!Array.isArray(scores)) {
+        throw new Error(
+          `experimentFeedbackScores(${experimentId}): 200 carried no feedback_scores array — ` +
+            'cannot tell an experiment that scored nothing from a body this read cannot see.',
+        );
+      }
+      return scores
+        .map((raw) => {
+          const score = raw as { name?: unknown; value?: unknown };
+          return { name: String(score.name), value: Number(score.value) };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    /**
+     * The `execution_policy` of a suite's LATEST version — the exact read
+     * `AddToTestSuiteDialog` makes (`useDatasetVersionsList`, page 1 size 1).
+     *
+     * The same page and size on purpose: the dialog's criteria come from
+     * `content[0]`, so a spec asserting what the dialog should have shown has to
+     * be looking at the same row. A different page size could legitimately
+     * return a different version first and the two would disagree for reasons
+     * that have nothing to do with the product.
+     *
+     * `null` when the version carries no policy, which is distinct from a
+     * policy equal to the default — see `listSuiteItemPolicies`. Through
+     * `rawFetch` because `execution_policy` is not on the pinned SDK's version
+     * model.
+     */
+    async suiteVersionPolicy(datasetId: string): Promise<ExecutionPolicyRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}/versions`,
+        { query: new URLSearchParams({ page: '1', size: '1' }) },
+      );
+      if (status !== 200) {
+        throw new Error(`suiteVersionPolicy(${datasetId}): answered ${status}: ${message}`);
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content) || content.length === 0) {
+        throw new Error(
+          `suiteVersionPolicy(${datasetId}): 200 carried no versions — a suite always has at ` +
+            'least one, so this read is looking in the wrong place rather than finding nothing.',
+        );
+      }
+      const policy = (content[0] as { execution_policy?: unknown }).execution_policy;
+      if (policy === null || policy === undefined) return null;
+      const { runs_per_item: runs, pass_threshold: threshold } = policy as {
+        runs_per_item?: unknown;
+        pass_threshold?: unknown;
+      };
+      if (typeof runs !== 'number' || typeof threshold !== 'number') {
+        throw new Error(
+          `suiteVersionPolicy(${datasetId}): the latest version carries an execution_policy ` +
+            `this read cannot decode: ${JSON.stringify(policy)}.`,
+        );
+      }
+      return { runsPerItem: runs, passThreshold: threshold };
+    },
+
+    /**
+     * Every item of a test suite with its own `execution_policy`, in the order
+     * the items endpoint returns them.
+     *
+     * `null` means the item carries no policy of its own and so INHERITS the
+     * suite's — which is a distinct state from holding a policy that happens to
+     * equal the suite's, and the difference is the whole subject of opik#9482.
+     * A caller must be able to tell them apart, so an absent policy is reported
+     * as `null` rather than defaulted to anything.
+     *
+     * Through `rawFetch` because `execution_policy` is not on the pinned SDK's
+     * dataset-item model at all: read through it, every item would report no
+     * policy and an assertion that an override was stored could never fail.
+     * An item whose policy is present but malformed throws rather than reading
+     * as `null`, for the same reason.
+     */
+    async listSuiteItemPolicies(
+      datasetId: string,
+    ): Promise<Array<{ id: string; executionPolicy: ExecutionPolicyRef | null }>> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}/items`,
+        { query: new URLSearchParams({ size: '500' }) },
+      );
+      if (status !== 200) {
+        throw new Error(`listSuiteItemPolicies(${datasetId}): answered ${status}: ${message}`);
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content)) {
+        throw new Error(
+          `listSuiteItemPolicies(${datasetId}): 200 carried no content array — cannot tell ` +
+            'a suite with no items from a read looking in the wrong place.',
+        );
+      }
+      return content.map((raw) => {
+        const item = raw as { id?: unknown; execution_policy?: unknown };
+        const policy = item.execution_policy;
+        if (policy === null || policy === undefined) {
+          return { id: String(item.id), executionPolicy: null };
+        }
+        const { runs_per_item: runs, pass_threshold: threshold } = policy as {
+          runs_per_item?: unknown;
+          pass_threshold?: unknown;
+        };
+        if (typeof runs !== 'number' || typeof threshold !== 'number') {
+          throw new Error(
+            `listSuiteItemPolicies(${datasetId}): item ${String(item.id)} carries an ` +
+              `execution_policy this read cannot decode: ${JSON.stringify(policy)}. ` +
+              'Reporting it as "inherited" would make a stored override look like an absent one.',
+          );
+        }
+        return { id: String(item.id), executionPolicy: { runsPerItem: runs, passThreshold: threshold } };
+      });
+    },
+
+    /**
      * Versions of a dataset, newest first — the rows the Version history tab
      * renders, including the item counters it shows in "Item count".
      */

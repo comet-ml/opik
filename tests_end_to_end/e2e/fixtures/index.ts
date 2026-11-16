@@ -1,4 +1,4 @@
-export { test, expect } from './guardrail-trigger-alert.fixture';
+export { test, expect } from './pass-criteria-suite.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -721,3 +721,12 @@ export {
   GUARDRAIL_TYPES_KEY,
   SEEDED_GUARDRAIL_TYPES,
 } from './guardrail-trigger-alert.fixture';
+export type {
+  PassCriteriaSuiteRef,
+  PassCriteriaSuiteFixtures,
+} from './pass-criteria-suite.fixture';
+export {
+  SUITE_RUNS_PER_ITEM,
+  SUITE_PASS_THRESHOLD,
+  OVERRIDE_RUNS_PER_ITEM,
+} from './pass-criteria-suite.fixture';

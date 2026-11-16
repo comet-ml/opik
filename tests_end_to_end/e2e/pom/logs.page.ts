@@ -3,6 +3,7 @@ import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
 import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
+import { AddToTestSuiteDialogPage } from './add-to-test-suite-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -787,6 +788,23 @@ export class LogsPage {
       await this.page.getByRole('menuitem', { name: 'Dataset', exact: true }).click();
       const dialog = new AddToDatasetDialogPage(this.page);
       await expect(dialog.root, 'the Add to dataset dialog is open').toBeVisible();
+      return dialog;
+    });
+  }
+
+  /**
+   * The same dropdown's "Test suite" entry.
+   *
+   * Exact, for the reason `openAddToDataset` gives: the three entries come from
+   * one `AddToDropdown`, and the list is the kind that grows. Callers select
+   * rows first — the trigger is disabled until at least one is ticked.
+   */
+  async openAddToTestSuite(): Promise<AddToTestSuiteDialogPage> {
+    return test.step('Open Add to → Test suite', async () => {
+      await this.page.getByRole('button', { name: 'Add to' }).click();
+      await this.page.getByRole('menuitem', { name: 'Test suite', exact: true }).click();
+      const dialog = new AddToTestSuiteDialogPage(this.page);
+      await expect(dialog.root, 'the Add to test suite dialog is open').toBeVisible();
       return dialog;
     });
   }

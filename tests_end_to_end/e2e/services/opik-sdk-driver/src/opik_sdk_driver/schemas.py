@@ -1109,3 +1109,72 @@ class TrackedGeneratorResult(BaseModel):
 
 class TrackedGeneratorResponse(BaseModel):
     calls: list[TrackedGeneratorResult]
+
+
+class MixedScoreItemSeed(BaseModel):
+    """One dataset item, naming the value kind its metric should return.
+
+    The KIND rather than the value itself: NaN and infinity are not valid JSON,
+    so a caller cannot send them over this bridge at all. Naming them is also
+    what makes the seed readable in a failure message — "the item whose metric
+    returned nan" beats an item that looks identical to its neighbours.
+    """
+
+    key: str
+    #: One of `MIXED_SCORE_KINDS` in routes/experiments.py.
+    value_kind: str
+
+
+class MixedScoreEvaluateRequest(BaseModel):
+    workspace: str | None = None
+    project_name: str
+    dataset_name: str
+    dataset_description: str | None = None
+    experiment_name: str
+    metric_name: str
+    items: list[MixedScoreItemSeed]
+    #: The reason the metric attaches to every score it returns. Asserted to
+    #: survive onto `metadata.original_reason` for the ones that are failed.
+    reason: str
+    #: Length of the string the `long_string` kind returns. The caller picks it
+    #: so the 200-character `reprlib` cap is asserted against a value the test
+    #: chose rather than one this file fixed.
+    long_string_length: int = 260
+    task_threads: int = 1
+
+
+class MixedScoreResult(BaseModel):
+    dataset_item_id: str
+    key: str
+    value_kind: str
+    #: What the engine recorded. `0.0` for every failed score.
+    score_value: float
+    scoring_failed: bool
+    #: The engine's own replacement reason, or the metric's for a score it left
+    #: alone.
+    reason: str | None = None
+    #: `metadata.original_value` — a `repr()` of what the metric returned,
+    #: capped at 200 characters. Null when the key is absent, never defaulted
+    #: to the empty string: "the engine recorded nothing here" and "it recorded
+    #: an empty repr" are different facts.
+    original_value: str | None = None
+    #: `metadata.original_reason` — the metric's own reason, moved aside.
+    original_reason: str | None = None
+
+
+class MixedScoreEvaluateResponse(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    dataset_id: str
+    item_count: int
+    results: list[MixedScoreResult]
+    #: The mean the console prints, or null when every score failed and there
+    #: was no denominator — `calculate_aggregated_statistics` drops such a
+    #: metric from its dictionary entirely.
+    aggregate_mean: float | None = None
+    #: `ScoreStatistics.failed_count` — how many of this metric's scores were
+    #: left out of the mean.
+    aggregate_failed_count: int | None = None
+    #: The values that DID make it into the mean, so a caller can assert the
+    #: denominator rather than inferring it.
+    aggregate_values: list[float] = []

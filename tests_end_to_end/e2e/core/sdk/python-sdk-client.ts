@@ -11,6 +11,50 @@
  * under the `original_usage.` prefix. A seed that must arrive with the bare key
  * cannot go through the bridge at all — see `backendClient.createSpan`.
  */
+/**
+ * The value kinds `mixedScoreEvaluate`'s metric can return, as
+ * `MIXED_SCORE_KINDS` in the bridge names them.
+ *
+ * `finite` is the control: without a score the engine must LEAVE ALONE, a
+ * build that failed every score indiscriminately would satisfy every
+ * assertion about the other five.
+ */
+export type MixedScoreKind = 'finite' | 'nan' | 'pos_inf' | 'neg_inf' | 'none' | 'long_string';
+
+/** One score as the engine recorded it, after the non-finite rewrite. */
+export interface MixedScoreResult {
+  dataset_item_id: string;
+  key: string;
+  value_kind: MixedScoreKind | '';
+  /** `0.0` for every failed score. */
+  score_value: number;
+  scoring_failed: boolean;
+  /** The engine's replacement reason, or the metric's own for a score it kept. */
+  reason: string | null;
+  /**
+   * `metadata.original_value` — a capped `repr()` of what the metric returned.
+   *
+   * `null` for an ABSENT key rather than `''`, so "the engine recorded nothing
+   * here" cannot satisfy a comparison against a recorded value.
+   */
+  original_value: string | null;
+  /** `metadata.original_reason` — the metric's own reason, moved aside. */
+  original_reason: string | null;
+}
+
+export interface MixedScoreEvaluateResult {
+  experiment_id: string;
+  experiment_name: string;
+  dataset_id: string;
+  item_count: number;
+  results: MixedScoreResult[];
+  /** Null when every score failed and the statistics dropped the metric. */
+  aggregate_mean: number | null;
+  aggregate_failed_count: number | null;
+  /** The values that formed the mean, so a caller can assert the denominator. */
+  aggregate_values: number[];
+}
+
 export type SpanSeedUsage = {
   prompt_tokens: number;
   completion_tokens: number;
@@ -301,6 +345,34 @@ export interface PythonSdkClient {
    * applied" (languages stop differing) apart from "the lock stopped holding"
    * (a language differs from its own sequential score).
    */
+  /**
+   * One `evaluate()` run whose single metric returns a different kind of value
+   * per item — finite, NaN, +-inf, None, an over-long string.
+   *
+   * The shape opik#9396 changed: a value that is not a finite real number is
+   * now turned into a FAILED score rather than reaching the feedback batch.
+   * Everything a caller needs to assert that comes back as data — the
+   * per-score `scoring_failed`, the engine's replacement reason, the relocated
+   * `original_reason`, the capped `original_value` — plus the console's own
+   * mean and failed count, read off the statistics the report prints rather
+   * than recomputed.
+   *
+   * `aggregate_mean` is null when every score failed: there is then no
+   * denominator, and the statistics drop the metric entirely rather than
+   * reporting a mean of nothing.
+   */
+  mixedScoreEvaluate(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    metric_name: string;
+    reason: string;
+    items: Array<{ key: string; value_kind: MixedScoreKind }>;
+    long_string_length?: number;
+    task_threads?: number;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<MixedScoreEvaluateResult>;
   readabilityEvaluate(args: {
     project_name: string;
     dataset_name: string;
@@ -902,6 +974,19 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async mixedScoreEvaluate(args) {
+      return request<MixedScoreEvaluateResult>(
+        'POST',
+        '/experiments/mixed-score-evaluate',
+        args,
+        {
+          // One evaluate() over a handful of items, all local computation —
+          // but behind a dataset create and an experiment write against a
+          // cloud backend, same as readabilityEvaluate.
+          timeoutMs: 120_000,
+        },
+      );
     },
     async readabilityEvaluate(args) {
       return request<{
