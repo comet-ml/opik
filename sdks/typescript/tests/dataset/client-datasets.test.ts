@@ -345,6 +345,26 @@ describe("Opik dataset operations", () => {
     expect(results).toHaveLength(1);
   });
 
+  it("should return no datasets when the project does not exist", async () => {
+    vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+      new OpikApiError({ message: "Not found", statusCode: 404 })
+    );
+
+    const results = await client.getDatasets();
+
+    expect(results).toEqual([]);
+    expect(findDatasetsSpy).not.toHaveBeenCalled();
+  });
+
+  it("should fail when the project lookup fails for a reason other than not found", async () => {
+    vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+      new OpikApiError({ message: "Server error", statusCode: 500 })
+    );
+
+    await expect(client.getDatasets()).rejects.toThrow();
+    expect(findDatasetsSpy).not.toHaveBeenCalled();
+  });
+
   it("should handle empty dataset list", async () => {
     const mockDatasets = {
       content: [],

@@ -178,7 +178,12 @@ A phone call is a live, unattended channel, so it is a good place to check what 
 from opik import exceptions
 from opik.guardrails import Guardrail, PII, PromptInjection
 
-inbound = Guardrail(guards=[PromptInjection(threshold=0.5), PII()])
+inbound = Guardrail(
+    rules=[
+        PromptInjection(),
+        PII(entities=["CREDIT_CARD", "PHONE_NUMBER", "EMAIL_ADDRESS"]),
+    ]
+)
 
 
 @opik.track(name="voice-agent-turn")
