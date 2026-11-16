@@ -1,17 +1,15 @@
 import React from "react";
-import { MessageCircleWarning, MoveRight, X } from "lucide-react";
+import { MessageCircleWarning, Pencil, X } from "lucide-react";
 
-import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Tag } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import FieldRowShell from "@/v2/components/FieldRowShell/FieldRowShell";
 import { JsonObject } from "@/types/shared";
 import { cn } from "@/lib/utils";
 import PathSourcePicker from "./PathSourcePicker";
-import {
-  MAX_FIELD_NAME_LENGTH,
-  MappingRow as MappingRowType,
-} from "./fieldMappingTypes";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
+import { MappingRow as MappingRowType } from "./fieldMappingTypes";
 import { FieldRowError } from "./useFieldMappings";
 import { FieldCoverage } from "./useFieldCoverage";
 
@@ -31,10 +29,11 @@ type MappingRowProps = {
   isPending?: boolean;
   entityLabel?: string;
   autoFocusName?: boolean;
-  autoOpenSource?: boolean;
   onRename?: (name: string) => void;
   onPathSelect?: (path: string) => void;
+  onPathClear?: () => void;
   onRemove?: () => void;
+  removeDisabledReason?: string;
 };
 
 const MappingRow: React.FunctionComponent<MappingRowProps> = ({
@@ -46,10 +45,11 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   isPending,
   entityLabel,
   autoFocusName,
-  autoOpenSource,
   onRename,
   onPathSelect,
+  onPathClear,
   onRemove,
+  removeDisabledReason,
 }) => {
   const isManaged = row.kind === "managed";
   const isCustom = row.kind === "custom";
@@ -80,27 +80,30 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
     }
 
     return (
-      <Input
-        dimension="xs"
-        value={row.name}
-        placeholder="Field name"
-        className={cn(
-          "px-2",
-          rowError && rowError !== "no_path" && "border-destructive",
-        )}
-        autoFocus={autoFocusName}
-        onFocus={(event) => autoFocusName && event.currentTarget.select()}
-        onChange={(event) => onRename?.(event.target.value)}
-      />
+      <div className="relative">
+        <Input
+          dimension="xs"
+          value={row.name}
+          placeholder="Field name"
+          className={cn(
+            "pl-2 pr-6",
+            rowError && rowError !== "no_path" && "border-destructive",
+          )}
+          autoFocus={autoFocusName}
+          onFocus={(event) => autoFocusName && event.currentTarget.select()}
+          onChange={(event) => onRename?.(event.target.value)}
+        />
+        <Pencil className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-light-slate" />
+      </div>
     );
   };
 
   const renderSource = () => {
     if (isManaged) {
       return (
-        <div className="flex h-6 items-center gap-1 rounded-md border border-border bg-muted px-2">
-          <span className="comet-body-xs min-w-0 flex-1 truncate text-muted-slate">
-            Managed by Opik
+        <div className="flex h-6 items-center gap-1 rounded-md border border-border bg-background px-2">
+          <span className="comet-code min-w-0 flex-1 truncate text-xs text-foreground">
+            {row.name}
           </span>
           {renderCoverage()}
         </div>
@@ -111,56 +114,48 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
       <PathSourcePicker
         fieldName={row.name}
         path={row.path}
+        placeholder={onPathClear ? "Not mapped" : undefined}
         badge={renderCoverage()}
         invalid={rowError === "no_path"}
-        defaultOpen={autoOpenSource}
         treeData={treeData}
         isPending={isPending}
         entityLabel={entityLabel}
         onSelect={(path) => onPathSelect?.(path)}
+        onClear={onPathClear}
       />
     );
   };
 
   return (
-    <div
+    <FieldRowShell
       data-testid={`mapping-row-${row.id}`}
-      className="rounded-md border border-border px-2 py-[5px]"
-    >
-      <div className="flex h-6 items-center gap-2">
-        <div className="w-[calc((100%-40px)/2)] min-w-0 shrink-0">
-          {renderName()}
-        </div>
-        <Button variant="ghost" size="icon-2xs" disabled className="shrink-0">
-          <MoveRight />
-        </Button>
-        <div className="min-w-0 flex-1">{renderSource()}</div>
-        {onRemove && (
-          <Button
-            variant="minimal"
-            size="icon-2xs"
-            className="shrink-0"
-            onClick={onRemove}
-          >
-            <X />
-          </Button>
-        )}
-      </div>
-      {rowError && (
-        <p className="comet-body-xs mt-1 text-destructive">
-          {ROW_ERROR_TEXT[rowError]}
-        </p>
-      )}
-      {!rowError && Boolean(newColumnItemCount) && (
-        <div className="flex items-center gap-1.5 py-2">
-          <MessageCircleWarning className="size-3 shrink-0 text-muted-slate" />
-          <span className="comet-body-xs text-muted-slate">
-            New field — the {newColumnItemCount} items already in this dataset
-            will display this field as empty.
-          </span>
-        </div>
-      )}
-    </div>
+      name={renderName()}
+      value={renderSource()}
+      removeLabel={`Remove ${row.name || "field"}`}
+      removeIcon={<X />}
+      removeVariant="inline"
+      removeDisabledReason={removeDisabledReason}
+      onRemove={onRemove}
+      note={
+        !rowError &&
+        Boolean(newColumnItemCount) && (
+          <div className="flex items-center gap-1 rounded-md bg-muted p-2">
+            <MessageCircleWarning className="size-3 shrink-0 text-muted-slate" />
+            <span className="comet-body-xs text-muted-slate">
+              New field — the {newColumnItemCount} items already in this dataset
+              will display this field as empty.
+            </span>
+          </div>
+        )
+      }
+      message={
+        rowError && (
+          <p className="comet-body-xs mt-1 text-destructive">
+            {ROW_ERROR_TEXT[rowError]}
+          </p>
+        )
+      }
+    />
   );
 };
 

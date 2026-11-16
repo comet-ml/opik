@@ -11,9 +11,9 @@ import {
 } from "react";
 
 import { EnrichmentOptions } from "./useAddToDatasetForm";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 import {
   FIXED_MAPPING_FIELDS,
-  MAX_FIELD_NAME_LENGTH,
   MappingRow,
   QUICK_ADD_CHIPS,
   QuickAddChip,
@@ -105,20 +105,33 @@ const useFieldMappings = ({
     [chips, enrichmentOptions],
   );
 
-  const datasetChips = useMemo(() => {
+  const [existingPaths, setExistingPaths] = useState<Record<string, string>>(
+    {},
+  );
+
+  // Columns the dataset already has are listed up front: they can't be removed
+  // here, only mapped or left empty for the new items.
+  const existingRows: MappingRow[] = useMemo(() => {
     const reserved = new Set([
       ...FIXED_MAPPING_FIELDS.map(({ key }) => key),
       ...QUICK_ADD_CHIPS.map((chip) => chip.key),
-      ...customRows.map((row) => row.name.trim()),
     ]);
 
-    return datasetColumns.filter((column) => !reserved.has(column));
-  }, [datasetColumns, customRows]);
+    return datasetColumns
+      .filter((column) => !reserved.has(column))
+      .map((column) => ({
+        id: `existing:${column}`,
+        name: column,
+        kind: "existing" as const,
+        path: existingPaths[column],
+      }));
+  }, [datasetColumns, existingPaths]);
 
   const rowErrors = useMemo(() => {
     const taken = new Set([
       ...FIXED_MAPPING_FIELDS.map(({ key }) => key),
       ...managedRows.map((row) => row.name),
+      ...existingRows.map((row) => row.name),
     ]);
     const errors: Record<string, FieldRowError> = {};
 
@@ -144,7 +157,7 @@ const useFieldMappings = ({
     });
 
     return errors;
-  }, [customRows, managedRows]);
+  }, [customRows, managedRows, existingRows]);
 
   const fieldMappings = useMemo(() => {
     const mappings: Record<string, string> = {};
@@ -156,7 +169,7 @@ const useFieldMappings = ({
       }
     });
 
-    customRows.forEach((row) => {
+    [...existingRows, ...customRows].forEach((row) => {
       const path = row.path?.trim();
       if (path && !rowErrors[row.id]) {
         mappings[row.name.trim()] = path;
@@ -164,16 +177,7 @@ const useFieldMappings = ({
     });
 
     return mappings;
-  }, [fixedPaths, customRows, rowErrors]);
-
-  const canUseBasicMode = useMemo(
-    () =>
-      isEmpty(customRows) &&
-      FIXED_MAPPING_FIELDS.every(
-        ({ key, defaultPath }) => fixedPaths[key] === defaultPath,
-      ),
-    [customRows, fixedPaths],
-  );
+  }, [fixedPaths, existingRows, customRows, rowErrors]);
 
   const setFixedPath = useCallback((key: string, path: string) => {
     setFixedPaths((prev) => ({ ...prev, [key]: path }));
@@ -195,11 +199,13 @@ const useFieldMappings = ({
     return id;
   }, []);
 
-  const addNamedRow = useCallback((name: string) => {
-    nextIdRef.current += 1;
-    const id = `custom-${nextIdRef.current}`;
-    setAdditionalRows((prev) => [...prev, { id, name, kind: "custom" }]);
-    return id;
+  const setExistingPath = useCallback((column: string, path?: string) => {
+    setExistingPaths((prev) => {
+      if (path) return { ...prev, [column]: path };
+      const next = { ...prev };
+      delete next[column];
+      return next;
+    });
   }, []);
 
   const removeRow = useCallback((id: string) => {
@@ -233,16 +239,15 @@ const useFieldMappings = ({
     fixedRows,
     customRows,
     managedRows,
-    additionalRows,
+    existingRows,
+    additionalRows: [...existingRows, ...additionalRows],
     availableChips,
-    datasetChips,
     rowErrors,
     isValid: isEmpty(rowErrors),
-    canUseBasicMode,
     fieldMappings,
     setFixedPath,
     addRow,
-    addNamedRow,
+    setExistingPath,
     removeRow,
     renameRow,
     setRowPath,
