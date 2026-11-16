@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import dspy
+import pytest
 
 from opik.integrations.dspy.callback import OpikCallback
 from opik.integrations.dspy.parsers import (
@@ -190,6 +191,48 @@ class TestExtractLMInfoFromHistory:
         assert result.actual_provider == "Novita"
         assert result.actual_model == "qwen/qwen3-8b"
         assert result.total_cost == 9.5e-06
+
+    @pytest.mark.parametrize(
+        "provider_usage, expected_total_cost",
+        [
+            # Free endpoint: OpenRouter billed 0, so the call really cost nothing.
+            ({"prompt_tokens": 10, "completion_tokens": 20, "cost": 0}, 0),
+            # BYOK: `cost` is only OpenRouter's fee; the model is billed upstream.
+            (
+                {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "cost": 0,
+                    "is_byok": True,
+                    "cost_details": {"upstream_inference_cost": 2.0e-05},
+                },
+                1.2e-05,
+            ),
+        ],
+        ids=["free_endpoint_keeps_billed_zero", "byok_falls_back_to_estimate"],
+    )
+    def test_dspy35_openrouter_billed_zero_cost(
+        self, provider_usage, expected_total_cost
+    ):
+        response = SimpleNamespace(
+            model="qwen/qwen3-8b",
+            provider_data={"provider": "Novita", "usage": provider_usage},
+        )
+        request = ("frozen-request", "openrouter-zero-cost")
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "request": request,
+                "response": response,
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+                "cost": 1.2e-05,  # dspy's own price-table estimate
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.total_cost == expected_total_cost
 
     def test_dspy35_response_without_provider__falls_back_to_estimated_cost(self):
         response = SimpleNamespace(
