@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -26,19 +27,20 @@ public record ProjectTopics(
                 + "topics yet. ready: topics with counts") Status status,
         @Schema(description = "The UTC date of the request, the window's last day") LocalDate today,
         @Schema(description = "The window's first UTC day, inclusive") LocalDate windowFrom,
-        @Schema(description = "When the project's last saved run (a first build or a nightly update) finished; "
-                + "omitted before the first one") Instant lastRunAt,
-        @Schema(description = "collecting only: the project's newest run when it is running or failed; omitted when "
-                + "it saved or there is none. The runbook's 'Reading topics' section tells the collecting cases "
-                + "apart") Attempt attempt,
-        @Schema(description = "collecting only: traces with a vector in the window") Long vectorsInWindow,
-        @Schema(description = "collecting only: traces with a vector the first build needs") Long minVectors,
-        @Schema(description = "ready only: traces with a topic in the window, Other included") Long totalTraces,
-        @Schema(description = "ready only: the first day in the window with a labelled trace; earlier days are 0 "
-                + "because nothing was labelled. Omitted when the window has none") LocalDate labelledFrom,
+        @Nullable @Schema(description = "When the project's last saved run (a first build or a nightly update) "
+                + "finished; omitted before the first one") Instant lastRunAt,
+        @Nullable @Schema(description = "collecting only: the project's newest run when it is running or failed; "
+                + "omitted when it saved or there is none. The runbook's 'Reading topics' section tells the "
+                + "collecting cases apart") Attempt attempt,
+        @Nullable @Schema(description = "collecting only: traces with a vector in the window") Long vectorsInWindow,
+        @Nullable @Schema(description = "collecting only: traces with a vector the first build needs") Long minVectors,
+        @Nullable @Schema(description = "ready only: traces with a topic in the window, Other "
+                + "included") Long totalTraces,
+        @Nullable @Schema(description = "ready only: the first day in the window with a labelled trace; earlier "
+                + "days are 0 because nothing was labelled. Omitted when the window has none") LocalDate labelledFrom,
         @Schema(description = "The live topics in rank order; empty unless ready") List<TopicStats> topics,
-        @Schema(description = "ready only: the traces per day with no topic, or with a topic that is no longer "
-                + "live. Add it to the topics' series for the project's total per day") OtherStats other) {
+        @Nullable @Schema(description = "ready only: the traces per day with no topic, or with a topic that is no "
+                + "longer live. Add it to the topics' series for the project's total per day") OtherStats other) {
 
     @Getter
     @RequiredArgsConstructor

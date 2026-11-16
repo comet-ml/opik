@@ -38,7 +38,8 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
  * {@code trace_topics}: the topic of each trace, one row per assignment, the latest per trace wins. Writes are plain
  * batched inserts; {@code last_updated_at} is stamped by ClickHouse. A reader takes each trace's latest row first and
  * then drops it when that row is a tombstone ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do. The
- * first build only writes: the read API and topic on arrival read the table.
+ * first build writes the table, and reads it once per run for the run's trace counts; the read API and topic on
+ * arrival read it too.
  *
  * <p>The deletes are copies of {@link TopicVectorsDAO}'s (same keys, same partitioning), so a trace's topic goes with
  * the trace exactly as its vector does: by retention and by the trace-delete cascade.
@@ -51,8 +52,8 @@ public class TraceTopicsDAO {
     static final String TABLE = "trace_topics";
 
     /**
-     * The Logs page's default filters, which the read API applies to the traces it counts: {@code source = sdk} (with
-     * the {@code unknown} rows from before sources, {@link Source#legacyFallbackDbValue}) and
+     * The Logs page's default filters, which the read API and the run counts apply to the traces they count:
+     * {@code source = sdk} (with the {@code unknown} rows from before sources, {@link Source#legacyFallbackDbValue}) and
      * {@code visibility_mode = default}. Bound as {@code :logs_sources} and {@code :logs_visibility_mode}.
      */
     private static final String[] LOGS_SOURCES = {Source.SDK.getValue(), Source.UNKNOWN_VALUE};
@@ -88,6 +89,39 @@ public class TraceTopicsDAO {
                 HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
             )
             GROUP BY topic_id, day
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
+                max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Traces per topic among the project's traces created in the window that Logs lists, each by its latest row. Any
+     * version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows. The
+     * latest row is the greatest (last_updated_at, run_id). A trace whose latest row is a tombstone is left out
+     * ({@code HAVING}).
+     */
+    private static final String COUNT_BY_TOPIC = """
+            SELECT latest_topic AS topic_id, count() AS traces
+            FROM (
+                SELECT argMax(topic_id, (last_updated_at, run_id)) AS latest_topic
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                AND trace_id IN (
+                    SELECT id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                    AND created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                    AND source IN :logs_sources
+                    AND visibility_mode = :logs_visibility_mode
+                )
+                GROUP BY trace_id
+                HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+            )
+            GROUP BY topic_id
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """;
@@ -197,6 +231,34 @@ public class TraceTopicsDAO {
                         .build()));
     }
 
+    /**
+     * Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. A trace
+     * counts by its latest row. Rows and memory are capped by the window read's guards ({@code topics.vectors.find}),
+     * time by {@code maxExecutionSeconds}.
+     */
+    public Flux<TopicCount> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
+            @NonNull Instant to, long maxExecutionSeconds) {
+        var find = config.getVectors().getFind();
+        var template = getSTWithLogComment(COUNT_BY_TOPIC, "topics:count_by_topic", workspaceId, null,
+                "project_id=%s, from=%s, to=%s".formatted(projectId, from, to))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
+                .add("max_execution_time", maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("project_id", projectId.toString())
+                        .bind("from_micros", toEpochMicros(from))
+                        .bind("to_micros", toEpochMicros(to))
+                        .bind("logs_sources", LOGS_SOURCES)
+                        .bind("logs_visibility_mode", LOGS_VISIBILITY_MODE)
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> TopicCount.builder()
+                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
+                        .traces(((Number) row.get("traces", Object.class)).longValue())
+                        .build()));
+    }
+
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(workspaceIds),
@@ -290,5 +352,10 @@ public class TraceTopicsDAO {
     /** One row of {@link #countByTopicAndDay}. */
     @Builder(toBuilder = true)
     public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
+    }
+
+    /** One row of {@link #countByTopic}. */
+    @Builder(toBuilder = true)
+    public record TopicCount(@NonNull UUID topicId, long traces) {
     }
 }

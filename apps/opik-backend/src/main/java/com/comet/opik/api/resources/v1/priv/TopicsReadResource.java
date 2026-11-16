@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -58,7 +59,8 @@ public class TopicsReadResource {
             @ApiResponse(responseCode = "404", description = "The project is not in the workspace", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Topics are off"),
-            @ApiResponse(responseCode = "503", description = "A ClickHouse read hit its time or memory limit, or the client timeout; retry after Retry-After seconds", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "503", description = "A ClickHouse read hit its time or memory limit, or the client timeout; retry after Retry-After seconds", headers = {
+                    @Header(name = "Retry-After", required = true, description = "Seconds to wait before a retry", schema = @Schema(implementation = Integer.class))}, content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     @RateLimited(value = "getProjectTopics:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getProjectTopics(@QueryParam("project_id") @NotNull UUID projectId) {

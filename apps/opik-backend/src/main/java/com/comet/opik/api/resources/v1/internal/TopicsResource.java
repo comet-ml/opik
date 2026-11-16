@@ -6,6 +6,7 @@ import com.comet.opik.domain.topics.TopicsFirstBuildService;
 import com.comet.opik.domain.topics.TopicsNightlyService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
@@ -81,7 +82,8 @@ public class TopicsResource {
             @ApiResponse(responseCode = "409", description = "The nightly job is off, or a night is in progress"),
             @ApiResponse(responseCode = "503", description = "Redis failed or did not answer while the night took its lock; retry after the Retry-After delay"),
             @ApiResponse(responseCode = "501", description = "Topics are off")})
-    public Response runNight(@QueryParam("night") String night) {
+    public Response runNight(
+            @QueryParam("night") @Schema(description = "The night to run, yyyy-MM-dd (UTC). Default today's date in UTC; at most tomorrow, at least 365 days ago") String night) {
         if (!config.isEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
