@@ -1595,6 +1595,41 @@ areas:
       projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
       project-home:  { covered: false, state: default }
 
+  # Workspace-level guardrail POLICIES (the Guardrails nav entry), not the
+  # trace-side guardrail surface: `traces.set-guardrail` and
+  # `traces.guardrail-results` keep the SetGuardrailDialog and the Logs
+  # Guardrails column, and stay where they are. This area owns the named,
+  # stored policies an application references by name — the docs' own
+  # /guardrails/policies page.
+  #
+  # NOT cloud_only: useGuardrailsEnabled gates the nav and the page on the
+  # guardrails_validations_enabled toggle, and only consults the platform
+  # plugin's organization check where a plugin supplies one — without the
+  # plugin (OSS) the toggle alone decides, so the surface is reachable
+  # self-hosted.
+  guardrails:
+    label: Guardrails
+    nav_group: Workspace
+    routes: ["/$workspaceName/guardrails"]
+    specs: []
+    capabilities:
+      list-policies:            { covered: false, note: "the Policies table: name, description, rules, execution scope, created/last-updated" }
+      create-policy:            { covered: false, note: "GuardrailPolicyPanel mode=create; names are unique per workspace" }
+      edit-policy:              { covered: false, note: "same panel, mode=edit — a policy has no route of its own, the open one is the ?policy= param" }
+      duplicate-policy:         { covered: false, note: "row menu Duplicate — opens the panel under a name that does not collide with this page's" }
+      delete-policy:            { covered: false, note: "row menu and the selection actions panel, both through the batch-delete endpoint" }
+      pii-rule:                 { covered: false, note: "the PII rule's entity picker — POLICY_PII_ENTITIES" }
+      topic-rule:               { covered: false, note: "allowed and restricted topic lists; at least one of the two is required" }
+      prompt-injection-rule:    { covered: false, note: "a toggle only, nothing to configure" }
+      execution-scope:          { covered: false, note: "on_request vs global — a global policy runs on every check in the workspace, named or not" }
+      search-policies:          { covered: false, note: "search by name" }
+      policy-code-snippet:      { covered: false, note: "'Use in your code' — buildPolicySnippet puts the policy name in as a Python string literal" }
+      guardrails-enabled-guard: { covered: false, note: "GuardrailsPageGuard: 'not enabled for this workspace' vs the page, and the retry it offers when the check itself fails" }
+
+    visual:
+      guardrails-policies: { covered: false, state: default }
+      guardrails-empty:    { covered: false, state: empty, note: "'No policies yet'" }
+
   configuration:
     label: Configuration
     nav_group: Workspace
