@@ -15,8 +15,14 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+permissions:
+  contents: read
+
 jobs:
   build:
+    permissions:
+      contents: write
+      pull-requests: write
     # Only run on non-draft PRs within the same repository.
     if:
       github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft
