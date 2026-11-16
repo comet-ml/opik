@@ -96,12 +96,12 @@ public class TopicWindowLabelService {
 
     /**
      * The saved list a pass labels with. The pass labels the traces created in {@code [from, to)}; the run's window is
-     * {@code [from, windowUntil)}, which the counts cover. {@code topicIds} are its live topics. {@code count} is true
+     * {@code [from, windowUntil)}, which the counts cover. {@code topicIds} are its live topics. {@code saveCounts} is true
      * when a complete pass saves the run's counts: the list has a topic prototype and the run's labels are not complete
      * yet.
      */
     private record Saved(UUID runId, Instant from, Instant to, Instant windowUntil, TopicAlgorithm.Labeller labeller,
-            List<UUID> topicIds, boolean count) {
+            List<UUID> topicIds, boolean saveCounts) {
     }
 
     /** Ends a pass early: the deadline is too close or the thread was interrupted. */
@@ -266,7 +266,7 @@ public class TopicWindowLabelService {
                 labelSlice(saved.from().plus(span.multipliedBy(slice).dividedBy(slices)),
                         saved.from().plus(span.multipliedBy(slice + 1).dividedBy(slices)));
             }
-            if (saved.count()) {
+            if (saved.saveCounts()) {
                 counts = count();
             }
         }
@@ -292,8 +292,11 @@ public class TopicWindowLabelService {
                     Thread.currentThread().interrupt();
                     throw new CutException("interrupted");
                 }
-                log.warn("Topics labelling pass could not count run '{}', project '{}'; the run's counts are not "
-                        + "saved", saved.runId(), projectId, exception);
+                // The exception types only, as markComplete logs them: a ClickHouse error quotes the query.
+                log.warn("Topics labelling pass could not count run '{}', project '{}', errors '{}'; the run's "
+                        + "counts are not saved", saved.runId(), projectId,
+                        ExceptionUtils.getThrowableList(exception).stream().map(TopicsRebuildService::formatError)
+                                .toList());
                 return Map.of();
             }
         }
