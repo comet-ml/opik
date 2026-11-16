@@ -13,24 +13,34 @@ import { readRecordedToasts, startRecordingToasts } from '@e2e/pom/toast-recorde
  * request fields), plus a code-point guard in `ProjectService` for callers that
  * bypass bean validation.
  *
- * ## Why this spec exists at all, given there is already a create-errors spec
- *
- * `project-create-duplicate-name.spec.ts` is the only `projects.create-project`
- * spec, and its non-409 vector is a 400-character name documented in as many
- * words as "The API declares no `@Size` on a project name". That premise is what
- * 9308 invalidated: the create now answers `422 {"errors":[…]}` rather than a
- * `message`-carrying 500, so that spec's `expect(other.message).not.toBeNull()`
- * fails. It is someone else's spec and is left alone; this one pins the
- * behaviour that replaced its assumption.
- *
  * ## The two halves, and why they are two tests
  *
  * The API half is the contract: 150 lands, 151 is refused, the refusal names the
- * limit, and nothing is created. It passes.
+ * limit, and nothing is created.
  *
- * The UI half is what a user actually gets, and it is RED on 2.2.142 — see the
- * comment on that test. Separating them keeps the contract assertion reporting
- * its own result instead of being swallowed by an expected failure beside it.
+ * The UI half is the client-side stop opik#9469 added on top: the dialog's Name
+ * input now carries `maxLength={PROJECT_NAME_MAX_LENGTH}`, so a user cannot type
+ * a name the API would refuse in the first place. Separating them keeps each
+ * reporting its own result — they can regress independently, and the backend
+ * `@Size` is what makes the frontend cap safe to rely on rather than redundant.
+ *
+ * ## What this spec asserted before 2.2.144, and why it no longer does
+ *
+ * The UI half used to be `test.fail()`, asserting that the refusal toast named
+ * the limit: on 2.2.142 the backend answered `{"errors":[…]}` while
+ * `useProjectCreateMutation` read only `response.data.message`, so the user got
+ * a bare "Request failed with status code 422". opik#9469 fixed BOTH ends of
+ * that — the hook now reads the errors envelope through `getApiErrorMessage`,
+ * and the input caps at 150 — which closes the defect and, in closing it, takes
+ * away this spec's vector: an over-long name can no longer reach the server
+ * from the dialog at all, so there is no refusal here to toast.
+ *
+ * The toast-carries-the-server's-reason claim is not dropped, it has an owner:
+ * `project-create-duplicate-name.spec.ts` asserts it against a whitespace-only
+ * name, which is still refused with an `errors` envelope and is now shown to the
+ * user. What stays here is the half that spec cannot make — that the 150
+ * boundary is where the API draws the line, and that the dialog draws it in the
+ * same place.
  */
 
 /** `Project.NAME_MAX_LENGTH`, the limit both halves are about. */
@@ -154,34 +164,25 @@ test.describe('Projects — the 150-character name limit', { tag: ['@t2-cuj', '@
   );
 
   test(
-    'the Create project dialog tells the user about the limit rather than echoing the HTTP status',
+    'the Create project dialog caps the typed name at the limit instead of letting the server refuse it',
     { tag: ['@cap:projects.create-project'] },
     async ({ backendClient, registerProjectCleanup, testNamespace, page }) => {
-      // QA: failing on staging for 2.2.142. The refusal itself is correct — 422,
-      // nothing created — but the toast reads only "Request failed with status
-      // code 422". The backend answers `{"errors":["name cannot exceed 150
-      // characters"]}` while `useProjectCreateMutation` reads
-      // `response.data.message` and falls back to axios's own `error.message`,
-      // so the one sentence that would tell the user what to change is dropped.
-      // Compounding it: the Name input carries no `maxLength` (Description has
-      // 255), so there is no client-side stop, and both dialog buttons sit
-      // inside `DialogClose` (`AddEditProjectDialog.tsx`), so the dialog closes
-      // on a refusal exactly as on a success and the typed name is gone. Only
-      // the toast is asserted here — the dialog closing is arguably the
-      // `DialogClose` wrapper working as written, and is a separate product
-      // decision from whether the user is told why.
-      // Remove test.fail() once the toast carries the server's reason;
-      // Playwright reports it when it does.
-      test.fail();
-
       const projects = new ProjectsPage(page);
       const stem = `${testNamespace}-ui-`;
-      const overLimit = nameOfExactly(stem, NAME_MAX_LENGTH + 1);
-      registerProjectCleanup(overLimit);
+      // Comfortably past the cap rather than one over it, so the assertion
+      // below is about the input holding a LIMIT and not about an off-by-one in
+      // this test's own arithmetic.
+      const typed = nameOfExactly(stem, NAME_MAX_LENGTH + 50);
+      // What the cap should leave behind, and so the name the create will
+      // actually land under. Registered for teardown because this vector now
+      // SUCCEEDS — the whole point of the cap is that the user is not refused.
+      const kept = typed.slice(0, NAME_MAX_LENGTH);
+      registerProjectCleanup(kept);
 
       // Installed before the first navigation: the recorder is an init script,
       // and Radix dismisses a toast on its own 5s timer — a point-in-time
-      // locator could not tell "never raised" from "raised and already gone".
+      // locator could not tell "never raised" from "raised and already gone",
+      // and "no refusal was shown" is part of what this asserts.
       await startRecordingToasts(page);
 
       await test.step('Open the Projects page and the create dialog', async () => {
@@ -190,47 +191,59 @@ test.describe('Projects — the 150-character name limit', { tag: ['@t2-cuj', '@
         await projects.openCreateProjectDialog();
       });
 
-      const submitted = await test.step(
-        `Type a ${NAME_MAX_LENGTH + 1}-character name and submit it`,
-        async () => projects.submitNewProject(overLimit),
+      await test.step(`Typing ${typed.length} characters leaves exactly ${NAME_MAX_LENGTH}`, async () => {
+        await projects.typeNewProjectName(typed);
+        // The value itself, not just its length: a cap that kept the LAST 150
+        // characters, or that dropped characters from the middle, would satisfy
+        // a length check while handing the user a name they never typed. The
+        // run namespace lives at the front of the stem, so a tail-truncating
+        // bug would also strand the project outside the teardown sweep.
+        await expect(
+          projects.newProjectNameInput,
+          `the input stops at ${NAME_MAX_LENGTH} characters, keeping the first ones typed`,
+        ).toHaveValue(kept);
+      });
+
+      const submitted = await test.step('Submit what the input kept', async () =>
+        projects.submitOpenCreateDialog(),
       );
 
-      await test.step('The server refused it, with the limit named', async () => {
-        // The precondition for everything below: if the dialog had somehow sent
-        // a shortened name, or the backend had accepted this one, the toast
-        // assertion would be about the wrong request.
+      await test.step('It was accepted, because the cap kept it inside the limit', async () => {
+        // The pair that makes the cap meaningful: the first test proved 151
+        // characters is refused, so a 201 here is only possible because the
+        // input really did shorten the name. A build that dropped the
+        // `maxLength` would send 200 characters and answer 422 at this line.
         expect(
           submitted.status,
-          'the submit was refused as unprocessable, which is the vector under test',
-        ).toBe(422);
-        expect(
-          submitted.errors,
-          'and the response carries the sentence the user needs, in its errors envelope',
-        ).toEqual([LIMIT_MESSAGE]);
+          `the capped name is at the limit, not over it — the server answered ` +
+            `${submitted.status}${submitted.message ? `: ${submitted.message}` : ''}`,
+        ).toBe(201);
       });
 
-      await test.step('Nothing was created', async () => {
+      await test.step('The project exists under the capped name, whole', async () => {
+        const found = await backendClient.listProjectsWithPrefix(stem);
         expect(
-          (await backendClient.listProjectsWithPrefix(stem)).map((p) => p.name),
-          'the refused create left no project behind',
-        ).toEqual([]);
+          found.map((p) => p.name),
+          'exactly one project was created for this stem, under the full capped name',
+        ).toEqual([kept]);
       });
 
-      await test.step('The toast names the limit', async () => {
+      await test.step('The user was never shown a refusal', async () => {
+        // The user-facing half of the claim, and the reason this reads as the
+        // cap WORKING rather than merely as a create that happened to succeed.
+        // Asserted over every toast raised, because a success toast is also
+        // legitimate here — what must not appear is a complaint about the name.
         const toasts = await readRecordedToasts(page);
-        expect(toasts, 'exactly one toast was raised by the refused submit').toHaveLength(1);
-        expect(
-          toasts[0],
-          'the user is told what is wrong with the name they typed',
-        ).toContain(LIMIT_MESSAGE);
-        // Stated separately, because it is the failure actually observed rather
-        // than merely the negation of the line above: a bare transport status
-        // is not feedback about a name, and a build that showed BOTH would
-        // still be an improvement on this one.
-        expect(
-          toasts[0],
-          'and not the bare HTTP status, which says nothing about the 150-character limit',
-        ).not.toMatch(/Request failed with status code/i);
+        for (const toast of toasts) {
+          expect(
+            toast,
+            'nothing told the user their name was too long — it was capped before it could be',
+          ).not.toContain(LIMIT_MESSAGE);
+          expect(
+            toast,
+            'and no bare transport status was shown either',
+          ).not.toMatch(/Request failed with status code/i);
+        }
       });
     },
   );
