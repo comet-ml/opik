@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Code2, FileTerminal, LucideIcon } from "lucide-react";
 
 import {
@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Tag } from "@/ui/tag";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { CreateDatasetMode } from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
 
 export type CreateEntityOption = {
@@ -35,6 +36,21 @@ export const CREATE_ENTITY_OPTIONS: CreateEntityOption[] = [
   },
 ];
 
+// Uploading adds items, which needs dataset edit on top of dataset create.
+export const useCreateEntityOptions = (): CreateEntityOption[] => {
+  const {
+    permissions: { canEditDatasets },
+  } = usePermissions();
+
+  return useMemo(
+    () =>
+      canEditDatasets
+        ? CREATE_ENTITY_OPTIONS
+        : CREATE_ENTITY_OPTIONS.filter((option) => option.mode !== "upload"),
+    [canEditDatasets],
+  );
+};
+
 type CreateEntityMenuProps = {
   children: React.ReactNode;
   onSelect: (mode: CreateDatasetMode) => void;
@@ -45,12 +61,14 @@ const CreateEntityMenu: React.FC<CreateEntityMenuProps> = ({
   children,
   onSelect,
   align = "end",
-}) => (
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-    <DropdownMenuContent align={align} className="w-80">
-      {CREATE_ENTITY_OPTIONS.map(
-        ({ mode, Icon, iconClassName, title, description }) => (
+}) => {
+  const options = useCreateEntityOptions();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent align={align} className="w-80">
+        {options.map(({ mode, Icon, iconClassName, title, description }) => (
           <DropdownMenuItem
             key={mode}
             className="items-start gap-2.5 py-2.5"
@@ -76,10 +94,10 @@ const CreateEntityMenu: React.FC<CreateEntityMenuProps> = ({
               </span>
             </div>
           </DropdownMenuItem>
-        ),
-      )}
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 export default CreateEntityMenu;

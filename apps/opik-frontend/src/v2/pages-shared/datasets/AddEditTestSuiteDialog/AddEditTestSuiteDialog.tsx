@@ -38,6 +38,7 @@ const AddEditTestSuiteDialog: React.FunctionComponent<
 
   const {
     isEdit,
+    canEditItems,
     assertions,
     setAssertions,
     runsPerItem,
@@ -50,10 +51,9 @@ const AddEditTestSuiteDialog: React.FunctionComponent<
       open={open}
       setOpen={setOpen}
       form={form}
-      hideUpload={hideUpload}
       idPrefix="testSuite"
     >
-      {!isEdit && (
+      {!isEdit && canEditItems && (
         <>
           <Separator className="mb-4" />
           <div className="mb-4">
