@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.topics.TraceTopicsDAO.TopicCount;
 import com.comet.opik.domain.topics.TraceTopicsDAO.TopicDayCount;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -38,6 +39,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -214,6 +216,43 @@ class TopicsReadDAOTest {
 
         assertThat(count(workspaceId, projectId))
                 .containsExactly(TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build());
+    }
+
+    @Test
+    @DisplayName("one counting rule: per topic and for Other, countByTopic equals the sum over days of "
+            + "countByTopicAndDay, with a tombstone, a trace of another source and a hidden trace")
+    void countByTopicIsTheSumOfTheDays() {
+        var workspaceId = workspaceId();
+        var projectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var runId = UUID.randomUUID();
+        var yesterday = NOON.minus(Duration.ofDays(1));
+        var deleted = ID_GENERATOR.generateId();
+        insert(arrival(workspaceId, projectId, NOON, topicId),
+                arrival(workspaceId, projectId, yesterday, topicId),
+                arrival(workspaceId, projectId, NOON, TraceTopic.OTHER),
+                run(workspaceId, projectId, deleted, NOON, topicId, runId));
+        TopicsTraces.tombstone(connectionFactory, workspaceId, projectId, deleted, NOON, topicId);
+        // Rows of traces Logs does not list: they count nowhere
+        var experiment = arrival(workspaceId, projectId, NOON, topicId);
+        var hidden = arrival(workspaceId, projectId, yesterday, TraceTopic.OTHER);
+        traceTopicsDAO.insert(List.of(experiment, hidden)).block();
+        TopicsTraces.insert(connectionFactory, "traces", List.of(
+                new TraceRow(workspaceId, projectId, experiment.traceId(), NOON, Source.EXPERIMENT.getValue(),
+                        VisibilityMode.DEFAULT.getValue()),
+                new TraceRow(workspaceId, projectId, hidden.traceId(), yesterday, Source.SDK.getValue(),
+                        VisibilityMode.HIDDEN.getValue())));
+
+        var byTopic = traceTopicsDAO.countByTopic(workspaceId, projectId, FROM, TO, MAX_EXECUTION_SECONDS)
+                .collectList().block();
+        var daySums = count(workspaceId, projectId).stream().collect(
+                Collectors.groupingBy(TopicDayCount::topicId, Collectors.summingLong(TopicDayCount::traces)));
+
+        assertThat(byTopic).containsExactlyInAnyOrder(
+                TopicCount.builder().topicId(topicId).traces(2).build(),
+                TopicCount.builder().topicId(TraceTopic.OTHER).traces(1).build());
+        assertThat(byTopic.stream().collect(Collectors.toMap(TopicCount::topicId, TopicCount::traces)))
+                .isEqualTo(daySums);
     }
 
     @Test
