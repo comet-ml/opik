@@ -93,9 +93,21 @@ Managed Agents runs on the Claude Platform, or on your own infrastructure with [
 
 ## Link the traces to your application
 
-This step is optional. By default, each user message that you send to a session starts its own trace. To put the agent's spans inside the traces of your own application, wrap each user message in a span of your application. The Anthropic SDK passes the trace context to the Claude API, so the API spans nest under your span.
+This step is optional.
 
-On your span, you can set your own `input`, `output`, and `thread_id`. Opik then shows these values for the trace and the thread.
+Your application, for example a backend server, receives a message from a user and sends it to a Managed Agents session through the Claude API. The Claude API sends the agent's spans to Opik. Your application can also send its own spans to Opik:
+
+```mermaid
+flowchart LR
+    U([User]) --> A["Your application"]
+    A -- "user message + trace context" --> C["Claude API<br/>Managed Agents session"]
+    A -- "application spans" --> O[("Opik")]
+    C -- "agent spans" --> O
+```
+
+Without application spans, each user message that you send to a session starts a new trace in Opik, with only the agent's spans. To see a request from end to end in one trace, create a span in your application for each user message. The Anthropic SDK sends the trace context with each request, so the agent's spans become children of your span.
+
+On your span, set `input`, `output`, and `thread_id`. Opik shows `input` and `output` as the input and output of the trace, and uses `thread_id` to group the traces into a thread.
 
 ```bash
 pip install anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
