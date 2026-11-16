@@ -17,6 +17,8 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator.ApiPipelineMode.RESPONSES_API;
@@ -25,6 +27,7 @@ import static com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator.Api
 class OpenAILlmServiceProvider implements LlmServiceProvider {
 
     private static final String REASONING_EFFORT = "reasoning_effort";
+    private static final String REASONING = "reasoning";
     private static final String NO_REASONING = "none";
 
     private enum ToolRoute {
@@ -60,12 +63,13 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
 
     @Override
     public ChatModel getToolCallingLanguageModel(@NonNull LlmProviderClientApiConfig config,
-            @NonNull LlmAsJudgeModelParameters modelParameters, @Nullable ModelParams.ToolsParam tools) {
+            @NonNull LlmAsJudgeModelParameters modelParameters, @Nullable ModelParams.ToolsParam tools,
+            @NonNull UnaryOperator<LlmAsJudgeModelParameters> resolve) {
         return switch (toolRoute(config, modelParameters, tools)) {
-            case AS_CONFIGURED -> clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
-            case RESPONSES_API -> clientGenerator.newResponsesApiChatModel(config, modelParameters);
+            case AS_CONFIGURED -> clientGenerator.newOpenAiChatLanguageModel(config, resolve.apply(modelParameters));
+            case RESPONSES_API -> clientGenerator.newResponsesApiChatModel(config, resolve.apply(modelParameters));
             case CHAT_COMPLETIONS_WITHOUT_REASONING ->
-                clientGenerator.newCompletionsApiChatModel(config, withoutReasoning(modelParameters));
+                clientGenerator.newCompletionsApiChatModel(config, resolve.apply(withoutReasoning(modelParameters)));
         };
     }
 
@@ -81,9 +85,10 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
             return ToolRoute.AS_CONFIGURED;
         }
         return chatCompletions == ModelParams.ChatCompletionsTools.EFFORT_NONE_ONLY
-                && (NO_REASONING.equals(effortOf(modelParameters)) || clientGenerator.hasCustomBaseUrl(config))
-                        ? ToolRoute.CHAT_COMPLETIONS_WITHOUT_REASONING
-                        : ToolRoute.RESPONSES_API;
+                && (NO_REASONING.equals(ParamResolver.reasoningEffort(modelParameters.customParameters()))
+                        || clientGenerator.hasCustomBaseUrl(config))
+                                ? ToolRoute.CHAT_COMPLETIONS_WITHOUT_REASONING
+                                : ToolRoute.RESPONSES_API;
     }
 
     // Written into custom_parameters rather than the typed field, because an extra body key replaces the typed field
@@ -92,7 +97,12 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
         var customParameters = modelParameters.customParameters() instanceof ObjectNode object
                 ? object.deepCopy()
                 : JsonUtils.getMapper().createObjectNode();
-        var removed = ParamResolver.removeReasoningEffort(customParameters);
+        var removed = new ArrayList<>(ParamResolver.removeReasoningEffort(customParameters));
+        // Chat Completions has no reasoning object ("Unknown parameter: 'reasoning'"), and at effort none the rest of
+        // it, such as summary, has no reasoning to apply to.
+        if (customParameters.remove(REASONING) != null) {
+            removed.add(REASONING);
+        }
         customParameters.put(REASONING_EFFORT, NO_REASONING);
         if (customParameters.equals(modelParameters.customParameters())) {
             return modelParameters;
@@ -103,11 +113,5 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
                         .map(param -> new ParamChange(param, ParamChange.Reason.REFUSED_BY_ROUTE))
                         .toList());
         return modelParameters.toBuilder().customParameters(customParameters).build();
-    }
-
-    private static String effortOf(LlmAsJudgeModelParameters modelParameters) {
-        return modelParameters.customParameters() == null
-                ? null
-                : modelParameters.customParameters().path(REASONING_EFFORT).asText(null);
     }
 }

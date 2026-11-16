@@ -29,6 +29,8 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ModelParamsByProvider } from "@/types/modelParams";
+import { LLM_JUDGE } from "@/types/llm";
+import { convertLLMJudgeDataToLLMJudgeObject } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import {
   createSupports,
   getOpenAIVisibleControls,
@@ -109,6 +111,13 @@ const CONFIGS: Record<string, unknown>[] = [
     reasoningEffort: "low",
   },
   { temperature: 0, seed: null, custom_parameters: null },
+  // A judge rule's saved effort, which the backend sends in place of the flat one.
+  {
+    temperature: 0.2,
+    topP: 0.5,
+    custom_parameters: { reasoning_effort: "none" },
+  },
+  { temperature: 0, custom_parameters: { reasoning_effort: "medium" } },
 ];
 
 // A switch moves these to the nearest level the next model offers; the tables moved them to high.
@@ -271,6 +280,38 @@ describe("the OpenAI catalog against today's tables", () => {
     }
   });
 
+  it.each(MODELS)(
+    "keeps the same temperature in a judge rule saved on %s",
+    (model) => {
+      for (const customParameters of [
+        null,
+        { reasoning_effort: "none" },
+        { reasoning_effort: "high" },
+      ]) {
+        const [fromTables, fromCatalog] = bothWays(
+          () =>
+            convertLLMJudgeDataToLLMJudgeObject({
+              model,
+              config: {
+                temperature: 0,
+                seed: null,
+                custom_parameters: customParameters,
+              },
+              template: LLM_JUDGE.custom,
+              messages: [],
+              variables: {},
+              schema: [],
+              maxCostUsd: null,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any).model.temperature,
+        );
+        expect(fromCatalog, JSON.stringify(customParameters)).toEqual(
+          fromTables,
+        );
+      }
+    },
+  );
+
   it.each(MODELS.filter((model) => model !== TRANSCRIBE_MODEL))(
     "seeds the same default config for %s",
     (model) => {
@@ -314,6 +355,28 @@ describe("where the catalog differs from today's tables", () => {
       expect(fromCatalog.maxCompletionTokens).toBe(16);
     },
   );
+
+  it("gives the sliders gpt-5.4 shows at effort none the profile's range, which the catalog leaves off a refused param", () => {
+    seedTablesOnly();
+    seedCatalog();
+    const params = getModelParams(OPENAI, "gpt-5.4")!;
+
+    const ranges = getShownControls(params, OPENAI_PANEL, {
+      temperature: 0,
+      topP: 1,
+      reasoningEffort: "none",
+    }).flatMap((control) =>
+      control.kind === "number" &&
+      (control.param === "temperature" || control.param === "top_p")
+        ? [[control.param, control.min, control.max]]
+        : [],
+    );
+
+    expect(ranges).toEqual([
+      ["temperature", 0, 2],
+      ["top_p", 0, 1],
+    ]);
+  });
 
   it("starts gpt-4o-transcribe-diarize at its own 2,000-token limit", () => {
     const [fromTables, fromCatalog] = bothWays(

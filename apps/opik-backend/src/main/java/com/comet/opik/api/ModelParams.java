@@ -28,6 +28,7 @@ public record ModelParams(
         EffortParam effort,
         ToolsParam tools,
         Boolean samplingExclusive,
+        Boolean samplingAtEffortNone,
         Boolean thinksByDefault,
         // Set when the provider refuses the model on every other route. Requests still follow the key's route,
         // so a Responses-only model on a Chat Completions key gets the provider's error; the live check reads it.
@@ -168,6 +169,7 @@ public record ModelParams(
                 EffortParam.overlay(base.effort, top.effort),
                 ToolsParam.overlay(base.tools, top.tools),
                 ObjectUtils.getIfNull(top.samplingExclusive, base.samplingExclusive),
+                ObjectUtils.getIfNull(top.samplingAtEffortNone, base.samplingAtEffortNone),
                 ObjectUtils.getIfNull(top.thinksByDefault, base.thinksByDefault),
                 ObjectUtils.getIfNull(top.onlyRoute, base.onlyRoute),
                 overlayRoutes(base.routes, top.routes));
@@ -232,6 +234,7 @@ public record ModelParams(
                 effort == null ? null : effort.settled(),
                 tools == null ? null : tools.settled(),
                 samplingExclusive,
+                samplingAtEffortNone,
                 thinksByDefault,
                 onlyRoute,
                 routes);

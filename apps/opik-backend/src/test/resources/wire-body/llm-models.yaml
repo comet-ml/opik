@@ -55,6 +55,13 @@ openai:
   - id: "gpt-5-nano"
     structuredOutput: true
     reasoning: true
+  # Reasoning models with a none level: gpt-5.4 runs at none by default, gpt-6-luna at medium (curated catalog).
+  - id: "gpt-5.4"
+    structuredOutput: true
+    reasoning: true
+  - id: "gpt-6-luna"
+    structuredOutput: true
+    reasoning: true
   - id: "o3-mini"
     reasoning: true
   - id: "gpt-4.1"

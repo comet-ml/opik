@@ -18,7 +18,7 @@ import {
   isAnthropicThinkingRequested,
   resolveEffort,
   resolveGeminiMaxOutputTokens,
-  resolveOpenAIEffort,
+  resolveOpenAIConfigEffort,
   resolveThinkingLevel,
   ThinkingLevelParams,
 } from "@/lib/modelUtils";
@@ -29,6 +29,7 @@ import {
   OPENAI_PARAM_BINDING,
   ParamBinding,
   ParamControl,
+  refusesSamplingAt,
   resolveMaxOutputTokens,
   resolveSampling,
 } from "@/lib/modelParams";
@@ -118,7 +119,7 @@ export const OPENAI_PANEL: GenericPanelPresentation = {
   getEffortLabel: getOpenAIReasoningEffortLabel,
   getEffortChoice: (_model, params, configs) => ({
     levels: getOpenAIEffortLevels(params),
-    value: resolveOpenAIEffort(params, configs.reasoningEffort),
+    value: resolveOpenAIConfigEffort(params, configs as EffortParams),
   }),
   getSamplingOffNote: () => undefined,
   throttlingDefault: DEFAULT_OPEN_AI_CONFIGS.THROTTLING,
@@ -186,19 +187,20 @@ export const getShownControls = (
   unsupportedParams?: ReadonlySet<string>,
   model = "",
 ): ParamControl[] => {
+  const { levels, value } = presentation.getEffortChoice(
+    model,
+    params,
+    configs,
+  );
   const samplingOff =
-    presentation.getSamplingOffNote(model, configs, false) !== undefined;
+    presentation.getSamplingOffNote(model, configs, false) !== undefined ||
+    refusesSamplingAt(params, value);
   const controls = getParamControls(
     params,
     presentation.binding,
     unsupportedParams,
   ).flatMap((control): ParamControl[] => {
     if (control.kind === "effort") {
-      const { levels, value } = presentation.getEffortChoice(
-        model,
-        params,
-        configs,
-      );
       return levels.length > 0 && value !== undefined
         ? [{ ...control, levels }]
         : [];
@@ -220,7 +222,11 @@ export const getShownValue = (
   if (control.kind === "effort") {
     return presentation.getEffortChoice(model, params, configs).value;
   }
-  const sampling = resolveSampling(params, configs);
+  const sampling = resolveSampling(
+    params,
+    configs,
+    presentation.getEffortChoice(model, params, configs).value,
+  );
   if (control.kind === "sampling_choice") {
     return { temperature: sampling.temperature, topP: sampling.topP };
   }

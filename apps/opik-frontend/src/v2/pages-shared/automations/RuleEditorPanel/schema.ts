@@ -25,13 +25,14 @@ import {
 } from "@/types/providers";
 import {
   getAnthropicThinkingEffortOptions,
+  getCustomParametersReasoningEfforts,
   getNestedThinkingEffort,
   getOpenAIReasoningEffortOptions,
   getOpenRouterReasoningEffortOptions,
   getThinkingLevelOptions,
   knowsAnthropicEffortLevels,
   leavesThinkingToModel,
-  resolveSamplingParams,
+  takesTemperatureAtSomeEffort,
   updateProviderConfig,
   withoutThinkingAmount,
   withThinkingEffort,
@@ -710,15 +711,11 @@ const getPersistedReasoningEffort = (
   if (!getReasoningEffortProvider(model) || !isPlainObject(customParameters)) {
     return undefined;
   }
-  const params = customParameters as Record<string, unknown>;
-  const toLevel = (value: unknown) =>
-    OPENAI_REASONING_EFFORT_VALUES.find((level) => level === value);
-  // Nested first: on the Responses API a stored reasoning object replaces the one built from
-  // reasoning_effort, so of two copies the nested one is what the model runs at.
-  return (
-    toLevel((params.reasoning as { effort?: unknown } | undefined)?.effort) ??
-    toLevel(params.reasoning_effort)
-  );
+  return getCustomParametersReasoningEfforts(customParameters)
+    .map((effort) =>
+      OPENAI_REASONING_EFFORT_VALUES.find((level) => level === effort),
+    )
+    .find((level) => level !== undefined);
 };
 
 const withOpenAIReasoningEffort = (
@@ -923,16 +920,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 
   // This path never reaches sanitizeConfigForRequest, so the capability check belongs here: the form
   // keeps a temperature the user set on another model, and the providers that take none reject it at
-  // scoring time. The resolver answers whether this model takes one; the value stays the user's, so
-  // a rule that never had a temperature does not gain the resolver's default.
-  // Asked without the effort: the judge leaves the temperature out for as long as Claude thinks, and
-  // keeping it in the rule brings it back when the effort goes back to Off.
-  const { temperature: resolvedTemperature } = resolveSamplingParams(
-    data.model as PROVIDER_MODEL_TYPE,
-    { temperature },
-  );
-
-  if (temperature != null && resolvedTemperature != null) {
+  // scoring time. The value stays the user's, so a rule that never had a temperature does not gain the
+  // resolver's default. The judge leaves it out for as long as Claude thinks or an OpenAI model runs
+  // above effort none.
+  if (
+    temperature != null &&
+    takesTemperatureAtSomeEffort(data.model as PROVIDER_MODEL_TYPE)
+  ) {
     model.temperature = temperature;
   }
 
