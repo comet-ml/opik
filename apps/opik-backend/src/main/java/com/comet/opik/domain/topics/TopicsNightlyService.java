@@ -63,6 +63,16 @@ public class TopicsNightlyService {
 
     /** The night's lock: one night at a time across the cluster, scheduled or started by hand. */
     public static final Lock NIGHT_LOCK = new Lock("topics:nightly:lock");
+    /**
+     * How long a date's run lock lasts: {@link #runLock} is taken for a night and never released, so a trigger that
+     * fires later for the same date skips.
+     */
+    public static final Duration RUN_SLOT = Duration.ofDays(1);
+
+    /** The lock that marks a date's night as run, by the scheduled job or by hand. */
+    public static Lock runLock(@NonNull LocalDate night) {
+        return new Lock("topics:nightly:run:" + night);
+    }
 
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
@@ -132,15 +142,20 @@ public class TopicsNightlyService {
     private NightResult runNight(LocalDate night, Instant began, NightRecord record) {
         runner.housekeeping(began);
         nightsHousekeeping(began);
-        var candidates = new ArrayList<Candidate>();
-        int skipped = eligible(night, candidates, record);
-        log.info("Topics night '{}' started, projects to update '{}', skipped '{}'", night, candidates.size(),
-                skipped);
-
         var budgetEnd = began.plus(config.getNightly().getBudget().toJavaDuration());
+        var candidates = new ArrayList<Candidate>();
+        var uncounted = new ArrayList<Candidate>();
+        int skipped = eligible(night, budgetEnd, candidates, uncounted, record);
+        log.info("Topics night '{}' started, projects to update '{}', skipped '{}', not counted '{}'", night,
+                candidates.size(), skipped, uncounted.size());
+
         int saved = 0;
         int failed = 0;
         int notReached = 0;
+        for (var candidate : uncounted) {
+            notReached++;
+            record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
+        }
         var executor = Executors.newThreadPerTaskExecutor(
                 Thread.ofPlatform().name("topics-nightly-", 0).daemon(true).factory());
         try {
@@ -208,6 +223,7 @@ public class TopicsNightlyService {
                 Mono.fromRunnable(() -> {
                     started.complete(true);
                     log.info("Topics night '{}' started by hand", night);
+                    markRun(night);
                     runNight(night.atStartOfDay(ZoneOffset.UTC).toInstant());
                 }).subscribeOn(Schedulers.boundedElastic()),
                 Mono.fromRunnable(() -> started.complete(false)),
@@ -229,6 +245,23 @@ public class TopicsNightlyService {
         } catch (ExecutionException | TimeoutException exception) {
             log.warn("Topics lock unavailable, lock '{}'", NIGHT_LOCK.key(), exception);
             throw lockUnavailable();
+        }
+    }
+
+    /**
+     * Takes the date's run lock, so the scheduled trigger skips a date already run by hand. Held already (the
+     * scheduled night ran) is fine. Not for tomorrow: tomorrow's scheduled night still reads the rest of today. A Redis
+     * failure is logged, and the night goes on.
+     */
+    private void markRun(LocalDate night) {
+        if (night.isAfter(LocalDate.now(ZoneOffset.UTC))) {
+            return;
+        }
+        try {
+            lockService.lockUsingToken(runLock(night), RUN_SLOT).block(LOCK_WAIT);
+        } catch (RuntimeException exception) {
+            log.warn("Topics night '{}' could not take its run lock '{}'; the scheduled job may run the date again",
+                    night, runLock(night).key(), exception);
         }
     }
 
@@ -298,8 +331,11 @@ public class TopicsNightlyService {
      * live topic. Each is counted on its own: the count's {@code max_rows_to_read} applies to one query, so a large
      * project fails only its own count, never its workspace's. A project whose count read fails gets a
      * {@code count_failed} row and is left for the next night. A read that fails otherwise throws, and fails the night.
+     * No count starts after {@code budgetEnd}: the projects left go to {@code uncounted}, and get a {@code not_reached}
+     * row. So the scan ends within the budget, and the night lock's lease (budget + one run) still covers the night.
      */
-    private int eligible(LocalDate night, List<Candidate> candidates, NightRecord record) {
+    private int eligible(LocalDate night, Instant budgetEnd, List<Candidate> candidates, List<Candidate> uncounted,
+            NightRecord record) {
         var build = config.getBuild();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(build.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -312,6 +348,10 @@ public class TopicsNightlyService {
         var skipped = new ArrayList<Skipped>();
         var found = new ArrayList<Candidate>();
         for (var project : listed) {
+            if (!Instant.now().isBefore(budgetEnd)) {
+                uncounted.add(new Candidate(project.workspaceId(), project.projectId(), 0));
+                continue;
+            }
             try {
                 long traces = windowVectors(project.workspaceId(), project.projectId(), from, to);
                 var candidate = new Candidate(project.workspaceId(), project.projectId(), traces);

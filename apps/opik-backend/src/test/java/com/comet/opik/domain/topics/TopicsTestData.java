@@ -21,7 +21,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -202,6 +204,7 @@ final class TopicsTestData {
                     .status(TopicRun.Status.SAVED)
                     .startedAt(savedAt.minus(Duration.ofMinutes(1)))
                     .finishedAt(savedAt)
+                    .stats("{\"topics\": 1}")
                     .build());
             return null;
         });
@@ -223,6 +226,18 @@ final class TopicsTestData {
         return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_prototypes", projectId).stream()
                 .flatMap(workspaceId -> handle.attach(TopicDAO.class).findPrototypes(workspaceId, projectId).stream())
                 .toList());
+    }
+
+    /** The run's {@code stats.topic_counts}, traces per topic id; empty when the run has none. */
+    Map<UUID, Long> runCounts(String workspaceId, UUID runId) {
+        var run = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicRunDAO.class).findById(workspaceId, runId));
+        var counts = new HashMap<UUID, Long>();
+        if (run != null && run.stats() != null) {
+            json(run.stats()).path("topic_counts").properties()
+                    .forEach(entry -> counts.put(UUID.fromString(entry.getKey()), entry.getValue().asLong()));
+        }
+        return counts;
     }
 
     TopicProjectState state(UUID projectId) {
