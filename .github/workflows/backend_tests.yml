@@ -80,8 +80,11 @@ jobs:
             # Not setup-java's `cache: maven`: its key hashes every pom.xml, so it is shared with the lint
             # workflow's spotless leg, which saves a near-empty repository first and every job here then
             # downloads the dependencies again. This key holds what `mvn test` here actually resolves.
-            - name: Cache Maven repository
-              uses: actions/cache@v6
+            # Every job restores; only main saves (see "Save Maven repository"), so pull requests read
+            # main's entry instead of each saving their own copy.
+            - name: Restore Maven repository
+              id: maven-cache
+              uses: actions/cache/restore@v6
               with:
                 path: ~/.m2/repository
                 key: backend-tests-maven-${{ runner.os }}-${{ hashFiles('apps/opik-backend/pom.xml') }}
@@ -112,6 +115,17 @@ jobs:
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
                 -Djunit.jupiter.execution.timeout.testable.method.default="$TEST_TIMEOUT"
+
+            # One job saves, on main, when this pom.xml has no entry yet; a pull request that changes the
+            # pom.xml restores main's previous entry and downloads only what's new.
+            - name: Save Maven repository
+              if: >-
+                github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.id == 'unit' &&
+                steps.maven-cache.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v6
+              with:
+                path: ~/.m2/repository
+                key: ${{ steps.maven-cache.outputs.cache-primary-key }}
 
             # The per-class times in these reports refresh backend-test-timings.tsv, which balances the
             # integration groups: .github/scripts/update-backend-test-timings.sh <run id>
