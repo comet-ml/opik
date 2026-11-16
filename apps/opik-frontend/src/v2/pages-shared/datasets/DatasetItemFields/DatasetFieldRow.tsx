@@ -53,9 +53,7 @@ const DatasetFieldRow: React.FunctionComponent<DatasetFieldRowProps> = ({
           autoFocus={autoFocus === "value"}
           onChange={(event) => onChange({ ...row, value: event.target.value })}
           minRows={1}
-          // 4.25 rows plus the vertical padding shows 4.5 lines, so a cut-off
-          // half line signals that the value scrolls.
-          maxRows={4.25}
+          maxRows={4}
           className="flex min-h-6 w-full resize-none rounded-md border border-border bg-background px-2 py-1 font-mono text-xs leading-4 text-foreground placeholder:text-light-slate focus-visible:border-primary focus-visible:outline-none"
         />
       }
