@@ -180,8 +180,9 @@ jobs:
 
           echo "::group::oxlint and prettier (plugin sources)"
           # Pass the files, not the folder: oxlint skips gitignored paths when it
-          # walks a folder, and src/plugins/ai-spend is gitignored.
-          mapfile -t plugin_files < <(find src/plugins/ai-spend -type f \( -name '*.ts' -o -name '*.tsx' \))
+          # walks a folder, and src/plugins/ai-spend is gitignored. -L follows a
+          # symlinked plugin, as in the local reproduction below.
+          mapfile -t plugin_files < <(find -L src/plugins/ai-spend -type f \( -name '*.ts' -o -name '*.tsx' \))
           npx oxlint --max-warnings=0 "${plugin_files[@]}" || failed=1
           npx prettier --check --log-level=warn "${plugin_files[@]}" || failed=1
           echo "::endgroup::"
