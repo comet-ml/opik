@@ -734,8 +734,8 @@ also logs a WARN (`Topics night count read failed`) with the workspace and the p
 | Metric | Meaning |
 |---|---|
 | `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
-| `topics.topics.live` | Live topics of a project after each saved run. |
-| `topics.topics.born` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
+| `topics.topics.live` | Live topics of a project after each saved nightly update. |
+| `topics.topics.born` | Topics born by saved nightly updates. A few a week per project is normal; many every night means the list does not settle. |
 | `topics.topics.retired` by `reason` | `low_share`, `replaced`. |
 | `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see "Nightly update". No alert. |
 
