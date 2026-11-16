@@ -8,7 +8,6 @@ extracting relevant information like usage, provider, and cost data.
 from dataclasses import dataclass
 from typing import Any, Optional
 import logging
-import math
 
 import dspy
 
@@ -142,27 +141,16 @@ def extract_lm_info_from_history(
                 actual_model = response.model
 
         # Prefer the cost the provider billed (e.g. OpenRouter includes all token types).
-        # dspy>=3.5 only records a LiteLLM-reported cost in the entry and otherwise
-        # stores its own price-table estimate, so read the billed cost from the raw reply first.
-        # A billed 0 is real (free endpoints) and is kept, like other integrations'
-        # provider-reported costs. With BYOK, OpenRouter's `cost` is only its own fee
-        # (often 0) and the provider bills the model separately, so no cost is sent and
-        # the backend prices the call from its table, as it does for dspy<3.5 and for
-        # integrations that never report a cost.
-        # The estimate fallbacks keep `> 0`: a 0 there leaves the cost as None, so the
-        # backend prices the call from its own table.
-        provider_usage = provider_data.get("usage") or {}
-        billed_cost = provider_usage.get("cost")
+        # On dspy<3.5 the entry's cost is LiteLLM's response_cost, which is the provider's
+        # reported cost (OpenRouter's usage.cost) when there is one. dspy>=3.5 stores its own
+        # price-table estimate there instead, so read the reported cost from the raw reply,
+        # with the same rule as before: used when > 0, otherwise left as None so the backend
+        # prices the call from its table.
         total_cost: Optional[float] = None
-        if provider_usage.get("is_byok"):
-            pass
-        elif (
-            isinstance(billed_cost, (int, float))
-            and not isinstance(billed_cost, bool)
-            and math.isfinite(billed_cost)
-            and billed_cost >= 0
-        ):
-            total_cost = billed_cost
+        provider_usage = provider_data.get("usage") or {}
+        if "cost" in provider_usage:
+            if (cost := provider_usage.get("cost") or 0) > 0:
+                total_cost = cost
         elif (cost := last_entry.get("cost") or 0) > 0:
             total_cost = cost
         elif usage_dict and (cost := usage_dict.get("cost") or 0) > 0:

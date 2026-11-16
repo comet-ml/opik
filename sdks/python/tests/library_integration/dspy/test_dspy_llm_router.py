@@ -192,42 +192,24 @@ class TestExtractLMInfoFromHistory:
         assert result.actual_model == "qwen/qwen3-8b"
         assert result.total_cost == 9.5e-06
 
+    # Same rule as dspy<3.5, where LiteLLM's response_cost was OpenRouter's usage.cost:
+    # a reported 0 leaves the cost to the backend instead of DSPy's estimate.
     @pytest.mark.parametrize(
-        "provider_usage, expected_total_cost",
+        "provider_usage",
         [
-            # Free endpoint: OpenRouter billed 0, so the call really cost nothing.
-            ({"prompt_tokens": 10, "completion_tokens": 20, "cost": 0}, 0),
-            # BYOK: `cost` is only OpenRouter's fee; the model is billed upstream, so
-            # no cost is sent and the backend prices the call from its table.
-            (
-                {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 20,
-                    "cost": 0,
-                    "is_byok": True,
-                    "cost_details": {"upstream_inference_cost": 2.0e-05},
-                },
-                None,
-            ),
-            (
-                {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 20,
-                    "cost": 1.0e-06,
-                    "is_byok": True,
-                    "cost_details": {"upstream_inference_cost": 2.0e-05},
-                },
-                None,
-            ),
+            {"prompt_tokens": 10, "completion_tokens": 20, "cost": 0},
+            {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "cost": 0,
+                "is_byok": True,
+                "cost_details": {"upstream_inference_cost": 2.0e-05},
+            },
         ],
-        ids=[
-            "free_endpoint_keeps_billed_zero",
-            "byok_zero_fee_left_to_backend",
-            "byok_nonzero_fee_left_to_backend",
-        ],
+        ids=["free_endpoint", "byok_zero_fee"],
     )
-    def test_dspy35_openrouter_billed_zero_cost(
-        self, provider_usage, expected_total_cost
+    def test_dspy35_openrouter_reported_cost__zero__left_to_backend(
+        self, provider_usage
     ):
         response = SimpleNamespace(
             model="qwen/qwen3-8b",
@@ -247,7 +229,7 @@ class TestExtractLMInfoFromHistory:
 
         result = extract_lm_info_from_history(mock_lm, request)
 
-        assert result.total_cost == expected_total_cost
+        assert result.total_cost is None
 
     def test_dspy35_response_without_provider__falls_back_to_estimated_cost(self):
         response = SimpleNamespace(
