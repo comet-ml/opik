@@ -183,6 +183,9 @@ export const setTracesCache = async (
     queryClient.setQueryData(
       queryKey,
       (originalData: UseTracesListResponse) => {
+        // [TRACES_KEY] also prefixes queries with other shapes (e.g. the exists probe)
+        if (!Array.isArray(originalData?.content)) return originalData;
+
         return {
           ...originalData,
           content: originalData.content.map((trace) => {
