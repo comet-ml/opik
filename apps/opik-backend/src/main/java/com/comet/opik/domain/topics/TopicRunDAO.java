@@ -120,6 +120,17 @@ public interface TopicRunDAO {
     List<FirstBuildFailures> findFirstBuildFailures(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
+    /**
+     * Sets the run's {@code stats.topic_counts} to {@code topicCounts}, a JSON object, and leaves the other keys of
+     * {@code stats} as the save wrote them. 0 when the workspace has no such run.
+     */
+    @SqlUpdate("""
+            UPDATE topic_runs SET stats = JSON_SET(stats, '$.topic_counts', CAST(:topicCounts AS JSON))
+            WHERE workspace_id = :workspaceId AND run_id = :runId
+            """)
+    int setTopicCounts(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId,
+            @Bind("topicCounts") String topicCounts);
+
     @SqlUpdate("DELETE FROM topic_runs WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);

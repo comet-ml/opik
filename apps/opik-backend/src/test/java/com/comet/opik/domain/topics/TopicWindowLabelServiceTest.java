@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.utils.JsonUtils;
 import org.jdbi.v3.core.Handle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +15,8 @@ import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,16 +35,18 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
  * The labelling pass with the stores mocked: MySQL holds a saved list, and ClickHouse is an in-memory window whose page
- * read leaves out the traces that have a row of the run, as {@code READ_UNLABELLED} does. Small pages and slices, so a
- * pass takes many of each.
+ * read leaves out the traces that have a row of the run, as {@code READ_UNLABELLED} does, and whose count per topic
+ * counts the rows the pass wrote. Small pages and slices, so a pass takes many of each.
  */
 @DisplayName("topics labelling pass")
 class TopicWindowLabelServiceTest {
@@ -60,6 +66,7 @@ class TopicWindowLabelServiceTest {
     private final Random random = new Random(11);
 
     private TopicDAO topicDAO;
+    private TopicRunDAO runDAO;
     private TopicWindowDAO windowDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService service;
@@ -80,6 +87,8 @@ class TopicWindowLabelServiceTest {
         topicDAO = mock(TopicDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
+        runDAO = mock(TopicRunDAO.class);
+        when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
@@ -101,6 +110,8 @@ class TopicWindowLabelServiceTest {
                 .lastRunId(runId)
                 .windowUntil(NIGHT)
                 .build()));
+        when(topicDAO.markLabelsComplete(WORKSPACE_ID, projectId, runId)).thenReturn(1);
+        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic(billing), topic(refunds)));
         // Billing has two prototypes, refunds one, then a known-Other one.
         when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of(
                 prototype(0, billing, billingPrototype),
@@ -143,6 +154,9 @@ class TopicWindowLabelServiceTest {
                                     trace.vector()))
                             .toList());
                 });
+        when(traceTopicsDAO.countByTopic(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
+                .thenAnswer(invocation -> Flux.fromIterable(countsOf(inserted).entrySet())
+                        .map(entry -> new TraceTopicsDAO.TopicCount(entry.getKey(), entry.getValue())));
         when(traceTopicsDAO.insert(any())).thenAnswer(invocation -> {
             List<TraceTopic> rows = invocation.getArgument(0);
             inserted.addAll(rows);
@@ -212,6 +226,124 @@ class TopicWindowLabelServiceTest {
         assertThat(pass.complete()).isTrue();
         assertExactlyOneRowPerWindowTrace();
         assertThat(inserted).extracting(TraceTopic::topicId).containsOnly(TraceTopic.OTHER);
+        verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
+        verify(traceTopicsDAO, never()).countByTopic(any(), any(), any(), any(), anyLong());
+        verify(runDAO, never()).setTopicCounts(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("a complete pass saves the run's counts with the labels complete, in one transaction: one entry per "
+            + "live topic and Other, each the traces counted over the run's window, even when the run saved after "
+            + "its window's end")
+    void completePassSavesTheCounts() {
+        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
+                .projectId(projectId)
+                .workspaceId(WORKSPACE_ID)
+                .rebuilds(1)
+                .lastRunId(runId)
+                .lastSuccessAt(NIGHT.plus(Duration.ofHours(2)))
+                .windowUntil(NIGHT)
+                .build()));
+
+        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(pass.complete()).isTrue();
+        var order = inOrder(topicDAO, runDAO);
+        order.verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
+        order.verify(runDAO).setTopicCounts(WORKSPACE_ID, runId, expectedCounts());
+        verify(traceTopicsDAO).countByTopic(eq(WORKSPACE_ID), eq(projectId),
+                eq(NIGHT.minus(Duration.ofDays(WINDOW_DAYS))), eq(NIGHT), anyLong());
+    }
+
+    @Test
+    @DisplayName("a pass that is cut saves no counts; the pass that resumes it saves them once, at completion, and a "
+            + "later complete pass of the same run saves nothing new")
+    void countsSavedOnceAtCompletion() {
+        doAnswer(invocation -> {
+            List<TraceTopic> rows = invocation.getArgument(0);
+            inserted.addAll(rows);
+            Thread.currentThread().interrupt();
+            return Mono.just((long) rows.size());
+        }).when(traceTopicsDAO).insert(any());
+        TopicWindowLabelService.Pass cut;
+        try {
+            cut = label(Instant.now().plus(Duration.ofMinutes(5)));
+        } finally {
+            Thread.interrupted();
+        }
+        assertThat(cut.complete()).isFalse();
+        verify(traceTopicsDAO, never()).countByTopic(any(), any(), any(), any(), anyLong());
+        verify(runDAO, never()).setTopicCounts(any(), any(), any());
+
+        doAnswer(invocation -> {
+            List<TraceTopic> rows = invocation.getArgument(0);
+            inserted.addAll(rows);
+            return Mono.just((long) rows.size());
+        }).when(traceTopicsDAO).insert(any());
+        var resumed = service.labelWindow(WORKSPACE_ID, projectId, Instant.now().plus(Duration.ofMinutes(5)),
+                TopicWindowLabelService.Trigger.RESUME, CHUNK, SLICE_TRACES);
+
+        assertThat(resumed.complete()).isTrue();
+        verify(runDAO).setTopicCounts(WORKSPACE_ID, runId, expectedCounts());
+
+        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
+                .projectId(projectId)
+                .workspaceId(WORKSPACE_ID)
+                .rebuilds(1)
+                .lastRunId(runId)
+                .windowUntil(NIGHT)
+                .labelsComplete(true)
+                .build()));
+        var again = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(again.complete()).isTrue();
+        verify(traceTopicsDAO, times(1)).countByTopic(any(), any(), any(), any(), anyLong());
+        verify(runDAO, times(1)).setTopicCounts(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("a failed count read still marks the labels complete, and saves no counts")
+    void failedCountSavesNoCounts() {
+        when(traceTopicsDAO.countByTopic(any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new IllegalStateException("too many rows to read")));
+
+        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(pass.complete()).isTrue();
+        verify(topicDAO).markLabelsComplete(WORKSPACE_ID, projectId, runId);
+        verify(runDAO, never()).setTopicCounts(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("an interrupt during the count cuts the pass: nothing is marked complete, no counts are saved, and "
+            + "the interrupt is kept")
+    void interruptedCountCutsThePass() {
+        when(traceTopicsDAO.countByTopic(any(), any(), any(), any(), anyLong()))
+                .thenReturn(Flux.error(new IllegalStateException(new InterruptedException("stop"))));
+
+        TopicWindowLabelService.Pass pass;
+        boolean interrupted;
+        try {
+            pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+        } finally {
+            interrupted = Thread.interrupted();
+        }
+
+        assertThat(interrupted).isTrue();
+        assertThat(pass.complete()).isFalse();
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
+        verify(runDAO, never()).setTopicCounts(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("a pass of a run that is no longer the project's last saved run saves no counts")
+    void olderRunSavesNoCounts() {
+        when(topicDAO.markLabelsComplete(WORKSPACE_ID, projectId, runId)).thenReturn(0);
+
+        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(pass.complete()).isTrue();
+        verify(runDAO, never()).setTopicCounts(any(), any(), any());
     }
 
     @Test
@@ -369,6 +501,39 @@ class TopicWindowLabelServiceTest {
         long lsb = 0x8000000000000000L | (random.nextLong() & 0x3FFFFFFFFFFFFFFFL);
         var traceId = new UUID(msb, lsb);
         traces.put(traceId, new Trace(traceId, createdAt, vector, expectedTopic));
+    }
+
+    /** The window's traces per topic among {@code rows}, each trace by its last row, as the count read does. */
+    private Map<UUID, Long> countsOf(List<TraceTopic> rows) {
+        var window = inWindow(NIGHT.minus(Duration.ofDays(WINDOW_DAYS)), NIGHT).stream().map(Trace::traceId)
+                .collect(Collectors.toSet());
+        var latest = new HashMap<UUID, UUID>();
+        rows.stream().filter(row -> window.contains(row.traceId()))
+                .forEach(row -> latest.put(row.traceId(), row.topicId()));
+        return latest.values().stream().collect(Collectors.groupingBy(topicId -> topicId, Collectors.counting()));
+    }
+
+    /**
+     * The {@code topic_counts} a complete pass saves: billing, refunds and Other, as the traces were built to be
+     * labelled.
+     */
+    private String expectedCounts() {
+        var window = inWindow(NIGHT.minus(Duration.ofDays(WINDOW_DAYS)), NIGHT);
+        var counts = JsonUtils.createObjectNode();
+        Stream.of(billing, refunds, TraceTopic.OTHER).forEach(topicId -> counts.put(topicId.toString(),
+                window.stream().filter(trace -> trace.expectedTopic().equals(topicId)).count()));
+        return counts.toString();
+    }
+
+    private Topic topic(UUID topicId) {
+        return Topic.builder()
+                .id(topicId)
+                .workspaceId(WORKSPACE_ID)
+                .projectId(projectId)
+                .name("topic " + topicId)
+                .definition("a topic")
+                .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
+                .build();
     }
 
     private TopicPrototype prototype(int position, UUID topicId, float[] vector) {

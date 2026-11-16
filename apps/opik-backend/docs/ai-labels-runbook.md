@@ -254,6 +254,27 @@ window that needs more time is finished over several runs, one every `TOPICS_FIR
 behind the projects saved before it. A resumed pass takes the window's start from `TOPICS_BUILD_WINDOW_DAYS` as it is
 then: change that setting while passes are unfinished, and they label the new window.
 
+The pass that ends complete also counts the window's traces per topic and writes the counts to the run's
+`stats.topic_counts`, in the transaction that sets `labels_complete`: one entry per topic of the run and one for Other.
+It counts the traces the Logs page lists (source `sdk`, visibility `default`), each by its latest `trace_topics` row
+(`topics:count_by_topic` in `system.query_log`). The counts cover the run's window exactly, from `window_from` to
+`window_until` in its `stats`, so two runs' counts compare like with like. The Topics page counts a sliding window
+that includes today, so its counts can differ from a run's by the traces of the days at the window's edges. Later
+runs relabel the window, so these counts are the only record of a past run's. A failed count read logs `could not count run` as a WARN; the labels are still marked complete, and that
+run has no `topic_counts`. The counts go when their `topic_runs` row goes. To see a topic's share run by run:
+
+```sql
+-- MySQL: one topic's traces and share of the run's counted traces, run by run.
+SELECT r.started_at,
+    JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') AS traces,
+    JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') / SUM(c.traces) AS share
+FROM topic_runs r,
+    JSON_TABLE(JSON_EXTRACT(r.stats, '$.topic_counts.*'), '$[*]' COLUMNS (traces BIGINT PATH '$')) AS c
+WHERE r.workspace_id = '<workspace_id>' AND r.project_id = '<project_id>'
+GROUP BY r.run_id
+ORDER BY r.started_at;
+```
+
 To see the projects that wait:
 
 ```sql
@@ -323,7 +344,9 @@ ORDER BY traces DESC;
 
 Each run logs at INFO, by run id: Qwen's token counts, and one line with the window, vectors, the topics with their
 sizes, the Other share and the phase timings. The algorithm's own numbers are in the run's `stats` in `topic_runs`:
-`unique_texts`, `k` (the k-means groups), `seed`, and `other_groups` (the groups the answer placed in Other).
+`unique_texts`, `k` (the k-means groups), `seed`, and `other_groups` (the groups the answer placed in Other). Once
+the run's labelling pass ends complete, `stats.topic_counts` holds its traces per topic id, Other under the all-zeros
+id (see "Saving and labelling").
 
 The author prompt and Qwen's raw answer hold users' trace text, so no log level prints them: the run logs their length
 and a SHA-256 of each, with `call '<call>'`, which matches the same prompt or answer across runs. Each LLM call's
@@ -560,7 +583,9 @@ flowchart TD
   set to `failed`, and records older than the retention are deleted.
 - It lists the projects with a live topic in the opted-in workspaces. A project without a list is the first-build
   job's. ClickHouse counts each project's vectors in the window, one query per project. A failed count gives the
-  project a `count_failed` row; the project runs the next night, and the other projects are not affected.
+  project a `count_failed` row; the project runs the next night, and the other projects are not affected. No count
+  starts after the budget's end: the projects left get a `not_reached` row, so the night ends within the night lock's
+  lease.
 - It skips a project under `TOPICS_BUILD_MIN_VECTORS` (`small`), a deleted project (`deleted`), and a paused project
   (`paused`). A project whose last 3 runs all failed (`abandoned` included) is paused for 7 nights from the night of
   the last failure, so it does not take the budget every night. A saved run ends the pause.
@@ -629,9 +654,10 @@ the second naming for the rejected ones.
 The save is the first build's (see "Saving and labelling"): one MySQL transaction (the new topics, the changed
 columns of the topics it read, the project's prototypes, `rebuilds` + 1, `labels_complete = false`, the run `saved`),
 then the `trace_topics` insert of the traces the run read, then the labelling pass for the rest of the window, up to
-the save. A pass
-that does not finish is finished by the first-build job. The transaction checks that `last_run_id` is still the one
-the run read; if another run saved the project meanwhile, the run fails with `save` and writes nothing.
+the save. A pass that does not finish is finished by the first-build job. The pass that ends complete writes the
+run's `stats.topic_counts` too, over the run's window (`window_from` to `window_until`), not the traces past it. The
+transaction checks that `last_run_id` is still the one the run read; if another run saved the project meanwhile, the
+run fails with `save` and writes nothing.
 
 A night can retire every live topic. The save then keeps the topics' rows (retired) and the run, deletes the project's
 `topic_project_states` row and prototypes, and writes no `trace_topics` rows: the traces keep their last topics. The
@@ -714,6 +740,9 @@ Each project's outcome is its `topic_night_projects` and `topic_runs` rows.
 A night run again for a date replaces that date's record. A project whose last saved run already covers the night is
 skipped as `already_saved`, so a second run of the same date runs only the projects the first one did not save.
 
+A night run by hand for today or an earlier date also takes the date's lock `topics:nightly:run:<date>`, so the
+scheduled job skips that date. A run for tomorrow does not: tomorrow's scheduled night still reads the rest of today.
+
 There is no endpoint for one project's nightly update. The project endpoint builds first lists only: for a project
 with a list it answers `409`.
 
@@ -729,8 +758,8 @@ also logs a WARN (`Topics night count read failed`) with the workspace and the p
 | Metric | Meaning |
 |---|---|
 | `topics.nightly.budget_used_seconds` | Wall time of each night (no workspace). Near `TOPICS_NIGHTLY_BUDGET` means projects will soon be `not_reached`. |
-| `topics.topics.live` | Live topics of a project after each saved run. |
-| `topics.topics.born` | Topics born by saved runs. A few a week per project is normal; many every night means the list does not settle. |
+| `topics.topics.live` | Live topics of a project after each saved nightly update. |
+| `topics.topics.born` | Topics born by saved nightly updates. A few a week per project is normal; many every night means the list does not settle. |
 | `topics.topics.retired` by `reason` | `low_share`, `replaced`. |
 | `topics.run.churn`, `topics.run.churn_any` | Per saved nightly update, see "Nightly update". No alert. |
 

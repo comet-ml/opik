@@ -505,8 +505,9 @@ class TopicsFirstBuildJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("a job run finishes the labelling pass of a saved list whose labels are not complete, and marks "
-            + "them complete; a project of a workspace not opted in or with AI labels off is left as it is")
+    @DisplayName("a job run finishes the labelling pass of a saved list whose labels are not complete, marks them "
+            + "complete and saves the run's counts; a project of a workspace not opted in or with AI labels off is "
+            + "left as it is")
     void resumesAnUnfinishedPass() {
         var workspaceId = enabledWorkspace();
         var unfinished = UUID.randomUUID();
@@ -532,6 +533,8 @@ class TopicsFirstBuildJobIntegrationTest {
         assertThat(data.traceTopics(workspaceId, unfinished)).hasSize(BUILT)
                 .allSatisfy(row -> assertThat(row.runId()).isEqualTo(runId.toString()));
         assertThat(data.state(unfinished).labelsComplete()).isTrue();
+        assertThat(data.runCounts(workspaceId, runId))
+                .containsOnlyKeys(data.topics(unfinished).getFirst().id(), TraceTopic.OTHER);
         for (var left : List.of(notOptedIn, aiLabelsOff)) {
             assertThat(data.state(left).labelsComplete()).isFalse();
         }
