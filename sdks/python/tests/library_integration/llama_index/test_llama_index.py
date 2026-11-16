@@ -1374,3 +1374,28 @@ def test_llama_index__concurrent_pipelines__thread_safe(
     # Verify all traces have different IDs (no collision)
     trace_ids = {tree.id for tree in fake_backend.trace_trees}
     assert len(trace_ids) == 3
+
+
+def test_llama_index__settings_llm_cannot_be_resolved__user_call_succeeds(
+    fake_backend, monkeypatch
+):
+    from llama_index.core.llms import ChatMessage, MockLLM
+
+    def _raise_resolve_error(*args, **kwargs):
+        raise ImportError("llama-index-llms-openai package not found")
+
+    monkeypatch.setattr(Settings, "_llm", None)
+    monkeypatch.setattr("llama_index.core.settings.resolve_llm", _raise_resolve_error)
+
+    opik_callback_handler = LlamaIndexCallbackHandler()
+    llm = MockLLM(callback_manager=CallbackManager([opik_callback_handler]))
+
+    response = llm.chat([ChatMessage(role="user", content="hi")])
+
+    opik_callback_handler.flush()
+
+    assert "hi" in response.message.content
+    assert len(fake_backend.trace_trees) == 1
+    llm_span = fake_backend.trace_trees[0].spans[0]
+    assert llm_span.type == "llm"
+    assert llm_span.usage is None
