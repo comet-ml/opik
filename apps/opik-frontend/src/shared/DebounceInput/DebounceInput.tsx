@@ -35,7 +35,7 @@ const DebounceInput = React.forwardRef<HTMLInputElement, DebounceInputProps>(
     const handleDebouncedValueChange = useMemo(
       () =>
         debounce((val: InputValue) => {
-          isFunction(valueChangeCallbackRef.current) &&
+          if (isFunction(valueChangeCallbackRef.current))
             valueChangeCallbackRef.current(val);
         }, delay),
       [delay],

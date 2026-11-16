@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # pre-commit hook entry: lint+fix only the frontend files pre-commit passes in
-# (changed files), never the whole src tree. Routes by extension: JS/TS → eslint,
-# styles → stylelint. Uses the repo's own node_modules (language: system).
+# (changed files), never the whole src tree. Routes by extension: JS/TS → oxlint,
+# then prettier; styles → stylelint, which runs prettier itself. Uses the repo's
+# own node_modules (language: system).
 set -euo pipefail
 
 [ "$#" -eq 0 ] && exit 0
@@ -19,7 +20,8 @@ done
 cd "$prefix"
 status=0
 if [ "${#js_files[@]}" -gt 0 ]; then
-	npx eslint --fix --max-warnings=0 "${js_files[@]}" || status=1
+	npx oxlint --fix --max-warnings=0 "${js_files[@]}" || status=1
+	npx prettier --write --log-level=warn "${js_files[@]}" || status=1
 fi
 if [ "${#style_files[@]}" -gt 0 ]; then
 	npx stylelint --fix "${style_files[@]}" || status=1

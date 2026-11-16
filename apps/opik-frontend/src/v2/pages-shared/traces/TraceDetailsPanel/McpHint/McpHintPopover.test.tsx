@@ -232,7 +232,7 @@ describe("the hint card with a hosted server", () => {
     // stand in for it wherever the card asks.
     for (const el of [container, ...container.querySelectorAll("*")]) {
       (el as HTMLElement).matches = ((selector: string) =>
-        selector === ":hover") as HTMLElement["matches"];
+        selector === ":hover") as unknown as HTMLElement["matches"];
     }
     act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_DISMISS_MS));
 

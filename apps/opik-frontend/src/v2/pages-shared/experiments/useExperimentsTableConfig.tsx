@@ -161,32 +161,30 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType, type: scoreType }) => {
-          const actualType = scoreType || SCORE_TYPE_FEEDBACK;
-          const scoreName = parseScoreColumnId(id)?.scoreName;
+    return dynamicScoresColumns.map(
+      ({ label, id, columnType, type: scoreType }) => {
+        const actualType = scoreType || SCORE_TYPE_FEEDBACK;
+        const scoreName = parseScoreColumnId(id)?.scoreName;
 
-          const columnData: ColumnData<T> = {
-            id,
-            label,
-            type: columnType,
-            scoreType: actualType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
-            customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                getExperimentScore(id, aggregation)?.value,
-              scoreName,
-            },
-          };
+        const columnData: ColumnData<T> = {
+          id,
+          label,
+          type: columnType,
+          scoreType: actualType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          aggregatedCell: FeedbackScoreCell.Aggregation as never,
+          accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
+          customMeta: {
+            accessorFn: (aggregation: ExperimentsAggregations) =>
+              getExperimentScore(id, aggregation)?.value,
+            scoreName,
+          },
+        };
 
-          return columnData;
-        },
-      ),
-    ];
+        return columnData;
+      },
+    );
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {

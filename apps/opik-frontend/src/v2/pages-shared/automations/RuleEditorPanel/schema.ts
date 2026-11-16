@@ -340,7 +340,7 @@ const LLMJudgeBaseSchema = z.object({
         unsaved: z
           .boolean()
           .optional()
-          .refine((value) => !value, {
+          .refine((value): boolean => !value, {
             message: "Changes not saved",
           }),
       }),
