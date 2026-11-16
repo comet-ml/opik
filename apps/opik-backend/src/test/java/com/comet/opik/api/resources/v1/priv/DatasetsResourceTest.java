@@ -602,6 +602,8 @@ class DatasetsResourceTest {
 
         private final String fakeApikey = UUID.randomUUID().toString();
         private final String okApikey = UUID.randomUUID().toString();
+        // A workspace member whose role lacks dataset view; the auth service answers it with 401, as in production.
+        private final String datasetViewDeniedApikey = UUID.randomUUID().toString();
 
         Stream<Arguments> credentials() {
             return Stream.of(
@@ -624,7 +626,9 @@ class DatasetsResourceTest {
                     arguments("", PRIVATE, 404),
                     arguments("", PUBLIC, 200),
                     arguments(fakeApikey, PRIVATE, 404),
-                    arguments(fakeApikey, PUBLIC, 200));
+                    arguments(fakeApikey, PUBLIC, 200),
+                    arguments(datasetViewDeniedApikey, PRIVATE, 404),
+                    arguments(datasetViewDeniedApikey, PUBLIC, 200));
         }
 
         @BeforeEach
@@ -638,6 +642,16 @@ class DatasetsResourceTest {
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
+
+            wireMock.server().stubFor(
+                    post(urlPathEqualTo("/opik/auth"))
+                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(datasetViewDeniedApikey))
+                            .withRequestBody(matchingJsonPath(
+                                    "$.requiredPermissions[?(@ == '%s')]".formatted(DATASET_VIEW.getValue())))
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new ReactServiceErrorResponse(
+                                                    RandomStringUtils.secure().nextAlphanumeric(32), 401)))));
         }
 
         @ParameterizedTest
