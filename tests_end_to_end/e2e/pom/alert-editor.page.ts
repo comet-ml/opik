@@ -306,6 +306,96 @@ export class AlertEditorPage {
     await popover.waitFor({ state: 'detached' });
   }
 
+  // --- Guardrail-triggered: the type checkboxes ---
+
+  /**
+   * One guardrail-type row of the `trace:guardrails_triggered` trigger's
+   * config, addressed by the label `GuardrailNamesLabelMap` renders for it.
+   *
+   * Scoped to that trigger's own config block, so the alerts form's other
+   * checkboxes — the destination rows, the enable switch — cannot be reached by
+   * accident. Within it, each row is a `<label>` wrapping a Radix `Checkbox`
+   * (a `button[role=checkbox]`, which a wrapping label does NOT give an
+   * accessible name to), so the row is matched on its text and the control
+   * reached through it.
+   *
+   * The text match is ANCHORED and exact. `hasText: 'Topic guardrail'` would
+   * also match nothing else today, but `'PII guardrail'` is a substring of no
+   * label only by luck, and these five strings are frontend copy that can grow
+   * a sibling at any time; an anchored match cannot silently start addressing
+   * two rows.
+   */
+  guardrailTypeRow(label: string): Locator {
+    return this.guardrailTypeRows.filter({ hasText: new RegExp(`^\\s*${label}\\s*$`) });
+  }
+
+  /**
+   * Every guardrail-type row, as a set.
+   *
+   * Narrowed to the labels that WRAP A CHECKBOX, not every label in the trigger
+   * block: the block also carries the trigger card's own label ("Guardrail
+   * triggered") and the field's `FormLabel` ("Guardrail types"), neither of
+   * which is a type the user can select. Keying on the control each row
+   * contains is what distinguishes a selectable row from a caption, and it
+   * stays right if more copy is added around them.
+   */
+  private get guardrailTypeRows(): Locator {
+    return this.triggerConfig('trace:guardrails_triggered')
+      .locator('label')
+      .filter({ has: this.page.getByRole('checkbox') });
+  }
+
+  /** The checkbox of one guardrail-type row. */
+  guardrailTypeCheckbox(label: string): Locator {
+    return this.guardrailTypeRow(label).getByRole('checkbox');
+  }
+
+  /**
+   * Every guardrail-type label the trigger currently offers, in render order.
+   *
+   * The whole list rather than a per-label `isVisible()` loop, because WHICH
+   * types are offered is the subject: a type that should not be there is
+   * invisible to an assertion that only checks the ones it expected. Order is
+   * preserved because it is meaningful — `EventTriggers` renders the three
+   * types it offers today first and appends any extra type the alert was saved
+   * with, so the position of a legacy type is part of how it reads.
+   */
+  async guardrailTypeLabels(): Promise<string[]> {
+    return test.step('read the offered guardrail types', async () => {
+      // The first row is waited for rather than read straight off: the trigger
+      // config block renders before react-hook-form has the field, so an
+      // immediate read can legitimately come back empty and would look like
+      // "no types are offered" — the exact failure this spec exists to report.
+      await this.guardrailTypeRows.first().waitFor({ state: 'visible' });
+      return (await this.guardrailTypeRows.allInnerTexts()).map((text) => text.trim());
+    });
+  }
+
+  /**
+   * Unticks one guardrail type.
+   *
+   * Deliberately NOT `uncheck()`. A type the alert was saved with but the
+   * editor no longer offers is listed only BECAUSE it is selected, so unticking
+   * it removes its row — and `uncheck()` re-reads the control after clicking to
+   * confirm it came out unchecked, which it cannot do once the element is gone.
+   * It retries until the action timeout and reports a timeout on a click that
+   * in fact worked.
+   *
+   * The checked state is asserted before the click instead, which keeps what
+   * `uncheck()` was wanted for: a row that is absent, or already unticked,
+   * fails here with a clear message rather than being silently toggled ON.
+   */
+  async untickGuardrailType(label: string): Promise<void> {
+    return test.step(`untick the "${label}" guardrail type`, async () => {
+      const checkbox = this.guardrailTypeCheckbox(label);
+      await expect(
+        checkbox,
+        `"${label}" is listed and ticked, so clicking it unticks it`,
+      ).toBeChecked();
+      await checkbox.click();
+    });
+  }
+
   /**
    * Fills a threshold trigger's threshold and rolling window. Only
    * `trace:cost`, `trace:latency` and `trace:errors` render these controls.

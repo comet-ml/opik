@@ -1,4 +1,4 @@
-export { test, expect } from './settled-compare-experiments.fixture';
+export { test, expect } from './guardrail-trigger-alert.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -707,3 +707,17 @@ export type {
   SettledCompareExperimentsFixtures,
 } from './settled-compare-experiments.fixture';
 export { SETTLED_ITEM_COUNT, compareMarker } from './settled-compare-experiments.fixture';
+export type { SecondProjectFixtures } from './second-project.fixture';
+export type {
+  ScopedTsClient,
+  ProjectScopedTsClientsFixtures,
+} from './project-scoped-ts-clients.fixture';
+export type {
+  GuardrailTriggerAlertRef,
+  GuardrailTriggerAlertFixtures,
+} from './guardrail-trigger-alert.fixture';
+export {
+  GUARDRAIL_TYPE_CONFIG,
+  GUARDRAIL_TYPES_KEY,
+  SEEDED_GUARDRAIL_TYPES,
+} from './guardrail-trigger-alert.fixture';

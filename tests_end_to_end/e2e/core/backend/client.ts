@@ -2103,6 +2103,21 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
   };
 
   /**
+   * The trailing path segment of a create's `Location` header, as an id.
+   *
+   * `null` rather than `''` when there is no header or no segment to take, so a
+   * caller registering teardown can tell "the create did not report an id" from
+   * an id it could use — and so a failed create, which carries no `Location` at
+   * all, does not produce a plausible-looking empty id that a later delete would
+   * quietly 404 on.
+   */
+  const idFromLocation = (location: string | null | undefined): string | null => {
+    if (!location) return null;
+    const segment = location.split('?')[0].replace(/\/+$/, '').split('/').pop();
+    return segment ? segment : null;
+  };
+
+  /**
    * `rawFetch` plus request headers the endpoint reads as arguments.
    *
    * Only the OTLP endpoint needs this so far: it takes the project from a
@@ -2465,6 +2480,112 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
       }
+    },
+
+    /**
+     * `POST /v1/private/dashboards`, reporting the STATUS instead of throwing.
+     *
+     * `createDashboard` above throws on anything but a success, which is what a
+     * seed wants. A spec whose subject is which status a create answers cannot
+     * use it: the failure would arrive as a rejected promise carrying the SDK's
+     * own wording, and a test that must distinguish 201 from 409 would be
+     * asserting on an exception message. So this returns the status as data.
+     *
+     * The id comes out of the `Location` header rather than the body, because
+     * that is the one place a create is contractually required to put it
+     * (`createDashboard`'s OpenAPI declares the header `required = true`) — and
+     * because a caller needs the id to register teardown even for a response it
+     * is about to assert was NOT a success.
+     *
+     * `projectId` is optional, and its absence is a distinct case rather than a
+     * default: the resource stamps `scope: workspace` either way, so what
+     * `project_id` changes is which project the dashboard is FILED under while
+     * remaining workspace-scoped. A name-collision spec needs both — two
+     * dashboards in different projects, and two with no project at all.
+     */
+    async createDashboardRaw(args: {
+      name: string;
+      projectId?: string;
+      description?: string;
+    }): Promise<RawApiResult & { id: string | null }> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/dashboards', {
+        body: {
+          name: args.name,
+          ...(args.projectId ? { project_id: args.projectId } : {}),
+          ...(args.description ? { description: args.description } : {}),
+          config: {
+            version: 1,
+            layout: { type: 'grid', columns: 24, rowHeight: 10 },
+            widgets: [],
+          },
+        },
+      });
+      return { status, message, location, id: idFromLocation(location) };
+    },
+
+    /**
+     * `PATCH /v1/private/dashboards/{id}` with nothing but a new name — the
+     * rename, reporting its status rather than throwing, for the same reason
+     * `createDashboardRaw` does.
+     *
+     * A rename is worth driving separately from a create because it took the
+     * same uniqueness check and could regress on its own: `DashboardService`
+     * runs create and update through different statements, so a constraint
+     * restored on one would not show up in the other.
+     */
+    async renameDashboardRaw(id: string, name: string): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'PATCH',
+        `/v1/private/dashboards/${id}`,
+        { body: { name } },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * The top-level field names of `GET /v1/private/dashboards/{id}`.
+     *
+     * For asserting a field is ABSENT, which no typed accessor can express: the
+     * pinned SDK model simply has no `slug` property, so a read through it would
+     * report "no slug" for a payload that carried one. The wire keys are the
+     * only place that question can be answered.
+     *
+     * Throws on a non-200 rather than returning an empty list — "the dashboard
+     * has no fields" would otherwise satisfy an absence assertion.
+     */
+    async getDashboardFieldNames(id: string): Promise<string[]> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/dashboards/${id}`);
+      if (status !== 200) {
+        throw new Error(`getDashboardFieldNames(${id}): answered ${status}: ${message}`);
+      }
+      if (json === null || typeof json !== 'object' || Array.isArray(json)) {
+        throw new Error(
+          `getDashboardFieldNames(${id}): 200 carried ${JSON.stringify(json)}, not an object — ` +
+            'cannot tell an absent field from a body this read cannot see.',
+        );
+      }
+      return Object.keys(json as Record<string, unknown>);
+    },
+
+    /**
+     * `POST /v1/private/insights-views`, reporting the status — the
+     * project-scoped twin of `createDashboardRaw`, and raw for the same reason.
+     */
+    async createInsightsViewRaw(args: {
+      name: string;
+      projectId: string;
+    }): Promise<RawApiResult & { id: string | null }> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/insights-views', {
+        body: {
+          name: args.name,
+          project_id: args.projectId,
+          // The type the project page's own create dialog sends — see
+          // `createInsightsView` for why a seed should match it.
+          type: 'multi_project',
+          config: { version: 1, sections: [], lastModified: Date.now() },
+        },
+      });
+      return { status, message, location, id: idFromLocation(location) };
     },
 
     /**
