@@ -451,3 +451,128 @@ def test_read_and_parse_full_stream__dropped_records_are_reported(caplog):
         r"finished with (\d+) record\(s\) dropped", "\n".join(warnings)
     )
     assert reported == ["2"], warnings
+
+
+class _ExperimentRow:
+    def __init__(self, *, experiment_id, id, value):
+        self.experiment_id = experiment_id
+        self.id = id
+        self.value = value
+
+
+class _CompositeCursorSource:
+    """Serves rows the way the dataset experiment-item stream does.
+
+    That stream pages on ``(experiment_id, id)`` (it resolves the middle sort-key
+    column, ``dataset_item_id``, from the cursor row itself), newest first, and
+    returns only rows below the cursor. Rows are ``((experiment_id, id), record)``
+    pairs; a record missing ``value`` fails to parse but still carries a cursor.
+    """
+
+    def __init__(self, rows):
+        self._rows = sorted(rows, key=lambda row: row[0], reverse=True)
+        self.requested = []
+
+    def __call__(self, current_batch_size, cursor):
+        self.requested.append((current_batch_size, cursor))
+        rows = self._rows
+        if cursor is not None:
+            rows = [row for row in rows if row[0] < cursor]
+        return [
+            json.dumps(record).encode("utf-8") + b"\r\n"
+            for _, record in rows[:current_batch_size]
+        ]
+
+
+def _experiment_row(experiment_id, row_id, *, parsable=True):
+    record = {"experiment_id": experiment_id, "id": row_id}
+    if parsable:
+        record["value"] = f"{experiment_id}/{row_id}"
+    return ((experiment_id, row_id), record)
+
+
+def _experiment_row_cursor(record):
+    return (record.get("experiment_id"), record.get("id"))
+
+
+def _read_experiment_rows(source, max_endpoint_batch_size=2):
+    return rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=_ExperimentRow,
+        max_results=None,
+        max_endpoint_batch_size=max_endpoint_batch_size,
+        cursor_from_record=_experiment_row_cursor,
+    )
+
+
+def test_read_and_parse_full_stream__composite_cursor__every_row_once_across_experiments():
+    source = _CompositeCursorSource(
+        rows=[
+            _experiment_row("exp-b", "r2"),
+            _experiment_row("exp-b", "r1"),
+            _experiment_row("exp-a", "r3"),
+            _experiment_row("exp-a", "r1"),
+            _experiment_row("exp-a", "r0"),
+        ]
+    )
+
+    rows = _read_experiment_rows(source)
+
+    assert [(row.experiment_id, row.id) for row in rows] == [
+        ("exp-b", "r2"),
+        ("exp-b", "r1"),
+        ("exp-a", "r3"),
+        ("exp-a", "r1"),
+        ("exp-a", "r0"),
+    ]
+    assert [cursor for _, cursor in source.requested] == [
+        None,
+        ("exp-b", "r1"),
+        ("exp-a", "r1"),
+    ]
+
+
+def test_read_and_parse_full_stream__composite_cursor__unparsable_last_record__cursor_still_advances():
+    source = _CompositeCursorSource(
+        rows=[
+            _experiment_row("exp-b", "r2"),
+            _experiment_row("exp-b", "r1", parsable=False),
+            _experiment_row("exp-a", "r1"),
+        ]
+    )
+
+    rows = _read_experiment_rows(source)
+
+    assert [(row.experiment_id, row.id) for row in rows] == [
+        ("exp-b", "r2"),
+        ("exp-a", "r1"),
+    ]
+    assert [cursor for _, cursor in source.requested] == [None, ("exp-b", "r1")]
+
+
+def test_read_and_parse_full_stream__composite_cursor__size_correlated_error__retries_same_cursor():
+    rows_source = _CompositeCursorSource(
+        rows=[_experiment_row("exp-a", f"r{index:03d}") for index in range(120)]
+    )
+    calls = []
+
+    def source(current_batch_size, cursor):
+        calls.append((current_batch_size, cursor))
+        if len(calls) == 2:
+            raise httpx.RemoteProtocolError("incomplete chunked read")
+        return rows_source(current_batch_size, cursor)
+
+    rows = rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=_ExperimentRow,
+        max_results=None,
+        max_endpoint_batch_size=100,
+        cursor_from_record=_experiment_row_cursor,
+    )
+
+    assert len(rows) == 120
+    assert calls == [
+        (100, None),
+        (100, ("exp-a", "r020")),
+        (50, ("exp-a", "r020")),
+    ]
