@@ -799,6 +799,9 @@ navigation:
               - page: Claude Agent SDK
                 path: ./docs-v2/integrations/claude-agent-sdk.mdx
                 slug: claude-agent-sdk
+              - page: Claude Managed Agents
+                path: ./docs-v2/integrations/claude-managed-agents.mdx
+                slug: claude-managed-agents
               - page: Autogen
                 path: ./docs-v2/integrations/autogen.mdx
                 slug: autogen
