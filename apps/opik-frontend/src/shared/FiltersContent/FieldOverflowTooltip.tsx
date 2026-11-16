@@ -33,7 +33,7 @@ const FieldOverflowTooltip: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<Element | null>(null);
-  const timerRef = useRef<number>();
+  const timerRef = useRef<number | undefined>(undefined);
   const [cutField, setCutField] = useState<CutField | null>(null);
 
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
