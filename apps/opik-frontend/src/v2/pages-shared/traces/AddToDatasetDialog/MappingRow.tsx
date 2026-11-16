@@ -99,21 +99,10 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   };
 
   const renderSource = () => {
-    if (isManaged) {
-      return (
-        <div className="flex h-6 items-center gap-1 rounded-md border border-border bg-background px-2">
-          <span className="comet-code min-w-0 flex-1 truncate text-xs text-foreground">
-            {row.name}
-          </span>
-          {renderCoverage()}
-        </div>
-      );
-    }
-
     return (
       <PathSourcePicker
         fieldName={row.name}
-        path={row.path}
+        path={isManaged ? row.name : row.path}
         placeholder={onPathClear ? "Not mapped" : undefined}
         badge={renderCoverage()}
         invalid={rowError === "no_path"}

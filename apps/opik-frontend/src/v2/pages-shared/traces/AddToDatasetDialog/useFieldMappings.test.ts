@@ -293,6 +293,28 @@ describe("useFieldMappings", () => {
     ]);
   });
 
+  it("re-points a managed row in place and switches its enrichment off", () => {
+    const { result } = renderMappings();
+
+    act(() => result.current.setManagedOption("includeTags", true));
+    act(() => result.current.setManagedOption("includeUsage", true));
+    act(() => {
+      result.current.remapManagedRow("includeTags", "output.labels");
+    });
+
+    expect(result.current.enrichmentOptions.includeTags).toBe(false);
+    expect(
+      result.current.additionalRows.map((row) => [row.name, row.kind]),
+    ).toEqual([
+      ["tags", "custom"],
+      ["usage", "managed"],
+    ]);
+    expect(result.current.fieldMappings.tags).toBe("output.labels");
+    expect(result.current.availableChips.map((chip) => chip.key)).toContain(
+      "tags",
+    );
+  });
+
   it("reports a blank name", () => {
     const { result } = renderMappings();
 

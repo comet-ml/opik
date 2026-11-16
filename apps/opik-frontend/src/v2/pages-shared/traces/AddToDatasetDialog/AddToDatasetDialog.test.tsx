@@ -864,6 +864,30 @@ describe("AddToDatasetDialog", () => {
     });
   });
 
+  it("should re-point an Opik-managed row to another field", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openRowExplorer("includeTags");
+    navigateToPath(2);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: expect.objectContaining({ tags: "input.tone" }),
+          enrichmentOptions: expect.objectContaining({ include_tags: false }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
   it("should send field mappings for spans too", async () => {
     render(<AddToDatasetDialog {...baseProps} selectedRows={[mockSpan]} />, {
       wrapper,

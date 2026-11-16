@@ -54,6 +54,7 @@ const FieldMappingSection: React.FunctionComponent<
     renameRow,
     setRowPath,
     setManagedOption,
+    remapManagedRow,
   } = mappings;
 
   const entityLabel = hasOnlySpans ? "spans" : "traces";
@@ -139,6 +140,11 @@ const FieldMappingSection: React.FunctionComponent<
                   row={row}
                   treeData={treeData}
                   coverage={coverage[row.id]}
+                  isPending={isPendingTree}
+                  entityLabel={entityLabel}
+                  onPathSelect={(path) => {
+                    if (path !== row.name) remapManagedRow(row.option!, path);
+                  }}
                   onRemove={() => setManagedOption(row.option!, false)}
                 />
               ) : (

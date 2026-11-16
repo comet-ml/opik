@@ -228,6 +228,25 @@ const useFieldMappings = ({
     );
   }, []);
 
+  // Re-pointing an Opik-managed row keeps its column and position but fills it
+  // from the chosen path, so Opik's own enrichment for it is switched off.
+  const remapManagedRow = useCallback(
+    (option: keyof EnrichmentOptions, path: string) => {
+      nextIdRef.current += 1;
+      const id = `custom-${nextIdRef.current}`;
+      setAddedRows((prev) =>
+        prev.map((row) =>
+          row.kind === "managed" && row.option === option
+            ? { id, name: row.name, kind: "custom", path, touched: true }
+            : row,
+        ),
+      );
+      setEnrichmentOptions((prev) => ({ ...prev, [option]: false }));
+      return id;
+    },
+    [setEnrichmentOptions],
+  );
+
   const setManagedOption = useCallback(
     (option: keyof EnrichmentOptions, enabled: boolean) => {
       setEnrichmentOptions((prev) => ({ ...prev, [option]: enabled }));
@@ -252,6 +271,7 @@ const useFieldMappings = ({
     renameRow,
     setRowPath,
     setManagedOption,
+    remapManagedRow,
   };
 };
 
