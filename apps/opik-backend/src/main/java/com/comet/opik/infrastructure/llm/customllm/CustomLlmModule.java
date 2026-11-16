@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure.llm.customllm;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.http.OneShotRequestBodies;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicClientGenerator;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -110,7 +112,10 @@ public class CustomLlmModule extends AbstractModule {
     @Singleton
     @Named("openAICompatible")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator) {
-        return new OpenAICompatibleServiceProvider(clientGenerator, llmProviderFactory);
+            @NonNull @Named("customLlmGenerator") CustomLlmClientGenerator clientGenerator,
+            @NonNull AnthropicClientGenerator anthropicClientGenerator,
+            @NonNull LlmModelRegistryService registryService) {
+        return new OpenAICompatibleServiceProvider(clientGenerator, anthropicClientGenerator, registryService,
+                llmProviderFactory);
     }
 }

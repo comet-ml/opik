@@ -165,3 +165,90 @@ describe("createCustomProviderDetailsFormSchema headers", () => {
     ]);
   });
 });
+
+describe("createCustomProviderDetailsFormSchema on a URL change", () => {
+  const STORED_URL =
+    "https://bedrock-runtime.us-east-1.amazonaws.com/anthropic";
+  const NEW_URL = "https://bedrock-runtime.us-east-1.amazonaws.com";
+
+  const bedrockEdit = (overrides: Record<string, unknown>) => ({
+    provider: PROVIDER_TYPE.BEDROCK,
+    composedProviderType: "bedrock:my-bedrock",
+    id: "provider-id",
+    apiKey: "",
+    url: NEW_URL,
+    models: "us.amazon.nova-pro-v1:0",
+    headers: [],
+    ...overrides,
+  });
+
+  it("asks for the API key again when a key is stored", () => {
+    const result = createCustomProviderDetailsFormSchema([], {
+      base_url: STORED_URL,
+      api_key: "*****",
+    }).safeParse(bedrockEdit({}));
+
+    expect(issueMessages(result)).toEqual([
+      "Enter the API key again to change the URL",
+    ]);
+  });
+
+  it("accepts the change with a new API key", () => {
+    const result = createCustomProviderDetailsFormSchema([], {
+      base_url: STORED_URL,
+      api_key: "*****",
+    }).safeParse(bedrockEdit({ apiKey: "new-key" }));
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an edit that keeps the URL without the key", () => {
+    const result = createCustomProviderDetailsFormSchema([], {
+      base_url: STORED_URL,
+      api_key: "*****",
+    }).safeParse(bedrockEdit({ url: STORED_URL }));
+
+    expect(result.success).toBe(true);
+  });
+
+  it.each([undefined, "null"])(
+    "accepts the change when no key is stored (api_key %s)",
+    (storedApiKey) => {
+      const result = createCustomProviderDetailsFormSchema([], {
+        base_url: STORED_URL,
+        api_key: storedApiKey,
+      }).safeParse(bedrockEdit({}));
+
+      expect(result.success).toBe(true);
+    },
+  );
+
+  it("asks for each stored secret again in token mode", () => {
+    const credential = (key: string, value: string, secret: boolean) => ({
+      key,
+      value,
+      secret,
+      saved: true,
+      id: key,
+    });
+    const result = createCustomProviderDetailsFormSchema([], {
+      base_url: STORED_URL,
+    }).safeParse(
+      bedrockEdit({
+        authMode: "token",
+        authTokenUrl: "https://auth.example.com/oauth/token",
+        authCredentials: [
+          credential("client_id", "my-client", false),
+          credential("client_secret", "__SECRET__", true),
+        ],
+      }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(
+      (
+        result as { error: { issues: Array<{ path: unknown[] }> } }
+      ).error.issues.map((issue) => issue.path),
+    ).toEqual([["authCredentials", 1, "value"]]);
+  });
+});

@@ -35,6 +35,7 @@ class ModelParams(UniversalBaseModel):
         None
     )
     thinks_by_default: typing_extensions.Annotated[typing.Optional[bool], FieldMetadata(alias="thinksByDefault")] = None
+    only_route: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="onlyRoute")] = None
     routes: typing.Optional[typing.Dict[str, "ModelParams"]] = None
 
     if IS_PYDANTIC_V2:

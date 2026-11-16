@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TraceLogsSidebarPage } from './trace-logs-sidebar.page';
 import { PromptLibraryMenu } from './prompt-library-menu';
+import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 
 export type OptimizerName = 'GEPA optimizer' | 'Hierarchical Reflective';
@@ -68,6 +69,7 @@ export class OptimizationStudioPage {
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations/new`,
       );
       await this.newRunPanel().waitFor();
+      await waitForAssistantSidebarLoaded(this.page);
     });
   }
 
@@ -529,6 +531,7 @@ export class OptimizationStudioPage {
           `?new=true&rerun=${optimizationId}`,
       );
       await this.newRunPanel().waitFor();
+      await waitForAssistantSidebarLoaded(this.page);
       await this.waitForModelResolved();
     });
   }
@@ -548,6 +551,7 @@ export class OptimizationStudioPage {
         `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations?new=true`,
       );
       await this.newRunPanel().waitFor();
+      await waitForAssistantSidebarLoaded(this.page);
       await this.waitForModelResolved();
     });
   }
@@ -770,6 +774,20 @@ export class OptimizationStudioPage {
       await expect(listbox).toBeVisible({ timeout: 2_000 });
     }).toPass({ timeout: 15_000 });
     return listbox;
+  }
+
+  /**
+   * Whether the prompt model mounts a parameters gear at all.
+   *
+   * `PromptModelConfigs` renders nothing for a model with no control to set on
+   * this surface — the cloud free model is one — so `readModelParameters` would
+   * wait on a trigger that never comes. Read after `waitForModelResolved`: the
+   * gear renders in the same pass as the resolved model.
+   */
+  async hasModelParameters(): Promise<boolean> {
+    return test.step('check whether the prompt model has a parameters gear', async () => {
+      return (await this.modelParametersTrigger().count()) > 0;
+    });
   }
 
   /**

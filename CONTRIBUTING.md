@@ -78,6 +78,17 @@ A maintainer can run the E2E suite against your branch before merging. The skip 
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
 
+## Secret scanning
+Every commit is scanned for hardcoded secrets (API keys, tokens, credentials, private keys) with [betterleaks](https://github.com/betterleaks/betterleaks), the successor to gitleaks from the same maintainers. It runs as a hook locally via pre-commit and in the unified `🐙 Code Quality` workflow on every changed file. The pre-commit framework builds the pinned version from source, so no manual install is needed. The scan is offline and prints findings redacted.
+
+- **If it flags a real secret**, remove it, and rotate it if it was ever pushed anywhere. Don't allowlist it.
+- **To run it yourself**, use `pre-commit run betterleaks --files <paths>`, or `pre-commit run betterleaks --all-files` for the whole tree.
+- **Suppressing a false positive** must be explicit and justified, and must not copy the value anywhere new:
+  - Add an inline `betterleaks:allow` comment with a short reason on the flagged line.
+  - If the line can't hold a comment (inside a shell string, or a rendered docs code block), add its fingerprint (`path:rule:line`, using the rule, path and line printed with the finding) to [`.betterleaksignore`](.betterleaksignore).
+  - Only obvious placeholder words (such as `password` or `changeit`) go in [`.betterleaks.toml`](.betterleaks.toml), as exact, anchored entries scoped to the rule that flags them. Never list a value there that looks like a real secret, even a harmless one.
+  - Never exclude whole paths or directories: that would let real secrets in those paths through.
+
 ## SQL query construction (Java backend)
 Production Java under `apps/opik-backend/src/main/java/` is scanned with [semgrep](https://semgrep.dev/) for SQL assembled by string formatting, as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit). The rules live in [`.semgrep/`](.semgrep/), with the conventions they enforce documented in [`.agents/rules/security.mdc`](.agents/rules/security.mdc) and the backend skill.
 

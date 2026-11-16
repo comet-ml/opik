@@ -168,7 +168,7 @@ class VertexAIClientGeneratorTest {
         keyPairGenerator.initialize(2048);
         var privateKey = keyPairGenerator.generateKeyPair().getPrivate();
 
-        var pem = "-----BEGIN PRIVATE KEY-----\\n"
+        var pem = "-----BEGIN PRIVATE KEY-----\\n" // betterleaks:allow — PEM framing for a key generated above
                 + Base64.getEncoder().encodeToString(privateKey.getEncoded())
                 + "\\n-----END PRIVATE KEY-----\\n";
 
@@ -649,7 +649,7 @@ class VertexAIClientGeneratorTest {
                     .configuration(Map.of("location", "global"))
                     .build();
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
-                    JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
+                    JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"), null);
 
             var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
@@ -713,7 +713,7 @@ class VertexAIClientGeneratorTest {
                     .configuration(Map.of("location", "global"))
                     .build();
             var modelParameters = new LlmAsJudgeModelParameters(MODEL, null, null,
-                    JsonUtils.getJsonNodeFromString(customParameters));
+                    JsonUtils.getJsonNodeFromString(customParameters), null);
 
             var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,
@@ -752,7 +752,7 @@ class VertexAIClientGeneratorTest {
 
             var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null));
+                    .generateChat(config, new LlmAsJudgeModelParameters(GEMINI_3_MODEL, null, null, null, null));
             var call = client.chat(ChatRequest.builder().messages(question).build()).aiMessage();
             client.chat(ChatRequest.builder()
                     .messages(question, call,
@@ -940,7 +940,7 @@ class VertexAIClientGeneratorTest {
 
             var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER, LlmTestClients.VIDEO_MIME_TYPE_UTILS, tokenCache)
-                    .generateChat(config, new LlmAsJudgeModelParameters(MODEL, null, null, null));
+                    .generateChat(config, new LlmAsJudgeModelParameters(MODEL, null, null, null, null));
             client.chat(ChatRequest.builder()
                     .messages(UserMessage.from("Read trace t1"))
                     .toolSpecifications(tool)
@@ -999,7 +999,7 @@ class VertexAIClientGeneratorTest {
         @Test
         @DisplayName("the judge path sends the rule's temperature and seed")
         void judgeSendsTemperatureAndSeed() {
-            var modelParameters = new LlmAsJudgeModelParameters(MODEL, 0.2, 7, null);
+            var modelParameters = new LlmAsJudgeModelParameters(MODEL, 0.2, 7, null, null);
 
             var client = new VertexAIClientGenerator(clientConfig(), registry,
                     LlmTestClients.REMOTE_MEDIA_INLINER,

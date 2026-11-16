@@ -148,24 +148,21 @@ export const TriggerSchema = z
 export const AlertFormSchema = z
   .object({
     name: z
-      .string({ required_error: "Alert name is required" })
+      .string({ error: "Alert name is required" })
       .min(1, { message: "Alert name is required" }),
-    enabled: z.boolean().default(true),
-    alertType: z.nativeEnum(ALERT_TYPE).default(ALERT_TYPE.general),
+    enabled: z.boolean(),
+    alertType: z.nativeEnum(ALERT_TYPE),
     routingKey: z.string().optional(),
     url: z
-      .string({ required_error: "Endpoint URL is required" })
+      .string({ error: "Endpoint URL is required" })
       .min(1, { message: "Endpoint URL is required" })
       .url({ message: "Please enter a valid URL" }),
     secretToken: z.string().optional(),
-    headers: z.array(HeaderSchema).default([]),
-    customFields: z
-      .array(CustomFieldSchema)
-      .max(MAX_CUSTOM_FIELDS, {
-        message: `At most ${MAX_CUSTOM_FIELDS} custom fields are allowed`,
-      })
-      .default([]),
-    triggers: z.array(TriggerSchema).default([]),
+    headers: z.array(HeaderSchema),
+    customFields: z.array(CustomFieldSchema).max(MAX_CUSTOM_FIELDS, {
+      message: `At most ${MAX_CUSTOM_FIELDS} custom fields are allowed`,
+    }),
+    triggers: z.array(TriggerSchema),
   })
   .refine(
     (data) => {

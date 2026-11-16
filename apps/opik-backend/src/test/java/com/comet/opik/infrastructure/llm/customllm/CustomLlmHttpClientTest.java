@@ -129,9 +129,23 @@ class CustomLlmHttpClientTest {
 
         Throwable actualError = failure(callPath, request("{}"));
 
-        assertThat(actualError).isExactlyInstanceOf(HttpException.class)
+        assertThat(actualError).isExactlyInstanceOf(HttpResponseException.class)
                 .hasMessage(errorBody.substring(0, ERROR_BODY_MAX_SIZE));
         assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
+    }
+
+    @ParameterizedTest
+    @EnumSource(CallPath.class)
+    void keepsTheHeadersOfAnErrorResponse(CallPath callPath) throws Exception {
+        wireMock.stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(403)
+                .withHeader("x-amzn-ErrorType", "AccessDeniedException:http://internal.amazon.com/")
+                .withBody("{\"Message\": \"Denied\"}")));
+
+        Throwable actualError = failure(callPath, request("{}"));
+
+        assertThat(actualError).isExactlyInstanceOf(HttpResponseException.class);
+        assertThat(((HttpResponseException) actualError).header("X-Amzn-ErrorType"))
+                .contains("AccessDeniedException:http://internal.amazon.com/");
     }
 
     /** What a raw server sends on its one connection, once it has read the request. */
@@ -208,7 +222,7 @@ class CustomLlmHttpClientTest {
 
             Throwable actualError = failure(callPath, rawRequest(server));
 
-            assertThat(actualError).isExactlyInstanceOf(HttpException.class)
+            assertThat(actualError).isExactlyInstanceOf(HttpResponseException.class)
                     .hasMessage(CustomLlmHttpClient.UNREADABLE_ERROR_BODY);
             assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
         }
@@ -565,7 +579,7 @@ class CustomLlmHttpClientTest {
             Throwable actualError = failure(trickleClient, callPath, rawRequest(server));
 
             var actualElapsed = Duration.ofNanos(System.nanoTime() - startNanos);
-            assertThat(actualError).isExactlyInstanceOf(HttpException.class)
+            assertThat(actualError).isExactlyInstanceOf(HttpResponseException.class)
                     .hasMessage(CustomLlmHttpClient.UNREADABLE_ERROR_BODY);
             assertThat(((HttpException) actualError).statusCode()).isEqualTo(400);
             assertThat(actualElapsed).isLessThan(expectedMaxElapsed);

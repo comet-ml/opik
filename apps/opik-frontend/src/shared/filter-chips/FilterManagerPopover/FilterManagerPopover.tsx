@@ -10,6 +10,8 @@ import {
 import { Separator } from "@/ui/separator";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { createFilter } from "@/lib/filters";
+import { NO_VALUE_OPERATORS } from "@/constants/filters";
 import { isSingleSelectApplied } from "@/shared/filter-chips/chips/SingleSelectChip/SingleSelectChip.logic";
 import { isBooleanApplied } from "@/shared/filter-chips/chips/BooleanChip/BooleanChip.logic";
 import { isNumericApplied } from "@/shared/filter-chips/chips/NumericChip/NumericChip.logic";
@@ -82,6 +84,13 @@ const FilterManagerPopover: React.FC<FilterManagerPopoverProps> = ({
     if (def.kind === "boolean") {
       onApplyValue(def.id, { applied: true });
       return;
+    }
+    if (def.kind === "query-builder" && !def.key) {
+      const operator = def.defaultOperator ?? def.operators[0];
+      // A default operator that takes no value (e.g. "is not empty") is already a complete filter.
+      if (NO_VALUE_OPERATORS.includes(operator)) {
+        onApplyValue(def.id, { rows: [createFilter({ operator })] });
+      }
     }
     // Open the chip popover only after Radix has finished tearing down the
     // dropdown — see onCloseAutoFocus below. Avoids the stray outside-click

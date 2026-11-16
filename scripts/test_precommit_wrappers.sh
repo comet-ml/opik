@@ -70,14 +70,17 @@ check "python change emits a python leg" '"id": "ruff"'        "$out"
 check "python leg carries the file"      'sdks/python/src/opik/foo.py' "$out"
 # leg_ids <stdin-json> → space-joined ids of the running legs (ignores skipped).
 leg_ids() { python3 -c 'import json,sys; print(" ".join(l["id"] for l in json.load(sys.stdin)["legs"]))'; }
+# scoped_leg_ids: leg_ids minus betterleaks, which gates every file by design.
+scoped_leg_ids() { leg_ids | tr ' ' '\n' | grep -vx 'betterleaks' | tr '\n' ' ' | sed 's/ *$//'; }
 check_empty "respects exclude (rest_api → no legs)" \
-	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids)"
+	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | scoped_leg_ids)"
 out=$(printf 'apps/opik-frontend/src/components/Foo.tsx\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "fe change emits fe-eslint"        '"id": "fe-eslint"'   "$out"
 check_empty "fe non-plugin change omits no-private-fe-plugins" \
 	"$(printf '%s' "$out" | leg_ids | grep -o 'no-private-fe-plugins' || true)"
-check_empty "unrelated file → no legs" \
-	"$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids)"
+out=$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check_empty "unrelated file → no legs" "$(printf '%s' "$out" | scoped_leg_ids)"
+check "any file emits the repo-wide betterleaks leg" '"id": "betterleaks"' "$out"
 # types: gate — a non-.py file under sdks/opik_optimizer must NOT emit the
 # python-only hooks (ruff/mypy/pyupgrade), or they'd spawn jobs that Skip at
 # runtime and drop from the timing table.

@@ -98,7 +98,12 @@ test.describe(
           await studio.gotoNewBlank();
           return {
             model: await studio.readPromptModel(),
-            parameters: await studio.readModelParameters(),
+            // null where the default mounts no parameter controls at all — on
+            // cloud it is the free model — and then the rerun must mount none
+            // either.
+            parameters: (await studio.hasModelParameters())
+              ? await studio.readModelParameters()
+              : null,
           };
         });
 
@@ -163,7 +168,9 @@ test.describe(
         });
 
         await test.step('Its settings are its own defaults, not the saved run’s', async () => {
-          const parameters = await studio.readModelParameters();
+          const parameters = (await studio.hasModelParameters())
+            ? await studio.readModelParameters()
+            : null;
 
           expect(
             parameters,
@@ -175,7 +182,7 @@ test.describe(
           // the comparison above with a diff nobody could read without this.
           for (const saved of new Set(Object.values(SAVED_MODEL_PARAMETERS))) {
             expect(
-              Object.values(parameters),
+              Object.values(parameters ?? {}),
               `no control may read ${saved}, which only the saved run's settings hold`,
             ).not.toContain(String(saved));
           }

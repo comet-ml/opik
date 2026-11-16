@@ -6,7 +6,7 @@ import useWebhookTestMutation from "@/api/alerts/useWebhookTestMutation";
 import { useToast } from "@/ui/use-toast";
 
 const urlSchema = z
-  .string({ required_error: "Endpoint URL is required" })
+  .string({ error: "Endpoint URL is required" })
   .min(1, { message: "Endpoint URL is required" })
   .url({ message: "Please enter a valid URL" });
 
@@ -33,7 +33,7 @@ const useWebhookTest = ({ getAlert }: UseWebhookTestParams) => {
       if (!validation.success) {
         toast({
           description:
-            validation.error.errors[0]?.message ||
+            validation.error.issues[0]?.message ||
             "Please enter a valid webhook URL before testing",
           variant: "destructive",
         });
@@ -47,7 +47,7 @@ const useWebhookTest = ({ getAlert }: UseWebhookTestParams) => {
         if (!routingKeyValidation.success) {
           toast({
             description:
-              routingKeyValidation.error.errors[0]?.message ||
+              routingKeyValidation.error.issues[0]?.message ||
               "Routing key is required for PagerDuty integration",
             variant: "destructive",
           });

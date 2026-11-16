@@ -33,7 +33,6 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     agentInsightsEnabled: core.serialization.boolean(),
     agentInsightsGuidanceEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
-    onlineScoringTracingEnabled: core.serialization.boolean(),
     annotationQueueAutomationEnabled: core.serialization.boolean(),
     eventBridgeAlertsEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
@@ -67,7 +66,6 @@ export declare namespace ServiceTogglesConfig {
         agentInsightsEnabled: boolean;
         agentInsightsGuidanceEnabled: boolean;
         projectHomepageEnabled: boolean;
-        onlineScoringTracingEnabled: boolean;
         annotationQueueAutomationEnabled: boolean;
         eventBridgeAlertsEnabled: boolean;
         defaultPageSize?: number | null;

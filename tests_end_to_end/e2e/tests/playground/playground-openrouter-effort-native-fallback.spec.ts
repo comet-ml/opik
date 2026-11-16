@@ -26,7 +26,7 @@ import { captureCompletionBody } from '@e2e/core/playground-completions';
  *
  * ## Why these are the native levels and not a coincidence
  *
- * `openai/o3-mini` publishes nothing, and the native `o3-mini` row offers
+ * `openai/o3` publishes nothing, and the native `o3` row offers
  * `low / medium / high` — one level FEWER than the published-levels model
  * `openai/gpt-5-mini` in `playground-openrouter-reasoning-effort.spec.ts`,
  * which has `minimal` too. That difference is what makes this a test of the
@@ -34,19 +34,20 @@ import { captureCompletionBody } from '@e2e/core/playground-completions';
  * OpenRouter reasoning model with one fixed set would pass one spec and fail
  * the other.
  *
- * Deterministic and billing-free: the fallback levels are pinned in
- * `OPENAI_MODEL_CAPABILITIES` rather than fetched, and the completion is
- * short-circuited in the browser (see the `openRouterProvider` fixture).
+ * Deterministic and billing-free: the fallback levels are the hand-written
+ * `o3` row of `llm-models-curated.yaml` (and `OPENAI_MODEL_CAPABILITIES` behind
+ * it), and the completion is short-circuited in the browser (see the
+ * `openRouterProvider` fixture).
  */
 
-/** The native `o3-mini` levels, in panel order, after "Default". */
+/** The native `o3` levels, in panel order, after "Default". */
 const NATIVE_EFFORTS = ['Default', 'Low', 'Medium', 'High'] as const;
 
 /** The level this spec picks, and the value it must reach the wire as. */
 const PICKED_EFFORT = { label: 'Medium', wire: 'medium' } as const;
 
 /**
- * A level the published-levels model offers and the native `o3-mini` row does
+ * A level the published-levels model offers and the native `o3` row does
  * not. Asserted absent, so "the control offers four values" cannot be satisfied
  * by a build that serves the gpt-5 set to everything.
  */
@@ -88,7 +89,7 @@ test.describe(
           const offered = await playground.reasoningEffortOptions();
           expect(
             offered,
-            'the native o3-mini levels, plus Default',
+            'the native o3 levels, plus Default',
           ).toEqual([...NATIVE_EFFORTS]);
           expect(
             offered,

@@ -40,9 +40,6 @@ class ServiceTogglesConfig(UniversalBaseModel):
         bool, FieldMetadata(alias="agentInsightsGuidanceEnabled")
     ]
     project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
-    online_scoring_tracing_enabled: typing_extensions.Annotated[
-        bool, FieldMetadata(alias="onlineScoringTracingEnabled")
-    ]
     annotation_queue_automation_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="annotationQueueAutomationEnabled")
     ]

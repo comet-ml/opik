@@ -58,7 +58,7 @@ class TestExportTracesByIdsRetry:
         client.search_spans.return_value = []
 
         with patch(f"{_EXPERIMENT_MODULE}._fetch_trace_data.retry.sleep"):
-            exported, skipped = export_traces_by_ids(
+            exported, skipped, failed = export_traces_by_ids(
                 client, ["t1"], tmp_path, "proj", None, "json", False, False
             )
 
@@ -85,7 +85,7 @@ class TestExportTracesByIdsRetry:
         client.search_spans.return_value = []
 
         with patch(f"{_EXPERIMENT_MODULE}._fetch_trace_data.retry.sleep"):
-            exported, skipped = export_traces_by_ids(
+            exported, skipped, failed = export_traces_by_ids(
                 client, ["t2"], tmp_path, "proj", None, "json", False, False
             )
 
@@ -106,11 +106,12 @@ class TestExportTracesByIdsRetry:
         client = MagicMock()
         client.get_trace_content.side_effect = get_trace_side_effect
 
-        exported, skipped = export_traces_by_ids(
+        exported, skipped, failed = export_traces_by_ids(
             client, ["missing-id"], tmp_path, "proj", None, "json", False, False
         )
 
         assert exported == 0, "404 trace must not be exported"
+        assert (skipped, failed) == (1, 0)
         assert call_count == 1, "404 must not trigger a retry"
 
     def test_export_traces_by_ids__success__exports_trace(self, tmp_path):
@@ -121,7 +122,7 @@ class TestExportTracesByIdsRetry:
         client.get_trace_content.return_value = self._make_mock_trace("t3")
         client.search_spans.return_value = []
 
-        exported, skipped = export_traces_by_ids(
+        exported, skipped, failed = export_traces_by_ids(
             client, ["t3"], tmp_path, "proj", None, "json", False, False
         )
 
@@ -189,9 +190,9 @@ class TestExportExperimentByIdPropagatesErrors:
                 f"{_ALL_MODULE}.export_experiment_by_id",
                 side_effect=export_side_effect,
             ),
-            patch(f"{_ALL_MODULE}.export_collected_trace_ids", return_value=(0, 0)),
+            patch(f"{_ALL_MODULE}.export_collected_trace_ids", return_value=(0, 0, 0)),
         ):
-            _, _, _, _, had_errors = _export_all_experiments(
+            _, _, _, _, _, had_errors = _export_all_experiments(
                 client=client,
                 project_dir=tmp_path,
                 project_name="proj",

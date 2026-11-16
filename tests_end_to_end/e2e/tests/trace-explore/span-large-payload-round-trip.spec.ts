@@ -277,11 +277,10 @@ test.describe(
           // panel fetches and renders that on open. The default 15s action
           // timeout is enough when the suite runs this spec alone and not when
           // the whole branch runs beside it — observed as the tree node never
-          // appearing on a 4-worker run.
-          await expect(
-            panel.spanTreeNode(spanName),
-            'the span appears in the trace tree',
-          ).toBeVisible({ timeout: 120_000 });
+          // appearing on a 4-worker run. Through `waitForSpanTreeNodes` because
+          // on staging that turned out to be the panel's spans read answered
+          // 429, which the panel never re-issues by itself.
+          await panel.waitForSpanTreeNodes([spanName], { timeout: 60_000 });
           await panel.selectSpan(spanName);
 
           // Per SECTION, not anywhere in the panel: a payload that landed in

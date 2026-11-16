@@ -506,11 +506,29 @@ export class LogsPage {
    * Not simply raised for everyone: a longer default would also lengthen the
    * failure of every spec whose project legitimately has no rows, turning a
    * quick, clear failure into a slow one.
+   *
+   * Reloads (at most twice) when the table settled on "No matching results"
+   * because its list read was shed — see {@link waitForTraceRow} for why the
+   * frontend never recovers from that on its own. Gated on the shed read, not
+   * on the empty table: a list that answered 200 with no rows gets no reload
+   * and still fails here exactly as it always did.
    */
   async waitForReady(opts: { timeout?: number } = {}): Promise<void> {
     return test.step('Wait for Logs table ready', async () => {
       const realRow = this.page.locator('tr[data-row-id]').first();
       const emptyState = this.page.getByText('No traces yet');
+      for (let reloads = 0; reloads < 2; reloads++) {
+        await realRow
+          .or(emptyState)
+          .or(this.noMatchingResults)
+          .first()
+          .waitFor({ state: 'visible', ...(opts.timeout ? { timeout: opts.timeout } : {}) });
+        if (!(await this.noMatchingResults.isVisible()) || !(await this.listReadWasShed())) break;
+        // Stood off first: on staging a reload issued straight away was shed
+        // again, every time, inside the same rate-limit window.
+        await this.page.waitForTimeout(reloads === 0 ? 5_000 : 15_000);
+        await this.page.reload();
+      }
       await Promise.race([
         realRow.waitFor({ state: 'visible', ...(opts.timeout ? { timeout: opts.timeout } : {}) }),
         emptyState.waitFor({
@@ -523,6 +541,28 @@ export class LogsPage {
         return /Traces\s+\d+/i.test(txt);
       });
     });
+  }
+
+  /**
+   * Whether a Logs list read (traces, spans or threads) issued since the page
+   * last loaded was answered 429 or 5xx. Scoped to the current document so a
+   * read shed before a reload cannot justify another one.
+   */
+  private async listReadWasShed(): Promise<boolean> {
+    const requests = await this.page.requests();
+    let loadedAt = -1;
+    requests.forEach((r, i) => {
+      if (r.isNavigationRequest() && r.frame() === this.page.mainFrame()) loadedAt = i;
+    });
+    for (const request of requests.slice(loadedAt + 1)) {
+      if (request.method() !== 'GET') continue;
+      if (!/\/v1\/private\/(traces|spans|traces\/threads)\/?$/.test(new URL(request.url()).pathname)) {
+        continue;
+      }
+      const status = (await request.response())?.status() ?? 0;
+      if (status === 429 || status >= 500) return true;
+    }
+    return false;
   }
 
   async countTraces(): Promise<number> {

@@ -30,3 +30,10 @@ tests:
           path: spec.templates.podTemplates[0].spec.containers[1].securityContext
           value:
             allowPrivilegeEscalation: false
+
+  # Without a policy kubelet re-chowns the whole data volume on every pod start.
+  - it: skips the recursive fsGroup chown when the volume root already matches
+    asserts:
+      - equal:
+          path: spec.templates.podTemplates[0].spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch

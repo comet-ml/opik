@@ -8,6 +8,10 @@ import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelS
 import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import { createSupports } from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/visibleControls";
 import {
+  NO_OUTPUT_LIMIT_TOOLTIP,
+  getNoOutputLimitHint,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/noOutputLimit";
+import {
   GenericPanelPresentation,
   getShownControls,
   getShownValue,
@@ -48,8 +52,14 @@ const SLIDERS: Record<
   },
 };
 
-const maxOutputTokensTooltip = (min: number, reasoningNoun: string) =>
-  `The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On ${reasoningNoun} models, ${reasoningNoun} tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. The minimum is ${min}. (One token is roughly 4 characters for standard English text).`;
+const maxOutputTokensTooltip = (
+  min: number,
+  reasoningNoun: string,
+  zeroMeansNoLimit: boolean,
+) =>
+  `The maximum number of tokens the model can generate in its response. The prompt does not count toward it. On ${reasoningNoun} models, ${reasoningNoun} tokens count toward it too, so a low limit can leave the response empty. The exact limit varies by model. ${
+    zeroMeansNoLimit ? NO_OUTPUT_LIMIT_TOOLTIP : `The minimum is ${min}.`
+  } (One token is roughly 4 characters for standard English text).`;
 
 interface GenericModelConfigsProps {
   model?: string;
@@ -88,16 +98,19 @@ const GenericModelConfigs = ({
 
   const renderNumber = (control: NumberControl) => {
     if (control.param === "max_output_tokens") {
+      const value = shown(control) as number;
+      const noLimitAtZero = presentation.zeroMeansNoLimit === true;
       return (
         <SliderInputControl
           key={control.configKey}
-          value={shown(control) as number}
+          value={value}
           onChange={(v) => onChange({ [control.configKey]: v })}
-          id={control.configKey}
-          min={control.min}
+          id={presentation.maxOutputTokensId ?? control.configKey}
+          min={noLimitAtZero ? 0 : control.min}
           max={control.max}
           step={1}
           integer
+          hint={noLimitAtZero ? getNoOutputLimitHint(value) : undefined}
           defaultValue={control.default}
           label="Max output tokens"
           tooltip={
@@ -105,6 +118,7 @@ const GenericModelConfigs = ({
               text={maxOutputTokensTooltip(
                 control.min,
                 presentation.reasoningNoun,
+                noLimitAtZero,
               )}
             />
           }

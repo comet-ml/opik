@@ -32,7 +32,7 @@ const CUSTOM_PROVIDER_TYPE = 'custom-llm';
 
 /**
  * OAuth2 client-credentials auth for a Custom provider (OPIK-7940). When present,
- * the provider is configured in "OAuth2 client credentials" mode instead of a
+ * the provider is configured in "Fetched token" mode (OAuth2 type) instead of a
  * static API key: Opik fetches a short-lived bearer from `tokenUrl` before LLM calls.
  */
 export interface CustomProviderAuthConfig {
@@ -247,13 +247,13 @@ export class ConfigurationPage {
   }
 
   /**
-   * Fill the Authentication card in "OAuth2 client credentials" mode. Selecting
+   * Fill the Authentication card in "Fetched token" mode; OAuth2 is the default type. Selecting
    * the mode seeds two credential rows (client_id, client_secret); their value
    * inputs are filled by matching each row's key input, so row order never matters.
    */
   async fillAuthSection(dialog: Locator, auth: CustomProviderAuthConfig): Promise<void> {
     return test.step('fill the OAuth2 client credentials auth section', async () => {
-      await dialog.getByRole('radio', { name: 'OAuth2 client credentials' }).click();
+      await dialog.getByRole('radio', { name: 'Fetched token' }).click();
       await dialog.getByRole('textbox', { name: 'Token URL' }).fill(auth.tokenUrl);
       await this.fillCredentialValue(dialog, 'client_id', auth.clientId);
       await this.fillCredentialValue(dialog, 'client_secret', auth.clientSecret);
@@ -263,6 +263,24 @@ export class ConfigurationPage {
         await newRow.getByTestId('auth-credential-key').fill('scope');
         await newRow.getByTestId('auth-credential-value').fill(auth.scope);
       }
+    });
+  }
+
+  /**
+   * Fill the Authentication card in "Fetched token" mode with the Service account type, whose
+   * username and password are fixed fields rather than credential rows.
+   */
+  async fillServiceAccountAuthSection(
+    dialog: Locator,
+    auth: { tokenUrl: string; username: string; password: string },
+  ): Promise<void> {
+    return test.step('fill the service account auth section', async () => {
+      await dialog.getByRole('radio', { name: 'Fetched token' }).click();
+      await dialog.getByRole('combobox', { name: 'Type' }).click();
+      await this.page.getByRole('option', { name: 'Service account', exact: true }).click();
+      await dialog.getByRole('textbox', { name: 'Token URL' }).fill(auth.tokenUrl);
+      await dialog.getByTestId('auth-service-account-username').fill(auth.username);
+      await dialog.getByTestId('auth-service-account-password').fill(auth.password);
     });
   }
 

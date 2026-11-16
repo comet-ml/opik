@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.LlmHttpClientBuilders;
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
 import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
 import dev.langchain4j.model.chat.ChatModel;
@@ -32,9 +33,10 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     private final @NonNull LlmModelRegistryService registryService;
     private final @NonNull LlmHttpClientBuilders httpClientBuilders;
 
-    private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
+    private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config,
+            @NonNull HttpClientBuilder httpClientBuilder) {
         var anthropicClientBuilder = AnthropicClient.builder()
-                .httpClientBuilder(httpClientBuilders.builder());
+                .httpClientBuilder(httpClientBuilder);
         Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
                 .map(AnthropicClientConfig::url)
                 .filter(StringUtils::isNotEmpty)
@@ -61,24 +63,24 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     }
 
     private ChatModel newChatLanguageModel(LlmProviderClientApiConfig config,
-            LlmAsJudgeModelParameters modelParameters) {
+            LlmAsJudgeModelParameters modelParameters, HttpClientBuilder httpClientBuilder) {
         var outputConfig = AnthropicEffort.toOutputConfig(modelParameters.name(), modelParameters.customParameters(),
                 registryService);
         if (outputConfig.isEmpty()) {
-            return newChatModelBuilder(config, modelParameters).build();
+            return newChatModelBuilder(config, modelParameters, httpClientBuilder).build();
         }
         return new AnthropicOutputConfigChatModel(outputConfig.get(),
-                customParameters -> newChatModelBuilder(config, modelParameters)
+                customParameters -> newChatModelBuilder(config, modelParameters, httpClientBuilder)
                         .customParameters(customParameters)
                         .build());
     }
 
     private AnthropicChatModel.AnthropicChatModelBuilder newChatModelBuilder(LlmProviderClientApiConfig config,
-            LlmAsJudgeModelParameters modelParameters) {
+            LlmAsJudgeModelParameters modelParameters, HttpClientBuilder httpClientBuilder) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
                 .modelName(modelParameters.name())
-                .httpClientBuilder(httpClientBuilders.builder())
+                .httpClientBuilder(httpClientBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -207,12 +209,22 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     @Override
     public AnthropicClient generate(@NonNull LlmProviderClientApiConfig config, Object... params) {
-        return newAnthropicClient(config);
+        return newAnthropicClient(config, httpClientBuilders.builder());
     }
 
     @Override
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        return newChatLanguageModel(config, modelParameters);
+        return newChatLanguageModel(config, modelParameters, httpClientBuilders.builder());
+    }
+
+    public AnthropicClient newClient(@NonNull LlmProviderClientApiConfig config,
+            @NonNull HttpClientBuilder httpClientBuilder) {
+        return newAnthropicClient(config, httpClientBuilder);
+    }
+
+    public ChatModel newChatModel(@NonNull LlmProviderClientApiConfig config,
+            @NonNull LlmAsJudgeModelParameters modelParameters, @NonNull HttpClientBuilder httpClientBuilder) {
+        return newChatLanguageModel(config, modelParameters, httpClientBuilder);
     }
 }

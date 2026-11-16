@@ -14,8 +14,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # Fetch all history for git diff
 
       - name: Install Fern
         working-directory: apps/opik-documentation/documentation

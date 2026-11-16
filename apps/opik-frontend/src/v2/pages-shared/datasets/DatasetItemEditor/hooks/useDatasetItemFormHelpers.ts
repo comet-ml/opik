@@ -81,7 +81,7 @@ export const createDynamicSchema = (fields: DatasetField[]) => {
         { message: "Must be a valid JSON object or array" },
       );
     } else {
-      schemaShape[field.key] = z.any();
+      schemaShape[field.key] = z.any().optional();
     }
   });
 

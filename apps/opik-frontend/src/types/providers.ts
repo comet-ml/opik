@@ -90,6 +90,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_IMAGE_2 = "gpt-image-2",
   GPT_IMAGE_2_5_FLARE = "gpt-image-2.5-flare",
   GPT_IMAGE_2_5_SUNBURST = "gpt-image-2.5-sunburst",
+  GPT_IMAGE_2_6_FLARE = "gpt-image-2.6-flare",
+  GPT_IMAGE_2_6_SUNBURST = "gpt-image-2.6-sunburst",
   GPT_LIVE_1 = "gpt-live-1",
   GPT_O1 = "o1",
   GPT_O1_2024_12_17 = "o1-2024-12-17",
@@ -321,6 +323,8 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_4_ARGON = "google/gemini-4-argon",
   GOOGLE_GEMINI_4_ARGON_BATCH = "google/gemini-4-argon:batch",
   GOOGLE_GEMINI_NANO_BANANA_2_1 = "google/gemini-nano-banana-2.1",
+  GOOGLE_GEMINI_OMNI_1_1_FLASH = "google/gemini-omni-1.1-flash",
+  GOOGLE_GEMINI_OMNI_1_2_FLASH = "google/gemini-omni-1.2-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -360,6 +364,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_3_0_FLASH_VL = "inclusionai/ling-3.0-flash-vl",
   INCLUSIONAI_LING_3_0_FLASH_VL_FREE = "inclusionai/ling-3.0-flash-vl:free",
   INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
+  INCLUSIONAI_LING_3_0_TINY = "inclusionai/ling-3.0-tiny",
   INCLUSIONAI_LING_3_0_TINY_FREE = "inclusionai/ling-3.0-tiny:free",
   INCLUSIONAI_LING_3_1_FLASH = "inclusionai/ling-3.1-flash",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
@@ -681,6 +686,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENGVLAB_INTERNVL3_78B = "opengvlab/internvl3-78b",
   OPENROUTER_AUTO = "openrouter/auto",
   OPENROUTER_AUTO_BETA = "openrouter/auto-beta",
+  OPENROUTER_AUTO_CODE = "openrouter/auto-code",
   OPENROUTER_BODYBUILDER = "openrouter/bodybuilder",
   OPENROUTER_ELEPHANT_ALPHA = "openrouter/elephant-alpha",
   OPENROUTER_FREE = "openrouter/free",
@@ -796,6 +802,7 @@ export enum PROVIDER_MODEL_TYPE {
   REKAAI_REKA_FLASH_3 = "rekaai/reka-flash-3",
   RELACE_RELACE_APPLY_3 = "relace/relace-apply-3",
   RELACE_RELACE_SEARCH = "relace/relace-search",
+  RICURSIVEAI_RIPPLE_65B_PREVIEW = "ricursiveai/ripple-65b-preview",
   SAKANA_FUGU_MAX = "sakana/fugu-max",
   SAKANA_FUGU_ULTRA = "sakana/fugu-ultra",
   SAKANA_FUGU_ULTRA_V2 = "sakana/fugu-ultra-v2",
@@ -807,6 +814,7 @@ export enum PROVIDER_MODEL_TYPE {
   SAO10K_L3_3_EURYALE_70B = "sao10k/l3.3-euryale-70b",
   SCALEDOWN_EXTRACT = "scaledown/extract",
   SCALEDOWN_SUMMARIZE = "scaledown/summarize",
+  STEALTH_CROUTON_ALPHA = "stealth/crouton-alpha",
   STEALTH_OX_ALPHA = "stealth/ox-alpha",
   STEALTH_SPACE_BUNNY_ALPHA = "stealth/space-bunny-alpha",
   STEALTH_UNION_ALPHA = "stealth/union-alpha",
@@ -824,6 +832,7 @@ export enum PROVIDER_MODEL_TYPE {
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
   TENCENT_HY3_FREE = "tencent/hy3:free",
+  TENCENT_HY4 = "tencent/hy4",
   TENCENT_HY4_PREVIEW = "tencent/hy4-preview",
   THEDRUMMER_ANUBIS_70B_V1_1 = "thedrummer/anubis-70b-v1.1",
   THEDRUMMER_CYDONIA_24B_V4_1 = "thedrummer/cydonia-24b-v4.1",
@@ -866,7 +875,9 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_3_BATCH = "x-ai/grok-4.3:batch",
   X_AI_GROK_4_5 = "x-ai/grok-4.5",
   X_AI_GROK_4_6 = "x-ai/grok-4.6",
+  X_AI_GROK_4_6_BATCH = "x-ai/grok-4.6:batch",
   X_AI_GROK_4_7 = "x-ai/grok-4.7",
+  X_AI_GROK_4_7_BATCH = "x-ai/grok-4.7:batch",
   X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
@@ -898,6 +909,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_3_FLASH = "z-ai/glm-5.3-flash",
   Z_AI_GLM_5_3_FLASH_BATCH = "z-ai/glm-5.3-flash:batch",
   Z_AI_GLM_5_3_FLASHX = "z-ai/glm-5.3-flashx",
+  Z_AI_GLM_5_3_FLASHX_LEGAL = "z-ai/glm-5.3-flashx-legal",
   Z_AI_GLM_5_3_PRIME = "z-ai/glm-5.3-prime",
   Z_AI_GLM_5_3_BATCH = "z-ai/glm-5.3:batch",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
@@ -965,6 +977,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_OMNI_1_2_FLASH = "gemini-omni-1.2-flash",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -1016,6 +1029,14 @@ export const OPENAI_PIPELINE_MODE_VALUES = [
 
 export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
 
+export const BEDROCK_API_VALUES = [
+  "chat_completions",
+  "anthropic_messages",
+  "converse",
+] as const;
+
+export type BedrockApi = (typeof BEDROCK_API_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -1030,6 +1051,7 @@ export interface ProviderKeyConfiguration {
   /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
    * and falls back to chat_completions_api on unknown values. */
   openai_pipeline_mode?: OpenAiPipelineMode;
+  bedrock_api?: BedrockApi;
 }
 
 /** Read-back sentinel for secret credential values: the backend never returns a stored secret,
@@ -1065,6 +1087,8 @@ export interface BaseProviderKey {
   created_at: string;
   provider: PROVIDER_TYPE;
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
+  // masked by the backend, or the string "null" when no key is stored
+  api_key?: string;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
   auth_config?: ProviderAuthConfig;

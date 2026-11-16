@@ -220,7 +220,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: main
-          fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js for TypeScript version update

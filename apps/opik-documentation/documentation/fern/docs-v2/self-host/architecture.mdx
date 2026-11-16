@@ -49,13 +49,40 @@ _You can find the full backend codebase in GitHub under the [`apps/opik-backend`
 
 Opik includes a Python backend service (Flask + Gunicorn) that handles workloads requiring Python execution:
 
-- **Evaluators**: Executes custom Python evaluation code in sandboxed subprocesses with configurable timeouts, memory limits, and network isolation.
+- **Evaluators**: Executes custom Python evaluation code, either in worker processes inside the service or in isolated containers, depending on the configured execution strategy (see [Python code execution](#python-code-execution)).
 - **Optimization Studio**: Runs LLM-based optimization and prompt engineering workflows with concurrent job management.
 - **Background jobs**: Uses Redis Queue (RQ) for asynchronous job processing, including evaluation runs and optimization tasks.
 
 The Java backend calls the Python backend for evaluator execution, and both services share Redis for job coordination.
 
 _You can find the full Python backend codebase in GitHub under the [`apps/opik-python-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-python-backend) folder._
+
+### Python code execution
+
+Custom Python evaluators and Optimization Studio code metrics run code written by users of your Opik instance. The
+`PYTHON_CODE_EXECUTOR_STRATEGY` setting of the Python backend controls where that code runs:
+
+| Strategy | Where the code runs | Use it when |
+| --- | --- | --- |
+| `process` (default in the Helm chart and Docker Compose) | In worker processes inside the Python backend container. The code runs with the same user, environment variables and network access as the Python backend service. | Local or single-user deployments, where everyone who can create evaluators is trusted. |
+| `docker` (default of the `opik-python-backend` image when no strategy is set) | In a separate container per evaluation, started from the `opik-sandbox-executor-python` image. The container runs as a non-root user, has no network access unless `PYTHON_CODE_EXECUTOR_ALLOW_NETWORK` is `true`, and has a memory limit (`PYTHON_CODE_EXECUTOR_MEM_LIMIT`). CPU is a relative share by default; set `PYTHON_CODE_EXECUTOR_CPU_LIMIT` for a hard CPU limit. | Any deployment shared by users who should not have access to the Python backend's environment, credentials or network. |
+
+<Warning>
+  The `process` strategy is not a security boundary. If your instance is reachable by users you do not fully trust,
+  use the `docker` strategy. Turning off Python evaluators (see
+  [Configure Python code execution](/self-host/kubernetes#configure-python-code-execution)) does not cover Optimization
+  Studio code metrics, so it is not a substitute for the `docker` strategy.
+</Warning>
+
+The `docker` strategy launches containers from inside the Python backend, so the Python backend container must run
+in privileged mode (Docker-in-Docker). The Helm chart and Docker Compose configurations set this by default.
+
+For the `process` strategy, `PYTHON_CODE_EXECUTOR_PROCESS_NETWORK_ISOLATION=true` adds hardening: each evaluator
+worker runs as an unprivileged user with a minimal environment and cannot open network connections. It accepts `true`
+or `false` (empty means `false`), and any other value fails startup. The code still shares the Python backend
+container, so this does not replace the `docker` strategy for untrusted users.
+
+See [Kubernetes deployment](/self-host/kubernetes#configure-python-code-execution) for how to change the strategy.
 
 ## Frontend Application
 

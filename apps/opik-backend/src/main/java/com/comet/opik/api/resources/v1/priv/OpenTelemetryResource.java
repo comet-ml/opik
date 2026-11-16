@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.OpenTelemetryService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
@@ -37,6 +38,7 @@ public class OpenTelemetryResource {
     @Path("/traces")
     @POST
     @Consumes("application/x-protobuf")
+    @UsageLimited
     public Response receiveProtobufTraces(
             @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotNull @Valid ExportTraceServiceRequest request) {
         return handleOtelTraceRequest(request);
@@ -45,6 +47,7 @@ public class OpenTelemetryResource {
     @Path("/traces")
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
+    @UsageLimited
     public Response receiveJsonTraces(
             @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotNull @Valid ExportTraceServiceRequest request) {
         return handleOtelTraceRequest(request);

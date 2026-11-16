@@ -329,3 +329,26 @@ async def test__session_completeness_quality__empty_conversation__raises_error__
     )
     with pytest.raises(exceptions.MetricComputationError):
         await metric.ascore(conversation=conversation)
+
+
+def test__session_completeness_quality__punctuated_no_verdict__counts_as_unmet(
+    simple_conversation, mock_model
+):
+    """A drifted verdict must not silently inflate the score.
+
+    The prompt asks for STRICTLY ``yes``/``no`` but the schema accepts any
+    string, and models drift. Before the shared normalizer, ``"No."`` passed
+    the ``!= "no"`` comparison and an unmet goal counted as addressed.
+    """
+    mock_model.generate_chat_completion.side_effect = _assistant_messages(
+        '{"user_goals": ["Find a chocolate cake recipe", "Plan a weekend trip to the mountains"]}',
+        '{"verdict": "No.", "reason": "No recipe was provided."}',
+        '{"verdict": "No.", "reason": "No packing advice was provided."}',
+        '{"reason": "Neither goal was addressed."}',
+    )
+
+    metric = SessionCompletenessQuality(model=mock_model, track=False)
+    result = metric.score(simple_conversation)
+
+    assert_helpers.assert_score_result(result)
+    assert result.value == 0.0

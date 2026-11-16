@@ -1,17 +1,15 @@
 import { test, expect } from '@e2e/fixtures';
 import { TestSuitesPage } from '@e2e/pom/test-suites.page';
 import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
-import { ensureModelAvailable } from '@e2e/pom/model-availability';
-import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
-import { assertAllowedModelId } from '@e2e/core/llm-model-policy';
+import { ensureMockModelAvailable } from '@e2e/pom/model-availability';
 
-test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area:test-suites'] }, () => {
+test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites'] }, () => {
   /**
    * Test A — SDK-create + SDK-run + UI-verify.
    *
    * The `testSuite` fixture seeds a suite with 3 items + 2 tautological
-   * LLM-judged assertions. The SDK-run uses task_output="PASS" so the LLM
-   * judge's verdict is mechanically predictable (3/3 pass).
+   * LLM-judged assertions. The judge runs in the SDK driver, whose LiteLLM calls
+   * go to the mock gateway (playwright.config.ts), so its verdict is fixed: 3/3 pass.
    */
   test('SDK-seeded suite renders + SDK-run produces a 3/3 pass experiment', { tag: ['@cap:test-suites.list-suites', '@cap:test-suites.create-suite-sdk', '@cap:test-suites.view-suite-items', '@cap:test-suites.run-suite-sdk', '@cap:test-suites.pass-rate-display', '@cap:test-suites.global-assertions'] }, async ({
     testSuite,
@@ -21,35 +19,11 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area
   }) => {
     test.setTimeout(120_000);
 
-    // The LLM judge runs inside the SDK bridge via LiteLLM, which reads the
-    // provider key from the bridge process env (not the backend-stored key).
-    // Without a key every judge call raises AuthenticationError and the run
-    // reports 0 passing items. CI injects these secrets; locally they may be
-    // absent — skip rather than fail, mirroring Test B's ensureModelAvailable.
-    test.skip(
-      !process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY,
-      'Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set',
-    );
-
     const experimentName = `${testSuite.name}-sdk-run`;
-    // Match the judge model to whichever provider key the bridge has (Anthropic
-    // preferred, OpenAI fallback) so the LiteLLM judge can authenticate.
-    // anthropicKeyUsable(), not process.env: the driver is a Playwright
-    // webServer spawned before globalSetup, so it still holds a key the
-    // preflight found dead. Asking the helper keeps the model we request and
-    // the credential the driver actually has in agreement.
     // gpt-5-mini, not gpt-4o-mini: the SDK's LLM-judge metric always sends
-    // reasoning_effort (DEFAULT_REASONING_EFFORT in llm_judge/config.py), and
-    // non-reasoning OpenAI models reject it outright —
-    // `litellm.UnsupportedParamsError: openai does not support parameters:
-    // ['reasoning_effort']`. The fallback was unreachable until now, so this
-    // had never surfaced.
-    const judgeModel = anthropicKeyUsable()
-      ? 'anthropic/claude-haiku-4-5'
-      : 'openai/gpt-5-mini';
-    // This id goes to the SDK, not a UI picker, so the picker guard cannot see
-    // it — assert it here against the same allowlist.
-    assertAllowedModelId(judgeModel);
+    // reasoning_effort, and LiteLLM rejects it client-side for non-reasoning
+    // OpenAI models before the request reaches any gateway.
+    const judgeModel = 'openai/gpt-5-mini';
 
     await test.step('SDK-trigger a run against the seeded suite', async () => {
       const result = await sdkClient.python.runTestSuite({
@@ -60,12 +34,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area
         judge_model: judgeModel,
       });
       expect(result.items_total).toBe(3);
-      // Assertions are tautological ("contains literal text PASS" + "non-empty"),
-      // and the task returns the literal "PASS". The LLM judge should mark all
-      // items as passing — but LLM responses carry small residual variance.
-      // Allow some slack: require at least 2/3 passing so the smoke is robust
-      // to transient judge stochasticity without being a hollow assertion.
-      expect(result.items_passed).toBeGreaterThanOrEqual(2);
+      expect(result.items_passed).toBe(3);
       expect(result.experiment_id).not.toBeNull();
     });
 
@@ -104,6 +73,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area
     backendClient,
     testNamespace,
     page,
+    providerKeys,
   }) => {
     test.setTimeout(180_000);
 
@@ -167,12 +137,11 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@llm-daily', '@area
         .toBeGreaterThanOrEqual(1);
     });
 
-    const modelDisplayName = await test.step('Ensure a model is available via the Configuration UI', async () => {
-      return ensureModelAvailable(page);
+    const modelDisplayName = await test.step('Provision a mock-gateway model', async () => {
+      return ensureMockModelAvailable(providerKeys, testNamespace);
     });
 
     await test.step('Open the suite in the Prompt Playground and configure a deterministic variant', async () => {
-      // Re-navigate to the suite items page (the Config nav above moved us off it).
       await items.goto();
       await items.waitForReady();
       const playground = await items.openInPlayground();

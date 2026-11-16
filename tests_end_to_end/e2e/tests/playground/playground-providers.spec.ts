@@ -6,6 +6,7 @@ import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { ConfigurationPage, type ProviderName } from '@e2e/pom/configuration.page';
 import { registerUnbilledModel } from '@e2e/core/llm-model-policy';
+import { mockAuthBaseUrl, mockAuthBaseUrlForBackend, mockAuthSkipReason } from '@e2e/core/mock-auth';
 
 interface ModelEntry {
   name: string;
@@ -52,8 +53,8 @@ const enabled = Object.values(config.providers).flatMap((p) =>
 );
 
 /**
- * Provider sanity tests — NOT in @t1-smoke. Tagged @provider-sanity so they run
- * on a separate cadence (no deploy-gating, no per-PR cost). Each test:
+ * Provider sanity tests — NOT in @t1-smoke. Tagged @llm-daily: this is the suite's
+ * one real-provider check, run once a day on a throwaway stack. Each test:
  *   1. Skips cleanly if the provider's API key env var is absent.
  *   2. Self-provisions the provider key via the AI Providers config UI (idempotent).
  *   3. Runs a simple prompt + model-options tweak via the Playground.
@@ -63,7 +64,7 @@ const enabled = Object.values(config.providers).flatMap((p) =>
 // declare them before any of them reaches the model guard.
 for (const name of ['mock-model-static', 'mock-model-oauth']) registerUnbilledModel(name);
 
-test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@area:playground', '@cap:playground.select-model-provider'] }, () => {
+test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@llm-daily', '@area:playground', '@cap:playground.select-model-provider'] }, () => {
   for (const { provider, model } of enabled) {
     test(`${provider.display_name} ${model.name} returns a completion`, async ({
       project,
@@ -77,6 +78,15 @@ test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@ar
         (provider.api_key_env_var ? process.env[provider.api_key_env_var] : undefined);
       test.skip(!apiKey && !auth, `${provider.api_key_env_var} not set in this env`);
 
+      // The mock entries name the mock as this runner reaches it; the backend may reach it
+      // elsewhere (docker0 in CI), and a remote backend not at all.
+      const onMock = provider.provider_type === 'custom' && provider.base_url.startsWith(mockAuthBaseUrl);
+      if (onMock) {
+        const reason = await mockAuthSkipReason();
+        test.skip(reason !== null, reason ?? '');
+      }
+      const forBackend = (url: string) => url.replace(mockAuthBaseUrl, mockAuthBaseUrlForBackend);
+
       const offered = await test.step(
         `Ensure ${provider.provider_name} provider key is configured`,
         async () => {
@@ -85,12 +95,12 @@ test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@ar
           if (provider.provider_type === 'custom') {
             return cfg.ensureCustomProviderConfigured({
               providerName: provider.provider_name,
-              baseUrl: provider.base_url,
+              baseUrl: forBackend(provider.base_url),
               apiKey,
               models: provider.models.map((m) => m.name).join(','),
               ...(auth && {
                 auth: {
-                  tokenUrl: auth.token_url,
+                  tokenUrl: forBackend(auth.token_url),
                   clientId: auth.client_id,
                   clientSecret: auth.client_secret,
                 },

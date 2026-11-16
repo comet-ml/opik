@@ -4,6 +4,7 @@ import { loadEnvConfig } from '../config/env.config';
 import { assertAllowedModelDisplayName } from '@e2e/core/llm-model-policy';
 import { PromptLibraryMenu } from './prompt-library-menu';
 import { readRecordedToasts, startRecordingToasts } from './toast-recorder';
+import { waitForAssistantSidebarLoaded } from './assistant-sidebar';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
@@ -189,6 +190,7 @@ export class PlaygroundPage {
         .waitFor({ state: 'visible' });
       // Variant card "A" should be mounted with its model picker.
       await this.modelPicker(0).waitFor({ state: 'visible' });
+      await waitForAssistantSidebarLoaded(this.page);
     });
   }
 
@@ -370,18 +372,32 @@ export class PlaygroundPage {
     entityName: string;
   }): Promise<void> {
     return test.step(`select ${args.mode} "${args.entityName}" for run experiment`, async () => {
-      const optionTestId =
+      const option = this.page.getByTestId(
         args.mode === 'test_suite'
           ? 'run-experiment-source-test-suite'
-          : 'run-experiment-source-dataset';
-      await this.page.getByTestId(optionTestId).click();
-
-      // The inline source selector auto-opens. Search and pick the entity by
-      // name; clicking the row selects the latest version and commits.
+          : 'run-experiment-source-dataset',
+      );
       const listbox = this.page.getByRole('listbox');
-      await listbox.waitFor({ state: 'visible' });
-      await listbox.getByPlaceholder('Search').fill(args.entityName);
-      await listbox.getByText(args.entityName, { exact: true }).first().click();
+
+      // Retried from the entry menu because the Ollie sidebar focuses its chat
+      // input when its iframe finishes loading, a few seconds after navigation.
+      // That focus move dismisses the auto-opened selector, and dismissing it
+      // drops the page back to the bare "Run experiment" button.
+      await expect(async () => {
+        if (!(await listbox.isVisible())) {
+          if (!(await option.isVisible())) {
+            await this.runExperimentTriggerButton().click({ timeout: 5_000 });
+          }
+          await option.click({ timeout: 5_000 });
+          await listbox.waitFor({ state: 'visible', timeout: 5_000 });
+        }
+        // Clicking the row selects the latest version and commits.
+        await listbox.getByPlaceholder('Search').fill(args.entityName, { timeout: 5_000 });
+        await listbox
+          .getByText(args.entityName, { exact: true })
+          .first()
+          .click({ timeout: 5_000 });
+      }).toPass({ timeout: 45_000 });
 
       await expect(this.loadedSourcePill()).toContainText(args.entityName);
     });
@@ -671,17 +687,16 @@ export class PlaygroundPage {
   }
 
   /**
-   * Fire the Run-all keyboard shortcut.
+   * Fire the Run-all keyboard shortcut, Cmd/Ctrl+Enter (`usePlaygroundRunHotkey`).
    *
-   * `PlaygroundHeader` listens on `window` in the CAPTURE phase and returns
-   * early on `isRunDisabled`, so the shortcut reaches the handler whatever has
-   * focus — including the CodeMirror message editor a variant's configuration
-   * leaves focused. That is why this does not park focus anywhere first: doing
-   * so would test a path the keyboard handler does not have.
+   * The handler ignores the key while any listbox, dialog or menu is open, and with
+   * more than one prompt it runs only the prompt card that holds focus. So focus is
+   * dropped first: from no focused control the shortcut means "run all".
    */
   async pressRunAllHotkey(): Promise<void> {
-    return test.step('press Shift+Enter', async () => {
-      await this.page.keyboard.press('Shift+Enter');
+    return test.step('press Cmd/Ctrl+Enter', async () => {
+      await this.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await this.page.keyboard.press('ControlOrMeta+Enter');
     });
   }
 
@@ -1306,6 +1321,10 @@ export class PlaygroundPage {
       await option.click();
 
       await expect(this.loadedSourceVersionLabel()).toHaveText(args.versionName);
+      // Picking from the version submenu leaves the source list open, and the run
+      // shortcut is ignored while any listbox is.
+      if (await listbox.isVisible()) await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
     });
   }
 

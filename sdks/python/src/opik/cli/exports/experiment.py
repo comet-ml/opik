@@ -104,41 +104,38 @@ def _write_trace_file(
     force: bool,
     debug: bool,
 ) -> bool:
-    """Write a single trace to file. Returns True if exported, False if skipped."""
-    try:
-        # Save trace directly in the project directory
-        project_dir.mkdir(parents=True, exist_ok=True)
+    """Write a single trace to file.
 
-        # Determine file path based on format
-        if format.lower() == "csv":
-            file_path = project_dir / f"trace_{trace_id}.csv"
-        else:
-            file_path = project_dir / f"trace_{trace_id}.json"
+    Returns True if exported and False if skipped because the file already
+    exists. Write errors are not swallowed: they propagate so callers can
+    count them as failures instead of reporting a successful export.
+    """
+    # Save trace directly in the project directory
+    project_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check if file already exists and should be skipped
-        if should_skip_file(file_path, force):
-            if debug:
-                debug_print(f"Skipping trace {trace_id} (already exists)", debug)
-            return False
+    # Determine file path based on format
+    if format.lower() == "csv":
+        file_path = project_dir / f"trace_{trace_id}.csv"
+    else:
+        file_path = project_dir / f"trace_{trace_id}.json"
 
-        # Save to file using the appropriate format
-        if format.lower() == "csv":
-            write_csv_data(trace_data, file_path, trace_to_csv_rows)
-            if debug:
-                debug_print(f"Wrote CSV file: {file_path}", debug)
-        else:
-            write_json_data(trace_data, file_path)
-            if debug:
-                debug_print(f"Wrote JSON file: {file_path}", debug)
-
-        return True
-    except Exception as e:
-        console.print(f"[red]Error writing trace {trace_id} to file: {e}[/red]")
+    # Check if file already exists and should be skipped
+    if should_skip_file(file_path, force):
         if debug:
-            import traceback
-
-            debug_print(f"Traceback: {traceback.format_exc()}", debug)
+            debug_print(f"Skipping trace {trace_id} (already exists)", debug)
         return False
+
+    # Save to file using the appropriate format
+    if format.lower() == "csv":
+        write_csv_data(trace_data, file_path, trace_to_csv_rows)
+        if debug:
+            debug_print(f"Wrote CSV file: {file_path}", debug)
+    else:
+        write_json_data(trace_data, file_path)
+        if debug:
+            debug_print(f"Wrote JSON file: {file_path}", debug)
+
+    return True
 
 
 def _scan_downloaded_trace_ids(project_dir: Path, format: str) -> Set[str]:
@@ -169,15 +166,16 @@ def export_collected_trace_ids(
     force: bool,
     manifest: Optional[ExportManifest] = None,
     filter_string: Optional[str] = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export a collected set of trace IDs, applying the optional limit.
 
     This is the common tail of both the ``export experiment`` and ``export all``
     flows: cap ``all_trace_ids`` to *max_limit*, print a status line, then
-    delegate to :func:`export_traces_by_ids`.  Returns ``(exported, skipped)``.
+    delegate to :func:`export_traces_by_ids`.  Returns
+    ``(exported, skipped, failed)``.
     """
     if not all_trace_ids:
-        return 0, 0
+        return 0, 0, 0
     trace_ids_list = list(all_trace_ids)
     if max_limit:
         trace_ids_list = trace_ids_list[:max_limit]
@@ -210,7 +208,7 @@ def export_traces_by_ids(
     force: bool,
     manifest: Optional[ExportManifest] = None,
     filter_string: Optional[str] = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export traces by their IDs using parallel batch processing.
 
     Traces are saved directly in the project directory (``project_dir``).
@@ -219,6 +217,12 @@ def export_traces_by_ids(
     Already-downloaded traces are skipped before any API call is made:
     - When *manifest* is provided its downloaded-ID set is used for the check.
     - Otherwise the project directory is scanned for existing trace files.
+
+    Returns ``(exported, skipped, failed)``. *skipped* counts traces that were
+    already downloaded, excluded by *filter_string*, or returned ``None`` for an
+    unresolvable ID (for example a 404). *failed* counts traces whose fetch or
+    write raised. ``manifest.complete()`` runs only when *failed* is 0, so an
+    interrupted export resumes on the next run.
     """
     exported_count = 0
     skipped_count = 0
@@ -228,7 +232,7 @@ def export_traces_by_ids(
         trace_ids = trace_ids[:max_traces]
 
     if not trace_ids:
-        return 0, 0
+        return 0, 0, 0
 
     # Record start time before first API call so manifest.complete() can store it.
     export_start_time = datetime.now(timezone.utc).isoformat()
@@ -361,9 +365,14 @@ def export_traces_by_ids(
                                 skipped_count += 1
                         except Exception as e:
                             failed_count += 1
+                            console.print(
+                                f"[red]Error writing trace {trace_id}: {e}[/red]"
+                            )
                             if debug:
-                                console.print(
-                                    f"[red]Error writing trace {trace_id}: {e}[/red]"
+                                import traceback
+
+                                debug_print(
+                                    f"Traceback: {traceback.format_exc()}", debug
                                 )
                         finally:
                             progress.update(
@@ -382,7 +391,7 @@ def export_traces_by_ids(
     if manifest and failed_count == 0:
         manifest.complete(export_start_time)
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, failed_count
 
 
 def export_experiment_by_id(
@@ -779,7 +788,7 @@ def export_experiment_by_name(
             if len(experiments) == 1
             else None
         )
-        traces_exported, traces_skipped = export_collected_trace_ids(
+        traces_exported, traces_skipped, traces_failed = export_collected_trace_ids(
             client,
             project_root,
             project_name,
@@ -792,6 +801,9 @@ def export_experiment_by_name(
             filter_string=filter_string,
         )
 
+        if traces_failed:
+            had_errors = True
+
         # Collect statistics for summary
         stats = {
             "experiments": exported_count,
@@ -802,10 +814,17 @@ def export_experiment_by_name(
             "prompts_skipped": prompts_skipped + aggregated_stats["prompts_skipped"],
             "traces": traces_exported,
             "traces_skipped": traces_skipped,
+            "traces_failed": traces_failed,
         }
 
         # Show export summary
         print_export_summary(stats, format)
+
+        if had_errors:
+            console.print(
+                "[bold yellow]Export completed with errors — some datasets, prompts or traces could not be exported.[/bold yellow]"
+            )
+            sys.exit(1)
 
         if exported_count > 0:
             if len(experiments) > 1:
@@ -820,12 +839,6 @@ def export_experiment_by_name(
             console.print(
                 f"[yellow]All {len(experiments)} experiment(s) with name '{name}' already exist (use --force to re-download)[/yellow]"
             )
-
-        if had_errors:
-            console.print(
-                "[bold yellow]Export completed with errors — some datasets or prompts could not be exported.[/bold yellow]"
-            )
-            sys.exit(1)
 
     except Exception as e:
         console.print(f"[red]Error exporting experiment: {e}[/red]")
@@ -926,22 +939,25 @@ def export_experiment_by_name_or_id(
             # so already-downloaded traces are skipped before any API call.
             traces_exported = 0
             traces_skipped = 0
+            traces_failed = 0
             if trace_ids_collector:
                 trace_ids_list = list(trace_ids_collector)
                 if max_traces:
                     trace_ids_list = trace_ids_list[:max_traces]
                 if len(trace_ids_list) > 0:
-                    traces_exported, traces_skipped = export_traces_by_ids(
-                        client,
-                        trace_ids_list,
-                        project_root,
-                        project_name,
-                        None,
-                        format,
-                        debug,
-                        force,
-                        manifest=exp_manifest,
-                        filter_string=filter_string,
+                    traces_exported, traces_skipped, traces_failed = (
+                        export_traces_by_ids(
+                            client,
+                            trace_ids_list,
+                            project_root,
+                            project_name,
+                            None,
+                            format,
+                            debug,
+                            force,
+                            manifest=exp_manifest,
+                            filter_string=filter_string,
+                        )
                     )
 
             # Collect statistics for summary
@@ -954,10 +970,17 @@ def export_experiment_by_name_or_id(
                 "prompts_skipped": exp_stats.get("prompts_skipped", 0),
                 "traces": traces_exported,
                 "traces_skipped": traces_skipped,
+                "traces_failed": traces_failed,
             }
 
             # Show export summary
             print_export_summary(stats, format)
+
+            if had_ds_errors or traces_failed:
+                console.print(
+                    "[bold yellow]Export completed with errors — some datasets or traces could not be exported.[/bold yellow]"
+                )
+                sys.exit(1)
 
             if file_written > 0:
                 console.print(
@@ -968,11 +991,6 @@ def export_experiment_by_name_or_id(
                     f"[yellow]Experiment '{experiment.name}' (ID: {experiment.id}) already exists (use --force to re-download)[/yellow]"
                 )
 
-            if had_ds_errors:
-                console.print(
-                    "[bold yellow]Export completed with errors — some datasets could not be exported.[/bold yellow]"
-                )
-                sys.exit(1)
             return
 
         except exceptions.ExperimentNotFound:

@@ -1,8 +1,8 @@
 package com.comet.opik.domain.evaluation;
 
 import com.comet.opik.api.FeedbackScoreItem;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import reactor.core.publisher.Mono;

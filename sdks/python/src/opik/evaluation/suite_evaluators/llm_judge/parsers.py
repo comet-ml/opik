@@ -143,7 +143,11 @@ class ResponseSchema:
 
         try:
             parsed = json.loads(content)
-            validated = self._response_model(**parsed)
+            # model_validate, not **parsed: valid JSON that is not an object (a
+            # list, a string, null) must fail as a ValidationError like any other
+            # malformed verdict, so it is retried and reported per assertion
+            # instead of escaping as a TypeError.
+            validated = self._response_model.model_validate(parsed)
 
             results = [
                 score_result.ScoreResult(

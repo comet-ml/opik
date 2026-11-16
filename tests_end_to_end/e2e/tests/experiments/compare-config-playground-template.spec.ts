@@ -125,11 +125,6 @@ test.describe('Experiment compare — Playground prompt template in the config',
 
       await test.step('The stored config holds the template, and only role and content', async () => {
         const metadata = await backendClient.getExperimentMetadata(experimentId);
-        const raw = metadata.messages;
-        // A string, because `getExperimentFromRun` stringifies the template —
-        // asserted rather than coerced, so a backend or frontend that started
-        // storing an object fails here instead of in a confusing JSON.parse.
-        expect(typeof raw, 'metadata.messages is stored as a JSON string').toBe('string');
 
         // Compared whole, against the text that was typed. This is the
         // assertion the spec exists for, and it is three claims at once: the
@@ -138,7 +133,12 @@ test.describe('Experiment compare — Playground prompt template in the config',
         // each message carries NOTHING but role and content — no `id`,
         // `promptId`, `promptVersionId` or `autoImprove` leaked out of the
         // editor's own state.
-        expect(JSON.parse(raw as string), 'the stored prompt template').toEqual([
+        //
+        // A JSON array, not a string: a dataset run is created by the server's
+        // experiment-execution endpoint, which stores `messages` structured, as
+        // test-suite runs always have. `toEqual` against the array still fails
+        // a stringified template rather than coercing it.
+        expect(metadata.messages, 'the stored prompt template').toEqual([
           { role: 'system', content: SYSTEM_TEMPLATE },
           { role: 'user', content: USER_TEMPLATE },
         ]);
@@ -151,15 +151,23 @@ test.describe('Experiment compare — Playground prompt template in the config',
           { id: experimentId, name: experimentName },
         ]);
 
-        const cell = await compare.configCellText('messages', experimentId);
-        expect(cell, 'the messages row for this experiment').toContain(SYSTEM_TEMPLATE);
-        expect(cell, 'the messages row for this experiment').toContain(USER_TEMPLATE);
-        // The other half of the same claim, on the surface a user reads: a cell
-        // showing a rendering would carry the first dataset item's values. Both
-        // columns, because the system message's variable is the one a
-        // single-variable check would miss.
-        for (const value of [dataset.items[0].input, dataset.items[0].expected_output]) {
-          expect(cell, "a dataset item's value baked into the config row").not.toContain(value);
+        // One row per message field, because the tab flattens structured
+        // metadata by path. Each content cell is matched exactly, which also
+        // rules out a rendering: that would carry the first dataset item's
+        // values in place of both `{{variables}}`.
+        const template = [
+          { role: 'system', content: SYSTEM_TEMPLATE },
+          { role: 'user', content: USER_TEMPLATE },
+        ];
+        for (const [index, message] of template.entries()) {
+          expect(
+            await compare.configCellText(`messages.${index}.role`, experimentId),
+            `the role row of message ${index}`,
+          ).toBe(message.role);
+          expect(
+            await compare.configCellText(`messages.${index}.content`, experimentId),
+            `the content row of message ${index}`,
+          ).toBe(message.content);
         }
       });
     },

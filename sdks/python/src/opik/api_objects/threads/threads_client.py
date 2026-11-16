@@ -68,6 +68,7 @@ class ThreadsClient:
                 - `start_time`, `end_time`, `created_at`, `last_updated_at`: DateTime (=, !=, >, >=, <, <=)
                 - `feedback_scores`: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
                 - `tags`, `annotation_queue_ids`: List (=, !=, contains, not_contains, is_empty, is_not_empty)
+                - `comments`: Whether the thread has comments (is_empty, is_not_empty)
                 - `duration`, `number_of_messages`: Numeric (=, !=, >, >=, <, <=)
 
                 Examples:
