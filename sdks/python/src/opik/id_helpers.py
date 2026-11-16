@@ -1,5 +1,9 @@
 from datetime import datetime
-from typing import Optional, TypeGuard, Any
+from typing import Optional, Any
+try:
+    from typing import TypeGuard
+except ImportError:
+    from typing_extensions import TypeGuard
 import random
 import string
 import uuid
