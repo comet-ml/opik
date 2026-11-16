@@ -290,6 +290,8 @@ anthropic:
     params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh, max]}}
   - id: "claude-fable-5-2"
     label: "Claude Fable 5.2"
+    structuredOutput: true
+    params: {temperature: {accepted: false}, topP: {accepted: false}, topK: {accepted: false}, maxOutputTokens: {max: 128000}, effort: {accepted: true, levels: [low, medium, high, xhigh, max]}}
   - id: "claude-mythos-5"
     label: "Claude Mythos 5"
     structuredOutput: true
