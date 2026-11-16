@@ -17,6 +17,15 @@ class _UnicodeTokenizer:
     This tokenizer keeps letters, digits and combining marks (such as Arabic
     harakat or Devanagari vowel signs) and splits on everything else. For ASCII
     text it produces exactly the same tokens as rouge-score's default tokenizer.
+
+    Text is Unicode-normalized to NFC before tokenizing, so canonically
+    equivalent spellings (e.g. a precomposed ``é`` and ``e`` + U+0301) yield the
+    same tokens instead of silently mismatching.
+
+    For scripts written without spaces between words (e.g. Chinese, Japanese,
+    Thai) each unsegmented run becomes a single token, so ``rouge1``/``rougeL``
+    still work but ``rouge2`` has no bigrams and scores 0.0 even for identical
+    text. Pass a word-segmenting ``tokenizer`` to ``ROUGE`` for those languages.
     """
 
     def __init__(self, use_stemmer: bool = False) -> None:
@@ -27,11 +36,24 @@ class _UnicodeTokenizer:
             self._stemmer = porter.PorterStemmer()
 
     def tokenize(self, text: str) -> List[str]:
-        text = "".join(
-            char if unicodedata.category(char)[0] in "LNM" else " "
-            for char in text.lower()
-        )
-        tokens = text.split()
+        # Normalize first so canonically equivalent spellings tokenize the same
+        # way; NFC leaves every ASCII character untouched.
+        text = unicodedata.normalize("NFC", text.lower())
+        chars: List[str] = []
+        seen_base = False  # a letter/digit has started the current run
+        for char in text:
+            category = unicodedata.category(char)[0]
+            if category in "LN":
+                chars.append(char)
+                seen_base = True
+            elif category == "M" and seen_base:
+                # Keep a combining mark only when it attaches to a base
+                # character; a leading mark would form an unmatchable token.
+                chars.append(char)
+            else:
+                chars.append(" ")
+                seen_base = False
+        tokens = "".join(chars).split()
         if self._stemmer is not None:
             # Like rouge-score, only stem words more than 3 characters long.
             tokens = [

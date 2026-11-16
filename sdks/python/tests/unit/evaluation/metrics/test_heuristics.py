@@ -1597,6 +1597,43 @@ def test_rouge_default_tokenizer_matches_rouge_score_for_ascii_text(use_stemmer)
         assert actual.tokenize(text) == expected.tokenize(text), text
 
 
+@pytest.mark.parametrize("rouge_type", ["rouge1", "rouge2", "rougeL", "rougeLsum"])
+def test_rouge_score_nfc_and_nfd_spellings_match(rouge_type):
+    # The same word spelled with a precomposed character (NFC) and with a base
+    # letter plus a combining mark (NFD) must tokenize identically, otherwise
+    # canonically equivalent text scores below 1.0.
+    import unicodedata
+
+    text = "Le café est très bon"
+    nfc = unicodedata.normalize("NFC", text)
+    nfd = unicodedata.normalize("NFD", text)
+    assert nfc != nfd  # guard: the two forms really do differ byte-for-byte
+
+    metric = rouge.ROUGE(rouge_type=rouge_type, track=False)
+    assert metric.score(output=nfd, reference=nfc).value == pytest.approx(1.0)
+
+
+def test_rouge_tokenizer_drops_leading_combining_mark():
+    # A combining mark with no preceding base character must not create a token
+    # that can never match a correctly ordered word.
+    tokenizer = rouge._UnicodeTokenizer()
+    assert tokenizer.tokenize("\u0301abc") == ["abc"]
+
+
+def test_rouge2_is_zero_for_identical_unsegmented_cjk():
+    # Documented limitation: without word segmentation an unsegmented CJK run is a
+    # single token, so there are no bigrams and rouge2 is 0.0 even for identical
+    # text, while rouge1 is still 1.0. Users should pass a word-segmenting
+    # tokenizer for such languages.
+    text = "我喜欢学习中文"
+    assert rouge.ROUGE(rouge_type="rouge1", track=False).score(
+        output=text, reference=text
+    ).value == pytest.approx(1.0)
+    assert rouge.ROUGE(rouge_type="rouge2", track=False).score(
+        output=text, reference=text
+    ).value == pytest.approx(0.0)
+
+
 def test_tone_empty_lexicons_disable_the_defaults():
     text = "This is terrible and useless."
 
