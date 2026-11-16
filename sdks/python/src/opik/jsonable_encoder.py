@@ -105,11 +105,12 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
         # Only booleans, integers and real floats are converted to Python
         # primitives. np.generic is too broad: .item() on datetime64[ns] returns
         # a raw int, and on longdouble returns another longdouble.
+        # np.timedelta64 subclasses np.integer but would lose its unit as an int.
         # np.float64 is a float subclass and is already returned by the check above.
         if np is not None:
             if isinstance(obj, np.bool_):
                 return bool(obj)
-            if isinstance(obj, np.integer):
+            if isinstance(obj, np.integer) and not isinstance(obj, np.timedelta64):
                 return int(obj)
             if isinstance(obj, np.floating):
                 return float(obj)

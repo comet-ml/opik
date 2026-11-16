@@ -167,6 +167,10 @@ def test_jsonable_encoder__numpy_datetime64__stays_readable_text():
     assert encoded == "2020-01-01T00:00:00.000000000"
 
 
+def test_jsonable_encoder__numpy_timedelta64__stays_text_with_unit():
+    assert jsonable_encoder.encode(np.timedelta64(5, "s")) == "5 seconds"
+
+
 def test_jsonable_encoder__numpy_scalars_inside_containers__converted():
     encoded = jsonable_encoder.encode(
         {"total": np.int64(6), "flags": [np.bool_(True)], "mean": np.float32(2.0)}
