@@ -8,6 +8,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -17,6 +18,7 @@ import com.fasterxml.uuid.Generators;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +42,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
@@ -114,13 +117,16 @@ class TopicsWindowSampleTest {
     }
 
     private TopicsRebuildService rebuildService;
+    private ConnectionFactory connectionFactory;
     private TopicsTestData data;
     private TopicsTestData.Traces traces;
 
     @BeforeAll
     void beforeAll(TransactionTemplate template, TransactionTemplateAsync clickHouseTemplate,
-            @Jit TopicsRebuildService rebuildService, @Jit TopicVectorsDAO vectorsDAO) {
+            @Jit TopicsRebuildService rebuildService, @Jit TopicVectorsDAO vectorsDAO,
+            ConnectionFactory connectionFactory) {
         this.rebuildService = rebuildService;
+        this.connectionFactory = connectionFactory;
         this.traces = weeklyTraces();
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, traces);
     }
@@ -132,12 +138,16 @@ class TopicsWindowSampleTest {
 
     @Test
     @DisplayName("a window over maxVectors builds on an even sample that sees weekdays and weekends, then every trace "
-            + "of the window gets a row of the run")
+            + "of the window gets a row of the run, and the run's counts are of the whole window, not of the sample")
     void sampleSeesTheWholeWindow() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
         int count = traces.traceIds().size();
         data.seed(workspaceId, projectId, 0, count);
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, traces.traceIds().stream()
+                .map(traceId -> TopicsTraces.TraceRow.shown(workspaceId, projectId, traceId,
+                        traces.createdAt().get(traces.traceIds().indexOf(traceId))))
+                .toList());
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(oneTopic(), 0)));
 
         var runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
@@ -163,6 +173,10 @@ class TopicsWindowSampleTest {
             // Every trace is near a centre of its kind, and every group is the one topic's.
             assertThat(row.topicId()).isEqualTo(topics.getFirst().id());
         });
+        // The topic's size is the sample's; the run's counts are the window's, with Other's row at zero.
+        assertThat(topics.getFirst().size()).isEqualTo(MAX_VECTORS);
+        assertThat(data.runCounts(workspaceId, runId))
+                .isEqualTo(Map.of(topics.getFirst().id(), (long) count, TraceTopic.OTHER, 0L));
     }
 
     /** One topic that takes every group. */
