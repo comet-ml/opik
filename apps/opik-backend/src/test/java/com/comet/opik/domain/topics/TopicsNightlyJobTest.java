@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.api.resources.v1.jobs.TopicsNightlyJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -30,6 +31,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
+import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -65,6 +67,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -72,6 +75,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -164,6 +168,7 @@ class TopicsNightlyJobTest {
     private TopicsTestData data;
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
+    private ConnectionFactory connectionFactory;
     private GuiceJobManager jobManager;
     private LockService lockService;
     private ClientSupport client;
@@ -173,7 +178,8 @@ class TopicsNightlyJobTest {
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager, LockService lockService,
             @Jit TopicsNightlyService nightlyService, @Jit TopicsFirstBuildService firstBuildService,
-            @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO) {
+            @Jit TopicsProjectRunner runner, @Jit TopicVectorsDAO vectorsDAO, @Jit TraceTopicsDAO traceTopicsDAO,
+            ConnectionFactory connectionFactory) {
         this.client = client;
         this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
@@ -186,6 +192,7 @@ class TopicsNightlyJobTest {
         this.runner = runner;
         this.vectorsDAO = vectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
+        this.connectionFactory = connectionFactory;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
                 FIXTURE.traceIds, FIXTURE.createdAt, FIXTURE.intents, FIXTURE.vectors, FIXTURE.night));
     }
@@ -588,24 +595,9 @@ class TopicsNightlyJobTest {
         template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM topic_prototypes WHERE topic_id = ?",
                 retiring.id().toString()));
         // A trace created an hour after the night's window ends, with a vector and the arrival row the old list gave.
-        int d = TopicsNightlyFixture.DIMENSIONS;
-        var vector = new ArrayList<Float>(d);
-        for (int t = 0; t < d; t++) {
-            vector.add(NIGHTLY.vectors[t]);
-        }
-        var traceId = ID_GENERATOR.generateId();
-        var createdAt = secondNight().atStartOfDay(ZoneOffset.UTC).toInstant().plus(Duration.ofHours(1));
-        vectorsDAO.insert(List.of(TopicVector.builder()
-                .workspaceId(workspaceId)
-                .projectId(projectId)
-                .traceId(traceId)
-                .traceCreatedAt(createdAt)
-                .taskVersion(1)
-                .embedModel(TopicVectorsTickService.EMBED_MODEL)
-                .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
-                .text(NIGHTLY.intents[0])
-                .vector(vector)
-                .build())).block();
+        var late = vectorAfterTheWindow(workspaceId, projectId);
+        var traceId = late.traceId();
+        var createdAt = late.traceCreatedAt();
         traceTopicsDAO.insert(List.of(TraceTopic.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
@@ -629,6 +621,56 @@ class TopicsNightlyJobTest {
                     assertThat(row.topicId()).isNotEqualTo(retiring.id());
                 });
         assertThat(data.state(projectId).labelsComplete()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a nightly update whose pass completes saves its window's traces per topic in the run's "
+            + "stats.topic_counts: the topic born that night counted, the topic retired that night absent, and a trace "
+            + "after the window's end left out")
+    void nightSavesTheWindowCounts() {
+        var workspaceId = enabledWorkspace();
+        var projectId = firstBuilt(workspaceId);
+        // One topic keeps no prototype, so it holds no trace tonight and retires.
+        var retiring = data.topics(projectId).getFirst();
+        template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM topic_prototypes WHERE topic_id = ?",
+                retiring.id().toString()));
+        var planted = plant(workspaceId, projectId);
+        var late = vectorAfterTheWindow(workspaceId, projectId);
+        // The counts read only the traces Logs lists: every trace gets its traces row.
+        var traces = new ArrayList<TopicsTraces.TraceRow>();
+        data.traceTopics(workspaceId, projectId).forEach(row -> traces.add(
+                TopicsTraces.TraceRow.shown(workspaceId, projectId, row.traceId(), row.traceCreatedAt())));
+        Stream.concat(planted.stream(), Stream.of(late)).forEach(vector -> traces.add(
+                TopicsTraces.TraceRow.shown(workspaceId, projectId, vector.traceId(), vector.traceCreatedAt())));
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, traces);
+        stubNightly(NAMED, sameAnswers());
+
+        assertThat(runNight(secondStart()).saved()).isEqualTo(1);
+
+        var update = nightlyRun(projectId);
+        var stats = json(update.stats());
+        var from = Instant.parse(stats.path("window_from").asText());
+        var until = Instant.parse(stats.path("window_until").asText());
+        assertThat(data.state(projectId).labelsComplete()).isTrue();
+        assertThat(allTopics(projectId)).filteredOn(topic -> topic.id().equals(retiring.id())).singleElement()
+                .satisfies(topic -> assertThat(topic.retiredAt()).isEqualTo(secondNight()));
+        var live = data.topics(projectId);
+        var born = live.stream().filter(topic -> topic.name().equals(NEW_THEME)).findFirst().orElseThrow();
+        // Each trace of the window by its latest row, as the count reads it; zero for a live topic with none.
+        var expected = new HashMap<UUID, Long>();
+        live.forEach(topic -> expected.put(topic.id(), 0L));
+        expected.put(TraceTopic.OTHER, 0L);
+        data.traceTopics(workspaceId, projectId).stream()
+                .filter(row -> !row.traceCreatedAt().isBefore(from) && row.traceCreatedAt().isBefore(until))
+                .forEach(row -> expected.merge(row.topicId(), 1L, Long::sum));
+
+        var counts = data.runCounts(workspaceId, update.runId());
+        assertThat(counts).isEqualTo(expected).doesNotContainKey(retiring.id());
+        assertThat(counts.get(born.id())).isPositive();
+        assertThat(counts.values().stream().mapToLong(Long::longValue).sum())
+                .isEqualTo(stats.path("window_traces").asLong());
+        assertThat(data.traceTopics(workspaceId, projectId)).filteredOn(row -> row.traceId().equals(late.traceId()))
+                .singleElement().satisfies(row -> assertThat(row.runId()).isEqualTo(update.runId().toString()));
     }
 
     @Test
@@ -852,12 +894,12 @@ class TopicsNightlyJobTest {
     }
 
     /** The {@value #PLANTED} traces of the nightly fixture's theme, created the day before the second night. */
-    private void plant(String workspaceId, UUID projectId) {
-        plant(workspaceId, projectId, 0, PLANTED);
+    private List<TopicVector> plant(String workspaceId, UUID projectId) {
+        return plant(workspaceId, projectId, 0, PLANTED);
     }
 
     /** The nightly fixture's traces {@code [from, from + count)}, created the day before the second night. */
-    private void plant(String workspaceId, UUID projectId, int from, int count) {
+    private List<TopicVector> plant(String workspaceId, UUID projectId, int from, int count) {
         int d = TopicsNightlyFixture.DIMENSIONS;
         var day = secondNight().minusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         var rows = new ArrayList<TopicVector>(count);
@@ -879,6 +921,29 @@ class TopicsNightlyJobTest {
                     .build());
         }
         vectorsDAO.insert(rows).block();
+        return rows;
+    }
+
+    /** The vector of a trace created an hour after the second night's window ends. */
+    private TopicVector vectorAfterTheWindow(String workspaceId, UUID projectId) {
+        int d = TopicsNightlyFixture.DIMENSIONS;
+        var vector = new ArrayList<Float>(d);
+        for (int t = 0; t < d; t++) {
+            vector.add(NIGHTLY.vectors[t]);
+        }
+        var row = TopicVector.builder()
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .traceId(ID_GENERATOR.generateId())
+                .traceCreatedAt(secondNight().atStartOfDay(ZoneOffset.UTC).toInstant().plus(Duration.ofHours(1)))
+                .taskVersion(1)
+                .embedModel(TopicVectorsTickService.EMBED_MODEL)
+                .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
+                .text(NIGHTLY.intents[0])
+                .vector(vector)
+                .build();
+        vectorsDAO.insert(List.of(row)).block();
+        return row;
     }
 
     /** The nightly fixture's trace nearest to {@link #tireCentre()}. */

@@ -652,9 +652,10 @@ the second naming for the rejected ones.
 The save is the first build's (see "Saving and labelling"): one MySQL transaction (the new topics, the changed
 columns of the topics it read, the project's prototypes, `rebuilds` + 1, `labels_complete = false`, the run `saved`),
 then the `trace_topics` insert of the traces the run read, then the labelling pass for the rest of the window, up to
-the save. A pass
-that does not finish is finished by the first-build job. The transaction checks that `last_run_id` is still the one
-the run read; if another run saved the project meanwhile, the run fails with `save` and writes nothing.
+the save. A pass that does not finish is finished by the first-build job. The pass that ends complete writes the
+run's `stats.topic_counts` too, over the run's window (`window_from` to `window_until`), not the traces past it. The
+transaction checks that `last_run_id` is still the one the run read; if another run saved the project meanwhile, the
+run fails with `save` and writes nothing.
 
 A night can retire every live topic. The save then keeps the topics' rows (retired) and the run, deletes the project's
 `topic_project_states` row and prototypes, and writes no `trace_topics` rows: the traces keep their last topics. The
