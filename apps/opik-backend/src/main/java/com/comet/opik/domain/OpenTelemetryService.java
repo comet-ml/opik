@@ -321,6 +321,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
                 .thenMany(Flux.fromIterable(ClaudePlatformTraces.traceUpdates(claudePlatformSpans).entrySet()))
+                .filter(entry -> !overriddenTraceIds.contains(entry.getKey()))
                 .concatMap(entry -> traceService.update(
                         entry.getValue().toBuilder().projectName(projectName).build(), entry.getKey()))
                 .then(Mono.defer(() -> {

@@ -1701,6 +1701,39 @@ class OpenTelemetryResourceTest {
                     JsonUtils.getJsonNodeFromString("{\"content\":[{\"type\":\"text\",\"text\":\"sales.csv\"}]}"));
         }
 
+        @Test
+        void claudeManagedAgentsTurnAttachedWithOpikTraceIdKeepsTheExistingTrace() {
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var projectName = "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var existingTrace = Trace.builder()
+                    .id(UUID_V7_GENERATOR.generate())
+                    .name("existing trace")
+                    .projectName(projectName)
+                    .startTime(Instant.now().minus(Duration.ofSeconds(5)))
+                    .input(JsonUtils.getJsonNodeFromString("{\"input\":\"original question\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\":\"original answer\"}"))
+                    .build();
+            traceResourceClient.createTrace(existingTrace, okApikey, workspaceName);
+
+            var otelTraceId = ByteString.copyFrom(UUID.randomUUID().toString().getBytes());
+            var turn = claudePlatformSpan(otelTraceId, null, "anthropic.session.turn", System.currentTimeMillis())
+                    .addAttributes(stringAttribute("opik.trace_id", existingTrace.id().toString()))
+                    .addAttributes(stringAttribute("anthropic.session.id", "sesn_attached"))
+                    .addAttributes(stringAttribute("gen_ai.input.messages", """
+                            [{"role":"user","parts":[{"type":"text","content":"turn question"}]}]"""))
+                    .addAttributes(stringAttribute("gen_ai.output.messages", """
+                            [{"role":"assistant","parts":[{"type":"text","content":"turn answer"}]}]"""))
+                    .build();
+
+            sendClaudePlatformSpans(List.of(turn), projectName, workspaceName);
+
+            var trace = traceResourceClient.getById(existingTrace.id(), workspaceName, okApikey);
+            assertThat(trace.input()).isEqualTo(existingTrace.input());
+            assertThat(trace.output()).isEqualTo(existingTrace.output());
+            assertThat(trace.threadId()).isNull();
+        }
+
         private Span.Builder claudePlatformSpan(ByteString otelTraceId, ByteString parentSpanId, String name,
                 long startTimeMs) {
             var span = Span.newBuilder()
