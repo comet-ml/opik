@@ -121,7 +121,6 @@ const useFilterChips = ({
 
   useEffect(() => {
     if (dropped.length === 0) return;
-    // eslint-disable-next-line no-console
     console.info(
       `[FilterChips] Sanitized ${urlFilters.length} filters from "${urlKey}": ${
         Object.keys(values).length
