@@ -73,7 +73,7 @@ const DatasetFieldsEditor: React.FunctionComponent<
               <button
                 key={field.name}
                 type="button"
-                className="flex"
+                className="flex rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary-active/40"
                 onClick={() => addRow(field.name, "value")}
               >
                 <Tag variant="blue" className="flex items-center gap-1">

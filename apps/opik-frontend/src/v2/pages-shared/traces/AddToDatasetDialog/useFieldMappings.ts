@@ -67,14 +67,14 @@ const useFieldMappings = ({
     [hasOnlySpans],
   );
 
-  const [additionalRows, setAdditionalRows] = useState<MappingRow[]>(() =>
+  const [addedRows, setAddedRows] = useState<MappingRow[]>(() =>
     chips.filter((chip) => enrichmentOptions[chip.option]).map(toManagedRow),
   );
 
   // Enrichment options also change from the basic-mode checkboxes, so the rows
   // follow them here rather than only from setManagedOption.
   useEffect(() => {
-    setAdditionalRows((prev) => {
+    setAddedRows((prev) => {
       const enabled = chips.filter((chip) => enrichmentOptions[chip.option]);
       const enabledIds = new Set<string>(enabled.map((chip) => chip.option));
       const kept = prev.filter(
@@ -91,13 +91,13 @@ const useFieldMappings = ({
   }, [chips, enrichmentOptions]);
 
   const customRows = useMemo(
-    () => additionalRows.filter((row) => row.kind === "custom"),
-    [additionalRows],
+    () => addedRows.filter((row) => row.kind === "custom"),
+    [addedRows],
   );
 
   const managedRows = useMemo(
-    () => additionalRows.filter((row) => row.kind === "managed"),
-    [additionalRows],
+    () => addedRows.filter((row) => row.kind === "managed"),
+    [addedRows],
   );
 
   const availableChips: QuickAddChip[] = useMemo(
@@ -186,7 +186,7 @@ const useFieldMappings = ({
   const addRow = useCallback((path: string) => {
     nextIdRef.current += 1;
     const id = `custom-${nextIdRef.current}`;
-    setAdditionalRows((prev) => [
+    setAddedRows((prev) => [
       ...prev,
       {
         id,
@@ -209,11 +209,11 @@ const useFieldMappings = ({
   }, []);
 
   const removeRow = useCallback((id: string) => {
-    setAdditionalRows((prev) => prev.filter((row) => row.id !== id));
+    setAddedRows((prev) => prev.filter((row) => row.id !== id));
   }, []);
 
   const renameRow = useCallback((id: string, name: string) => {
-    setAdditionalRows((prev) =>
+    setAddedRows((prev) =>
       prev.map((row) =>
         row.id === id ? { ...row, name, touched: true } : row,
       ),
@@ -221,7 +221,7 @@ const useFieldMappings = ({
   }, []);
 
   const setRowPath = useCallback((id: string, path: string) => {
-    setAdditionalRows((prev) =>
+    setAddedRows((prev) =>
       prev.map((row) =>
         row.id === id ? { ...row, path, touched: true } : row,
       ),
@@ -240,7 +240,7 @@ const useFieldMappings = ({
     customRows,
     managedRows,
     existingRows,
-    additionalRows: [...existingRows, ...additionalRows],
+    additionalRows: [...existingRows, ...addedRows],
     availableChips,
     rowErrors,
     isValid: isEmpty(rowErrors),

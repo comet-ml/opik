@@ -25,7 +25,7 @@ const QuickAddChips: React.FunctionComponent<QuickAddChipsProps> = ({
         <button
           key={chip.option}
           type="button"
-          className="flex"
+          className="flex rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary-active/40"
           onClick={() => onAdd(chip.option)}
         >
           <Tag variant="gray" className="text-foreground">

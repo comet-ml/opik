@@ -52,8 +52,7 @@ const AddDatasetItemForm: React.FC<AddDatasetItemFormProps> = ({
   const isDirty =
     rows.length !== columns.length ||
     rows.some(
-      (row, index) =>
-        row.name !== columns[index].name || row.value.trim() !== "",
+      (row, index) => row.name !== columns[index].name || row.value !== "",
     );
   useEffect(() => {
     setHasUnsavedChanges(isDirty);

@@ -152,6 +152,19 @@ describe("AddDatasetItemPanel", () => {
       expect(screen.getByText("Discard changes?")).toBeInTheDocument();
     });
 
+    it("asks before discarding a whitespace-only value", () => {
+      const onClose = vi.fn();
+      renderPanel(columns, { onClose });
+
+      fireEvent.change(screen.getByLabelText("input value"), {
+        target: { value: "  " },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByText("Discard changes?")).toBeInTheDocument();
+    });
+
     it("blocks saving while a field name is duplicated", () => {
       renderPanel(columns);
 
