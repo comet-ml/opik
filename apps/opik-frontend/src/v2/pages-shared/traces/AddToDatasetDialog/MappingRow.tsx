@@ -1,5 +1,5 @@
 import React from "react";
-import { MessageCircleWarning } from "lucide-react";
+import { MessageCircleWarning, X } from "lucide-react";
 
 import { Input } from "@/ui/input";
 import { Tag } from "@/ui/tag";
@@ -126,6 +126,7 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
       name={renderName()}
       value={renderSource()}
       removeLabel={`Remove ${row.name || "field"}`}
+      removeIcon={<X />}
       onRemove={onRemove}
       message={
         <>

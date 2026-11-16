@@ -27,9 +27,6 @@ import useMappingSampleEntities from "./useMappingSampleEntities";
 const fieldCountLabel = (count: number) =>
   `${count} ${count === 1 ? "field" : "fields"}`;
 
-const itemCountLabel = (count: number) =>
-  `${count} ${count === 1 ? "item" : "items"}`;
-
 const entityCountLabel = (count: number, hasOnlySpans: boolean) => {
   const entity = hasOnlySpans ? "span" : "trace";
   return `${count} ${count === 1 ? entity : `${entity}s`}`;
@@ -149,12 +146,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       defaultValue="metadata"
       className="mb-4"
     >
-      <AccordionItem value="metadata" className="border-t">
-        <AccordionTrigger>
-          {type === "trace"
-            ? "Trace metadata configuration"
-            : "Span metadata configuration"}
-        </AccordionTrigger>
+      <AccordionItem value="metadata" className="border-none">
+        <AccordionTrigger>Additional fields</AccordionTrigger>
         <AccordionContent className="px-3">
           <div className="grid grid-cols-2 gap-3">
             {includeNestedSpans &&
@@ -240,7 +233,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           }
         >
           {itemCount > 0
-            ? `Add ${itemCountLabel(itemCount)}`
+            ? `Add ${entityCountLabel(itemCount, hasOnlySpans)}`
             : "Add to dataset"}
         </Button>
       </div>

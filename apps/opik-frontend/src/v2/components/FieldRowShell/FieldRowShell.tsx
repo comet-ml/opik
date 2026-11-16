@@ -10,6 +10,7 @@ type FieldRowShellProps = {
   message?: React.ReactNode;
   removeLabel: string;
   removeTooltip?: string;
+  removeIcon?: React.ReactNode;
   onRemove?: () => void;
   className?: string;
   "data-testid"?: string;
@@ -23,6 +24,7 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
   message,
   removeLabel,
   removeTooltip,
+  removeIcon = <Trash />,
   onRemove,
   className,
   "data-testid": testId,
@@ -36,18 +38,19 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
         </div>
         <div className="min-w-0 flex-1">{value}</div>
       </div>
-      <TooltipWrapper content={onRemove ? removeTooltip : undefined}>
-        <Button
-          variant="minimal"
-          size="icon-2xs"
-          aria-label={removeLabel}
-          disabled={!onRemove}
-          onClick={onRemove}
-          className="h-auto shrink-0 self-stretch rounded-none border-l border-border hover:bg-primary-foreground"
-        >
-          <Trash />
-        </Button>
-      </TooltipWrapper>
+      {onRemove && (
+        <TooltipWrapper content={removeTooltip}>
+          <Button
+            variant="minimal"
+            size="icon-2xs"
+            aria-label={removeLabel}
+            onClick={onRemove}
+            className="h-auto shrink-0 self-stretch rounded-none border-l border-border hover:bg-primary-foreground"
+          >
+            {removeIcon}
+          </Button>
+        </TooltipWrapper>
+      )}
     </div>
     {message}
   </div>
