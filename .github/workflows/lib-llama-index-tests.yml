@@ -57,14 +57,24 @@ jobs:
           uv pip install --system -r test_requirements.txt
 
       - name: Install lib
-        # NLTK >=3.10.4 refuses data that is hardlinked (uv's default link mode) or in a
-        # directory others can write to, which includes the stopwords llama-index bundles.
+        # NLTK >=3.10.4 refuses hardlinked data files, uv's default link mode, which
+        # includes the stopwords llama-index bundles in its NLTK cache.
         env:
           UV_LINK_MODE: copy
         run: |
-          umask 022
           cd ./tests
           uv pip install --system -r library_integration/llama_index/requirements.txt
+
+      - name: Make llama-index's NLTK cache private
+        # NLTK >=3.10.4 also refuses a data directory that is group- or world-writable,
+        # and the installed cache directory is group-writable on the runner.
+        run: |
+          nltk_cache="$(python -c 'import os, llama_index.core as core; print(os.path.join(os.path.dirname(core.__file__), "_static", "nltk_cache"))')"
+          echo "uid $(id -u), umask $(umask)"
+          stat -c '%a %U:%G %n' "$nltk_cache" "$nltk_cache/corpora" "$nltk_cache/corpora/stopwords"
+          getfacl -p "$nltk_cache" || true
+          chmod -R go-w "$nltk_cache"
+          stat -c '%a %U:%G %n' "$nltk_cache" "$nltk_cache/corpora" "$nltk_cache/corpora/stopwords"
 
       - name: Run tests
         run: |
