@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.vertexai;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
-import com.comet.opik.domain.llm.ProviderFailures;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.http.OneShotRequestBodies;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
@@ -20,11 +19,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.hash.Hashing;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.google.genai.Client;
 import com.google.genai.types.ClientOptions;
 import com.google.genai.types.HttpOptions;
@@ -33,7 +30,6 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiChatModel;
 import dev.langchain4j.model.google.genai.GoogleGenAiStreamingChatModel;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -48,7 +44,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -196,14 +191,6 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     }
 
     /**
-     * The cause is carried redacted: the key-file parser can quote the key's own content in its message, such as an
-     * unrecognised {@code type} value, and this exception is logged with its cause.
-     */
-    private InternalServerErrorException failWithError(Exception e) {
-        return new InternalServerErrorException("Failed to create GoogleCredentials", ProviderFailures.redacted(e));
-    }
-
-    /**
      * The location is free-text in the configuration but reaches both the {@code locations/%s} resource path and the
      * endpoint lookup, both the configured overrides, keyed in this same lower-case form, and the SDK's own, which only
      * recognises the lower-case {@code eu} and {@code us} as multi-regions.
@@ -266,12 +253,7 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         var keyHash = Hashing.sha256()
                 .hashString(clientConfig.getVertexAIClient().scope() + "\n" + apiKey, StandardCharsets.UTF_8)
                 .toString();
-        try {
-            return scopedCredentialsByKeyHash.get(keyHash, () -> loadCredentials(apiKey, keyHash));
-        } catch (UncheckedExecutionException | ExecutionException e) {
-            Throwables.throwIfUnchecked(e.getCause());
-            throw failWithError((Exception) e.getCause());
-        }
+        return scopedCredentialsByKeyHash.asMap().computeIfAbsent(keyHash, hash -> loadCredentials(apiKey, hash));
     }
 
     private SharedTokenServiceAccountCredentials loadCredentials(String apiKey, String keyHash) {
