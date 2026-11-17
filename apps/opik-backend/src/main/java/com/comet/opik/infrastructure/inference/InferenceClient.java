@@ -224,7 +224,8 @@ public class InferenceClient {
      * {@code request_id}, and a {@code quota_exceeded} answer fails at once. So does {@code schema_violation}: the
      * service checks the answer against the schema, and the same bytes at temperature 0 give the same answer. The
      * request's {@code deadline_ms} is the caller's, if set, cut to the time left before {@code deadline} and to the
-     * lane's maximum; the read timeout is that deadline, as the service holds the connection until the model answers.
+     * lane's maximum; the read timeout is the base read timeout plus that deadline, as the service holds the connection
+     * until the model answers.
      */
     public Mono<GenerateResponse> generate(@NonNull GenerateRequest request, @NonNull Instant deadline) {
         Preconditions.checkArgument(!request.messages().isEmpty(), "a generate call takes at least one message");
@@ -246,7 +247,6 @@ public class InferenceClient {
                     .requestId(request.requestId() == null ? newRequestId() : request.requestId())
                     .deadlineMs(deadlineMs)
                     .build();
-            // Serialized once, so every retry sends the same bytes and the same request_id.
             var body = InferenceJson.writeBytes(withIds);
             return execute(Call.<GenerateResponse>builder()
                     .method(HttpMethod.POST)

@@ -52,9 +52,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * these counts are the only record of the run's. They are written once per run, and not for a list with no topic
  * prototype. A failed count read is logged and saves no counts: the labels are still marked complete.
  *
- * <p>The counts cover the run's window exactly, {@code [window_from, window_until)} as its {@code stats} name it,
- * whatever range the pass labels, so two runs' counts compare like with like. The Topics page counts a sliding window
- * that includes today, so its counts can differ from a run's by the traces of the days at the window's edges.
+ * <p>The counts cover the run's window exactly, {@code [window_from, window_until)} as its {@code stats} name it, so
+ * two runs' counts compare like with like. The Topics page counts a sliding window that includes today, so its counts
+ * can differ from a run's by the traces of the days at the window's edges.
  */
 @Slf4j
 @Singleton
@@ -65,7 +65,6 @@ public class TopicWindowLabelService {
     static final int CHUNK = 10_000;
     /** The traces a slice of the window holds on average. A page's read costs about its slice's keys. */
     static final int SLICE_TRACES = 50_000;
-    /** No page starts with less time than this to the deadline. */
     static final Duration MIN_PAGE_TIME = Duration.ofSeconds(10);
 
     private final @NonNull @Config("topics") TopicsConfig config;
@@ -95,10 +94,9 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * The saved list a pass labels with. The pass labels the traces created in {@code [from, to)}; the run's window is
-     * {@code [from, windowUntil)}, which the counts cover. {@code topicIds} are its live topics. {@code saveCounts} is true
-     * when a complete pass saves the run's counts: the list has a topic prototype and the run's labels are not complete
-     * yet.
+     * The saved list a pass labels with. The pass labels the traces created in {@code [from, to)}; the counts cover the
+     * run's window, {@code [from, windowUntil)}. {@code topicIds} are its live topics. {@code saveCounts} is true when
+     * a complete pass saves the run's counts: the list has a topic prototype and the run's labels are not complete yet.
      */
     private record Saved(UUID runId, Instant from, Instant to, Instant windowUntil, TopicAlgorithm.Labeller labeller,
             List<UUID> topicIds, boolean saveCounts) {
@@ -113,9 +111,9 @@ public class TopicWindowLabelService {
 
     /**
      * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
-     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete, only while the state
-     * still names that run. Never throws: a failure ends the pass, which says so. The caller holds the project's lock,
-     * as for a run: a run that saves meanwhile would make this pass label with a list that is no longer the project's.
+     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never throws: a
+     * failure ends the pass, which says so. The caller holds the project's lock, as for a run: a run that saves
+     * meanwhile would make this pass label with a list that is no longer the project's.
      */
     public Pass labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline,
             @NonNull Trigger trigger) {
@@ -187,8 +185,6 @@ public class TopicWindowLabelService {
                         + "'{}'; its labels stay as the newer run left them", runId, projectId);
             }
         } catch (RuntimeException exception) {
-            // A Jdbi statement error quotes the bound arguments: the exception types only, and a SQL error's state
-            // and code, as a failed run logs them.
             log.warn("Topics labelling pass could not mark run '{}' complete, project '{}', errors '{}'; the "
                     + "first-build job runs the pass again", runId, projectId,
                     ExceptionUtils
@@ -221,7 +217,6 @@ public class TopicWindowLabelService {
         return out;
     }
 
-    /** One pass's progress. */
     private final class Labelling {
 
         private final String workspaceId;
@@ -266,7 +261,7 @@ public class TopicWindowLabelService {
 
         /**
          * The run's window's traces per live topic and Other, zero for one with none. Too little time left cuts the
-         * pass, as a page does, so a later pass counts. A failed read is logged and gives no counts.
+         * pass, as a page does, so a later pass counts.
          */
         private Map<UUID, Long> count() {
             var left = timeLeft();
@@ -285,7 +280,6 @@ public class TopicWindowLabelService {
                     Thread.currentThread().interrupt();
                     throw new CutException("interrupted");
                 }
-                // The exception types only, as markComplete logs them: a ClickHouse error quotes the query.
                 log.warn("Topics labelling pass could not count run '{}', project '{}', errors '{}'; the run's "
                         + "counts are not saved", saved.runId(), projectId,
                         ExceptionUtils.getThrowableList(exception).stream().map(TopicsRebuildService::formatError)

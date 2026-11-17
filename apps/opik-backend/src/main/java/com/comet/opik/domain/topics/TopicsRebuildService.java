@@ -112,10 +112,7 @@ public class TopicsRebuildService {
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
     }
 
-    /**
-     * The vector has {@value #DIMENSIONS} values and a norm within {@value #UNIT_TOLERANCE} of 1. A NaN or infinite
-     * value fails too.
-     */
+    /** A NaN or infinite value fails too. */
     static boolean isUnit(@NonNull float[] values) {
         return values.length == DIMENSIONS && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
     }
@@ -128,12 +125,10 @@ public class TopicsRebuildService {
         return Math.sqrt(sum);
     }
 
-    /** ClickHouse {@code max_execution_time} of a run's read: {@value #READ_SECONDS} s, or the run's timeout if shorter. */
     static long readSeconds(@NonNull TopicsConfig.BuildConfig build) {
         return Math.min(READ_SECONDS, build.getProjectTimeout().toSeconds());
     }
 
-    /** Inserts the run as {@code running} and returns its id. */
     public UUID startRun(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull TopicRun.Mode mode) {
         var runId = idGenerator.generateId();
         template.inTransaction(WRITE, handle -> {
@@ -195,10 +190,7 @@ public class TopicsRebuildService {
         return Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
     }
 
-    /**
-     * One run's state while it builds: the stats it records and the phase timings. It is the algorithm's
-     * {@link TopicAlgorithm.Context}.
-     */
+    /** One run's state while it builds: the stats it records and the phase timings. */
     private final class Run implements TopicAlgorithm.Context {
 
         private final UUID runId;
@@ -421,7 +413,6 @@ public class TopicsRebuildService {
             return topics;
         }
 
-        /** The topic prototypes, each with its topic's id, then the known-Other ones, in the algorithm's order. */
         private List<TopicPrototype> prototypes(TopicAlgorithm.FirstBuild built, List<Topic> topics) {
             var prototypes = new ArrayList<TopicPrototype>(
                     built.topicPrototypes().size() + built.otherPrototypes().size());
@@ -556,7 +547,6 @@ public class TopicsRebuildService {
             metrics.run(workspaceId, TopicRun.Status.SAVED, null);
             metrics.saved(workspaceId, "topics", topics.size());
             metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
-            // The value the run saved in its stats, not computed again.
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             int inserted = insertTraceTopics(traceTopics) ? traceTopics.size() : 0;
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', prototypes '{}'", runId,
@@ -567,9 +557,7 @@ public class TopicsRebuildService {
             stats.set("seconds", seconds);
             var message = StringUtils.defaultIfBlank(ExceptionUtils.getMessage(exception), code.getValue());
             if (TEXT_CODES.contains(code)) {
-                // A cause can quote the answer (a Jackson parse error does) or the save's bound arguments (a Jdbi
-                // statement error does): the exception types only, and a SQL error's state and code, never their
-                // messages or stack. The answer's length and SHA-256 are logged when it arrives.
+                // The answer's length and SHA-256 are logged when it arrives.
                 log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}'", runId, projectId,
                         code.getValue(), ExceptionUtils.getThrowableList(exception).stream()
                                 .map(TopicsRebuildService::formatError).toList());
@@ -604,6 +592,10 @@ public class TopicsRebuildService {
         }
     }
 
+    /**
+     * The type, and a SQL error's state and code, never the message: a Jackson, Jdbi or ClickHouse error can quote the
+     * answer, the bound arguments or the query, which can hold trace text.
+     */
     static String formatError(Throwable throwable) {
         return throwable instanceof SQLException sql
                 ? "%s(state %s, code %s)".formatted(sql.getClass().getName(), sql.getSQLState(), sql.getErrorCode())
@@ -615,7 +607,6 @@ public class TopicsRebuildService {
             TreeMap<Long, Integer> versions) {
     }
 
-    /** What the save reads of a window trace. */
     private record WindowTrace(UUID traceId, Instant traceCreatedAt) {
     }
 

@@ -36,15 +36,10 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     static final int AUTHOR_MAX_TOKENS = 2500;
     static final String AUTHOR_TAG = "author";
 
-    /**
-     * The first build's number of fine groups: min({@value #MAX_GROUPS}, max({@value #MIN_GROUPS}, unique /
-     * {@value #TEXTS_PER_GROUP})), at most the unique texts.
-     */
     static int groups(int unique) {
         return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
     }
 
-    /** How many texts the author sees per group for {@code k} groups. */
     static int authorExampleCount(int k) {
         return Math.min(AUTHOR_MAX, Math.max(AUTHOR_MIN, (int) Math.round((double) AUTHOR_BUDGET / k)));
     }

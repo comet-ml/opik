@@ -81,9 +81,7 @@ public class GroupSummaries {
     }
 
     /**
-     * One group's examples: up to {@code frequent} texts that occur at least {@value #MIN_REPEATS} times, most frequent
-     * first (ties by code point order), then the texts nearest to the centre not already listed (ties by trace order),
-     * up to {@code total} in all. A text seen once is not "frequent": its slot goes to the nearest texts.
+     * One group's examples, by the rule on {@link #authorExamples}.
      *
      * @param members the group's traces, in trace order
      * @param sims    per trace, its dot product with the group's centre; read for the members only

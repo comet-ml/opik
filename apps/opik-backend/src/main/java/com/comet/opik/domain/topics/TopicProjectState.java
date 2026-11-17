@@ -8,9 +8,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One row of {@code topic_project_states}: a project with a saved run. {@code rebuilds} counts the saved runs and seeds
- * the next run's k-means; {@code windowUntil} is the end of the last saved run's window. {@code labelsComplete} is
- * false from the save until the labelling pass has labelled every trace of that window.
+ * One row of {@code topic_project_states}: a project with a saved run. {@code rebuilds} counts the saved runs; {@code
+ * windowUntil} is the end of the last saved run's window. {@code labelsComplete} is false from the save until the
+ * labelling pass has labelled every trace of that window.
  */
 @Builder(toBuilder = true)
 public record TopicProjectState(

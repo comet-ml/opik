@@ -67,10 +67,6 @@ public class TopicsConfig {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    /**
-     * How one project's topic list is built: the window it reads, how long a build may run, and how long its
-     * {@code topic_runs} rows are kept.
-     */
     @Data
     public static class BuildConfig {
 
@@ -120,11 +116,7 @@ public class TopicsConfig {
         }
     }
 
-    /**
-     * The first-build job: builds the list of a project that has none yet. Its window ends at tomorrow's start (UTC), so
-     * it holds today's traces so far. A project whose first builds failed waits 1 hour, then 6 hours, then a day between
-     * attempts.
-     */
+    /** The first-build job: builds the list of a project that has none yet. */
     @Data
     public static class FirstBuildConfig {
 

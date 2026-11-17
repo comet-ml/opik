@@ -22,10 +22,6 @@ public class TopicPrompts {
 
     private static final String AUTHOR = load("author_v2.md");
 
-    /**
-     * The author answer's schema: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}},
-     * {@code topic} the topic's index or -1 for Other.
-     */
     public static final JsonNode AUTHOR_SCHEMA = parse("""
             {"type": "object", "properties": {
               "topics": {"type": "array", "items": {"type": "object", "properties": {
