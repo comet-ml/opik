@@ -181,19 +181,38 @@ def stream_experiment_items_for_dataset(
             cursor_from_record=_experiment_item_cursor,
         )
     except ApiError as e:
-        # The dataset was resolved before the stream was opened, so a 404 here can
-        # only be one of the requested versions.
-        if e.status_code == 404 and dataset_versions:
-            raise exceptions.DatasetVersionNotFound(
-                f"Dataset version(s) {dataset_versions} not found: {e.body}"
-            ) from e
+        # A 404 is also what a dataset deleted since it was resolved returns, so
+        # only the backend's own version message maps to the typed exception.
+        message = _error_message(e.body)
+        if e.status_code == 404 and message.startswith(_VERSION_NOT_FOUND_PREFIX):
+            raise exceptions.DatasetVersionNotFound(message) from e
         raise
+
+    for row in rows:
+        # A failure after the stream has started arrives as a final error line
+        # (e.g. a timeout) on the 200 response, not as an HTTP error.
+        if "id" not in row and "message" in row:
+            raise ApiError(status_code=row.get("code"), headers={}, body=row)
 
     items = [
         experiment_item.ExperimentItemContent.from_compare_dict(row) for row in rows
     ]
     items.sort(key=lambda item: item.dataset_item_id)
     return items
+
+
+_VERSION_NOT_FOUND_PREFIX = "Version not found"
+
+
+def _error_message(body: Any) -> str:
+    if not isinstance(body, dict):
+        return ""
+    if isinstance(body.get("message"), str):
+        return body["message"]
+    errors = body.get("errors")
+    if isinstance(errors, list) and errors and isinstance(errors[0], str):
+        return errors[0]
+    return ""
 
 
 def _experiment_item_cursor(record: Dict[str, Any]) -> Optional[Tuple[str, str]]:

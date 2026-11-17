@@ -199,3 +199,47 @@ def test_find_experiment_items_for_dataset__other_api_errors__propagate_unchange
         )
 
     assert exc_info.value.status_code == status_code
+
+
+def test_find_experiment_items_for_dataset__404_for_the_dataset_with_dataset_versions__propagates_api_error():
+    # The dataset can be deleted between its lookup and the stream request; that
+    # 404 is not a missing version.
+    with pytest.raises(ApiError) as exc_info:
+        _find(
+            _client(
+                _failing_stream(404, {"code": 404, "message": "Dataset not found"})
+            ),
+            dataset_versions=["v1"],
+        )
+
+    assert not isinstance(exc_info.value, exceptions.DatasetVersionNotFound)
+    assert exc_info.value.status_code == 404
+
+
+def test_find_experiment_items_for_dataset__version_message_in_message_field__raises_dataset_version_not_found():
+    body = {
+        "code": 404,
+        "message": "Version not found for dataset hash='v9' datasetId='d'",
+    }
+
+    with pytest.raises(
+        exceptions.DatasetVersionNotFound,
+        match="Version not found for dataset hash='v9'",
+    ):
+        _find(_client(_failing_stream(404, body)), dataset_versions=["v9"])
+
+
+def test_find_experiment_items_for_dataset__error_line_in_the_stream__raises_api_error():
+    error_line = {"code": 500, "message": "Streaming operation timed out"}
+
+    def stream(**kwargs: Any) -> List[bytes]:
+        return [
+            json.dumps(_row("exp-a", "r1", "item-1")).encode("utf-8") + b"\n",
+            json.dumps(error_line).encode("utf-8") + b"\n",
+        ]
+
+    with pytest.raises(ApiError) as exc_info:
+        _find(_client(stream))
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.body == error_line

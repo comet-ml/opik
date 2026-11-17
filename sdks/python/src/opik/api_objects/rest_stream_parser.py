@@ -121,10 +121,12 @@ def read_and_parse_full_stream(
         cursor_before_page = cursor
         if page_last_id["id"] is not None:
             cursor = page_last_id["id"]
-        elif len(result) > 0:
-            # No line on this page decoded to an object with a cursor; fall back
-            # to the last record that parsed so the read still advances.
-            last_item = result[-1]
+        elif parsed_items:
+            # No raw line on this page reported a cursor; fall back to this page's
+            # last parsed record. Never to an earlier page's: that would move the
+            # cursor backwards and re-serve the same pages forever. A page with
+            # neither leaves the cursor where it was, which ends the read below.
+            last_item = parsed_items[-1]
             cursor = cursor_from_record(
                 last_item if isinstance(last_item, dict) else vars(last_item)
             )

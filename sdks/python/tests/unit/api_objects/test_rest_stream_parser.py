@@ -576,3 +576,21 @@ def test_read_and_parse_full_stream__composite_cursor__size_correlated_error__re
         (100, ("exp-a", "r020")),
         (50, ("exp-a", "r020")),
     ]
+
+
+def test_read_and_parse_full_stream__page_without_a_cursor_after_an_unparsable_one__stops_instead_of_looping():
+    # Page 1 ends on a record that decodes but fails validation, so the cursor is
+    # that record. Page 2 has no decodable line at all. Falling back to the last
+    # record that *parsed* (row r06) would move the cursor backwards, re-serve
+    # page 1's tail and page 2, and repeat forever.
+    rows = _RowSource(_rows(("r06",), ("r05", "bad"), ("r04", "raw"), ("r03", "raw")))
+
+    def source(current_batch_size, last_retrieved_id):
+        if len(rows.requested) >= 5:
+            raise AssertionError("the read kept requesting pages")
+        return rows(current_batch_size, last_retrieved_id)
+
+    spans = _read(source)
+
+    assert [span.id for span in spans] == ["r06"]
+    assert [cursor for _, cursor in rows.requested] == [None, "r05"]

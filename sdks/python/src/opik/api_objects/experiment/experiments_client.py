@@ -79,7 +79,8 @@ class ExperimentsClient:
 
         Note:
             Without ``experiment_ids``, ``page_size`` and ``num_threads`` do not
-            apply: the read pages through a server-side cursor instead. Each
+            control paging (the read pages through a server-side cursor), but
+            they are still validated. Each
             result's ``dataset_item_data`` is then the item's input as the
             experiment saw it.
 
