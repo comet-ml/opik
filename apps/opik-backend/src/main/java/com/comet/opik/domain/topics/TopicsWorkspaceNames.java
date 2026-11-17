@@ -60,7 +60,6 @@ public class TopicsWorkspaceNames {
         this.clock = clock;
     }
 
-    /** The workspace's name, or its id when the name is blank or its lookup fails. */
     public String name(@NonNull String workspaceId) {
         var now = clock.instant();
         var cached = names.get(workspaceId);

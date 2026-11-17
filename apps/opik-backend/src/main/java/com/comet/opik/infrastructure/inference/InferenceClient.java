@@ -58,9 +58,8 @@ import java.util.function.Function;
  * usual retries. A call cut off at its deadline frees its caller, but its thread reads on until the response ends and
  * keeps its slot until then, so a slow service ties up decide's slots, never the shared client.
  * <p>
- * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body,
- * success or error, is read up to {@code aiLabels.inference.maxResponseBytes}; a longer one fails the call the same
- * way, and its connection is closed without reading the rest.
+ * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body
+ * longer than {@code aiLabels.inference.maxResponseBytes} fails the call the same way.
  * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
@@ -186,12 +185,7 @@ public class InferenceClient {
                 .map(BatchJobStatusResponse::jobs);
     }
 
-    /**
-     * One vector per input, in the inputs' order, from the realtime embedding pool. Retried like a submit, and like a
-     * submit a {@code quota_exceeded} answer fails at once, so the caller can stop calling for a while. The request
-     * gets a new {@code request_id}, and {@code deadline_ms} is the time left before {@code deadline}, at most the
-     * service's maximum.
-     */
+    /** One vector per input, in the inputs' order, from the realtime embedding pool. Retried like a submit. */
     public Mono<EmbedResponse> embed(@NonNull EmbedRequest request, @NonNull Instant deadline) {
         Preconditions.checkArgument(!request.inputs().isEmpty() && request.inputs().size() <= MAX_EMBED_INPUTS,
                 "an embed call takes 1 to '%s' inputs, inputs '%s'", MAX_EMBED_INPUTS, request.inputs().size());
@@ -444,11 +438,7 @@ public class InferenceClient {
         }
     }
 
-    /**
-     * The body, read up to one byte past {@code maxBytes}, so a longer one is seen without holding more of it, as
-     * {@code WebhookHttpClient} reads a response. Closing the stream of a longer one ends its connection, see
-     * {@link #CLOSE_WITHOUT_DRAINING}, so the rest is never read.
-     */
+    /** Up to one byte past {@code maxBytes}, so a longer body is seen without holding more of it. */
     private static byte[] readBody(Response response, long maxBytes) {
         try {
             // hasEntity reads ahead, so it can fail like the read itself.

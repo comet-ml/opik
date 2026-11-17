@@ -11,9 +11,18 @@ import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Answers every request on a connection with the same keep-alive response, and counts both. */
+/**
+ * Answers every request on a connection with the same keep-alive response, and counts both. {@link #endless()}
+ * instead answers with a chunked body that never ends, until the client closes the connection.
+ */
 final class KeepAliveServer implements AutoCloseable {
 
+    private static final byte[] ENDLESS_HEADERS = ("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+            + "Transfer-Encoding: chunked\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] CHUNK = ("2000\r\n" + " ".repeat(0x2000) + "\r\n")
+            .getBytes(StandardCharsets.US_ASCII);
+
+    /** Null in the endless mode. */
     private final byte[] response;
     private final ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
     private final List<Socket> accepted = new CopyOnWriteArrayList<>();
@@ -28,6 +37,15 @@ final class KeepAliveServer implements AutoCloseable {
         System.arraycopy(head, 0, response, 0, head.length);
         System.arraycopy(bytes, 0, response, head.length, bytes.length);
         Thread.ofVirtual().start(this::accept);
+    }
+
+    private KeepAliveServer() throws IOException {
+        response = null;
+        Thread.ofVirtual().start(this::accept);
+    }
+
+    static KeepAliveServer endless() throws IOException {
+        return new KeepAliveServer();
     }
 
     String url() {
@@ -48,7 +66,7 @@ final class KeepAliveServer implements AutoCloseable {
             try {
                 var socket = serverSocket.accept();
                 accepted.add(socket);
-                Thread.ofVirtual().start(() -> serve(socket));
+                Thread.ofVirtual().start(response == null ? () -> writeForever(socket) : () -> serve(socket));
             } catch (IOException exception) {
                 // closed
                 return;
@@ -63,6 +81,17 @@ final class KeepAliveServer implements AutoCloseable {
                 requests.incrementAndGet();
                 output.write(response);
                 output.flush();
+            }
+        } catch (IOException exception) {
+            // the client closed the connection
+        }
+    }
+
+    private static void writeForever(Socket socket) {
+        try (var output = socket.getOutputStream()) {
+            output.write(ENDLESS_HEADERS);
+            while (true) {
+                output.write(CHUNK);
             }
         } catch (IOException exception) {
             // the client closed the connection

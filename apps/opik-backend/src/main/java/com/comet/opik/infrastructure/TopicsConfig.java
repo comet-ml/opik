@@ -21,11 +21,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
- * summary, for the workspaces in {@code enabledWorkspaces} that ai-labels is enabled for; the first-build job builds
- * each project's topic list from them. Off by default, and deliberately not a service toggle. Needs ai-labels on, and
- * calls the same opik-inference deployment with the same credential ({@code aiLabels.inference}); see
- * {@code OpikConfiguration#isTopicsAiLabelsEnabled}. The defaults are in {@code config.yml}.
+ * Topics settings; config.yml describes each key and its default. Deliberately not a service toggle. Needs ai-labels
+ * on and uses its opik-inference deployment and credential: see {@code OpikConfiguration#isTopicsAiLabelsEnabled}.
  */
 @Data
 public class TopicsConfig {
@@ -34,13 +31,8 @@ public class TopicsConfig {
     private boolean enabled;
 
     /**
-     * The workspaces topics run for, comma-separated (Helm's {@code TOGGLE_TOPICS_WORKSPACES}). A workspace in it runs
-     * only while it is also enabled in {@code ai_label_workspaces}: see {@code TopicWorkspaceService}. Empty (the
-     * default): none.
-     *
-     * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind to
-     * a collection. Nullable: null and blank both mean none. No getter, so the raw string cannot be matched against;
-     * read it via {@link #enabledWorkspaceIds()}.
+     * A String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind to a
+     * collection. Null and blank both mean none. No getter: read it via {@link #enabledWorkspaceIds()}.
      */
     @JsonProperty
     @Getter(AccessLevel.NONE)
@@ -177,29 +169,19 @@ public class TopicsConfig {
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
         private Duration longWindow;
 
-        /**
-         * How often the daily long-window pass starts. A pass stays on, every second tick, until one of its ticks drains
-         * it; this interval runs from that tick. Also how often the tick discovers each workspace's projects for the
-         * backfill.
-         */
+        /** How often the daily long-window pass starts, and the tick discovers each workspace's projects. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration longWindowInterval;
 
-        /**
-         * When above zero, the backfill phase and the daily pass use this window instead of {@code longWindow}, to embed
-         * the traces summarised before topics were enabled. 0 is off.
-         */
+        /** Above zero: replaces {@code longWindow} for the backfill phase and the daily pass. 0 is off. */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration backfillWindow;
 
-        /**
-         * The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project in the
-         * backfill phase; the tick budget bounds the total.
-         */
+        /** The most traces one tick embeds per workspace, and per project in the backfill phase. */
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick;
 
@@ -207,18 +189,11 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(256) private int embedBatchSize;
 
-        /**
-         * Embed calls in flight at a time, within one workspace's or project's read. The embed pool computes one call
-         * at a time per replica, so this should equal its replica count: more only makes each call wait longer, toward
-         * {@code embedTimeout}. At most 4: the service's queue holds 4 full calls and answers a fifth with a 429.
-         */
+        /** Embed calls in flight at a time; set it to the embed pool's replica count. */
         @JsonProperty
         @Min(1) @Max(4) private int embedConcurrency = 1;
 
-        /**
-         * Each embed call's deadline. A chunk starts only with at least this much of the tick budget left, so a call
-         * that starts always gets all of it. Must be under {@code tickBudget}.
-         */
+        /** Each embed call's deadline; a chunk starts only with at least this much of the tick budget left. */
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
@@ -257,10 +232,7 @@ public class TopicsConfig {
         }
     }
 
-    /**
-     * Guards of the window read on the shared ClickHouse, as {@code aiLabels.sweep}'s. A trip fails that workspace's read
-     * for the tick.
-     */
+    /** Guards of the window read, as {@code aiLabels.sweep}'s; a trip fails that workspace's read for the tick. */
     @Data
     public static class FindConfig {
 
@@ -275,20 +247,13 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;
 
-        /**
-         * ai-labels labels only traces created within {@code aiLabels.horizon}, so a status written at or after the
-         * window's lower bound has {@code trace_created_at} at or after {@code lowerBound - horizon}. This margin covers
-         * the time from the sweep to the status write (inference, load, retries) and a horizon changed since.
-         */
+        /** The margin below {@code lowerBound - aiLabels.horizon} for the time from the sweep to the status write. */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
         private Duration createdAtSlack;
 
-        /**
-         * The daily pass, and the backfill of a large project, read their window in slices of this much trace creation
-         * time, one query each, so a query's rows and memory follow the slice and not the window.
-         */
+        /** The daily pass and a large project's backfill read their window in slices of this much creation time. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
