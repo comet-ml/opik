@@ -37,6 +37,12 @@ class TestTemplateContract:
         assert "<side_info>" in default
 
 
+class TestOptimizerWiring:
+    def test_default_template_is_resolved_and_validated(self) -> None:
+        optimizer = GepaOptimizer(model="openai/gpt-4o-mini")
+        assert optimizer._resolve_reflection_prompt_template() == TEMPLATE
+
+
 class TestInvalidOverridesFailAtConstruction:
     """Reject a bad template in __init__, before a billed baseline evaluation."""
 
@@ -154,6 +160,26 @@ class TestTemplateReachesGepa:
     gepa.optimize() call leaves the whole suite green — fix (b) would be
     silently inert.
     """
+
+    def test_default_template_is_passed_to_gepa_optimize(
+        self,
+        monkeypatch,
+        mock_optimization_context,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        captured = run_optimize_capturing_gepa_kwargs(
+            monkeypatch,
+            mock_optimization_context,
+            simple_chat_prompt,
+            mock_dataset,
+            sample_dataset_items,
+            sample_metric,
+        )
+
+        assert captured["reflection_prompt_template"] == TEMPLATE
 
     def test_override_is_passed_to_gepa_optimize(
         self,
