@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.utils.TruncationUtils;
-import com.fasterxml.jackson.core.StreamWriteConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.util.RawValue;
@@ -29,12 +28,6 @@ import java.util.Map;
  */
 @UtilityClass
 public class JsonRowValues {
-
-    /**
-     * The deepest payload that can be embedded raw: the row object around it is one more level against the
-     * generator's {@code StreamWriteConstraints} nesting limit.
-     */
-    private static final int MAX_RAW_PAYLOAD_DEPTH = StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1;
 
     /**
      * A blank column name is as wrong as a null one -- {@code node.put("", value)} produces a row
@@ -135,20 +128,16 @@ public class JsonRowValues {
      * so the cells are the same text as {@link TruncationUtils#toJsonWithSlim(JsonNode)}.
      *
      * <p>Anything else is written as that text: ClickHouse would store a raw root string without its quotes and
-     * a raw {@code null} as an empty string, which are not the cells the string path writes. So is a payload
-     * nested deeper than {@code MAX_RAW_PAYLOAD_DEPTH}, which only fits the generator's nesting limit on its own.
+     * a raw {@code null} as an empty string, which are not the cells the string path writes.
      */
     public void putJsonWithSlim(@NonNull ObjectNode node, String field, String slimField,
             @Nullable JsonNode value) {
         checkField(field);
         checkField(slimField);
         if (value != null && value.isContainerNode()) {
-            var slim = TruncationUtils.toSlimJson(value, MAX_RAW_PAYLOAD_DEPTH);
-            if (slim.isPresent()) {
-                node.putRawValue(field, new RawValue(value));
-                node.putRawValue(slimField, new RawValue(slim.get()));
-                return;
-            }
+            node.putRawValue(field, new RawValue(value));
+            node.putRawValue(slimField, new RawValue(TruncationUtils.toSlimJson(value)));
+            return;
         }
         var columns = TruncationUtils.toJsonWithSlim(value);
         node.put(field, columns.json());

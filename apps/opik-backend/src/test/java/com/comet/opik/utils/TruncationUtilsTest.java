@@ -366,25 +366,9 @@ class TruncationUtilsTest {
         @MethodSource({"parsedPayloads", "builtPayloads"})
         @DisplayName("should stream the same slim json it returns as a string")
         void shouldStreamTheSameSlimJson(JsonNode node) {
-            String actual = JsonUtils.writeValueAsString(TruncationUtils.toSlimJson(node, Integer.MAX_VALUE)
-                    .orElseThrow());
+            String actual = JsonUtils.writeValueAsString(TruncationUtils.toSlimJson(node));
 
             assertThat(actual).isEqualTo(expectedFromReparse(node).slim());
-        }
-
-        @Test
-        @DisplayName("should stream the slim json of a node only up to the max depth")
-        void shouldStreamSlimJsonOnlyUpToMaxDepth() {
-            int maxDepth = 10;
-            JsonNode node = JsonNodeFactory.instance.arrayNode().add(randomAscii(MAX + 1));
-            for (int depth = 1; depth < maxDepth; depth++) {
-                node = JsonNodeFactory.instance.objectNode().set("nested", node);
-            }
-
-            assertThat(TruncationUtils.toSlimJson(node, maxDepth).map(JsonUtils::writeValueAsString))
-                    .contains(expectedFromReparse(node).slim());
-            assertThat(TruncationUtils.toSlimJson(JsonNodeFactory.instance.arrayNode().add(node), maxDepth))
-                    .isEmpty();
         }
 
         @Test

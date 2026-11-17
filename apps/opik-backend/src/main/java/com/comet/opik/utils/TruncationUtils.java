@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Iterator;
-import java.util.Optional;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -176,11 +175,10 @@ public final class TruncationUtils {
             return JsonWithSlim.builder().json(json).slim(json).build();
         }
 
-        String slim = switch (inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH, Integer.MAX_VALUE)) {
+        String slim = switch (inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
             case UNCHANGED -> json;
             case TRUNCATED -> writeSlimJsonString(node, DEFAULT_SLIM_STRING_MAX_LENGTH);
-            // TOO_DEEP is unreachable without a depth bound; the reparse is correct for any node.
-            case REPARSE, TOO_DEEP -> createSlimJsonString(json);
+            case REPARSE -> createSlimJsonString(json);
         };
 
         return JsonWithSlim.builder().json(json).slim(slim).build();
@@ -204,20 +202,11 @@ public final class TruncationUtils {
      * {@link #toJsonWithSlim(JsonNode)} returns as {@code slim}, without materializing it as a {@code String}
      * except on the reparse path.
      *
-     * <p>Empty when the node nests more than {@code maxDepth} containers deep, so the caller can keep such a payload
-     * on the string path: embedded in an enclosing document, it would exceed the generator's nesting limit that
-     * {@code node.toString()} alone stays within. Checked in the same walk that inspects the strings.
-     *
-     * @param node     the payload node
-     * @param maxDepth the deepest container nesting to accept, the root container counting as one
-     * @return the slim JSON, written when the enclosing value is serialized, or empty if the node is too deep
+     * @param node the payload node
+     * @return the slim JSON, written when the enclosing value is serialized
      */
-    public static Optional<JsonSerializable> toSlimJson(@NonNull JsonNode node, int maxDepth) {
-        SlimShape shape = inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH, maxDepth);
-        return switch (shape) {
-            case TOO_DEEP -> Optional.empty();
-            case UNCHANGED, TRUNCATED, REPARSE -> Optional.of(new SlimJson(node, shape));
-        };
+    public static JsonSerializable toSlimJson(@NonNull JsonNode node) {
+        return new SlimJson(node, inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH));
     }
 
     private record SlimJson(JsonNode node, SlimShape shape) implements JsonSerializable {
@@ -227,8 +216,7 @@ public final class TruncationUtils {
             switch (shape) {
                 case UNCHANGED -> node.serialize(generator, provider);
                 case TRUNCATED -> writeSlimJson(generator, node, DEFAULT_SLIM_STRING_MAX_LENGTH, provider);
-                // TOO_DEEP is never constructed; the reparse is correct for any node.
-                case REPARSE, TOO_DEEP -> generator.writeRawValue(createSlimJsonString(node.toString()));
+                case REPARSE -> generator.writeRawValue(createSlimJsonString(node.toString()));
             }
         }
 
@@ -242,20 +230,16 @@ public final class TruncationUtils {
     private enum SlimShape {
         UNCHANGED,
         TRUNCATED,
-        REPARSE,
-        TOO_DEEP
+        REPARSE
     }
 
     /**
-     * Walks the node without allocating copies. Stops at the first container deeper than {@code depthLeft} allows;
-     * otherwise reports whether any value needs the reparse path, or else whether any string value exceeds the
-     * max length.
+     * Walks the node without allocating copies, and reports whether any value needs the reparse path, or else
+     * whether any string value exceeds the max length.
      */
-    private static SlimShape inspect(JsonNode node, int maxStringLength, int depthLeft) {
+    private static SlimShape inspect(JsonNode node, int maxStringLength) {
         return switch (node.getNodeType()) {
-            case OBJECT, ARRAY -> depthLeft <= 0
-                    ? SlimShape.TOO_DEEP
-                    : inspectChildren(node.elements(), maxStringLength, depthLeft - 1);
+            case OBJECT, ARRAY -> inspectChildren(node.elements(), maxStringLength);
             case STRING -> node.textValue().length() > maxStringLength ? SlimShape.TRUNCATED : SlimShape.UNCHANGED;
             case NUMBER -> node.isFloat() || node.isBigDecimal() ? SlimShape.REPARSE : SlimShape.UNCHANGED;
             case BOOLEAN, NULL -> SlimShape.UNCHANGED;
@@ -263,13 +247,10 @@ public final class TruncationUtils {
         };
     }
 
-    private static SlimShape inspectChildren(Iterator<JsonNode> children, int maxStringLength, int depthLeft) {
+    private static SlimShape inspectChildren(Iterator<JsonNode> children, int maxStringLength) {
         SlimShape shape = SlimShape.UNCHANGED;
         while (children.hasNext()) {
-            switch (inspect(children.next(), maxStringLength, depthLeft)) {
-                case TOO_DEEP -> {
-                    return SlimShape.TOO_DEEP;
-                }
+            switch (inspect(children.next(), maxStringLength)) {
                 case REPARSE -> shape = SlimShape.REPARSE;
                 case TRUNCATED -> shape = shape == SlimShape.UNCHANGED ? SlimShape.TRUNCATED : shape;
                 case UNCHANGED -> {
@@ -301,25 +282,44 @@ public final class TruncationUtils {
 
     private static void writeSlimJson(JsonGenerator generator, JsonNode node, int maxStringLength,
             SerializerProvider provider) throws IOException {
+        // One buffer per walk for every truncated string, rather than a substring and a concatenation each.
+        char[] truncated = new char[maxStringLength + TRUNCATION_SUFFIX.length()];
+        TRUNCATION_SUFFIX.getChars(0, TRUNCATION_SUFFIX.length(), truncated, maxStringLength);
+        writeSlimJson(generator, node, truncated, provider);
+    }
+
+    private static void writeSlimJson(JsonGenerator generator, JsonNode node, char[] truncated,
+            SerializerProvider provider) throws IOException {
         switch (node.getNodeType()) {
             case OBJECT -> {
                 generator.writeStartObject(node, node.size());
                 for (var property : node.properties()) {
                     generator.writeFieldName(property.getKey());
-                    writeSlimJson(generator, property.getValue(), maxStringLength, provider);
+                    writeSlimJson(generator, property.getValue(), truncated, provider);
                 }
                 generator.writeEndObject();
             }
             case ARRAY -> {
                 generator.writeStartArray(node, node.size());
                 for (JsonNode element : node) {
-                    writeSlimJson(generator, element, maxStringLength, provider);
+                    writeSlimJson(generator, element, truncated, provider);
                 }
                 generator.writeEndArray();
             }
-            case STRING -> generator.writeString(truncateString(node.textValue(), maxStringLength));
+            case STRING -> writeSlimString(generator, node.textValue(), truncated);
             case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> node.serialize(generator, provider);
         }
+    }
+
+    /** Writes the text, or its first max length chars and the suffix, the same chars {@link #truncateString} returns. */
+    private static void writeSlimString(JsonGenerator generator, String text, char[] truncated) throws IOException {
+        int maxLength = truncated.length - TRUNCATION_SUFFIX.length();
+        if (text.length() <= maxLength) {
+            generator.writeString(text);
+            return;
+        }
+        text.getChars(0, maxLength, truncated, 0);
+        generator.writeString(truncated, 0, truncated.length);
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {

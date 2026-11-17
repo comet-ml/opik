@@ -6,7 +6,9 @@ import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import com.comet.opik.utils.AsyncUtils;
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.StreamWriteConstraints;
 import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -87,7 +89,7 @@ public class JsonEachRowBulkInsert {
 
     private final Client clickHouseClient;
 
-    private final ObjectMapper objectMapper;
+    private final JsonFactory rowFactory;
 
     private final ObjectWriter rowWriter;
 
@@ -109,7 +111,13 @@ public class JsonEachRowBulkInsert {
     @Inject
     public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper) {
         this.clickHouseClient = clickHouseClient;
-        this.objectMapper = objectMapper;
+        // One nesting level above the mapper's: the row object wraps the payloads JsonRowValues embeds raw, so a
+        // payload as deep as a request body may be still fits once inside the row.
+        this.rowFactory = objectMapper.getFactory().rebuild()
+                .streamWriteConstraints(StreamWriteConstraints.builder()
+                        .maxNestingDepth(objectMapper.getFactory().streamWriteConstraints().getMaxNestingDepth() + 1)
+                        .build())
+                .build();
         this.rowWriter = objectMapper.writer();
     }
 
@@ -230,7 +238,7 @@ public class JsonEachRowBulkInsert {
         // writer, then the writer into payload. Both are resources so a row that fails to serialize
         // still releases the generator's buffer back to Jackson's recycler on the way out.
         try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8));
-                var generator = objectMapper.getFactory().createGenerator(writer)) {
+                var generator = rowFactory.createGenerator(writer)) {
 
             // Both set before anything is written, since they govern what close() and flush() do.
             // The generator writes into, but does not own, the writer, which the try-with-resources

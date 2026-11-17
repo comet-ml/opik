@@ -1,25 +1,47 @@
 package com.comet.opik.infrastructure.db;
 
+import com.clickhouse.client.api.Client;
+import com.clickhouse.client.api.DataStreamWriter;
+import com.clickhouse.client.api.insert.InsertResponse;
+import com.clickhouse.client.api.insert.InsertSettings;
+import com.clickhouse.client.api.metrics.Metric;
+import com.clickhouse.client.api.metrics.OperationMetrics;
+import com.clickhouse.client.api.metrics.ServerMetrics;
+import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamWriteConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Covers {@link JsonRowValues#putDouble}, which decides how every {@code Float64} column on the
@@ -96,6 +118,30 @@ class JsonRowValuesTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** The row as {@link JsonEachRowBulkInsert} sends it to ClickHouse, without its line separator. */
+    private static String written(ObjectNode row) throws IOException {
+        var metric = mock(Metric.class);
+        when(metric.getLong()).thenReturn(1L);
+        var metrics = mock(OperationMetrics.class);
+        when(metrics.getMetric(ServerMetrics.NUM_ROWS_WRITTEN)).thenReturn(metric);
+        var response = mock(InsertResponse.class);
+        when(response.getMetrics()).thenReturn(metrics);
+        var client = mock(Client.class);
+        when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
+                any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
+
+        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+                .insert("spans", "log-comment", List.of(row), Function.identity())
+                .block();
+
+        var writer = ArgumentCaptor.forClass(DataStreamWriter.class);
+        verify(client).insert(eq("spans"), writer.capture(), eq(ClickHouseFormat.JSONEachRow),
+                any(InsertSettings.class));
+        var body = new ByteArrayOutputStream();
+        writer.getValue().onOutput(body);
+        return body.toString(StandardCharsets.UTF_8).stripTrailing();
+    }
+
     private static String randomText(int length) {
         return RandomStringUtils.secure().nextAlphanumeric(length);
     }
@@ -114,13 +160,13 @@ class JsonRowValuesTest {
     @ParameterizedTest
     @MethodSource("containerPayloads")
     @DisplayName("an object or array payload is embedded as raw JSON, with its slim copy")
-    void containerPayloadIsEmbeddedRaw(JsonNode payload) {
+    void containerPayloadIsEmbeddedRaw(JsonNode payload) throws IOException {
         var node = JsonUtils.createObjectNode();
 
         JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
 
         var columns = TruncationUtils.toJsonWithSlim(payload);
-        assertThat(JsonUtils.writeValueAsString(node))
+        assertThat(written(node))
                 .isEqualTo("{\"input\":%s,\"input_slim\":%s}".formatted(columns.json(), columns.slim()));
     }
 
@@ -132,23 +178,28 @@ class JsonRowValuesTest {
         return node;
     }
 
-    @Test
-    @DisplayName("a payload as deep as the row leaves room for is embedded raw, and still serializes")
-    void deepestPayloadIsEmbeddedRaw() {
-        var payload = nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1);
+    static Stream<JsonNode> deepPayloads() {
+        return Stream.of(
+                nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1),
+                // As deep as a request body can be: the row around it goes one level past the default limit.
+                nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH));
+    }
+
+    @ParameterizedTest
+    @MethodSource("deepPayloads")
+    @DisplayName("a payload as deep as a request body can be is embedded raw, and still serializes")
+    void deepestPayloadIsEmbeddedRaw(JsonNode payload) throws IOException {
         var node = JsonUtils.createObjectNode();
 
         JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
 
         var json = payload.toString();
-        assertThat(JsonUtils.writeValueAsString(node))
+        assertThat(written(node))
                 .isEqualTo("{\"input\":%s,\"input_slim\":%s}".formatted(json, json));
     }
 
     static Stream<JsonNode> textPayloads() {
         return Stream.of(
-                // One level deeper than the row leaves room for: it serializes alone, not embedded.
-                nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH),
                 null,
                 JsonUtils.getJsonNodeFromString("null"),
                 JsonUtils.getJsonNodeFromString("42"),
@@ -177,7 +228,13 @@ class JsonRowValuesTest {
      */
     private static Map<String, String> storedCells(String row) throws IOException {
         Map<String, String> cells = new LinkedHashMap<>();
-        try (var parser = JsonUtils.getMapper().createParser(row)) {
+        // The row is one level deeper than its deepest payload, as JsonEachRowBulkInsert allows.
+        var factory = JsonFactory.builder()
+                .streamReadConstraints(StreamReadConstraints.builder()
+                        .maxNestingDepth(StreamReadConstraints.DEFAULT_MAX_DEPTH + 1)
+                        .build())
+                .build();
+        try (var parser = factory.createParser(row)) {
             parser.nextToken();
             while (parser.nextToken() == JsonToken.FIELD_NAME) {
                 String field = parser.currentName();
@@ -195,7 +252,7 @@ class JsonRowValuesTest {
     }
 
     @ParameterizedTest
-    @MethodSource({"containerPayloads", "textPayloads",
+    @MethodSource({"containerPayloads", "deepPayloads", "textPayloads",
             "com.comet.opik.utils.TruncationUtilsTest$ToJsonWithSlimTests#parsedPayloads",
             "com.comet.opik.utils.TruncationUtilsTest$ToJsonWithSlimTests#builtPayloads"})
     @DisplayName("the stored cells are the ones the full and slim strings produced before")
@@ -209,7 +266,6 @@ class JsonRowValuesTest {
                 .put("input", json)
                 .put("input_slim", TruncationUtils.createSlimJsonString(json));
 
-        assertThat(storedCells(JsonUtils.writeValueAsString(actual)))
-                .isEqualTo(storedCells(JsonUtils.writeValueAsString(expected)));
+        assertThat(storedCells(written(actual))).isEqualTo(storedCells(written(expected)));
     }
 }
