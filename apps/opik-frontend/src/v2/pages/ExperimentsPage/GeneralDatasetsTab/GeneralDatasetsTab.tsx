@@ -85,7 +85,11 @@ import TextCell from "@/shared/DataTableCells/TextCell";
 import ItemSourceCell, {
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
-import { EVALUATION_METHOD, EXPERIMENT_STATUS } from "@/types/datasets";
+import {
+  DATASET_TYPE,
+  EVALUATION_METHOD,
+  EXPERIMENT_STATUS,
+} from "@/types/datasets";
 import { Filter } from "@/types/filters";
 import DatasetVersionCell from "@/v2/pages-shared/experiments/DatasetVersionCell";
 import { formatPromptVersionLabel } from "@/lib/experiments";
@@ -118,6 +122,7 @@ const NO_DYNAMIC_SCORES_COLUMNS: DynamicColumn[] = [];
 
 type TabConfig = {
   storageKeyPrefix: string;
+  datasetType: DATASET_TYPE;
   versionLabel: string;
   excludedColumnIds: string[];
   defaultSelectedColumns: string[];
@@ -129,6 +134,7 @@ type TabConfig = {
 const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
   [EVALUATION_METHOD.TEST_SUITE]: {
     storageKeyPrefix: "experiments-test-suites",
+    datasetType: DATASET_TYPE.TEST_SUITE,
     versionLabel: "Test suite version",
     excludedColumnIds: [COLUMN_FEEDBACK_SCORES_ID],
     defaultSelectedColumns: [
@@ -145,6 +151,7 @@ const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
   },
   [EVALUATION_METHOD.DATASET]: {
     storageKeyPrefix: "experiments-datasets",
+    datasetType: DATASET_TYPE.DATASET,
     versionLabel: "Dataset version",
     excludedColumnIds: ["pass_rate"],
     defaultSelectedColumns: [
@@ -204,6 +211,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
 }) => {
   const {
     storageKeyPrefix,
+    datasetType,
     versionLabel,
     excludedColumnIds,
     defaultSelectedColumns,
@@ -447,6 +455,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       sortedColumns,
       filters: queryFilters,
       projectId: activeProjectId,
+      datasetType,
     });
 
   const expandingConfig = useExpandingConfig({
