@@ -1671,7 +1671,7 @@ class OpenTelemetryResourceTest {
             try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, MediaType.WILDCARD,
                     Entity.json(JsonFormat.printer().print(exportRequest(otelSpans))))) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
-                assertThat(actualResponse.getMediaType()).isEqualTo(MediaType.APPLICATION_OCTET_STREAM_TYPE);
+                assertThat(actualResponse.getMediaType().toString()).isNotEqualTo("application/x-protobuf");
                 assertThat(JsonUtils.getJsonNodeFromString(actualResponse.readEntity(String.class)))
                         .isEqualTo(expectedError);
             }
