@@ -46,9 +46,12 @@ def read_yes_no(verdict: Any) -> Optional[str]:
     bare ``yes`` or ``no`` reads the same here. It also reads the word when a
     judge wraps it in markdown or quotes (``"**No**"``, ``"`no`"``,
     ``'"no"'``) or explains it after the word (``"No, the reply ignores the
-    request"``). Anything else returns ``None``, so a caller can tell an
-    unreadable verdict apart from a negative or positive one instead of
-    counting it on either side.
+    request"``). The word must end there: underscores right after it count
+    only when they close the same number of opening ones (``"_no_"``,
+    ``"__yes__"``), so ``"yes_"``, ``"no__"`` or ``"_no__"`` return ``None``,
+    as do glued words such as ``"yes1"`` or ``"no_foo"``. Anything else
+    returns ``None``, so a caller can tell an unreadable verdict apart from a
+    negative or positive one instead of counting it on either side.
     """
     if not isinstance(verdict, str):
         return None
