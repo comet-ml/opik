@@ -7,11 +7,12 @@ import tracemalloc
 import uuid
 from unittest.mock import Mock
 
+import pydantic
 import pytest
 import tenacity
 
 import opik.config as config
-from opik import exceptions
+from opik import exceptions, json_helpers
 from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
@@ -53,6 +54,32 @@ def test_insert__list__still_accepted():
     dataset.insert(_items(3))
 
     assert len(capture.items) == 3
+
+
+@pytest.mark.parametrize("accelerated", [False, True])
+@pytest.mark.parametrize("number", [42, 2**64])
+def test_insert__integer_fallback__preserves_successful_model_serialization(
+    accelerated, number, monkeypatch
+):
+    if accelerated:
+        pytest.importorskip("orjson")
+    else:
+        monkeypatch.setattr(json_helpers, "_orjson", None)
+    calls = []
+
+    class Model(pydantic.BaseModel):
+        @pydantic.model_serializer
+        def serialize(self):
+            calls.append(self)
+            return {"serial": len(calls), "number": number}
+
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert([{"input": Model()}], deduplication=False, num_threads=1)
+
+    assert capture.items[0]["data"]["input"] == {"serial": 1, "number": number}
+    assert len(calls) == 1
 
 
 def test_update__list__still_accepted():

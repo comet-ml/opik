@@ -17,6 +17,9 @@ asserted here instead is that the accelerated path is self-consistent, separates
 that differs, and agrees with itself across the two callers that have to agree.
 """
 
+import hashlib
+
+import pydantic
 import pytest
 
 from opik import json_helpers
@@ -122,3 +125,23 @@ def test_content_hash__integer_beyond_orjson_range__still_hashes():
 
     assert len(digest) == 64
     assert digest == dataset_item.DatasetItem(big=2**64).content_hash()
+
+
+def test_content_hash__integer_fallback__preserves_successful_model_serialization():
+    calls = []
+
+    class Model(pydantic.BaseModel):
+        @pydantic.model_serializer
+        def serialize(self):
+            calls.append(self)
+            return {"serial": len(calls), "number": 2**64}
+
+    digest = dataset_item.DatasetItem(input=Model()).content_hash()
+
+    assert (
+        digest
+        == hashlib.sha256(
+            b'{"input": {"number": 18446744073709551616, "serial": 1}}'
+        ).hexdigest()
+    )
+    assert len(calls) == 1

@@ -7,9 +7,11 @@ means to exercise, so both branches run everywhere.
 """
 
 import datetime
+import enum
 import importlib
 import json
 import sys
+import uuid
 
 import pytest
 
@@ -144,6 +146,103 @@ def test_dumps__integer_beyond_range__falls_back_without_calling_default(acceler
 
     assert json.loads(encoded) == {"v": 2**64}
     assert calls == [], "`default` has no say in an out-of-range integer"
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+@pytest.mark.parametrize("sort_keys", [False, True])
+@pytest.mark.parametrize("number", [42, 2**64, -(2**63) - 1])
+@pytest.mark.parametrize("position", ["before", "between", "after", "converted"])
+def test_dumps__integer_fallback__preserves_each_default_occurrence(
+    mode, sort_keys, number, position, request
+):
+    request.getfixturevalue(mode)
+    calls = []
+    opaque = object()
+
+    def counting(value):
+        assert value is opaque
+        calls.append(value)
+        result = {"serial": len(calls)}
+        if position == "converted":
+            result["number"] = number
+        return result
+
+    if position == "before":
+        value = [number, opaque, opaque]
+        expected = [number, {"serial": 1}, {"serial": 2}]
+    elif position == "between":
+        value = [opaque, number, opaque]
+        expected = [{"serial": 1}, number, {"serial": 2}]
+    elif position == "after":
+        value = [opaque, opaque, number]
+        expected = [{"serial": 1}, {"serial": 2}, number]
+    else:
+        value = [opaque, opaque]
+        expected = [{"serial": 1, "number": number}, {"serial": 2, "number": number}]
+
+    encoded = json_helpers.dumps(value, default=counting, sort_keys=sort_keys)
+
+    assert json.loads(encoded) == expected
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__integer_fallback__handles_defaults_only_stdlib_visits(mode, request):
+    request.getfixturevalue(mode)
+    opaque = object()
+    identifier = uuid.UUID("12345678-1234-5678-1234-567812345678")
+
+    class Choice(enum.Enum):
+        FIRST = "first"
+
+    calls = []
+
+    def counting(value):
+        calls.append(value)
+        if value is opaque:
+            return {"serial": sum(item is opaque for item in calls)}
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        if isinstance(value, enum.Enum):
+            return value.value
+        raise TypeError("unsupported")
+
+    encoded = json_helpers.dumps(
+        [identifier, Choice.FIRST, opaque, 2**64, opaque],
+        default=counting,
+        sort_keys=False,
+    )
+
+    assert json.loads(encoded) == [
+        str(identifier),
+        "first",
+        {"serial": 1},
+        2**64,
+        {"serial": 2},
+    ]
+    assert sum(item is opaque for item in calls) == 2
+    assert sum(item is identifier for item in calls) == 1
+    assert sum(item is Choice.FIRST for item in calls) == 1
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__integer_fallback__preserves_later_default_exception(mode, request):
+    request.getfixturevalue(mode)
+    first, last = object(), object()
+    calls = []
+    error = ValueError("the caller's later error")
+
+    def counting(value):
+        calls.append(value)
+        if value is last:
+            raise error
+        return "first"
+
+    with pytest.raises(ValueError) as raised:
+        json_helpers.dumps([first, 2**64, last], default=counting, sort_keys=False)
+
+    assert raised.value is error
+    assert calls == [first, last]
 
 
 def test_dumps__default_raises__propagates_the_callers_exception(accelerated):

@@ -77,6 +77,9 @@ def dumps(
     # first is worth retrying, so record what `default` raised and use that to tell them
     # apart. Matching on orjson's message would do the same job until orjson reworded it.
     raised_by_default: List[BaseException] = []
+    # Keep the originals alive so identities cannot be reused, and retain every
+    # occurrence: the same object can legitimately produce different results.
+    converted: dict[int, tuple[Any, list[Any]]] = {}
 
     def guarded_default(unencodable: Any) -> Any:
         if default is None:
@@ -84,10 +87,15 @@ def dumps(
                 f"Object of type {type(unencodable).__name__} is not JSON serializable"
             )
         try:
-            return default(unencodable)
+            result = default(unencodable)
         except BaseException as exception:
             raised_by_default.append(exception)
             raise
+        identity = id(unencodable)
+        if identity not in converted:
+            converted[identity] = (unencodable, [])
+        converted[identity][1].append(result)
+        return result
 
     try:
         return _orjson.dumps(
@@ -103,7 +111,25 @@ def dumps(
         # orjson refuses integers outside -2**63 .. 2**64-1 *before* consulting
         # `default`, so such a value cannot be intercepted, only the whole value
         # re-encoded. The standard library takes them.
-        return json.dumps(value, default=default, sort_keys=sort_keys).encode("utf-8")
+        pending = {key: iter(results) for key, (_, results) in converted.items()}
+
+        def replay_default(unencodable: Any) -> Any:
+            previous = pending.get(id(unencodable))
+            if previous is not None:
+                try:
+                    return next(previous)
+                except StopIteration:
+                    pass
+            # stdlib also visits values orjson handles natively (e.g. UUIDs), or
+            # occurrences after the refusal. Those still need their first conversion.
+            assert default is not None
+            return default(unencodable)
+
+        return json.dumps(
+            value,
+            default=replay_default if default is not None else None,
+            sort_keys=sort_keys,
+        ).encode("utf-8")
 
 
 def loads(data: Any) -> Any:
