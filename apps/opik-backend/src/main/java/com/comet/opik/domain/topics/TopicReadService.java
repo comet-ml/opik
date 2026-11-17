@@ -41,8 +41,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * </ul>
  * MySQL is read first: the project's state and its live topics, from MySQL, then, when collecting, the project's
  * newest run. Then ClickHouse. There is no lock: a run that saves in between makes some of the request's rows count
- * as Other. A ClickHouse read that reads more rows or bytes than it may is a 400 with {@link #TOO_LARGE_MESSAGE}; one
- * that trips the time or memory limit, or the client timeout, is a 503 with {@code Retry-After}.
+ * as Other.
  */
 @Slf4j
 @Singleton
@@ -146,10 +145,7 @@ public class TopicReadService {
         return TopicsCounts.ready(today, windowDays, live, state, rows);
     }
 
-    /**
-     * Empty when the workspace is not eligible for topics. Otherwise the project's state, then its live topics, from
-     * MySQL; the prototypes are not read. With no saved run, {@code state} is null and {@code live} empty.
-     */
+    /** Empty when the workspace is not eligible for topics. */
     private Optional<TopicReadScope> readScope(String workspaceId, UUID projectId) {
         if (!workspaces.isEligible(workspaceId)) {
             return Optional.empty();
@@ -162,12 +158,7 @@ public class TopicReadService {
         }));
     }
 
-    /**
-     * Blocks on a ClickHouse read, which carries its own client timeout. A read over its rows or bytes limit
-     * ({@link TopicsReadErrors#isTooLarge}) becomes a 400: a retry reads the same project and fails the same way. A
-     * time or memory limit or the client timeout ({@link TopicsReadErrors#isLimit}) becomes a 503 with Retry-After.
-     * The raw ClickHouse text stays in the logs.
-     */
+    /** Maps the ClickHouse limits to a 400 or a 503, see {@link TopicsReadErrors}. */
     private <T> T blockWithLimits(String workspaceId, UUID projectId, Mono<T> read) {
         try {
             return read.block();

@@ -332,7 +332,6 @@ public class TraceTopicsDAO {
         return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1_000L);
     }
 
-    /** One row of {@link #countByTopicAndDay}. */
     @Builder(toBuilder = true)
     public record TopicDayCount(@NonNull UUID topicId, @NonNull LocalDate day, long traces) {
     }
