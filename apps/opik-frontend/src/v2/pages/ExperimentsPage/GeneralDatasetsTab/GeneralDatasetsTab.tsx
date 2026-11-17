@@ -71,6 +71,7 @@ import { useExperimentsFeedbackScores } from "@/v2/pages-shared/experiments/useE
 import { useExperimentsAutoExpandingLogic } from "@/v2/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/v2/pages-shared/experiments/useExpandingConfig";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
+import { migrateLegacyExperimentsStorage } from "./migrateLegacyExperimentsStorage";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
@@ -217,6 +218,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     defaultSelectedColumns,
   } = TAB_CONFIG[evaluationMethod];
   const isTestSuiteTab = evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
+  // Must run before the storage hooks below read their keys.
+  useState(() =>
+    migrateLegacyExperimentsStorage({
+      storageKeyPrefix,
+      excludedColumnIds,
+      addedColumnIds: [COLUMN_DATASET_VERSION_ID],
+    }),
+  );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
@@ -441,9 +450,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     );
   }, [versionLabel, excludedColumnIds]);
 
+  const evaluationMethodFilters = useMemo<Filter[]>(
+    () => [getEvaluationMethodFilter(evaluationMethod)],
+    [evaluationMethod],
+  );
+
   const queryFilters = useMemo<Filter[]>(
-    () => [...filters, getEvaluationMethodFilter(evaluationMethod)],
-    [filters, evaluationMethod],
+    () => [...filters, ...evaluationMethodFilters],
+    [filters, evaluationMethodFilters],
   );
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
@@ -489,6 +503,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     projectId: activeProjectId ?? undefined,
     pinnedIds,
     setPinnedIds,
+    filters: evaluationMethodFilters,
     enabled: groups.length === 0,
     polling: true,
   });
