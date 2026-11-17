@@ -24,7 +24,7 @@ const getCutText = (field: Element) => {
   }
   const label = field.querySelector(":scope > span");
   return label && label.scrollWidth > label.clientWidth
-    ? label.textContent ?? ""
+    ? (label.textContent ?? "")
     : "";
 };
 

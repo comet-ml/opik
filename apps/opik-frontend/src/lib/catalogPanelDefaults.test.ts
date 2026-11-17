@@ -123,38 +123,32 @@ const RETIRED_CLAUDE = "claude-3-opus-20240229" as PROVIDER_MODEL_TYPE;
 const MODES = ["chat_completions_api", "responses_api"] as const;
 
 const CASES: Case[] = [
-  ...REGISTRY[PROVIDER_TYPE.ANTHROPIC].map(
-    (m): Case => [
-      m.id as PROVIDER_MODEL_TYPE,
-      PROVIDER_TYPE.ANTHROPIC,
-      ANTHROPIC_PANEL,
-      undefined,
-      {},
-    ],
-  ),
+  ...REGISTRY[PROVIDER_TYPE.ANTHROPIC].map((m): Case => [
+    m.id as PROVIDER_MODEL_TYPE,
+    PROVIDER_TYPE.ANTHROPIC,
+    ANTHROPIC_PANEL,
+    undefined,
+    {},
+  ]),
   ...REGISTRY[PROVIDER_TYPE.OPEN_AI].flatMap((m) =>
-    MODES.map(
-      (mode): Case => [
-        m.id as PROVIDER_MODEL_TYPE,
-        PROVIDER_TYPE.OPEN_AI,
-        OPENAI_PANEL,
-        mode,
-        {},
-      ],
-    ),
+    MODES.map((mode): Case => [
+      m.id as PROVIDER_MODEL_TYPE,
+      PROVIDER_TYPE.OPEN_AI,
+      OPENAI_PANEL,
+      mode,
+      {},
+    ]),
   ),
   // An id the registry doesn't list gets the provider profile, and a stored value outside its range
   // is shown clamped: the request must send the clamped value too.
   ...MODES.flatMap((mode) =>
-    [200000, 5].map(
-      (tokens): Case => [
-        UNLISTED_OPENAI,
-        PROVIDER_TYPE.OPEN_AI,
-        OPENAI_PANEL,
-        mode,
-        { maxCompletionTokens: tokens },
-      ],
-    ),
+    [200000, 5].map((tokens): Case => [
+      UNLISTED_OPENAI,
+      PROVIDER_TYPE.OPEN_AI,
+      OPENAI_PANEL,
+      mode,
+      { maxCompletionTokens: tokens },
+    ]),
   ),
   [
     UNLISTED_CLAUDE,
@@ -164,24 +158,20 @@ const CASES: Case[] = [
     { maxCompletionTokens: 200000 },
   ],
   // The Claude profile takes no sampling, so the panel shows no slider for these stored values.
-  ...[UNLISTED_CLAUDE, RETIRED_CLAUDE].map(
-    (model): Case => [
-      model,
-      PROVIDER_TYPE.ANTHROPIC,
-      ANTHROPIC_PANEL,
-      undefined,
-      { temperature: 0.7, topP: 0.9 },
-    ],
-  ),
-  ...MODES.map(
-    (mode): Case => [
-      UNKNOWN_LEVEL_OPENAI,
-      PROVIDER_TYPE.OPEN_AI,
-      OPENAI_PANEL,
-      mode,
-      { reasoningEffort: "ultra" },
-    ],
-  ),
+  ...[UNLISTED_CLAUDE, RETIRED_CLAUDE].map((model): Case => [
+    model,
+    PROVIDER_TYPE.ANTHROPIC,
+    ANTHROPIC_PANEL,
+    undefined,
+    { temperature: 0.7, topP: 0.9 },
+  ]),
+  ...MODES.map((mode): Case => [
+    UNKNOWN_LEVEL_OPENAI,
+    PROVIDER_TYPE.OPEN_AI,
+    OPENAI_PANEL,
+    mode,
+    { reasoningEffort: "ultra" },
+  ]),
   // A stored 0 is shown as 0 and sends no limit; a stored value above the model's limit is shown and
   // sent capped; a level the model does not offer is shown and sent as its default.
   ...GEMINI_PROVIDERS.flatMap((provider) =>
@@ -194,15 +184,13 @@ const CASES: Case[] = [
           thinkingLevel: "off",
         },
         { thinkingLevel: "minimal" },
-      ].map(
-        (stored): Case => [
-          (m.qualified_name ?? m.id) as PROVIDER_MODEL_TYPE,
-          provider,
-          provider === PROVIDER_TYPE.GEMINI ? GEMINI_PANEL : VERTEX_AI_PANEL,
-          undefined,
-          stored,
-        ],
-      ),
+      ].map((stored): Case => [
+        (m.qualified_name ?? m.id) as PROVIDER_MODEL_TYPE,
+        provider,
+        provider === PROVIDER_TYPE.GEMINI ? GEMINI_PANEL : VERTEX_AI_PANEL,
+        undefined,
+        stored,
+      ]),
     ),
   ),
   // A bare id saved under Vertex AI that AI Studio also lists: the panel and the request must both read
@@ -296,11 +284,11 @@ describe("the catalog panel shows what the request sends", () => {
             ? sentEffort(provider, model, request)
             : control.kind === "sampling_choice"
               ? { temperature: request.temperature, topP: request.topP }
-              : request[control.configKey] ??
+              : (request[control.configKey] ??
                 (presentation.zeroMeansNoLimit &&
                 control.param === "max_output_tokens"
                   ? 0
-                  : undefined);
+                  : undefined));
         expect(
           sent,
           control.kind === "number" ? control.param : control.kind,

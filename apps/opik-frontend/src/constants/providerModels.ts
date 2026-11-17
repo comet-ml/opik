@@ -14,7 +14,6 @@ import {
  * to this map is a one-line change. OPIK-5022 will delete both this
  * constant and the Java enums once the registry has soaked in prod.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.OPIK_FREE]: [
     {

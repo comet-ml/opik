@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 const descriptionVariants = cva("comet-body-s text-light-slate");
 
 export interface DescriptionProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
+  extends
+    React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof descriptionVariants> {
   asChild?: boolean;
 }

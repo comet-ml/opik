@@ -2,7 +2,6 @@
 import react from "@vitejs/plugin-react-swc";
 import * as path from "path";
 import { defineConfig, loadEnv, UserConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 import svgr from "vite-plugin-svgr";
 
 // https://vitejs.dev/config https://vitest.dev/config
@@ -37,7 +36,6 @@ export default defineConfig(({ mode }) => {
         },
       }),
       react(),
-      tsconfigPaths(),
     ],
     test: {
       globals: true,

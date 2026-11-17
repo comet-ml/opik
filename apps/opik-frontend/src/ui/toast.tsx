@@ -56,7 +56,8 @@ const Toast = React.forwardRef<
 Toast.displayName = ToastPrimitives.Root.displayName;
 
 export interface ToastActionProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
     React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>,
     VariantProps<typeof buttonVariants> {}
 

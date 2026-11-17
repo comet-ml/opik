@@ -21,7 +21,8 @@ const listActionVariants = cva(
 );
 
 interface ListActionProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof listActionVariants> {
   asChild?: boolean;
 }
