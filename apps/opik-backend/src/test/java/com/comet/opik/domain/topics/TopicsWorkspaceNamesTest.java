@@ -16,7 +16,7 @@ class TopicsWorkspaceNamesTest {
     @DisplayName("The name is looked up once per TTL, paired with the id, and refreshed after the TTL")
     void nameIsCached() {
         var calls = new AtomicInteger();
-        var clock = new TopicVectorsTickServiceTest.TestClock(NOW);
+        var clock = new TopicsTestClock(NOW);
         var names = new TopicsWorkspaceNames(id -> "name-" + id + "-" + calls.incrementAndGet(), clock);
 
         assertThat(names.name("ws")).isEqualTo("name-ws-1");
@@ -33,7 +33,7 @@ class TopicsWorkspaceNamesTest {
     @DisplayName("A blank name or a failed lookup falls back to the id and is retried after the failure TTL")
     void fallsBackToTheId() {
         var calls = new AtomicInteger();
-        var clock = new TopicVectorsTickServiceTest.TestClock(NOW);
+        var clock = new TopicsTestClock(NOW);
         var names = new TopicsWorkspaceNames(id -> {
             if (calls.incrementAndGet() == 1) {
                 throw new IllegalStateException("react service down");
@@ -54,7 +54,7 @@ class TopicsWorkspaceNamesTest {
     @DisplayName("The known name never looks up: the id before any lookup, then the last resolved name, even expired")
     void knownNameNeverLooksUp() {
         var calls = new AtomicInteger();
-        var clock = new TopicVectorsTickServiceTest.TestClock(NOW);
+        var clock = new TopicsTestClock(NOW);
         var names = new TopicsWorkspaceNames(id -> {
             calls.incrementAndGet();
             return "name-" + id;

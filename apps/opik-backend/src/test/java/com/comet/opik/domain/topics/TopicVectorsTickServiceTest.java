@@ -43,8 +43,6 @@ import reactor.core.publisher.Mono;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -232,7 +230,7 @@ class TopicVectorsTickServiceTest {
         private TopicWorkspaceService workspaces;
         private AiLabelTaskRegistry registry;
         private TestMeter meter;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final List<EmbedRequest> requests = Collections.synchronizedList(new ArrayList<>());
         private final List<TopicVector> inserted = Collections.synchronizedList(new ArrayList<>());
@@ -252,7 +250,7 @@ class TopicVectorsTickServiceTest {
             workspaces = mock(TopicWorkspaceService.class);
             registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
                     registry, names(), meter.meter, clock);
@@ -1138,7 +1136,7 @@ class TopicVectorsTickServiceTest {
         private static final Duration INTERVAL = Duration.ofMinutes(1);
 
         private TopicsConfig config;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final Map<String, Instant> lockedUntil = new HashMap<>();
         private final List<Duration> windowsRead = new ArrayList<>();
@@ -1157,7 +1155,7 @@ class TopicVectorsTickServiceTest {
             var lockService = mock(LockService.class);
             var workspaces = mock(TopicWorkspaceService.class);
             var registry = mock(AiLabelTaskRegistry.class);
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
                     registry, names(), new TestMeter().meter, clock);
@@ -1347,7 +1345,7 @@ class TopicVectorsTickServiceTest {
         private LockService lockService;
         private TopicWorkspaceService workspaces;
         private TestMeter meter;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final List<TopicVectorCandidate> unvectored = new ArrayList<>();
         private final List<UUID> embedded = new ArrayList<>();
@@ -1369,7 +1367,7 @@ class TopicVectorsTickServiceTest {
             workspaces = mock(TopicWorkspaceService.class);
             var registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService, registry, names(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
@@ -1971,7 +1969,7 @@ class TopicVectorsTickServiceTest {
         private TopicsConfig config;
         private TopicVectorsDAO dao;
         private InferenceClient client;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final List<TopicVectorCandidate> candidates = new ArrayList<>();
         private final List<UUID> inserted = Collections.synchronizedList(new ArrayList<>());
@@ -1989,7 +1987,7 @@ class TopicVectorsTickServiceTest {
             var lockService = mock(LockService.class);
             var workspaces = mock(TopicWorkspaceService.class);
             var registry = mock(AiLabelTaskRegistry.class);
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, allDrained(), client,
                     lockService, registry, names(), new TestMeter().meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
@@ -2340,35 +2338,6 @@ class TopicVectorsTickServiceTest {
             return constructor.newInstance(code, retryable, httpStatus, null, null, null);
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException(exception);
-        }
-    }
-
-    /** A clock that stands still until a test moves it, so every deadline, time left and age the tick uses is exact. */
-    static final class TestClock extends Clock {
-
-        private volatile Instant now;
-
-        TestClock(Instant now) {
-            this.now = now;
-        }
-
-        void advance(Duration duration) {
-            now = now.plus(duration);
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
         }
     }
 

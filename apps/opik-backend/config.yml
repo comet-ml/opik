@@ -2651,8 +2651,9 @@ topics:
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each
-    #  tick runs the fresh phase (window), then the backfill phase (longWindow or backfillWindow, progress in the MySQL
-    #  table topic_vector_backfills). At most 1h
+    #  tick runs the fresh phase (window), or the daily pass in its place when that is due (longWindow, in slices),
+    #  then the backfill phase (longWindow or backfillWindow, progress in the MySQL table topic_vector_backfills).
+    #  At most 1h
     tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
     #  Default: 50s
     #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
@@ -2676,7 +2677,8 @@ topics:
     backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
     #  Default: 5000
     #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
-    #  in the backfill phase; the tick budget bounds the total
+    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read, and
+    #  summaries are read 1000 at a time
     maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
     #  Default: 256 (the most /v1/embed takes)
     #  Description: Texts per embed call
