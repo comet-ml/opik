@@ -15,6 +15,7 @@ import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -535,12 +536,18 @@ class DatasetsResourceProjectScopedTest {
 
         var withoutProject = datasetResourceClient.getDatasetByIdentifier(
                 DatasetIdentifier.builder().datasetName(projectless.name()).build(), apiKey, workspaceName);
-        var inDefaultProject = datasetResourceClient.getDatasetByIdentifier(
-                DatasetIdentifier.builder().datasetName(projectless.name()).projectName(DEFAULT_PROJECT).build(),
-                apiKey, workspaceName);
-
         assertDataset(withoutProject, projectless);
-        assertDataset(inDefaultProject, projectless);
+
+        var inDefaultProject = DatasetIdentifier.builder()
+                .datasetName(projectless.name())
+                .projectName(DEFAULT_PROJECT)
+                .build();
+        try (var response = datasetResourceClient.callGetDatasetByIdentifier(inDefaultProject, apiKey,
+                workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            assertDataset(response.readEntity(Dataset.class), projectless);
+        }
     }
 
     @Test
