@@ -429,6 +429,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     columnsOrder,
     setColumnsOrder,
     getExperimentRowId,
+    getExperimentRowClassName,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
@@ -536,6 +537,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
+        getRowClassName={getExperimentRowClassName}
         columnPinning={columnPinningConfig}
         noData={<DataTableNoData title={noDataText} />}
         TableBody={DataTableVirtualBody}

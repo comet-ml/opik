@@ -6,6 +6,7 @@ import {
   ColumnDefTemplate,
   CellContext,
   OnChangeFn,
+  Row,
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
@@ -59,6 +60,9 @@ import {
   Experiment,
   ExperimentsAggregations,
 } from "@/types/datasets";
+
+const getExperimentRowClassName = <T,>(row: Row<T>) =>
+  row.getIsGrouped() ? "comet-table-row-group" : "";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -442,6 +446,7 @@ export const useExperimentsTableConfig = <
 
     // Utility methods
     getExperimentRowId,
+    getExperimentRowClassName,
 
     // Configs
     sortConfig,

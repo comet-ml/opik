@@ -458,6 +458,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     setColumnsOrder,
     groupFieldNames,
     getExperimentRowId,
+    getExperimentRowClassName,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
@@ -760,6 +761,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
+        getRowClassName={getExperimentRowClassName}
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoMatchingData

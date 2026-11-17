@@ -404,6 +404,13 @@ export const generateDataRowCellDef = <
             onClick={(event) => checkboxClickHandler(event, context)}
             aria-label="Select row"
           />
+          {context.row.depth > 0 && (
+            // Takes the expand chevron's space so names align with their group label
+            <ChevronRight
+              aria-hidden
+              className="invisible ml-1.5 size-4 shrink-0"
+            />
+          )}
           <div className="min-w-1 max-w-full">
             {flexRender(
               columDataFields.cell as never,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, renderHook } from "@testing-library/react";
-import { CellContext } from "@tanstack/react-table";
+import { CellContext, Row as TableRow } from "@tanstack/react-table";
 
 import { useExperimentsTableConfig } from "./useExperimentsTableConfig";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -9,7 +9,7 @@ import { SORT_DIRECTION } from "@/types/sorting";
 
 type Row = { id: string; duration?: number; trace_count?: number };
 
-const renderColumns = () =>
+const renderConfig = () =>
   renderHook(() =>
     useExperimentsTableConfig<Row>({
       storageKeyPrefix: "test-experiments-table",
@@ -41,7 +41,9 @@ const renderColumns = () =>
       sortedColumns: [],
       setSortedColumns: vi.fn(),
     }),
-  ).result.current.columns;
+  ).result.current;
+
+const renderColumns = () => renderConfig().columns;
 
 const findColumn = (id: string) =>
   renderColumns().find(
@@ -71,6 +73,19 @@ describe("useExperimentsTableConfig", () => {
     ) => unknown;
 
     expect(render(groupRowContext({}, undefined))).toBeNull();
+  });
+});
+
+describe("group row background", () => {
+  it("marks group rows only", () => {
+    const { getExperimentRowClassName } = renderConfig();
+
+    expect(
+      getExperimentRowClassName({ getIsGrouped: () => true } as TableRow<Row>),
+    ).toBe("comet-table-row-group");
+    expect(
+      getExperimentRowClassName({ getIsGrouped: () => false } as TableRow<Row>),
+    ).toBe("");
   });
 });
 
