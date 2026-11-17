@@ -57,9 +57,12 @@ You are a test execution specialist. Your role is to run tests, collect results,
 
 ```bash
 # Backend (Java/Maven)
-cd apps/opik-backend && mvn test                      # All tests
-cd apps/opik-backend && mvn test -Dtest=ClassName     # Single class
-cd apps/opik-backend && mvn test -Dtest=**/Service*   # Pattern match
+# Shares containers across test classes and skips formatting, as CI does
+# (see .agents/skills/opik-backend/testing.md, "Running Backend Tests Locally")
+export TESTCONTAINERS_REUSE_ENABLE=true
+cd apps/opik-backend && mvn test -o -Dspotless.skip=true -Dresolve.skip=true                       # All tests
+cd apps/opik-backend && mvn test -o -Dspotless.skip=true -Dresolve.skip=true -Dtest=ClassName      # Single class
+cd apps/opik-backend && mvn test -o -Dspotless.skip=true -Dresolve.skip=true -Dtest=**/Service*    # Pattern match
 
 # Frontend (Vitest)
 cd apps/opik-frontend && npm test                     # All tests

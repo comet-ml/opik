@@ -26,7 +26,7 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 - `scripts/dev-runner.sh --build-be` — rebuild backend dependencies/artifacts only.
 - `scripts/dev-runner.sh --lint-be` — run backend lint/format checks.
 - `scripts/dev-runner.sh --migrate` — run DB migrations (MySQL + ClickHouse).
-- `cd apps/opik-backend && mvn test` — unit/integration tests (includes testcontainers-backed suites).
+- `cd apps/opik-backend && mvn test` — unit/integration tests (includes testcontainers-backed suites). To run them as CI does, sharing containers across classes: `TESTCONTAINERS_REUSE_ENABLE=true mvn test -o -Dspotless.skip=true -Dresolve.skip=true -Dtest=...` (see `.agents/skills/opik-backend/testing.md`).
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
 
 ## Coding Style & Naming Conventions

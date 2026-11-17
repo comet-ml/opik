@@ -24,9 +24,9 @@ it dies with the JVM. The flow:
    comment it out. Container reuse is already requested in code (`withReuse(true)`), but also needs
    `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`. Both are local-only; revert
    the Java file before committing.
-2. **Run the narrowest test that exercises the query** — one ClickHouse-migrating test class per `mvn`
-   invocation, or the second migration fails with `REPLICA_ALREADY_EXISTS` (see
-   `opik-backend/testing.md`). Its fixtures are your distribution sample; if no test covers the query,
+2. **Run the narrowest test that exercises the query** — with reuse enabled as in step 1, several
+   ClickHouse-migrating classes can share one `mvn` invocation; without it, run one per invocation or
+   the second migration fails with `REPLICA_ALREADY_EXISTS` (see `opik-backend/testing.md`). Its fixtures are your distribution sample; if no test covers the query,
    write the smallest one that does.
 3. **Attach to the surviving container** on its mapped native port (it changes per run) as `default`,
    database `opik` (`ClickHouseContainerUtils.DATABASE_NAME`). Being admin here unlocks what a real
