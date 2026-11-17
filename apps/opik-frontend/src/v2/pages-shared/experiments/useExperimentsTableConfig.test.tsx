@@ -3,6 +3,7 @@ import { render, renderHook } from "@testing-library/react";
 import { CellContext, Row as TableRow } from "@tanstack/react-table";
 
 import { useExperimentsTableConfig } from "./useExperimentsTableConfig";
+import CostCell from "@/shared/DataTableCells/CostCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import { COLUMN_DATASET_ID, COLUMN_NAME_ID, COLUMN_TYPE } from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
@@ -110,6 +111,19 @@ describe("group row stat cells", () => {
     const { container } = render(
       <DurationCell.Aggregation
         {...(groupRowContext({}, meta) as unknown as CellContext<Row, string>)}
+      />,
+    );
+
+    expect(container.textContent).toBe("");
+  });
+
+  it("leaves a zero group cost blank instead of a dash", () => {
+    const { container } = render(
+      <CostCell.Aggregation
+        {...(groupRowContext(
+          { cost: 0 },
+          { custom: { aggregationKey: "cost" } },
+        ) as unknown as CellContext<Row, string>)}
       />,
     );
 
