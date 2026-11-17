@@ -156,6 +156,95 @@ def test__find_experiment_items_for_dataset__happy_path(
     )
 
 
+def test__find_experiment_items_for_dataset__no_experiment_ids__one_item_across_experiments_and_versions(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
+            },
+            {
+                "input": {"question": "What is the capital of Poland?"},
+                "expected_model_output": {"output": "Warsaw"},
+            },
+        ]
+    )
+    first_version_hash = dataset.get_version_info().version_hash
+
+    def run_experiment(name: str) -> str:
+        return opik.evaluate(
+            dataset=dataset,
+            task=llm_task,
+            scoring_functions=[equals_scoring_function],
+            experiment_name=name,
+            scoring_key_mapping={
+                "reference": lambda x: x["expected_model_output"]["output"],
+            },
+            project_name=PROJECT_NAME,
+        ).experiment_id
+
+    first_version_experiment_ids = {
+        run_experiment(f"{experiment_name}-v1-a"),
+        run_experiment(f"{experiment_name}-v1-b"),
+    }
+
+    # A new item creates a second version; the Poland item keeps its stable id.
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "expected_model_output": {"output": "Paris"},
+            }
+        ]
+    )
+    second_version_experiment_id = run_experiment(f"{experiment_name}-v2")
+    opik.flush_tracker()
+
+    poland_item_id = next(
+        item["id"]
+        for item in dataset.get_items()
+        if item["input"]["question"] == "What is the capital of Poland?"
+    )
+    experiments = opik_client.get_experiments_client()
+
+    every_version = experiments.find_experiment_items_for_dataset(
+        dataset_name=dataset_name,
+        filter_string=f'id = "{poland_item_id}"',
+        project_name=PROJECT_NAME,
+    )
+
+    assert {item.experiment_id for item in every_version} == (
+        first_version_experiment_ids | {second_version_experiment_id}
+    )
+    assert len(every_version) == 3
+    for item in every_version:
+        assert item.dataset_item_id == poland_item_id
+        assert item.evaluation_task_output == {"output": "Krakow"}
+        assert item.feedback_scores[0]["value"] == 0.0
+
+    first_version_only = experiments.find_experiment_items_for_dataset(
+        dataset_name=dataset_name,
+        filter_string=f'id = "{poland_item_id}"',
+        project_name=PROJECT_NAME,
+        dataset_versions=[first_version_hash],
+    )
+
+    assert {
+        item.experiment_id for item in first_version_only
+    } == first_version_experiment_ids
+    assert len(first_version_only) == 2
+
+    with pytest.raises(opik.exceptions.DatasetVersionNotFound):
+        experiments.find_experiment_items_for_dataset(
+            dataset_name=dataset_name,
+            project_name=PROJECT_NAME,
+            dataset_versions=["no-such-version"],
+        )
+
+
 def test__find_experiment_items_for_dataset__filtered__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
