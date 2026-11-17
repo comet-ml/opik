@@ -57,9 +57,12 @@ jobs:
           uv pip install --system -r test_requirements.txt
 
       - name: Install lib
+        # NLTK >=3.10.4 refuses data that is hardlinked (uv's default link mode) or in a
+        # directory others can write to, which includes the stopwords llama-index bundles.
         env:
           UV_LINK_MODE: copy
         run: |
+          umask 022
           cd ./tests
           uv pip install --system -r library_integration/llama_index/requirements.txt
 
