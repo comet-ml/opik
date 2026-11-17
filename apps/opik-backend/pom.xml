@@ -26,6 +26,7 @@
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.10.0</clickhouse-java.version>
         <google-protobuf.version>4.36.0</google-protobuf.version>
+        <google-common-protos.version>2.78.0</google-common-protos.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
@@ -408,6 +409,12 @@
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java-util</artifactId>
             <version>${google-protobuf.version}</version>
+        </dependency>
+        <!-- Declared for com.google.rpc.Status in the OTLP error responses, which used to come in through gax. -->
+        <dependency>
+            <groupId>com.google.api.grpc</groupId>
+            <artifactId>proto-google-common-protos</artifactId>
+            <version>${google-common-protos.version}</version>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry.proto</groupId>
