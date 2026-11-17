@@ -1,6 +1,11 @@
-from typing import Any
+from typing import Any, List, Optional
 import json
+import re
+import logging
+
 import opik.exceptions as exceptions
+
+LOGGER = logging.getLogger(__name__)
 
 
 def normalize_verdict(verdict: str) -> str:
@@ -19,6 +24,57 @@ def normalize_verdict(verdict: str) -> str:
     drift, it does not interpret the verdict.
     """
     return verdict.strip().lower().rstrip(".,!?;:").strip()
+
+
+# Characters a judge wraps a verdict in: markdown emphasis/code and quotes.
+_VERDICT_WRAPPERS = "*_`\"'\u201c\u201d\u2018\u2019 "
+_LEADING_YES_NO = re.compile(r"(yes|no)(?![a-z])")
+
+
+def read_yes_no(verdict: Any) -> Optional[str]:
+    """Read a judge ``verdict`` as ``"yes"``, ``"no"`` or ``None``.
+
+    Builds on :func:`normalize_verdict` and also reads the verdict word when a
+    judge wraps it in markdown or quotes (``"**No**"``, ``"`no`"``,
+    ``'"no"'``) or explains it after the word (``"No, the reply ignores the
+    request"``). Anything else returns ``None``, so a caller can tell an
+    unreadable verdict apart from a negative or positive one instead of
+    counting it on either side.
+    """
+    if not isinstance(verdict, str):
+        return None
+    text = verdict.strip().lower().lstrip(_VERDICT_WRAPPERS)
+    match = _LEADING_YES_NO.match(text)
+    return match.group(1) if match else None
+
+
+def yes_share_of_readable_verdicts(verdicts: List[Any], metric_name: str) -> float:
+    """Share of ``"yes"`` among the verdicts that read as ``"yes"`` or ``"no"``.
+
+    Unreadable verdicts are left out of both counts, so they no longer count
+    as positive: ``["no", "N/A"]`` scores 0.0, not 0.5. A warning gives their
+    count and positions only, never the verdict text, which is free-form judge
+    output and can quote the conversation. When no verdict is readable, a
+    ``MetricComputationError`` is raised: an empty read must not turn into a
+    perfect or a zero score.
+    """
+    readings = [read_yes_no(verdict) for verdict in verdicts]
+    readable = [reading for reading in readings if reading is not None]
+    if len(readable) < len(readings):
+        LOGGER.warning(
+            "%s: ignored %d of %d judge verdict(s) that are neither yes nor no "
+            "(positions %s)",
+            metric_name,
+            len(readings) - len(readable),
+            len(readings),
+            [index for index, reading in enumerate(readings) if reading is None],
+        )
+    if not readable:
+        raise exceptions.MetricComputationError(
+            f"{metric_name}: none of the {len(readings)} judge verdict(s) "
+            "reads as yes or no"
+        )
+    return readable.count("yes") / len(readable)
 
 
 def extract_json_content_or_raise(content: str) -> Any:

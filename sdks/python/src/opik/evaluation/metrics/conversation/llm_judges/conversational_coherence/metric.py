@@ -322,7 +322,7 @@ def _extract_irrelevancies_from_verdicts(
     return [
         {"message_number": f"{index + 1}", "reason": verdict.reason}
         for index, verdict in enumerate(verdicts)
-        if parsing_helpers.normalize_verdict(verdict.verdict) == "no"
+        if parsing_helpers.read_yes_no(verdict.verdict) == "no"
         and verdict.reason is not None
     ]
 
@@ -344,10 +344,9 @@ def _evaluate_conversation_from_model_output(
 def _score_from_verdicts(
     verdicts: List[schema.EvaluateConversationCoherenceResponse],
 ) -> float:
-    relevant_count = sum(
-        parsing_helpers.normalize_verdict(v.verdict) != "no" for v in verdicts
+    return parsing_helpers.yes_share_of_readable_verdicts(
+        [v.verdict for v in verdicts], metric_name="conversational_coherence"
     )
-    return relevant_count / len(verdicts)
 
 
 def _windows_to_grade(
