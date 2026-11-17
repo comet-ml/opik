@@ -11,6 +11,7 @@ from opik.rest_api import JsonListStringPublic, TracePublic, TraceThread
 
 from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
+from ..engine import helpers as engine_helpers
 from ..engine import types as engine_types
 from ..metrics import score_result
 from ..suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
@@ -46,17 +47,29 @@ class ThreadsEvaluationEngine:
             Callable[[TracePublic], Optional[List[str]]]
         ] = None,
         max_traces_per_thread: int = 1000,
+        max_threads: int = 1000,
     ) -> evaluation_result.ThreadsEvaluationResult:
         if len(metrics) == 0:
             raise ValueError("No metrics provided")
+        if max_threads < 1:
+            raise ValueError(f"max_threads must be at least 1, got {max_threads}")
 
         threads = self._threads_client.search_threads(
             project_name=self._project_name,
             filter_string=filter_string,
+            max_results=max_threads,
         )
         if len(threads) == 0:
             raise exceptions.EvaluationError(
                 f"No threads found with filter_string: {filter_string}"
+            )
+        if len(threads) == max_threads:
+            LOGGER.warning(
+                "Evaluating the first %d threads found, the max_threads=%d limit. "
+                "Threads past the limit are not evaluated: raise max_threads or "
+                "narrow filter_string to evaluate them.",
+                len(threads),
+                max_threads,
             )
 
         evaluation_tasks: List[
@@ -182,4 +195,4 @@ class ThreadsEvaluationEngine:
                     )
                 )
 
-        return score_results
+        return engine_helpers.mark_invalid_score_values_as_failed(score_results)

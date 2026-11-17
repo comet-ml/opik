@@ -53,6 +53,10 @@ jobs:
       - name: Build E2E Docker images
         env:
           COMPOSE_BAKE: false
+          # The default attestation wraps each image in an index with two untagged child
+          # versions; deleting the ci-e2e tag in cleanup_e2e_docker.yaml leaves those
+          # children behind as orphans that bloat the package listing.
+          BUILDX_NO_DEFAULT_ATTESTATIONS: 1
         run: |
           SERVICES="backend python-backend"
           if [ "${{ inputs.include_guardrails }}" = "true" ]; then

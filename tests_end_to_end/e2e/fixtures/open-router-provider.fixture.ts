@@ -29,10 +29,12 @@ export const OPEN_ROUTER_EFFORT_MODEL = {
    * `reasoning_efforts`, so the panel has to fall back to
    * `getNativeModelBehindOpenRouter` + the native OpenAI row to find levels.
    *
-   * `o3-mini` matches `llm-model-policy`'s forbidden fragment `o3`, which is
-   * why this fixture registers it unbilled — see the header.
+   * Not `openai/o3-mini`, the cheaper one: the registry sync stopped labelling
+   * it, so the picker no longer offers it. `o3` matches `llm-model-policy`'s
+   * forbidden fragment `o3`, which is why this fixture registers it unbilled —
+   * see the header.
    */
-  nativeFallbackEfforts: 'openai/o3-mini',
+  nativeFallbackEfforts: 'openai/o3',
 } as const;
 
 // The group label the model picker renders OpenRouter's built-in models under
@@ -93,7 +95,7 @@ export interface OpenRouterProviderFixtures {
  *
  * ## Why registering the models unbilled is honest here
  *
- * `openai/o3-mini` matches `llm-model-policy`'s forbidden `o3` fragment, so a
+ * `openai/o3` matches `llm-model-policy`'s forbidden `o3` fragment, so a
  * POM would refuse to select it without this. The exemption is sound because
  * every spec using this fixture short-circuits `POST /v1/private/chat/completions`
  * in the browser (`captureCompletionBody`), so no request reaches OpenRouter

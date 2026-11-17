@@ -20,43 +20,42 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * name never leaves the frontend as typed: `buildExperimentName` composes the
  * `_b` from the variant's index in the prompt list, so the binding under test —
  * WHICH variant a suffix lands on — is only observable by clicking one
- * variant's button and reading what the resulting POST carried.
+ * variant's button and reading what the resulting `/experiments/execute`
+ * request carried.
  *
- * The provider is a `custom-llm` one whose base URL refuses every connection.
- * The model has to be selectable for Run to enable, but its output is not under
- * test: the experiment is named and created when the run starts, so it is
- * posted and persisted regardless of what the provider does with the
- * completion. That is what keeps this deterministic and free of a provider key.
+ * The provider is a `custom-llm` one that fails every call. The model has to be
+ * selectable for Run to enable, but its output is not under test: `execute`
+ * creates the named experiment before any item reaches the provider, so it
+ * persists whatever the provider answers. That is what keeps this
+ * deterministic and free of a provider key.
  */
 test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playground'] }, () => {
-  interface PostedExperiment {
-    name?: string;
+  interface ExecuteRequest {
     dataset_name?: string;
-    /**
-     * `getExperimentFromRun` stringifies the variant's own rendered prompt into
-     * `metadata.messages`. It is the only field on this POST that says which
-     * variant produced it, and so the only way to tell "B's suffix reached B"
-     * from "B's suffix reached whichever variant ran".
-     */
-    metadata?: { messages?: string };
+    prompts?: {
+      experiment_name?: string;
+      /**
+       * The variant's own messages: the only field on the request that says
+       * which variant ran, and so the only way to tell "B's suffix reached B"
+       * from "B's suffix reached whichever variant ran".
+       */
+      messages?: unknown[];
+    }[];
   }
 
   /**
-   * Collect every experiment-creation POST the page makes, from before the run
-   * starts.
-   *
-   * Anchored on the end of the path — `/experiments/items` and
-   * `/experiments/execute` share the prefix, and only the bare collection
-   * endpoint is the dataset-mode write path.
+   * Collect every `/experiments/execute` request the page makes, from before
+   * the run starts. A dataset run creates its experiments server-side from
+   * this one request, one per prompt entry, under the names it carries.
    */
-  const collectExperimentPosts = (page: Page): PostedExperiment[] => {
-    const posted: PostedExperiment[] = [];
+  const collectExecuteRequests = (page: Page): ExecuteRequest[] => {
+    const executed: ExecuteRequest[] = [];
     page.on('request', (request) => {
       if (request.method() !== 'POST') return;
-      if (!/\/v1\/private\/experiments\/?$/.test(new URL(request.url()).pathname)) return;
-      posted.push((request.postDataJSON() ?? {}) as PostedExperiment);
+      if (!/\/v1\/private\/experiments\/execute$/.test(new URL(request.url()).pathname)) return;
+      executed.push((request.postDataJSON() ?? {}) as ExecuteRequest);
     });
-    return posted;
+    return executed;
   };
 
   /**
@@ -104,7 +103,7 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
       const runName = `${testNamespace}-col`;
       const nameA = `${runName}_a`;
       const nameB = `${runName}_b`;
-      // A literal only variant B's prompt carries, so B's experiment POST is
+      // A literal only variant B's prompt carries, so B's prompt entry is
       // identifiable as B's from its body alone.
       const variantBMarker = 'second-variant-marker';
       const modelDisplayName = 'unreachable-model';
@@ -117,7 +116,7 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
       });
 
       const playground = new PlaygroundPage(page, project.id);
-      const posted = collectExperimentPosts(page);
+      const executed = collectExecuteRequests(page);
       const listExperiments = listerRegistering(
         backendClient,
         dataset.id,
@@ -157,7 +156,7 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
       await test.step("Run variant B's column only, and wait for it to announce", async () => {
         await playground.clickVariantRun(1);
         // The recorded toast is the run's own completion signal, so waiting on
-        // it is what makes the "exactly one POST" assertion below a closed
+        // it is what makes the "exactly one request" assertion below a closed
         // statement about a finished run rather than a snapshot of one in
         // progress.
         await expect
@@ -178,18 +177,20 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
         await listExperiments();
       });
 
-      await test.step('Exactly one experiment was posted, carrying B\'s suffix and B\'s prompt', async () => {
+      await test.step('Exactly one experiment was requested, carrying B\'s suffix and B\'s prompt', async () => {
         // Exactly one, not "at least one": a per-column run that also created
         // the other variant's experiment is the same class of defect as one
         // that named it wrongly, and is invisible to a lookup by name.
-        expect(posted).toHaveLength(1);
-        expect(posted[0].name).toBe(nameB);
-        expect(posted[0].dataset_name).toBe(dataset.name);
+        expect(executed).toHaveLength(1);
+        expect(executed[0].dataset_name).toBe(dataset.name);
+        expect(executed[0].prompts).toHaveLength(1);
+        const [prompt] = executed[0].prompts!;
+        expect(prompt.experiment_name).toBe(nameB);
         // The pairing, not just the string: a build that composed the suffix
         // from the clicked position instead of the variant's own index would
-        // post `_a` here, and a build that ran the wrong column would post B's
+        // send `_a` here, and a build that ran the wrong column would send B's
         // name with A's prompt.
-        expect(posted[0].metadata?.messages ?? '').toContain(variantBMarker);
+        expect(JSON.stringify(prompt.messages ?? [])).toContain(variantBMarker);
       });
 
       await test.step('The toast names B and only B', async () => {

@@ -133,8 +133,8 @@
     --message-input-background: #f2f2ff;
 
     /* Action cards */
-    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
-      0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --action-card-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 
     /* Action types */
     --action-trace-background: #dafbf0;
@@ -152,8 +152,8 @@
     --color-ollie: #f46e41;
     --color-ollie-amber: #f59e0b;
     --color-ollie-live: #00d14c;
-    --shadow-ollie: 0px 4px 3px
-        color-mix(in srgb, var(--color-ollie) 10%, transparent),
+    --shadow-ollie:
+      0px 4px 3px color-mix(in srgb, var(--color-ollie) 10%, transparent),
       0px 2px 2px color-mix(in srgb, var(--color-ollie) 10%, transparent);
 
     /* Config link icon color */
@@ -389,7 +389,8 @@
     --special-button-active: #1e9a65;
 
     /* Action cards - Dark Mode */
-    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1),
+    --action-card-shadow:
+      0 4px 6px -1px rgb(255 255 255 / 0.1),
       0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
@@ -702,34 +703,34 @@
   }
 
   body {
-    @apply bg-background text-foreground comet-body;
+    @apply comet-body bg-background text-foreground;
   }
 }
 
 /* custom classes */
 @layer base {
   .comet-title-xl {
-    @apply font-medium text-3xl tracking-normal text-foreground-secondary;
+    @apply text-3xl font-medium tracking-normal text-foreground-secondary;
   }
 
   .comet-title-l {
-    @apply font-medium text-2xl tracking-normal text-foreground-secondary;
+    @apply text-2xl font-medium tracking-normal text-foreground-secondary;
   }
 
   .comet-title-m {
-    @apply font-medium text-xl tracking-normal text-foreground-secondary;
+    @apply text-xl font-medium tracking-normal text-foreground-secondary;
   }
 
   .comet-title-s {
-    @apply font-medium text-lg tracking-normal text-foreground-secondary;
+    @apply text-lg font-medium tracking-normal text-foreground-secondary;
   }
 
   .comet-title-xs {
-    @apply font-medium text-sm tracking-normal text-foreground-secondary;
+    @apply text-sm font-medium tracking-normal text-foreground-secondary;
   }
 
   .comet-body {
-    @apply font-normal text-base tracking-normal text-foreground-secondary;
+    @apply text-base font-normal tracking-normal text-foreground-secondary;
   }
 
   .comet-body-accented {
@@ -737,7 +738,7 @@
   }
 
   .comet-body-s {
-    @apply font-normal text-sm tracking-normal;
+    @apply text-sm font-normal tracking-normal;
   }
 
   .comet-body-s-accented {
@@ -745,7 +746,7 @@
   }
 
   .comet-body-xs {
-    @apply font-normal text-xs tracking-normal;
+    @apply text-xs font-normal tracking-normal;
   }
 
   .comet-body-xs-accented {
@@ -753,7 +754,7 @@
   }
 
   .comet-code {
-    @apply font-normal text-sm tracking-normal;
+    @apply text-sm font-normal tracking-normal;
     font-family:
       Ubuntu Mono,
       ui-monospace,
@@ -913,6 +914,17 @@
   to {
     transform: translateX(-1000000px);
   }
+}
+
+// Registered from JS via CSS.highlights (thread Messages search)
+::highlight(thread-search-match) {
+  background-color: var(--search-highlight);
+  color: #000;
+}
+
+::highlight(thread-search-current-match) {
+  background-color: var(--search-current-highlight);
+  color: #000;
 }
 
 // rewrite padding for first cell for tables that takes full width with sticky behaviour
@@ -1119,11 +1131,11 @@ div.cm-theme div.cm-search.cm-panel {
   @apply px-2 py-1;
 
   input {
-    @apply h-8 px-3 pb-1.5 pt-1 rounded-md bg-background text-sm placeholder:text-light-slate focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray;
+    @apply h-8 rounded-md bg-background px-3 pb-1.5 pt-1 text-sm placeholder:text-light-slate focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray;
   }
 
   .cm-button {
-    @apply leading-none text-foreground h-8 px-3 comet-body-s border border-border bg-background hover:text-foreground active:bg-primary-100 active:text-foreground disabled:border-muted-disabled disabled:text-muted-gray disabled:opacity-100 whitespace-nowrap rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none bg-none disabled:bg-muted-gray;
+    @apply comet-body-s h-8 whitespace-nowrap rounded-md border border-border bg-background bg-none px-3 leading-none text-foreground transition-colors hover:text-foreground focus-visible:outline-none active:bg-primary-100 active:text-foreground disabled:pointer-events-none disabled:border-muted-disabled disabled:bg-muted-gray disabled:text-muted-gray disabled:opacity-100;
   }
 
   label {
@@ -1131,23 +1143,23 @@ div.cm-theme div.cm-search.cm-panel {
   }
 
   button[name="close"] {
-    @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
+    @apply bottom-px top-0 my-auto size-6 leading-none opacity-50 hover:opacity-100;
   }
 }
 
 /* Collapsible headings styles */
 .collapsible-heading {
-  @apply border border-border rounded-lg mb-4;
+  @apply mb-4 rounded-lg border border-border;
 
   /* Summary styling */
   summary.collapsible-heading-summary {
-    @apply cursor-pointer p-4 hover:bg-muted/50 transition-colors;
+    @apply cursor-pointer p-4 transition-colors hover:bg-muted/50;
     list-style: none; /* Remove default arrow */
 
     /* Custom arrow */
     &::before {
       content: "▶";
-      @apply inline-block mr-2 text-muted-foreground transition-transform duration-200;
+      @apply mr-2 inline-block text-muted-foreground transition-transform duration-200;
     }
 
     /* Rotate arrow when open */
@@ -1158,7 +1170,7 @@ div.cm-theme div.cm-search.cm-panel {
 
   /* Content wrapper */
   .collapsible-heading-content {
-    @apply p-4 pt-0 border-t border-border;
+    @apply border-t border-border p-4 pt-0;
   }
 
   /* When open, rotate arrow */
@@ -1189,7 +1201,7 @@ div.cm-theme div.cm-search.cm-panel {
     h4,
     h5,
     h6 {
-      @apply mt-4 mb-2;
+      @apply mb-2 mt-4;
 
       &:first-child {
         @apply mt-0;

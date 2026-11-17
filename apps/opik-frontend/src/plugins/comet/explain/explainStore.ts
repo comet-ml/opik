@@ -119,7 +119,7 @@ const withChunk = (entry: ExplainEntry, delta: string): ExplainEntry => {
     text: (recovering ? "" : entry.text) + delta,
     firstTokenAt: recovering
       ? performance.now()
-      : entry.firstTokenAt ?? performance.now(),
+      : (entry.firstTokenAt ?? performance.now()),
   };
 };
 

@@ -100,4 +100,15 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         return new RemoteWorkspacePermissionsService(client, config.getReactService());
     }
 
+    @Provides
+    @Singleton
+    public OrganizationResolver organizationResolver(@Config("authentication") AuthenticationConfig config) {
+
+        if (!config.isEnabled()) {
+            return new DefaultOrganizationResolver();
+        }
+
+        return new RemoteOrganizationResolver();
+    }
+
 }

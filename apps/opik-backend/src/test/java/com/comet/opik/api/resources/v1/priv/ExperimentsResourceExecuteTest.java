@@ -4,8 +4,10 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetType;
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -48,6 +50,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
@@ -134,19 +137,41 @@ class ExperimentsResourceExecuteTest {
     void executeSendsNoReasoningEffortForANonOpenAiModel() {
         var workspace = newWorkspace();
         var upstreamPath = stubUpstream();
-        createProviderApiKey(workspace, ProviderApiKey.builder()
-                .provider(LlmProvider.CUSTOM_LLM)
-                .providerName(CUSTOM_PROVIDER_NAME)
-                .apiKey("gateway-key")
-                .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + upstreamPath)
-                .configuration(Map.of("provider_name", CUSTOM_PROVIDER_NAME, "models", CUSTOM_MODEL))
-                .build());
+        createProviderApiKey(workspace, customProviderApiKey(upstreamPath));
 
         execute(workspace, CUSTOM_MODEL, "low");
 
         assertThat(awaitUpstreamRequestBodies(upstreamPath))
                 .hasSize(1)
                 .allSatisfy(body -> assertThat(body.has("reasoning_effort")).isFalse());
+    }
+
+    @Test
+    void executeWithSeveralPromptsCreatesTheMissingProjectOnceForAllOfThem() {
+        var workspace = newWorkspace();
+        var upstreamPath = stubUpstream();
+        createProviderApiKey(workspace, customProviderApiKey(upstreamPath));
+        var dataset = createDatasetWithOneItem(workspace);
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var prompts = IntStream.range(0, 5)
+                .mapToObj(i -> promptVariant(CUSTOM_MODEL).toBuilder().experimentName("variant-" + i).build())
+                .toList();
+
+        var response = experimentResourceClient.execute(ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(dataset.id())
+                .projectName(projectName)
+                .prompts(prompts)
+                .build(), workspace.apiKey(), workspace.name());
+
+        assertThat(response.experiments()).hasSize(prompts.size());
+        var experiments = experimentResourceClient.findExperiments(1, 10, dataset.id(), null, null, null, false,
+                null, null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK).content();
+        assertThat(experiments).hasSize(prompts.size());
+        assertThat(experiments).extracting(Experiment::projectName).containsOnly(projectName);
+        assertThat(experiments.stream().map(Experiment::projectId).distinct().toList())
+                .singleElement()
+                .isNotNull();
     }
 
     @ParameterizedTest
@@ -181,6 +206,52 @@ class ExperimentsResourceExecuteTest {
         assertThat(experiments.content()).isEmpty();
     }
 
+    @Test
+    void executeAcceptsAProjectNameOfMaxLength() {
+        var workspace = newWorkspace();
+        var upstreamPath = stubUpstream();
+        createProviderApiKey(workspace, customProviderApiKey(upstreamPath));
+        var dataset = createDatasetWithOneItem(workspace);
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH);
+
+        var response = experimentResourceClient.execute(ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(dataset.id())
+                .projectName(projectName)
+                .prompts(List.of(promptVariant(CUSTOM_MODEL)))
+                .build(), workspace.apiKey(), workspace.name());
+
+        assertThat(response.experiments()).hasSize(1);
+        var experiments = experimentResourceClient.findExperiments(1, 10, dataset.id(), null, null, null, false,
+                null, null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK).content();
+        assertThat(experiments).extracting(Experiment::projectName).containsExactly(projectName);
+    }
+
+    @Test
+    void executeRejectsATooLongProjectName() {
+        var workspace = newWorkspace();
+        var dataset = createDatasetWithOneItem(workspace);
+        var request = ExperimentExecutionRequest.builder()
+                .datasetName(dataset.name())
+                .datasetId(dataset.id())
+                .projectName(RandomStringUtils.secure().nextAlphanumeric(Project.NAME_MAX_LENGTH + 1))
+                .prompts(List.of(promptVariant(CUSTOM_MODEL)))
+                .build();
+
+        try (var response = experimentResourceClient.callExecute(request, workspace.apiKey(), workspace.name())) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            var expectedError = new ValidationErrors(List.of("projectName cannot exceed 150 characters"));
+            assertThat(response.readEntity(ValidationErrors.class)).isEqualTo(expectedError);
+        }
+
+        var experiments = experimentResourceClient.findExperiments(1, 10, dataset.id(), null, null, null, false,
+                null, null, null, workspace.apiKey(), workspace.name(), HttpStatus.SC_OK);
+        assertThat(experiments.content()).isEmpty();
+    }
+
+    private record ValidationErrors(List<String> errors) {
+    }
+
     private record Workspace(String apiKey, String name) {
     }
 
@@ -205,7 +276,20 @@ class ExperimentsResourceExecuteTest {
                 HttpStatus.SC_CREATED);
     }
 
-    private void execute(Workspace workspace, String model, String reasoningEffort) {
+    private ProviderApiKey customProviderApiKey(String upstreamPath) {
+        return ProviderApiKey.builder()
+                .provider(LlmProvider.CUSTOM_LLM)
+                .providerName(CUSTOM_PROVIDER_NAME)
+                .apiKey("gateway-key")
+                .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + upstreamPath)
+                .configuration(Map.of("provider_name", CUSTOM_PROVIDER_NAME, "models", CUSTOM_MODEL))
+                .build();
+    }
+
+    private record CreatedDataset(String name, UUID id) {
+    }
+
+    private CreatedDataset createDatasetWithOneItem(Workspace workspace) {
         var dataset = DatasetResourceClient.buildDataset(podamFactory);
         var datasetId = datasetResourceClient.createDataset(dataset, workspace.apiKey(), workspace.name());
         datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
@@ -215,16 +299,26 @@ class ExperimentsResourceExecuteTest {
                         .data(Map.of("question", TextNode.valueOf("What is 2 + 2?")))
                         .build()))
                 .build(), workspace.name(), workspace.apiKey());
+        return new CreatedDataset(dataset.name(), datasetId);
+    }
+
+    private static ExperimentExecutionRequest.PromptVariant promptVariant(String model) {
+        return ExperimentExecutionRequest.PromptVariant.builder()
+                .model(model)
+                .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
+                        .role("user")
+                        .content(TextNode.valueOf("{{question}}"))
+                        .build()))
+                .build();
+    }
+
+    private void execute(Workspace workspace, String model, String reasoningEffort) {
+        var dataset = createDatasetWithOneItem(workspace);
 
         var response = experimentResourceClient.execute(ExperimentExecutionRequest.builder()
                 .datasetName(dataset.name())
-                .datasetId(datasetId)
-                .prompts(List.of(ExperimentExecutionRequest.PromptVariant.builder()
-                        .model(model)
-                        .messages(List.of(ExperimentExecutionRequest.PromptVariant.Message.builder()
-                                .role("user")
-                                .content(TextNode.valueOf("{{question}}"))
-                                .build()))
+                .datasetId(dataset.id())
+                .prompts(List.of(promptVariant(model).toBuilder()
                         .configs(Map.of("reasoningEffort", TextNode.valueOf(reasoningEffort)))
                         .build()))
                 .build(), workspace.apiKey(), workspace.name());

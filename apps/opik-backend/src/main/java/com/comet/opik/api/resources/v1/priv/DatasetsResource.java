@@ -87,6 +87,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.media.multipart.ContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
@@ -113,6 +114,9 @@ import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Datasets", description = "Dataset resources")
 public class DatasetsResource {
+
+    // Each item carries one result per experiment in all-experiments mode, so pages are bounded tighter
+    private static final int ALL_EXPERIMENTS_MAX_PAGE_SIZE = 100;
 
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
@@ -777,19 +781,36 @@ public class DatasetsResource {
     public Response findDatasetItemsWithExperimentItems(
             @PathParam("id") UUID datasetId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
+            @QueryParam("size") @Min(1) @DefaultValue("10") @Schema(description = "Page size. At most "
+                    + ALL_EXPERIMENTS_MAX_PAGE_SIZE
+                    + " when experiment_ids is omitted, since each item then carries a result per experiment") int size,
+            @QueryParam("experiment_ids") @Schema(description = "JSON array of experiment IDs. Omit to include every regular experiment on the dataset (optimizer trial, mini-batch and mutation experiments are excluded); item filters are then evaluated against the newest version of each item that those experiments reference") String experimentIdsQueryParam,
+            @QueryParam("dataset_version") @Schema(description = "Dataset version hash or tag. Only experiments run against this version are included. Requires experiment_ids to be omitted. Returns 404 if the version does not exist") String datasetVersion,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
             @QueryParam("search") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
-        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+        boolean allDatasetExperiments = experimentIdsQueryParam == null;
+        Set<UUID> experimentIds = allDatasetExperiments || StringUtils.isBlank(experimentIdsQueryParam)
+                ? Set.of()
+                : ParamsValidator.getIds(experimentIdsQueryParam);
 
-        if (experimentIds.isEmpty()) {
+        String validationError = null;
+        if (!allDatasetExperiments && experimentIds.isEmpty()) {
+            validationError = "experiment_ids cannot be empty";
+        } else if (!allDatasetExperiments && StringUtils.isNotBlank(datasetVersion)) {
+            validationError = "dataset_version can only be used when experiment_ids is omitted";
+        } else if (allDatasetExperiments && !featureFlags.isDatasetVersioningEnabled()) {
+            validationError = "experiment_ids is required when dataset versioning is disabled";
+        } else if (allDatasetExperiments && size > ALL_EXPERIMENTS_MAX_PAGE_SIZE) {
+            validationError = "size must be at most %d when experiment_ids is omitted"
+                    .formatted(ALL_EXPERIMENTS_MAX_PAGE_SIZE);
+        }
+
+        if (validationError != null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
-                            "experiment_ids cannot be empty"))
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), validationError))
                     .build();
         }
 
@@ -806,6 +827,8 @@ public class DatasetsResource {
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .versionHashOrTag(null) // Service layer will resolve to experiment's version when experimentIds present
+                .allDatasetExperiments(allDatasetExperiments)
+                .experimentsVersionHashOrTag(datasetVersion)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

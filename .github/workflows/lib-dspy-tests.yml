@@ -22,7 +22,7 @@ on:
 
 jobs:
   tests:
-    name: DSPy Python ${{matrix.python_version}}
+    name: DSPy Python ${{matrix.python_version}} (dspy ${{matrix.dspy_version}})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -36,6 +36,14 @@ jobs:
         # Lowest and highest supported Python only: these suites make paid
         # LLM calls and the intermediate versions add cost without coverage.
         python_version: ["3.10", "3.13"]
+        dspy_version: ["latest"]
+        # dspy 3.5 changed the LM call/history shape the integration reads usage
+        # from; keep one cell on the last pre-3.5 release so both stay supported.
+        # dspy_version is a matrix axis so this include adds a cell instead of
+        # being merged into the existing 3.13 one.
+        include:
+          - python_version: "3.13"
+            dspy_version: "3.4.1"
 
     steps:
       - name: Check out code
@@ -47,7 +55,7 @@ jobs:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Install opik
         run: uv pip install --system .
@@ -61,6 +69,12 @@ jobs:
         run: |
           cd ./tests
           uv pip install --system -r library_integration/dspy/requirements.txt
+
+      - name: Pin dspy version
+        if: matrix.dspy_version != 'latest'
+        env:
+          DSPY_VERSION: ${{ matrix.dspy_version }}
+        run: uv pip install --system "dspy==${DSPY_VERSION}"
 
       - name: Run tests
         run: |

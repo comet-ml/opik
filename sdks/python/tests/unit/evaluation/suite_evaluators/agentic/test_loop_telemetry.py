@@ -54,10 +54,19 @@ def loop_log_records():
 class _StubChatModel(base_model.OpikBaseModel):
     """Returns canned responses in order; records every call."""
 
-    def __init__(self, responses: List[base_model.ConversationDict]) -> None:
+    def __init__(
+        self,
+        responses: List[base_model.ConversationDict],
+        features: base_model.ModelFeatures = base_model.ModelFeatures(),
+    ) -> None:
         super().__init__(model_name="stub-model")
         self._responses = list(responses)
+        self._features = features
         self.calls: List[dict] = []
+
+    @property
+    def supported_features(self) -> base_model.ModelFeatures:
+        return self._features
 
     def generate_string(
         self,
@@ -128,8 +137,14 @@ def _tool_call(tool_id: str, name: str, arguments: str = "{}") -> dict:
     }
 
 
-def _run_with_responses(responses, tools, ctx, overview_truncated=False):
-    model = _StubChatModel(responses)
+def _run_with_responses(
+    responses,
+    tools,
+    ctx,
+    overview_truncated=False,
+    features=base_model.ModelFeatures(),
+):
+    model = _StubChatModel(responses, features=features)
     registry = tool_registry.ToolRegistry(tools=tools)
     content = loop.run_agentic_judge(
         model=model,
@@ -316,7 +331,7 @@ class TestDuplicateToolCallShortCircuit:
         responses = [
             {"tool_calls": [_tool_call("c1", "scan")]},
             {"tool_calls": [_tool_call("c2", "scan")]},
-            {"content": '{"verdict": "ok"}', "tool_calls": []},
+            {"tool_calls": [_tool_call("c3", "submit_verdict", '{"verdict": "ok"}')]},
         ]
         ctx = _ctx(_trace())
         tool = _StubTool("scan", payload='{"spans": []}')
@@ -412,3 +427,90 @@ class TestDuplicateToolCallShortCircuit:
             r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
         ]
         assert "duplicates=0" in finished[0].getMessage()
+
+
+class TestVerdictTool:
+    def test_run_agentic_judge__verdict_tool_called__returns_its_arguments_without_wrapup(
+        self,
+    ):
+        tools = [_StubTool("read")]
+        responses = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [_tool_call("c1", "read")],
+            },
+            {
+                "role": "assistant",
+                "content": "Checked the span.",
+                "tool_calls": [
+                    _tool_call("c2", "submit_verdict", '{"verdict": "pass"}')
+                ],
+            },
+        ]
+
+        content, model, _ = _run_with_responses(responses, tools, _ctx(_trace()))
+
+        assert [call["response_format"] for call in model.calls] == [None, None]
+        assert [call["tool_choice"] for call in model.calls] == [
+            "required",
+            "required",
+        ]
+        assert content == '{"verdict": "pass"}'
+
+    def test_run_agentic_judge__reply_without_verdict_tool__wrapup_structures(
+        self,
+    ):
+        tools = [_StubTool("read")]
+        responses = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [_tool_call("c1", "read")],
+            },
+            {"role": "assistant", "content": "The answer looks right."},
+            {"role": "assistant", "content": '{"verdict": "pass"}'},
+        ]
+
+        content, model, _ = _run_with_responses(responses, tools, _ctx(_trace()))
+
+        assert [call["response_format"] for call in model.calls] == [
+            None,
+            None,
+            _WrapupSchema,
+        ]
+        assert content == '{"verdict": "pass"}'
+
+    def test_run_agentic_judge__verdict_mixed_with_lookup__sets_verdict_aside_and_runs_lookup(
+        self,
+    ):
+        read_tool = _StubTool("read")
+        responses = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    _tool_call("c1", "read"),
+                    _tool_call("c2", "submit_verdict", '{"verdict": "early"}'),
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    _tool_call("c3", "submit_verdict", '{"verdict": "pass"}')
+                ],
+            },
+        ]
+
+        content, model, _ = _run_with_responses(responses, [read_tool], _ctx(_trace()))
+
+        assert content == '{"verdict": "pass"}'
+        assert read_tool.execute_count == 1
+        assert len(model.calls) == 2
+        for call in model.calls:
+            assert _conversation_is_well_formed(call["messages"])
+        assert any(
+            m.get("role") == "tool" and m.get("tool_call_id") == "c2"
+            for m in model.calls[1]["messages"]
+        )

@@ -16,7 +16,7 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * pins that the guard does not STICK: nothing in the shipped unit tests covers
  * `itemsTotal` changing under a mounted component.
  *
- * The Shift+Enter run here is deliberately the same gesture
+ * The Cmd/Ctrl+Enter run here is deliberately the same gesture
  * `playground-empty-version-run-guard.spec.ts` asserts does nothing on an empty
  * version. That spec's negative is only worth anything if the shortcut is shown
  * to work somewhere, and this is where: a shortcut deleted outright would leave
@@ -100,6 +100,14 @@ test.describe(
           // single-variant page cannot exercise that half of the gate at all.
           await playground.duplicateVariant(0);
           await playground.clickRunExperiment();
+          // The header names the dataset from its own `GET /datasets/{id}`,
+          // sent once the selection commits; until it answers, its reason is
+          // "Your dataset has been removed".
+          const datasetRead = page.waitForResponse(
+            (response) =>
+              response.request().method() === 'GET' &&
+              new URL(response.url()).pathname.endsWith(`/v1/private/datasets/${emptiedDataset.id}`),
+          );
           await playground.selectRunExperimentSource({
             mode: 'dataset',
             entityName: emptiedDataset.name,
@@ -110,6 +118,7 @@ test.describe(
           await expect(playground.loadedSourceVersionLabel()).toHaveText(
             emptiedDataset.emptied.name,
           );
+          await (await datasetRead).finished();
         });
 
         await test.step('On the emptied version every Run surface is closed', async () => {
@@ -148,7 +157,7 @@ test.describe(
           expect(await playground.mountedRowIds()).toHaveLength(seededItems);
         });
 
-        await test.step('Shift+Enter now starts a run, over every item and variant', async () => {
+        await test.step('Cmd/Ctrl+Enter now starts a run, over every item and variant', async () => {
           await playground.pressRunAllHotkey();
           await playground.waitForRunSettled();
           // Two items times two variants. A run that had used the emptied

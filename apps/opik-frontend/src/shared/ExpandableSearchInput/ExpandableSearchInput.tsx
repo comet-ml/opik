@@ -54,6 +54,12 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  // A value present at mount while disabled (e.g. a search restored from the URL while
+  // data loads) must still show once enabled, or it filters with no visible search.
+  const expandWhenEnabledRef = useRef(Boolean(value) && disabled);
+  // Only a user-opened search takes focus; one that opens on its own must not steal it
+  // from the page (and its keyboard shortcuts).
+  const focusOnExpandRef = useRef(false);
 
   useEffect(() => {
     if (overlayRef.current) {
@@ -63,10 +69,20 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
         overlayRef.current.setAttribute("inert", "");
       }
     }
-    if (isExpanded && inputRef.current) {
+    if (isExpanded && focusOnExpandRef.current && inputRef.current) {
+      focusOnExpandRef.current = false;
       inputRef.current.focus();
     }
   }, [isExpanded]);
+
+  useEffect(() => {
+    if (disabled || !expandWhenEnabledRef.current) return;
+    expandWhenEnabledRef.current = false;
+    if (value) {
+      setIsExpanded(true);
+      onExpandedChange?.(true);
+    }
+  }, [disabled, value, onExpandedChange]);
 
   useEffect(() => {
     if (isUndefined(value)) {
@@ -77,6 +93,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
 
   const handleExpand = () => {
     if (disabled) return;
+    focusOnExpandRef.current = true;
     setIsExpanded(true);
     onExpandedChange?.(true);
   };

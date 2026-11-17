@@ -81,8 +81,15 @@ const OUTPUT_TOKENS = 1_000_000;
  * two counts with no cache, audio, character or prompt-tier term in it:
  *
  *   gpt-3.5-turbo                  openai     $0.5/M in + $1.5/M out  -> $2.00
- *   amazon.titan-text-express-v1   bedrock    $1.3/M in + $1.7/M out  -> $3.00
+ *   amazon.titan-text-express-v1   bedrock    $0.2/M in + $0.6/M out  -> $0.80
  *   gemini-gemma-2-27b-it          google_ai  $0.35/M in + $1.05/M out -> $1.40
+ *
+ * The Titan row was $1.3/M + $1.7/M -> $3.00 until the generated price artifact
+ * was refreshed; `amazon.titan-text-express-v1` now publishes $0.2/M + $0.6/M in
+ * `model_prices_and_context_window.json`, and the backend resolved exactly the
+ * $0.80 that implies. Re-pinned rather than derived from the file on purpose —
+ * pinning is what makes a reprice a thing a human looks at, which is how this
+ * one surfaced.
  *
  * The two excluded values are not an afterthought. `GenAiProviderAliasResolver`
  * documents why each is left out — `google_genai` names more than one Google
@@ -113,7 +120,7 @@ const ALIAS_SEEDS: Array<Omit<OtelAliasSpanSeed, 'name'>> = [
     reportedProvider: 'amazon_bedrock',
     storedProvider: 'bedrock',
     model: 'amazon.titan-text-express-v1',
-    expectedCost: 3,
+    expectedCost: 0.8,
     controlKey: 'bedrock-canonical',
   },
   {
@@ -121,7 +128,7 @@ const ALIAS_SEEDS: Array<Omit<OtelAliasSpanSeed, 'name'>> = [
     reportedProvider: 'bedrock',
     storedProvider: 'bedrock',
     model: 'amazon.titan-text-express-v1',
-    expectedCost: 3,
+    expectedCost: 0.8,
   },
   {
     key: 'google-ai-gemini-aliased',

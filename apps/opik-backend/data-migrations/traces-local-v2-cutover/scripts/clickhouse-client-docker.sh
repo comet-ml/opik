@@ -10,7 +10,7 @@
 #
 # Knobs (env):
 #   CLICKHOUSE_CLIENT_IMAGE        official image to run — match your server's major version. Default:
-#                                  clickhouse/clickhouse-server:26.3.16.16-alpine (the version Opik ships); its bundled
+#                                  clickhouse/clickhouse-server:26.3.62.3-alpine (the version Opik ships); its bundled
 #                                  clickhouse-client is used via --entrypoint, so there is one trusted image.
 #   CLICKHOUSE_CLIENT_DOCKER_OPTS  extra `docker run` flags. Empty for a remote CLICKHOUSE_HOST (the container dials out).
 #                                  To reach a ClickHouse on the HOST's own loopback there are two cases, and on macOS they
@@ -27,7 +27,7 @@
 #                                  ignores CLICKHOUSE_PORT.
 set -euo pipefail
 
-IMAGE="${CLICKHOUSE_CLIENT_IMAGE:-clickhouse/clickhouse-server:26.3.16.16-alpine}"
+IMAGE="${CLICKHOUSE_CLIENT_IMAGE:-clickhouse/clickhouse-server:26.3.62.3-alpine}"
 
 # CLICKHOUSE_CLIENT_DOCKER_OPTS is unquoted so multiple flags word-split; CLICKHOUSE_* are forwarded so the in-image
 # client reads the same connection env the driver scripts set.

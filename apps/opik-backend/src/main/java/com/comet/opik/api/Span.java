@@ -37,7 +37,7 @@ public record Span(
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) UUID id,
         @JsonView({
                 Span.View.Public.class,
-                Span.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
+                Span.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "If null, the default project is used") String projectName,
         @JsonView({Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({Span.View.Public.class,
                 Span.View.Write.class}) @NotNull(groups = {Span.View.Write.class}) UUID traceId,

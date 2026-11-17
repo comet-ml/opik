@@ -23,6 +23,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
@@ -39,6 +40,7 @@ class AuthModuleNoAuthIntegrationTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/projects";
     public static final String FEEDBACK_DEFINITION_TEMPLATE = "%s/v1/private/feedback-definitions";
+    private static final String PINNED_DEFAULT_ORGANIZATION_ID = "01a1a1c9-b569-7b5b-9c5c-1aa254d42e50";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -147,6 +149,18 @@ class AuthModuleNoAuthIntegrationTest {
                 .hasEntrySatisfying("\uD83D\uDC4D", value -> assertThat(value).isEqualTo(1.0));
         assertThat(actualEntity.getDetails().getCategories())
                 .hasEntrySatisfying("\uD83D\uDC4E", value -> assertThat(value).isEqualTo(0.0));
+    }
+
+    @Test
+    void testOrganizationResolver__noAuthIsConfigured__thenResolveDefaultOrganization(OrganizationResolver resolver) {
+        assertThat(resolver).isInstanceOf(DefaultOrganizationResolver.class);
+
+        StepVerifier.create(resolver.organizationId())
+                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
+                .verifyComplete();
+        StepVerifier.create(resolver.requireOrganizationAdmin())
+                .expectNext(PINNED_DEFAULT_ORGANIZATION_ID)
+                .verifyComplete();
     }
 
 }

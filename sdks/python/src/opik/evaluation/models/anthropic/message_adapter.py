@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 import pydantic
@@ -13,30 +14,14 @@ LOGGER = logging.getLogger(__name__)
 
 # Parameters accepted by anthropic.messages.create().
 #
-# Notable omission — `reasoning_effort` (OpenAI-shape extended-thinking
-# knob). It's deliberately not listed, so `filter_unsupported_params`
-# drops it silently. The LiteLLM path translates `reasoning_effort` →
-# `thinking={"type": "enabled", "budget_tokens": N}` (and applies a
-# conditional drop when an explicit non-1 `temperature` would conflict —
-# see `LiteLLMChatModel._remove_unnecessary_not_supported_params`). The
-# native path here intentionally does NOT mirror that translation: the
-# effort→budget mapping is LiteLLM's convention, not Anthropic's, so
-# encoding it here would tie us to LiteLLM's choices.
-#
-# Practical consequence — for users who want extended thinking on the
-# native adapter, pass `thinking={...}` directly (you'd also need to
-# add it to this set so it isn't filtered) instead of relying on
-# `reasoning_effort`. Same-model, swap-adapters behavior therefore
-# diverges when the caller sets `reasoning_effort` with a non-
-# conflicting temperature: native drops it, LiteLLM keeps it. See the
-# discussion on the `temperature=0` rationale in
-# `suite_evaluators/agentic/loop.py` for why this hasn't surfaced via
-# the agentic judge (the loop pins `temperature=0`, which forces both
-# paths into the drop branch and hides the asymmetry).
+# `reasoning_effort` (OpenAI shape) is deliberately not listed:
+# `AnthropicChatModel` takes it out before this filter and sends it as
+# Anthropic's own `output_config.effort`, only to the models that accept
+# that level (see `accepted_effort_levels`).
 #
 # This is a ceiling, not the final answer: `filter_unsupported_params`
 # intersects it with what the installed SDK's `Messages.create()` actually
-# accepts, because the SDK removes parameters over time (1.7.0 dropped
+# accepts, because the SDK removes parameters over time (1.0.0 dropped
 # `temperature`, `top_p` and `top_k`) and forwarding one it no longer
 # takes is a `TypeError` before the request is ever sent.
 _SUPPORTED_PARAMS: frozenset[str] = frozenset(
@@ -54,6 +39,14 @@ _SUPPORTED_PARAMS: frozenset[str] = frozenset(
         "metadata",
     }
 )
+
+_SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
+
+_EFFORT_LEVELS = frozenset({"low", "medium", "high", "xhigh", "max"})
+
+# The minor version is one or two digits so a date suffix
+# (claude-sonnet-4-20250514) is not read as one.
+_CLAUDE_VERSION = re.compile(r"^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-|$)")
 
 
 def _parse_tool_call_arguments(arguments: Any) -> Dict[str, Any]:
@@ -247,6 +240,80 @@ def filter_unsupported_params(
             )
             already_warned.add(key)
     return filtered
+
+
+def _claude_version(model_name: str) -> Optional[Tuple[str, Tuple[int, int]]]:
+    match = _CLAUDE_VERSION.match(model_name)
+    if match is None:
+        return None
+    family, major, minor = match.groups()
+    return family, (int(major), int(minor or 0))
+
+
+def _rejects_sampling_params(model_name: str) -> bool:
+    claude_version = _claude_version(model_name)
+    if claude_version is None:
+        return False
+    family, version = claude_version
+    return version >= (5, 0) or (family == "opus" and version >= (4, 7))
+
+
+def accepted_effort_levels(model_name: str) -> frozenset[str]:
+    # An SDK from before `output_config` raises a TypeError on it.
+    sdk_params = _sdk_accepted_params()
+    if sdk_params is not None and "output_config" not in sdk_params:
+        return frozenset()
+    claude_version = _claude_version(model_name)
+    if claude_version is None:
+        return frozenset()
+    family, version = claude_version
+    if version >= (5, 0) or (family == "opus" and version >= (4, 7)):
+        return _EFFORT_LEVELS
+    if family in ("opus", "sonnet") and version >= (4, 6):
+        return _EFFORT_LEVELS - {"xhigh"}
+    if family == "opus" and version >= (4, 5):
+        return frozenset({"low", "medium", "high"})
+    return frozenset()
+
+
+def output_effort(
+    reasoning_effort: Any, model_name: str, already_warned: Set[str]
+) -> Optional[str]:
+    if reasoning_effort is None:
+        return None
+    if reasoning_effort in accepted_effort_levels(model_name):
+        return reasoning_effort
+    if "reasoning_effort" not in already_warned:
+        LOGGER.warning(
+            "Model %s does not accept effort=%s. Dropping reasoning_effort.",
+            model_name,
+            reasoning_effort,
+        )
+        already_warned.add("reasoning_effort")
+    return None
+
+
+def drop_unsupported_sampling_params(
+    params: Dict[str, Any],
+    model_name: str,
+    already_warned: Set[str],
+) -> None:
+    # Anthropic SDKs from 1.0.0 no longer take these, so this only matters on
+    # older SDKs, where `filter_unsupported_params` leaves them in.
+    if not _rejects_sampling_params(model_name):
+        return
+    present = [param for param in _SAMPLING_PARAMS if param in params]
+    for param in present:
+        value = params.pop(param)
+        if param not in already_warned:
+            LOGGER.warning(
+                "Model %s does not accept %s. Dropping %s=%s.",
+                model_name,
+                param,
+                param,
+                value,
+            )
+            already_warned.add(param)
 
 
 # OpenAI accepts `tool_choice` as a bare string ("auto" / "none" /

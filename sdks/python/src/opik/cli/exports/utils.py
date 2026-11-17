@@ -373,6 +373,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
     table.add_column("Type", style="cyan", no_wrap=True)
     table.add_column("Exported", justify="right", style="green")
     table.add_column("Skipped", justify="right", style="yellow")
+    table.add_column("Failed", justify="right", style="red")
     table.add_column("Files", style="blue")
 
     # Add rows for each type
@@ -386,6 +387,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
             "🧪 Experiments",
             str(exported),
             str(skipped) if skipped > 0 else "",
+            "",
             experiment_file_pattern,
         )
 
@@ -399,10 +401,13 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
             "📊 Datasets",
             str(exported),
             str(skipped) if skipped > 0 else "",
+            "",
             dataset_file_pattern,
         )
 
-    if stats.get("traces", 0) > 0 or stats.get("traces_skipped", 0) > 0:
+    if any(
+        stats.get(key, 0) > 0 for key in ("traces", "traces_skipped", "traces_failed")
+    ):
         exported = stats.get("traces", 0)
         skipped = stats.get("traces_skipped", 0)
         trace_file_pattern = (
@@ -412,6 +417,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
             "🔍 Traces",
             str(exported),
             str(skipped) if skipped > 0 else "",
+            str(stats["traces_failed"]) if stats.get("traces_failed", 0) > 0 else "",
             trace_file_pattern,
         )
 
@@ -425,6 +431,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
             "💬 Prompts",
             str(exported),
             str(skipped) if skipped > 0 else "",
+            "",
             prompt_file_pattern,
         )
 
@@ -435,6 +442,7 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
             "📁 Projects",
             str(exported),
             str(skipped) if skipped > 0 else "",
+            "",
             "project directories",
         )
 
@@ -459,11 +467,12 @@ def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
     )
     total_files = total_exported + total_skipped
 
-    table.add_row("", "", "", "", style="bold")
+    table.add_row("", "", "", "", "", style="bold")
     table.add_row(
         "📦 Total",
         str(total_exported),
         str(total_skipped) if total_skipped > 0 else "",
+        str(stats["traces_failed"]) if stats.get("traces_failed", 0) > 0 else "",
         f"{total_files} files",
         style="bold green",
     )

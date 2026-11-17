@@ -26,7 +26,7 @@ import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
 import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
-import { parseNdjsonStreamToArray } from "@/utils/stream";
+import { readAllStreamPages } from "@/utils/stream";
 import {
   Prompt,
   CreatePromptOptions,
@@ -380,16 +380,15 @@ export class OpikClient {
       // Flush the queue first to ensure all pending datasets are created
       await this.datasetBatchQueue.flush();
 
-      let projectId: string | undefined;
-      try {
-        projectId = await this.getProjectIdByName(resolvedProjectName);
-      } catch {
-        // Project doesn't exist yet — list without project filter
+      // A project that does not exist has no datasets
+      const projectId = await this.findProjectIdByName(resolvedProjectName);
+      if (projectId === undefined) {
+        return [];
       }
 
       const response = await this.api.datasets.findDatasets({
         size: maxResults,
-        ...(projectId && { projectId }),
+        projectId,
       });
 
       const datasets: Dataset<T>[] = [];
@@ -557,6 +556,21 @@ export class OpikClient {
       throw new Error("Failed to retrieve test suites");
     }
   };
+
+  /**
+   * Resolves a project name to its ID, or undefined when the project does not exist.
+   * Any other failure is rethrown, so an outage is not mistaken for a missing project.
+   */
+  private async findProjectIdByName(projectName: string): Promise<string | undefined> {
+    try {
+      return await this.getProjectIdByName(projectName);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
 
   private async getProjectIdByName(projectName: string): Promise<string> {
     const project = await this.api.projects.retrieveProject({
@@ -1003,14 +1017,16 @@ export class OpikClient {
     logger.debug(`Getting experiments with name "${name}"`);
 
     try {
-      const streamResponse = await this.api.experiments.streamExperiments({
-        name,
-        projectName: resolvedProjectName,
-      });
-
-      const rawItems = await parseNdjsonStreamToArray<ExperimentPublic>(
-        streamResponse,
-        serialization.ExperimentPublic
+      const rawItems = await readAllStreamPages<ExperimentPublic>(
+        (limit, lastRetrievedId) =>
+          this.api.experiments.streamExperiments({
+            name,
+            projectName: resolvedProjectName,
+            limit,
+            lastRetrievedId,
+          }),
+        serialization.ExperimentPublic,
+        "id"
       );
 
       return rawItems.map(
@@ -1708,6 +1724,8 @@ export class OpikClient {
    * - Number fields (`version_count`): =, !=, >, <, >=, <=
    * - List fields (`tags`): contains
    *
+   * @param filterString - Optional OQL filter
+   * @param projectName - Project to search in. Defaults to the active project context, then the client's project.
    * @returns Promise resolving to array of matching latest prompt versions
    * @throws Error if OQL filter syntax is invalid
    * @see https://www.comet.com/docs/opik/mcp-server
@@ -1739,9 +1757,11 @@ export class OpikClient {
    * ```
    */
   public searchPrompts = async (
-    filterString?: string
+    filterString?: string,
+    projectName?: string
   ): Promise<(Prompt | ChatPrompt)[]> => {
-    logger.debug("Searching prompts", { filterString });
+    logger.debug("Searching prompts", { filterString, projectName });
+    const searchProjectName = this.resolveProjectName(projectName);
 
     try {
       // Parse OQL filter string to JSON
@@ -1754,15 +1774,25 @@ export class OpikClient {
           : undefined;
       }
 
-      const response = await this.api.prompts.getPrompts(
-        {
-          filters,
-          size: 1000,
-        },
-        this.api.requestOptions
-      );
+      // A project that does not exist has no prompts
+      const projectId = await this.findProjectIdByName(searchProjectName);
+      if (projectId === undefined) {
+        return [];
+      }
 
-      const prompts = response.content ?? [];
+      const pageSize = 1000;
+      const prompts: OpikApi.PromptPublic[] = [];
+      for (let page = 1; ; page++) {
+        const response = await this.api.prompts.getPrompts(
+          { filters, projectId, page, size: pageSize },
+          this.api.requestOptions
+        );
+        const content = response.content ?? [];
+        prompts.push(...content);
+        if (content.length < pageSize) {
+          break;
+        }
+      }
 
       // Map each prompt to get its latest version and create appropriate instance
       const promptsWithVersions = await Promise.all(
@@ -1774,13 +1804,12 @@ export class OpikClient {
           try {
             const versionResponse =
               await this.api.prompts.retrievePromptVersion(
-                { name: promptData.name },
+                { name: promptData.name, projectName: searchProjectName },
                 this.api.requestOptions
               );
 
             const templateStructure = versionResponse.templateStructure;
 
-            const searchProjectName = this.resolveProjectName();
             // Default to text for backwards compatibility
             if (!templateStructure || templateStructure === PromptTemplateStructure.Text) {
               return Prompt.fromApiResponse(promptData, versionResponse, this, searchProjectName);
@@ -2055,7 +2084,7 @@ export class OpikClient {
    * @param options - Search options
    * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
    * @param options.filterString - Filter string using Opik Query Language (OQL).
-   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, metadata, etc.
+   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, comments, metadata, etc.
    *   Examples: 'status = "active"', 'feedback_scores.quality > 0.8', 'duration > 300'
    * @param options.maxResults - Maximum number of threads to return (default: 1000)
    * @param options.truncate - Whether to truncate large fields in the response (default: true)

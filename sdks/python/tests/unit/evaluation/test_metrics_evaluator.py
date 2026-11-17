@@ -1,11 +1,17 @@
+import logging
 from unittest.mock import MagicMock
+
+import numpy as np
+import pytest
 
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation.engine.metrics_evaluator import (
+    _compute_metric_scores,
     _extract_item_evaluators,
     build_metrics_evaluator,
 )
 from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.types import ErrorTolerance
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
@@ -15,6 +21,14 @@ def _make_judge(assertions, **kwargs):
     defaults = {"track": False, "name": "llm_judge"}
     defaults.update(kwargs)
     return llm_judge.LLMJudge(assertions=assertions, **defaults)
+
+
+def _fake_models_factory(monkeypatch, takes_reasoning_effort):
+    model = MagicMock()
+    model.supported_features = base_model.ModelFeatures(
+        reasoning_effort=takes_reasoning_effort
+    )
+    monkeypatch.setattr(models_factory, "get", lambda **_: model)
 
 
 def _make_non_judge_metric(name="other_metric"):
@@ -152,6 +166,25 @@ class TestLLMJudgeMerged:
 
         assert llm_judge.LLMJudge.merged([j1]) is None
 
+    def test_default_and_explicit_default_effort__merges(self, monkeypatch):
+        _fake_models_factory(monkeypatch, takes_reasoning_effort=True)
+        j1 = _make_judge(["A"], model="gpt-5-nano")
+        j2 = _make_judge(["B"], model="gpt-5-nano", reasoning_effort="low")
+
+        merged = llm_judge.LLMJudge.merged([j1, j2])
+
+        assert merged is not None
+        assert merged.assertions == ["A", "B"]
+
+    def test_model_without_reasoning__default_and_explicit_effort__not_merged(
+        self, monkeypatch
+    ):
+        _fake_models_factory(monkeypatch, takes_reasoning_effort=False)
+        j1 = _make_judge(["A"], model="ollama/qwen2.5:1.5b")
+        j2 = _make_judge(["B"], model="ollama/qwen2.5:1.5b", reasoning_effort="low")
+
+        assert llm_judge.LLMJudge.merged([j1, j2]) is None
+
     def test_numeric_config__does_not_merge_and_drop_schema_types(self):
         config = _make_judge(["A"]).to_config()
         config.schema_[0] = llm_judge_config.LLMJudgeSchemaItem(
@@ -220,3 +253,132 @@ class TestBuildMetricsEvaluatorMerging:
         result = _build([])
 
         assert result == []
+
+
+class _FixedValueMetric(base_metric.BaseMetric):
+    def __init__(self, name, value):
+        super().__init__(name=name, track=False)
+        self._value = value
+
+    def score(self, output, **ignored_kwargs):
+        if isinstance(self._value, list):
+            return [
+                score_result.ScoreResult(name=self.name, value=v) for v in self._value
+            ]
+        return score_result.ScoreResult(name=self.name, value=self._value, reason="ok")
+
+
+def _compute(metrics):
+    return _compute_metric_scores(
+        scoring_metrics=metrics,
+        mapped_scoring_inputs={"output": "answer"},
+        scoring_key_mapping={},
+        dataset_item_content={},
+        task_output={"output": "answer"},
+        trace_tool_context=None,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [float("nan"), float("inf"), float("-inf"), None, "0.5", np.float32("nan")],
+    ids=["nan", "inf", "-inf", "none", "string", "np-nan"],
+)
+def test_compute_metric_scores__value_not_a_finite_number__marked_as_failed(
+    invalid_value,
+):
+    results = _compute(
+        [_FixedValueMetric("healthy", 1.0), _FixedValueMetric("broken", invalid_value)]
+    )
+
+    assert results[0] == score_result.ScoreResult(
+        name="healthy", value=1.0, reason="ok"
+    )
+    broken = results[1]
+    assert broken.name == "broken"
+    assert broken.scoring_failed is True
+    assert broken.value == 0.0
+    assert broken.metadata == {
+        "original_value": repr(invalid_value),
+        "original_reason": "ok",
+    }
+    assert "not a finite number" in broken.reason
+
+
+def test_compute_metric_scores__list_result__only_the_non_finite_element_fails():
+    results = _compute([_FixedValueMetric("m", [1.0, float("nan"), 0.5])])
+
+    assert results == [
+        score_result.ScoreResult(name="m", value=1.0),
+        score_result.ScoreResult(
+            name="m",
+            value=0.0,
+            reason="Score value is not a finite number: nan",
+            metadata={"original_value": "nan"},
+            scoring_failed=True,
+        ),
+        score_result.ScoreResult(name="m", value=0.5),
+    ]
+
+
+def test_compute_metric_scores__value_not_a_finite_number__keeps_the_metric_reason():
+    (result,) = _compute([_FixedValueMetric("m", float("nan"))])
+
+    assert result.scoring_failed is True
+    assert result.metadata == {"original_value": "nan", "original_reason": "ok"}
+
+
+class _LongReprValue:
+    def __repr__(self):
+        return "_LongReprValue(" + "y" * 10_000 + ")"
+
+
+@pytest.mark.parametrize(
+    "long_value, expected_start",
+    [("x" * 10_000, "'xxx"), (_LongReprValue(), "_LongReprValue(yyy")],
+    ids=["string", "object-with-long-repr"],
+)
+def test_compute_metric_scores__long_invalid_value__capped_at_200_characters(
+    caplog, long_value, expected_start
+):
+    with caplog.at_level(logging.WARNING):
+        (result,) = _compute([_FixedValueMetric("m", long_value)])
+
+    value_repr = result.metadata["original_value"]
+    assert result.scoring_failed is True
+    assert value_repr.startswith(expected_start)
+    assert "..." in value_repr
+    assert len(value_repr) == 200
+    assert result.reason == f"Score value is not a finite number: {value_repr}"
+    (warning,) = [r for r in caplog.records if "not a finite number" in r.message]
+    assert warning.getMessage() == (
+        f"Metric m returned a score value that is not a finite number: "
+        f"{value_repr}. Its score will be marked as failed."
+    )
+
+
+class _UnprintableValue:
+    def __repr__(self):
+        raise RuntimeError("repr failed")
+
+
+def test_compute_metric_scores__value_whose_repr_raises__still_marked_as_failed():
+    (result,) = _compute([_FixedValueMetric("m", _UnprintableValue())])
+
+    assert result.scoring_failed is True
+    assert result.value == 0.0
+    assert "_UnprintableValue" in result.metadata["original_value"]
+    assert "_UnprintableValue" in result.reason
+
+
+@pytest.mark.parametrize(
+    "value",
+    [1, 0.5, True, np.float32(0.25), np.int64(1)],
+    ids=["int", "float", "bool", "np-float32", "np-int64"],
+)
+def test_compute_metric_scores__finite_real_value__kept_unchanged(value):
+    (result,) = _compute([_FixedValueMetric("m", value)])
+
+    assert result.scoring_failed is False
+    assert result.value == value

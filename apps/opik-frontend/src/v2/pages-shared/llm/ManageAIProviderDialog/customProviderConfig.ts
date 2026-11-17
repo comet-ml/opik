@@ -15,6 +15,13 @@ export type KeyValueEntry = {
 export const AUTH_MODE_VALUES = ["api_key", "token"] as const;
 export type AuthMode = (typeof AUTH_MODE_VALUES)[number];
 
+export const AUTH_TYPE_VALUES = [
+  "oauth2",
+  "service_account",
+  "custom",
+] as const;
+export type AuthType = (typeof AUTH_TYPE_VALUES)[number];
+
 export type AuthCredentialEntry = {
   key: string;
   value: string;
@@ -25,6 +32,7 @@ export type AuthCredentialEntry = {
 
 export type AuthConfigFormValues = {
   authMode: AuthMode;
+  authType: AuthType;
   authTokenUrl: string;
   authSendAs: AuthSendAs;
   authCredentials: AuthCredentialEntry[];
@@ -36,17 +44,22 @@ export type AuthConfigFormValues = {
 /** Field names the backend auto-locks; mirrored here so the lock flips visibly as the user types. */
 export const AUTH_SECRET_KEY_PATTERN = /secret|password|key|token|credential/i;
 
-// The one grant the UI supports at the moment. Hidden from the credentials list and injected on save.
-// A grant_type row the user adds themselves — or one stored with a different value — wins over the
-// injected default.
+// The OAuth2 type's grant. Hidden from its credentials list and injected on save. A grant_type row
+// the user adds themselves — or one stored with a different value — wins over the injected default.
 const OAUTH2_GRANT_TYPE = {
   key: "grant_type",
   value: "client_credentials",
   secret: false,
 };
 
+export const SERVICE_ACCOUNT_USERNAME_KEY = "username";
+export const SERVICE_ACCOUNT_PASSWORD_KEY = "password";
+// Service-account token endpoints commonly reply with the bare token and no lifetime
+export const SERVICE_ACCOUNT_DEFAULT_TTL_SECONDS = "86400";
+
 export const EMPTY_AUTH_FORM_VALUES: AuthConfigFormValues = {
   authMode: "api_key",
+  authType: "oauth2",
   authTokenUrl: "",
   authSendAs: "basic",
   authCredentials: [],
@@ -55,6 +68,34 @@ export const EMPTY_AUTH_FORM_VALUES: AuthConfigFormValues = {
   authFallbackTtl: "",
 };
 
+const isOAuth2Grant = (credential: { key: string; value: string }) =>
+  credential.key === OAUTH2_GRANT_TYPE.key &&
+  credential.value === OAUTH2_GRANT_TYPE.value;
+
+/**
+ * The type a stored recipe was saved with. Only exact matches of what the OAuth2 and service
+ * account types save map back to them; anything else (e.g. a recipe configured through the API)
+ * opens as Custom so nothing about it is hidden or rewritten.
+ */
+export function authTypeOf(authConfig: ProviderAuthConfig): AuthType {
+  const credentials = authConfig.credentials ?? [];
+  if (authConfig.send_as !== "basic") {
+    return "custom";
+  }
+  if (credentials.some(isOAuth2Grant)) {
+    return "oauth2";
+  }
+  const keys = credentials.map(({ key }) => key).sort();
+  if (
+    keys.length === 2 &&
+    keys[0] === SERVICE_ACCOUNT_PASSWORD_KEY &&
+    keys[1] === SERVICE_ACCOUNT_USERNAME_KEY
+  ) {
+    return "service_account";
+  }
+  return "custom";
+}
+
 /** Loads a stored provider's auth config into form state (absent config -> static mode). */
 export function authConfigToFormValues(
   authConfig: ProviderAuthConfig | undefined,
@@ -62,15 +103,15 @@ export function authConfigToFormValues(
   if (!authConfig) {
     return { ...EMPTY_AUTH_FORM_VALUES };
   }
+  const authType = authTypeOf(authConfig);
   return {
     authMode: "token",
+    authType,
     authTokenUrl: authConfig.token_url ?? "",
-    authSendAs: authConfig.send_as ?? "basic",
+    authSendAs: authConfig.send_as ?? "form",
     authCredentials: (authConfig.credentials ?? [])
       .filter(
-        (credential) =>
-          credential.key !== OAUTH2_GRANT_TYPE.key ||
-          credential.value !== OAUTH2_GRANT_TYPE.value,
+        (credential) => authType !== "oauth2" || !isOAuth2Grant(credential),
       )
       .map((credential) => ({
         key: credential.key,
@@ -116,14 +157,18 @@ export function formValuesToAuthConfig(
       value: credential.value,
       secret: credential.secret,
     }));
-  if (!credentials.some(({ key }) => key === OAUTH2_GRANT_TYPE.key)) {
+  if (
+    values.authType === "oauth2" &&
+    !credentials.some(({ key }) => key === OAUTH2_GRANT_TYPE.key)
+  ) {
     credentials.unshift({ ...OAUTH2_GRANT_TYPE });
   }
 
   const fallbackTtl = values.authFallbackTtl.trim();
   return {
     token_url: values.authTokenUrl.trim(),
-    send_as: values.authSendAs,
+    // OAuth2 and service accounts both send their id/secret pair as HTTP Basic
+    send_as: values.authType === "custom" ? values.authSendAs : "basic",
     credentials,
     ...(values.authTokenField.trim() && {
       token_field: values.authTokenField.trim(),
@@ -135,17 +180,47 @@ export function formValuesToAuthConfig(
   };
 }
 
-export function oauth2CredentialRows(): AuthCredentialEntry[] {
-  return [
-    { key: "client_id", value: "", secret: false, saved: false, id: uuidv4() },
-    {
-      key: "client_secret",
-      value: "",
-      secret: true,
-      saved: false,
-      id: uuidv4(),
-    },
-  ];
+const credentialRow = (key: string, secret: boolean): AuthCredentialEntry => ({
+  key,
+  value: "",
+  secret,
+  saved: false,
+  id: uuidv4(),
+});
+
+/**
+ * Credential rows after switching type. OAuth2 and service account start from their own rows;
+ * Custom keeps the current ones as a starting point, surfacing the grant OAuth2 injected on save
+ * so the recipe behaves the same until the user edits it.
+ */
+export function credentialRowsForType(
+  nextType: AuthType,
+  previousType: AuthType,
+  currentRows: AuthCredentialEntry[],
+): AuthCredentialEntry[] {
+  if (nextType === "oauth2") {
+    // grant_type is not a row: it is injected on save
+    return [
+      credentialRow("client_id", false),
+      credentialRow("client_secret", true),
+    ];
+  }
+  if (nextType === "service_account") {
+    return [
+      credentialRow(SERVICE_ACCOUNT_USERNAME_KEY, false),
+      credentialRow(SERVICE_ACCOUNT_PASSWORD_KEY, true),
+    ];
+  }
+  if (
+    previousType === "oauth2" &&
+    !currentRows.some(({ key }) => key === OAUTH2_GRANT_TYPE.key)
+  ) {
+    return [
+      { ...OAUTH2_GRANT_TYPE, saved: false, id: uuidv4() },
+      ...currentRows,
+    ];
+  }
+  return currentRows;
 }
 
 /**

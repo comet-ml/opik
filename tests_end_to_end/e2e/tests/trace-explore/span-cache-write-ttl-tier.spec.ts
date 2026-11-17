@@ -4,6 +4,7 @@ import {
   CACHE_WRITE_5M_KEY,
   CACHE_WRITE_1H_KEY,
   CACHE_WRITE_RATES,
+  CACHE_WRITE_TTL_MODEL,
 } from '@e2e/fixtures';
 import type { CacheWriteTtlSpanSeed, CacheWriteTtlSpansRef, PromptTier } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
@@ -34,17 +35,26 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * ordinary dollar amounts on the page people read to decide what their LLM
  * spend is; only the pair shows anything.
  *
- * WHY THE ABOVE-TIER TEST IS MARKED `test.fail()`. The PR's own Java unit tests
- * cover the 1h rate on a price fixture with no prompt tiers, and cover tiers
- * with the cache-creation rate pinned to zero — so neither sees the
- * combination, which is the only shape the shipped price table actually
- * contains. `ModelCostData` declares no field for
+ * THE ABOVE-TIER TEST WAS `test.fail()` UNTIL 2.2.131, and now is not.
+ * `ModelCostData` declared no field for
  * `cache_creation_input_token_cost_above_1hr_above_200k_tokens`, so above 200k
- * the 1h bucket bills at the untiered base rate: half the table's own, and
- * below the tiered 5-minute rate, which inverts the pair. All 16 shipped rows
- * publishing both rates are affected (Claude Sonnet 4.x across `anthropic`,
- * `bedrock`, `bedrock_converse` and `openrouter`). The assertions below are the
- * CORRECT amounts; Playwright reports the test the moment it starts passing.
+ * the 1h bucket billed at the untiered base rate: half the table's own, and
+ * below the tiered 5-minute rate, which inverted the pair. opik#9068 (OPIK-8897)
+ * fixed it — every prompt-size tier is priced, and above a tier publishing no
+ * 1-hour rate the 1h rate keeps its base ratio to the 5-minute one. Verified on
+ * staging 2.2.131: $2.4225 against $1.9725 at the API, $2.42 against $1.97 in
+ * the panel.
+ *
+ * THE FIXTURE MODEL MOVED IN THE SAME CHANGE, and the two are not independent.
+ * `claude-sonnet-4-5`/`anthropic` published every rate this spec asserts when
+ * it was written and has since lost its 200K tier entirely (LiteLLM dropped it;
+ * opik#9068's commit message records the same thing). Both above-tier vectors
+ * were therefore billing at BASE rates by 2.2.130 — ordered correctly, for a
+ * reason that had nothing to do with any tier — and `test.fail()` kept that
+ * green, so this spec could report on neither the defect nor the fix. The
+ * fixture now logs `claude-sonnet-4-5-20250929-v1:0` under `bedrock`, which
+ * still publishes the full matrix; see the fixture for the rates and for why
+ * that id.
  */
 
 /**
@@ -222,19 +232,13 @@ test.describe(
       'above the 200k prompt tier, a 1-hour cache write bills at the tiered 1-hour rate and still costs more than an identical 5-minute one',
       { tag: ['@cap:traces.span-model-cost-tokens'] },
       async ({ cacheWriteTtlSpans, project, backendClient }) => {
-        // QA: failing against main for 2.2.105. Product defect, reproduced at
-        // the API and on the page: `cache_creation_input_token_cost_above_1hr`
-        // is read untiered (SpanCostCalculator.anthropicCost calls
-        // cacheCreationInputTokenPriceAbove1hr() with no tier basis) and
-        // ModelCostData declares no field for the table's own
-        // `cache_creation_input_token_cost_above_1hr_above_200k_tokens` — so on
-        // claude-sonnet-4-5 at a 300k prompt a 1h write bills $1.8225 against
-        // $1.9725 for an identical 5m write. Half the published rate, and
-        // inverted: the longer, dearer write renders as the cheaper span. 16
-        // shipped price rows are affected. The assertions below are the correct
-        // amounts; remove test.fail() once this passes, which Playwright
-        // reports.
-        test.fail();
+        // QA: was `test.fail()` from 2.2.105 to 2.2.130, a reproduced product
+        // defect — the tiered 1-hour cache-write rate was never read, so above
+        // 200k a 1h write billed $1.8225 against $1.9725 for an identical 5m
+        // one: half the published rate, and inverted. opik#9068 fixed it and
+        // this passes on 2.2.131 at the amounts below. See the file docblock
+        // for why the fixture's model had to move in the same change for this
+        // to be able to report on either state.
 
         const byName = await test.step('Read the seeded spans back once all of them are queryable', async () =>
           readSeededSpans(backendClient, project.id, cacheWriteTtlSpans));
@@ -256,7 +260,8 @@ test.describe(
 
         await test.step('The 1-hour write is still the dearer of the two', async () => {
           // The inversion, stated as the comparison a human would make. This is
-          // the half that fails today: $1.8225 is not greater than $1.9725.
+          // the half that failed before opik#9068: $1.8225 is not greater than
+          // $1.9725.
           const oneHourCost = costOf(byName, cacheWriteTtlSpans, oneHour.key);
           const fiveMinuteCost = costOf(byName, cacheWriteTtlSpans, fiveMinutes.key);
           expect(
@@ -363,7 +368,11 @@ test.describe(
                 message: `the panel must be showing '${seed.name}' itself, not whichever span was selected before it`,
               })
               .toBe(byName.get(seed.name)!.id);
-            await expect(panel.spanModelChip).toContainText('claude-sonnet-4-5');
+            // The id the fixture logged, not a prefix of it: `claude-sonnet-4-5`
+            // is a substring of every Sonnet 4.5 spelling, so a fixture that
+            // drifted onto another row — the move this spec just made — would
+            // keep satisfying a prefix match.
+            await expect(panel.spanModelChip).toContainText(CACHE_WRITE_TTL_MODEL);
             await expect(panel.estimatedCost(displayedCost(resolved.get(seed.key)!))).toBeVisible();
           }
         });

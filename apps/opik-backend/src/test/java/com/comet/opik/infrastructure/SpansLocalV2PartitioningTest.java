@@ -9,7 +9,6 @@ import com.comet.opik.domain.SpanWeek;
 import com.comet.opik.domain.SpanWeeksBackfillChunk;
 import com.comet.opik.domain.SpanWeeksDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
@@ -173,7 +172,6 @@ class SpansLocalV2PartitioningTest {
         var connectionFactory = databaseAnalyticsFactory.build();
         transactionTemplateAsync = TransactionTemplateAsync.create(connectionFactory);
         spanWeeksDAO = new SpanWeeksDAO(connectionFactory,
-                new JsonEachRowBulkInsert(databaseAnalyticsFactory.buildClient(), JsonUtils.getMapper()),
                 new InstantToUUIDMapper(),
                 TestConfigUtils.loadConfigTest().getSpanWeeksBackfill());
     }

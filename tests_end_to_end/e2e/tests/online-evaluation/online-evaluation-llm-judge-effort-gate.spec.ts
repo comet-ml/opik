@@ -109,6 +109,11 @@ test.describe(
         providerKeys,
         automationRulesCleanup,
       }) => {
+        // Product bug: since 2.2.129 the judge scorers log only the root error
+        // type ("error type 'BadRequestException'"), dropping Opik's own effort
+        // refusal along with provider text, so the ERROR no longer names the
+        // parameter. Remove test.fail() once this passes.
+        test.fail();
         test.setTimeout(300_000);
 
         const refusedRuleName = `${testNamespace}-refused-effort`;

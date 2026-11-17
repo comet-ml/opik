@@ -13,6 +13,7 @@ export type ColumnType =
   | "list"
   | "number"
   | "error_container"
+  | "comments"
   | "enum"
   | "map";
 

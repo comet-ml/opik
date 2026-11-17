@@ -1,11 +1,17 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsQuestion;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
+import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
@@ -13,23 +19,31 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class DecisionScoringServiceTest {
 
     private static final int CHARS_PER_TOKEN = 4;
 
     private final DecisionScoringService service = new DecisionScoringService(
-            mock(OpenRouterDecisionsClient.class), mock(LlmProviderFactory.class));
+            Set.of(mock(OpenRouterDecisionsClient.class)), mock(LlmProviderFactory.class));
 
     @Test
     void buildRequestJoinsMessageTextInOrderAndKeepsScoreOrder() {
@@ -66,16 +80,16 @@ class DecisionScoringServiceTest {
         // Question key and instructions add 2 chars on top of the state.
         var atLimit = service.buildRequest("m",
                 List.of(UserMessage.from(
-                        "a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN - 2))),
+                        "a".repeat(DecisionModels.JEV_MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN - 2))),
                 schema);
         var overLimit = service.buildRequest("m",
                 List.of(UserMessage.from(
-                        "a".repeat(DecisionScoringService.MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN + 4))),
+                        "a".repeat(DecisionModels.JEV_MAX_CONTEXT_TOKENS * CHARS_PER_TOKEN + 4))),
                 schema);
 
-        assertThat(DecisionScoringService.exceedsContext(
+        assertThat(DecisionScoringService.exceedsContext("m",
                 DecisionScoringService.estimateTokens(atLimit, CHARS_PER_TOKEN))).isFalse();
-        assertThat(DecisionScoringService.exceedsContext(
+        assertThat(DecisionScoringService.exceedsContext("m",
                 DecisionScoringService.estimateTokens(overLimit, CHARS_PER_TOKEN))).isTrue();
     }
 
@@ -150,6 +164,63 @@ class DecisionScoringServiceTest {
                 .build(), List.of(score("forged\nINFO line", "?"), score("unanswered", "?")));
 
         assertThat(summary).isEqualTo("forged?INFO line=0.93, unanswered=null");
+    }
+
+    @Test
+    void gpt6LunaHasItsOwnContextLength() {
+        assertThat(DecisionScoringService.exceedsContext("gpt-6-luna",
+                DecisionModels.JEV_MAX_CONTEXT_TOKENS + 1)).isFalse();
+        assertThat(DecisionScoringService.exceedsContext("gpt-6-luna",
+                DecisionModels.GPT_6_LUNA_MAX_CONTEXT_TOKENS + 1)).isTrue();
+    }
+
+    @ParameterizedTest(name = "{0} → {1}")
+    @CsvSource({"~typesafe/jev-latest, OPEN_ROUTER", "gpt-6-luna, OPEN_AI"})
+    void decideCallsTheClientOfTheModelsProvider(String model, LlmProvider provider) {
+        var openRouterClient = client(OpenRouterDecisionsClient.class, LlmProvider.OPEN_ROUTER);
+        var openAiClient = client(OpenAiDecisionsClient.class, LlmProvider.OPEN_AI);
+        var request = service.buildRequest(model, List.of(UserMessage.from("hi")), List.of(score("q", "?")));
+        var response = DecisionsResponse.builder().answers(Map.of("q0", noul(0.9))).build();
+        when(openRouterClient.decide(eq(request), any())).thenReturn(Mono.just(response));
+        when(openAiClient.decide(eq(request), any())).thenReturn(Mono.just(response));
+
+        var decided = new DecisionScoringService(Set.of(openRouterClient, openAiClient), keyLookup(model))
+                .decide(request, "workspace", passThroughRecorder())
+                .block();
+
+        assertThat(decided).isEqualTo(response);
+        verify(openAiClient, times(provider == LlmProvider.OPEN_AI ? 1 : 0)).decide(eq(request), any());
+        verify(openRouterClient, times(provider == LlmProvider.OPEN_ROUTER ? 1 : 0)).decide(eq(request), any());
+    }
+
+    @Test
+    void decideFailsWhenNoClientServesTheModelsProvider() {
+        var request = service.buildRequest("gpt-6-luna", List.of(UserMessage.from("hi")), List.of(score("q", "?")));
+        var openRouterOnly = new DecisionScoringService(
+                Set.of(client(OpenRouterDecisionsClient.class, LlmProvider.OPEN_ROUTER)), keyLookup("gpt-6-luna"));
+
+        assertThatThrownBy(() -> openRouterOnly.decide(request, "workspace", passThroughRecorder()).block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No Decisions API client for provider");
+    }
+
+    private static <T extends DecisionsClient> T client(Class<T> type, LlmProvider provider) {
+        var client = mock(type);
+        when(client.provider()).thenReturn(provider);
+        return client;
+    }
+
+    private static LlmProviderFactory keyLookup(String model) {
+        var llmProviderFactory = mock(LlmProviderFactory.class);
+        when(llmProviderFactory.getClientApiConfig("workspace", model))
+                .thenReturn(LlmProviderClientApiConfig.builder().apiKey("key").build());
+        return llmProviderFactory;
+    }
+
+    private static EvaluationRecorder passThroughRecorder() {
+        var recorder = mock(EvaluationRecorder.class);
+        when(recorder.recordDecisionCall(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        return recorder;
     }
 
     private static DecisionsResponse.Answer noul(Double probability) {

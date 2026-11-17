@@ -90,6 +90,34 @@ describe("assistantBridge — single-subscriber invariant", () => {
   });
 });
 
+describe("assistantBridge — a failing console listener", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Regression: a closure from a removed Ollie iframe reads its own (now null)
+  // localStorage and threw "Cannot read properties of null (reading 'setItem')"
+  // out of a host effect, taking the whole page down.
+  it("does not throw into the host and still reaches the other listeners", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const listeners = createHostListeners();
+    const bridge = createBridge(makeRefs(listeners));
+    const detachedStorage = null as unknown as Storage;
+    const live = vi.fn();
+
+    bridge.subscribe("visibility:changed", ({ isOpen }) =>
+      detachedStorage.setItem("assistant-sidebar-open", String(isOpen)),
+    );
+    bridge.subscribe("visibility:changed", live);
+
+    expect(() =>
+      emitHostEvent(ref(listeners), "visibility:changed", { isOpen: false }),
+    ).not.toThrow();
+    expect(live).toHaveBeenCalledWith({ isOpen: false });
+    expect(console.error).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("assistantBridge — requests made before the console subscribes", () => {
   const setup = (dashboardId?: string) => {
     const refs: BridgeRefs = {

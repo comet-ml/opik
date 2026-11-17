@@ -1,4 +1,4 @@
-export { test, expect } from './emptied-source-versions.fixture';
+export { test, expect } from './environment-split-thread.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -365,6 +365,7 @@ export {
   CACHE_WRITE_1H_KEY,
   CACHE_WRITE_TOTAL_KEY,
   CACHE_WRITE_RATES,
+  CACHE_WRITE_TTL_MODEL,
 } from './cache-write-ttl-spans.fixture';
 export type {
   CacheDialectWriter,
@@ -493,3 +494,149 @@ export type {
   EmptiedSourceRef,
   EmptiedSourceVersionsFixtures,
 } from './emptied-source-versions.fixture';
+export type {
+  ProjectOverviewTracesRef,
+  ProjectOverviewCopyFixtures,
+} from './project-overview-copy.fixture';
+export type {
+  OpenRouterSpelling,
+  OpenRouterCostSpanSeed,
+  OpenRouterCostSpansRef,
+  OpenRouterCostSpansFixtures,
+} from './openrouter-cost-spans.fixture';
+export type { ImageOnlyPromptRef, ImageOnlyPromptFixtures } from './image-only-prompt.fixture';
+export {
+  IMAGE_ONLY_PROMPT_TEXT,
+  IMAGE_ONLY_PROMPT_IMAGE_URL,
+  IMAGE_ONLY_PROMPT_CONTENT,
+} from './image-only-prompt.fixture';
+export type {
+  OpenAiStreamToolsStubRef,
+  OpenAiStreamToolsStubFixtures,
+} from './openai-stream-tools-stub.fixture';
+export {
+  STREAM_TOOLS_MODEL,
+  STREAM_TOOLS_PROMPT_TOKENS,
+  STREAM_TOOLS_COMPLETION_TOKENS,
+  STREAM_TOOL_CALLS,
+} from './openai-stream-tools-stub.fixture';
+export type {
+  GeminiThinkingStubRef,
+  GeminiThinkingStubFixtures,
+} from './gemini-thinking-stub.fixture';
+export {
+  GEMINI_STUB_MODEL,
+  GEMINI_STUB_USAGE,
+  GEMINI_STUB_TEXT,
+} from './gemini-thinking-stub.fixture';
+export type {
+  OpenRouterVisionModelsRef,
+  OpenRouterVisionModelsFixtures,
+} from './openrouter-vision-models.fixture';
+export {
+  OPEN_ROUTER_VISION_MODEL,
+  OPEN_ROUTER_MAX_TOKENS_LIMIT,
+} from './openrouter-vision-models.fixture';
+export type {
+  EnvironmentThreadRef,
+  EnvironmentThreadsRef,
+  EnvironmentThreadsFixtures,
+} from './environment-threads.fixture';
+export type {
+  AnnotatorViewQueueRef,
+  AnnotatorViewQueueFixtures,
+} from './annotator-view-queue.fixture';
+export type {
+  OpenRouterRepricedSpanSeed,
+  OpenRouterRepricedSpansRef,
+  OpenRouterRepricedSpansFixtures,
+} from './openrouter-repriced-spans.fixture';
+export type {
+  SourceMixTraceRef,
+  SourceMixTracesRef,
+  SourceMixTracesFixtures,
+} from './source-mix-traces.fixture';
+export type {
+  PlaygroundLogsTraceRef,
+  PlaygroundLogsTracesRef,
+  PlaygroundLogsTracesFixtures,
+} from './playground-logs-traces.fixture';
+export type {
+  StoppableRunDatasetRef,
+  StoppableRunDatasetFixtures,
+} from './stoppable-run-dataset.fixture';
+export type {
+  WideContentTurnSeed,
+  WideContentTurnRef,
+  WideContentThreadRef,
+  WideContentThreadQueueRef,
+  WideContentThreadFixtures,
+} from './wide-content-thread.fixture';
+export type {
+  PagedRunExpectation,
+  PagedOptimizationRunsRef,
+  PagedOptimizationRunsFixtures,
+} from './paged-optimization-runs.fixture';
+export { TRIAL_COST, TRIALS_PER_RUN } from './paged-optimization-runs.fixture';
+export type { StudioAllowlistRunsFixtures } from './studio-allowlist-runs.fixture';
+export type {
+  ClaudeCodeOtelSpanSeed,
+  ClaudeCodeOtelCacheSpansRef,
+  ClaudeCodeOtelCacheSpansFixtures,
+} from './claude-code-otel-cache-spans.fixture';
+export {
+  CLAUDE_CODE_SCOPE,
+  CLAUDE_CODE_LLM_SPAN_NAME,
+  CLAUDE_CODE_MODEL,
+  CLAUDE_CODE_USAGE_ATTR,
+  CLAUDE_CODE_CACHE_WRITE_RATES,
+  CLAUDE_CODE_UNMAPPED_ATTR,
+  CLAUDE_CODE_UNMAPPED_VALUE,
+  CACHE_CREATION_1H_USAGE_KEY,
+} from './claude-code-otel-cache-spans.fixture';
+export type {
+  ImageModelTokenCostSpanSeed,
+  ImageModelTokenCostSpansRef,
+  ImageModelTokenCostSpansFixtures,
+} from './image-model-token-cost-spans.fixture';
+export type {
+  UnlistedRegistryModelRef,
+  UnlistedRegistryModelFixtures,
+} from './unlisted-registry-model.fixture';
+export { UNLISTED_MODEL_PROVIDER } from './unlisted-registry-model.fixture';
+export type {
+  StudioUnlistedRunRef,
+  StudioUnlistedModelRunsRef,
+  StudioUnlistedModelRunsFixtures,
+} from './studio-unlisted-model-runs.fixture';
+export { SAVED_TEMPERATURE } from './studio-unlisted-model-runs.fixture';
+export type { QueueFormSeedRef, QueueFormSeedFixtures } from './queue-form-seed.fixture';
+export type {
+  ThreadVersionRowRef,
+  ThreadVersionSearchRef,
+  ThreadVersionSearchFixtures,
+} from './thread-version-search.fixture';
+export { VERSION_MARKER } from './thread-version-search.fixture';
+export type {
+  ThreadCostOrderRowRef,
+  ThreadCostOrderSearchRef,
+  ThreadCostOrderSearchFixtures,
+} from './thread-cost-order-search.fixture';
+export { COST_ORDER_MARKER } from './thread-cost-order-search.fixture';
+export type {
+  NumericAssertionSuiteRef,
+  NumericAssertionSuiteFixtures,
+} from './numeric-assertion-suite.fixture';
+export { NUMERIC_ITEM } from './numeric-assertion-suite.fixture';
+export type {
+  SearchedThreadTurnRef,
+  SearchedThreadRef,
+  SearchedThreadAggregateRef,
+  SearchedThreadAggregateFixtures,
+} from './searched-thread-aggregate.fixture';
+export { AGGREGATE_MARKER } from './searched-thread-aggregate.fixture';
+export type {
+  SplitThreadTurnRef,
+  EnvironmentSplitThreadRef,
+  EnvironmentSplitThreadFixtures,
+} from './environment-split-thread.fixture';

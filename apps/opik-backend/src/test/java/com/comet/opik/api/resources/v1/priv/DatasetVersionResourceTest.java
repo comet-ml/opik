@@ -85,6 +85,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -1422,6 +1423,44 @@ class DatasetVersionResourceTest {
             // Every v1 item must appear in v2 with the same fields. id changes per version, so
             // the helper ignores it and compares the rest of the entity.
             assertDatasetItemsContain(v2Items, v1Items);
+        }
+
+        @Test
+        @DisplayName("Success: concurrent first versions of adjacent datasets all succeed")
+        void applyChanges__whenConcurrentFirstVersions__thenAllCreated() throws Exception {
+            // Datasets created back to back get adjacent UUIDv7 ids, so their first 'latest' tags
+            // contend on the same dataset_version_tags index gap.
+            int datasetCount = 20;
+            List<UUID> datasetIds = IntStream.range(0, datasetCount)
+                    .mapToObj(i -> createDataset(UUID.randomUUID().toString()))
+                    .toList();
+            var changes = DatasetItemChanges.builder().build();
+
+            ExecutorService executor = Executors.newFixedThreadPool(datasetCount);
+            CyclicBarrier barrier = new CyclicBarrier(datasetCount);
+            List<Integer> actualStatuses;
+            try {
+                var futures = datasetIds.stream()
+                        .map(datasetId -> CompletableFuture.supplyAsync(() -> {
+                            try {
+                                barrier.await(30, TimeUnit.SECONDS);
+                            } catch (InterruptedException | BrokenBarrierException | TimeoutException e) {
+                                throw new IllegalStateException(e);
+                            }
+                            try (var response = datasetResourceClient.callApplyDatasetItemChanges(
+                                    datasetId, changes, true, API_KEY, TEST_WORKSPACE)) {
+                                return response.getStatus();
+                            }
+                        }, executor))
+                        .toList();
+                actualStatuses = futures.stream().map(CompletableFuture::join).toList();
+            } finally {
+                executor.shutdown();
+                executor.awaitTermination(30, TimeUnit.SECONDS);
+            }
+
+            var expectedStatuses = Collections.nCopies(datasetCount, HttpStatus.SC_CREATED);
+            assertThat(actualStatuses).isEqualTo(expectedStatuses);
         }
     }
 

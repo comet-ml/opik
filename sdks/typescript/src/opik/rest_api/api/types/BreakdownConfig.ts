@@ -3,6 +3,7 @@
 import type * as OpikApi from "../index.js";
 
 export interface BreakdownConfig {
+    /** Field to group by. Tags are overlapping groups: each tag receives the full metric value. For cost, adding tag groups can exceed actual spend; use provider or model for additive span cost totals. */
     field?: OpikApi.BreakdownConfigField;
     metadataKey?: string;
     subMetric?: string;

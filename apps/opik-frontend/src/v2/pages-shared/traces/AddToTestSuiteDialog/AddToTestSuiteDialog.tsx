@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import isEqual from "lodash/isEqual";
 
 import { Span, Trace } from "@/types/traces";
 import { DATASET_TYPE } from "@/types/datasets";
-import { DEFAULT_EXECUTION_POLICY } from "@/types/test-suites";
+import { DEFAULT_EXECUTION_POLICY, ExecutionPolicy } from "@/types/test-suites";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import { extractAssertions, packAssertions } from "@/lib/assertion-converters";
 import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
+import Loader from "@/shared/Loader/Loader";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import {
   Dialog,
@@ -29,19 +31,14 @@ const AddToTestSuiteDialog: React.FunctionComponent<
   AddToTestSuiteDialogProps
 > = ({ selectedRows, open, setOpen }) => {
   const [assertions, setAssertions] = useState<string[]>([]);
-  const [runsPerItem, setRunsPerItem] = useState(
-    DEFAULT_EXECUTION_POLICY.runs_per_item,
+  // null means the item inherits the suite policy
+  const [customPolicy, setCustomPolicy] = useState<ExecutionPolicy | null>(
+    null,
   );
-  const [passThreshold, setPassThreshold] = useState(
-    DEFAULT_EXECUTION_POLICY.pass_threshold,
-  );
-  const [useGlobalPolicy, setUseGlobalPolicy] = useState(true);
 
   const handleDatasetChange = useCallback(() => {
     setAssertions([]);
-    setRunsPerItem(DEFAULT_EXECUTION_POLICY.runs_per_item);
-    setPassThreshold(DEFAULT_EXECUTION_POLICY.pass_threshold);
-    setUseGlobalPolicy(true);
+    setCustomPolicy(null);
   }, []);
 
   const form = useAddToDatasetForm({
@@ -55,16 +52,17 @@ const AddToTestSuiteDialog: React.FunctionComponent<
 
   const { selectedDataset } = form;
 
-  const { data: versionsData } = useDatasetVersionsList(
-    {
-      datasetId: selectedDataset?.id ?? "",
-      page: 1,
-      size: 1,
-    },
-    {
-      enabled: Boolean(selectedDataset?.id),
-    },
-  );
+  const { data: versionsData, isPending: isSuiteVersionPending } =
+    useDatasetVersionsList(
+      {
+        datasetId: selectedDataset?.id ?? "",
+        page: 1,
+        size: 1,
+      },
+      {
+        enabled: Boolean(selectedDataset?.id),
+      },
+    );
 
   const suiteAssertions = useMemo(() => {
     const evaluators = versionsData?.content?.[0]?.evaluators ?? [];
@@ -77,13 +75,7 @@ const AddToTestSuiteDialog: React.FunctionComponent<
     );
   }, [versionsData]);
 
-  useEffect(() => {
-    if (!selectedDataset?.id) return;
-    setRunsPerItem(suiteExecutionPolicy.runs_per_item);
-    setPassThreshold(suiteExecutionPolicy.pass_threshold);
-    setUseGlobalPolicy(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDataset?.id]);
+  const policy = customPolicy ?? suiteExecutionPolicy;
 
   const handleAssertionChange = useCallback((index: number, value: string) => {
     setAssertions((prev) => prev.map((a, i) => (i === index ? value : a)));
@@ -97,46 +89,47 @@ const AddToTestSuiteDialog: React.FunctionComponent<
     setAssertions((prev) => ["", ...prev]);
   }, []);
 
-  const handleRunsPerItemChange = useCallback(
-    (v: number) => {
-      setUseGlobalPolicy(false);
-      setRunsPerItem(v);
-      if (passThreshold > v) setPassThreshold(v);
+  // Functional update: the section can change both fields in the same tick
+  const updateCustomPolicy = useCallback(
+    (change: Partial<ExecutionPolicy>) => {
+      setCustomPolicy((prev) => ({
+        ...(prev ?? suiteExecutionPolicy),
+        ...change,
+      }));
     },
-    [passThreshold],
+    [suiteExecutionPolicy],
   );
 
-  const handlePassThresholdChange = useCallback((v: number) => {
-    setUseGlobalPolicy(false);
-    setPassThreshold(v);
-  }, []);
+  const handleRunsPerItemChange = useCallback(
+    (runs_per_item: number) => updateCustomPolicy({ runs_per_item }),
+    [updateCustomPolicy],
+  );
+
+  const handlePassThresholdChange = useCallback(
+    (pass_threshold: number) => updateCustomPolicy({ pass_threshold }),
+    [updateCustomPolicy],
+  );
 
   const handleRevertToDefaults = useCallback(() => {
-    setUseGlobalPolicy(true);
-    setRunsPerItem(suiteExecutionPolicy.runs_per_item);
-    setPassThreshold(suiteExecutionPolicy.pass_threshold);
-  }, [suiteExecutionPolicy]);
+    setCustomPolicy(null);
+  }, []);
 
   const buildEvaluatorParams = useCallback(() => {
     const nonEmptyAssertions = assertions.map((a) => a.trim()).filter(Boolean);
-    const hasCustomPolicy =
-      runsPerItem !== suiteExecutionPolicy.runs_per_item ||
-      passThreshold !== suiteExecutionPolicy.pass_threshold;
+    const policyOverride =
+      customPolicy && !isEqual(customPolicy, suiteExecutionPolicy)
+        ? customPolicy
+        : null;
 
-    if (nonEmptyAssertions.length === 0 && !hasCustomPolicy) return {};
+    if (nonEmptyAssertions.length === 0 && !policyOverride) return {};
 
     return {
       ...(nonEmptyAssertions.length > 0 && {
         evaluators: [packAssertions(nonEmptyAssertions)],
       }),
-      ...(hasCustomPolicy && {
-        executionPolicy: {
-          runs_per_item: runsPerItem,
-          pass_threshold: passThreshold,
-        },
-      }),
+      ...(policyOverride && { executionPolicy: policyOverride }),
     };
-  }, [assertions, runsPerItem, passThreshold, suiteExecutionPolicy]);
+  }, [assertions, customPolicy, suiteExecutionPolicy]);
 
   const { noValidRows, fetching, configSectionRef, submit } = form;
 
@@ -161,21 +154,25 @@ const AddToTestSuiteDialog: React.FunctionComponent<
           />
           {selectedDataset && (
             <div ref={configSectionRef} className="mt-6">
-              <EvaluationCriteriaSection
-                suiteAssertions={suiteAssertions}
-                editableAssertions={assertions}
-                onChangeAssertion={handleAssertionChange}
-                onRemoveAssertion={handleAssertionRemove}
-                onAddAssertion={handleAssertionAdd}
-                runsPerItem={runsPerItem}
-                passThreshold={passThreshold}
-                onRunsPerItemChange={handleRunsPerItemChange}
-                onPassThresholdChange={handlePassThresholdChange}
-                useGlobalPolicy={useGlobalPolicy}
-                onRevertToDefaults={handleRevertToDefaults}
-                defaultRunsPerItem={suiteExecutionPolicy.runs_per_item}
-                defaultPassThreshold={suiteExecutionPolicy.pass_threshold}
-              />
+              {isSuiteVersionPending ? (
+                <Loader className="min-h-32" />
+              ) : (
+                <EvaluationCriteriaSection
+                  suiteAssertions={suiteAssertions}
+                  editableAssertions={assertions}
+                  onChangeAssertion={handleAssertionChange}
+                  onRemoveAssertion={handleAssertionRemove}
+                  onAddAssertion={handleAssertionAdd}
+                  runsPerItem={policy.runs_per_item}
+                  passThreshold={policy.pass_threshold}
+                  onRunsPerItemChange={handleRunsPerItemChange}
+                  onPassThresholdChange={handlePassThresholdChange}
+                  useGlobalPolicy={customPolicy === null}
+                  onRevertToDefaults={handleRevertToDefaults}
+                  defaultRunsPerItem={suiteExecutionPolicy.runs_per_item}
+                  defaultPassThreshold={suiteExecutionPolicy.pass_threshold}
+                />
+              )}
             </div>
           )}
         </DialogAutoScrollBody>

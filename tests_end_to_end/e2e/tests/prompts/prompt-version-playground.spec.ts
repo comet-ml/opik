@@ -1,7 +1,7 @@
 import { test, expect } from '../../fixtures/prompt.fixture';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { PlaygroundLogsSidebarPage } from '@e2e/pom/playground-logs-sidebar.page';
-import { ensureModelAvailable } from '@e2e/pom/model-availability';
+import { ensureMockModelAvailable } from '@e2e/pom/model-availability';
 
 const PROMPT_VARIANTS = [
   {
@@ -16,12 +16,12 @@ const PROMPT_VARIANTS = [
 
 test.describe(
   'Prompt versioning → Playground → Trace verification',
-  { tag: ['@t2-cuj', '@llm-daily', '@area:playground', '@cap:playground.load-prompt-version', '@cap:playground.verify-trace-from-run'] },
+  { tag: ['@t2-cuj', '@area:playground', '@cap:playground.load-prompt-version', '@cap:playground.verify-trace-from-run'] },
   () => {
     test.use({ viewport: { width: 1600, height: 900 } });
 
     for (const { promptType, title } of PROMPT_VARIANTS) {
-      test(title, async ({ project, page, sdkClient, registerPromptCleanup, testNamespace }) => {
+      test(title, async ({ project, page, sdkClient, registerPromptCleanup, testNamespace, providerKeys }) => {
         test.setTimeout(120_000);
 
         const promptName = `${testNamespace}-versioned-${promptType}`;
@@ -29,8 +29,8 @@ test.describe(
         const v2Content = 'Say goodbye in exactly one word.';
         const v3Content = 'What is the capital of France?';
 
-        const modelDisplayName = await test.step('Ensure a model is available', () =>
-          ensureModelAvailable(page),
+        const modelDisplayName = await test.step('Provision a mock-gateway model', () =>
+          ensureMockModelAvailable(providerKeys, testNamespace),
         );
 
         await test.step(`Create 3 versions of the ${promptType} prompt via SDK`, async () => {

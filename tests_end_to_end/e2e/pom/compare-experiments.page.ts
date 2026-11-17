@@ -648,7 +648,7 @@ export class CompareExperimentsPage {
 
   /**
    * The row-detail panel's link out to the open row's dataset item — the
-   * "View in test suite" tag in the dataset-item column (OPIK-8600).
+   * "View in dataset" tag in the dataset-item column (OPIK-8600).
    *
    * Addressed by role and accessible name, which `ResourceLink` supplies from
    * the tag's own text. Page-scoped rather than reached through `rowPanel`
@@ -657,7 +657,7 @@ export class CompareExperimentsPage {
    * exactly one element, so an ambiguous match fails rather than guessing.
    */
   get datasetItemTag(): Locator {
-    return this.page.getByRole('link', { name: 'View in test suite' });
+    return this.page.getByRole('link', { name: 'View in dataset' });
   }
 
   /**

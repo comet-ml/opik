@@ -192,6 +192,77 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
             == f"No threads found with filter_string: {filter_string}"
         )
 
+    def _evaluate_threads_with_executor_mocked(self, **kwargs):
+        metric = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
+        with mock.patch(
+            "opik.evaluation.threads.evaluation_engine.evaluation_tasks_executor.execute",
+            return_value=[],
+        ):
+            self.engine.evaluate_threads(
+                filter_string=None,
+                eval_project_name="eval_project",
+                metrics=[metric],
+                trace_input_transform=lambda x: "",
+                trace_output_transform=lambda x: "",
+                **kwargs,
+            )
+
+    def test_evaluate_threads__max_threads_not_set__1000_threads_searched(self):
+        self.mock_client.search_threads.return_value = [
+            TraceThread(id="thread_1", status="inactive")
+        ]
+
+        self._evaluate_threads_with_executor_mocked()
+
+        self.mock_client.search_threads.assert_called_once_with(
+            project_name=self.project_name, filter_string=None, max_results=1000
+        )
+
+    def test_evaluate_threads__max_threads_set__passed_to_threads_search(self):
+        self.mock_client.search_threads.return_value = [
+            TraceThread(id="thread_1", status="inactive")
+        ]
+
+        self._evaluate_threads_with_executor_mocked(max_threads=5)
+
+        self.mock_client.search_threads.assert_called_once_with(
+            project_name=self.project_name, filter_string=None, max_results=5
+        )
+
+    def test_evaluate_threads__max_threads_reached__warning_logged(self):
+        self.mock_client.search_threads.return_value = [
+            TraceThread(id="thread_1", status="inactive"),
+            TraceThread(id="thread_2", status="inactive"),
+        ]
+
+        with self.assertLogs(
+            level="WARNING", logger="opik.evaluation.threads.evaluation_engine"
+        ) as log_context:
+            self._evaluate_threads_with_executor_mocked(max_threads=2)
+
+        self.assertEqual(len(log_context.output), 1)
+        self.assertIn("max_threads=2", log_context.output[0])
+
+    def test_evaluate_threads__max_threads_below_1__raises_value_error(self):
+        for max_threads in (0, -1):
+            with self.subTest(max_threads=max_threads):
+                with pytest.raises(ValueError, match=f"got {max_threads}"):
+                    self._evaluate_threads_with_executor_mocked(max_threads=max_threads)
+
+        self.mock_client.search_threads.assert_not_called()
+
+    def test_evaluate_threads__fewer_threads_than_max_threads__no_warning(self):
+        self.mock_client.search_threads.return_value = [
+            TraceThread(id="thread_1", status="inactive"),
+        ]
+
+        with mock.patch.object(evaluation_engine.LOGGER, "warning") as warning:
+            self._evaluate_threads_with_executor_mocked(max_threads=2)
+
+        warning.assert_not_called()
+
     def test_evaluate_threads__with_multiple_trace_threads__executor_called_with_correct_args(
         self,
     ):
@@ -423,6 +494,46 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
                     for message in log_context.output
                 )
             )
+
+    @patch("opik.decorator.base_track_decorator.opik_client")
+    @patch("opik.evaluation.threads.evaluation_engine.helpers.load_conversation_thread")
+    def test_evaluate_thread__non_finite_score__marked_as_failed(
+        self, load_conversation_thread, decorator_opik_client
+    ):
+        decorator_opik_client.get_global_client.return_value = mock.MagicMock(
+            spec=opik_client.Opik
+        )
+        conversation = conversation_thread.ConversationThread()
+        conversation.add_user_message("Hello")
+        load_conversation_thread.return_value = conversation
+
+        healthy = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
+        healthy.name = "healthy"
+        healthy.score.return_value = score_result.ScoreResult(name="healthy", value=0.8)
+        broken = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
+        broken.name = "broken"
+        broken.score.return_value = score_result.ScoreResult(
+            name="broken", value=float("nan")
+        )
+
+        result = self.engine.evaluate_thread(
+            thread=TraceThread(id="thread_1"),
+            eval_project_name="eval_project",
+            metrics=[healthy, broken],
+            trace_input_transform=lambda x: "",
+            trace_output_transform=lambda x: "",
+            max_traces_per_thread=10,
+        )
+
+        self.assertEqual(
+            [(s.name, s.value, s.scoring_failed) for s in result.scores],
+            [("healthy", 0.8, False), ("broken", 0.0, True)],
+        )
+        self.assertEqual(result.scores[1].metadata, {"original_value": "nan"})
 
 
 def _mock_evaluate_thread_two_test_results(*args, **kwargs):

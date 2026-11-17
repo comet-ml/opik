@@ -1021,6 +1021,7 @@ class Opik:
                 - `start_time`, `end_time`, `created_at`, `last_updated_at`: DateTime (=, !=, >, >=, <, <=)
                 - `feedback_scores`: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
                 - `tags`, `annotation_queue_ids`: List (=, !=, contains, not_contains, is_empty, is_not_empty)
+                - `comments`: Whether the thread has comments (is_empty, is_not_empty)
                 - `duration`, `number_of_messages`: Numeric (=, !=, >, >=, <, <=)
 
                 Examples:
@@ -2211,6 +2212,7 @@ class Opik:
                 - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
                 - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
                 - `tags`: List field (use "contains" operator only)
+                - `comments`: Whether the trace has comments (use "is_empty" or "is_not_empty")
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
                 - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
 
@@ -2223,6 +2225,7 @@ class Opik:
                 - `metadata`: =, contains, >, <
                 - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
                 - `tags`: contains (only)
+                - `comments`: is_empty, is_not_empty
                 - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
 
                 Examples:

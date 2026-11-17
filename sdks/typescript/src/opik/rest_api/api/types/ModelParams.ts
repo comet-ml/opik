@@ -15,5 +15,6 @@ export interface ModelParams {
     tools?: OpikApi.ToolsParam;
     samplingExclusive?: boolean;
     thinksByDefault?: boolean;
+    onlyRoute?: string;
     routes?: Record<string, OpikApi.ModelParams>;
 }

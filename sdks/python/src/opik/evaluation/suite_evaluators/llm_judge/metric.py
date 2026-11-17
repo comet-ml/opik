@@ -142,7 +142,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
         temperature: Optional temperature value for model generation.
         reasoning_effort: Optional reasoning effort level for the model.
             Supported values depend on the provider (e.g., "low", "medium", "high"
-            for OpenAI reasoning models).
+            for OpenAI reasoning models). Defaults to "low" for models that take an
+            effort and to none for the rest.
         scoring_tool_strategy: Controls whether scoring uses the one-shot prompt
             or the agentic tool-call loop when a ``trace_tool_context`` is
             available. One of:
@@ -226,9 +227,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self._temperature = temperature
         self._reasoning_effort = reasoning_effort
         self._model_name: str = model or llm_judge_config.DEFAULT_MODEL_NAME
-        self._reasoning_effort = (
-            reasoning_effort or llm_judge_config.DEFAULT_REASONING_EFFORT
-        )
         self.set_scoring_tool_strategy(scoring_tool_strategy)
         self._init_model()
 
@@ -268,7 +266,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
             self._model_name == other._model_name
             and self._temperature == other._temperature
             and self._seed == other._seed
-            and self._reasoning_effort == other._reasoning_effort
+            and self._effective_reasoning_effort == other._effective_reasoning_effort
             and self.track == other.track
             and self._scoring_tool_strategy_input == other._scoring_tool_strategy_input
         )
@@ -320,9 +318,21 @@ class LLMJudge(base.BaseSuiteEvaluator):
             model_kwargs["temperature"] = self._temperature
         if self._seed is not None:
             model_kwargs["seed"] = self._seed
-        if self._reasoning_effort is not None:
-            model_kwargs["reasoning_effort"] = self._reasoning_effort
 
+        reasoning_effort = self._reasoning_effort
+        if reasoning_effort is None:
+            # A model that can't reason may reject any effort, so the default
+            # only goes to the models that take one. The probe is built without
+            # the kwargs so their constructor warnings print once, from the real
+            # model below.
+            plain_model = models_factory.get(
+                model_name=self._model_name, track=self.track
+            )
+            if plain_model.supported_features.reasoning_effort:
+                reasoning_effort = llm_judge_config.DEFAULT_REASONING_EFFORT
+        if reasoning_effort is not None:
+            model_kwargs["reasoning_effort"] = reasoning_effort
+        self._effective_reasoning_effort = reasoning_effort
         self._model = models_factory.get(
             model_name=self._model_name, track=self.track, **model_kwargs
         )
@@ -562,7 +572,14 @@ class LLMJudge(base.BaseSuiteEvaluator):
             name=None,
             temperature=self._temperature,
             seed=self._seed,
-            custom_parameters={"reasoning_effort": self._reasoning_effort},
+            # The backend scores with a judge model of its own choosing, so only an
+            # effort the caller picked is stored: the local default could be
+            # refused by that model.
+            custom_parameters=(
+                {"reasoning_effort": self._reasoning_effort}
+                if self._reasoning_effort is not None
+                else None
+            ),
         )
 
         # NOTE: For test suite evaluators, no consumer reads these messages —

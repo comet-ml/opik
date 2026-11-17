@@ -1,5 +1,10 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 
+import {
+  measureTraceMessages,
+  type TraceMessagesGeometry,
+} from './trace-messages-geometry';
+
 /**
  * Copy the thread views show instead of a blank Messages tab when every trace
  * in the thread is an internal call and all of them are hidden.
@@ -231,6 +236,18 @@ export class ThreadPanelPage {
   async readHideSpansPreference(): Promise<string | null> {
     return test.step(`Read localStorage["${TRACE_HIDE_SPANS_KEY}"]`, async () =>
       this.page.evaluate((key) => window.localStorage.getItem(key), TRACE_HIDE_SPANS_KEY));
+  }
+
+  /**
+   * Measure the boxes of the panel's message list — see
+   * `measureTraceMessages` for why geometry rather than a screenshot.
+   *
+   * Lives on the POM rather than being called with a raw locator from the spec
+   * so the SME view's identical method and this one stay visibly the same
+   * question asked of two components that do not share code.
+   */
+  async measureMessages(): Promise<TraceMessagesGeometry> {
+    return measureTraceMessages(this.turns);
   }
 
   async countTurns(): Promise<number> {

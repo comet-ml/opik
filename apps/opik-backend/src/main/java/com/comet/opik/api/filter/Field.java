@@ -31,6 +31,7 @@ public interface Field {
     String DATASET_ID_QUERY_PARAM = "dataset_id";
     String PROJECT_ID_QUERY_PARAM = "project_id";
     String PROMPT_IDS_QUERY_PARAM = "prompt_ids";
+    String EVALUATION_METHOD_QUERY_PARAM = "evaluation_method";
     String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";
     String FIRST_MESSAGE_QUERY_PARAM = "first_message";
     String LAST_MESSAGE_QUERY_PARAM = "last_message";
@@ -57,6 +58,7 @@ public interface Field {
     String TRACE_ID_QUERY_PARAM = "trace_id";
     String SPAN_ID_QUERY_PARAM = "span_id";
     String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
+    String COMMENTS_QUERY_PARAM = "comments";
     String EXPERIMENT_ID_QUERY_PARAM = "experiment_id";
     String EXPERIMENT_IDS_QUERY_PARAM = "experiment_ids";
     String WEBHOOK_URL_QUERY_PARAM = "webhook_url";

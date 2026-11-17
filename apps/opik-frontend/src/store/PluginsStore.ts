@@ -48,6 +48,9 @@ type PluginStore = {
   getOllieCredits:
     | ((workspaceName: string, signal?: AbortSignal) => Promise<boolean>)
     | null;
+  getGuardrailsEnabled:
+    | ((workspaceName: string, signal?: AbortSignal) => Promise<boolean>)
+    | null;
   init: unknown;
   collectRoutes: (parents: PluginRouteParents) => AnyRoute[];
   sidebarSections: PluginSidebarSection[];
@@ -77,6 +80,7 @@ const PLUGIN_NAMES = [
   "BillingLink",
   "sendOnboardingEmail",
   "getOllieCredits",
+  "getGuardrailsEnabled",
   "init",
 ];
 
@@ -124,6 +128,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   BillingLink: null,
   sendOnboardingEmail: null,
   getOllieCredits: null,
+  getGuardrailsEnabled: null,
   init: null,
   collectRoutes: (parents) =>
     ACTIVE_MANIFESTS.flatMap((manifest) => manifest.routes?.(parents) ?? []),

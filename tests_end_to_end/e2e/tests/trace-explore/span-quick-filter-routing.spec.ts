@@ -139,6 +139,10 @@ test.describe('Logs quick filter — routing', { tag: ['@t2-cuj', '@area:traces'
       // `trace=`, which would drop the `traces_filters` param the click just
       // wrote and leave this asserting against an unfiltered table.
       await panel.close();
+      // Waited on first, as the Spans test above does: the table keeps the
+      // unfiltered rows on screen until the filtered read answers, so reading
+      // at once can catch both traces from before the filter landed.
+      await expect(logs.traceRow(seed.beta.traceId), 'trace beta is excluded').toHaveCount(0);
       expect(await logs.readRowIdsOnPage(), 'every row the filtered table holds').toEqual([
         seed.alpha.traceId,
       ]);

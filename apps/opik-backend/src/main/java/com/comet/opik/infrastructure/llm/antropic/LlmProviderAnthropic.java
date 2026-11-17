@@ -32,7 +32,7 @@ import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_C
 
 @RequiredArgsConstructor
 @Slf4j
-class LlmProviderAnthropic implements LlmProviderService {
+public class LlmProviderAnthropic implements LlmProviderService {
 
     private final @NonNull AnthropicClient anthropicClient;
     private final @NonNull LlmModelRegistryService registryService;

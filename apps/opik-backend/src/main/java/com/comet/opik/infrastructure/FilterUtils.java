@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -37,6 +38,7 @@ public class FilterUtils {
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
     public static final int UUID_POOL_MULTIPLIER = 2;
     private static final String LOG_COMMENT = "<query_name>:<workspace_id>:<user_name>:<details>";
+    private static final Pattern LOG_COMMENT_UNSUPPORTED_CHARS = Pattern.compile("[^A-Za-z0-9 _.,:=@+-]");
 
     /*
      * A trace in no annotation queue has an empty queue id list, which only these operators accept: queue filters
@@ -257,10 +259,14 @@ public class FilterUtils {
 
     public static String getLogComment(String queryName, String workspaceId, String userName, Object details) {
         return TemplateUtils.newST(LOG_COMMENT)
-                .add("query_name", queryName != null ? queryName.replace("'", "''") : null)
-                .add("workspace_id", workspaceId != null ? workspaceId.replace("'", "''") : null)
-                .add("user_name", userName != null ? userName.replace("'", "''") : null)
-                .add("details", details != null ? details.toString().replace("'", "''") : null)
+                .add("query_name", toLogCommentPart(queryName))
+                .add("workspace_id", toLogCommentPart(workspaceId))
+                .add("user_name", toLogCommentPart(userName))
+                .add("details", toLogCommentPart(details))
                 .render();
+    }
+
+    private static String toLogCommentPart(Object value) {
+        return value != null ? LOG_COMMENT_UNSUPPORTED_CHARS.matcher(value.toString()).replaceAll("-") : null;
     }
 }

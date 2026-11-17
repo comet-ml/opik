@@ -50,7 +50,7 @@ be `@t2-cuj` *and* `@t1-stsaas`: t2 depth, but also part of the STSaaS sanity se
 |---|---|
 | `@t1-stsaas` | include in the STSaaS customer-env sanity run (`test:t1-stsaas`) |
 | `@provider-sanity` | LLM-provider matrix; own cadence, no deploy gating |
-| `@llm-daily` | makes a real LLM provider call; runs once a day via `test:llm-daily` and is excluded from every tier (`--grep-invert @llm-daily`), so post-merge and nightly spend nothing |
+| `@llm-daily` | makes a real LLM provider call; runs once a day via `test:llm-daily` on a throwaway local stack and is excluded from every tier (`--grep-invert @llm-daily`), so post-merge and nightly spend nothing. Reserved for the provider-sanity canary: a spec that only needs *a* completion uses the free mock gateway (`ensureMockModelAvailable`) and stays in its tier |
 
 Worked example — `optimization-studio.spec.ts`:
 

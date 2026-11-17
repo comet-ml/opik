@@ -33,7 +33,7 @@ export const isAccepted = (param?: { accepted?: boolean }): boolean =>
   param?.accepted === true;
 
 export const getEffortLevels = (effort?: EffortParam): string[] =>
-  isAccepted(effort) ? effort?.levels ?? [] : [];
+  isAccepted(effort) ? (effort?.levels ?? []) : [];
 
 const getDefaultEffortLevel = (
   effort: EffortParam | undefined,
@@ -125,9 +125,11 @@ export const resolveSampling = (
 ): SamplingValues => {
   const takesTemperature = isAccepted(params.temperature);
   const temperature = takesTemperature
-    ? configs.temperature ?? undefined
+    ? (configs.temperature ?? undefined)
     : undefined;
-  const topP = isAccepted(params.top_p) ? configs.topP ?? undefined : undefined;
+  const topP = isAccepted(params.top_p)
+    ? (configs.topP ?? undefined)
+    : undefined;
 
   if (!params.sampling_exclusive) {
     return {
@@ -161,6 +163,13 @@ export const ANTHROPIC_PARAM_BINDING: ParamBinding = {
   top_p: "topP",
   max_output_tokens: "maxCompletionTokens",
   effort: "thinkingEffort",
+};
+
+export const GEMINI_PARAM_BINDING: ParamBinding = {
+  temperature: "temperature",
+  top_p: "topP",
+  max_output_tokens: "maxCompletionTokens",
+  effort: "thinkingLevel",
 };
 
 export const OPENAI_PARAM_BINDING: ParamBinding = {
@@ -299,13 +308,13 @@ export const adjustConfigForModel = <T extends object>(
       ? getDefaultEffortLevel(params.effort, levels)
       : typeof current === "string" && levels.includes(current)
         ? current
-        : (typeof current === "string"
+        : ((typeof current === "string"
             ? getNearestOfferedLevel(
                 current,
                 levels.map((value) => ({ value })),
                 previousLevels.map((value) => ({ value })),
               )
-            : undefined) ?? getDefaultEffortLevel(params.effort, levels);
+            : undefined) ?? getDefaultEffortLevel(params.effort, levels));
   }
   return next === current ? config : { ...config, [effortKey]: next };
 };

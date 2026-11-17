@@ -1,3 +1,4 @@
+import logging
 from typing import List, Callable, Optional
 
 from . import evaluation_result
@@ -6,6 +7,8 @@ from ...api_objects.conversation import conversation_thread, conversation_factor
 from ...rest_api import TraceThread, JsonListStringPublic, TracePublic
 from ...types import BatchFeedbackScoreDict
 from ...api_objects.threads import threads_client
+
+LOGGER = logging.getLogger(__name__)
 
 
 def log_feedback_scores(
@@ -24,6 +27,9 @@ def log_feedback_scores(
             for score in result.scores
             if not score.scoring_failed
         ]
+        if not feedback_scores:
+            continue
+
         client.log_threads_feedback_scores(
             scores=feedback_scores,
             project_name=project_name,
@@ -43,10 +49,37 @@ def load_conversation_thread(
 ) -> conversation_thread.ConversationThread:
     traces = client.search_traces(
         project_name=project_name,
-        filter_string=f'thread_id = "{thread.id}"',
+        # A thread id is a free-form string, so a value containing a double
+        # quote would otherwise terminate the literal early and make the
+        # filter match other threads' traces. The OQL parser reads a doubled
+        # quote inside a double-quoted literal as one quote character.
+        filter_string=f'thread_id = "{thread.id.replace(chr(34), chr(34) * 2)}"',
         max_results=max_results,
         truncate=False,
     )
+    # The backend counts two messages per trace.
+    trace_count = (
+        thread.number_of_messages // 2
+        if thread.number_of_messages is not None
+        else None
+    )
+    if len(traces) == max_results and (
+        trace_count is None or trace_count > len(traces)
+    ):
+        # Traces come back newest first, so the ones past the limit are the
+        # start of the conversation.
+        LOGGER.warning(
+            "Thread '%s' has %s the max_traces_per_thread=%d "
+            "limit. Only its %d most recent traces are evaluated, so the start "
+            "of the conversation is missing: raise max_traces_per_thread to "
+            "evaluate the whole thread.",
+            thread.id,
+            f"{trace_count} traces, more than"
+            if trace_count is not None
+            else f"at least {len(traces)} traces, reaching",
+            max_results,
+            len(traces),
+        )
     return conversation_factory.create_conversation_from_traces(
         traces=traces,
         input_transform=trace_input_transform,

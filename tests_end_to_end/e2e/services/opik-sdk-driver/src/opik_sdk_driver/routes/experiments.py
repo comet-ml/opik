@@ -9,12 +9,16 @@ from opik.evaluation.metrics.heuristics.readability import Readability
 from ..opik_factory import make_opik_client
 from ..schemas import (
     CompareExperimentResult,
+    ExperimentCancelRequest,
+    ExperimentCancelResponse,
     ExperimentCompareSeedRequest,
     ExperimentCompareSeedResponse,
     ExperimentEvaluateRequest,
     ExperimentEvaluateResponse,
     ExperimentItemFingerprint,
     ExperimentItemScore,
+    ExperimentLifecycleRequest,
+    ExperimentLifecycleResponse,
     ExperimentReadItemsRequest,
     ExperimentReadItemsResponse,
     ReadabilityEvaluateRequest,
@@ -172,6 +176,76 @@ def read_experiment_items(
         experiment_id=body.experiment_id,
         count=len(fingerprints),
         items=fingerprints,
+    )
+
+
+@router.post("/cancel", response_model=ExperimentCancelResponse, status_code=200)
+def cancel_experiments(
+    body: ExperimentCancelRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> ExperimentCancelResponse:
+    """Stop running experiments through `cancel_experiments`, new in 2.2.122's regen.
+
+    Reached through the public `Opik.rest_client` property rather than importing
+    anything out of `opik.rest_api`: the method is one of the bindings opik#9211
+    generated, and the question this route exists to answer is whether it is
+    callable at all on a live backend — a generated client that lost the method,
+    or whose request model no longer matches the endpoint, fails here.
+
+    Returns what the call returned (nothing) rather than reading the experiments
+    back. The stop having APPLIED is a separate claim with its own failure mode —
+    the endpoint answers 204 for ids it is not tracking — so the caller asserts
+    it off `/experiments/lifecycle` instead of inferring it from this reply.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        returned = client.rest_client.experiments.cancel_experiments(ids=body.ids)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return ExperimentCancelResponse(
+        requested=len(body.ids),
+        returned_none=returned is None,
+    )
+
+
+@router.post("/lifecycle", response_model=ExperimentLifecycleResponse, status_code=200)
+def read_experiment_lifecycle(
+    body: ExperimentLifecycleRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> ExperimentLifecycleResponse:
+    """Read `status` and `finished_at` back through the regenerated client.
+
+    `Experiment.get_experiment_data()` is the public accessor for the whole
+    `ExperimentPublic` model, so this drives the generated DESERIALISATION of
+    the two fields opik#9211 added — which is where a regen breaks silently: a
+    field the model no longer declares is dropped by pydantic and reads here as
+    `None`, not as an error.
+
+    Timestamps are rendered with `isoformat()` rather than passed through as the
+    raw wire string, because the SDK has already parsed them into `datetime` by
+    the time this route sees them. That parse is itself part of what is under
+    test: a `finished_at` the client could not read would have raised inside
+    `get_experiment_data`, before this line.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        experiment = client.get_experiment_by_id(body.experiment_id)
+        data = experiment.get_experiment_data()
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return ExperimentLifecycleResponse(
+        experiment_id=body.experiment_id,
+        # `str(...)` only once it is known to be there: an absent status must
+        # reach the caller as None so its assertion fails, not as "None".
+        status=str(data.status) if data.status is not None else None,
+        finished_at=data.finished_at.isoformat() if data.finished_at is not None else None,
+        created_at=data.created_at.isoformat() if data.created_at is not None else None,
+        trace_count=data.trace_count,
+        dataset_item_count=data.dataset_item_count,
     )
 
 

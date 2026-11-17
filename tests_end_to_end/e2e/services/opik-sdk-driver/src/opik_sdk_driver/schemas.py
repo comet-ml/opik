@@ -405,6 +405,64 @@ class ExperimentReadItemsRequest(BaseModel):
     workspace: str | None = None
 
 
+class ExperimentLifecycleRequest(BaseModel):
+    """One experiment, read for its lifecycle fields.
+
+    `ids` on the cancel request rather than a single id because
+    `cancel_experiments` takes a sequence, and a caller asserting that the stop
+    is scoped to what it named has to be able to name more than one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_id: str
+    workspace: str | None = None
+
+
+class ExperimentCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[str]
+    workspace: str | None = None
+
+
+class ExperimentCancelResponse(BaseModel):
+    """What the SDK call returned, which for this endpoint is nothing.
+
+    Stated explicitly rather than answering an empty body: the claim the caller
+    makes is that `cancel_experiments` was REACHABLE on the regenerated client
+    and did not raise, which is a different claim from the stop having applied —
+    that one is only readable off the experiment's own status afterwards.
+    """
+
+    requested: int
+    returned_none: bool
+
+
+class ExperimentLifecycleResponse(BaseModel):
+    """An experiment's lifecycle as the regenerated Python client deserialises it.
+
+    Every field is `| None` because `ExperimentPublic` types each one optional,
+    and that optionality is a fact about the API the caller must assert away
+    rather than one this route may paper over: substituting `"completed"` for a
+    dropped `status` here would reproduce the backend's own
+    `ExperimentStatus.fromString` fallback inside the bridge and make the
+    regression invisible.
+
+    `status` is passed through as the raw string the model carries.
+    `ExperimentPublicStatus` is a `Literal[...] | Any` union, so pydantic admits
+    any value — which means a status the client does not know is reported here
+    rather than rejected, and the caller compares it against what it expects.
+    """
+
+    experiment_id: str
+    status: str | None
+    finished_at: str | None
+    created_at: str | None
+    trace_count: int | None
+    dataset_item_count: int | None
+
+
 class ExperimentItemFingerprint(BaseModel):
     """The identity of one experiment item, in the order the read returned it.
 
@@ -594,6 +652,66 @@ class TestSuiteRunRequest(BaseModel):
     experiment_name: str
     judge_model: str | None = None
     workspace: str | None = None
+    # Return every assertion score result the run produced, per item and per
+    # run, rather than only the pass/fail tallies.
+    #
+    # Off by default, and the default is the honest one for the existing
+    # callers: a run judged by a real model produces assertion reasons that are
+    # model prose, so a spec reading them would be asserting on LLM output. It
+    # is opt-in for the one shape where the results are mechanical — a schema
+    # item whose type the judge cannot score, where the result is built by the
+    # SDK without a provider call and its text is a fixed sentence.
+    include_assertions: bool = False
+
+
+class TestSuiteSchemaItem(BaseModel):
+    """One `LLMJudgeSchemaItem` as a caller asks for it.
+
+    `type` is the whole reason this route exists: the public
+    `create_test_suite(global_assertions=[...])` / `update_test_settings`
+    shorthand builds an `LLMJudge` from plain strings, and every item it writes
+    is `BOOLEAN`. A numeric item cannot be expressed through it at all.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: Literal["BOOLEAN", "INTEGER", "DOUBLE"]
+    description: str
+
+
+class TestSuiteEvaluatorSchemaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite_name: str
+    project_name: str
+    #: In schema order, which is the order the run's results come back in.
+    schema_items: list[TestSuiteSchemaItem]
+    workspace: str | None = None
+
+
+class TestSuiteEvaluatorSchemaResponse(BaseModel):
+    suite_id: str
+    #: The version the write landed on, read back from the backend.
+    version_name: str | None
+    #: `get_global_assertions()` over a suite re-read after the write.
+    global_assertions: list[str]
+    #: The evaluator schema as the backend answers it, so a caller can assert
+    #: the `type` survived the round trip rather than only the description.
+    schema_items: list[TestSuiteSchemaItem]
+
+
+class TestSuiteAssertionResult(BaseModel):
+    """One `ScoreResult` the run produced, with the item and run it came from."""
+
+    dataset_item_id: str
+    trial_id: int
+    name: str
+    value: float
+    reason: str | None
+    category_name: str | None
+    scoring_failed: bool
+    metadata: dict[str, Any] | None
 
 
 class TestSuiteInsertItemsRequest(BaseModel):
@@ -642,6 +760,17 @@ class TestSuiteRunResponse(BaseModel):
     items_passed: int
     items_failed: int
     items_total: int
+    #: Items the run covered, as `item_results` keys. Distinct from
+    #: `items_total` on purpose: a caller asserting "every item was covered"
+    #: wants the id set, since a run that covered one item twice and another
+    #: never still reports the right total.
+    item_ids: list[str] = []
+    #: `None` unless the request asked for them, which keeps "the caller did
+    #: not ask" distinct from "the run produced no assertion results" — the
+    #: second being a real and interesting answer.
+    item_assertions: list[TestSuiteAssertionResult] | None = None
+    #: Wall-clock seconds `TestSuiteResult` reports for the whole run.
+    total_time: float | None = None
 
 
 class TextPromptCreate(BaseModel):

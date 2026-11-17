@@ -66,7 +66,7 @@ import {
 
 const RuleNameSchema = z
   .string({
-    required_error: "Rule name is required",
+    error: "Rule name is required",
   })
   .min(1, { message: "Rule name is required" });
 
@@ -277,14 +277,14 @@ const refineDecisionModelRule = (
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
-      required_error: "Model is required",
+      error: "Model is required",
     })
     .min(1, { message: "Model is required" }),
   config: z.object({
     temperature: z.number().optional(),
     seed: z
       .number()
-      .int()
+      .int({ message: "Seed must be a non-negative integer" })
       .min(0, { message: "Seed must be a non-negative integer" })
       .optional()
       .nullable(),
@@ -340,8 +340,7 @@ const LLMJudgeBaseSchema = z.object({
         unsaved: z
           .boolean()
           .optional()
-          .default(false)
-          .refine((value) => !value, {
+          .refine((value): boolean => !value, {
             message: "Changes not saved",
           }),
       }),
@@ -525,7 +524,7 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
 export const BasePythonCodeFormSchema = z.object({
   metric: z
     .string({
-      required_error: "Code is required",
+      error: "Code is required",
     })
     .min(1, { message: "Code is required" }),
 });
@@ -566,11 +565,9 @@ export const BaseEvaluationRuleFormSchema = z.object({
   samplingRate: SamplingRateSchema,
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
-  enabled: z.boolean().default(true),
-  triggerScope: z
-    .nativeEnum(EVAL_TRIGGER_SCOPE)
-    .default(EVAL_TRIGGER_SCOPE.production),
-  filters: FiltersSchema.default([]),
+  enabled: z.boolean(),
+  triggerScope: z.nativeEnum(EVAL_TRIGGER_SCOPE),
+  filters: FiltersSchema,
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =
@@ -876,12 +873,12 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     ),
   };
   const config = model
-    ? updateProviderConfig(rawConfig, {
+    ? (updateProviderConfig(rawConfig, {
         model: model as PROVIDER_MODEL_TYPE,
         provider: getProviderFromModel(
           model as PROVIDER_MODEL_TYPE,
         ) as COMPOSED_PROVIDER_TYPE,
-      }) ?? rawConfig
+      }) ?? rawConfig)
     : rawConfig;
   return {
     model,

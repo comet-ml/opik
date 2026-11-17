@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { loadEnvConfig } from './config/env.config';
+import { MOCK_STATIC_API_KEY, mockAuthBaseUrl } from './core/mock-auth';
 
 const env = loadEnvConfig();
 
@@ -60,6 +61,12 @@ export default defineConfig({
         ...(process.env as Record<string, string>),
         OPIK_URL_OVERRIDE: env.apiBaseUrl,
         OPIK_WORKSPACE: env.workspace,
+        // LLM calls the SDK makes from here (LiteLLM judges) go to the mock gateway on this
+        // runner, never a paid API — whatever keys the run holds.
+        OPENAI_API_BASE: `${mockAuthBaseUrl}/v1`,
+        OPENAI_BASE_URL: `${mockAuthBaseUrl}/v1`,
+        OPENAI_API_KEY: MOCK_STATIC_API_KEY,
+        ANTHROPIC_API_KEY: '',
       },
     },
     {

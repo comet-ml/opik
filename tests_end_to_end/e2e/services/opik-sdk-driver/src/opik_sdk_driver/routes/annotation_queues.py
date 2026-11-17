@@ -1,8 +1,9 @@
 import atexit
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header
 
 from ..opik_factory import make_opik_client
+from ..visibility import wait_for_trace
 from ..schemas import AnnotationQueueCreate, AnnotationQueueResponse
 
 router = APIRouter(prefix="/annotation-queues", tags=["annotation-queues"])
@@ -14,26 +15,13 @@ def create_annotation_queue(
     x_opik_api_key: str | None = Header(default=None),
 ) -> AnnotationQueueResponse:
     # add_traces takes Trace/TracePublic objects (not bare ids), so each
-    # seeded trace is looked up by id via search_traces first; the queue is
+    # seeded trace is read back by id first; the queue is
     # only created once every trace is confirmed visible, so a lookup
     # failure doesn't leave an orphan queue behind. ApiError is translated
     # to HTTP by the app-wide exception handler.
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
-        traces = []
-        for trace_id in body.trace_ids:
-            found = client.search_traces(
-                project_name=body.project_name,
-                filter_string=f'id = "{trace_id}"',
-                max_results=1,
-                wait_for_at_least=1,
-            )
-            if not found:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Trace {trace_id} not visible when adding to annotation queue",
-                )
-            traces.append(found[0])
+        traces = [wait_for_trace(client, trace_id) for trace_id in body.trace_ids]
 
         queue = client.create_traces_annotation_queue(
             name=body.name,

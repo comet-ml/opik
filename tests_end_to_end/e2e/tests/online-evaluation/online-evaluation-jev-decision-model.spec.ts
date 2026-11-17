@@ -11,12 +11,6 @@ const JEV_PINNED = 'typesafe/jev-1.13';
  */
 const CHAT_MODEL = 'openai/gpt-4o-mini';
 
-/**
- * The built-in provider a Jev model resolves to. Workspace-global and unnamed,
- * so the fixture reuses an existing key rather than seeding over it.
- */
-const OPENROUTER = 'openrouter';
-
 const QUESTION = 'Does the output fully answer the input?';
 
 /**
@@ -35,7 +29,10 @@ const QUESTION = 'Does the output fully answer the input?';
  *
  * Deterministic and free: the rules are created but never scored, so no
  * provider call is made. The OpenRouter key exists only so the provider
- * resolves; its secret is never used.
+ * resolves; its secret is never used. It comes from `openRouterProvider`, which
+ * never deletes it: a key seeded and torn down per test is pulled out from under
+ * a parallel test still on the page, which then renders "Connect OpenRouter"
+ * and no Jev select.
  */
 test.describe(
   'Online Evaluation — Jev decision models',
@@ -44,12 +41,14 @@ test.describe(
     test(
       'a Jev rule saves, persists as a decisions-model rule, and reopens as one',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
-      async ({ project, backendClient, providerKeys, testNamespace, automationRulesCleanup, page }) => {
+      async ({ project, backendClient, openRouterProvider, testNamespace, automationRulesCleanup, page }) => {
         const ruleName = `${testNamespace}-jev-rule`;
         const rules = new OnlineEvaluationPage(page);
 
-        await test.step('Make sure the workspace has an OpenRouter key', async () => {
-          await providerKeys.ensureBuiltIn(OPENROUTER, [JEV_LATEST, JEV_PINNED]);
+        await test.step('The workspace has an OpenRouter key', async () => {
+          expect(openRouterProvider.configured, 'a Jev model resolves only through OpenRouter').toBe(
+            true,
+          );
         });
 
         await test.step('Build a decision model rule on the pinned Jev model', async () => {
@@ -148,11 +147,13 @@ test.describe(
     test(
       'Jev is its own evaluator at trace and span scope, and absent from the LLM-as-a-Judge picker',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
-      async ({ project, providerKeys, page }) => {
+      async ({ project, openRouterProvider, page }) => {
         const rules = new OnlineEvaluationPage(page);
 
-        await test.step('Make sure the workspace has an OpenRouter key', async () => {
-          await providerKeys.ensureBuiltIn(OPENROUTER, [JEV_LATEST, JEV_PINNED]);
+        await test.step('The workspace has an OpenRouter key', async () => {
+          expect(openRouterProvider.configured, 'a Jev model resolves only through OpenRouter').toBe(
+            true,
+          );
         });
 
         await test.step('The decision model editor offers both Jev models, at trace and span scope only', async () => {
@@ -167,11 +168,15 @@ test.describe(
             'a thread rule cannot use a decisions model',
           ).toHaveCount(0);
 
-          await rules.decisionModelSelect.click();
-          for (const model of [JEV_LATEST, JEV_PINNED]) {
-            await expect(page.getByRole('option', { name: model, exact: true })).toBeVisible();
-          }
-          await page.getByRole('option', { name: JEV_LATEST, exact: true }).click();
+          await expect(async () => {
+            const listbox = await rules.openDecisionModelSelect();
+            for (const model of [JEV_LATEST, JEV_PINNED]) {
+              await expect(listbox.getByRole('option', { name: model, exact: true })).toBeVisible({
+                timeout: 2_000,
+              });
+            }
+          }).toPass({ timeout: 30_000 });
+          await rules.chooseDecisionModel(JEV_LATEST);
           await rules.cancelPanel();
         });
 

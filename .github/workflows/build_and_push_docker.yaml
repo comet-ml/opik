@@ -55,6 +55,9 @@ env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik"
   DOCKER_BUILD_SUMMARY: "false"
 
+permissions:
+  contents: read
+
 jobs:
   generate-matrix:
     runs-on: ubuntu-latest

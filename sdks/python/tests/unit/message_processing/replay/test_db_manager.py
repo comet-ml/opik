@@ -551,6 +551,24 @@ class TestReplayFailedMessages:
         assert result == 0
         callback.assert_not_called()
 
+    @pytest.mark.parametrize("timeout, expected_replayed", [(0.3, 10), (0.0, 0)])
+    def test_replay_failed_messages__timeout__stops_between_batches_and_leaves_the_rest_failed(
+        self, manager: db_manager.DBManager, timeout, expected_replayed
+    ):
+        for i in range(50):
+            manager.register_message(
+                _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}"),
+                status=db_manager.MessageStatus.failed,
+            )
+
+        start = time.monotonic()
+        result = manager.replay_failed_messages(mock.Mock(), timeout=timeout)
+
+        # The 0.5 s pause after a full batch is cut short by the deadline.
+        assert time.monotonic() - start < 0.45
+        assert result == expected_replayed
+        assert manager.failed_messages_count() == 50 - expected_replayed
+
     def test_replay_failed_messages__large_batch__processes_all_batches(
         self, small_batch_manager: db_manager.DBManager
     ):
