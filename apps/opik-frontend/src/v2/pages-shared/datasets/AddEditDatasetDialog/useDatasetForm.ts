@@ -3,6 +3,7 @@ import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
 import { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetItemsFromJsonMutation from "@/api/datasets/useDatasetItemsFromJsonMutation";
@@ -43,9 +44,9 @@ const useDatasetForm = ({
   open,
   setOpen,
   onDatasetCreated,
-  hideUpload,
+  hideUpload: hideUploadProp,
   csvRequired = false,
-  skipEvaluationCriteria = false,
+  skipEvaluationCriteria: skipEvaluationCriteriaProp = false,
   appendDateToAutoName = false,
   datasetType,
   onNameConflict,
@@ -53,6 +54,13 @@ const useDatasetForm = ({
 }: UseDatasetFormParams) => {
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
+  const {
+    permissions: { canEditDatasets },
+  } = usePermissions();
+
+  // Items, assertions and run policy are saved with edit rights, not create.
+  const hideUpload = hideUploadProp || !canEditDatasets;
+  const skipEvaluationCriteria = skipEvaluationCriteriaProp || !canEditDatasets;
 
   const { mutate: createMutate } = useDatasetCreateMutation();
   const { mutate: updateMutate } = useDatasetUpdateMutation();
@@ -125,7 +133,7 @@ const useDatasetForm = ({
   }, [open, dataset, datasetType]);
 
   const isEdit = Boolean(dataset);
-  const hasValidUploadFile = uploadFile && !uploadError;
+  const hasValidUploadFile = !hideUpload && uploadFile && !uploadError;
   const isValid =
     name.length > 0 &&
     (isEdit || hideUpload || !csvRequired || hasValidUploadFile);
@@ -421,6 +429,8 @@ const useDatasetForm = ({
     buttonText,
     submitHandler,
     handleFileSelect,
+    hideUpload,
+    canEditDatasets,
   };
 };
 
