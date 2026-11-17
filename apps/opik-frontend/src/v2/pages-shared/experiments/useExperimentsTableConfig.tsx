@@ -241,6 +241,7 @@ export const useExperimentsTableConfig = <
           valueKey: `${metaKey}.value`,
           labelKey: `${metaKey}.label`,
           countAggregationKey: "experiment_count",
+          countUnit: "exp",
           explainer: {
             id: "group-experiments",
             description: `Some of the experiments didn’t match any group`,
@@ -279,6 +280,7 @@ export const useExperimentsTableConfig = <
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
+              countUnit: "exp",
               explainer: {
                 id: "group-experiments",
                 description: `Some experiments reference a project that has been deleted`,

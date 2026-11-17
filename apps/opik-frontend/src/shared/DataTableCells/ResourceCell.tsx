@@ -5,7 +5,7 @@ import isNumber from "lodash/isNumber";
 import { CellContext } from "@tanstack/react-table";
 
 import { Explainer } from "@/types/shared";
-import { formatExperimentCount } from "@/lib/experiments";
+import { formatCount } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
@@ -67,6 +67,7 @@ type GroupCustomMeta = {
   valueKey: string;
   labelKey: string;
   countAggregationKey?: string;
+  countUnit?: string;
   explainer?: Explainer;
   getResource?: (cellData: unknown) => RESOURCE_TYPE;
 } & CustomMeta;
@@ -83,6 +84,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getIsDeleted,
     getResource,
     countAggregationKey,
+    countUnit,
     explainer,
   } = (custom ?? {}) as GroupCustomMeta;
 
@@ -105,7 +107,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ? get(data, countAggregationKey, undefined)
       : undefined;
 
-  const countText = isNumber(count) ? formatExperimentCount(count) : "";
+  const countText = isNumber(count) ? formatCount(count, countUnit) : "";
 
   return (
     <CellWrapper

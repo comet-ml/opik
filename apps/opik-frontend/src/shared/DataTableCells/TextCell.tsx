@@ -2,8 +2,7 @@ import { CellContext } from "@tanstack/react-table";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
-import { formatNumericData, toString } from "@/lib/utils";
-import { formatExperimentCount } from "@/lib/experiments";
+import { formatCount, formatNumericData, toString } from "@/lib/utils";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
@@ -79,14 +78,15 @@ type GroupCustomMeta = {
   valueKey: string;
   labelKey: string;
   countAggregationKey?: string;
+  countUnit?: string;
   explainer?: Explainer;
 };
 
 const GroupTextCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const cellData = context.row.original;
-  const { valueKey, labelKey, countAggregationKey, explainer } = (custom ??
-    {}) as GroupCustomMeta;
+  const { valueKey, labelKey, countAggregationKey, countUnit, explainer } =
+    (custom ?? {}) as GroupCustomMeta;
   const label = get(cellData, labelKey.split("."), undefined);
   const value = get(cellData, valueKey.split("."), undefined);
 
@@ -114,7 +114,7 @@ const GroupTextCell = <TData,>(context: CellContext<TData, unknown>) => {
       </CellTooltipWrapper>
       {isNumber(count) && (
         <span className="shrink-0 text-light-slate">
-          {formatExperimentCount(count)}
+          {formatCount(count, countUnit)}
         </span>
       )}
       {!hasValue && explainer && <ExplainerIcon {...explainer} />}

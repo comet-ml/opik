@@ -117,9 +117,6 @@ export const formatExperimentPromptVersions = (
   return sortPromptVersions(promptVersions).map(toComparableLabel).join(", ");
 };
 
-export const formatExperimentCount = (count: number) =>
-  `${count} ${count === 1 ? "exp" : "exps"}`;
-
 export const isExperimentTerminal = (
   status: EXPERIMENT_STATUS | undefined | null,
 ): boolean =>
