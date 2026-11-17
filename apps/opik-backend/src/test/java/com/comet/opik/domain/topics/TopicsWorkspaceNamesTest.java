@@ -3,9 +3,7 @@ package com.comet.opik.domain.topics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,7 +16,7 @@ class TopicsWorkspaceNamesTest {
     @DisplayName("The name is looked up once per TTL, paired with the id, and refreshed after the TTL")
     void nameIsCached() {
         var calls = new AtomicInteger();
-        var clock = new MutableClock(NOW);
+        var clock = new TopicVectorsTickServiceTest.TestClock(NOW);
         var names = new TopicsWorkspaceNames(id -> "name-" + id + "-" + calls.incrementAndGet(), clock);
 
         assertThat(names.name("ws")).isEqualTo("name-ws-1");
@@ -26,7 +24,7 @@ class TopicsWorkspaceNamesTest {
         assertThat(names.of("ws").get(TopicsWorkspaceNames.WORKSPACE_NAME)).isEqualTo("name-ws-1");
         assertThat(calls).hasValue(1);
 
-        clock.now = NOW.plus(TopicsWorkspaceNames.NAME_TTL);
+        clock.advance(TopicsWorkspaceNames.NAME_TTL);
         assertThat(names.name("ws")).isEqualTo("name-ws-2");
         assertThat(calls).hasValue(2);
     }
@@ -35,7 +33,7 @@ class TopicsWorkspaceNamesTest {
     @DisplayName("A blank name or a failed lookup falls back to the id and is retried after the failure TTL")
     void fallsBackToTheId() {
         var calls = new AtomicInteger();
-        var clock = new MutableClock(NOW);
+        var clock = new TopicVectorsTickServiceTest.TestClock(NOW);
         var names = new TopicsWorkspaceNames(id -> {
             if (calls.incrementAndGet() == 1) {
                 throw new IllegalStateException("react service down");
@@ -47,7 +45,7 @@ class TopicsWorkspaceNamesTest {
         assertThat(names.name("ws")).isEqualTo("ws");
         assertThat(calls).hasValue(1);
 
-        clock.now = NOW.plus(TopicsWorkspaceNames.FAILURE_TTL);
+        clock.advance(TopicsWorkspaceNames.FAILURE_TTL);
         assertThat(names.name("ws")).isEqualTo("ws");
         assertThat(calls).hasValue(2);
     }
@@ -56,7 +54,7 @@ class TopicsWorkspaceNamesTest {
     @DisplayName("The known name never looks up: the id before any lookup, then the last resolved name, even expired")
     void knownNameNeverLooksUp() {
         var calls = new AtomicInteger();
-        var clock = new MutableClock(NOW);
+        var clock = new TopicVectorsTickServiceTest.TestClock(NOW);
         var names = new TopicsWorkspaceNames(id -> {
             calls.incrementAndGet();
             return "name-" + id;
@@ -66,7 +64,7 @@ class TopicsWorkspaceNamesTest {
         assertThat(calls).hasValue(0);
 
         names.name("ws");
-        clock.now = NOW.plus(TopicsWorkspaceNames.NAME_TTL);
+        clock.advance(TopicsWorkspaceNames.NAME_TTL);
         assertThat(names.knownName("ws")).isEqualTo("name-ws");
         assertThat(calls).hasValue(1);
     }
@@ -78,29 +76,5 @@ class TopicsWorkspaceNamesTest {
                 .isEqualTo("acme");
         assertThat(TopicsWorkspaceNames.builder("ws", "").build().get(TopicsWorkspaceNames.WORKSPACE_NAME))
                 .isEqualTo("ws");
-    }
-
-    private static final class MutableClock extends Clock {
-
-        private Instant now;
-
-        private MutableClock(Instant now) {
-            this.now = now;
-        }
-
-        @Override
-        public ZoneOffset getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(java.time.ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
-        }
     }
 }
