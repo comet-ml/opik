@@ -87,11 +87,11 @@ def parse_api_key(raw_key: str) -> Optional[OpikApiKey]:
             attributes = json.loads(data)
         else:
             # edge case - delimiter found but no encoded JSON afterward
-            LOGGER.warning(PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES)
+            LOGGER.warning(PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES % raw_key)
             raw_key = parts[0]  # remove obsolete delimiter
             attributes = None
 
         return OpikApiKey(api_key_raw=raw_key, api_key=parts[0], attributes=attributes)
 
-    LOGGER.warning(PARSE_API_KEY_TOO_MANY_PARTS, size)
+    LOGGER.warning(PARSE_API_KEY_TOO_MANY_PARTS, size, raw_key)
     return None
