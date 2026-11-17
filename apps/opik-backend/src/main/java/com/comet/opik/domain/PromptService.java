@@ -1043,6 +1043,9 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         Prompt prompt = findByName(workspaceId, name, projectId);
+        if (prompt != null && prompt.projectId() == null) {
+            requestContext.get().setWorkspaceFallbackFor("Prompt", name);
+        }
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);

@@ -545,7 +545,9 @@ class DatasetsResourceProjectScopedTest {
         try (var response = datasetResourceClient.callGetDatasetByIdentifier(inDefaultProject, apiKey,
                 workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                    .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                            projectless.name()));
             assertDataset(response.readEntity(Dataset.class), projectless);
         }
     }

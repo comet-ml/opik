@@ -785,6 +785,9 @@ class PromptResourceProjectScopedPromptsTest {
         try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, apiKey,
                 workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                    .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
+                            projectless.name()));
             assertThat(response.readEntity(PromptVersion.class).id()).isEqualTo(createdVersion.id());
         }
     }
@@ -910,6 +913,7 @@ class PromptResourceProjectScopedPromptsTest {
         var request = PromptVersionRetrieve.builder().name(prompt.name()).build();
         try (var response = promptResourceClient.callRetrievePromptVersion(request, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
             assertThat(response.readEntity(PromptVersion.class).template()).isEqualTo(prompt.template());
         }
     }

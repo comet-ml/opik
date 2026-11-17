@@ -64,6 +64,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -308,7 +309,12 @@ public class DatasetsResource {
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 
-        return Response.ok(dataset).build();
+        var responseBuilder = Response.ok(dataset);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
     }
 
     @POST
@@ -454,7 +460,8 @@ public class DatasetsResource {
             }), maxItems = 2000)))
     })
     public ChunkedOutput<JsonNode> streamDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
+            @Context HttpServletResponse httpResponse) {
         var ctxSnapshot = requestContext.get();
         var workspaceId = ctxSnapshot.getWorkspaceId();
 
@@ -479,6 +486,11 @@ public class DatasetsResource {
 
             log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
                     request.datasetName(), request.projectName(), workspaceId);
+
+            String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+            if (fallbackMessage != null) {
+                httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+            }
 
             return outputStream;
         } catch (NotFoundException ex) {

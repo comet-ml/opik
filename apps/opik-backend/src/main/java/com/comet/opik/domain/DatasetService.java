@@ -397,11 +397,14 @@ class DatasetServiceImpl implements DatasetService {
 
     private Dataset findByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        if (StringUtils.isBlank(identifier.projectName())) {
-            return findByNameWithoutProject(workspaceId, identifier.datasetName(), visibility);
+        Dataset dataset = StringUtils.isBlank(identifier.projectName())
+                ? findByNameWithoutProject(workspaceId, identifier.datasetName(), visibility)
+                : findByName(workspaceId, identifier.datasetName(),
+                        findProjectId(workspaceId, identifier.projectName()), visibility);
+        if (dataset.projectId() == null) {
+            requestContext.get().setWorkspaceFallbackFor("Dataset", identifier.datasetName());
         }
-        UUID projectId = findProjectId(workspaceId, identifier.projectName());
-        return findByName(workspaceId, identifier.datasetName(), projectId, visibility);
+        return dataset;
     }
 
     @Override
