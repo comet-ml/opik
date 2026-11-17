@@ -14,6 +14,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TopicsReadTestUtils;
+import com.comet.opik.api.resources.utils.TopicsReadTestUtils.Caller;
 import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -21,7 +23,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
-import com.comet.opik.domain.topics.Topic;
 import com.comet.opik.domain.topics.TopicDAO;
 import com.comet.opik.domain.topics.TopicProjectState;
 import com.comet.opik.domain.topics.TopicReadService;
@@ -42,7 +43,6 @@ import com.google.common.base.Throwables;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
-import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.AfterEach;
@@ -61,7 +61,6 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
-import uk.co.jemos.podam.api.PodamFactory;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -74,11 +73,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.savedState;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.topic;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -96,8 +96,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TopicsReadResourceTest {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/topics";
-    private static final String USER = "user-" + UUID.randomUUID();
     private static final String RATE_LIMIT_BUCKET = "getProjectTopics";
     private static final int RATE_LIMIT = 3;
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
@@ -154,8 +152,7 @@ class TopicsReadResourceTest {
 
     private String baseUrl;
     private ClientSupport client;
-    private ProjectResourceClient projectClient;
-    private PodamFactory podamFactory;
+    private TopicsReadTestUtils topics;
     private TransactionTemplate template;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicVectorsDAO vectorsDAO;
@@ -166,13 +163,13 @@ class TopicsReadResourceTest {
     void setUpAll(ClientSupport client, Injector injector, OpikConfiguration opikConfig) {
         this.client = client;
         this.baseUrl = TestUtils.getBaseUrl(client);
-        this.podamFactory = PodamFactoryUtils.newPodamFactory();
-        this.projectClient = new ProjectResourceClient(client, baseUrl, podamFactory);
         this.template = injector.getInstance(TransactionTemplate.class);
         this.traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         this.vectorsDAO = injector.getInstance(TopicVectorsDAO.class);
         this.connectionFactory = injector.getInstance(ConnectionFactory.class);
         this.opikConfig = opikConfig;
+        this.topics = new TopicsReadTestUtils(wireMock.server(), client, baseUrl,
+                new ProjectResourceClient(client, baseUrl, PodamFactoryUtils.newPodamFactory()), template, opikConfig);
     }
 
     @AfterEach
@@ -184,9 +181,9 @@ class TopicsReadResourceTest {
     @DisplayName("ready: per topic counts, shares, ranks, series and New as seeded; a retired topic's rows count as "
             + "Other; rows outside the window do not count; a run's rows count without its topic_runs row")
     void ready() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
         var firstBuild = today.minusDays(20);
         var first = topic(caller.workspaceId(), projectId, firstBuild, null);
@@ -222,7 +219,7 @@ class TopicsReadResourceTest {
         rows.addAll(run(caller.workspaceId(), projectId, first.id(), today.minusDays(30), 5, saved));
         insertShown(rows);
 
-        var body = get(caller, projectId);
+        var body = topics.get(caller, projectId);
 
         assumeTrue(today.equals(body.today()), "the UTC day changed between the seed and the request");
         assertThat(body.status()).isEqualTo(ProjectTopics.Status.READY);
@@ -253,16 +250,16 @@ class TopicsReadResourceTest {
     @DisplayName("collecting, queued: no live topic and no run; the window's vectors and the first build's minimum, "
             + "without the ready fields, attempt or last_run_at")
     void collecting() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
         vectorsDAO.insert(List.of(
                 vector(caller.workspaceId(), projectId, today),
                 vector(caller.workspaceId(), projectId, today.minusDays(29)),
                 vector(caller.workspaceId(), projectId, today.minusDays(30)))).block();
 
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(200);
             var json = response.readEntity(JsonNode.class);
             assumeTrue(today.toString().equals(json.get("today").asText()),
@@ -284,9 +281,9 @@ class TopicsReadResourceTest {
     @DisplayName("collecting, building: the newest run is running, so attempt is running; an older failed run does "
             + "not count")
     void collectingBuilding() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var startedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.FAILED,
                 startedAt.minus(Duration.ofDays(1)));
@@ -303,9 +300,9 @@ class TopicsReadResourceTest {
     @DisplayName("collecting, failed: the newest run failed, so attempt is failed; of two runs started at the same "
             + "instant, the greater run id is the newest")
     void collectingFailed() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var startedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var runIds = Stream.of(UUID.randomUUID(), UUID.randomUUID())
                 .sorted(Comparator.comparing(UUID::toString))
@@ -324,21 +321,15 @@ class TopicsReadResourceTest {
     @DisplayName("collecting, built with no topics: the newest run saved and left no live topic, so no attempt and "
             + "last_run_at set; an older failed run does not count")
     void collectingBuiltWithNoTopics() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var savedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var saved = ID_GENERATOR.generateId();
         topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.FAILED,
                 savedAt.minus(Duration.ofDays(1)));
         topicRun(caller.workspaceId(), projectId, saved, TopicRun.Status.SAVED, savedAt.minus(Duration.ofMinutes(5)));
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicDAO.class).insertState(savedState(caller.workspaceId(), projectId).toBuilder()
-                    .lastRunId(saved)
-                    .lastSuccessAt(savedAt)
-                    .build());
-            return null;
-        });
+        saveState(caller, projectId, saved, savedAt);
 
         var json = json(caller, projectId);
 
@@ -351,21 +342,15 @@ class TopicsReadResourceTest {
     @DisplayName("collecting, failed after saved: a run saved and left no live topic, then the newest run failed, so "
             + "attempt is failed and last_run_at is set")
     void collectingFailedAfterSaved() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var startedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var savedAt = startedAt.minus(Duration.ofDays(1));
         var saved = ID_GENERATOR.generateId();
         topicRun(caller.workspaceId(), projectId, saved, TopicRun.Status.SAVED, savedAt.minus(Duration.ofMinutes(5)));
         topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.FAILED, startedAt);
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicDAO.class).insertState(savedState(caller.workspaceId(), projectId).toBuilder()
-                    .lastRunId(saved)
-                    .lastSuccessAt(savedAt)
-                    .build());
-            return null;
-        });
+        saveState(caller, projectId, saved, savedAt);
 
         var json = json(caller, projectId);
 
@@ -375,10 +360,11 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("disabled and ready have no attempt, also while the project's newest run is running")
+    @DisplayName("disabled, also with live topics: no topics, other, vectors_in_window or attempt; ready has no "
+            + "attempt either, also while the project's newest run is running")
     void noAttemptUnlessCollecting() {
-        var caller = caller();
-        var projectId = project(caller);
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicDAO.class);
             dao.insertTopics(List.of(
@@ -392,48 +378,29 @@ class TopicsReadResourceTest {
                 Instant.now().truncatedTo(ChronoUnit.MICROS));
 
         var disabled = json(caller, projectId);
-        optIn(caller.workspaceId());
+        topics.optIn(caller.workspaceId());
         var ready = json(caller, projectId);
 
         assertThat(disabled.get("status").asText()).isEqualTo("disabled");
+        assertThat(disabled.get("topics")).isEmpty();
+        assertThat(disabled.has("other")).isFalse();
+        assertThat(disabled.has("vectors_in_window")).isFalse();
         assertThat(disabled.has("attempt")).isFalse();
         assertThat(ready.get("status").asText()).isEqualTo("ready");
         assertThat(ready.has("attempt")).isFalse();
     }
 
     @Test
-    @DisplayName("disabled: a workspace not opted in, also with live topics")
-    void disabled() {
-        var caller = caller();
-        var projectId = project(caller);
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(
-                    List.of(topic(caller.workspaceId(), projectId, LocalDate.now(ZoneOffset.UTC), null)));
-            dao.insertState(savedState(caller.workspaceId(), projectId));
-            handle.attach(AiLabelWorkspaceDAO.class).upsert(caller.workspaceId(), true, "test");
-            return null;
-        });
-
-        var body = get(caller, projectId);
-
-        assertThat(body.status()).isEqualTo(ProjectTopics.Status.DISABLED);
-        assertThat(body.topics()).isEmpty();
-        assertThat(body.other()).isNull();
-        assertThat(body.vectorsInWindow()).isNull();
-    }
-
-    @Test
     @DisplayName("400 with the too-large message when the counts read hits its rows limit (max_rows_to_read): the real "
             + "driver's error, not a mock")
     void clickHouseRowsLimitIs400() {
-        var caller = caller();
+        var caller = topics.caller();
         var projectId = readyProject(caller);
         var find = opikConfig.getTopics().getVectors().getFind();
         var maxRowsToRead = find.getMaxRowsToRead();
         find.setMaxRowsToRead(1);
 
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(400);
             assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isNull();
             assertThat(response.readEntity(ErrorMessage.class).errors())
@@ -455,13 +422,13 @@ class TopicsReadResourceTest {
     @Test
     @DisplayName("503 with Retry-After when the counts read hits its memory limit (max_memory_usage): a retry can pass")
     void clickHouseMemoryLimitIs503() {
-        var caller = caller();
+        var caller = topics.caller();
         var projectId = readyProject(caller);
         var find = opikConfig.getTopics().getVectors().getFind();
         var maxMemoryUsage = find.getMaxMemoryUsage();
         find.setMaxMemoryUsage(1);
 
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(503);
             assertThat(response.getHeaderString(HttpHeaders.RETRY_AFTER)).isEqualTo("5");
         } finally {
@@ -472,10 +439,10 @@ class TopicsReadResourceTest {
     @Test
     @DisplayName("404 for a project of another workspace")
     void otherWorkspacesProject() {
-        var caller = caller();
-        var projectId = project(caller());
+        var caller = topics.caller();
+        var projectId = topics.project(topics.caller());
 
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(404);
         }
     }
@@ -483,9 +450,9 @@ class TopicsReadResourceTest {
     @Test
     @DisplayName("400 without project_id")
     void noProjectId() {
-        var caller = caller();
+        var caller = topics.caller();
 
-        try (var response = client.target(RESOURCE_PATH.formatted(baseUrl)).request()
+        try (var response = client.target(TopicsReadTestUtils.RESOURCE_PATH.formatted(baseUrl)).request()
                 .header(HttpHeaders.AUTHORIZATION, caller.apiKey())
                 .header(RequestContext.WORKSPACE_HEADER, caller.workspaceName())
                 .get()) {
@@ -496,10 +463,10 @@ class TopicsReadResourceTest {
     @Test
     @DisplayName("501 with no body when topics are off, before the project check")
     void topicsOff() {
-        var caller = caller();
+        var caller = topics.caller();
         opikConfig.getTopics().setEnabled(false);
 
-        try (var response = request(caller, UUID.randomUUID()).get()) {
+        try (var response = topics.request(caller, UUID.randomUUID()).get()) {
             assertThat(response.getStatus()).isEqualTo(501);
             assertThat(response.hasEntity()).isFalse();
         }
@@ -510,10 +477,10 @@ class TopicsReadResourceTest {
     @DisplayName("the toggles' topics_enabled is topics.enabled and the caller's workspace eligible; when false, the "
             + "API answers 501 or status disabled")
     void togglesTopicsEnabled(boolean enabled, boolean eligible, boolean expected) {
-        var caller = caller();
-        var projectId = project(caller);
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
         if (eligible) {
-            optIn(caller.workspaceId());
+            topics.optIn(caller.workspaceId());
         }
         opikConfig.getTopics().setEnabled(enabled);
 
@@ -525,7 +492,7 @@ class TopicsReadResourceTest {
             assertThat(response.getStatus()).isEqualTo(200);
             assertThat(response.readEntity(JsonNode.class).get("topics_enabled").asBoolean()).isEqualTo(expected);
         }
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             if (!enabled) {
                 assertThat(response.getStatus()).isEqualTo(501);
                 return;
@@ -545,7 +512,7 @@ class TopicsReadResourceTest {
         AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), caller.apiKey(), caller.workspaceName(),
                 WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
 
-        try (var response = request(caller, UUID.randomUUID()).get()) {
+        try (var response = topics.request(caller, UUID.randomUUID()).get()) {
             assertThat(response.getStatus()).isEqualTo(403);
         }
     }
@@ -553,26 +520,23 @@ class TopicsReadResourceTest {
     @Test
     @DisplayName("429 after the workspace's limit of requests")
     void rateLimited() {
-        var caller = caller();
-        var projectId = project(caller);
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
 
         for (int i = 0; i < RATE_LIMIT; i++) {
-            try (var response = request(caller, projectId).get()) {
+            try (var response = topics.request(caller, projectId).get()) {
                 assertThat(response.getStatus()).isEqualTo(200);
             }
         }
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(429);
         }
     }
 
-    private record Caller(String apiKey, String workspaceName, String workspaceId) {
-    }
-
     /** A ready project: one live topic with three traces in the window. */
     private UUID readyProject(Caller caller) {
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
         var live = topic(caller.workspaceId(), projectId, today.minusDays(5), null);
         var state = savedState(caller.workspaceId(), projectId);
@@ -595,48 +559,9 @@ class TopicsReadResourceTest {
                 .toList());
     }
 
-    private Caller caller() {
-        var caller = new Caller(UUID.randomUUID().toString(), "ws-" + UUID.randomUUID(),
-                UUID.randomUUID().toString());
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), caller.apiKey(), caller.workspaceName(),
-                caller.workspaceId(), USER);
-        return caller;
-    }
-
-    private UUID project(Caller caller) {
-        return projectClient.createProject("topics-" + UUID.randomUUID(), caller.apiKey(), caller.workspaceName());
-    }
-
-    /** Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces as a Helm change would. */
-    private void optIn(String workspaceId) {
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            return null;
-        });
-        var topics = opikConfig.getTopics();
-        var listed = new TreeSet<>(topics.enabledWorkspaceIds());
-        listed.add(workspaceId);
-        topics.setEnabledWorkspaces(String.join(",", listed));
-    }
-
-    private Invocation.Builder request(Caller caller, UUID projectId) {
-        return client.target(RESOURCE_PATH.formatted(baseUrl))
-                .queryParam("project_id", projectId)
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, caller.apiKey())
-                .header(RequestContext.WORKSPACE_HEADER, caller.workspaceName());
-    }
-
-    private ProjectTopics get(Caller caller, UUID projectId) {
-        try (var response = request(caller, projectId).get()) {
-            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-            return response.readEntity(ProjectTopics.class);
-        }
-    }
-
     /** The body as the client gets it. */
     private JsonNode json(Caller caller, UUID projectId) {
-        try (var response = request(caller, projectId).get()) {
+        try (var response = topics.request(caller, projectId).get()) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
             return response.readEntity(JsonNode.class);
         }
@@ -646,6 +571,17 @@ class TopicsReadResourceTest {
         var attempt = json.get("attempt");
         assertThat(attempt.get("status").asText()).isEqualTo(status);
         assertThat(attempt.size()).isEqualTo(1);
+    }
+
+    /** The project's state as run {@code runId} saved it at {@code savedAt}. */
+    private void saveState(Caller caller, UUID projectId, UUID runId, Instant savedAt) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicDAO.class).insertState(savedState(caller.workspaceId(), projectId).toBuilder()
+                    .lastRunId(runId)
+                    .lastSuccessAt(savedAt)
+                    .build());
+            return null;
+        });
     }
 
     /** A {@code topic_runs} row of the project as a run with {@code status} leaves it. */
@@ -664,34 +600,6 @@ class TopicsReadResourceTest {
                     .build());
             return null;
         });
-    }
-
-    /** The state of a project a run saved. */
-    private static TopicProjectState savedState(String workspaceId, UUID projectId) {
-        var today = LocalDate.now(ZoneOffset.UTC);
-        return TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(workspaceId)
-                .rebuilds(1)
-                .firstBuiltAt(today.minusDays(20).atTime(2, 0).toInstant(ZoneOffset.UTC))
-                .lastRunId(ID_GENERATOR.generateId())
-                .lastSuccessAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                .windowUntil(today.atStartOfDay().toInstant(ZoneOffset.UTC))
-                .build();
-    }
-
-    private static Topic topic(String workspaceId, UUID projectId, LocalDate born, LocalDate retiredAt) {
-        var id = UUID.randomUUID();
-        return Topic.builder()
-                .id(id)
-                .workspaceId(workspaceId)
-                .projectId(projectId)
-                .name("Topic " + id)
-                .definition("Definition of " + id)
-                .born(born)
-                .retiredAt(retiredAt)
-                .retiredReason(retiredAt == null ? null : "merged")
-                .build();
     }
 
     /** {@code count} traces created at noon of {@code day}, labelled by run {@code runId}. */

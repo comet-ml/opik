@@ -16,8 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import reactor.core.publisher.Flux;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
@@ -30,9 +31,11 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -144,10 +147,19 @@ class TopicReadServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("disabled"));
     }
 
-    @ParameterizedTest(name = "a {1} limit (code {0}) is a 503 with Retry-After, status error: a retry can pass")
-    @CsvSource({"159, time", "241, memory"})
-    void timeOrMemoryLimit(int code, String limit) {
-        readyWithCounts(Flux.error(new RuntimeException(new ServerException(code, limit + " limit", 500, "query-id"))));
+    static Stream<Arguments> busyErrors() {
+        return Stream.of(
+                arguments("a time limit (159)", new RuntimeException(new ServerException(159, "time limit", 500,
+                        "query-id"))),
+                arguments("a memory limit (241)", new RuntimeException(new ServerException(241, "memory limit", 500,
+                        "query-id"))),
+                arguments("the client timeout", new TimeoutException("Did not observe any item")));
+    }
+
+    @ParameterizedTest(name = "{0} is a 503 with Retry-After, status error: a retry can pass")
+    @MethodSource("busyErrors")
+    void busyIs503(String name, Throwable error) {
+        readyWithCounts(Flux.error(error));
 
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isInstanceOfSatisfying(ServiceUnavailableException.class, exception -> assertThat(
@@ -157,13 +169,21 @@ class TopicReadServiceTest {
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
 
-    @Test
-    @DisplayName("the r2dbc driver's error, the v1 client's ClickHouseException, with a rows limit (158) is a 400 with "
-            + "the too-large message, status error")
-    void rowsLimitFromTheR2dbcDriver() {
-        readyWithCounts(Flux.error(
-                new com.clickhouse.client.ClickHouseException(158, "Limit for rows (controlled by "
-                        + "'max_rows_to_read' setting) exceeded", null)));
+    static Stream<Arguments> tooLargeErrors() {
+        return Stream.of(
+                arguments("the r2dbc driver's error, the v1 client's ClickHouseException, with a rows limit (158)",
+                        new com.clickhouse.client.ClickHouseException(158, "Limit for rows (controlled by "
+                                + "'max_rows_to_read' setting) exceeded", null)),
+                arguments("a bytes limit (307)", new RuntimeException(new ServerException(307, "Limit exceeded", 500,
+                        "query-id"))),
+                arguments("a rows-or-bytes limit (396)", new RuntimeException(new ServerException(396,
+                        "Limit exceeded", 500, "query-id"))));
+    }
+
+    @ParameterizedTest(name = "{0} is a 400 with the too-large message, status error")
+    @MethodSource("tooLargeErrors")
+    void tooLargeIs400(String name, Throwable error) {
+        readyWithCounts(Flux.error(error));
 
         assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
                 .isInstanceOfSatisfying(BadRequestException.class, exception -> {
@@ -171,27 +191,6 @@ class TopicReadServiceTest {
                     assertThat(exception.getResponse().getEntity()).isEqualTo(
                             new ErrorMessage(List.of(TopicReadService.TOO_LARGE_MESSAGE)));
                 });
-        assertThat(meter.points(DURATION)).singleElement()
-                .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
-    }
-
-    @ParameterizedTest
-    @ValueSource(ints = {307, 396})
-    @DisplayName("a bytes limit (307) or a rows-or-bytes limit (396) is a 400 too")
-    void bytesLimit(int code) {
-        readyWithCounts(Flux.error(new RuntimeException(new ServerException(code, "Limit exceeded", 500, "query-id"))));
-
-        assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOf(BadRequestException.class);
-    }
-
-    @Test
-    @DisplayName("the client timeout is a 503 too")
-    void clientTimeout() {
-        readyWithCounts(Flux.error(new TimeoutException("Did not observe any item")));
-
-        assertThatThrownBy(() -> service.get(WORKSPACE_ID, projectId))
-                .isInstanceOf(ServiceUnavailableException.class);
         assertThat(meter.points(DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("error"));
     }
