@@ -7,6 +7,7 @@ import {
   getJSONPaths,
   buildJSONPath,
   JSON_PATH_FORMAT,
+  formatCount,
 } from "./utils";
 
 describe("isStringMarkdown", () => {
@@ -521,5 +522,16 @@ describe("buildJSONPath", () => {
     expect(
       buildJSONPath([{ key: 'say "hi".x' }], JSON_PATH_FORMAT.bracket),
     ).toBe('["say \\"hi\\".x"]');
+  });
+});
+
+describe("formatCount", () => {
+  it.each([
+    [3, undefined, "3"],
+    [1, "exp", "1 exp"],
+    [3, "exp", "3 exps"],
+    [0, "exp", "0 exps"],
+  ])("formats %i with unit %s as %s", (count, unit, expected) => {
+    expect(formatCount(count, unit)).toBe(expected);
   });
 });

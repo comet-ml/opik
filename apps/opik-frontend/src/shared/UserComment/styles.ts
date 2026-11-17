@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 
-export const rootStyleVariants = cva("group flex max-w-full items-start ", {
+export const rootStyleVariants = cva("group flex max-w-full items-start", {
   variants: {
     size: {
       default: "gap-2 py-3",

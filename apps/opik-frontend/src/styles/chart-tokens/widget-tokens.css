@@ -203,8 +203,8 @@
   --chart-tooltip-fg: hsl(var(--foreground));
   --chart-tooltip-muted: hsl(var(--muted-slate));
   --chart-tooltip-border: hsl(var(--border) / 0.5);
-  --chart-tooltip-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1),
-    0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --chart-tooltip-shadow:
+    0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   --chart-tooltip-font-size: var(--chart-font-size-md);
   --chart-tooltip-padding-x: 10px;
   --chart-tooltip-padding-y: 6px;
@@ -296,8 +296,8 @@
   --chart-tooltip-fg: hsl(var(--foreground));
   --chart-tooltip-muted: hsl(var(--muted-slate));
   --chart-tooltip-border: hsl(var(--border));
-  --chart-tooltip-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5),
-    0 8px 10px -6px rgb(0 0 0 / 0.4);
+  --chart-tooltip-shadow:
+    0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
 
   /* Per-type overrides (chartTheme.types) */
   --chart-map-land: hsl(var(--secondary));

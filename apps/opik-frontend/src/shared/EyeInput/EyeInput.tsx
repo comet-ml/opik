@@ -22,7 +22,7 @@ const EyeInput = ({ revealable = true, ...props }: EyeInputProps) => {
         {...props}
         style={
           {
-            ...(props?.style || {}),
+            ...props?.style,
             WebkitTextSecurity: isHidden ? "disc" : "none",
           } as React.CSSProperties
         }

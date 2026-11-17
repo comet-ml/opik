@@ -121,7 +121,6 @@ const useFilterChips = ({
 
   useEffect(() => {
     if (dropped.length === 0) return;
-    // eslint-disable-next-line no-console
     console.info(
       `[FilterChips] Sanitized ${urlFilters.length} filters from "${urlKey}": ${
         Object.keys(values).length
@@ -166,7 +165,7 @@ const useFilterChips = ({
         // An edit before the restore effect has run must build on the remembered filters.
         const prevFilters = Array.isArray(prevRaw)
           ? prevRaw
-          : savedFilters ?? EMPTY_FILTERS;
+          : (savedFilters ?? EMPTY_FILTERS);
         const prevValues = sanitizeFilters(prevFilters, definitions).values;
         const nextValues = updater(prevValues);
 

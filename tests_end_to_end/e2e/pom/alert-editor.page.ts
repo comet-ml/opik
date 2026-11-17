@@ -146,9 +146,9 @@ export class AlertEditorPage {
   }
 
   /**
-   * A toast carrying `text`, scoped to the notifications region.
+   * A toast carrying `text`.
    *
-   * Scoped rather than a bare `getByText`, for the reason
+   * Matched by test id rather than a bare `getByText`, for the reason
    * `PlaygroundPage.completionToast` documents: Radix also renders a
    * visually-hidden `role="status"` announcer carrying the same copy, so an
    * unscoped lookup matches twice and trips strict mode instead of asserting
@@ -156,10 +156,7 @@ export class AlertEditorPage {
    * as soon as the action that raises it has settled.
    */
   toast(text: string | RegExp): Locator {
-    return this.page
-      .getByRole('region', { name: 'Notifications (F8)' })
-      .getByRole('status')
-      .filter({ hasText: text });
+    return this.page.getByTestId('toast').filter({ hasText: text });
   }
 
   /** The toggle group renders its options as radios, one per destination. */
