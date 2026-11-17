@@ -51,6 +51,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
@@ -1026,48 +1028,29 @@ class TopicVectorsTickTest {
                     .isEqualTo(3);
         }
 
-        @Test
-        @DisplayName("a failing trace_topics insert leaves the vectors written and the tick's counts as they were; it "
-                + "is counted by phase and error type, and arrival stops for the rest of the tick")
-        void failingInsert() {
-            var failingDAO = mock(TraceTopicsDAO.class);
-            when(failingDAO.insert(any())).thenReturn(Mono.error(new IllegalStateException("trace_topics down")));
-            var meter = new TopicsTestMeter();
-            var tick = tickWith(arrival(meter, template, failingDAO, new KMeansTopicAlgorithm()), meter);
-            config().setEmbedBatchSize(2);
-            var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
-            savePrototypes(prototype(workspaceId, projectId, 0, UUID.randomUUID(), intent(0)));
-            var traceIds = labelIntents(workspaceId, projectId,
-                    List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
-
-            var result = tick.tick(Instant.now());
-
-            assertThat(result.written()).isEqualTo(5);
-            assertThat(result.skipped()).isEmpty();
-            assertThat(vectors(workspaceId, traceIds)).hasSize(5);
-            assertThat(countTraceTopicRows(workspaceId)).isZero();
-            // Chunks of 2: the first chunk's insert fails, the other 3 traces are not tried.
-            assertThat(meter.points("topics.arrival.failures")).singleElement().satisfies(point -> {
-                assertThat(point.get("phase")).isEqualTo("insert");
-                assertThat(point.get("error_type")).isEqualTo("IllegalStateException");
-                assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
-            });
-            verify(failingDAO, times(1)).insert(any());
-            assertThat(meter.sum("topics.arrival.labelled", "outcome", "after_failure", "workspace_id", workspaceId))
-                    .isEqualTo(3);
-            assertThat(meter.sum("topics.arrival.labelled", "outcome", "topic")).isZero();
-        }
-
-        @Test
-        @DisplayName("a failing prototypes read leaves the vectors written and the tick's counts as they were; arrival "
-                + "reads nothing more in the tick")
-        void failingRead() {
+        @ParameterizedTest
+        @ValueSource(strings = {TopicsArrivalService.READ, TopicsArrivalService.INSERT, TopicsArrivalService.ASSIGN})
+        @DisplayName("a failing step (the prototypes read, the trace_topics insert, or anything else) leaves the vectors "
+                + "written and the tick's counts as they were; it is counted once by phase and error type, and arrival "
+                + "stops for the rest of the tick")
+        void failingStep(String phase) {
             var failingTemplate = mock(TransactionTemplate.class);
             when(failingTemplate.inTransaction(any(TxConfig.class), any()))
                     .thenThrow(new IllegalStateException("mysql down"));
+            var failingDAO = mock(TraceTopicsDAO.class);
+            when(failingDAO.insert(any())).thenReturn(Mono.error(new IllegalStateException("trace_topics down")));
+            var failingAlgorithm = mock(TopicAlgorithm.class);
+            when(failingAlgorithm.labeller(any())).thenReturn(Optional.of(vectors -> {
+                throw new IllegalStateException("rule broken");
+            }));
             var meter = new TopicsTestMeter();
-            var tick = tickWith(arrival(meter, failingTemplate, traceTopicsDAO, new KMeansTopicAlgorithm()), meter);
+            var arrival = switch (phase) {
+                case TopicsArrivalService.READ ->
+                    arrival(meter, failingTemplate, traceTopicsDAO, new KMeansTopicAlgorithm());
+                case TopicsArrivalService.INSERT -> arrival(meter, template, failingDAO, new KMeansTopicAlgorithm());
+                default -> arrival(meter, template, traceTopicsDAO, failingAlgorithm);
+            };
+            var tick = tickWith(arrival, meter);
             config().setEmbedBatchSize(2);
             var workspaceId = enabledWorkspace();
             var projectId = UUID.randomUUID();
@@ -1081,13 +1064,21 @@ class TopicVectorsTickTest {
             assertThat(result.skipped()).isEmpty();
             assertThat(vectors(workspaceId, traceIds)).hasSize(5);
             assertThat(countTraceTopicRows(workspaceId)).isZero();
+            // Chunks of 2: the first chunk's step fails once, the other 3 traces are not tried.
             assertThat(meter.points("topics.arrival.failures")).singleElement().satisfies(point -> {
-                assertThat(point.get("phase")).isEqualTo("read");
+                assertThat(point.get("phase")).isEqualTo(phase);
                 assertThat(point.get("error_type")).isEqualTo("IllegalStateException");
+                assertThat(point.get("workspace_id")).isEqualTo(workspaceId);
             });
-            verify(failingTemplate, times(1)).inTransaction(any(TxConfig.class), any());
+            switch (phase) {
+                case TopicsArrivalService.READ ->
+                    verify(failingTemplate, times(1)).inTransaction(any(TxConfig.class), any());
+                case TopicsArrivalService.INSERT -> verify(failingDAO, times(1)).insert(any());
+                default -> verify(failingAlgorithm, times(1)).labeller(any());
+            }
             assertThat(meter.sum("topics.arrival.labelled", "outcome", "after_failure", "workspace_id", workspaceId))
                     .isEqualTo(3);
+            assertThat(meter.sum("topics.arrival.labelled", "outcome", "topic")).isZero();
         }
 
         @Test
@@ -1224,37 +1215,6 @@ class TopicVectorsTickTest {
                     .isEqualTo(3);
             assertThat(meter.sum("topics.arrival.labelled", "outcome", "over_budget")).isZero();
             assertThat(meter.points("topics.arrival.failures")).isEmpty();
-        }
-
-        @Test
-        @DisplayName("an unexpected exception in a step stops arrival for the rest of the tick and counts phase assign")
-        void unexpectedFailure() {
-            var algorithm = mock(TopicAlgorithm.class);
-            when(algorithm.labeller(any())).thenReturn(Optional.of(vectors -> {
-                throw new IllegalStateException("rule broken");
-            }));
-            var meter = new TopicsTestMeter();
-            var tick = tickWith(arrival(meter, template, traceTopicsDAO, algorithm), meter);
-            config().setEmbedBatchSize(2);
-            var workspaceId = enabledWorkspace();
-            var projectId = UUID.randomUUID();
-            savePrototypes(prototype(workspaceId, projectId, 0, UUID.randomUUID(), intent(0)));
-            var traceIds = labelIntents(workspaceId, projectId,
-                    List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
-
-            var result = tick.tick(Instant.now());
-
-            assertThat(result.written()).isEqualTo(5);
-            assertThat(vectors(workspaceId, traceIds)).hasSize(5);
-            assertThat(countTraceTopicRows(workspaceId)).isZero();
-            // Chunks of 2: the first chunk's rule fails once, the other 3 traces are not tried.
-            assertThat(meter.points("topics.arrival.failures")).singleElement().satisfies(point -> {
-                assertThat(point.get("phase")).isEqualTo("assign");
-                assertThat(point.get("error_type")).isEqualTo("IllegalStateException");
-            });
-            verify(algorithm, times(1)).labeller(any());
-            assertThat(meter.sum("topics.arrival.labelled", "outcome", "after_failure", "workspace_id", workspaceId))
-                    .isEqualTo(3);
         }
 
         @Test
