@@ -130,7 +130,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
 
   // For each node, track which ancestor depth levels have a continuing vertical line
   const connectorInfo = useMemo(() => {
-    const info: boolean[][] = new Array(flattenedTree.length);
+    const info: boolean[][] = Array.from({ length: flattenedTree.length });
     const hasFollowing: boolean[] = [];
 
     for (let i = flattenedTree.length - 1; i >= 0; i--) {

@@ -58,7 +58,7 @@ const AutoComplete = <T extends string>({
   const handleDebouncedValueChange = useMemo(
     () =>
       debounce((val: T) => {
-        isFunction(valueChangeCallbackRef.current) &&
+        if (isFunction(valueChangeCallbackRef.current))
           valueChangeCallbackRef.current(val);
       }, delay),
     [delay],

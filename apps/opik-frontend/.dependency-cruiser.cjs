@@ -239,6 +239,9 @@ module.exports = {
     includeOnly: {
       path: "^src/",
     },
+    // dependency-cruiser can't load TypeScript 7.0, so .ts/.tsx fall back to acorn:
+    // same graph and rules, minus type-only re-exports and the type-only label.
+    // Fixed by TypeScript 7.1 + dependency-cruiser 18.8 (sverweij/dependency-cruiser#1113).
     tsPreCompilationDeps: true,
     tsConfig: {
       fileName: "tsconfig.json",

@@ -327,14 +327,14 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
-  # Frontend (apps/opik-frontend) — eslint --fix on changed files; whole-project
+  # Frontend (apps/opik-frontend) — oxlint --fix + prettier on changed files; whole-project
   # typecheck (tsc can't be per-file: path aliases + cross-file inference).
   # language: system → uses the repo's own node_modules; files-gated to src.
   # ---------------------------------------------------------------------------
   - repo: local
     hooks:
-      - id: fe-eslint
-        name: 🌐 eslint — frontend
+      - id: fe-lint
+        name: 🌐 oxlint + prettier — frontend
         entry: scripts/precommit-fe-lint.sh
         language: system
         files: ^apps/opik-frontend/src/.*\.(ts|tsx|js|jsx|css|scss|sass)$

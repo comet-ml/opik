@@ -47,13 +47,10 @@ check_empty "no-arg is a no-op"      "$(scripts/precommit-spotless.sh 2>&1)"
 
 echo "precommit-fe-lint.sh:"
 out=$(scripts/precommit-fe-lint.sh apps/opik-frontend/src/a.tsx apps/opik-frontend/src/b.css 2>&1)
-check "routes .tsx to eslint"          "eslint"          "$out"
-check "eslint uses --max-warnings=0"   "--max-warnings=0" "$out"
-# FE pins eslint v8.57.0, which rejects the v9-only --no-warn-ignored flag
-# (OPIK-7237). Assert the wrapper does NOT pass it.
-check_empty "fe eslint omits --no-warn-ignored" \
-	"$(printf '%s' "$out" | grep -o -- '--no-warn-ignored' || true)"
+check "routes .tsx to oxlint"          "oxlint"          "$out"
+check "oxlint uses --max-warnings=0"   "--max-warnings=0" "$out"
 check "routes .css to stylelint"       "stylelint"       "$out"
+check "formats with prettier"          "prettier"        "$out"
 
 echo "precommit-ts-sdk-lint.sh:"
 out=$(scripts/precommit-ts-sdk-lint.sh sdks/typescript/src/opik/index.ts 2>&1)
@@ -75,7 +72,7 @@ scoped_leg_ids() { leg_ids | tr ' ' '\n' | grep -vx 'betterleaks' | tr '\n' ' ' 
 check_empty "respects exclude (rest_api → no legs)" \
 	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | scoped_leg_ids)"
 out=$(printf 'apps/opik-frontend/src/components/Foo.tsx\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
-check "fe change emits fe-eslint"        '"id": "fe-eslint"'   "$out"
+check "fe change emits fe-lint"          '"id": "fe-lint"'     "$out"
 check_empty "fe non-plugin change omits no-private-fe-plugins" \
 	"$(printf '%s' "$out" | leg_ids | grep -o 'no-private-fe-plugins' || true)"
 out=$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)

@@ -23,7 +23,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - `scripts/dev-runner.sh --build-be` / `--build-fe` — build one side only.
 - `scripts/dev-runner.sh --lint-be` — Java lint/format checks.
 - `scripts/dev-runner.sh --lint-fe` — frontend lint/type checks via `npm`.
-- `cd apps/opik-frontend && npm run lint && npm run test` — run ESLint + Vitest.
+- `cd apps/opik-frontend && npm run lint && npm run test` — run oxlint, Prettier check, stylelint + Vitest.
 - `cd apps/opik-frontend && npm run build` — production frontend build.
 - `cd apps/opik-backend && mvn test` — backend unit/integration tests.
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
