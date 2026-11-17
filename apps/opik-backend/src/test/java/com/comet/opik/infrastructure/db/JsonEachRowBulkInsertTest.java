@@ -24,6 +24,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -133,8 +135,8 @@ class JsonEachRowBulkInsertTest {
                 .insert("feedback_scores", "log-comment", List.of(randomValue()), ROW_MAPPER)
                 .subscribe();
 
-        // The body is serialized on boundedElastic, so wait for the call to reach the client before
-        // cancelling - otherwise this races the serialization and cancels before there is a future at all.
+        // Wait for the call to reach the client before cancelling, or this could cancel before there is a
+        // future at all.
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> verify(client).insert(eq("feedback_scores"),
                 any(DataStreamWriter.class), eq(ClickHouseFormat.JSONEachRow), any(InsertSettings.class)));
         subscription.dispose();
@@ -194,6 +196,40 @@ class JsonEachRowBulkInsertTest {
         assertThat(second.toString(StandardCharsets.UTF_8))
                 .isEqualTo(first.toString(StandardCharsets.UTF_8))
                 .isEqualTo("{\"name\":\"%s\"}\n{\"name\":\"%s\"}\n".formatted(first0, second0));
+    }
+
+    @Test
+    @DisplayName("rows are mapped only when the client writes the body, which stays open for the client to close")
+    void writesRowsIntoTheBodyWithoutClosingIt() throws Exception {
+        var client = clientReturning(1L);
+        var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+        var mapped = new AtomicInteger();
+        var only = randomValue();
+
+        new JsonEachRowBulkInsert(client, MAPPER)
+                .insert("feedback_scores", "log-comment", List.of(only), value -> {
+                    mapped.incrementAndGet();
+                    return ROW_MAPPER.apply(value);
+                })
+                .block();
+
+        // No batch is built up front: the mock client never asked for the body.
+        assertThat(mapped).hasValue(0);
+
+        verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), eq(ClickHouseFormat.JSONEachRow),
+                any(InsertSettings.class));
+        var closed = new AtomicBoolean();
+        var body = new ByteArrayOutputStream() {
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        writerCaptor.getValue().onOutput(body);
+
+        assertThat(mapped).hasValue(1);
+        assertThat(closed).isFalse();
+        assertThat(body.toString(StandardCharsets.UTF_8)).isEqualTo("{\"name\":\"%s\"}\n".formatted(only));
     }
 
     @Test

@@ -20,11 +20,10 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
@@ -47,28 +46,22 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * <p>This is the only bulk write path. It was introduced behind a toggle alongside the R2DBC
  * implementation it replaced; both the toggle and that implementation are gone.
  *
- * <p><b>Which thread does what.</b> The two halves run on different pools, deliberately:
+ * <p><b>Rows are written straight into the request body.</b> {@link #write} runs as the client's
+ * {@code DataStreamWriter}, so each row is mapped and serialized into the body as it is sent, and the batch is
+ * never held as a buffer: the client sends the body chunked through its fixed-size compression buffer. For span
+ * and trace payloads that buffer was most of the memory the insert allocated, up to the size of the whole batch
+ * several times over while it grew.
  *
- * <ul>
- *   <li><b>Serialization</b> — the row building that replaces R2DBC's parameter binding — runs in
- *       {@link #serialize} on {@link Schedulers#boundedElastic()}, which is bounded at
- *       {@code 10 × cores}. That bound is the point: it is CPU work, and it is the one part of this
- *       path whose cost scales with the batch.</li>
- *   <li><b>The HTTP round trip</b> runs on the client's own {@code chc-operation} pool, because
- *       {@code DatabaseAnalyticsFactory} builds the client with {@code useAsyncRequests(true)} and
- *       {@link Client#insert} therefore returns a genuinely deferred future. {@link Mono#fromFuture}
- *       consumes it without parking a thread of ours on it.</li>
- * </ul>
+ * <p>The callback runs on the client's {@code chc-operation} pool, because {@code DatabaseAnalyticsFactory} builds
+ * the client with {@code useAsyncRequests(true)}: {@link Client#insert} returns a deferred future that
+ * {@link Mono#fromFuture} consumes without parking a thread of ours on it, and serialization stays off the reactive
+ * event loop. The thread is the one the insert holds for its HTTP round trip anyway, so writing the rows there adds
+ * none; and the work alternates with socket writes that block on the server, which is what a platform thread is
+ * for.
  *
- * <p>The split is why the payload is materialized rather than serialized straight into the client's
- * output stream: the {@code DataStreamWriter} callback is the HTTP body pump, so anything written
- * there runs on {@code chc-operation}. Handing that callback a finished buffer keeps the CPU work on
- * the bounded pool. The cost is holding the batch in memory — for feedback scores that is a large
- * count of small rows rather than the reverse, and {@link ByteArrayOutputStream#writeTo} hands the
- * buffer to the client without copying it again.
- *
- * <p>Writing from a fixed buffer also makes the writer replayable for free: the client's
- * {@code onRetry} re-invokes it and gets identical bytes, rather than resuming a half-written stream.
+ * <p>The client calls the writer again on a retry, which maps and serializes the items again. That gives identical
+ * bytes as long as the row mapper is a pure function of the item; callers resolve values such as the batch
+ * timestamp before calling {@link #insert}.
  *
  * <p>The body is <b>not</b> compressed here, and must not be: the shared client is built with
  * {@code compressClientRequest(true)} in {@code DatabaseAnalyticsFactory}, which compresses the
@@ -102,7 +95,7 @@ public class JsonEachRowBulkInsert {
      * Dropwizard mapper bound here.
      *
      * <p>{@code FLUSH_AFTER_WRITE_VALUE} is left <b>enabled</b>, which is the library default and
-     * load-bearing for the framing in {@link #serialize}: rows go through the generator's own buffer
+     * load-bearing for the framing in {@link #write}: rows go through the generator's own buffer
      * while the row separator is written straight to the {@link BufferedWriter}, so without a flush per
      * row the separator would overtake the row it is supposed to follow and merge two rows into one
      * malformed document. The generator's {@code FLUSH_PASSED_TO_STREAM} is disabled instead, so that
@@ -138,28 +131,18 @@ public class JsonEachRowBulkInsert {
             return Mono.just(0L);
         }
 
-        return Mono.fromCallable(() -> serialize(items, rowMapper))
-                // Serialization is CPU work that scales with the batch; keep it on the bounded pool and
-                // off the reactive event loop.
-                .subscribeOn(Schedulers.boundedElastic())
-                // Opened here, around the statement alone, not around the serialization above: the
-                // R2DBC paths time statement.execute() and nothing else, so measuring more here would
-                // make the two transports incomparable on the metric that exists to compare them.
-                // Named for the table, so a JSONEachRow write lands on the same segment as its R2DBC
-                // counterpart -- spans already report custom-reactive-spans / batch_insert.
-                //
-                // No Mono.defer: the flatMap body runs when the payload is emitted, which is already
-                // subscription time, so the segment cannot open on an unsubscribed publisher.
-                .flatMap(payload -> {
-                    Segment segment = startSegment(table, "Clickhouse", "batch_insert");
+        // Deferred so the segment opens at subscription, not at assembly. It times serialization with the
+        // statement, since the rows are now written while the body is sent. Named for the table, so spans report
+        // custom-reactive-spans / batch_insert.
+        return Mono.defer(() -> {
+            Segment segment = startSegment(table, "Clickhouse", "batch_insert");
 
-                    return AsyncUtils.usingClickHouseFuture(
-                            () -> clickHouseClient.insert(
-                                    table, payload::writeTo, ClickHouseFormat.JSONEachRow, settings(logComment)),
-                            response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN)
-                                    .getLong())
-                            .doFinally(signalType -> endSegment(segment));
-                })
+            return AsyncUtils.usingClickHouseFuture(
+                    () -> clickHouseClient.insert(table, body -> write(body, items, rowMapper),
+                            ClickHouseFormat.JSONEachRow, settings(logComment)),
+                    response -> response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong())
+                    .doFinally(signalType -> endSegment(segment));
+        })
                 // The throwable is passed as the cause, not formatted into the message: a failed bulk
                 // insert is diagnosable only from the stack and the cause chain, which say whether it
                 // was serialization, a connection reset or a server-side rejection. Only the table and
@@ -218,31 +201,24 @@ public class JsonEachRowBulkInsert {
     }
 
     /**
-     * Renders the batch as newline-delimited JSON rows. Returns the buffer rather than a {@code byte[]}
-     * so the caller can hand it to the client via {@link ByteArrayOutputStream#writeTo}, which writes
-     * the backing array directly instead of copying the whole payload a second time.
+     * Writes the batch into the request body as newline-delimited JSON rows, mapping each item as it goes.
      *
      * <p>Note {@link BufferedWriter#newLine()} writes {@code System.lineSeparator()}, so the row
      * terminator follows the platform rather than being a fixed {@code '\n'}. ClickHouse accepts the
      * {@code \r\n} that produces on Windows — JSONEachRow treats the {@code \r} as inter-row
      * whitespace — and the backend runs on Linux, where the two are the same byte.
      */
-    private <T> ByteArrayOutputStream serialize(Collection<T> items, Function<T, ObjectNode> rowMapper)
+    private <T> void write(OutputStream body, Collection<T> items, Function<T, ObjectNode> rowMapper)
             throws IOException {
 
-        // Outside the try-with-resources, unlike the other ByteArrayOutputStream uses in this codebase:
-        // they copy out with toByteArray() before the block ends, while this one is handed to the client
-        // as writeTo and read on its thread after this method returns, so it has to outlive the block.
-        var payload = new ByteArrayOutputStream();
-        // Declared in this order so they close in the reverse one: the generator drains into the
-        // writer, then the writer into payload. Both are resources so a row that fails to serialize
-        // still releases the generator's buffer back to Jackson's recycler on the way out.
-        try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8));
-                var generator = rowFactory.createGenerator(writer)) {
+        // Not a resource: closing the writer would close the body, which the client owns and closes. A resource
+        // generator still releases its buffer back to Jackson's recycler when a row fails to serialize.
+        var writer = new BufferedWriter(new OutputStreamWriter(body, StandardCharsets.UTF_8));
+        try (var generator = rowFactory.createGenerator(writer)) {
 
             // Both set before anything is written, since they govern what close() and flush() do.
-            // The generator writes into, but does not own, the writer, which the try-with-resources
-            // closes; left enabled, closing the generator would close the writer under it.
+            // The generator writes into, but does not own, the writer; left enabled, closing the generator
+            // would close the writer, and the body, under it.
             generator.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
             // Keep the per-row flush from draining the BufferedWriter as well, which would leave it
             // buffering nothing.
@@ -258,11 +234,9 @@ public class JsonEachRowBulkInsert {
                 writer.newLine();
             }
 
-            // The payload is complete here rather than as a side effect of the closes below.
-            // FLUSH_AFTER_WRITE_VALUE has already drained the generator into the writer after every
-            // row, so this pushes the whole batch into payload; closing would do it too.
+            // FLUSH_AFTER_WRITE_VALUE has already drained the generator into the writer after every row, so this
+            // pushes the rest of the batch into the body before the client finishes the request.
             writer.flush();
         }
-        return payload;
     }
 }
