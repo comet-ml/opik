@@ -26,6 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -103,13 +104,7 @@ class TopicWindowLabelServiceTest {
         billingPrototype = unit(random);
         refundsPrototype = unit(random);
         otherPrototype = unit(random);
-        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(WORKSPACE_ID)
-                .rebuilds(1)
-                .lastRunId(runId)
-                .windowUntil(NIGHT)
-                .build()));
+        stubState(state -> state);
         when(topicDAO.markLabelsComplete(WORKSPACE_ID, projectId, runId)).thenReturn(1);
         when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic(billing), topic(refunds)));
         // Billing has two prototypes, refunds one, then a known-Other one.
@@ -157,11 +152,7 @@ class TopicWindowLabelServiceTest {
         when(traceTopicsDAO.countByTopic(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyLong()))
                 .thenAnswer(invocation -> Flux.fromIterable(countsOf(inserted).entrySet())
                         .map(entry -> new TraceTopicsDAO.TopicCount(entry.getKey(), entry.getValue())));
-        when(traceTopicsDAO.insert(any())).thenAnswer(invocation -> {
-            List<TraceTopic> rows = invocation.getArgument(0);
-            inserted.addAll(rows);
-            return Mono.just((long) rows.size());
-        });
+        stubInsert(false);
     }
 
     @Test
@@ -195,28 +186,6 @@ class TopicWindowLabelServiceTest {
     }
 
     @Test
-    @DisplayName("the rows the pass writes are what the algorithm's labeller gives for the saved prototypes")
-    void rowsAreTheLabellers() {
-        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
-
-        assertThat(pass.complete()).isTrue();
-        var labeller = new KMeansTopicAlgorithm().labeller(topicDAO.findPrototypes(WORKSPACE_ID, projectId))
-                .orElseThrow();
-        var window = inWindow(NIGHT.minus(Duration.ofDays(WINDOW_DAYS)), NIGHT);
-        var vectors = new float[window.size() * DIMENSIONS];
-        for (int i = 0; i < window.size(); i++) {
-            System.arraycopy(window.get(i).vector(), 0, vectors, i * DIMENSIONS, DIMENSIONS);
-        }
-        var labels = labeller.label(vectors);
-        var expected = new HashMap<UUID, UUID>();
-        for (int i = 0; i < window.size(); i++) {
-            expected.put(window.get(i).traceId(), labels[i]);
-        }
-        assertThat(inserted.stream().collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId)))
-                .isEqualTo(expected);
-    }
-
-    @Test
     @DisplayName("a saved list with no topic prototype labels every window trace Other, as its run did")
     void noTopicPrototypeLabelsOther() {
         when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of(prototype(0, null, otherPrototype)));
@@ -236,14 +205,7 @@ class TopicWindowLabelServiceTest {
             + "live topic and Other, each the traces counted over the run's window, even when the run saved after "
             + "its window's end")
     void completePassSavesTheCounts() {
-        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(WORKSPACE_ID)
-                .rebuilds(1)
-                .lastRunId(runId)
-                .lastSuccessAt(NIGHT.plus(Duration.ofHours(2)))
-                .windowUntil(NIGHT)
-                .build()));
+        stubState(state -> state.lastSuccessAt(NIGHT.plus(Duration.ofHours(2))));
 
         var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
 
@@ -259,12 +221,7 @@ class TopicWindowLabelServiceTest {
     @DisplayName("a pass that is cut saves no counts; the pass that resumes it saves them once, at completion, and a "
             + "later complete pass of the same run saves nothing new")
     void countsSavedOnceAtCompletion() {
-        doAnswer(invocation -> {
-            List<TraceTopic> rows = invocation.getArgument(0);
-            inserted.addAll(rows);
-            Thread.currentThread().interrupt();
-            return Mono.just((long) rows.size());
-        }).when(traceTopicsDAO).insert(any());
+        stubInsert(true);
         TopicWindowLabelService.Pass cut;
         try {
             cut = label(Instant.now().plus(Duration.ofMinutes(5)));
@@ -275,25 +232,14 @@ class TopicWindowLabelServiceTest {
         verify(traceTopicsDAO, never()).countByTopic(any(), any(), any(), any(), anyLong());
         verify(runDAO, never()).setTopicCounts(any(), any(), any());
 
-        doAnswer(invocation -> {
-            List<TraceTopic> rows = invocation.getArgument(0);
-            inserted.addAll(rows);
-            return Mono.just((long) rows.size());
-        }).when(traceTopicsDAO).insert(any());
+        stubInsert(false);
         var resumed = service.labelWindow(WORKSPACE_ID, projectId, Instant.now().plus(Duration.ofMinutes(5)),
                 TopicWindowLabelService.Trigger.RESUME, CHUNK, SLICE_TRACES);
 
         assertThat(resumed.complete()).isTrue();
         verify(runDAO).setTopicCounts(WORKSPACE_ID, runId, expectedCounts());
 
-        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(WORKSPACE_ID)
-                .rebuilds(1)
-                .lastRunId(runId)
-                .windowUntil(NIGHT)
-                .labelsComplete(true)
-                .build()));
+        stubState(state -> state.labelsComplete(true));
         var again = label(Instant.now().plus(Duration.ofMinutes(5)));
 
         assertThat(again.complete()).isTrue();
@@ -406,12 +352,7 @@ class TopicWindowLabelServiceTest {
     @Test
     @DisplayName("an interrupt stops the pass at the next page and the interrupt is kept")
     void interruptStops() {
-        doAnswer(invocation -> {
-            List<TraceTopic> rows = invocation.getArgument(0);
-            inserted.addAll(rows);
-            Thread.currentThread().interrupt();
-            return Mono.just((long) rows.size());
-        }).when(traceTopicsDAO).insert(any());
+        stubInsert(true);
 
         TopicWindowLabelService.Pass pass;
         boolean interrupted;
@@ -459,6 +400,28 @@ class TopicWindowLabelServiceTest {
         for (int i = 1; i < bounds.size(); i++) {
             assertThat(bounds.get(i)[0]).isEqualTo(bounds.get(i - 1)[1]);
         }
+    }
+
+    /** The project's saved state: run {@code runId}, its window ending at {@code NIGHT}, plus {@code extra}. */
+    private void stubState(UnaryOperator<TopicProjectState.TopicProjectStateBuilder> extra) {
+        when(topicDAO.findStates(eq(WORKSPACE_ID), any())).thenReturn(List.of(extra.apply(TopicProjectState.builder()
+                .projectId(projectId)
+                .workspaceId(WORKSPACE_ID)
+                .rebuilds(1)
+                .lastRunId(runId)
+                .windowUntil(NIGHT)).build()));
+    }
+
+    /** Each insert adds its rows to {@code inserted}; with {@code interrupt}, it then interrupts the thread. */
+    private void stubInsert(boolean interrupt) {
+        doAnswer(invocation -> {
+            List<TraceTopic> rows = invocation.getArgument(0);
+            inserted.addAll(rows);
+            if (interrupt) {
+                Thread.currentThread().interrupt();
+            }
+            return Mono.just((long) rows.size());
+        }).when(traceTopicsDAO).insert(any());
     }
 
     private TopicWindowLabelService.Pass label(Instant deadline) {

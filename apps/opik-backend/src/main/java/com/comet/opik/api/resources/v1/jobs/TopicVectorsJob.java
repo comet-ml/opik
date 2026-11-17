@@ -44,9 +44,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * interval; a lease of one interval would let a long tick overlap the next. The tick itself is
  * {@link TopicVectorsTickService#tick(Instant)}.
  *
- * <p>Every firing is counted in {@code topics.vectors.ticks} by outcome: {@value #RAN}, {@value #NOT_DUE} (a tick ran
- * less than one interval ago), {@value #LOCK_HELD} (another pod holds the leader lock, or Redis failed: the lock
- * service then runs the same fallback) or {@value #FAILED}. Across the cluster, about one {@value #RAN} per interval.
+ * <p>Across the cluster, {@code topics.vectors.ticks} counts about one {@value #RAN} per interval.
  */
 @Slf4j
 @Singleton

@@ -30,10 +30,6 @@ public class TopicPrompts {
     private static final String NAMING_GROUP_NEW = load("naming_group_new.md");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-z_]+)}");
 
-    /**
-     * The author answer's schema: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}},
-     * {@code topic} the topic's index or -1 for Other.
-     */
     public static final JsonNode AUTHOR_SCHEMA = parse("""
             {"type": "object", "properties": {
               "topics": {"type": "array", "items": {"type": "object", "properties": {
@@ -45,7 +41,6 @@ public class TopicPrompts {
              "required": ["topics", "assignment"]}
             """);
 
-    /** The batched verify answer's schema: {@code {answers: [{pair, same}]}}. */
     public static final JsonNode VERIFY_SCHEMA = parse("""
             {"type": "object", "properties": {
               "answers": {"type": "array", "items": {"type": "object", "properties": {
@@ -53,10 +48,7 @@ public class TopicPrompts {
              "required": ["answers"]}
             """);
 
-    /**
-     * The grouped naming answer's schema: {@code {assign: [{cluster, topic}], new: [{name, definition, clusters}],
-     * other: [int]}}, keys in this order.
-     */
+    /** The grouped naming answer's schema; keep its keys in this order. */
     public static final JsonNode NAMING_GROUP_SCHEMA = parse("""
             {"type": "object", "properties": {
               "assign": {"type": "array", "items": {"type": "object", "properties": {
@@ -116,11 +108,7 @@ public class TopicPrompts {
         return VERIFY.replace("{pairs}", body.toString());
     }
 
-    /**
-     * The grouped naming prompt: the live topics in list order ({@code "  (none)"} when there are none),
-     * the groups largest first. With {@code allowAssign} false, the second call's prompt, which offers new and other
-     * only.
-     */
+    /** The grouped naming prompt. With {@code allowAssign} false, the second call's prompt: new and other only. */
     public static String namingGroup(@NonNull List<PromptTopic> topics, @NonNull List<GroupSummary> groups,
             boolean allowAssign) {
         var topicBlock = topics.stream().map(TopicPrompts::topicBlock).collect(Collectors.joining("\n"));
@@ -171,7 +159,6 @@ public class TopicPrompts {
     public record VerifyPair(@NonNull PromptTopic topic, @NonNull GroupSummary group) {
     }
 
-    /** A group as the naming prompts show it: share, last-7-days share, tightness and its examples. */
     static String groupBlock(GroupSummary group) {
         var examples = group.examples().stream().map(example -> "    - " + example)
                 .collect(Collectors.joining("\n"));

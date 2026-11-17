@@ -15,9 +15,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * {@code topic_vector_backfills}. Only the topic vectors tick writes it; a project delete removes the project's row.
- */
+/** {@code topic_vector_backfills}: see {@link TopicVectorBackfill}. A project delete removes the project's row. */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(TopicVectorBackfill.class)
 public interface TopicVectorBackfillDAO {
@@ -31,7 +29,6 @@ public interface TopicVectorBackfillDAO {
     List<TopicVectorBackfill> findByWorkspaceIds(
             @BindList(value = "workspaceIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<String> workspaceIds);
 
-    /** The rows of {@code projectIds} in one workspace. */
     @SqlQuery("SELECT " + COLUMNS + """
             FROM topic_vector_backfills
             WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
@@ -39,7 +36,6 @@ public interface TopicVectorBackfillDAO {
     List<TopicVectorBackfill> findByKeys(@Bind("workspaceId") String workspaceId,
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
 
-    /** The rows of {@code workspaceIds} not drained yet. */
     @SqlQuery("SELECT " + COLUMNS + """
             FROM topic_vector_backfills
             WHERE workspace_id IN (<workspaceIds>) AND drained_at IS NULL
@@ -68,14 +64,10 @@ public interface TopicVectorBackfillDAO {
     int resetStale(@Bind("workspaceId") String workspaceId, @Bind("staleBefore") Instant staleBefore,
             @Bind("now") Instant now);
 
-    /** The tick discovered the workspace's projects at {@code now}: every row of it is checked. */
     @SqlUpdate("UPDATE topic_vector_backfills SET checked_at = :now WHERE workspace_id = :workspaceId")
     int touch(@Bind("workspaceId") String workspaceId, @Bind("now") Instant now);
 
-    /**
-     * The projects a discovery found: a new row starts a backfill, an existing one takes the new counts and latest done
-     * status and keeps {@code started_at} and {@code drained_at}.
-     */
+    /** The projects a discovery found; an existing row keeps {@code started_at} and {@code drained_at}. */
     @SqlBatch("""
             INSERT INTO topic_vector_backfills (workspace_id, project_id, started_at, checked_at, last_done_at,
                 traces_total, traces_done)
@@ -97,7 +89,6 @@ public interface TopicVectorBackfillDAO {
             """)
     void record(@BindMethods List<TopicVectorBackfill.Progress> progress);
 
-    /** Removes the rows of deleted projects. */
     @SqlUpdate("DELETE FROM topic_vector_backfills WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteByProjects(@Bind("workspaceId") String workspaceId,
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);

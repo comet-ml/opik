@@ -26,20 +26,16 @@ import java.util.stream.IntStream;
  * topic's, a known-Other one (the memory: the centres of groups earlier nights left in Other), or none;</li>
  * <li>{@link CandidateGrouper} on the Other traces, held by the memory or unassigned; a group of at least
  * {@value CandidateGrouper#MIN_CANDIDATE} traces is a candidate;</li>
- * <li>{@link ForcedBirth}: every candidate goes to one naming call (a loose one stays Other without a call). A group
- * may join a live topic (through one batched verify), form a new topic with same-kind groups, or stay Other. A new
- * topic is born only when its groups' share of the window reaches {@value #BIG_SHARE}; on a full list it replaces the
- * topic with the lowest share of the window, when that is below the new topic's;</li>
+ * <li>{@link ForcedBirth}: every candidate goes to one naming call; a group may join a live topic, form a new topic, or
+ * stay Other;</li>
  * <li>decisions become prototypes: the centre of every group given to a live topic is appended to its prototypes. The
  * memory keeps its prototypes whose held traces mostly stayed in Other, then the centre of every group the naming left
  * in Other (not a loose one), unless one kept is within {@value #SAME_MEMORY} of it;</li>
  * <li>the final assignment, as the first build's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
  * <li>{@link Lifecycle}: retirements on the share of the whole window, then a reassignment when one happened, then the
  * sizes;</li>
- * <li>a known-Other prototype that held none of the window's traces in the final assignment is dropped (one gated by a
- * topic's prototype holds none), and so is a live topic's prototype that took none, the topic keeping at least one.
- * The window is a prototype's lifetime. Tonight's labels do not change. A retired topic keeps no prototypes: a theme
- * that comes back later is born as a new topic.</li>
+ * <li>{@link #dropIdle}: a prototype that won no trace leaves, a live topic keeping at least one. The window is a
+ * prototype's lifetime. A retired topic keeps no prototypes: a theme that comes back later is born as a new topic.</li>
  * </ol>
  */
 @UtilityClass

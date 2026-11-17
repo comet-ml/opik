@@ -382,17 +382,8 @@ class TopicsStorageTest {
         var vectors = saveList(workspaceId, projectId, runId, topicId);
         // The run's own insert, or an earlier cut pass, labelled 30 traces.
         var labelledBefore = UUID.randomUUID();
-        traceTopicsDAO.insert(IntStream.range(3, 33)
-                .mapToObj(i -> TraceTopic.builder()
-                        .workspaceId(workspaceId)
-                        .projectId(projectId)
-                        .traceId(TRACES.traceIds().get(i))
-                        .traceCreatedAt(TRACES.createdAt().get(i))
-                        .topicId(labelledBefore)
-                        .source(TraceTopic.Source.RUN)
-                        .runId(runId.toString())
-                        .build())
-                .toList()).block();
+        insertRunRows(workspaceId, projectId, runId, labelledBefore, TRACES.traceIds().subList(3, 33),
+                TRACES.createdAt().subList(3, 33));
 
         assertThat(data.state(projectId).labelsComplete()).isFalse();
 
@@ -474,17 +465,7 @@ class TopicsStorageTest {
         TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, 2)
                 .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, outside.get(i), outsideAt.get(i)))
                 .toList());
-        traceTopicsDAO.insert(IntStream.range(0, 2)
-                .mapToObj(i -> TraceTopic.builder()
-                        .workspaceId(workspaceId)
-                        .projectId(projectId)
-                        .traceId(outside.get(i))
-                        .traceCreatedAt(outsideAt.get(i))
-                        .topicId(topicId)
-                        .source(TraceTopic.Source.RUN)
-                        .runId(runId.toString())
-                        .build())
-                .toList()).block();
+        insertRunRows(workspaceId, projectId, runId, topicId, outside, outsideAt);
 
         var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
                 TopicWindowLabelService.Trigger.RUN, 7, 20);
@@ -838,24 +819,20 @@ class TopicsStorageTest {
         return NIGHT;
     }
 
-    /** The distinct values of the two settings the workspace's finished {@code queryName} queries ran with. */
-    private List<List<String>> settings(String queryName, String workspaceId, String first, String second) {
-        return clickHouseTemplate.nonTransaction(connection -> Mono
-                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                .thenMany(Flux.from(connection.createStatement("""
-                        SELECT DISTINCT Settings[:first] AS first, Settings[:second] AS second
-                        FROM system.query_log
-                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
-                        """)
-                        .bind("first", first)
-                        .bind("second", second)
-                        .bind("log_comment", queryName + ":" + workspaceId + ":%")
-                        .execute()))
-                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("first", String.class),
-                        row.get("second", String.class))))
-                .collectList())
-                .block();
+    /** Rows of the run labelling trace {@code traceIds[i]}, created at {@code createdAt[i]}, with {@code topicId}. */
+    private void insertRunRows(String workspaceId, UUID projectId, UUID runId, UUID topicId, List<UUID> traceIds,
+            List<Instant> createdAt) {
+        traceTopicsDAO.insert(IntStream.range(0, traceIds.size())
+                .mapToObj(i -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(traceIds.get(i))
+                        .traceCreatedAt(createdAt.get(i))
+                        .topicId(topicId)
+                        .source(TraceTopic.Source.RUN)
+                        .runId(runId.toString())
+                        .build())
+                .toList()).block();
     }
 
     /**
@@ -863,21 +840,23 @@ class TopicsStorageTest {
      * workspace's finished {@code queryName} queries ran with, an empty string for a setting left at its default.
      */
     private List<List<String>> guards(String queryName, String workspaceId) {
+        return settings(queryName, workspaceId, "max_threads", "max_rows_to_read", "priority", "max_execution_time");
+    }
+
+    /** The distinct values of the named settings the workspace's finished {@code queryName} queries ran with. */
+    private List<List<String>> settings(String queryName, String workspaceId, String... names) {
         return clickHouseTemplate.nonTransaction(connection -> Mono
                 .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
                 .flatMap(result -> Mono.from(result.getRowsUpdated()))
                 .thenMany(Flux.from(connection.createStatement("""
-                        SELECT DISTINCT Settings['max_threads'] AS max_threads,
-                            Settings['max_rows_to_read'] AS max_rows_to_read, Settings['priority'] AS priority,
-                            Settings['max_execution_time'] AS max_execution_time
+                        SELECT DISTINCT arrayMap(name -> Settings[name], :names) AS settings
                         FROM system.query_log
                         WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
                         """)
+                        .bind("names", names)
                         .bind("log_comment", queryName + ":" + workspaceId + ":%")
                         .execute()))
-                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("max_threads", String.class),
-                        row.get("max_rows_to_read", String.class), row.get("priority", String.class),
-                        row.get("max_execution_time", String.class))))
+                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("settings", String[].class))))
                 .collectList())
                 .block();
     }

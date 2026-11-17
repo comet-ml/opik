@@ -18,8 +18,6 @@ public class Lifecycle {
     static final int RETIRE_NIGHTS = 3;
 
     /**
-     * Retirements: a topic with no trace tonight, then the low-share streak.
-     *
      * @param labels per trace, a topic index or {@link PrototypeAssigner#OTHER}
      */
     public static void retire(@NonNull NightState state, @NonNull NightWindow window, @NonNull int[] labels) {

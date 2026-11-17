@@ -154,7 +154,6 @@ public interface TopicRunDAO {
             """)
     Optional<TopicRun> findNewest(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
-    /** The run, or {@code null} when the workspace has no run with this id. */
     @SqlQuery("SELECT * FROM topic_runs WHERE workspace_id = :workspaceId AND run_id = :runId")
     @Nullable TopicRun findById(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId);
 
@@ -165,7 +164,6 @@ public interface TopicRunDAO {
             """)
     List<TopicRun> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
-    /** A project's failed first builds: how many, the first one's start and the last one's end. */
     record FirstBuildFailures(@NonNull UUID projectId, int failures, @NonNull Instant firstStartedAt,
             @NonNull Instant lastFinishedAt) {
     }
