@@ -10,8 +10,8 @@
 --   * last_updated_at is the ReplacingMergeTree version, set by ClickHouse at insert.
 --   * is_deleted is the ReplacingMergeTree soft-delete marker. Nothing sets it today: deletes are lightweight DELETEs.
 --     It is in the engine now because engine parameters cannot be added by ALTER.
---   * Readers dedupe explicitly (LIMIT 1 BY trace, latest last_updated_at, then run_id) and then drop a row
---     whose latest version has is_deleted = 1.
+--   * Readers dedupe explicitly (argMax per trace by last_updated_at, then run_id) and then drop a trace whose
+--     latest row has is_deleted = 1.
 --   * source is in the sort key, after trace_id: a merge collapses run rows only with run rows and arrival rows only
 --     with arrival rows. An arrival row written after a run (a relabel) so cannot merge away the run row a read by
 --     run_id looks for. A trace keeps at most two rows after merges; the "latest per trace" readers dedupe by

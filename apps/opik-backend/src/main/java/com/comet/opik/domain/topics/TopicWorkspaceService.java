@@ -26,7 +26,6 @@ public class TopicWorkspaceService {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
 
-    /** The listed workspaces enabled in {@code ai_label_workspaces}, by id. */
     public List<String> eligibleWorkspaceIds() {
         var listed = config.enabledWorkspaceIds();
         if (listed.isEmpty()) {

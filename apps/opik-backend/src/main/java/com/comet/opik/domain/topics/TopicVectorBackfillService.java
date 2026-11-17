@@ -24,7 +24,6 @@ public class TopicVectorBackfillService {
 
     private final @NonNull TransactionTemplate template;
 
-    /** The projects of {@code workspaceIds} not drained yet, by workspace id. */
     public Map<String, List<TopicVectorBackfill>> findUndrained(@NonNull Collection<String> workspaceIds) {
         if (workspaceIds.isEmpty()) {
             return Map.of();
@@ -35,7 +34,6 @@ public class TopicVectorBackfillService {
                 .collect(Collectors.groupingBy(TopicVectorBackfill::workspaceId));
     }
 
-    /** The rows of {@code projectIds} in one workspace, by project id. */
     public Map<UUID, TopicVectorBackfill> findByKeys(@NonNull String workspaceId,
             @NonNull Collection<UUID> projectIds) {
         if (projectIds.isEmpty()) {
@@ -47,7 +45,6 @@ public class TopicVectorBackfillService {
                 .collect(Collectors.toMap(TopicVectorBackfill::projectId, Function.identity()));
     }
 
-    /** Starts a backfill for each project that has no row: see {@link TopicVectorBackfillDAO#start}. */
     public void start(@NonNull List<TopicVectorBackfill> backfills) {
         if (backfills.isEmpty()) {
             return;
@@ -58,11 +55,7 @@ public class TopicVectorBackfillService {
         });
     }
 
-    /**
-     * Records one discovery of a workspace's projects, in one transaction: rows not checked since {@code staleBefore}
-     * start again, every row is checked at {@code now}, {@code found} are created or take their new counts, and the
-     * rows of deleted projects are removed. Returns how many rows were removed.
-     */
+    /** One discovery of a workspace's projects, in one transaction. Returns the rows of deleted projects removed. */
     public int discovered(@NonNull String workspaceId, @NonNull List<TopicVectorBackfill> found,
             @NonNull Instant now, @NonNull Instant staleBefore) {
         return template.inTransaction(WRITE, handle -> {
@@ -77,7 +70,6 @@ public class TopicVectorBackfillService {
         });
     }
 
-    /** Records what a tick's backfill did: see {@link TopicVectorBackfillDAO#record}. */
     public void record(@NonNull List<TopicVectorBackfill.Progress> progress) {
         if (progress.isEmpty()) {
             return;
@@ -88,7 +80,6 @@ public class TopicVectorBackfillService {
         });
     }
 
-    /** Removes the rows of deleted projects, see {@link TopicVectorBackfillDAO#deleteByProjects}. */
     public int deleteByProjects(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds) {
         if (projectIds.isEmpty()) {
             return 0;

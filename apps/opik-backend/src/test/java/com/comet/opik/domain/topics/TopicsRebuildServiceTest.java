@@ -125,21 +125,6 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a failed mark counts the run once, with its workspace")
-    void failCountsOnce() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
-
-        assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
-
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.get("status")).isEqualTo("failed");
-            assertThat(point.get("error_code")).isEqualTo("timeout");
-            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
-            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
-        });
-    }
-
-    @Test
     @DisplayName("a run that had already ended is not counted again")
     void alreadyEndedIsNotCounted() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(0);
@@ -151,7 +136,7 @@ class TopicsRebuildServiceTest {
 
     @Test
     @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
-            + "counts it once")
+            + "counts it once, with its workspace")
     void markThatThrowsCountsNothing() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"))
@@ -162,12 +147,17 @@ class TopicsRebuildServiceTest {
         assertThat(meter.points("topics.runs")).isEmpty();
 
         assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
-        assertThat(meter.points("topics.runs")).singleElement()
-                .satisfies(point -> assertThat(point.get("error_code")).isEqualTo("timeout"));
+        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+            assertThat(point.get("status")).isEqualTo("failed");
+            assertThat(point.get("error_code")).isEqualTo("timeout");
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
     }
 
     @Test
-    @DisplayName("an answer that cannot be read counts bad_answer, not ok, and fails the run once")
+    @DisplayName("an answer that cannot be read counts bad_answer, not ok, fails the run once, and the failed run "
+            + "does not label")
     void unreadableAnswerIsBadAnswer() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
         answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
@@ -183,6 +173,7 @@ class TopicsRebuildServiceTest {
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "qwen_bad_answer")).isEqualTo(1);
         assertThat(meter.points("topics.run.duration_seconds"))
                 .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -340,22 +331,6 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a saved run counts its run and rows with the workspace attributes")
-    void savedRunIsCounted() {
-        answer(FIXTURE.answer);
-
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.get("status")).isEqualTo("saved");
-            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
-        });
-        assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
-                .isEqualTo(TRACES);
-    }
-
-    @Test
     @DisplayName("a saved run then labels the rest of its window, after the MySQL commit and its own insert, until "
             + "its timeout less the slack")
     void savedRunLabelsTheWindow() {
@@ -374,17 +349,6 @@ class TopicsRebuildServiceTest {
         order.verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(projectId), deadline.capture(),
                 eq(TopicWindowLabelService.Trigger.RUN));
         assertThat(deadline.getValue()).isBetween(earliest, latest);
-    }
-
-    @Test
-    @DisplayName("a run that fails before its save does not label")
-    void failedRunDoesNotLabel() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
-        answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
-
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-
-        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -672,12 +636,20 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a saved run records the Other share it saved in its stats, once, with its workspace")
+    @DisplayName("a saved run counts its run and rows, and records the Other share it saved in its stats, once, "
+            + "with its workspace")
     void otherShareIsTheSavedValue() throws Exception {
         answer(FIXTURE.answer);
 
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+            assertThat(point.get("status")).isEqualTo("saved");
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
+        assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(TRACES);
         var stats = ArgumentCaptor.forClass(String.class);
         verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
         double saved = JsonUtils.getMapper().readTree(stats.getValue()).get("other_share").asDouble();
@@ -723,8 +695,7 @@ class TopicsRebuildServiceTest {
             var output = InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"Alpha Requests\", "
                     + "\"definition\": \"d\"}], \"assignment\": [{\"cluster\": " + matcher.group(1)
                     + ", \"topic\": 0}]}");
-            return Mono.just(GenerateResponse.builder().requestId("r-1").usage(new Usage(1_000, 200))
-                    .latencyMs(1_500).result(new GenerateResult(output)).build());
+            return Mono.just(response(output));
         });
 
         assertThat(service.firstBuild(runId, WORKSPACE_ID, projectId, night).status())
@@ -890,12 +861,12 @@ class TopicsRebuildServiceTest {
     }
 
     private void answer(JsonNode output) {
-        when(client.generate(any(), any())).thenReturn(Mono.just(GenerateResponse.builder()
-                .requestId("r-1")
-                .usage(new Usage(1_000, 200))
-                .latencyMs(1_500)
-                .result(new GenerateResult(output))
-                .build()));
+        when(client.generate(any(), any())).thenReturn(Mono.just(response(output)));
+    }
+
+    private static GenerateResponse response(JsonNode output) {
+        return GenerateResponse.builder().requestId("r-1").usage(new Usage(1_000, 200)).latencyMs(1_500)
+                .result(new GenerateResult(output)).build();
     }
 
     private static List<TopicWindowRow> window() {

@@ -30,10 +30,6 @@ public class TopicPrompts {
     private static final String NAMING_GROUP_NEW = load("naming_group_new.md");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-z_]+)}");
 
-    /**
-     * The author answer's schema: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}},
-     * {@code topic} the topic's index or -1 for Other.
-     */
     public static final JsonNode AUTHOR_SCHEMA = parse("""
             {"type": "object", "properties": {
               "topics": {"type": "array", "items": {"type": "object", "properties": {

@@ -63,23 +63,19 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries with {@code /v1/embed} and
  * store the unit-length vectors in {@code topic_vectors}. Runs on the leader only. A tick has three parts:
  * <ul>
- * <li>The fresh phase, every tick: per workspace, one read of the done statuses written in {@code window} (24h), all
- * its drained projects together, up to {@code maxTracesPerTick}, oldest first. It keeps new traces served.</li>
+ * <li>The fresh phase, every tick: per workspace, one read of the done statuses written in {@code window}, all its
+ * drained projects together, up to {@code maxTracesPerTick}, oldest first. It keeps new traces served.</li>
  * <li>The backfill phase, every tick, with the budget the fresh phase left: the projects not drained yet, one at a
- * time. A project's read covers the long window (or the backfill window) and only that project, so it follows the
- * tables' sort keys; a large project is read in {@code find.sliceSize} slices of trace creation time, the newest
- * first. A project whose read finds fewer than {@code maxTracesPerTick} traces, all embedded, is marked drained in
- * {@code topic_vector_backfills}, and the tick goes on to the next one. Workspaces take turns, one project each; a
- * workspace's projects go in {@link TopicVectorBackfill#backfillOrder}.</li>
+ * time, each over the long window (or the backfill window) and only that project, so the read follows the tables'
+ * sort keys. A project whose read finds fewer than {@code maxTracesPerTick} traces, all embedded, is marked drained
+ * in {@code topic_vector_backfills}, and the tick goes on to the next one.</li>
  * <li>The daily pass, once per {@code longWindowInterval}, in place of that tick's fresh read: the same read over the
- * long window, in slices, for rows the fresh phase missed. Until one of its ticks drains it, it runs every second
- * tick.</li>
+ * long window, in slices, for rows the fresh phase missed.</li>
  * </ul>
  * The fresh phase and the daily pass leave out the projects not drained yet, and the backfill phase reads only those,
- * so a trace is embedded by one phase in a tick, and a project's backlog is never embedded mixed with the others'. A
- * project the fresh phase sees for the first time gets its row there and its traces go to the backfill phase of the
- * same tick. About once per {@code longWindowInterval} per workspace, the tick discovers the projects with done
- * statuses in the long window, with two plain aggregates, and creates or refreshes their rows.
+ * so a trace is embedded by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
+ * About once per {@code longWindowInterval} per workspace, the tick discovers the projects with done statuses in the
+ * long window and creates or refreshes their rows.
  *
  * <p>ClickHouse alone says which traces have no vector: every read is the done statuses less the keys already in
  * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader change loses nothing.
@@ -121,10 +117,9 @@ public class TopicVectorsTickService {
     static final long ONE_SLICE_MAX_TRACES = 250_000;
 
     /**
-     * Present while the daily long-window pass is not due. A tick that finds it absent sets it for one lease and runs the
-     * pass. When the pass drains, the tick sets it again for {@code longWindowInterval}; otherwise it sets it to expire
-     * 1.5 tick intervals after the tick started, so the next tick is a normal one and the one after runs the pass
-     * again. A leader that dies mid-pass leaves it to expire with its lease.
+     * Present while the daily long-window pass is not due. A tick that finds it absent sets it for one lease and runs
+     * the pass; {@link #finishLongWindow} sets when it is due next. A leader that dies mid-pass leaves it to expire
+     * with its lease.
      */
     static final Lock LONG_WINDOW_LOCK = new Lock("topics:vectors:long_window");
     // The insert after the last embed call, which has no deadline of its own, and the status check after it, which has
@@ -168,10 +163,6 @@ public class TopicVectorsTickService {
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
 
-    /**
-     * What one tick did: the vectors it wrote, the traces it skipped by reason, whether its workspace reads were the
-     * daily long-window pass, and the projects its backfill phase drained.
-     */
     @Builder(toBuilder = true)
     record TickResult(int written, @NonNull Map<String, Integer> skipped, boolean longWindowPass,
             int projectsDrained) {
@@ -198,14 +189,10 @@ public class TopicVectorsTickService {
     private record UndrainedSnapshot(@NonNull Instant at, @NonNull Map<String, Undrained> undrained) {
     }
 
-    /** One workspace's projects not drained yet: how many, and when the oldest of their backfills started. */
     private record Undrained(@NonNull String workspaceName, int projects, @Nullable Instant oldestStartedAt) {
     }
 
-    /**
-     * The workspace reads' outcome: the candidates, in visiting order, and whether they saw everything in the window:
-     * every workspace read and none at its cap.
-     */
+    /** The workspace reads' candidates, in visiting order; complete: every workspace read and none at its cap. */
     private record Found(@NonNull List<TopicVectorCandidate> candidates, boolean complete) {
     }
 
@@ -225,10 +212,7 @@ public class TopicVectorsTickService {
             @NonNull Instant deadline) {
     }
 
-    /**
-     * The counts one tick keeps while it runs, reported both as metrics and in its {@link TickResult}, and the names of
-     * the workspaces it reads.
-     */
+    /** One tick's counts, reported both as metrics and in its {@link TickResult}, and its workspace names. */
     private final class Tally {
         private final Map<String, Integer> skipped = new HashMap<>();
         // Looked up once per tick, before the workspace's window read, so no later step waits on the name service.
@@ -243,7 +227,6 @@ public class TopicVectorsTickService {
             return names.computeIfAbsent(workspaceId, workspaceNames::name);
         }
 
-        /** Both workspace attributes, to add a metric's own attributes to. */
         AttributesBuilder workspace(String workspaceId) {
             return TopicsWorkspaceNames.builder(workspaceId, name(workspaceId));
         }
@@ -275,10 +258,7 @@ public class TopicVectorsTickService {
     private record Pending(TopicVectorCandidate candidate, String text) {
     }
 
-    /**
-     * What one chunk's turn made: its vectors, whether an embed call was made for it, and what to count, for the
-     * tick's thread to apply.
-     */
+    /** What one chunk's turn made; the tick's thread applies its {@code effects} to the tally. */
     private record Embedded(List<TopicVector> vectors, boolean called, List<Consumer<Tally>> effects) {
 
         static Embedded notCalled(Consumer<Tally> effect) {
@@ -393,8 +373,6 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Runs one tick.
-     *
      * @throws IllegalStateException when ai-labels has no {@value #TASK} task: no tick can run, so the job counts the
      *         tick as failed rather than as one that ran and found nothing
      */
@@ -438,7 +416,6 @@ public class TopicVectorsTickService {
                 .projectsDrained(drained.size()).build();
     }
 
-    /** The long-window pass's window: the backfill window when one is set, else {@code longWindow}. */
     static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
         return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
@@ -455,18 +432,15 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Drained: the pass is not due again for {@code longWindowInterval}, counted from now, the end of the tick that
-     * drained it. A pass is drained when its tick read every workspace, found fewer than the cap in each, and left
-     * nothing for want of time, a read, a back-off or an insert.
+     * Drained (its tick read every workspace, each under the cap, and cut nothing): the pass is next due
+     * {@code longWindowInterval} from now.
      *
-     * <p>Not drained: the pass is not due until 1.5 tick intervals after this tick's {@code start}, so it runs every
-     * second tick. It is counted from the start, not from now, so the pace is the same for a tick that ends at once and
-     * for one that uses its whole budget. Ticks start 59 to 61 s apart at the default interval (each pod fires at its
-     * own second, and the job's tick lock lasts one interval less a second): the next one starts before the 1.5
-     * intervals are over and reads the short window, the one after starts past them and runs the pass. That normal
-     * tick in between keeps the short window served when the pass can't drain, for example when one workspace's long
-     * read fails every time. A tick that ends past the 1.5 intervals leaves the pass due at once: it held the leader
-     * lock, so no tick ran in between.
+     * <p>Not drained: it is due again 1.5 tick intervals after this tick's {@code start}, counted from the start so the
+     * pace does not depend on how long the tick ran. Ticks start 59 to 61 s apart at the default interval (each pod
+     * fires at its own second, and the job's tick lock lasts one interval less a second), so the next tick reads the
+     * short window and the one after runs the pass. That normal tick keeps the short window served when the pass
+     * can't drain, for example when one workspace's long read fails every time. A tick that ends past the 1.5
+     * intervals leaves the pass due at once: it held the leader lock, so no tick ran in between.
      */
     private void finishLongWindow(Instant start, boolean drained) {
         var vectors = config.getVectors();
@@ -493,9 +467,8 @@ public class TopicVectorsTickService {
      * Discovers the projects of the workspaces due for it: never discovered by this pod, or not for
      * {@code longWindowInterval}. Per workspace, two plain aggregates over the backfill window: the projects with done
      * statuses, and their vector counts. A new project gets a row, an existing one its new counts; a workspace's rows
-     * not checked for twice the interval start again, because the tick did not run for it meanwhile. A failed
-     * discovery is tried again next tick. A workspace no longer eligible is forgotten, so one enabled again is
-     * discovered at its first tick.
+     * not checked for twice the interval start again, because the tick did not run for it meanwhile. A workspace no
+     * longer eligible is forgotten, so one enabled again is discovered at its first tick.
      */
     private void discover(List<String> workspaceIds, Window window, Tally tally) {
         discoveredAt.keySet().retainAll(new HashSet<>(workspaceIds));
@@ -545,11 +518,9 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * Per enabled workspace, from a rotating offset, up to {@code maxTracesPerTick} candidates of its window, of the
-     * projects whose backfill has drained: the fresh phase's read, or the daily pass's sliced one. A workspace whose
-     * read fails, or isn't reached before the deadline, is read again next tick. Each workspace's name is resolved
-     * before its read; one not reached is counted with the name this pod already knows, so the name service can hold
-     * the tick past its deadline by at most one lookup.
+     * The fresh phase's read, or the daily pass's sliced one, per workspace. Each workspace's name is resolved before
+     * its read; one not reached is counted with the name this pod already knows, so the name service can hold the
+     * tick past its deadline by at most one lookup.
      */
     private Found find(List<String> workspaceIds, Window window, boolean longWindowPass,
             Map<String, List<TopicVectorBackfill>> undrained, Tally tally) {
@@ -629,7 +600,7 @@ public class TopicVectorsTickService {
                     : Optional.ofNullable(createdBefore).orElse(window.start()).minus(sliceSize);
             var createdAfter = sliceStart.isAfter(window.createdAfter()) ? sliceStart : window.createdAfter();
             int remaining = limit - candidates.size();
-            // The plain read when nothing narrows it: the fresh phase's query stays as it was measured.
+            // The short overload when nothing narrows the read; both render the same query.
             var slice = createdBefore == null && projectId == null && excludedProjectIds.isEmpty()
                     ? dao.findUnvectored(workspaceId, TASK, window.lowerBound(), window.start(), createdAfter,
                             remaining, maxExecutionSeconds(left))
@@ -777,7 +748,6 @@ public class TopicVectorsTickService {
                 .build()), !read.complete() && tally.cuts == cuts);
     }
 
-    /** Per workspace, the projects still not drained after this tick. */
     private UndrainedSnapshot undrainedSnapshot(List<String> workspaceIds,
             Map<String, List<TopicVectorBackfill>> undrained, Set<TopicVectorBackfill> drained, Tally tally) {
         var snapshot = new HashMap<String, Undrained>();
@@ -869,7 +839,6 @@ public class TopicVectorsTickService {
             if (written.isEmpty()) {
                 continue;
             }
-            // Once per workspace, after its last insert, so it covers every vector written above.
             var deleted = deleteVectorsOfDeletedTraces(workspaceId, written, deadline);
             var kept = written.stream().filter(vector -> !deleted.contains(key(vector))).toList();
             tally.skip(workspaceId, TRACE_DELETED, deleted.size());
@@ -943,10 +912,7 @@ public class TopicVectorsTickService {
                 .toIterable(1);
     }
 
-    /**
-     * One chunk's turn: no call once the workspace backed off or the tick has no time for one. {@code backedOff} is the
-     * workspace's, shared by its chunks in flight.
-     */
+    /** {@code backedOff} is the workspace's, shared by its chunks in flight. */
     private Embedded embedSlot(String workspaceId, Attributes attributes, List<Pending> chunk, Instant deadline,
             AtomicBoolean backedOff) {
         if (backedOff.get()) {
@@ -964,7 +930,6 @@ public class TopicVectorsTickService {
      * opik-inference refuses), so the chunk is halved and each half is tried, down to single inputs: a bad input costs
      * only itself, at about two calls per halving (17 calls for one bad input in 256). The halves are tried one after
      * the other, in the chunk's own turn. Halving stops at a back-off or when the tick has no time for another call.
-     * Runs on a call's thread: what it counts goes to {@code effects}, for the tick's thread to apply.
      */
     private List<TopicVector> embedChunk(String workspaceId, Attributes attributes, List<Pending> chunk,
             Instant deadline, AtomicBoolean backedOff, List<Consumer<Tally>> effects) {
@@ -1047,10 +1012,7 @@ public class TopicVectorsTickService {
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
-    /**
-     * Whether to stop calling for this workspace for the rest of the tick: any 429 or 5xx, whatever its code, a
-     * transport failure or timeout, a retryable code, or no time left for an attempt.
-     */
+    /** Whether to stop calling for this workspace for the rest of the tick. */
     static boolean backsOff(@NonNull InferenceException exception) {
         int status = exception.getHttpStatus();
         return exception.isRetryable() || exception.isOutOfTime() || status == 429 || status >= 500;
@@ -1063,8 +1025,7 @@ public class TopicVectorsTickService {
 
     /**
      * One embed call with its full {@code embedTimeout}; vectors that aren't {@value #EMBED_DIMENSIONS} non-zero
-     * numbers are dropped and counted. May run on a call's thread: the instruments it records to are thread-safe, and
-     * what it counts in the tally goes to {@code effects}.
+     * numbers are dropped and counted. The instruments it records to are thread-safe.
      */
     private List<TopicVector> embed(String workspaceId, Attributes attributes, List<Pending> chunk,
             List<Consumer<Tally>> effects) {
@@ -1134,10 +1095,7 @@ public class TopicVectorsTickService {
         return vectors;
     }
 
-    /**
-     * The window's lower bound: {@code window} before {@code now}, but never before the task first applied, so no run
-     * scans statuses from before the task existed.
-     */
+    /** Never before the task first applied, so no run scans statuses from before the task existed. */
     static Instant lowerBound(@NonNull Instant appliesFrom, @NonNull Instant now, @NonNull Duration window) {
         var windowStart = now.minus(window);
         return windowStart.isAfter(appliesFrom) ? windowStart : appliesFrom;
@@ -1207,7 +1165,7 @@ public class TopicVectorsTickService {
     /**
      * The window read's {@code trace_created_at} bound: ai-labels labels only traces created within its horizon, so a
      * status written at or after {@code lowerBound} belongs to a trace created at or after {@code lowerBound - horizon};
-     * {@code slack} covers the time from the sweep to the status write.
+     * {@code slack} covers the time from the sweep to the status write and a horizon changed since.
      */
     static Instant createdAfter(@NonNull Instant lowerBound, @NonNull Duration horizon, @NonNull Duration slack) {
         return lowerBound.minus(horizon).minus(slack);
@@ -1218,7 +1176,6 @@ public class TopicVectorsTickService {
         return start.toEpochMilli() / Math.max(1, config.getVectors().getTickInterval().toMilliseconds());
     }
 
-    /** {@code items} starting at {@code sequence} modulo their count, wrapping around. */
     static <T> List<T> rotated(@NonNull List<T> items, long sequence) {
         if (items.isEmpty()) {
             return items;
