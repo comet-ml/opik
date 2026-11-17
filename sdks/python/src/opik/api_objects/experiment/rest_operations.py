@@ -1,7 +1,7 @@
 import json
 import math
 from concurrent import futures
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from . import experiment_item
 from .. import constants, rest_stream_parser
@@ -141,6 +141,68 @@ def find_experiment_items_for_dataset(
             _collect_page(page, collected_items, max_results)
 
     return collected_items
+
+
+def stream_experiment_items_for_dataset(
+    rest_client: rest_api.OpikApi,
+    dataset_id: str,
+    dataset_versions: Optional[List[str]],
+    max_results: int,
+    truncate: bool,
+    filter_expression: Optional[str] = None,
+) -> List[experiment_item.ExperimentItemContent]:
+    """Every regular experiment's items on a dataset, read from the cursor stream.
+
+    Results are grouped by dataset item, so one item's history across experiments
+    is contiguous.
+    """
+    if max_results <= 0:
+        return []
+
+    def read_page(
+        batch_size: int, cursor: Optional[Tuple[str, str]]
+    ) -> Iterable[bytes]:
+        last_experiment_id, last_id = cursor if cursor is not None else (None, None)
+        return rest_client.datasets.stream_dataset_experiment_items(
+            dataset_id=dataset_id,
+            dataset_versions=dataset_versions,
+            filters=filter_expression,
+            limit=batch_size,
+            last_retrieved_experiment_id=last_experiment_id,
+            last_retrieved_id=last_id,
+            truncate=truncate,
+        )
+
+    try:
+        rows = rest_stream_parser.read_and_parse_full_stream(
+            read_source=read_page,
+            parsed_item_class=dict,
+            max_results=max_results,
+            cursor_from_record=_experiment_item_cursor,
+        )
+    except ApiError as e:
+        # The dataset was resolved before the stream was opened, so a 404 here can
+        # only be one of the requested versions.
+        if e.status_code == 404 and dataset_versions:
+            raise exceptions.DatasetVersionNotFound(
+                f"Dataset version(s) {dataset_versions} not found: {e.body}"
+            ) from e
+        raise
+
+    items = [
+        experiment_item.ExperimentItemContent.from_compare_dict(row) for row in rows
+    ]
+    items.sort(key=lambda item: item.dataset_item_id)
+    return items
+
+
+def _experiment_item_cursor(record: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    # The stream pages on (experiment_id, id); the backend resolves the stored
+    # dataset_item_id from that row itself.
+    experiment_id, item_id = record.get("experiment_id"), record.get("id")
+    if experiment_id is None or item_id is None:
+        return None
+    return (experiment_id, item_id)
 
 
 def http_client(rest_client: rest_api.OpikApi) -> Any:
