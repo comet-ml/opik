@@ -377,31 +377,28 @@ assertion. In short: compare whole objects with `isEqualTo`, escalate to
 `usingRecursiveComparison` only for the exceptional cases above, and keep per-field assertions for
 the cases in this list.
 
-## Running Backend Tests Locally
+## Don't Run Two ClickHouse-Migrating Test Classes in One `mvn` Reactor
 
-Run them the way CI does:
+Each resource test class that touches ClickHouse runs its own Liquibase migration against the
+Testcontainers instance. Running two such classes in a single `mvn` invocation (e.g. spans + traces
+together, or a wildcard that matches both) makes the second migration fail with
+`REPLICA_ALREADY_EXISTS` (the replicated table from migration `000017` already exists) — a confusing
+failure that looks like a product bug but is purely a test-harness collision.
+
+Set `TESTCONTAINERS_REUSE_ENABLE=true`, as CI does, and the classes of one invocation share one
+ClickHouse instead, so they can run together and the classes after the first skip container start.
+Otherwise, when a change spans both spans and traces (the usual case for shared query SQL), run each
+class in a **separate** `mvn` invocation:
 
 ```bash
-cd apps/opik-backend
-TESTCONTAINERS_REUSE_ENABLE=true mvn test -o -Dspotless.skip=true -Dresolve.skip=true \
-  -Dtest='FindSpansResourceTest$FindSpans#whenFilterSortExcludeAcrossPages*,GetTracesByProjectResourceTest$FindTraces#getTracesByProject__whenFilterSortExcludeAcrossPages*'
-```
+# ✅ GOOD - separate invocations
+mvn test -o -Dtest='FindSpansResourceTest$FindSpans#whenFilterSortExcludeAcrossPages*'
+mvn test -o -Dtest='GetTracesByProjectResourceTest$FindTraces#getTracesByProject__whenFilterSortExcludeAcrossPages*'
 
-- `TESTCONTAINERS_REUSE_ENABLE=true`: the test classes of one `mvn` run share one set of containers,
-  as in CI, instead of each starting its own and migrating it from scratch. After the first class,
-  the next ones start in seconds: three resource classes took 82 s together, against 159 s without it.
-- Without it, each class starts its own ClickHouse and ZooKeeper, and a second ClickHouse-migrating
-  class in the same invocation can fail with `REPLICA_ALREADY_EXISTS`, a test-harness collision that
-  looks like a product bug. Then run one such class per `mvn` invocation.
-- With it, MySQL, Redis and MinIO keep running after the run and the next run reuses them, as does any
-  other run on the same machine at the same time. If MySQL migrations fail validation after a branch
-  switch, remove those containers (`docker ps --filter label=org.testcontainers.hash`) and run again.
-- `-o -Dspotless.skip=true -Dresolve.skip=true`: no remote dependency checks, no reformatting of the
-  sources (`spotless:apply` runs in `validate` otherwise) and no OpenAPI resolve, as in CI. Run
-  `mvn spotless:apply` before committing.
-- Test output is INFO, with `com.comet` at DEBUG: `src/test/resources/logback-test.xml` until the app
-  starts, `config-test.yml` after.
+# ❌ BAD - one reactor migrates ClickHouse twice -> REPLICA_ALREADY_EXISTS
+mvn test -o -Dtest='FindSpansResourceTest,GetTracesByProjectResourceTest'
+```
 
 Surefire selectors for `@Nested` + parameterized tests: use `OuterClass$NestedClass#methodPattern`,
 and prefer a `*wildcard*` over the exact (long) method name — exact long names silently match 0 tests.
-Combine methods within a class with `+`, classes with `,` (with reuse on, see above).
+Combine methods within a class with `+`, classes with `,` (but see the ClickHouse caveat above).
