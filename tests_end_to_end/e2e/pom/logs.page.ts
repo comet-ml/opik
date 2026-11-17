@@ -99,7 +99,7 @@ export class LogsPage {
    */
   async gotoSpans(
     projectId: string,
-    opts: { size?: number; timeRange?: string } = {},
+    opts: { size?: number; timeRange?: string; search?: string } = {},
   ): Promise<void> {
     return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
       this.projectId = projectId;
@@ -107,6 +107,11 @@ export class LogsPage {
       const params = new URLSearchParams({ logsType: 'spans' });
       if (opts.size !== undefined) params.set('size', String(opts.size));
       if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+      // `<type>_search`, not `search`: TracesSpansTab names the param after the
+      // active tab (`useQueryParam(`${type}_search`)`), so a bare `search=` is
+      // accepted by the router, changes nothing, and leaves a spec asserting
+      // over an unfiltered table while believing it filtered.
+      if (opts.search !== undefined) params.set('spans_search', opts.search);
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
       );
@@ -1735,6 +1740,69 @@ export class LogsPage {
    */
   get noMatchingResults(): Locator {
     return this.page.getByRole('heading', { name: 'No matching results' });
+  }
+
+  /**
+   * The table's ONBOARDING empty state — "No traces yet" / "No spans yet" —
+   * which is a different claim from {@link noMatchingResults}.
+   *
+   * `TracesSpansTab` picks between the two from the spans/traces existence
+   * probe alone (`showEmptyState = !isTableLoading && !hasProjectData &&
+   * rows.length === 0 && page === 1`). So this panel means "this project has
+   * never been logged to" and `noMatchingResults` means "it has, and this read
+   * matched nothing" — telling a user the first when the second is true reads
+   * as data loss. A spec about that distinction has to be able to name each
+   * state separately, which is why this exists alongside the other rather than
+   * as one "the table is empty" helper.
+   *
+   * Addressed as the heading for the same reason `noMatchingResults` is:
+   * `DataTableEmptyContent` renders a `<h3>` title beside an `<img>` whose
+   * `alt` is its own string, so the role lookup is the unambiguous one. Named
+   * after the tab rather than hard-coded, because the title is built as
+   * `No ${type} yet` from the active `TRACE_DATA_TYPE`.
+   */
+  onboardingEmptyState(type: LogsFilterScope): Locator {
+    return this.page.getByRole('heading', { name: `No ${type} yet`, exact: true });
+  }
+
+  /**
+   * The Quickstart CTA inside the onboarding empty state.
+   *
+   * The second half of "this is the onboarding panel": the heading alone is a
+   * string, while this is the panel's own action (`openQuickstart`) and renders
+   * nowhere else on the page. Asserted together with the heading so a build
+   * that kept the words and lost the panel — or that rendered the words in some
+   * other component — cannot satisfy the claim.
+   */
+  get quickstartGuideAction(): Locator {
+    return this.page.getByRole('button', { name: 'Quickstart guide' });
+  }
+
+  /**
+   * Wait until the Spans table has settled into one of its three terminal
+   * states: at least one row, the onboarding panel, or "No matching results".
+   *
+   * `waitForReady()` cannot be used for this. It waits on the string "No traces
+   * yet" and then blocks on a `Traces\s+\d+` KPI label, both of which are the
+   * Traces tab's — against the Spans tab it waits out the full test timeout on
+   * a page that finished rendering long before.
+   *
+   * Deliberately does NOT assert which state was reached: a helper that
+   * insisted on rows could not be used by a spec whose subject is the empty
+   * states, and one that accepted any of the three without the caller then
+   * asserting would pass over a page that rendered the wrong one.
+   */
+  async waitForSpansReady(opts: { timeout?: number } = {}): Promise<void> {
+    return test.step('Wait for the Spans table to settle', async () => {
+      const timeout = opts.timeout ?? 30_000;
+      await this.page
+        .locator('tr[data-row-id]')
+        .first()
+        .or(this.onboardingEmptyState('spans'))
+        .or(this.noMatchingResults)
+        .first()
+        .waitFor({ state: 'visible', timeout });
+    });
   }
 
   /**

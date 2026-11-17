@@ -1,4 +1,4 @@
-export { test, expect } from './pass-criteria-suite.fixture';
+export { test, expect } from './grouped-dataset-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -730,3 +730,14 @@ export {
   SUITE_PASS_THRESHOLD,
   OVERRIDE_RUNS_PER_ITEM,
 } from './pass-criteria-suite.fixture';
+export type {
+  SpansEmptyStateProjectRef,
+  SpansEmptyStateProjectsRef,
+  SpansEmptyStateProjectsFixtures,
+} from './spans-empty-state-projects.fixture';
+export type {
+  GroupedExperimentRef,
+  ExperimentGroupRef,
+  GroupedDatasetExperimentsRef,
+  GroupedDatasetExperimentsFixtures,
+} from './grouped-dataset-experiments.fixture';

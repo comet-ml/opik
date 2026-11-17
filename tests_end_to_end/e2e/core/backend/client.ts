@@ -1596,6 +1596,44 @@ export interface AnnotationQueueWrite {
  * error: a thread with the right id but a wrong message count or cost still
  * renders as a perfectly ordinary row.
  */
+/**
+ * The `groups` array the Experiments page sends by default — `DEFAULT_GROUPS`
+ * in `useExperimentsGroupsAndFilters.ts`, verbatim.
+ *
+ * Exported because a spec about the DEFAULT grouping must not restate it:
+ * `field: 'dataset_id'` is the column the page groups by out of the box
+ * (opik#9374, OPIK-8654), and the label the UI renders over that column is
+ * "Item source" rather than "Dataset" — so a spec that reasoned from the
+ * rendered label and sent `field: 'item_source'` would get a 400 from
+ * `GroupingFactory`. `id: 'default_groups'` is part of the value the page
+ * stores, not a nonce.
+ */
+export const DEFAULT_EXPERIMENT_GROUPS = JSON.stringify([
+  { id: 'default_groups', field: 'dataset_id', type: 'string', direction: 'ASC', key: '' },
+]);
+
+/**
+ * One group's row in `GET /v1/private/experiments/groups/aggregations`.
+ *
+ * Every aggregate is `number | undefined` and never defaulted. The endpoint
+ * OMITS an aggregate it has nothing to report — a group whose experiments carry
+ * no priced span has no `total_estimated_cost_avg` at all — and that absence is
+ * what the UI renders as a blank cell rather than as a dash. A `?? 0` here
+ * would turn "this group has no cost to report" into "this group cost nothing",
+ * which are the two answers a reader of the table most needs told apart.
+ */
+export interface ExperimentGroupAggregationsEntry {
+  /** The group value's display name — the dataset's name, for the default grouping. */
+  label: string | null;
+  experimentCount?: number;
+  traceCount?: number;
+  totalEstimatedCost?: number;
+  totalEstimatedCostAvg?: number;
+  durationP50?: number;
+  durationP90?: number;
+  durationP99?: number;
+}
+
 export interface ThreadRowRef {
   id: string;
   numberOfMessages: number | null;
@@ -5606,6 +5644,63 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/spans/exists` — the LIMIT-1 existence probe behind the
+     * Logs page's empty state (opik#9599, OPIK-9219).
+     *
+     * This is not "the project has spans" read through a cheaper door, and a
+     * caller must not treat it as interchangeable with a size-1 listing. The
+     * Logs Spans tab decides between two visually different empty states from
+     * exactly this answer and nothing else: `showEmptyState` in
+     * `TracesSpansTab` is `!hasProjectData && rows.length === 0`, so a `false`
+     * here renders the SDK onboarding panel ("No spans yet", Quickstart guide)
+     * while a `true` over an empty list renders "No matching results". A probe
+     * that wrongly answered `false` therefore tells a user whose project is
+     * full of spans that they have never logged one — which reads as data loss
+     * rather than as a filter that matched nothing.
+     *
+     * `source` is the parameter that makes it non-trivial, and it is omitted
+     * rather than defaulted: `source=sdk` (what the page sends, matching its
+     * own `logsSource: LOGS_SOURCE.sdk` listing) and no `source` at all are
+     * different questions, and a project whose only spans are
+     * experiment/playground/optimization/evaluator rows answers `true` to the
+     * second and `false` to the first. Defaulting either way here would hide
+     * that from the caller. Note `Source.legacyFallbackDbValue`: `sdk` also
+     * matches legacy `unknown` rows, so `sdk` is not simply "source = 'sdk'".
+     *
+     * Returns the boolean the envelope carries, and throws on anything that is
+     * not a 200 with a boolean `exists` — an endpoint that answered 404, or
+     * 200 with a differently-shaped body, would otherwise come back as a
+     * perfectly plausible `false` and satisfy every "this project is empty"
+     * assertion in the suite.
+     */
+    async spansExist(args: {
+      projectId: string;
+      /** Omit to probe ANY source; `'sdk'` is what the Logs page sends. */
+      source?: 'sdk' | 'experiment' | 'playground' | 'optimization' | 'evaluator';
+    }): Promise<boolean> {
+      const query = new URLSearchParams({ project_id: args.projectId });
+      if (args.source !== undefined) query.set('source', args.source);
+      const { status, message, json } = await rawFetch('GET', '/v1/private/spans/exists', {
+        query,
+      });
+      if (status !== 200) {
+        throw new Error(
+          `GET /v1/private/spans/exists (project ${args.projectId}` +
+            `${args.source ? `, source ${args.source}` : ', any source'}) -> ${status}: ${message}`,
+        );
+      }
+      const exists = (json as { exists?: unknown } | null)?.exists;
+      if (typeof exists !== 'boolean') {
+        throw new Error(
+          `GET /v1/private/spans/exists (project ${args.projectId}) answered 200 with no ` +
+            `boolean 'exists' (body: ${JSON.stringify(json)}) — a missing field must not be ` +
+            'read as "no spans".',
+        );
+      }
+      return exists;
+    },
+
+    /**
      * `PATCH /v1/private/spans/{id}`, reporting the status instead of throwing.
      *
      * The rejection IS the contract: `SpanService.update` refuses an update
@@ -8520,6 +8615,86 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           : {}),
       });
       return args.id;
+    },
+
+    /**
+     * `GET /v1/private/experiments/groups/aggregations` — the per-group
+     * statistics the Experiments table renders on its GROUP rows (opik#9374).
+     *
+     * This is the read behind the aggregation cells, and it is a separate call
+     * from the experiments listing: the list answers rows, this answers the
+     * numbers above them. `GeneralDatasetsTab` puts it into the table as
+     * `meta.aggregationMap` keyed by group row id, and every `aggregatedCell`
+     * renders out of that map and nothing else — so what this returns IS what a
+     * group row says, and a spec comparing a rendered cell against it is
+     * comparing the two halves of one claim rather than restating the UI.
+     *
+     * Two things about the shape are load-bearing, and both are kept verbatim:
+     *
+     *  - The response is keyed by GROUP VALUE, which for the default grouping
+     *    is the dataset id. `label` beside it is the dataset's name.
+     *  - An aggregate with nothing to report is ABSENT, not zero. A group whose
+     *    experiments carry no priced span has no `total_estimated_cost_avg`
+     *    key, which is exactly why its rendered cost cell is blank rather than
+     *    a dash. A helper that defaulted it to 0 would erase the distinction
+     *    this is read for, so `ExperimentGroupAggregations` keeps every field
+     *    optional and a caller that needs one must assert it.
+     *
+     * `groups` is passed as the frontend serialises it, because the parameter is
+     * not a field list: `GroupingFactory.newGrouping` parses the whole JSON
+     * array and a differently-shaped one is a 400. `DEFAULT_EXPERIMENT_GROUPS`
+     * is the default the page itself sends.
+     */
+    async getExperimentGroupAggregations(args: {
+      projectId: string;
+      /** The `groups` array, already JSON. Defaults to the page's own default. */
+      groups?: string;
+      /** `types`, as JSON. Defaults to `["regular"]`, which is what the page sends. */
+      types?: string;
+    }): Promise<Record<string, ExperimentGroupAggregationsEntry>> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        groups: args.groups ?? DEFAULT_EXPERIMENT_GROUPS,
+        types: args.types ?? JSON.stringify(['regular']),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments/groups/aggregations',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `GET /v1/private/experiments/groups/aggregations (project ${args.projectId}) -> ` +
+            `${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (content === null || typeof content !== 'object') {
+        throw new Error(
+          `GET /v1/private/experiments/groups/aggregations (project ${args.projectId}) answered ` +
+            `200 with no 'content' object (body: ${JSON.stringify(json)}) — an absent envelope ` +
+            'must not be read as "this project has no groups".',
+        );
+      }
+      const out: Record<string, ExperimentGroupAggregationsEntry> = {};
+      for (const [groupValue, node] of Object.entries(content as Record<string, unknown>)) {
+        const entry = (node ?? {}) as Record<string, unknown>;
+        const aggregations = (entry.aggregations ?? {}) as Record<string, unknown>;
+        const duration = (aggregations.duration ?? null) as Record<string, unknown> | null;
+        const num = (v: unknown): number | undefined =>
+          typeof v === 'number' ? v : undefined;
+        out[groupValue] = {
+          label: typeof entry.label === 'string' ? entry.label : null,
+          experimentCount: num(aggregations.experiment_count),
+          traceCount: num(aggregations.trace_count),
+          totalEstimatedCost: num(aggregations.total_estimated_cost),
+          totalEstimatedCostAvg: num(aggregations.total_estimated_cost_avg),
+          durationP50: duration ? num(duration.p50) : undefined,
+          durationP90: duration ? num(duration.p90) : undefined,
+          durationP99: duration ? num(duration.p99) : undefined,
+        };
+      }
+      return out;
     },
 
     /**
