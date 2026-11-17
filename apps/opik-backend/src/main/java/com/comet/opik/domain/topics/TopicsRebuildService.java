@@ -307,10 +307,7 @@ public class TopicsRebuildService {
             });
         }
 
-        /**
-         * The nightly update. True when the list was saved with at least one live topic; false when no topic stayed
-         * live and the save deleted the project's state and prototypes.
-         */
+        /** The nightly update; false when no topic stayed live (see {@link #saveUpdate}). */
         boolean update() {
             stats.put("mode", TopicRun.Mode.NIGHTLY_UPDATE.getValue());
             var flat = flatten(timed("window", this::readWindow));
@@ -907,7 +904,6 @@ public class TopicsRebuildService {
                 : throwable.getClass().getName();
     }
 
-    /** The saved list as a nightly update reads it, the state row it read, and the names of the topics it read. */
     private record SavedList(NightState state, TopicProjectState projectState, Map<UUID, String> names) {
     }
 

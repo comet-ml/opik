@@ -111,7 +111,6 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration namingDeadline;
 
-        /** The deadline of a nightly update's verify call. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)

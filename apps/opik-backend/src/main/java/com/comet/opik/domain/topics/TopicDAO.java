@@ -54,7 +54,6 @@ public interface TopicDAO {
             """)
     int[] updateTopics(@BindMethods List<Topic> topics);
 
-    /** The projects among {@code projectIds} of the workspace with at least one live topic. */
     @SqlQuery("""
             SELECT DISTINCT project_id FROM topics
             WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND retired_at IS NULL

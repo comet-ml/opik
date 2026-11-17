@@ -41,7 +41,6 @@ public interface TopicNightDAO {
             long projects) {
     }
 
-    /** A night's runs per workspace and status. */
     record RunCount(@NonNull String workspaceId, @NonNull String runStatus, long runs) {
     }
 
@@ -108,10 +107,6 @@ public interface TopicNightDAO {
             """)
     List<TopicNight> findLatestEnded(@Bind("limit") int limit);
 
-    /**
-     * The night's projects per workspace, decision and skip reason. Every count below keeps only the workspaces still
-     * enabled in {@code ai_label_workspaces}.
-     */
     @SqlQuery("""
             SELECT np.workspace_id, np.decision, np.reason, COUNT(*) AS projects
             FROM topic_night_projects np

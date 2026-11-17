@@ -26,8 +26,6 @@ public class GroupSummaries {
     static final int FREQUENT = Math.max(2, EXAMPLES - 2);
 
     /**
-     * Sizes and shares only: what the author prompt reads.
-     *
      * @param labels per trace, the group in {@code [0, k)}
      * @param k      the number of groups
      */
@@ -50,8 +48,6 @@ public class GroupSummaries {
     }
 
     /**
-     * Sizes, shares, tightness and examples: what the nightly naming and verify prompts read.
-     *
      * @param texts   per trace
      * @param vectors per trace, unit length, {@code texts.length * dimensions}
      * @param labels  per trace, the group in {@code [0, k)}
