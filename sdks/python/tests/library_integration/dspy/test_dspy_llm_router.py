@@ -6,9 +6,11 @@ information from LLM routers like OpenRouter that route requests to
 different underlying providers.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import dspy
+import pytest
 
 from opik.integrations.dspy.callback import OpikCallback
 from opik.integrations.dspy.parsers import (
@@ -84,6 +86,191 @@ class TestExtractLMInfoFromHistory:
 
         assert result.usage is None
         assert result.cache_hit is None
+
+    def test_dspy35_request_prompt__matches_history_request__usage_extracted(self):
+        # dspy>=3.5 adapters call the LM with an lm15 Request as `prompt`; history
+        # stores it under "request" with "prompt" None and "messages" re-derived.
+        request = ("frozen-request", ("user", "What is 2+2?"))
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+                "request": request,
+                "response": None,
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.usage is not None
+        assert result.usage.prompt_tokens == 11
+        assert result.usage.completion_tokens == 7
+        assert result.cache_hit is False
+
+    def test_dspy35_string_prompt__matches_history_prompt__usage_extracted(self):
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": "What is 2+2?",
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+                "request": ("frozen-request",),
+                "response": None,
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, "What is 2+2?")
+
+        assert result.usage is not None
+        assert result.usage.prompt_tokens == 11
+
+    def test_dspy35_request_mismatch__returns_empty_info(self):
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [{"role": "user", "content": "other"}],
+                "request": ("frozen-request", "other"),
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, ("frozen-request", "expected"))
+
+        assert result.usage is None
+        assert result.cache_hit is None
+
+    def test_none_call_input__does_not_match_entry_with_missing_keys(self):
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [{"role": "user", "content": "unrelated call"}],
+                "request": ("frozen-request", "unrelated call"),
+                "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, None)
+
+        assert result.usage is None
+        assert result.cache_hit is None
+
+    def test_dspy35_openrouter_response__provider_and_billed_cost_from_provider_data(
+        self,
+    ):
+        # lm15 Response has no `provider` attribute; the raw OpenRouter reply
+        # (with the serving provider and billed cost) is kept in provider_data.
+        response = SimpleNamespace(
+            model="qwen/qwen3-8b",
+            provider_data={
+                "provider": "Novita",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "cost": 9.5e-06,
+                },
+            },
+        )
+        request = ("frozen-request", "openrouter")
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "request": request,
+                "response": response,
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+                "cost": 1.2e-05,  # dspy's own price-table estimate
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.actual_provider == "Novita"
+        assert result.actual_model == "qwen/qwen3-8b"
+        assert result.total_cost == 9.5e-06
+
+    # Same rule as dspy<3.5, where LiteLLM's response_cost was OpenRouter's usage.cost:
+    # a reported 0 leaves the cost to the backend instead of DSPy's estimate.
+    @pytest.mark.parametrize(
+        "provider_usage",
+        [
+            {"prompt_tokens": 10, "completion_tokens": 20, "cost": 0},
+            {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "cost": 0,
+                "is_byok": True,
+                "cost_details": {"upstream_inference_cost": 2.0e-05},
+            },
+        ],
+        ids=["free_endpoint", "byok_zero_fee"],
+    )
+    def test_dspy35_openrouter_reported_cost__zero__left_to_backend(
+        self, provider_usage
+    ):
+        response = SimpleNamespace(
+            model="qwen/qwen3-8b",
+            provider_data={"provider": "Novita", "usage": provider_usage},
+        )
+        request = ("frozen-request", "openrouter-zero-cost")
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "request": request,
+                "response": response,
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+                "cost": 1.2e-05,  # dspy's own price-table estimate
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.total_cost is None
+
+    def test_dspy35_response_without_provider__falls_back_to_estimated_cost(self):
+        response = SimpleNamespace(
+            model="gpt-5-nano-2025-08-07",
+            provider_data={"usage": {"prompt_tokens": 10, "completion_tokens": 20}},
+        )
+        request = ("frozen-request", "openai")
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "request": request,
+                "response": response,
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+                "cost": 1.2e-05,
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.actual_provider is None
+        assert result.total_cost == 1.2e-05
+
+    def test_dspy35_cached_request__no_usage_and_cache_hit_true(self):
+        request = ("frozen-request", "cached")
+        mock_lm = MagicMock()
+        mock_lm.history = [
+            {
+                "prompt": None,
+                "messages": [],
+                "request": request,
+                "response": None,
+                "usage": {},
+                "cost": None,
+            }
+        ]
+
+        result = extract_lm_info_from_history(mock_lm, request)
+
+        assert result.usage is None
+        assert result.cache_hit is True
 
     def test_extracts_provider_from_response(self):
         """Should extract actual_provider from response.provider attribute."""

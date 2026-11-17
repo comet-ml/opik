@@ -1315,6 +1315,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.8-omni-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN4_MAX,
+      label: "qwen/qwen4-max",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.RECURSIVE_FLINT_V1_0_FREE,
       label: "recursive/flint-v1.0:free",
     },
@@ -1401,6 +1405,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY4,
       label: "tencent/hy4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY4_FLASH,
+      label: "tencent/hy4-flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY4_PREVIEW,
