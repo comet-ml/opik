@@ -845,22 +845,18 @@ class TopicsStorageTest {
 
     /** The distinct values of the named settings the workspace's finished {@code queryName} queries ran with. */
     private List<List<String>> settings(String queryName, String workspaceId, String... names) {
-        var columns = IntStream.range(0, names.length).mapToObj(i -> "Settings[:name%d] AS value%d".formatted(i, i))
-                .collect(Collectors.joining(", "));
         return clickHouseTemplate.nonTransaction(connection -> Mono
                 .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
                 .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                .thenMany(Flux.defer(() -> {
-                    var statement = connection.createStatement("SELECT DISTINCT " + columns + " FROM system.query_log"
-                            + " WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment")
-                            .bind("log_comment", queryName + ":" + workspaceId + ":%");
-                    for (int i = 0; i < names.length; i++) {
-                        statement.bind("name" + i, names[i]);
-                    }
-                    return Flux.from(statement.execute());
-                }))
-                .flatMap(result -> result.map((row, metadata) -> IntStream.range(0, names.length)
-                        .mapToObj(i -> row.get("value" + i, String.class)).toList()))
+                .thenMany(Flux.from(connection.createStatement("""
+                        SELECT DISTINCT arrayMap(name -> Settings[name], :names) AS settings
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
+                        """)
+                        .bind("names", names)
+                        .bind("log_comment", queryName + ":" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("settings", String[].class))))
                 .collectList())
                 .block();
     }

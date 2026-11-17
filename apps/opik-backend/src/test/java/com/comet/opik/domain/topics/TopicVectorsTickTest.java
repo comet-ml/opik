@@ -88,7 +88,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -527,9 +529,31 @@ class TopicVectorsTickTest {
         var workspaceId = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
         var traceIds = labelTraces(workspaceId, projectId, 9, 1);
+        // The first two calls each wait for the other: calls made one after another leave the first waiting alone.
+        var bothInFlight = new CountDownLatch(2);
+        var waitedAlone = new AtomicBoolean();
+        embedStub.beforeAnswer = () -> {
+            bothInFlight.countDown();
+            try {
+                if (!bothInFlight.await(5, TimeUnit.SECONDS)) {
+                    waitedAlone.set(true);
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        };
 
-        var result = tickService.tick(Instant.now());
+        TopicVectorsTickService.TickResult result;
+        try {
+            result = tickService.tick(Instant.now());
+        } finally {
+            while (bothInFlight.getCount() > 0) {
+                bothInFlight.countDown();
+            }
+            embedStub.beforeAnswer = null;
+        }
 
+        assertThat(waitedAlone).isFalse();
         assertThat(result.written()).isEqualTo(9);
         assertThat(embedStub.callsFor(workspaceId)).isEqualTo(5);
         assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
