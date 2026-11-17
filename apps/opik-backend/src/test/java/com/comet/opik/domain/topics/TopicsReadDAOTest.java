@@ -171,24 +171,6 @@ class TopicsReadDAOTest {
     }
 
     @Test
-    @DisplayName("Other and days apart: the all-zeros id is a topic id like any other, each day is its own row")
-    void otherAndDays() {
-        var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
-        var yesterday = NOON.minus(Duration.ofDays(1));
-        insert(arrival(workspaceId, projectId, NOON, topicId),
-                arrival(workspaceId, projectId, NOON, topicId),
-                arrival(workspaceId, projectId, yesterday, topicId),
-                arrival(workspaceId, projectId, NOON, TraceTopic.OTHER));
-
-        assertThat(count(workspaceId, projectId)).containsExactlyInAnyOrder(
-                TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build(),
-                TopicDayCount.builder().topicId(topicId).day(TODAY.minusDays(1)).traces(1).build(),
-                TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(1).build());
-    }
-
-    @Test
     @DisplayName("only the traces Logs shows count: source sdk, or unknown from before sources, with visibility "
             + "default; experiment, playground, optimization, evaluator and hidden traces have rows but do not count")
     void onlyTracesLogsShows() {
@@ -220,7 +202,8 @@ class TopicsReadDAOTest {
 
     @Test
     @DisplayName("one counting rule: per topic and for Other, countByTopic equals the sum over days of "
-            + "countByTopicAndDay, with a tombstone, a trace of another source and a hidden trace")
+            + "countByTopicAndDay, with a tombstone, a trace of another source and a hidden trace; each day is its "
+            + "own row, and the all-zeros id is a topic id like any other")
     void countByTopicIsTheSumOfTheDays() {
         var workspaceId = workspaceId();
         var projectId = UUID.randomUUID();
@@ -229,6 +212,7 @@ class TopicsReadDAOTest {
         var yesterday = NOON.minus(Duration.ofDays(1));
         var deleted = ID_GENERATOR.generateId();
         insert(arrival(workspaceId, projectId, NOON, topicId),
+                arrival(workspaceId, projectId, NOON, topicId),
                 arrival(workspaceId, projectId, yesterday, topicId),
                 arrival(workspaceId, projectId, NOON, TraceTopic.OTHER),
                 run(workspaceId, projectId, deleted, NOON, topicId, runId));
@@ -245,14 +229,18 @@ class TopicsReadDAOTest {
 
         var byTopic = traceTopicsDAO.countByTopic(workspaceId, projectId, FROM, TO, MAX_EXECUTION_SECONDS)
                 .collectList().block();
-        var daySums = count(workspaceId, projectId).stream().collect(
-                Collectors.groupingBy(TopicDayCount::topicId, Collectors.summingLong(TopicDayCount::traces)));
+        var byDay = count(workspaceId, projectId);
 
+        assertThat(byDay).containsExactlyInAnyOrder(
+                TopicDayCount.builder().topicId(topicId).day(TODAY).traces(2).build(),
+                TopicDayCount.builder().topicId(topicId).day(TODAY.minusDays(1)).traces(1).build(),
+                TopicDayCount.builder().topicId(TraceTopic.OTHER).day(TODAY).traces(1).build());
         assertThat(byTopic).containsExactlyInAnyOrder(
-                TopicCount.builder().topicId(topicId).traces(2).build(),
+                TopicCount.builder().topicId(topicId).traces(3).build(),
                 TopicCount.builder().topicId(TraceTopic.OTHER).traces(1).build());
         assertThat(byTopic.stream().collect(Collectors.toMap(TopicCount::topicId, TopicCount::traces)))
-                .isEqualTo(daySums);
+                .isEqualTo(byDay.stream().collect(Collectors.groupingBy(TopicDayCount::topicId,
+                        Collectors.summingLong(TopicDayCount::traces))));
     }
 
     @Test

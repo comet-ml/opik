@@ -29,7 +29,6 @@ import java.util.stream.IntStream;
  * <li>A row of an id that is neither a live topic nor Other (a topic retired since the trace was labelled) counts as
  * Other.</li>
  * <li>{@code share} is over all the window's traces, Other included.</li>
- * <li>Rank: by count, most first; ties by born, then the id as text.</li>
  * <li>New: born after the first build's date and at most {@value #NEW_DAYS} days ago, so a first build's topics are
  * never New.</li>
  * </ul>
@@ -43,7 +42,6 @@ public class TopicsCounts {
         return today.minusDays(windowDays - 1L);
     }
 
-    /** The fields of every status: the window's dates, and no topic. */
     public static ProjectTopics.ProjectTopicsBuilder window(@NonNull LocalDate today, int windowDays) {
         return ProjectTopics.builder()
                 .today(today)
@@ -51,12 +49,10 @@ public class TopicsCounts {
                 .topics(List.of());
     }
 
-    /** The last saved run's end, null before the first one. */
     public static Instant lastRunAt(@Nullable TopicProjectState state) {
         return state == null ? null : state.lastSuccessAt();
     }
 
-    /** The collecting body's attempt from the project's newest run: null when that run saved, or with no run. */
     public static ProjectTopics.Attempt attempt(@Nullable TopicRun newest) {
         if (newest == null) {
             return null;

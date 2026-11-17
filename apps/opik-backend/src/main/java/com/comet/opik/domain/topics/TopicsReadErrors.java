@@ -35,18 +35,14 @@ public class TopicsReadErrors {
     private static final Set<Integer> TOO_LARGE_CODES = Set.of(TOO_MANY_ROWS, TOO_MANY_BYTES, TOO_MANY_ROWS_OR_BYTES);
     private static final Set<Integer> LIMIT_CODES = Set.of(TIMEOUT_EXCEEDED, MEMORY_LIMIT_EXCEEDED);
 
-    /**
-     * The read hit the rows or bytes it may read ({@code TOO_MANY_ROWS}, {@code TOO_MANY_BYTES},
-     * {@code TOO_MANY_ROWS_OR_BYTES}): the same project fails the same way on a retry, so the caller gets a 400.
-     */
+    /** A rows or bytes limit: the same project fails the same way on a retry, so the caller gets a 400. */
     static boolean isTooLarge(@NonNull Throwable error) {
         return hasCode(error, TOO_LARGE_CODES);
     }
 
     /**
-     * The read hit its time or memory limit ({@code TIMEOUT_EXCEEDED}, {@code MEMORY_LIMIT_EXCEEDED}), or the client
-     * timeout is anywhere in the causal chain: a retry can pass, so the caller gets a 503 with Retry-After. False for
-     * the codes of {@link #isTooLarge}.
+     * A time or memory limit, or the client timeout anywhere in the causal chain: a retry can pass, so the caller gets
+     * a 503 with Retry-After. False for the codes of {@link #isTooLarge}.
      */
     static boolean isLimit(@NonNull Throwable error) {
         return hasCode(error, LIMIT_CODES) || Throwables.getCausalChain(error).stream()
@@ -68,7 +64,6 @@ public class TopicsReadErrors {
         });
     }
 
-    /** A 503 with Retry-After: the read can pass on a retry. */
     static ServiceUnavailableException busy() {
         return new ServiceUnavailableException(Response.status(Response.Status.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)

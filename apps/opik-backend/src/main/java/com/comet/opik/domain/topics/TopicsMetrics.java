@@ -36,7 +36,6 @@ public class TopicsMetrics {
     static final String ERROR_START_FAILED = "start_failed";
     /** Housekeeping failed a run its pod left {@code running}: the code {@code TopicRunDAO.failAbandoned} writes. */
     static final String ERROR_ABANDONED = "abandoned";
-    /** The read API's status of a failed request, beside ready, collecting and disabled. */
     static final String API_STATUS_ERROR = "error";
 
     private static final AttributeKey<String> REASON = stringKey("reason");
@@ -210,7 +209,6 @@ public class TopicsMetrics {
         firstBuildGate.add(1, names.builder(workspaceId).put(OUTCOME, state.getValue()).build());
     }
 
-    /** {@code status} is null for a request that failed, recorded as {@code error}. */
     void apiRequest(ProjectTopics.Status status, @NonNull Duration duration) {
         apiDuration.record(duration.toNanos() / 1e9,
                 Attributes.of(STATUS, status == null ? API_STATUS_ERROR : status.getValue()));

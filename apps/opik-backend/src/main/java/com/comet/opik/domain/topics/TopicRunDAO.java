@@ -146,7 +146,6 @@ public interface TopicRunDAO {
     @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
     int deleteStartedBefore(@Bind("before") Instant before);
 
-    /** The project's newest run by {@code started_at} (then the greater run id), whatever its status. */
     @SqlQuery("""
             SELECT * FROM topic_runs
             WHERE workspace_id = :workspaceId AND project_id = :projectId

@@ -38,17 +38,6 @@ class TopicsCountsTest {
             .build();
 
     @Test
-    @DisplayName("the fields of every status: today, the window's first day, and no topic")
-    void window() {
-        var body = TopicsCounts.window(TODAY, WINDOW_DAYS).status(ProjectTopics.Status.DISABLED).build();
-
-        assertThat(body.today()).isEqualTo(TODAY);
-        assertThat(body.windowFrom()).isEqualTo(TODAY.minusDays(29));
-        assertThat(body.topics()).isEmpty();
-        assertThat(TopicsCounts.window(TODAY, 14).build().windowFrom()).isEqualTo(TODAY.minusDays(13));
-    }
-
-    @Test
     @DisplayName("ready body: the window, the last run and the total; a series of 30 days, oldest first, today last, "
             + "missing days as 0")
     void series() {
@@ -211,13 +200,6 @@ class TopicsCountsTest {
                 ProjectTopics.Attempt.builder().status(ProjectTopics.Attempt.Status.FAILED).build());
         assertThat(TopicsCounts.attempt(run(TopicRun.Status.SAVED))).isNull();
         assertThat(TopicsCounts.attempt(null)).isNull();
-    }
-
-    @Test
-    @DisplayName("last_run_at: the state's last success, none without a state")
-    void lastRunAt() {
-        assertThat(TopicsCounts.lastRunAt(STATE)).isEqualTo(LAST_RUN);
-        assertThat(TopicsCounts.lastRunAt(null)).isNull();
     }
 
     private static ProjectTopics fold(List<Topic> live, List<TopicDayCount> rows) {

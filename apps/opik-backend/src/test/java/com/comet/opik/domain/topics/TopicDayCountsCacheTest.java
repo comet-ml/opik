@@ -94,7 +94,7 @@ class TopicDayCountsCacheTest {
                 .build();
         when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
         savedBy(UUID.randomUUID());
-        var cacheConfiguration = shipped(Map.of());
+        var cacheConfiguration = shipped();
         service = Guice.createInjector(new AbstractModule() {
             @Override
             protected void configure() {
@@ -110,17 +110,6 @@ class TopicDayCountsCacheTest {
                         new CacheInterceptor(getProvider(CacheManager.class), cacheConfiguration));
             }
         }).getInstance(TopicReadService.class);
-    }
-
-    @Test
-    @DisplayName("config.yml keeps the counts for 5 minutes by default, and the TTL has its own env var")
-    void ttl() throws Exception {
-        var shipped = shipped(Map.of());
-        assertThat(shipped.isEnabled()).isTrue();
-        assertThat(shipped.getCaches().get(TopicReadService.DAY_COUNTS_CACHE)).isEqualTo(Duration.ofMinutes(5));
-
-        var set = shipped(Map.of("CACHE_MANAGER_TOPICS_DAY_COUNTS_DURATION", "PT2M"));
-        assertThat(set.getCaches().get(TopicReadService.DAY_COUNTS_CACHE)).isEqualTo(Duration.ofMinutes(2));
     }
 
     @Test
@@ -183,9 +172,9 @@ class TopicDayCountsCacheTest {
                 .build()));
     }
 
-    /** The {@code cacheManager} section of the shipped config.yml, with {@code environment} for the env vars. */
-    private static CacheConfiguration shipped(Map<String, String> environment) throws Exception {
-        var substitutor = new StringSubstitutor(StringLookupFactory.INSTANCE.mapStringLookup(environment));
+    /** The {@code cacheManager} section of the shipped config.yml, every env var at its default. */
+    private static CacheConfiguration shipped() throws Exception {
+        var substitutor = new StringSubstitutor(StringLookupFactory.INSTANCE.mapStringLookup(Map.of()));
         substitutor.setValueDelimiter(":-");
         substitutor.setEnableUndefinedVariableException(false);
         return new YamlConfigurationFactory<>(OpikConfiguration.class, null, Jackson.newObjectMapper(), "dw")

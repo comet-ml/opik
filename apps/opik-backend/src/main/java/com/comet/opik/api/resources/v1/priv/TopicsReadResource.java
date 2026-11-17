@@ -43,13 +43,6 @@ public class TopicsReadResource {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull Provider<RequestContext> requestContext;
 
-    /**
-     * 400 without {@code project_id} and 429 over the rate limit come before the method. Inside it, 501 with no body
-     * when topics are off is the first check. 404 for another workspace's project. 400 with
-     * {@link TopicReadService#TOO_LARGE_MESSAGE} and no {@code Retry-After} when the counts read hits its rows or bytes
-     * limit: a retry fails the same way. 503 with {@code Retry-After} when a ClickHouse read hits its time or memory
-     * limit, or the client timeout.
-     */
     @GET
     @Operation(operationId = "getProjectTopics", summary = "Get a project's topics", description = "The project's topics over the window, the last topics.build.windowDays UTC days (default 30), today included: per topic its count, share, rank and a daily series, plus Other's daily series. Counts can be up to 5 minutes old. status is disabled when the workspace is not opted in to topics, collecting while the project has no topics yet, and ready otherwise. Fields of other states are omitted.", responses = {
             @ApiResponse(responseCode = "200", description = "The project's topics", content = @Content(schema = @Schema(implementation = ProjectTopics.class))),
