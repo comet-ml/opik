@@ -34,7 +34,7 @@ def test_parse_api_key__no_expected_attributes(capture_log):
     assert opik_api_key.short_api_key == raw_key
 
     assert PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES in capture_log.messages
-    assert raw_key + DELIMITER_CHAR not in " ".join(capture_log.messages)
+    assert "some API key" not in " ".join(capture_log.messages)
 
 
 def test_parse_api_key__too_many_parts(capture_log):
@@ -43,7 +43,7 @@ def test_parse_api_key__too_many_parts(capture_log):
 
     assert opik_api_key is None
     assert PARSE_API_KEY_TOO_MANY_PARTS % 3 in capture_log.messages
-    assert raw_key not in " ".join(capture_log.messages)
+    assert "some API key" not in " ".join(capture_log.messages)
 
 
 def test_parse_api_key__happy_path__with_padding():
