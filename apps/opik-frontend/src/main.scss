@@ -72,6 +72,7 @@
     --upload-chip-bg: #bae6fd1a;
     --upload-chip-border: #bae6fd99;
     --upload-chip-icon-bg: #89deff;
+    --table-group-row-background: #f8fafc;
 
     /* CodeMirror theme colors */
     --codemirror-background: #f8fafc;
@@ -444,6 +445,7 @@
     --thread-active: #2a3f2f;
     --thread-inactive: #2a3447;
     --message-input-background: #2a2f47;
+    --table-group-row-background: #1c1c1c;
 
     /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
     --codemirror-background: #1c1c1c;
@@ -784,6 +786,10 @@
     );
     left: var(--sidebar-width);
     right: 0;
+  }
+
+  .comet-table-row-group td {
+    background: var(--table-group-row-background);
   }
 
   .comet-table-row-best td {

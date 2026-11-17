@@ -6,6 +6,7 @@ import {
   ColumnDefTemplate,
   CellContext,
   OnChangeFn,
+  Row,
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
@@ -59,6 +60,9 @@ import {
   Experiment,
   ExperimentsAggregations,
 } from "@/types/datasets";
+
+const getExperimentRowClassName = <T,>(row: Row<T>) =>
+  row.getIsGrouped() ? "comet-table-row-group" : "";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -345,12 +349,14 @@ export const useExperimentsTableConfig = <
       sortableColumns: sortableBy,
     });
 
-    const baseColumns = [
-      ...firstColumns,
-      ...groupColumns,
-      ...regularColumns,
-      ...scoresColumns,
-    ];
+    // Columns without a group stat need an explicit empty cell, otherwise
+    // TanStack falls back to rendering the summed column value.
+    const statColumns = [...regularColumns, ...scoresColumns].map((column) => ({
+      ...column,
+      aggregatedCell: column.aggregatedCell ?? (() => null),
+    }));
+
+    const baseColumns = [...firstColumns, ...groupColumns, ...statColumns];
 
     if (actionsCell) {
       baseColumns.push(
@@ -440,6 +446,7 @@ export const useExperimentsTableConfig = <
 
     // Utility methods
     getExperimentRowId,
+    getExperimentRowClassName,
 
     // Configs
     sortConfig,
