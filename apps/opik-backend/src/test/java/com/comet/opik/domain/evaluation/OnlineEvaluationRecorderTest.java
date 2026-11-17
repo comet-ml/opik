@@ -27,6 +27,9 @@ import dev.langchain4j.model.googleai.GoogleAiGeminiTokenUsage;
 import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -173,12 +176,17 @@ class OnlineEvaluationRecorderTest {
         assertThat(capturedSpan().model()).isEqualTo("claude-actual-20260917");
     }
 
-    @Test
-    void keepsConfiguredModelOnLlmSpanWhenResponseNamesNone() {
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   "})
+    void keepsConfiguredModelOnLlmSpanWhenResponseNamesNone(String modelName) {
         stubSpanWrites();
-        var usage = AnthropicTokenUsage.builder().inputTokenCount(10).outputTokenCount(5).build();
+        var response = ChatResponse.builder().aiMessage(AiMessage.from("ok"))
+                .modelName(modelName)
+                .tokenUsage(AnthropicTokenUsage.builder().inputTokenCount(10).outputTokenCount(5).build())
+                .build();
 
-        recorder().recordLlmCall(request(), Mono.just(responseWith(usage))).block();
+        recorder().recordLlmCall(request(), Mono.just(response)).block();
 
         assertThat(capturedSpan().model()).isEqualTo("claude-actual");
     }
