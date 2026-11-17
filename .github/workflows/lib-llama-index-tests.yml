@@ -57,6 +57,8 @@ jobs:
           uv pip install --system -r test_requirements.txt
 
       - name: Install lib
+        env:
+          UV_LINK_MODE: copy
         run: |
           cd ./tests
           uv pip install --system -r library_integration/llama_index/requirements.txt
