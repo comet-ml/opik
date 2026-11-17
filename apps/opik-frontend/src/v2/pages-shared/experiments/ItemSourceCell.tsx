@@ -30,6 +30,7 @@ import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
 import { cn, formatCount } from "@/lib/utils";
 
 export const ITEM_SOURCE_LABEL = "Item source";
+export const EXPERIMENT_COUNT_UNIT = "exp";
 
 type CustomMeta = {
   nameKey?: string;
@@ -186,7 +187,9 @@ export const createItemSourceGroupCell = <TData,>(
       countAggregationKey && aggregationData
         ? get(aggregationData, countAggregationKey, undefined)
         : undefined;
-    const countText = isNumber(count) ? formatCount(count, "exp") : "";
+    const countText = isNumber(count)
+      ? formatCount(count, EXPERIMENT_COUNT_UNIT)
+      : "";
 
     const rowHeight = table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
     const textClass = CELL_TEXT_CLASS_MAP[rowHeight];

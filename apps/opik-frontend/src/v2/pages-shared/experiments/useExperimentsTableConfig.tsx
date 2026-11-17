@@ -53,6 +53,7 @@ import {
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
 import {
   createItemSourceGroupCell,
+  EXPERIMENT_COUNT_UNIT,
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
@@ -241,7 +242,7 @@ export const useExperimentsTableConfig = <
           valueKey: `${metaKey}.value`,
           labelKey: `${metaKey}.label`,
           countAggregationKey: "experiment_count",
-          countUnit: "exp",
+          countUnit: EXPERIMENT_COUNT_UNIT,
           explainer: {
             id: "group-experiments",
             description: `Some of the experiments didn’t match any group`,
@@ -280,7 +281,7 @@ export const useExperimentsTableConfig = <
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
-              countUnit: "exp",
+              countUnit: EXPERIMENT_COUNT_UNIT,
               explainer: {
                 id: "group-experiments",
                 description: `Some experiments reference a project that has been deleted`,
