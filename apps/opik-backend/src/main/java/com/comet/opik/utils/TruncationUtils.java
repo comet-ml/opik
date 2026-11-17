@@ -251,8 +251,11 @@ public final class TruncationUtils {
         SlimShape shape = SlimShape.UNCHANGED;
         while (children.hasNext()) {
             switch (inspect(children.next(), maxStringLength)) {
-                case REPARSE -> shape = SlimShape.REPARSE;
-                case TRUNCATED -> shape = shape == SlimShape.UNCHANGED ? SlimShape.TRUNCATED : shape;
+                // Nothing found later outranks a reparse, so the rest of the tree need not be walked.
+                case REPARSE -> {
+                    return SlimShape.REPARSE;
+                }
+                case TRUNCATED -> shape = SlimShape.TRUNCATED;
                 case UNCHANGED -> {
                 }
             }
