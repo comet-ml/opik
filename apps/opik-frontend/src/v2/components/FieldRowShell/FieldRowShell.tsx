@@ -2,6 +2,7 @@ import React from "react";
 import { MoveRight, Trash } from "lucide-react";
 
 import { Button } from "@/ui/button";
+import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type FieldRowShellProps = {
@@ -11,13 +12,14 @@ type FieldRowShellProps = {
   message?: React.ReactNode;
   removeLabel: string;
   removeTooltip?: string;
-  removeIcon?: React.ReactNode;
-  removeVariant?: "divided" | "inline";
   removeDisabledReason?: string;
   onRemove?: () => void;
   className?: string;
   "data-testid"?: string;
 };
+
+const REMOVE_STRIP_CLASS =
+  "h-auto shrink-0 self-stretch rounded-none border-l border-border hover:bg-primary-foreground";
 
 // Shared "name → value" row used wherever dataset fields are edited, so the
 // record panel and the Add-to-dataset field mapping look the same.
@@ -28,8 +30,6 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
   message,
   removeLabel,
   removeTooltip,
-  removeIcon = <Trash />,
-  removeVariant = "divided",
   removeDisabledReason,
   onRemove,
   className,
@@ -44,50 +44,36 @@ const FieldRowShell: React.FunctionComponent<FieldRowShellProps> = ({
             <MoveRight className="size-3" />
           </div>
           <div className="min-w-0 flex-1">{value}</div>
-          {removeVariant === "inline" &&
-            (onRemove ? (
-              <TooltipWrapper content={removeTooltip}>
-                <Button
-                  variant="minimal"
-                  size="icon-2xs"
-                  aria-label={removeLabel}
-                  onClick={onRemove}
-                  className="shrink-0"
-                >
-                  {removeIcon}
-                </Button>
-              </TooltipWrapper>
-            ) : (
-              removeDisabledReason && (
-                <TooltipWrapper content={removeDisabledReason}>
-                  {/* Disabled buttons swallow hover, so the wrapper carries the tooltip. */}
-                  <span className="flex shrink-0" tabIndex={0}>
-                    <Button
-                      variant="minimal"
-                      size="icon-2xs"
-                      aria-label={removeLabel}
-                      disabled
-                      className="disabled:opacity-50"
-                    >
-                      {removeIcon}
-                    </Button>
-                  </span>
-                </TooltipWrapper>
-              )
-            ))}
         </div>
-        {onRemove && removeVariant === "divided" && (
+        {onRemove ? (
           <TooltipWrapper content={removeTooltip}>
             <Button
               variant="minimal"
               size="icon-2xs"
               aria-label={removeLabel}
               onClick={onRemove}
-              className="h-auto shrink-0 self-stretch rounded-none border-l border-border hover:bg-primary-foreground"
+              className={REMOVE_STRIP_CLASS}
             >
-              {removeIcon}
+              <Trash />
             </Button>
           </TooltipWrapper>
+        ) : (
+          removeDisabledReason && (
+            <TooltipWrapper content={removeDisabledReason}>
+              {/* Disabled buttons swallow hover, so the wrapper carries the tooltip. */}
+              <span className="flex shrink-0 self-stretch" tabIndex={0}>
+                <Button
+                  variant="minimal"
+                  size="icon-2xs"
+                  aria-label={removeLabel}
+                  disabled
+                  className={cn(REMOVE_STRIP_CLASS, "disabled:opacity-50")}
+                >
+                  <Trash />
+                </Button>
+              </span>
+            </TooltipWrapper>
+          )
         )}
       </div>
       {note && <div className="px-2 pb-1.5 pt-2.5">{note}</div>}
