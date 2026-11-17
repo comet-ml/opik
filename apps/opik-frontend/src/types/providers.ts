@@ -111,6 +111,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
   CLAUDE_FABLE_5 = "claude-fable-5",
   CLAUDE_FABLE_5_1 = "claude-fable-5-1",
+  CLAUDE_FABLE_5_2 = "claude-fable-5-2",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
   CLAUDE_HAIKU_5_5 = "claude-haiku-5-5",
   CLAUDE_MYTHOS_5 = "claude-mythos-5",
@@ -132,7 +133,6 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
   CLAUDE_SONNET_5_5 = "claude-sonnet-5-5",
-  CLAUDE_FABLE_5_2 = "claude-fable-5-2",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -816,6 +816,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_8_MAX_0902_BATCH = "qwen/qwen3.8-max-0902:batch",
   QWEN_QWEN3_8_MAX_PRIME = "qwen/qwen3.8-max-prime",
   QWEN_QWEN3_8_OMNI_FLASH = "qwen/qwen3.8-omni-flash",
+  QWEN_QWEN4_MAX = "qwen/qwen4-max",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   RECURSIVE_FLINT_V1_0_FREE = "recursive/flint-v1.0:free",
@@ -856,6 +857,7 @@ export enum PROVIDER_MODEL_TYPE {
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
   TENCENT_HY3_FREE = "tencent/hy3:free",
   TENCENT_HY4 = "tencent/hy4",
+  TENCENT_HY4_FLASH = "tencent/hy4-flash",
   TENCENT_HY4_PREVIEW = "tencent/hy4-preview",
   THEDRUMMER_ANUBIS_70B_V1_1 = "thedrummer/anubis-70b-v1.1",
   THEDRUMMER_CYDONIA_24B_V4_1 = "thedrummer/cydonia-24b-v4.1",
@@ -991,6 +993,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_8_FLASH_LITE_TTS = "gemini-3.8-flash-lite-tts",
   GEMINI_3_8_FLASH_TTS = "gemini-3.8-flash-tts",
   GEMINI_4_ARGON = "gemini-4-argon",
+  GEMINI_4_CARBON = "gemini-4-carbon",
+  GEMINI_4_HYDROGEN = "gemini-4-hydrogen",
   GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
   GEMINI_NANO_BANANA_2_1 = "gemini-nano-banana-2.1",
   GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
@@ -1004,8 +1008,6 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_4_CARBON = "gemini-4-carbon",
-  GEMINI_4_HYDROGEN = "gemini-4-hydrogen",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
