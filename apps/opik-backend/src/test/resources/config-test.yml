@@ -1024,7 +1024,6 @@ topics:
       createdAtSlack: 1d
       sliceSize: 1d
   build:
-    # Defaults and descriptions of build and firstBuild: see config.yml
     projectTimeout: 15m
     minVectors: 100
     windowDays: 30
