@@ -172,11 +172,11 @@ const PromptDiff: React.FunctionComponent<PromptDiffProps> = ({
     const baseText =
       typeof baseline === "string"
         ? baseline
-        : JSON.stringify(baseline, null, 2) ?? "";
+        : (JSON.stringify(baseline, null, 2) ?? "");
     const currText =
       typeof current === "string"
         ? current
-        : JSON.stringify(current, null, 2) ?? "";
+        : (JSON.stringify(current, null, 2) ?? "");
 
     return <TextDiff content1={baseText} content2={currText} mode="words" />;
   }

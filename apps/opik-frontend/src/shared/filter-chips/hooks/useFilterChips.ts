@@ -165,7 +165,7 @@ const useFilterChips = ({
         // An edit before the restore effect has run must build on the remembered filters.
         const prevFilters = Array.isArray(prevRaw)
           ? prevRaw
-          : savedFilters ?? EMPTY_FILTERS;
+          : (savedFilters ?? EMPTY_FILTERS);
         const prevValues = sanitizeFilters(prevFilters, definitions).values;
         const nextValues = updater(prevValues);
 

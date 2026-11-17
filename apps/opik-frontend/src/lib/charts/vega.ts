@@ -371,7 +371,7 @@ export const prepareVegaSpec = (
   const data = prepared.data as Record<string, unknown> | undefined;
   const values = rows
     ? coerceNumericRows(rows)
-    : (data?.values as VegaRows | undefined) ?? [];
+    : ((data?.values as VegaRows | undefined) ?? []);
   if (rows) {
     // Live rows always win: a spec carrying its own `values` (or any other source) would show stale data.
     const name = typeof data?.name === "string" ? data.name : VEGA_ROWS_DATASET;

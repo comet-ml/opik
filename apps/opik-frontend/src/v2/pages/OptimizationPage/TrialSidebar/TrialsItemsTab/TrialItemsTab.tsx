@@ -311,17 +311,15 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     const definitions: ChipDefinition[] = sortBy(
       dynamicDatasetColumns,
       "label",
-    ).map(
-      ({ id, label, columnType }): ChipDefinition => ({
-        id,
-        field: id,
-        label: `${label} (${isTestSuite ? "Test suite" : "Dataset"})`,
-        kind: "query-builder",
-        columnType,
-        operators: OPERATORS_MAP[columnType].map((o) => o.value),
-        defaultOperator: DEFAULT_OPERATOR_MAP[columnType],
-      }),
-    );
+    ).map(({ id, label, columnType }): ChipDefinition => ({
+      id,
+      field: id,
+      label: `${label} (${isTestSuite ? "Test suite" : "Dataset"})`,
+      kind: "query-builder",
+      columnType,
+      operators: OPERATORS_MAP[columnType].map((o) => o.value),
+      defaultOperator: DEFAULT_OPERATOR_MAP[columnType],
+    }));
 
     definitions.push({
       id: "output",

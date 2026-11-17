@@ -873,12 +873,12 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     ),
   };
   const config = model
-    ? updateProviderConfig(rawConfig, {
+    ? (updateProviderConfig(rawConfig, {
         model: model as PROVIDER_MODEL_TYPE,
         provider: getProviderFromModel(
           model as PROVIDER_MODEL_TYPE,
         ) as COMPOSED_PROVIDER_TYPE,
-      }) ?? rawConfig
+      }) ?? rawConfig)
     : rawConfig;
   return {
     model,

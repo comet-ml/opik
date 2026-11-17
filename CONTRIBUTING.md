@@ -141,7 +141,7 @@ from the single root `.pre-commit-config.yaml` (the source of truth for which ch
 - On commit, only the hooks matching your changed files run. If a formatter fixes a file, the commit
   is aborted and the fixes are left **unstaged** — review them, `git add`, and commit again.
 - Run the same checks over your whole branch diff: `make precommit`. Full-repo audit: `make precommit-all`.
-- Java (Spotless), frontend (oxlint + Prettier + typecheck), TypeScript SDK (ESLint + typecheck) hooks use the repo's own Maven/Node toolchains,
+- Java (Spotless), frontend (oxlint + oxfmt + typecheck), TypeScript SDK (ESLint + typecheck) hooks use the repo's own Maven/Node toolchains,
   so they only run for contributors already set up for those areas.
 
 ## Agent/editor setup
