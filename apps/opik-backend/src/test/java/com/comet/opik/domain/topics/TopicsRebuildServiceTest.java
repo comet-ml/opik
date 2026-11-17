@@ -18,6 +18,8 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -405,11 +407,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a saved nightly update records the Other share it saved in its stats, and its live topics and churn, "
             + "with its workspace")
     void nightlyUpdateIsCounted() throws Exception {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        // Most nights make no Qwen call; any that comes changes nothing.
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -446,10 +444,7 @@ class TopicsRebuildServiceTest {
             + "as a run's, then runs the labelling pass after its insert")
     @SuppressWarnings("unchecked")
     void nightlyUpdateSavesThenLabels() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -476,38 +471,13 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a nightly update whose state no longer names the run it read fails as a conflict and writes nothing")
-    void nightlyUpdateConflict() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
-        when(topicDAO.updateState(any(), eq(runId))).thenReturn(0);
-        var updateRunId = UUID.randomUUID();
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(updateRunId), any(), anyString(), anyString(), any()))
-                .thenReturn(1);
-
-        var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
-
-        assertThat(outcome.errorCode()).isEqualTo("save");
-        verify(topicDAO, never()).updateTopics(any());
-        verify(runDAO, never()).markSaved(eq(WORKSPACE_ID), eq(updateRunId), any(), any());
-        // The first build's insert and pass only.
-        verify(traceTopicsDAO, times(1)).insert(any());
-        verify(labelService, times(1)).labelWindow(any(), any(), any(), any());
-    }
-
-    @Test
     @DisplayName("a nightly update that leaves no live topic deletes the state and the prototypes, keeps the topics as "
             + "retired, and writes no labels")
     @SuppressWarnings("unchecked")
     void allRetiredDeletesTheList() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
+        firstBuildThenEmptyNaming();
         // The topics keep no prototype, so they hold no trace tonight and retire; the naming call births nothing.
         when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of());
-        answer(emptyNaming());
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -528,21 +498,26 @@ class TopicsRebuildServiceTest {
         verify(labelService, times(1)).labelWindow(any(), any(), any(), any());
     }
 
-    @Test
-    @DisplayName("a nightly update's MySQL save that fails writes no trace_topics row: the traces keep last night's")
-    void failedUpdateSaveWritesNoLabels() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"the state no longer names the run it read", "MySQL is down"})
+    @DisplayName("a nightly update whose MySQL save fails, as a conflict or with MySQL down, fails with save and "
+            + "writes no trace_topics row: the traces keep last night's")
+    void failedUpdateSaveWritesNoLabels(String failure) {
+        firstBuildThenEmptyNaming();
+        if (failure.equals("MySQL is down")) {
+            when(topicDAO.updateState(any(), eq(runId))).thenThrow(new IllegalStateException("MySQL down"));
+        } else {
+            when(topicDAO.updateState(any(), eq(runId))).thenReturn(0);
+        }
         var updateRunId = UUID.randomUUID();
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(updateRunId), any(), anyString(), anyString(), any()))
                 .thenReturn(1);
-        when(topicDAO.updateState(any(), eq(runId))).thenThrow(new IllegalStateException("MySQL down"));
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
 
         assertThat(outcome.errorCode()).isEqualTo("save");
+        verify(topicDAO, never()).updateTopics(any());
+        verify(runDAO, never()).markSaved(eq(WORKSPACE_ID), eq(updateRunId), any(), any());
         // The first build's insert and pass only.
         verify(traceTopicsDAO, times(1)).insert(any());
         verify(labelService, times(1)).labelWindow(any(), any(), any(), any());
@@ -552,10 +527,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a nightly update's trace_topics insert comes after its MySQL commit, and a failed insert is retried")
     void updateInsertAfterCommitIsRetried() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         var attempts = new AtomicInteger();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> attempts.incrementAndGet() <= 2
                 ? Mono.error(new IllegalStateException("ClickHouse down"))
@@ -576,10 +548,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a nightly update whose trace_topics insert fails every attempt stays saved, and its labelling pass "
             + "still runs")
     void updateInsertExhausted() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.error(new IllegalStateException("ClickHouse down")));
         var updateRunId = UUID.randomUUID();
 
@@ -680,6 +649,17 @@ class TopicsRebuildServiceTest {
         when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(topics.getValue());
         when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(prototypes.getValue());
         when(topicDAO.updateState(any(), eq(runId))).thenReturn(1);
+    }
+
+    /**
+     * The first build, read back as the nightly update reads it, then a naming answer that changes nothing: most nights
+     * make no Qwen call, and any that comes changes nothing.
+     */
+    private void firstBuildThenEmptyNaming() {
+        answer(FIXTURE.answer);
+        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        readBackFirstBuild();
+        answer(emptyNaming());
     }
 
     /** A naming answer that changes nothing. */

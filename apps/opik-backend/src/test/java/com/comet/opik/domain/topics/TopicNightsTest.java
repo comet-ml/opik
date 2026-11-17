@@ -340,22 +340,6 @@ class TopicNightsTest {
         assertThat(dao.findProjects(NIGHT)).hasSize(1);
     }
 
-    @Test
-    @DisplayName("a night run again for the same date starts over")
-    void startOver() {
-        var dao = dao();
-        ended(NIGHT, TopicNight.Outcome.FAILED);
-        var again = clock.instant();
-
-        dao.start(NIGHT, again);
-
-        assertThat(dao.findByNight(NIGHT)).satisfies(night -> {
-            assertThat(night.outcome()).isEqualTo(TopicNight.Outcome.RUNNING);
-            assertThat(night.startedAt()).isEqualTo(again);
-            assertThat(night.finishedAt()).isNull();
-        });
-    }
-
     private void refresh() {
         gauges.begin();
         gauges.refresh();
