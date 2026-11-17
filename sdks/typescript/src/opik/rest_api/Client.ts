@@ -17,6 +17,7 @@ import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
 import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
+import { GuardrailPoliciesClient } from "./api/resources/guardrailPolicies/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
 import { InsightsViewsClient } from "./api/resources/insightsViews/client/Client.js";
 import { LlmModelsClient } from "./api/resources/llmModels/client/Client.js";
@@ -79,6 +80,7 @@ export class OpikApiClient {
     protected _environments: EnvironmentsClient | undefined;
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
+    protected _guardrailPolicies: GuardrailPoliciesClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
     protected _insightsViews: InsightsViewsClient | undefined;
     protected _llmModels: LlmModelsClient | undefined;
@@ -185,6 +187,10 @@ export class OpikApiClient {
 
     public get feedbackDefinitions(): FeedbackDefinitionsClient {
         return (this._feedbackDefinitions ??= new FeedbackDefinitionsClient(this._options));
+    }
+
+    public get guardrailPolicies(): GuardrailPoliciesClient {
+        return (this._guardrailPolicies ??= new GuardrailPoliciesClient(this._options));
     }
 
     public get guardrails(): GuardrailsClient {
