@@ -1,4 +1,4 @@
-export { default as default } from "@/shared/DataTable/columnVirtualization/useColumnVirtualization";
+export { default } from "@/shared/DataTable/columnVirtualization/useColumnVirtualization";
 export type { ColumnVirtualizationConfig } from "@/shared/DataTable/columnVirtualization/useColumnVirtualization";
 export {
   sliceColumnWindow,
