@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamWriteConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -12,6 +13,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -165,5 +169,47 @@ class JsonRowValuesTest {
                 .put("input", columns.json())
                 .put("input_slim", columns.slim());
         assertThat(node).isEqualTo(expected);
+    }
+
+    /**
+     * The cells ClickHouse stores from one JSONEachRow row into String columns: a string's value, and an
+     * object or array verbatim, as input_format_json_read_objects_as_strings / _arrays_as_strings do.
+     */
+    private static Map<String, String> storedCells(String row) throws IOException {
+        Map<String, String> cells = new LinkedHashMap<>();
+        try (var parser = JsonUtils.getMapper().createParser(row)) {
+            parser.nextToken();
+            while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                String field = parser.currentName();
+                JsonToken value = parser.nextToken();
+                if (value == JsonToken.START_OBJECT || value == JsonToken.START_ARRAY) {
+                    int start = (int) parser.currentTokenLocation().getCharOffset();
+                    parser.skipChildren();
+                    cells.put(field, row.substring(start, (int) parser.currentLocation().getCharOffset()));
+                } else {
+                    cells.put(field, parser.getText());
+                }
+            }
+        }
+        return cells;
+    }
+
+    @ParameterizedTest
+    @MethodSource({"containerPayloads", "textPayloads",
+            "com.comet.opik.utils.TruncationUtilsTest$ToJsonWithSlimTests#parsedPayloads",
+            "com.comet.opik.utils.TruncationUtilsTest$ToJsonWithSlimTests#builtPayloads"})
+    @DisplayName("the stored cells are the ones the full and slim strings produced before")
+    void storedCellsMatchThePreviousStrings(JsonNode payload) throws IOException {
+        var actual = JsonUtils.createObjectNode();
+        JsonRowValues.putJsonWithSlim(actual, "input", "input_slim", payload);
+
+        // The previous row: the payload rendered to a string, and its slim copy from that string.
+        String json = TruncationUtils.toJsonString(payload);
+        var expected = JsonUtils.createObjectNode()
+                .put("input", json)
+                .put("input_slim", TruncationUtils.createSlimJsonString(json));
+
+        assertThat(storedCells(JsonUtils.writeValueAsString(actual)))
+                .isEqualTo(storedCells(JsonUtils.writeValueAsString(expected)));
     }
 }
