@@ -2194,10 +2194,7 @@ public class SpanDAO {
                     .bind("start_time", span.startTime().toString())
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
                     .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
-            StreamedPayload.bind(statement,
-                    TruncationUtils.toJsonString(span.input()),
-                    TruncationUtils.toJsonString(span.output()),
-                    Objects.toString(span.metadata(), ""));
+            StreamedPayload.bind(statement, span.input(), span.output(), Objects.toString(span.metadata(), ""));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
             } else {
@@ -2478,9 +2475,7 @@ public class SpanDAO {
     }
 
     private static void bindStreamedPayload(SpanUpdate spanUpdate, Statement statement) {
-        StreamedPayload.bind(statement,
-                Objects.toString(spanUpdate.input(), null),
-                Objects.toString(spanUpdate.output(), null),
+        StreamedPayload.bind(statement, spanUpdate.input(), spanUpdate.output(),
                 Objects.toString(spanUpdate.metadata(), null));
     }
 

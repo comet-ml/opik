@@ -3784,9 +3784,7 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("start_time", trace.startTime().toString())
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-        StreamedPayload.bind(statement,
-                TruncationUtils.toJsonString(trace.input()),
-                TruncationUtils.toJsonString(trace.output()),
+        StreamedPayload.bind(statement, trace.input(), trace.output(),
                 TruncationUtils.toJsonString(trace.metadata()));
 
         bindEpochSentinel(statement, "end_time", trace.endTime());
@@ -5725,9 +5723,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private static void bindStreamedPayload(TraceUpdate traceUpdate, Statement statement) {
-        StreamedPayload.bind(statement,
-                Objects.toString(traceUpdate.input(), null),
-                Objects.toString(traceUpdate.output(), null),
+        StreamedPayload.bind(statement, traceUpdate.input(), traceUpdate.output(),
                 Objects.toString(traceUpdate.metadata(), null));
     }
 
