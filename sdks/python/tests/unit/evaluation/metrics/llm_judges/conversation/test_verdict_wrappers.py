@@ -70,15 +70,62 @@ _CONVERSATION = [
         # A leading-word read, not a semantic one: a self-correction after
         # the first word is not interpreted.
         ("No, correction: yes", "no"),
+        ("_no_", "no"),
+        ("__Yes__", "yes"),
         ("kind of", None),
         ("nothing", None),
         ("not sure", None),
+        # The verdict word must end the word, in any script.
+        ("yes1", None),
+        ("no123", None),
+        ("no_foo", None),
+        ("yes_please", None),
+        ("noé", None),
+        ("yesß", None),
         ("", None),
         (None, None),
     ],
 )
 def test_read_yes_no(verdict, expected):
     assert parsing_helpers.read_yes_no(verdict) == expected
+
+
+def _assert_scored(metric, result, expected):
+    assert result.value == expected
+    assert result.name == metric.name
+    assert result.reason is None  # include_reason=False
+    assert result.scoring_failed is False
+
+
+def test_glued_verdict_words_are_left_out_of_the_share(caplog):
+    verdicts = ["no", "yes1", "yes_please", "no123", "noé"]
+    with caplog.at_level(logging.WARNING):
+        share = parsing_helpers.yes_share_of_readable_verdicts(
+            verdicts, metric_name="some_metric"
+        )
+    assert share == 0.0
+    assert "ignored 4 of 5 judge verdict(s)" in caplog.text
+    assert "[2, 3, 4, 5]" in caplog.text
+
+
+def test_only_glued_verdict_words_fail_instead_of_scoring():
+    with pytest.raises(exceptions.MetricComputationError) as exc_info:
+        parsing_helpers.yes_share_of_readable_verdicts(
+            ["yes1", "no_foo"], metric_name="some_metric"
+        )
+    assert "none of the 2 judge verdict(s) reads as yes or no" in str(exc_info.value)
+
+
+def test_ignored_verdict_warning_lists_bounded_one_based_positions(caplog):
+    verdicts = ["yes"] + ["N/A"] * 25
+    with caplog.at_level(logging.WARNING):
+        share = parsing_helpers.yes_share_of_readable_verdicts(
+            verdicts, metric_name="some_metric"
+        )
+    assert share == 1.0
+    (message,) = [record.getMessage() for record in caplog.records]
+    assert "ignored 25 of 26 judge verdict(s)" in message
+    assert f"1-based: {list(range(2, 22))} and 5 more)" in message
 
 
 @pytest.mark.parametrize(
@@ -91,7 +138,7 @@ def test_negative_verdicts_score_zero(metric_cls, verdict):
     metric = metric_cls(
         model=_ScriptedJudge(verdict), include_reason=False, track=False
     )
-    assert metric.score(_CONVERSATION).value == 0.0
+    _assert_scored(metric, metric.score(_CONVERSATION), 0.0)
 
 
 @pytest.mark.parametrize(
@@ -101,7 +148,7 @@ def test_user_frustration_positive_verdicts_score_one(verdict):
     metric = UserFrustrationMetric(
         model=_ScriptedJudge(verdict), include_reason=False, track=False
     )
-    assert metric.score(_CONVERSATION).value == 1.0
+    _assert_scored(metric, metric.score(_CONVERSATION), 1.0)
 
 
 @pytest.mark.parametrize(
@@ -112,8 +159,9 @@ def test_unreadable_verdicts_fail_instead_of_scoring(metric_cls):
     metric = metric_cls(
         model=_ScriptedJudge("kind of"), include_reason=False, track=False
     )
-    with pytest.raises(exceptions.MetricComputationError):
+    with pytest.raises(exceptions.MetricComputationError) as exc_info:
         metric.score(_CONVERSATION)
+    assert "none of the 2 judge verdict(s) reads as yes or no" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -126,6 +174,10 @@ def test_unreadable_verdicts_fail_instead_of_scoring(metric_cls):
         (ConversationalCoherenceMetric, ["yes", "N/A"], 1.0),
         (UserFrustrationMetric, ["yes", "N/A"], 1.0),
         (UserFrustrationMetric, ["no", "N/A"], 0.0),
+        # A verdict word glued to more letters or digits is unreadable too.
+        (ConversationalCoherenceMetric, ["no", "yes1"], 0.0),
+        (SessionCompletenessQuality, ["no", "yes_please"], 0.0),
+        (UserFrustrationMetric, ["no", "yesé"], 0.0),
     ],
 )
 def test_unreadable_verdicts_are_left_out_of_the_denominator(
@@ -134,7 +186,7 @@ def test_unreadable_verdicts_are_left_out_of_the_denominator(
     metric = metric_cls(
         model=_ScriptedJudge(verdicts), include_reason=False, track=False
     )
-    assert metric.score(_CONVERSATION).value == expected
+    _assert_scored(metric, metric.score(_CONVERSATION), expected)
 
 
 _SENTINEL = "SENTINEL-user-secret-4242"
@@ -151,8 +203,10 @@ def test_unreadable_verdict_text_is_not_logged(metric_cls, caplog):
         track=False,
     )
     with caplog.at_level(logging.DEBUG):
-        metric.score(_CONVERSATION)
+        result = metric.score(_CONVERSATION)
+    _assert_scored(metric, result, 1.0)
     assert "ignored 1 of 2 judge verdict(s)" in caplog.text
+    assert "1-based: [2]" in caplog.text
     assert _SENTINEL not in caplog.text
 
 
@@ -169,5 +223,6 @@ def test_unreadable_verdict_text_is_not_in_the_error(metric_cls, caplog):
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(exceptions.MetricComputationError) as exc_info:
             metric.score(_CONVERSATION)
+    assert "none of the 2 judge verdict(s) reads as yes or no" in str(exc_info.value)
     assert _SENTINEL not in str(exc_info.value)
     assert _SENTINEL not in caplog.text

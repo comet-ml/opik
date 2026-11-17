@@ -28,7 +28,12 @@ def normalize_verdict(verdict: str) -> str:
 
 # Characters a judge wraps a verdict in: markdown emphasis/code and quotes.
 _VERDICT_WRAPPERS = "*_`\"'\u201c\u201d\u2018\u2019 "
-_LEADING_YES_NO = re.compile(r"(yes|no)(?![a-z])")
+# The verdict word must end the word: no letter or digit follows it (any
+# script), so "yes1", "no_foo" or "noé" stay unreadable. Underscores right
+# after it are allowed only as closing emphasis ("_no_", "__yes__").
+_LEADING_YES_NO = re.compile(r"(yes|no)(?!_*[^\W_])")
+# Positions listed in the ignored-verdict warning; the counts are always full.
+_MAX_LOGGED_POSITIONS = 20
 
 
 def read_yes_no(verdict: Any) -> Optional[str]:
@@ -53,21 +58,27 @@ def yes_share_of_readable_verdicts(verdicts: List[Any], metric_name: str) -> flo
 
     Unreadable verdicts are left out of both counts, so they no longer count
     as positive: ``["no", "N/A"]`` scores 0.0, not 0.5. A warning gives their
-    count and positions only, never the verdict text, which is free-form judge
-    output and can quote the conversation. When no verdict is readable, a
-    ``MetricComputationError`` is raised: an empty read must not turn into a
+    count and their 1-based verdict numbers (the first
+    ``_MAX_LOGGED_POSITIONS``) only, never the verdict text, which is free-form
+    judge output and can quote the conversation. When no verdict is readable,
+    a ``MetricComputationError`` is raised: an empty read must not turn into a
     perfect or a zero score.
     """
     readings = [read_yes_no(verdict) for verdict in verdicts]
     readable = [reading for reading in readings if reading is not None]
-    if len(readable) < len(readings):
+    ignored = [
+        number for number, reading in enumerate(readings, start=1) if reading is None
+    ]
+    if ignored:
+        not_listed = len(ignored) - _MAX_LOGGED_POSITIONS
         LOGGER.warning(
             "%s: ignored %d of %d judge verdict(s) that are neither yes nor no "
-            "(positions %s)",
+            "(verdict numbers, 1-based: %s%s)",
             metric_name,
-            len(readings) - len(readable),
+            len(ignored),
             len(readings),
-            [index for index, reading in enumerate(readings) if reading is None],
+            ignored[:_MAX_LOGGED_POSITIONS],
+            f" and {not_listed} more" if not_listed > 0 else "",
         )
     if not readable:
         raise exceptions.MetricComputationError(
