@@ -639,14 +639,21 @@ class SpansReadPathPartitionPruningTest {
         assertNoStatementFor("exists_spans_by_project_id_all_weeks", projectId);
     }
 
-    @Test
-    void existsReadsEveryWeekForAProjectWithNoRecentSpan() {
+    /** A span on either side of the recent weeks: before the previous week, or a far-future id from a bad clock. */
+    private Stream<Arguments> nonRecentEras() {
+        var oldMonday = THIS_MONDAY.minusWeeks(RandomUtils.secure().randomInt(2, 105));
+        return Stream.of(
+                arguments(Named.of("before the recent weeks", randomInstant(
+                        oldMonday.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                        oldMonday.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant()))),
+                arguments(Named.of("far future", farFutureInstant())));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("nonRecentEras")
+    void existsReadsEveryWeekForAProjectWithNoRecentSpan(Instant idAt) {
         var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
-        // Any week before the previous one is outside the recent weeks.
-        var oldMonday = THIS_MONDAY.minusWeeks(RandomUtils.secure().randomInt(2, 105));
-        var idAt = randomInstant(oldMonday.atStartOfDay(ZoneOffset.UTC).toInstant(),
-                oldMonday.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant());
         spanResourceClient.createSpan(newSpan(idAt, ID_GENERATOR.generateId()).toBuilder()
                 .projectName(projectName).build(), API_KEY, WORKSPACE_NAME);
 
@@ -654,7 +661,7 @@ class SpansReadPathPartitionPruningTest {
 
         assertThat(actualExists).isTrue();
         assertThat(spansPartitionsRead("exists_spans_by_project_id_all_weeks", projectId))
-                .contains(yyyymmdd(oldMonday));
+                .contains(yyyymmdd(mondayOf(idAt)));
     }
 
     @Test
