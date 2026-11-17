@@ -1,4 +1,3 @@
-import itertools
 import json
 import logging
 import threading
@@ -15,21 +14,37 @@ from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.evaluation.models import base_model
 
 
+# Per-turn verdicts each metric asks for on _CONVERSATION: one per assistant
+# turn, or one per user goal for SessionCompleteness.
+_VERDICTS_PER_SCORE = 2
+
+
 class _ScriptedJudge(base_model.OpikBaseModel):
-    """Answers the per-turn judge calls with the given verdict(s), in turn."""
+    """Answers the per-turn judge calls with the given verdicts, one per call.
+
+    A single verdict answers every per-turn call of one score. The replies run
+    out: a call past the last one fails, and ``verdicts_left`` lets a test
+    check that the metric asked for every scripted verdict.
+    """
 
     def __init__(self, verdicts):
         super().__init__(model_name="scripted-judge")
         if isinstance(verdicts, str):
-            verdicts = [verdicts]
-        self._replies = itertools.cycle(
-            [json.dumps({"verdict": v, "reason": "judge reason"}) for v in verdicts]
-        )
+            verdicts = [verdicts] * _VERDICTS_PER_SCORE
+        self._replies = [
+            json.dumps({"verdict": v, "reason": "judge reason"}) for v in verdicts
+        ]
         self._lock = threading.Lock()
+
+    @property
+    def verdicts_left(self):
+        return len(self._replies)
 
     def _next_reply(self):
         with self._lock:
-            return next(self._replies)
+            if not self._replies:
+                raise AssertionError("the metric asked for more verdicts than scripted")
+            return self._replies.pop(0)
 
     def generate_string(self, input, response_format=None, **kwargs):
         return self._next_reply()
@@ -72,6 +87,8 @@ _CONVERSATION = [
         ("No, correction: yes", "no"),
         ("_no_", "no"),
         ("__Yes__", "yes"),
+        ("_no_, the reply is off-topic", "no"),
+        ("**_yes_**", "yes"),
         ("kind of", None),
         ("nothing", None),
         ("not sure", None),
@@ -82,6 +99,12 @@ _CONVERSATION = [
         ("yes_please", None),
         ("noé", None),
         ("yesß", None),
+        # Trailing underscores only count as closing emphasis.
+        ("yes_", None),
+        ("no__", None),
+        ("yes___", None),
+        ("_no__", None),
+        ("__yes_", None),
         ("", None),
         (None, None),
     ],
@@ -90,7 +113,8 @@ def test_read_yes_no(verdict, expected):
     assert parsing_helpers.read_yes_no(verdict) == expected
 
 
-def _assert_scored(metric, result, expected):
+def _assert_scored(metric, judge, result, expected):
+    assert judge.verdicts_left == 0
     assert result.value == expected
     assert result.name == metric.name
     assert result.reason is None  # include_reason=False
@@ -135,20 +159,18 @@ def test_ignored_verdict_warning_lists_bounded_one_based_positions(caplog):
     "metric_cls", [ConversationalCoherenceMetric, SessionCompletenessQuality]
 )
 def test_negative_verdicts_score_zero(metric_cls, verdict):
-    metric = metric_cls(
-        model=_ScriptedJudge(verdict), include_reason=False, track=False
-    )
-    _assert_scored(metric, metric.score(_CONVERSATION), 0.0)
+    judge = _ScriptedJudge(verdict)
+    metric = metric_cls(model=judge, include_reason=False, track=False)
+    _assert_scored(metric, judge, metric.score(_CONVERSATION), 0.0)
 
 
 @pytest.mark.parametrize(
     "verdict", ["yes", "Yes.", "**Yes**", "Yes, clearly frustrated"]
 )
 def test_user_frustration_positive_verdicts_score_one(verdict):
-    metric = UserFrustrationMetric(
-        model=_ScriptedJudge(verdict), include_reason=False, track=False
-    )
-    _assert_scored(metric, metric.score(_CONVERSATION), 1.0)
+    judge = _ScriptedJudge(verdict)
+    metric = UserFrustrationMetric(model=judge, include_reason=False, track=False)
+    _assert_scored(metric, judge, metric.score(_CONVERSATION), 1.0)
 
 
 @pytest.mark.parametrize(
@@ -156,11 +178,11 @@ def test_user_frustration_positive_verdicts_score_one(verdict):
     [ConversationalCoherenceMetric, SessionCompletenessQuality, UserFrustrationMetric],
 )
 def test_unreadable_verdicts_fail_instead_of_scoring(metric_cls):
-    metric = metric_cls(
-        model=_ScriptedJudge("kind of"), include_reason=False, track=False
-    )
+    judge = _ScriptedJudge("kind of")
+    metric = metric_cls(model=judge, include_reason=False, track=False)
     with pytest.raises(exceptions.MetricComputationError) as exc_info:
         metric.score(_CONVERSATION)
+    assert judge.verdicts_left == 0
     assert "none of the 2 judge verdict(s) reads as yes or no" in str(exc_info.value)
 
 
@@ -178,15 +200,15 @@ def test_unreadable_verdicts_fail_instead_of_scoring(metric_cls):
         (ConversationalCoherenceMetric, ["no", "yes1"], 0.0),
         (SessionCompletenessQuality, ["no", "yes_please"], 0.0),
         (UserFrustrationMetric, ["no", "yesé"], 0.0),
+        (ConversationalCoherenceMetric, ["no", "yes_"], 0.0),
     ],
 )
 def test_unreadable_verdicts_are_left_out_of_the_denominator(
     metric_cls, verdicts, expected
 ):
-    metric = metric_cls(
-        model=_ScriptedJudge(verdicts), include_reason=False, track=False
-    )
-    _assert_scored(metric, metric.score(_CONVERSATION), expected)
+    judge = _ScriptedJudge(verdicts)
+    metric = metric_cls(model=judge, include_reason=False, track=False)
+    _assert_scored(metric, judge, metric.score(_CONVERSATION), expected)
 
 
 _SENTINEL = "SENTINEL-user-secret-4242"
@@ -197,14 +219,11 @@ _SENTINEL = "SENTINEL-user-secret-4242"
     [ConversationalCoherenceMetric, SessionCompletenessQuality, UserFrustrationMetric],
 )
 def test_unreadable_verdict_text_is_not_logged(metric_cls, caplog):
-    metric = metric_cls(
-        model=_ScriptedJudge(["yes", f"maybe, the user said {_SENTINEL}"]),
-        include_reason=False,
-        track=False,
-    )
+    judge = _ScriptedJudge(["yes", f"maybe, the user said {_SENTINEL}"])
+    metric = metric_cls(model=judge, include_reason=False, track=False)
     with caplog.at_level(logging.DEBUG):
         result = metric.score(_CONVERSATION)
-    _assert_scored(metric, result, 1.0)
+    _assert_scored(metric, judge, result, 1.0)
     assert "ignored 1 of 2 judge verdict(s)" in caplog.text
     assert "1-based: [2]" in caplog.text
     assert _SENTINEL not in caplog.text
@@ -215,14 +234,12 @@ def test_unreadable_verdict_text_is_not_logged(metric_cls, caplog):
     [ConversationalCoherenceMetric, SessionCompletenessQuality, UserFrustrationMetric],
 )
 def test_unreadable_verdict_text_is_not_in_the_error(metric_cls, caplog):
-    metric = metric_cls(
-        model=_ScriptedJudge(f"unsure, the user said {_SENTINEL}"),
-        include_reason=False,
-        track=False,
-    )
+    judge = _ScriptedJudge(f"unsure, the user said {_SENTINEL}")
+    metric = metric_cls(model=judge, include_reason=False, track=False)
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(exceptions.MetricComputationError) as exc_info:
             metric.score(_CONVERSATION)
+    assert judge.verdicts_left == 0
     assert "none of the 2 judge verdict(s) reads as yes or no" in str(exc_info.value)
     assert _SENTINEL not in str(exc_info.value)
     assert _SENTINEL not in caplog.text

@@ -30,8 +30,9 @@ def normalize_verdict(verdict: str) -> str:
 _VERDICT_WRAPPERS = "*_`\"'\u201c\u201d\u2018\u2019 "
 # The verdict word must end the word: no letter or digit follows it (any
 # script), so "yes1", "no_foo" or "noé" stay unreadable. Underscores right
-# after it are allowed only as closing emphasis ("_no_", "__yes__").
-_LEADING_YES_NO = re.compile(r"(yes|no)(?!_*[^\W_])")
+# after it must close the same number of opening ones ("_no_", "__yes__"), so a
+# bare "yes_" or "no__" stays unreadable too.
+_LEADING_YES_NO = re.compile(r"(yes|no)(_*)(?!\w)")
 # Positions listed in the ignored-verdict warning; the counts are always full.
 _MAX_LOGGED_POSITIONS = 20
 
@@ -39,7 +40,10 @@ _MAX_LOGGED_POSITIONS = 20
 def read_yes_no(verdict: Any) -> Optional[str]:
     """Read a judge ``verdict`` as ``"yes"``, ``"no"`` or ``None``.
 
-    Builds on :func:`normalize_verdict` and also reads the verdict word when a
+    Folds case and surrounding whitespace like :func:`normalize_verdict`, but
+    reads only the leading verdict word instead of trimming trailing
+    punctuation, so every verdict that :func:`normalize_verdict` reduces to a
+    bare ``yes`` or ``no`` reads the same here. It also reads the word when a
     judge wraps it in markdown or quotes (``"**No**"``, ``"`no`"``,
     ``'"no"'``) or explains it after the word (``"No, the reply ignores the
     request"``). Anything else returns ``None``, so a caller can tell an
@@ -48,9 +52,16 @@ def read_yes_no(verdict: Any) -> Optional[str]:
     """
     if not isinstance(verdict, str):
         return None
-    text = verdict.strip().lower().lstrip(_VERDICT_WRAPPERS)
+    folded = verdict.strip().lower()
+    text = folded.lstrip(_VERDICT_WRAPPERS)
     match = _LEADING_YES_NO.match(text)
-    return match.group(1) if match else None
+    if match is None:
+        return None
+    closing = match.group(2)
+    opening = folded[: len(folded) - len(text)].count("_")
+    if closing and len(closing) != opening:
+        return None
+    return match.group(1)
 
 
 def yes_share_of_readable_verdicts(verdicts: List[Any], metric_name: str) -> float:
