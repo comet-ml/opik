@@ -61,9 +61,9 @@ class SpanJsonRowMapper {
             @NonNull String nowForBatch, @NonNull BigDecimal cost, @NonNull String costVersion,
             boolean nonNullableColumns, int truncationSize) {
 
-        // Computed once: each is also the input to its *_slim counterpart below.
-        String inputValue = TruncationUtils.toJsonString(span.input());
-        String outputValue = TruncationUtils.toJsonString(span.output());
+        // Serialized once with their *_slim counterparts below.
+        var input = TruncationUtils.toJsonWithSlim(span.input());
+        var output = TruncationUtils.toJsonWithSlim(span.output());
 
         var node = JsonUtils.createObjectNode();
 
@@ -85,8 +85,8 @@ class SpanJsonRowMapper {
             node.putNull("end_time");
         }
 
-        node.put("input", inputValue);
-        node.put("output", outputValue);
+        node.put("input", input.json());
+        node.put("output", output.json());
         // toString(), not toJsonString() -- see the class javadoc. Matches the binder.
         node.put("metadata", span.metadata() != null ? span.metadata().toString() : "");
         node.put("model", StringUtils.defaultIfBlank(span.model(), ""));
@@ -111,8 +111,8 @@ class SpanJsonRowMapper {
         node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);
-        node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
-        node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+        node.put("input_slim", input.slim());
+        node.put("output_slim", output.slim());
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {

@@ -1,18 +1,26 @@
 package com.comet.opik.utils;
 
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.io.SegmentedStringWriter;
+import com.fasterxml.jackson.core.util.BufferRecycler;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Iterator;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -138,14 +146,130 @@ public final class TruncationUtils {
     }
 
     /**
-     * Converts a JsonNode to a slim JSON string using the default max length.
-     * Combines toJsonString and createSlimJsonString for convenience.
+     * Serializes a payload node into the strings stored in its full column ({@code input}, {@code output}) and
+     * its slim column ({@code input_slim}, {@code output_slim}), with the default max length.
      *
-     * @param node the JSON node to process (may be null)
-     * @return the slim JSON string, or empty string if null
+     * <p>The result is identical to {@code toJsonString(node)} and {@code createSlimJsonString(toJsonString(node))},
+     * without reparsing the serialized JSON:
+     * <ul>
+     *   <li>When no string value exceeds the max length, the slim copy is the full JSON itself, the same
+     *   {@code String} instance, so nothing is serialized twice.</li>
+     *   <li>When one does, the slim JSON is written by a single walk of the node, without building a slim tree.</li>
+     *   <li>When the node holds a value whose reparse would change it ({@code float}, {@code BigDecimal},
+     *   binary or POJO nodes, which a request body never produces), the slim JSON comes from the reparse, as
+     *   before.</li>
+     * </ul>
+     *
+     * @param node the payload node (may be null)
+     * @return the full and slim JSON strings, both empty if the node is null
      */
-    public static String createSlimJsonStringFromNode(JsonNode node) {
-        return createSlimJsonString(toJsonString(node));
+    public static JsonWithSlim toJsonWithSlim(JsonNode node) {
+        if (node == null) {
+            return JsonWithSlim.EMPTY;
+        }
+
+        String json = node.toString();
+        if (json.isEmpty()) {
+            return JsonWithSlim.builder().json(json).slim(json).build();
+        }
+
+        String slim = switch (inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
+            case UNCHANGED -> json;
+            case TRUNCATED -> writeSlimJsonString(node, DEFAULT_SLIM_STRING_MAX_LENGTH);
+            case REPARSE -> createSlimJsonString(json);
+        };
+
+        return JsonWithSlim.builder().json(json).slim(slim).build();
+    }
+
+    /**
+     * The full and slim JSON strings of a payload node.
+     *
+     * @param json the full JSON, as {@link #toJsonString(JsonNode)} renders it
+     * @param slim the slim JSON, as {@link #createSlimJsonString(String)} renders it from {@code json}
+     */
+    @Builder
+    public record JsonWithSlim(@NonNull String json, @NonNull String slim) {
+
+        public static final JsonWithSlim EMPTY = JsonWithSlim.builder().json("").slim("").build();
+    }
+
+    private enum SlimShape {
+        UNCHANGED,
+        TRUNCATED,
+        REPARSE
+    }
+
+    /**
+     * Walks the node without allocating copies. Stops at the first value that needs the reparse path; otherwise
+     * reports whether any string value exceeds the max length.
+     */
+    private static SlimShape inspect(JsonNode node, int maxStringLength) {
+        return switch (node.getNodeType()) {
+            case OBJECT, ARRAY -> inspectChildren(node.elements(), maxStringLength);
+            case STRING -> node.textValue().length() > maxStringLength ? SlimShape.TRUNCATED : SlimShape.UNCHANGED;
+            case NUMBER -> node.isFloat() || node.isBigDecimal() ? SlimShape.REPARSE : SlimShape.UNCHANGED;
+            case BOOLEAN, NULL -> SlimShape.UNCHANGED;
+            case BINARY, MISSING, POJO -> SlimShape.REPARSE;
+        };
+    }
+
+    private static SlimShape inspectChildren(Iterator<JsonNode> children, int maxStringLength) {
+        SlimShape shape = SlimShape.UNCHANGED;
+        while (children.hasNext()) {
+            switch (inspect(children.next(), maxStringLength)) {
+                case REPARSE -> {
+                    return SlimShape.REPARSE;
+                }
+                case TRUNCATED -> shape = SlimShape.TRUNCATED;
+                case UNCHANGED -> {
+                }
+            }
+        }
+        return shape;
+    }
+
+    /**
+     * Writes the slim JSON of a node in one pass, with the generator and settings
+     * {@link JsonUtils#writeValueAsString(Object)} uses, so the output matches serializing
+     * {@link #createSlimJson(JsonNode, int)}.
+     */
+    private static String writeSlimJsonString(JsonNode node, int maxStringLength) {
+        ObjectMapper mapper = JsonUtils.getMapper();
+        BufferRecycler recycler = mapper.getFactory()._getBufferRecycler();
+        try (var writer = new SegmentedStringWriter(recycler)) {
+            try (JsonGenerator generator = mapper.createGenerator(writer)) {
+                writeSlimJson(generator, node, maxStringLength, mapper.getSerializerProviderInstance());
+            }
+            return writer.getAndClear();
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        } finally {
+            recycler.releaseToPool();
+        }
+    }
+
+    private static void writeSlimJson(JsonGenerator generator, JsonNode node, int maxStringLength,
+            SerializerProvider provider) throws IOException {
+        switch (node.getNodeType()) {
+            case OBJECT -> {
+                generator.writeStartObject(node, node.size());
+                for (var property : node.properties()) {
+                    generator.writeFieldName(property.getKey());
+                    writeSlimJson(generator, property.getValue(), maxStringLength, provider);
+                }
+                generator.writeEndObject();
+            }
+            case ARRAY -> {
+                generator.writeStartArray(node, node.size());
+                for (JsonNode element : node) {
+                    writeSlimJson(generator, element, maxStringLength, provider);
+                }
+                generator.writeEndArray();
+            }
+            case STRING -> generator.writeString(truncateString(node.textValue(), maxStringLength));
+            case BINARY, BOOLEAN, MISSING, NULL, NUMBER, POJO -> node.serialize(generator, provider);
+        }
     }
 
     private static TextNode truncateTextNode(String text, int maxLength) {
