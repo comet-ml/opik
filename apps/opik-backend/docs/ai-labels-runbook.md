@@ -374,7 +374,10 @@ workspace's), a run of the project or another run by hand is in progress, anothe
 update) holds the run slot of the pod that took the request, the project already has a list, or its
 vectors backfill has not drained (gate `waiting` or `timed_out_waiting`). Add `&ignore_backfill=true` to build it
 anyway, from the vectors it has so far. It answers `503` with `Retry-After: 30` when Redis fails or does not answer
-within 10s while it takes a lock; `409` means a lock is really held.
+within 10s while it takes a lock; `409` means a lock is really held. A lock that Redis takes after those 10s is
+released when its reply arrives. If Redis stalls longer than its client retries (about 25s), the lock can stay with no
+run behind it: runs by hand answer `409`, and scheduled runs skip the project as locked, until the project lease ends.
+Wait, or delete `topics:by_hand` or `topics:project:<project_id>` in Redis.
 
 To build a project that already has a list again (for example after a bad first build), delete its list first. Its
 `trace_topics` rows stay until the new run replaces them:

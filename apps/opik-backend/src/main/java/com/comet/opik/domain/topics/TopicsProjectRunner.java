@@ -42,7 +42,7 @@ public class TopicsProjectRunner {
     /** Covers the reads before a run and the save after it in a lock's lease. */
     static final Duration LEASE_SLACK = Duration.ofMinutes(5);
     /** How long a run started by hand waits for Redis while it takes a lock. */
-    private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
+    static final Duration LOCK_WAIT = Duration.ofSeconds(10);
     /** The {@code Retry-After} of a 503 when Redis fails or hangs while an endpoint takes a lock. */
     static final long LOCK_RETRY_AFTER_SECONDS = 30;
 
@@ -56,6 +56,8 @@ public class TopicsProjectRunner {
      * night and a run by hand on one pod take turns.
      */
     private final Semaphore runSlot = new Semaphore(1, true);
+    /** {@link #LOCK_WAIT}; tests shorten it. */
+    Duration lockWait = LOCK_WAIT;
 
     /**
      * The longest one run holds its locks: its timeout, then the trace_topics insert of a run that saved just before
@@ -138,9 +140,32 @@ public class TopicsProjectRunner {
         }
     }
 
-    /** Throws when Redis fails, or does not answer within {@link #LOCK_WAIT}. */
+    /**
+     * Throws when Redis fails, or does not answer within {@link #LOCK_WAIT}. A SET that Redis runs after that wait
+     * would hold the lock for its whole lease with no run behind it, so a late reply that took the lock releases it.
+     */
     private boolean takeLock(Lock lock) {
-        return Boolean.TRUE.equals(lockService.lockUsingToken(lock, projectLease()).block(LOCK_WAIT));
+        var reply = lockService.lockUsingToken(lock, projectLease()).toFuture();
+        try {
+            return Boolean.TRUE.equals(reply.get(lockWait.toMillis(), TimeUnit.MILLISECONDS));
+        } catch (ExecutionException exception) {
+            throw exception.getCause() instanceof RuntimeException cause
+                    ? cause
+                    : new IllegalStateException(exception.getCause());
+        } catch (TimeoutException | InterruptedException exception) {
+            if (exception instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            reply.thenAccept(taken -> {
+                if (Boolean.TRUE.equals(taken)) {
+                    log.warn("Topics lock taken after its wait, released, lock '{}'", lock.key());
+                    lockService.unlockUsingToken(lock).subscribe(null,
+                            error -> log.warn("Topics lock release failed, lock '{}'; it expires with its lease",
+                                    lock.key(), error));
+                }
+            });
+            throw new IllegalStateException("Redis did not answer within '%s'".formatted(lockWait), exception);
+        }
     }
 
     /** Whether the project has a saved list. Read under the project's lock, so a list built meanwhile is seen. */
