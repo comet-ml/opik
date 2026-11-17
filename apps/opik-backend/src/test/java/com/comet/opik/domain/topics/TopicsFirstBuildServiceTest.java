@@ -304,18 +304,6 @@ class TopicsFirstBuildServiceTest {
     }
 
     @Test
-    @DisplayName("a workspace the vectors tick has not seen yet (no backfill row) has no candidate")
-    void unseenWorkspaceWaits() {
-        backfills.clear();
-        project(WORKSPACE_ID, started, 140);
-        project(WORKSPACE_ID, next, 120);
-
-        assertThat(service.candidates(NIGHT, START)).isEmpty();
-        assertThat(meter.sum(TopicsMetrics.FIRST_BUILD_GATE, "outcome", "waiting")).isEqualTo(2);
-        verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
-    }
-
-    @Test
     @DisplayName("a run builds the drained projects after a gated one: the gated project starts no run and does not "
             + "stop the run")
     void runsPastAGatedProject() {

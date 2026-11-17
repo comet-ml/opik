@@ -8,14 +8,18 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.uuid.Generators;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,11 +38,15 @@ import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLException;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -67,6 +75,10 @@ class TopicsBuildTest {
 
     private static final TopicsFixture FIXTURE = TopicsFixture.load();
     private static final int BUILT = 120;
+    /** The window sample's {@code topics.build.maxVectors}, set for its one run. */
+    private static final int MAX_VECTORS = 100;
+    /** A Sunday: the weekly window's last day is a Saturday. */
+    private static final Instant WEEKLY_NIGHT = Instant.parse("2026-10-18T00:00:00Z");
 
     // The app needs Redis to start; a build takes no lock.
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
@@ -112,16 +124,25 @@ class TopicsBuildTest {
     }
 
     private TransactionTemplate template;
+    private OpikConfiguration opikConfig;
+    private ConnectionFactory connectionFactory;
     private TopicsRebuildService rebuildService;
     private TopicsTestData data;
+    private TopicsTestData.Traces weeklyWindow;
+    private TopicsTestData weekly;
 
     @BeforeAll
     void beforeAll(TransactionTemplate template, TransactionTemplateAsync clickHouseTemplate,
+            OpikConfiguration opikConfig, ConnectionFactory connectionFactory,
             @Jit TopicsRebuildService rebuildService, @Jit TopicVectorsDAO vectorsDAO) {
         this.template = template;
+        this.opikConfig = opikConfig;
+        this.connectionFactory = connectionFactory;
         this.rebuildService = rebuildService;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
                 FIXTURE.traceIds, FIXTURE.createdAt, FIXTURE.intents, FIXTURE.vectors, FIXTURE.night));
+        this.weeklyWindow = weeklyTraces();
+        this.weekly = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, weeklyWindow);
     }
 
     @AfterAll
@@ -360,6 +381,61 @@ class TopicsBuildTest {
         assertThat(data.traceTopics(workspaceId, projectId)).isEmpty();
     }
 
+    /**
+     * The project's traces have a weekly pattern, and the window's last day alone holds more weekend traces than the
+     * run reads. The newest traces would be all weekend; the sample holds both.
+     */
+    @Test
+    @DisplayName("a window over maxVectors builds on an even sample that sees weekdays and weekends, then every trace "
+            + "of the window gets a row of the run, and the run's counts are of the whole window, not of the sample")
+    void sampleSeesTheWholeWindow() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var traces = weeklyWindow;
+        int count = traces.traceIds().size();
+        weekly.seed(workspaceId, projectId, 0, count);
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, traces.traceIds().stream()
+                .map(traceId -> TopicsTraces.TraceRow.shown(workspaceId, projectId, traceId,
+                        traces.createdAt().get(traces.traceIds().indexOf(traceId))))
+                .toList());
+        stubAnswer(oneTopic());
+
+        var build = opikConfig.getTopics().getBuild();
+        int maxVectors = build.getMaxVectors();
+        build.setMaxVectors(MAX_VECTORS);
+        TopicsRebuildService.Outcome outcome;
+        try {
+            outcome = startAndBuild(workspaceId, projectId, LocalDate.ofInstant(WEEKLY_NIGHT, ZoneOffset.UTC));
+        } finally {
+            build.setMaxVectors(maxVectors);
+        }
+        var runId = outcome.runId();
+
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        var stats = json(data.runs(projectId).getFirst().stats());
+        assertThat(stats.path("window_traces").asInt()).isEqualTo(count);
+        assertThat(stats.path("sample_traces").asInt()).isEqualTo(MAX_VECTORS);
+        assertThat(stats.path("vectors").asInt()).isEqualTo(MAX_VECTORS);
+        // The newest 100 traces are all the last Saturday's; the sample reaches the weekdays too.
+        var prompt = wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))).getFirst().getBodyAsString();
+        assertThat(prompt).contains("weekday intent").contains("weekend intent");
+
+        var topics = data.topics(projectId);
+        assertThat(topics).hasSize(1);
+        var rows = data.traceTopics(workspaceId, projectId);
+        assertThat(rows).extracting(TraceTopic::traceId).containsExactlyInAnyOrderElementsOf(traces.traceIds());
+        assertThat(rows).allSatisfy(row -> {
+            assertThat(row.runId()).isEqualTo(runId.toString());
+            assertThat(row.source()).isEqualTo(TraceTopic.Source.RUN);
+            // Every trace is near a centre of its kind, and every group is the one topic's.
+            assertThat(row.topicId()).isEqualTo(topics.getFirst().id());
+        });
+        // The topic's size is the sample's; the run's counts are the window's, with Other's row at zero.
+        assertThat(topics.getFirst().size()).isEqualTo(MAX_VECTORS);
+        assertThat(data.runCounts(workspaceId, runId))
+                .isEqualTo(Map.of(topics.getFirst().id(), (long) count, TraceTopic.OTHER, 0L));
+    }
+
     /** Starts a first-build run of the project and builds it on this thread, as the first-build job and a run by hand do. */
     private TopicsRebuildService.Outcome startAndBuild(String workspaceId, UUID projectId, LocalDate night) {
         var runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
@@ -394,5 +470,85 @@ class TopicsBuildTest {
 
     private void stubAnswer(JsonNode output, int delayMillis) {
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(output, delayMillis)));
+    }
+
+    /** One topic that takes every group. */
+    private static JsonNode oneTopic() {
+        var answer = InferenceJson.MAPPER.createObjectNode();
+        answer.putArray("topics").addObject()
+                .put("name", "Plan questions")
+                .put("definition", "Questions about the user's plan");
+        var assignment = answer.putArray("assignment");
+        for (int cluster = 0; cluster < KMeansTopicAlgorithm.groups(MAX_VECTORS); cluster++) {
+            assignment.addObject().put("cluster", cluster).put("topic", 0);
+        }
+        return answer;
+    }
+
+    /**
+     * Ten traces on each day of a 30-day window and 110 on its last day. Weekday traces have
+     * weekday texts and vectors near one direction, weekend traces weekend texts and vectors near another.
+     */
+    private static TopicsTestData.Traces weeklyTraces() {
+        int windowDays = 30;
+        int perDay = 10;
+        int lastDay = MAX_VECTORS + 10;
+        int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+        var random = new Random(5);
+        var ids = Generators.timeBasedEpochGenerator(random);
+        var weekday = unit(random, dimensions);
+        var weekend = unit(random, dimensions);
+        var traceIds = new ArrayList<UUID>();
+        var createdAt = new ArrayList<Instant>();
+        var texts = new ArrayList<String>();
+        var vectors = new ArrayList<float[]>();
+        for (int day = windowDays; day >= 1; day--) {
+            var start = WEEKLY_NIGHT.minus(Duration.ofDays(day));
+            var dayOfWeek = LocalDate.ofInstant(start, ZoneOffset.UTC).getDayOfWeek();
+            boolean isWeekend = dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY;
+            int traces = day == 1 ? lastDay : perDay;
+            for (int i = 0; i < traces; i++) {
+                var created = start.plus(Duration.ofDays(1).multipliedBy(i).dividedBy(traces));
+                createdAt.add(created);
+                traceIds.add(ids.construct(created.toEpochMilli()));
+                texts.add((isWeekend ? "weekend intent " : "weekday intent ") + texts.size());
+                vectors.add(nudge(isWeekend ? weekend : weekday, random));
+            }
+        }
+        var flat = new float[vectors.size() * dimensions];
+        for (int i = 0; i < vectors.size(); i++) {
+            System.arraycopy(vectors.get(i), 0, flat, i * dimensions, dimensions);
+        }
+        return new TopicsTestData.Traces(List.copyOf(traceIds), List.copyOf(createdAt),
+                texts.toArray(String[]::new), flat, WEEKLY_NIGHT);
+    }
+
+    private static float[] unit(Random random, int dimensions) {
+        var vector = new float[dimensions];
+        for (int t = 0; t < dimensions; t++) {
+            vector[t] = (float) random.nextGaussian();
+        }
+        return normalize(vector);
+    }
+
+    /** A unit vector at cosine about 0.95 from {@code base}. */
+    private static float[] nudge(float[] base, Random random) {
+        var noise = unit(random, base.length);
+        var vector = new float[base.length];
+        for (int t = 0; t < base.length; t++) {
+            vector[t] = base[t] + 0.3f * noise[t];
+        }
+        return normalize(vector);
+    }
+
+    private static float[] normalize(float[] vector) {
+        double norm = 0;
+        for (float value : vector) {
+            norm += (double) value * value;
+        }
+        for (int t = 0; t < vector.length; t++) {
+            vector[t] /= (float) Math.sqrt(norm);
+        }
+        return vector;
     }
 }
