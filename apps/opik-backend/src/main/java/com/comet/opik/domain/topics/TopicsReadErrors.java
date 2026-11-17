@@ -50,9 +50,8 @@ public class TopicsReadErrors {
     }
 
     /**
-     * The read of a trace query, with a guard trip of {@code topics.filter} ({@link #isLimit}) answered as a 503 with
-     * Retry-After when the query is filtered by topic ({@code topicFiltered}). Other errors, the rows and bytes limits
-     * included, pass as they are. A query without a topic filter is returned as it is.
+     * Answers a guard trip of {@code topics.filter} ({@link #isLimit}) as a 503 with Retry-After when the query is
+     * filtered by topic. Other errors, the rows and bytes limits included, pass as they are.
      */
     public static <T> Mono<T> busyOnFilterGuard(boolean topicFiltered, @NonNull Mono<T> read) {
         if (!topicFiltered) {

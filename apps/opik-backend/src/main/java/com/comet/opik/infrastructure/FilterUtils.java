@@ -245,14 +245,12 @@ public class FilterUtils {
     }
 
     /**
-     * The topic filter of a trace query: the trace list, count and stats (TraceDAO's {@code topic_trace_ids} CTE), the
-     * trace KPI cards and the trace metrics (the same subquery inline). The subquery keeps the ids of the project's
-     * traces whose topic matches {@code <topic_filters>}. A trace's topic is its latest {@code trace_topics} row, as in
-     * the topics read API's counts, and a topic that is not live is Other. A trace with no row has no topic, so no
-     * operator keeps it, {@code !=} included. The query's id range bounds the subquery; with none, it reads the
-     * project's whole history. The scope's guards go to the query's {@code SETTINGS}. With a topic filter and no scope
-     * (topics off, a workspace not eligible, a project with no live topic) it adds {@code topic_no_match}: the query
-     * keeps no trace and its response keeps its shape. Without a topic filter it adds nothing.
+     * The topic filter of a trace query: a subquery that keeps the ids of the project's traces whose topic matches
+     * {@code <topic_filters>}. A trace's topic is its latest {@code trace_topics} row, as in the topics read API's
+     * counts, and a topic that is not live is Other. A trace with no row has no topic, so no operator keeps it,
+     * {@code !=} included. The query's id range bounds the subquery; with none, it reads the project's whole history.
+     * The scope's guards go to the query's {@code SETTINGS}. With a topic filter and no scope it adds
+     * {@code topic_no_match}: the query keeps no trace and its response keeps its shape.
      */
     public static void addTopicFilters(ST template, List<? extends Filter> filters, TopicFilterScope scope) {
         if (filters == null) {
@@ -269,7 +267,6 @@ public class FilterUtils {
         });
     }
 
-    /** Binds what {@link #addTopicFilters} added; nothing without a topic filter or a scope. */
     public static void bindTopicFilters(Statement statement, List<? extends Filter> filters, UUID projectId,
             TopicFilterScope scope) {
         if (filters == null || scope == null

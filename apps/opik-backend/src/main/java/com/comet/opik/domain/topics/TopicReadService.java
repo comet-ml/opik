@@ -118,12 +118,9 @@ public class TopicReadService {
     }
 
     /**
-     * The scope of a trace query filtered by topic. Empty with no read when {@code filters} is null or has no
-     * {@code topic_id}.
-     * Also empty where the read API shows no topic: topics off, a workspace not eligible, a project with no live
-     * topic. A caller with a topic filter and an empty scope matches no trace. Otherwise the live topic ids and the
-     * query guards of {@code topics.filter}. Reads MySQL twice (eligibility, live topics) on a bounded elastic
-     * thread, with the workspace id from the Reactor context.
+     * The scope of a trace query filtered by topic; empty with no read without a {@code topic_id} filter. Also empty
+     * where the read API shows no topic: topics off, a workspace not eligible, a project with no live topic. Reads
+     * MySQL twice on a bounded elastic thread, with the workspace id from the Reactor context.
      */
     public Mono<Optional<TopicFilterScope>> filterScope(@Nullable List<? extends Filter> filters,
             @NonNull UUID projectId) {

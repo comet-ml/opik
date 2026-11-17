@@ -209,9 +209,8 @@ public class TopicsConfig {
     }
 
     /**
-     * The guards of a trace query filtered by topic (the trace list, count and stats, the trace KPI cards and the trace
-     * metrics): ClickHouse settings on the whole query, added only when the filters have a topic. A query that trips
-     * one answers 503 with Retry-After. Queries without a topic filter keep their settings.
+     * The guards of a trace query filtered by topic: ClickHouse settings on the whole query, added only when the
+     * filters have a topic. A query that trips one answers 503 with Retry-After.
      */
     @Data
     public static class FilterConfig {
