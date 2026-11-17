@@ -89,7 +89,7 @@ class JSDivergence(_DistributionMetricBase):
 
     Args:
         tokenizer: Optional tokenizer function. Defaults to whitespace split.
-        base: Logarithm base used when computing divergence (> ``1.0``).
+        base: Finite logarithm base used when computing divergence (> ``1.0``).
         normalize: Whether to normalise token counts to probabilities first.
         name: Display name for the metric result.
         track: Whether to automatically track metric results.
@@ -118,8 +118,8 @@ class JSDivergence(_DistributionMetricBase):
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
-        if base <= 1.0:
-            raise ValueError("base must be greater than 1.0")
+        if not math.isfinite(base) or base <= 1.0:
+            raise ValueError("base must be finite and greater than 1.0")
         super().__init__(
             tokenizer=tokenizer,
             name=name,
@@ -198,7 +198,7 @@ class JSDistance(JSDivergence):
 
     Args:
         tokenizer: Optional tokenizer function.
-        base: Logarithm base used for the divergence calculation.
+        base: Finite logarithm base for the divergence calculation (> ``1.0``).
         normalize: Whether to normalise counts into probabilities.
         name: Display name for the metric result.
         track: Whether to automatically track metric results.
