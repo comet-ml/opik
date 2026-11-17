@@ -38,8 +38,12 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *   id                                      label   priced
  *   poolside/laguna-s-2.1                   no      no
  *   nousresearch/hermes-3-llama-3.1-405b    no      no
- *   meta-llama/llama-3.1-70b-instruct       no      YES  ($0.80)
+ *   meta-llama/llama-3.1-70b-instruct       no      YES  ($1.44)
  *   qwen/qwen3.8-27b                        YES     YES  ($2.025)
+ *
+ * Both amounts come from the fixture's pins, which track a generated file and
+ * move between releases — opik#9585 re-priced the third row for 2.2.146. The
+ * figures here are a reader's orientation, not the assertion.
  *
  * The third row is what stops this passing by accident. A build that shipped no
  * price file at all, or read a stale copy, or stopped resolving OpenRouter ids,
@@ -92,6 +96,23 @@ async function readSeededSpans(
   const spans = await backendClient.listSpanCosts({ projectId, traceId: seed.traceId });
   expect(spans, 'the trace carries exactly the seeded spans').toHaveLength(seed.spans.length);
   return new Map(spans.map((s) => [s.name, s]));
+}
+
+/**
+ * The fixture's own vector for `key` — its pinned amount and its workings.
+ *
+ * Read rather than re-stated, so an amount that tracks a generated price file
+ * lives in exactly one place. Asserted present for the same reason `spanFor`
+ * is: a key that named no vector would otherwise come back `undefined` and the
+ * comparison below would be between two of them.
+ */
+function seedFor(
+  seed: OpenRouterRemovedRowSpansRef,
+  key: string,
+): OpenRouterRemovedRowSeed {
+  const vector = seed.spans.find((s) => s.key === key);
+  expect(vector, `the fixture must seed a '${key}' vector`).toBeDefined();
+  return vector!;
 }
 
 /**
@@ -194,10 +215,22 @@ test.describe(
           // tautology: same provider, same token counts, same release — and
           // still priced. A build that had lost the price file wholesale fails
           // here while leaving every "unpriced" assertion green.
+          //
+          // The amount comes from the fixture's own pin rather than a literal
+          // here. It used to be both, and the 2.2.146 price regen moved this
+          // row ($0.40/M both ways to $0.72/M) — which failed on the literal
+          // while the fixture was still the place the header tells a reader to
+          // update. One source for a generated number.
+          const delabelled = seedFor(openRouterRemovedRowSpans, 'llama-delabelled');
+          expect(
+            delabelled.expectedCost,
+            'the de-labelled vector must carry a pinned amount — it is the priced control',
+          ).not.toBeNull();
           expect(
             costOf(byName, openRouterRemovedRowSpans, 'llama-delabelled'),
-            'meta-llama/llama-3.1-70b-instruct: de-labelled by 9365, still in the price table',
-          ).toBeCloseTo(0.8, 9);
+            `meta-llama/llama-3.1-70b-instruct: de-labelled by 9365, still in the price table ` +
+              `(${delabelled.workings})`,
+          ).toBeCloseTo(delabelled.expectedCost!, 9);
         });
 
         await test.step("Every priced row is billed at its own rate, and the two rates differ", async () => {
@@ -225,11 +258,11 @@ test.describe(
 
         await test.step("The trace's rolled-up cost is the sum of its priced spans alone", async () => {
           // The number a user actually reads, and the one a de-listed row makes
-          // plausible rather than obviously absent: the trace rolls up to
-          // $2.825 where four priced spans would have given more, and $2.825 is
-          // a perfectly ordinary figure. (The sum comes from the fixture, not a
-          // literal, because the rates come from a generated file — see its
-          // header.)
+          // plausible rather than obviously absent: the trace rolls up to the
+          // two priced rows' sum where four priced spans would have given more,
+          // and that sum is a perfectly ordinary figure. (It comes from the
+          // fixture, not a literal, because the rates come from a generated
+          // file — see its header.)
           const traceCost = await backendClient.getTraceCost(openRouterRemovedRowSpans.traceId);
           expect(traceCost, 'the trace must report a rolled-up cost').not.toBeNull();
           expect(
