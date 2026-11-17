@@ -37,12 +37,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * {@code topic_vectors}: one row per (trace, task version). Writes are plain batched inserts; {@code last_updated_at}
- * is stamped by ClickHouse. Reads drop a key whose latest row has {@code is_deleted = 1}. It reads ai-labels'
- * {@code ai_label_status} and {@code ai_labels} and never writes them.
- *
- * <p>The deletes are this DAO's own, in {@code TraceDAO}'s shape on {@code trace_id}: the table has the trace's weekly
- * partition, so the vectors go with their traces, by retention and by the trace-delete cascade.
+ * {@code topic_vectors}; migration 000148 explains its layout. Reads drop a key whose latest row has
+ * {@code is_deleted = 1}. It reads ai-labels' {@code ai_label_status} and {@code ai_labels} and never writes them.
  */
 @Slf4j
 @Singleton
@@ -89,9 +85,8 @@ public class TopicVectorsDAO {
      * <p>Three optional scopes narrow every side alike, so the anti-join stays exact. One project: the read then follows
      * the tables' sort keys, which have {@code project_id} right after {@code workspace_id}. Excluded projects, on
      * {@code done} only: the other sides are joined to its keys. A slice, {@code trace_created_at < :created_before}:
-     * {@code trace_created_at} is the same on every row of a key, so half-open slices put each key in exactly one of
-     * them; a slice also bounds {@code id_at} from above by {@code done}'s newest trace id, so an old slice does not
-     * read the outputs and vectors of every newer trace.
+     * half-open slices put each key in exactly one of them; a slice also bounds {@code id_at} from above by
+     * {@code done}'s newest trace id, so an old slice does not read the outputs and vectors of every newer trace.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -155,11 +150,9 @@ public class TopicVectorsDAO {
             """;
 
     /**
-     * RE2 for "not blank" as opik-inference counts it: a character that Python's {@code str.strip()} keeps. That is
-     * anything outside the ASCII controls tab to carriage return and file to unit separator, U+0085 and the Unicode
-     * separators ({@code \p{Z}}, the no-break spaces included). The service rejects an input that strips to nothing,
-     * so such a summary must never reach an embed call. {@code TopicVectorsTickService.isBlankForEmbed} is the same rule.
-     * Bound as a parameter so the backslashes need no escaping in the template.
+     * RE2 for "not blank" by the rule of {@code TopicVectorsTickService.isBlankForEmbed}: a character outside the ASCII
+     * controls tab to carriage return and file to unit separator, U+0085 and {@code \p{Z}}. Bound as a parameter so
+     * the backslashes need no escaping in the template.
      */
     static final String NON_BLANK = "[^\\t\\n\\x0B\\f\\r\\x1C-\\x1F\\x{85}\\p{Z}]";
 
@@ -225,9 +218,8 @@ public class TopicVectorsDAO {
             """;
 
     /**
-     * The check after a workspace's inserts: the pairs that still have a status row of the task. The trace-delete
-     * cascade deletes the status rows before the vectors, so a pair missing here belongs to a trace deleted while its
-     * vector was embedded. The guards are the window read's.
+     * The check after a workspace's inserts: the pairs that still have a status row of the task; see
+     * {@code TopicVectorsTickService.deleteVectorsOfDeletedTraces}. The guards are the window read's.
      */
     private static final String FIND_STATUS_KEYS = """
             SELECT DISTINCT project_id, trace_id
@@ -390,10 +382,6 @@ public class TopicVectorsDAO {
                 .flatMap(result -> result.map((row, metadata) -> toCandidate(row)));
     }
 
-    /**
-     * The projects with a done status of {@code task} written at or after {@code lowerBound}, of traces created at or
-     * after {@code createdAfter}: see {@link #FIND_BACKFILL_PROJECTS}.
-     */
     public Flux<TopicBackfillProject> findBackfillProjects(@NonNull String workspaceId, @NonNull String task,
             @NonNull Instant lowerBound, @NonNull Instant createdAfter, long maxExecutionSeconds) {
         var template = guarded(FIND_BACKFILL_PROJECTS, "topics:find_backfill_projects", workspaceId,
@@ -412,10 +400,6 @@ public class TopicVectorsDAO {
                         .build()));
     }
 
-    /**
-     * Per project, the traces with a live vector, created at or after {@code lowerBound}: see
-     * {@link #COUNT_TRACES_WITH_VECTORS_BY_PROJECT}.
-     */
     public Mono<Map<UUID, Long>> countTracesWithVectorsByProject(@NonNull String workspaceId,
             @NonNull Instant lowerBound,
             long maxExecutionSeconds) {
@@ -442,7 +426,6 @@ public class TopicVectorsDAO {
                 .add("max_execution_time", maxExecutionSeconds);
     }
 
-    /** Each key's latest output row of {@code task}, when it has one. */
     public Flux<TopicSummary> findSummaries(@NonNull String workspaceId, @NonNull String task,
             @NonNull Collection<TopicTraceKey> keys, long maxExecutionSeconds) {
         return findByKeys(FIND_SUMMARIES, "topics:find_summaries", workspaceId, task, keys, maxExecutionSeconds,
@@ -454,7 +437,6 @@ public class TopicVectorsDAO {
                         .build());
     }
 
-    /** The keys that still have a status row of {@code task}. */
     public Flux<TopicTraceKey> findStatusKeys(@NonNull String workspaceId, @NonNull String task,
             @NonNull Collection<TopicTraceKey> keys, long maxExecutionSeconds) {
         return findByKeys(FIND_STATUS_KEYS, "topics:find_status_keys", workspaceId, task, keys, maxExecutionSeconds,
