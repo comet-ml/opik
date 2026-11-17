@@ -245,6 +245,77 @@ def test_dumps__integer_fallback__preserves_later_default_exception(mode, reques
     assert calls == [first, last]
 
 
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__nested_default_results__preserves_opaque_leaves(mode, request):
+    request.getfixturevalue(mode)
+
+    class Leaf:
+        def __deepcopy__(self, memo):
+            raise AssertionError("encoding must not invoke deepcopy hooks")
+
+    parent, leaf = object(), Leaf()
+    calls = []
+
+    def counting(value):
+        calls.append(value)
+        if value is parent:
+            return {"children": [leaf, leaf]}
+        assert value is leaf
+        return {"serial": sum(item is leaf for item in calls)}
+
+    encoded = json_helpers.dumps([parent, 2**64], default=counting, sort_keys=False)
+
+    assert json.loads(encoded) == [
+        {"children": [{"serial": 1}, {"serial": 2}]},
+        2**64,
+    ]
+    assert calls == [parent, leaf, leaf]
+
+
+@pytest.mark.parametrize("kind", ["dict", "list"])
+def test_dumps__default_returns_builtin_subclass__keeps_native_iteration(
+    kind, accelerated
+):
+    class Mapping(dict):
+        def items(self):
+            raise AssertionError("orjson does not call overridden items")
+
+    class Sequence(list):
+        def __iter__(self):
+            raise AssertionError("orjson does not call overridden iteration")
+
+    result = Mapping(answer=42) if kind == "dict" else Sequence([42])
+    encoded = json_helpers.dumps(
+        object(), default=lambda value: result, sort_keys=False
+    )
+
+    assert json.loads(encoded) == ({"answer": 42} if kind == "dict" else [42])
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__cyclic_default_result__still_rejects_cycle(mode, request):
+    request.getfixturevalue(mode)
+    cyclic = []
+    cyclic.append(cyclic)
+
+    with pytest.raises(ValueError, match="Circular reference"):
+        json_helpers.dumps(object(), default=lambda value: cyclic, sort_keys=False)
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__deep_default_result__does_not_add_recursion_limit(mode, request):
+    request.getfixturevalue(mode)
+    nested = 0
+    for _ in range(600):
+        nested = [nested]
+
+    encoded = json_helpers.dumps(
+        [object(), 2**64], default=lambda value: nested, sort_keys=False
+    )
+
+    assert encoded == b"[" + b"[" * 600 + b"0" + b"]" * 600 + b", 18446744073709551616]"
+
+
 def test_dumps__default_raises__propagates_the_callers_exception(accelerated):
     """Not orjson's paraphrase of it, which loses the type and the message."""
 

@@ -2,6 +2,7 @@
 
 import base64
 import datetime
+import enum
 import json
 import tracemalloc
 import uuid
@@ -80,6 +81,43 @@ def test_insert__integer_fallback__preserves_successful_model_serialization(
 
     assert capture.items[0]["data"]["input"] == {"serial": 1, "number": number}
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("accelerated", [False, True])
+@pytest.mark.parametrize("number", [42, 2**64])
+def test_insert__integer_fallback__preserves_mutable_model_results(
+    accelerated, number, monkeypatch
+):
+    if accelerated:
+        pytest.importorskip("orjson")
+    else:
+        monkeypatch.setattr(json_helpers, "_orjson", None)
+    calls = []
+
+    class Choice(enum.Enum):
+        PAYLOAD = {"serial": 0}
+
+    class Model(pydantic.BaseModel):
+        @pydantic.model_serializer
+        def serialize(self):
+            calls.append(self)
+            Choice.PAYLOAD.value["serial"] = len(calls)
+            return Choice.PAYLOAD
+
+    model = Model()
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert(
+        [{"input": [model, model, number]}], deduplication=False, num_threads=1
+    )
+
+    assert capture.items[0]["data"]["input"] == [
+        {"serial": 1},
+        {"serial": 2},
+        number,
+    ]
+    assert len(calls) == 2
 
 
 def test_update__list__still_accepted():

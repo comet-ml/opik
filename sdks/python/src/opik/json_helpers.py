@@ -15,6 +15,7 @@ hashing them locally). Within one process a single encoder answers every call, s
 digest is always compared against digests made the same way.
 """
 
+import enum
 import json
 from typing import Any, Callable, List, Optional
 
@@ -47,6 +48,47 @@ except ImportError:  # pragma: no cover - the path taken where no orjson wheel e
 
 #: Whether the fast encoder is in use. For diagnostics; behaviour does not depend on it.
 ACCELERATED: bool = _orjson is not None
+
+
+def _snapshot_default_result(value: Any) -> Any:
+    """Own the JSON containers without copying opaque leaves or calling copy hooks.
+
+    orjson visits Enum values natively, so they must be captured too. An explicit
+    stack preserves shared/cyclic containers without adding a Python recursion limit.
+    """
+    copies: dict[int, Any] = {}
+    pending: list[tuple[Any, Any]] = []
+
+    def shell(member: Any) -> Any:
+        while isinstance(member, enum.Enum):
+            member = member.value
+        identity = id(member)
+        if identity in copies:
+            return copies[identity]
+        if isinstance(member, dict):
+            copied: Any = {}
+        elif isinstance(member, (list, tuple)):
+            copied = []
+        else:
+            return member
+        copies[identity] = copied
+        pending.append((member, copied))
+        return copied
+
+    result = shell(value)
+    while pending:
+        original, copied = pending.pop()
+        if isinstance(original, dict):
+            for key, member in dict.items(original):
+                copied[key] = shell(member)
+        else:
+            members = (
+                list.__iter__(original)
+                if isinstance(original, list)
+                else tuple.__iter__(original)
+            )
+            copied.extend(shell(member) for member in members)
+    return result
 
 
 def dumps(
@@ -87,7 +129,7 @@ def dumps(
                 f"Object of type {type(unencodable).__name__} is not JSON serializable"
             )
         try:
-            result = default(unencodable)
+            result = _snapshot_default_result(default(unencodable))
         except BaseException as exception:
             raised_by_default.append(exception)
             raise
