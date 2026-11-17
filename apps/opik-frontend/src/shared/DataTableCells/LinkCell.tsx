@@ -29,8 +29,8 @@ const LinkCell = <TData,>(context: CellContext<TData, unknown>) => {
   // Note: When value is 0, we render "-" but isDisabled is still true for consistency
   const isDisabled = !value || (getIsDisabled ? getIsDisabled(row) : false);
   const effectiveTooltip = isDisabled
-    ? disabledTooltip ?? tooltip ?? String(value)
-    : tooltip ?? String(value);
+    ? (disabledTooltip ?? tooltip ?? String(value))
+    : (tooltip ?? String(value));
 
   const copyClickHandler = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {

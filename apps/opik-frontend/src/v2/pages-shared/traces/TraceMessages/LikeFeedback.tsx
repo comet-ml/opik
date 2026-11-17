@@ -42,9 +42,11 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
         variant="ghost"
         size="icon-2xs"
         onClick={() => {
-          state === USER_FEEDBACK_SCORE.like
-            ? deleteFeedbackScore()
-            : updateFeedbackScore(USER_FEEDBACK_SCORE.like);
+          if (state === USER_FEEDBACK_SCORE.like) {
+            deleteFeedbackScore();
+          } else {
+            updateFeedbackScore(USER_FEEDBACK_SCORE.like);
+          }
         }}
       >
         {state === USER_FEEDBACK_SCORE.like ? (
@@ -57,9 +59,11 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
         variant="ghost"
         size="icon-2xs"
         onClick={() => {
-          state === USER_FEEDBACK_SCORE.dislike
-            ? deleteFeedbackScore()
-            : updateFeedbackScore(USER_FEEDBACK_SCORE.dislike);
+          if (state === USER_FEEDBACK_SCORE.dislike) {
+            deleteFeedbackScore();
+          } else {
+            updateFeedbackScore(USER_FEEDBACK_SCORE.dislike);
+          }
         }}
       >
         {state === USER_FEEDBACK_SCORE.dislike ? (

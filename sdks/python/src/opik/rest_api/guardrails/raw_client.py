@@ -6,9 +6,18 @@ from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.http_response import AsyncHttpResponse, HttpResponse
+from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
+from ..errors.bad_request_error import BadRequestError
+from ..errors.forbidden_error import ForbiddenError
+from ..errors.service_unavailable_error import ServiceUnavailableError
+from ..errors.too_many_requests_error import TooManyRequestsError
+from ..errors.unauthorized_error import UnauthorizedError
+from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.guardrail_write import GuardrailWrite
+from ..types.guardrails_validation_response import GuardrailsValidationResponse
+from ..types.validation_descriptor import ValidationDescriptor
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -57,6 +66,128 @@ class RawGuardrailsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def validate_guardrails(
+        self,
+        *,
+        text: str,
+        validations: typing.Sequence[ValidationDescriptor],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[GuardrailsValidationResponse]:
+        """
+        Runs the requested checks on the text through the Opik inference decision service and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.
+
+        Parameters
+        ----------
+        text : str
+            The text to check, at most 16384 characters as the decision service counts them: on the text's JSON encoding, so the two quotes count, a quote, backslash or line break counts as 2, and any other control or non-ASCII character as 6 (an emoji as 12). In practice about 16,380 characters of English text fit, about 2,730 of text in Cyrillic, Greek, Hebrew, Arabic, Chinese or Japanese, and about 1,365 emoji. A longer text is rejected rather than cut.
+
+        validations : typing.Sequence[ValidationDescriptor]
+            The checks to run. Together they must fit in 64 questions to the decision service, asked in up to two calls of 32: each PII class and each topic list is one question, prompt injection is one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[GuardrailsValidationResponse]
+            A verdict per check
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/guardrails/validations",
+            method="POST",
+            json={
+                "text": text,
+                "validations": convert_and_respect_annotation_metadata(
+                    object_=validations, annotation=typing.Sequence[ValidationDescriptor], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    GuardrailsValidationResponse,
+                    parse_obj_as(
+                        type_=GuardrailsValidationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawGuardrailsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -96,6 +227,128 @@ class AsyncRawGuardrailsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def validate_guardrails(
+        self,
+        *,
+        text: str,
+        validations: typing.Sequence[ValidationDescriptor],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[GuardrailsValidationResponse]:
+        """
+        Runs the requested checks on the text through the Opik inference decision service and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.
+
+        Parameters
+        ----------
+        text : str
+            The text to check, at most 16384 characters as the decision service counts them: on the text's JSON encoding, so the two quotes count, a quote, backslash or line break counts as 2, and any other control or non-ASCII character as 6 (an emoji as 12). In practice about 16,380 characters of English text fit, about 2,730 of text in Cyrillic, Greek, Hebrew, Arabic, Chinese or Japanese, and about 1,365 emoji. A longer text is rejected rather than cut.
+
+        validations : typing.Sequence[ValidationDescriptor]
+            The checks to run. Together they must fit in 64 questions to the decision service, asked in up to two calls of 32: each PII class and each topic list is one question, prompt injection is one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[GuardrailsValidationResponse]
+            A verdict per check
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/guardrails/validations",
+            method="POST",
+            json={
+                "text": text,
+                "validations": convert_and_respect_annotation_metadata(
+                    object_=validations, annotation=typing.Sequence[ValidationDescriptor], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    GuardrailsValidationResponse,
+                    parse_obj_as(
+                        type_=GuardrailsValidationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 401:
+                raise UnauthorizedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 403:
+                raise ForbiddenError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 429:
+                raise TooManyRequestsError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

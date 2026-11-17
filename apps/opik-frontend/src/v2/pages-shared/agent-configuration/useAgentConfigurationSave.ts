@@ -246,8 +246,8 @@ export const useAgentConfigurationSave = ({
         .map((v) => {
           const value =
             v.type === BlueprintValueType.PROMPT
-              ? newCommits.get(v.key) ?? v.value
-              : draftValues[v.key] ?? v.value;
+              ? (newCommits.get(v.key) ?? v.value)
+              : (draftValues[v.key] ?? v.value);
           return {
             key: v.key,
             type: v.type,

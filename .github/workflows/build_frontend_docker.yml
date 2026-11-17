@@ -35,7 +35,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # Build only: the source tree checks (eslint, typecheck, unit tests) all run
+      # Build only: the source tree checks (lint, typecheck, unit tests) all run
       # against the working tree, so they miss anything that only breaks in a clean
       # Docker build context -- e.g. a COPY of a directory that git dropped because
       # it went empty. amd64 only: the Dockerfile has no arch-conditional logic, so

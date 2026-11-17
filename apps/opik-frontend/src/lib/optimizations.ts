@@ -233,7 +233,7 @@ export const extractRequiredScoreParams = (code: string): string[] => {
 export const getObjectiveLabel = (
   isTestSuite?: boolean,
   objectiveName?: string,
-): string => (isTestSuite ? "Pass rate" : objectiveName ?? "Accuracy");
+): string => (isTestSuite ? "Pass rate" : (objectiveName ?? "Accuracy"));
 
 export const MAX_EXPERIMENTS_LOADED = 1000;
 

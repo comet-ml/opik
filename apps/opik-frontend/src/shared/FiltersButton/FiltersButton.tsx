@@ -89,7 +89,9 @@ const FiltersButton = <TColumnData,>({
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>
-      <TooltipWrapper content={isIconLayout ? tooltip ?? "Filters" : undefined}>
+      <TooltipWrapper
+        content={isIconLayout ? (tooltip ?? "Filters") : undefined}
+      >
         <PopoverTrigger asChild>
           <Button
             variant={variant}

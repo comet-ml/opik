@@ -23,6 +23,7 @@ models:
   no-sampling:
     - claude-fable-5
     - claude-fable-5-1
+    - claude-fable-5-2
     - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1
@@ -42,6 +43,7 @@ models:
   thinks-by-default:
     - claude-fable-5
     - claude-fable-5-1
+    - claude-fable-5-2
     - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1
@@ -62,6 +64,7 @@ models:
   effort-all:
     - claude-fable-5
     - claude-fable-5-1
+    - claude-fable-5-2
     - claude-haiku-5-5
     - claude-mythos-5
     - claude-mythos-5-1

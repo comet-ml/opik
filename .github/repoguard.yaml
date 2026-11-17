@@ -1,0 +1,5 @@
+# RepoGuard waivers — see https://github.com/comet-ml/repo-guard#waiving-a-check
+waivers:
+  - check: no-hardcoded-keys
+    reason: "Not credentials: the test's PEM header wraps an RSA key generated at runtime, and the docs examples use made-up OpenAI-style placeholders (all rejected by OpenAI)."
+    findings: [sha256:3021d90eb943, sha256:3da7d2a655ad, sha256:4d7795d2437f, sha256:bd03daf15882]

@@ -994,6 +994,17 @@ attachmentsConfig:
   # For tests, use 5KB (same as local dev default)
   stripMinSize: 5000
 
+workspaceFeatures:
+  # Off in tests, like the auth cache: a test that needs it turns it on.
+  cacheTtl: 0s
+
+aiLabels:
+  inference:
+    # The synchronous decide calls guardrail checks make, on a client of their own.
+    maxConcurrentDecides: 256
+    decideKeepAlive: 30s
+    decideTimeToLive: 5m
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
@@ -1065,6 +1076,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Guardrails feature is enabled
   guardrailsEnabled: "false"
+  # Default: false
+  # Description: Whether or not the backend runs guardrails itself
+  guardrailsValidationsEnabled: "false"
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"

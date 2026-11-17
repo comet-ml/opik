@@ -45,7 +45,7 @@ vi.mock("use-local-storage-state", () => ({
     const value =
       key in localStorageStore
         ? localStorageStore[key]
-        : options?.defaultValue ?? undefined;
+        : (options?.defaultValue ?? undefined);
     if (!localStorageSetters[key]) {
       localStorageSetters[key] = vi.fn((next: unknown) => {
         localStorageStore[key] = next;
