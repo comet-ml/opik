@@ -316,6 +316,66 @@ def test_dumps__deep_default_result__does_not_add_recursion_limit(mode, request)
     assert encoded == b"[" + b"[" * 600 + b"0" + b"]" * 600 + b", 18446744073709551616]"
 
 
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+@pytest.mark.parametrize("depth", [1, 254, 255, 600])
+def test_dumps__deep_default_chain__converts_each_occurrence_once(mode, depth, request):
+    request.getfixturevalue(mode)
+
+    class Node:
+        def __init__(self, child):
+            self.child = child
+
+    value = 0
+    for _ in range(depth):
+        value = Node(value)
+    calls = []
+
+    def convert(node):
+        calls.append(node)
+        return node.child
+
+    assert json_helpers.dumps(value, default=convert, sort_keys=False) == b"0"
+    assert len(calls) == depth
+
+
+@pytest.mark.parametrize("number", [42, 2**64])
+@pytest.mark.parametrize("ready_after", [2, 254, 255, 256])
+def test_dumps__default_returns_same_object__can_finish_conversion(
+    number, ready_after, accelerated
+):
+    opaque = object()
+    calls = []
+
+    def convert(value):
+        calls.append(value)
+        return value if len(calls) < ready_after else {"serial": ready_after}
+
+    encoded = json_helpers.dumps([opaque, number], default=convert, sort_keys=False)
+
+    assert json.loads(encoded) == [{"serial": ready_after}, number]
+    assert len(calls) == ready_after
+
+
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__too_deep_default_result__rejects_without_repeating_default(
+    mode, request
+):
+    request.getfixturevalue(mode)
+    nested = 0
+    for _ in range(10000):
+        nested = [nested]
+    calls = []
+
+    def convert(value):
+        calls.append(value)
+        return nested
+
+    with pytest.raises(RecursionError):
+        json_helpers.dumps(object(), default=convert, sort_keys=False)
+
+    assert len(calls) == 1
+
+
 def test_dumps__default_raises__propagates_the_callers_exception(accelerated):
     """Not orjson's paraphrase of it, which loses the type and the message."""
 

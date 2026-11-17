@@ -15,7 +15,6 @@ hashing them locally). Within one process a single encoder answers every call, s
 digest is always compared against digests made the same way.
 """
 
-import enum
 import json
 from typing import Any, Callable, List, Optional
 
@@ -50,47 +49,6 @@ except ImportError:  # pragma: no cover - the path taken where no orjson wheel e
 ACCELERATED: bool = _orjson is not None
 
 
-def _snapshot_default_result(value: Any) -> Any:
-    """Own the JSON containers without copying opaque leaves or calling copy hooks.
-
-    orjson visits Enum values natively, so they must be captured too. An explicit
-    stack preserves shared/cyclic containers without adding a Python recursion limit.
-    """
-    copies: dict[int, Any] = {}
-    pending: list[tuple[Any, Any]] = []
-
-    def shell(member: Any) -> Any:
-        while isinstance(member, enum.Enum):
-            member = member.value
-        identity = id(member)
-        if identity in copies:
-            return copies[identity]
-        if isinstance(member, dict):
-            copied: Any = {}
-        elif isinstance(member, (list, tuple)):
-            copied = []
-        else:
-            return member
-        copies[identity] = copied
-        pending.append((member, copied))
-        return copied
-
-    result = shell(value)
-    while pending:
-        original, copied = pending.pop()
-        if isinstance(original, dict):
-            for key, member in dict.items(original):
-                copied[key] = shell(member)
-        else:
-            members = (
-                list.__iter__(original)
-                if isinstance(original, list)
-                else tuple.__iter__(original)
-            )
-            copied.extend(shell(member) for member in members)
-    return result
-
-
 def dumps(
     value: Any,
     *,
@@ -113,65 +71,84 @@ def dumps(
     if _orjson is None:
         return json.dumps(value, default=default, sort_keys=sort_keys).encode("utf-8")
 
-    # orjson reports two very different things as `TypeError`: its own refusal of a
-    # value it cannot represent, and a failure inside `default` -- which it re-raises as
-    # a generic "Type is not JSON serializable", losing the caller's exception. Only the
-    # first is worth retrying, so record what `default` raised and use that to tell them
-    # apart. Matching on orjson's message would do the same job until orjson reworded it.
-    raised_by_default: List[BaseException] = []
-    # Keep the originals alive so identities cannot be reused, and retain every
-    # occurrence: the same object can legitimately produce different results.
-    converted: dict[int, tuple[Any, list[Any]]] = {}
+    options = _SORTED_OPTIONS if sort_keys else _BASE_OPTIONS
+    default_depth = 0
+    used_default = False
 
-    def guarded_default(unencodable: Any) -> Any:
-        if default is None:
-            raise TypeError(
-                f"Object of type {type(unencodable).__name__} is not JSON serializable"
-            )
+    def encode(current: Any) -> bytes:
+        nonlocal used_default
+        converted: dict[int, tuple[Any, list[bytes]]] = {}
+        raised_by_default: List[BaseException] = []
+
+        def guarded_default(unencodable: Any) -> Any:
+            nonlocal default_depth, used_default
+            if default is None:
+                raise TypeError(
+                    f"Object of type {type(unencodable).__name__} is not JSON serializable"
+                )
+            identity = id(unencodable)
+            default_depth += 1
+            try:
+                used_default = True
+                result = default(unencodable)
+                # orjson allows the initial call plus 254 recursive conversions.
+                # Keep its stdlib fallback rather than adding a rejection limit.
+                if default_depth >= 255:
+                    encoded = json.dumps(
+                        result, default=default, sort_keys=sort_keys
+                    ).encode("utf-8")
+                else:
+                    encoded = encode(result)
+            except BaseException as exception:
+                raised_by_default.append(exception)
+                raise
+            finally:
+                default_depth -= 1
+            # Bytes capture mutable results with the encoder's own type dispatch.
+            # Retain the original to prevent identity reuse, and every occurrence.
+            if identity not in converted:
+                converted[identity] = (unencodable, [])
+            converted[identity][1].append(encoded)
+            return _orjson.Fragment(encoded)
+
+        def fallback() -> bytes:
+            pending = {key: iter(results) for key, (_, results) in converted.items()}
+
+            def replay_default(unencodable: Any) -> Any:
+                previous = pending.get(id(unencodable))
+                if previous is not None:
+                    try:
+                        return json.loads(next(previous))
+                    except StopIteration:
+                        pass
+                assert default is not None
+                return default(unencodable)
+
+            return json.dumps(
+                current,
+                default=replay_default if default is not None else None,
+                sort_keys=sort_keys,
+            ).encode("utf-8")
+
         try:
-            result = _snapshot_default_result(default(unencodable))
-        except BaseException as exception:
-            raised_by_default.append(exception)
-            raise
-        identity = id(unencodable)
-        if identity not in converted:
-            converted[identity] = (unencodable, [])
-        converted[identity][1].append(result)
-        return result
+            return _orjson.dumps(current, default=guarded_default, option=options)
+        except TypeError:
+            if raised_by_default:
+                raise raised_by_default[0]
+            return fallback()
 
+    encoded = encode(value)
+    if not used_default:
+        return encoded
+
+    # A fragment can contain a stdlib fallback (e.g. a large integer). Encode the
+    # completed JSON value once in the mode its JSON-native readback would use, so
+    # typed dataset items and their stored form keep the same content hash.
+    normalized = json.loads(encoded)
     try:
-        return _orjson.dumps(
-            value,
-            default=guarded_default,
-            option=_SORTED_OPTIONS if sort_keys else _BASE_OPTIONS,
-        )
+        return _orjson.dumps(normalized, option=options)
     except TypeError:
-        if raised_by_default:
-            # The caller's own error, not orjson's paraphrase of it, and `default` is
-            # not run a second time -- it may not be free of side effects.
-            raise raised_by_default[0]
-        # orjson refuses integers outside -2**63 .. 2**64-1 *before* consulting
-        # `default`, so such a value cannot be intercepted, only the whole value
-        # re-encoded. The standard library takes them.
-        pending = {key: iter(results) for key, (_, results) in converted.items()}
-
-        def replay_default(unencodable: Any) -> Any:
-            previous = pending.get(id(unencodable))
-            if previous is not None:
-                try:
-                    return next(previous)
-                except StopIteration:
-                    pass
-            # stdlib also visits values orjson handles natively (e.g. UUIDs), or
-            # occurrences after the refusal. Those still need their first conversion.
-            assert default is not None
-            return default(unencodable)
-
-        return json.dumps(
-            value,
-            default=replay_default if default is not None else None,
-            sort_keys=sort_keys,
-        ).encode("utf-8")
+        return json.dumps(normalized, sort_keys=sort_keys).encode("utf-8")
 
 
 def loads(data: Any) -> Any:

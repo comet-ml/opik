@@ -17,12 +17,16 @@ asserted here instead is that the accelerated path is self-consistent, separates
 that differs, and agrees with itself across the two callers that have to agree.
 """
 
+import dataclasses
+import datetime
 import hashlib
+import json
 
 import pydantic
 import pytest
 
 from opik import json_helpers
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import dataset_item
 
 pytestmark = pytest.mark.skipif(
@@ -145,3 +149,25 @@ def test_content_hash__integer_fallback__preserves_successful_model_serializatio
         ).hexdigest()
     )
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["model", "dataclass", "date", "set"])
+@pytest.mark.parametrize("number", [42, 2**64])
+def test_content_hash__flexible_value__matches_json_readback(kind, number):
+    class Model(pydantic.BaseModel):
+        answer: int = 42
+
+    @dataclasses.dataclass
+    class Payload:
+        answer: int = 42
+
+    values = {
+        "model": Model(),
+        "dataclass": Payload(),
+        "date": datetime.date(2024, 1, 2),
+        "set": {"a", "b"},
+    }
+    item = dataset_item.DatasetItem(input={"typed": values[kind], "number": number})
+    stored = json.loads(streaming_upload.dumps(item.get_content()))
+
+    assert item.content_hash() == dataset_item.DatasetItem(**stored).content_hash()

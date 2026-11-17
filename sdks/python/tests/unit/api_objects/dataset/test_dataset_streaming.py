@@ -1,6 +1,7 @@
 """Streaming behaviour of `Dataset.insert`: laziness, memory, and the widened signature."""
 
 import base64
+import dataclasses
 import datetime
 import enum
 import json
@@ -118,6 +119,49 @@ def test_insert__integer_fallback__preserves_mutable_model_results(
         number,
     ]
     assert len(calls) == 2
+
+
+def test_insert__dataclass_with_string_subclass_key__does_not_rehash():
+    class Key(str):
+        rehash = False
+
+        def __hash__(self):
+            if self.rehash:
+                raise AssertionError("JSON encoding must not rehash mapping keys")
+            return super().__hash__()
+
+    @dataclasses.dataclass
+    class Payload:
+        inner: dict
+
+    key = Key("answer")
+    value = Payload({key: 42})
+    key.rehash = True
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert([{"input": value}], deduplication=False, num_threads=1)
+
+    assert capture.items[0]["data"]["input"] == {"inner": {"answer": 42}}
+
+
+def test_insert__dataclass_with_tuple_subclass__uses_flexible_conversion():
+    class Sequence(tuple):
+        def __iter__(self):
+            return iter([99])
+
+    @dataclasses.dataclass
+    class Payload:
+        inner: object
+
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    dataset.insert(
+        [{"input": Payload(Sequence((1, 2)))}], deduplication=False, num_threads=1
+    )
+
+    assert capture.items[0]["data"]["input"] == {"inner": [99]}
 
 
 def test_update__list__still_accepted():
