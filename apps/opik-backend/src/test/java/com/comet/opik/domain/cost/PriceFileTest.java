@@ -68,9 +68,9 @@ class PriceFileTest {
             "image and video tokens, cached audio and Perplexity's citations: no usage format reads those counts, so "
                     + "they bill at the text rates",
             Pattern.compile("(input_|output_)?cost_per_(image|pixel|second|character)(_[\\w.]+)?"
-                    + "|input_cost_per_(video|audio)_per_second(_\\w+)?|output_cost_per_(video|billable_unit)"),
-            "per-image, per-pixel, per-second, per-character, per-video and per-unit prices: spans report tokens, and "
-                    + "video and speech models are billed by their own calculators",
+                    + "|input_cost_per_(video|audio)_per_second(_\\w+)?|output_cost_per_(video(_clip)?|billable_unit)"),
+            "per-image, per-pixel, per-second, per-character, per-video, per-clip and per-unit prices: spans report "
+                    + "tokens, and video and speech models are billed by their own calculators",
             Pattern.compile("search_context_cost_per_query|google_maps_grounding_cost_per_query|input_cost_per_query"
                     + "|input_cost_per_request|code_interpreter_cost_per_session|guardrail_cost_per_unit"
                     + "|annotation_cost_per_page|ocr_cost_per_page|ocr_cost_per_credit|input_cost_per_text_message"),
