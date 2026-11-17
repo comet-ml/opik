@@ -44,7 +44,7 @@ def sandbox_hardening_options() -> dict:
     if not hardening_enabled():
         return {}
     pids_limit = os.getenv(PIDS_LIMIT_ENV_VAR) or "64"
-    if not pids_limit.isdecimal() or int(pids_limit) == 0:
+    if not re.fullmatch(r"[1-9][0-9]*", pids_limit):
         raise ValueError(f"{PIDS_LIMIT_ENV_VAR} must be a positive integer, not {pids_limit[:32]!r}")
     tmpfs_size = os.getenv(TMPFS_SIZE_ENV_VAR) or "16m"
     if not re.fullmatch(r"[1-9][0-9]*[kmg]?", tmpfs_size):

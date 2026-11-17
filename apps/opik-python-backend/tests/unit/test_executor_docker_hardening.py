@@ -71,7 +71,7 @@ def test_invalid_setting_fails_startup(monkeypatch, hardening):
         sandbox_hardening_options()
 
 
-@pytest.mark.parametrize("pids_limit", ["0", "-1", "1.5", "many"])
+@pytest.mark.parametrize("pids_limit", ["0", "00", "-1", "+1", " 64", "1.5", "many", "\u0666\u0664"])
 def test_invalid_pids_limit_fails_startup(monkeypatch, pids_limit):
     monkeypatch.setenv(HARDENING_ENV_VAR, "true")
     monkeypatch.setenv(PIDS_LIMIT_ENV_VAR, pids_limit)
