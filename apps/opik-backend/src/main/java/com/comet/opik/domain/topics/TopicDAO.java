@@ -94,7 +94,7 @@ public interface TopicDAO {
 
     /**
      * The prototype rows of several projects of one workspace, in one query on the primary key: by project, each in
-     * {@code position} order. Topic on arrival reads its projects' saved lists with it.
+     * {@code position} order.
      */
     @SqlQuery("""
             SELECT * FROM topic_prototypes

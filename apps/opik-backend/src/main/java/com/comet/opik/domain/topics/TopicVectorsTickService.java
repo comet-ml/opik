@@ -242,7 +242,6 @@ public class TopicVectorsTickService {
         private int cuts;
         // The workspaces an embed call backed off for: not called again this tick, in either phase.
         private final Set<String> backedOff = new HashSet<>();
-        // Topic on arrival for this tick: reads each project's prototypes once per tick.
         private final TopicsArrivalService.Tick arrival = arrivalService.tick();
 
         String name(String workspaceId) {
@@ -874,8 +873,7 @@ public class TopicVectorsTickService {
                     continue;
                 }
                 written.addAll(vectors);
-                // One hook for both phases: the chunk's traces get their topic by the saved list. Throws only on an
-                // interrupt.
+                // One hook for both phases.
                 tally.arrival.label(workspaceId, tally.name(workspaceId), vectors, deadline);
             }
             if (written.isEmpty()) {

@@ -37,10 +37,9 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Topic on arrival: right after the vectors tick inserts a chunk of vectors, each trace gets the topic of the nearest
  * saved prototype of its project, as a {@code trace_topics} row with source {@code arrival} and an empty run id.
  *
- * <p>The rule is the algorithm's {@link TopicAlgorithm#labeller}, the same one the labelling pass uses. This service
- * reads each project's prototype rows once per tick, in one MySQL query for the projects of a chunk, bounds the time,
- * writes the rows and counts. A project with no prototype row, or with known-Other rows only, has no labeller: its
- * traces get no row and wait for the project's next run.
+ * <p>The rule is the algorithm's {@link TopicAlgorithm#labeller}, the same one the labelling pass uses. It reads each
+ * project's prototype rows once per tick, in one MySQL query for the projects of a chunk. A project with no prototype
+ * row, or with known-Other rows only, has no labeller: its traces get no row and wait for the project's next run.
  *
  * <p>Every vector it gets has a non-blank text and {@value TopicVectorsTickService#EMBED_DIMENSIONS} values, because
  * the tick wrote it: the tick embeds only a non-blank summary and keeps only vectors of that length, the length of a
@@ -121,7 +120,7 @@ public class TopicsArrivalService {
                 .build();
     }
 
-    /** One tick's arrival steps, which read each project's prototypes once; a no-op when arrival is off. */
+    /** One tick's arrival steps; a no-op when arrival is off. */
     public Tick tick() {
         return new Tick(config.getArrival().isEnabled());
     }
@@ -134,7 +133,6 @@ public class TopicsArrivalService {
         private final Map<UUID, Optional<Labeller>> labellers = new HashMap<>();
         // Set by any failure: arrival does nothing more this tick.
         private boolean stopped;
-        // The time the tick's steps took so far: all of them together end within topics.arrival.timeout.
         private Duration spent = Duration.ZERO;
 
         private Tick(boolean enabled) {
@@ -147,7 +145,6 @@ public class TopicsArrivalService {
          * interrupt.
          *
          * @param workspaceName the name the tick resolved, for the metrics: this step looks up nothing
-         * @param tickDeadline  the end of the tick's budget
          */
         public void label(@NonNull String workspaceId, @NonNull String workspaceName,
                 @NonNull List<TopicVector> vectors, @NonNull Instant tickDeadline) {
@@ -241,8 +238,6 @@ public class TopicsArrivalService {
          * Reads the prototype rows of the projects this tick has not read yet, in one query and one read-only
          * transaction, and asks the algorithm for each project's labeller. The tick stops waiting at {@code until}. A
          * failed read stops arrival for the tick and returns false.
-         *
-         * <p>The one place arrival reads MySQL: a cache can be put in front of it here, if a measurement shows the need.
          */
         private boolean read(String workspaceId, String workspaceName, Set<UUID> projectIds, Instant until) {
             var toRead = projectIds.stream().filter(projectId -> !labellers.containsKey(projectId)).toList();
@@ -291,7 +286,6 @@ public class TopicsArrivalService {
         return a.isBefore(b) ? a : b;
     }
 
-    /** The time left until {@code until}, zero once it has passed. */
     private Duration left(Instant until) {
         var left = Duration.between(clock.instant(), until);
         return left.isNegative() ? Duration.ZERO : left;

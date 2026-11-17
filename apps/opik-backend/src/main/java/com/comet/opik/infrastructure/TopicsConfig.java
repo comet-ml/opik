@@ -74,10 +74,7 @@ public class TopicsConfig {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    /**
-     * Topic on arrival: after the vectors tick inserts a chunk of vectors, each trace of a project with a saved list gets
-     * the topic of its nearest saved prototype in {@code trace_topics}, until the next run writes its own row.
-     */
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
     @Data
     public static class ArrivalConfig {
 
