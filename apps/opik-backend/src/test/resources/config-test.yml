@@ -1005,6 +1005,25 @@ aiLabels:
     decideKeepAlive: 30s
     decideTimeToLive: 5m
 
+topics:
+  # Same values as config.yml's topics block; see it for what each key means.
+  vectors:
+    tickInterval: 1m
+    tickBudget: 50s
+    window: 24h
+    longWindow: 7d
+    longWindowInterval: 1d
+    backfillWindow: 0s
+    maxTracesPerTick: 5000
+    embedBatchSize: 256
+    embedTimeout: 10s
+    find:
+      maxRowsToRead: 30000000
+      maxMemoryUsage: 1073741824
+      maxExecutionTime: 30s
+      createdAtSlack: 1d
+      sliceSize: 1d
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
