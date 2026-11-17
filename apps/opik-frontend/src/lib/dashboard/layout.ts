@@ -36,7 +36,7 @@ export const getWidgetSizeConfig = (type: string): WidgetSizeConfig => {
 };
 
 export const getColumnHeights = (layout: DashboardLayout): number[] => {
-  const heights = new Array(GRID_COLUMNS).fill(0);
+  const heights = Array.from({ length: GRID_COLUMNS }, () => 0);
 
   layout.forEach((item) => {
     const startCol = item.x;

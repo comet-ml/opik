@@ -5,7 +5,7 @@ import {
   ExperimentItemContent,
   ExperimentItemReferences,
 } from "./ExperimentItem";
-import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
+import { readAllStreamPages, splitIntoBatches } from "@/utils/stream";
 import { ExperimentItemCompare } from "@/rest_api/api/types/ExperimentItemCompare";
 import { logger } from "@/utils/logger";
 import { serialization } from "@/rest_api";
@@ -136,67 +136,28 @@ export class Experiment {
     maxResults?: number;
     truncate?: boolean;
   }): Promise<ExperimentItemContent[]> {
-    const result: ExperimentItemContent[] = [];
-    const maxEndpointBatchSize = 2000; // Maximum batch size per API request
     const { maxResults, truncate = false } = options || {};
 
-    let lastRetrievedId: string | undefined;
-    let shouldContinuePagination = true;
-
     try {
-      while (shouldContinuePagination) {
-        if (maxResults !== undefined && result.length >= maxResults) {
-          break;
-        }
-
-        const currentBatchSize = maxResults
-          ? Math.min(maxResults - result.length, maxEndpointBatchSize)
-          : maxEndpointBatchSize;
-
-        const itemsStream =
-          await this.opik.api.experiments.streamExperimentItems({
+      const rawItems = await readAllStreamPages<ExperimentItemCompare>(
+        (limit, lastRetrievedId) =>
+          this.opik.api.experiments.streamExperimentItems({
             experimentName: this.name!,
-            limit: currentBatchSize,
-            lastRetrievedId: lastRetrievedId,
+            limit,
+            lastRetrievedId,
             truncate,
-          });
-
-        try {
-          const experimentItemsCurrentBatch =
-            await parseNdjsonStreamToArray<ExperimentItemCompare>(
-              itemsStream,
-              serialization.ExperimentItemCompare,
-              currentBatchSize
-            );
-
-          if (experimentItemsCurrentBatch.length === 0) {
-            shouldContinuePagination = false;
-            break;
-          }
-
-          for (const item of experimentItemsCurrentBatch) {
-            const convertedItem =
-              ExperimentItemContent.fromRestExperimentItemCompare(item);
-            result.push(convertedItem);
-
-            if (maxResults !== undefined && result.length >= maxResults) {
-              shouldContinuePagination = false;
-              break;
-            }
-          }
-
-          lastRetrievedId =
-            experimentItemsCurrentBatch[experimentItemsCurrentBatch.length - 1]
-              .id;
-        } catch (error) {
-          logger.error(
-            "Error parsing experiment item: " +
-              (error instanceof Error ? error.message : String(error))
-          );
-          shouldContinuePagination = false;
-          break;
-        }
-      }
+          }),
+        serialization.ExperimentItemCompare,
+        "id",
+        { maxResults }
+      );
+      const result = rawItems.map((item) =>
+        ExperimentItemContent.fromRestExperimentItemCompare(item)
+      );
+      logger.info(
+        `Retrieved ${result.length} items${maxResults ? ` (limited by maxResults=${maxResults})` : ``}`
+      );
+      return result;
     } catch (error) {
       logger.error(
         "Error retrieving experiment items: " +
@@ -204,12 +165,6 @@ export class Experiment {
       );
       throw error;
     }
-
-    logger.info(
-      `Retrieved ${result.length} items${maxResults ? ` (limited by maxResults=${maxResults})` : ``}`
-    );
-
-    return result;
   }
 
   async getUrl(): Promise<string> {

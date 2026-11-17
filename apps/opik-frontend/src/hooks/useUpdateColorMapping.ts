@@ -23,7 +23,7 @@ const useUpdateColorMapping = () => {
           variant: "destructive",
         });
 
-      const currentMap = { ...(config?.color_map ?? {}) };
+      const currentMap = { ...config?.color_map };
       const isDefault =
         hexColor.toLowerCase() ===
         resolveHexColor(resolveColor(colorKey)).toLowerCase();

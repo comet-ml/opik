@@ -141,10 +141,16 @@ jobs:
                 echo "  Deleting ${IMAGE}:${CI_TAG}"
               fi
 
-              if gh api --method DELETE \
-                "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}"; then
+              if DELETE_OUT=$(gh api --method DELETE \
+                "/orgs/comet-ml/packages/container/opik%2F${IMAGE}/versions/${VERSION_ID}" 2>&1); then
                 DELETED=$((DELETED + 1))
+              # A concurrent run (e.g. a PR close overlapping the weekly sweep) may have
+              # deleted this version first; the goal state is reached, so don't fail.
+              elif grep -q 'HTTP 404' <<< "$DELETE_OUT"; then
+                echo "  Already deleted ${IMAGE}:${CI_TAG}"
+                SKIPPED=$((SKIPPED + 1))
               else
+                echo "  Failed to delete ${IMAGE}:${CI_TAG}: ${DELETE_OUT}"
                 FAILED=$((FAILED + 1))
               fi
             done <<< "$VERSIONS"

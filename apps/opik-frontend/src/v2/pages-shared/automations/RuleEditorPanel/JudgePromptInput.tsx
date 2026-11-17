@@ -38,7 +38,7 @@ type JudgePromptInputProps = {
   onBlur: () => void;
   sampleData: RuleSampleData | null;
   showMedia: boolean;
-  editorRef?: React.RefObject<PromptVariableEditorHandle>;
+  editorRef?: React.RefObject<PromptVariableEditorHandle | null>;
 };
 
 const JudgePromptInput: React.FC<JudgePromptInputProps> = ({

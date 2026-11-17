@@ -5,6 +5,8 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.guardrail_write import GuardrailWrite
+from ..types.guardrails_validation_response import GuardrailsValidationResponse
+from ..types.validation_descriptor import ValidationDescriptor
 from .raw_client import AsyncRawGuardrailsClient, RawGuardrailsClient
 
 # this is used as the default value for optional parameters
@@ -55,6 +57,45 @@ class GuardrailsClient:
         _response = self._raw_client.create_guardrails(guardrails=guardrails, request_options=request_options)
         return _response.data
 
+    def validate_guardrails(
+        self,
+        *,
+        text: str,
+        validations: typing.Sequence[ValidationDescriptor],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> GuardrailsValidationResponse:
+        """
+        Runs the requested checks on the text through the Opik inference decision service and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.
+
+        Parameters
+        ----------
+        text : str
+            The text to check, at most 16384 characters as the decision service counts them: on the text's JSON encoding, so the two quotes count, a quote, backslash or line break counts as 2, and any other control or non-ASCII character as 6 (an emoji as 12). In practice about 16,380 characters of English text fit, about 2,730 of text in Cyrillic, Greek, Hebrew, Arabic, Chinese or Japanese, and about 1,365 emoji. A longer text is rejected rather than cut.
+
+        validations : typing.Sequence[ValidationDescriptor]
+            The checks to run. Together they must fit in 64 questions to the decision service, asked in up to two calls of 32: each PII class and each topic list is one question, prompt injection is one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        GuardrailsValidationResponse
+            A verdict per check
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import ValidationDescriptor
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.guardrails.validate_guardrails(text='text', validations=[ValidationDescriptor(type="TOPIC", config={'key': 'value'
+        }, )], )
+        """
+        _response = self._raw_client.validate_guardrails(
+            text=text, validations=validations, request_options=request_options
+        )
+        return _response.data
+
 
 class AsyncGuardrailsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -101,4 +142,46 @@ class AsyncGuardrailsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_guardrails(guardrails=guardrails, request_options=request_options)
+        return _response.data
+
+    async def validate_guardrails(
+        self,
+        *,
+        text: str,
+        validations: typing.Sequence[ValidationDescriptor],
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> GuardrailsValidationResponse:
+        """
+        Runs the requested checks on the text through the Opik inference decision service and returns a verdict per check. Writes nothing: the SDK reports the results to the guardrails batch endpoint, as before.
+
+        Parameters
+        ----------
+        text : str
+            The text to check, at most 16384 characters as the decision service counts them: on the text's JSON encoding, so the two quotes count, a quote, backslash or line break counts as 2, and any other control or non-ASCII character as 6 (an emoji as 12). In practice about 16,380 characters of English text fit, about 2,730 of text in Cyrillic, Greek, Hebrew, Arabic, Chinese or Japanese, and about 1,365 emoji. A longer text is rejected rather than cut.
+
+        validations : typing.Sequence[ValidationDescriptor]
+            The checks to run. Together they must fit in 64 questions to the decision service, asked in up to two calls of 32: each PII class and each topic list is one question, prompt injection is one
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        GuardrailsValidationResponse
+            A verdict per check
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import ValidationDescriptor
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.guardrails.validate_guardrails(text='text', validations=[ValidationDescriptor(type="TOPIC", config={'key': 'value'
+            }, )], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.validate_guardrails(
+            text=text, validations=validations, request_options=request_options
+        )
         return _response.data

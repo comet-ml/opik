@@ -79,7 +79,11 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
               onKeyDown={(event) => {
                 if (event.key === "Enter" && isValid && !isSubmitting) {
                   event.preventDefault();
-                  uploadError ? setConfirmOpen(true) : submitHandler();
+                  if (uploadError) {
+                    setConfirmOpen(true);
+                  } else {
+                    submitHandler();
+                  }
                 }
               }}
             />

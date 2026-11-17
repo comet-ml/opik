@@ -1,7 +1,7 @@
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import * as OpikApi from "@/rest_api/api";
 import { serialization } from "@/rest_api";
-import { parseNdjsonStreamToArray } from "@/utils/stream";
+import { readAllStreamPages } from "@/utils/stream";
 import { OpikQueryLanguage } from "@/query";
 
 /**
@@ -15,21 +15,20 @@ export async function searchTracesWithFilters(
   truncate: boolean,
   exclude?: OpikApi.TraceSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.TracePublic[]> {
-  const streamResponse = await apiClient.traces.searchTraces({
-    projectName,
-    filters: filters ?? undefined,
-    limit: maxResults,
-    truncate,
-    exclude,
-  });
-
-  const traces = await parseNdjsonStreamToArray<OpikApi.TracePublic>(
-    streamResponse,
+  return readAllStreamPages(
+    (limit, lastRetrievedId) =>
+      apiClient.traces.searchTraces({
+        projectName,
+        filters: filters ?? undefined,
+        limit,
+        lastRetrievedId,
+        truncate,
+        exclude,
+      }),
     serialization.TracePublic,
-    maxResults
+    "id",
+    { maxResults }
   );
-
-  return traces;
 }
 
 /**
@@ -78,20 +77,19 @@ export async function searchThreadsWithFilters(
   maxResults: number,
   truncate: boolean
 ): Promise<OpikApi.TraceThread[]> {
-  const streamResponse = await apiClient.traces.searchTraceThreads({
-    projectName,
-    filters: filters ?? undefined,
-    limit: maxResults,
-    truncate,
-  });
-
-  const threads = await parseNdjsonStreamToArray<OpikApi.TraceThread>(
-    streamResponse,
+  return readAllStreamPages(
+    (limit, lastRetrievedThreadModelId) =>
+      apiClient.traces.searchTraceThreads({
+        projectName,
+        filters: filters ?? undefined,
+        limit,
+        lastRetrievedThreadModelId,
+        truncate,
+      }),
     serialization.TraceThread,
-    maxResults
+    "thread_model_id",
+    { maxResults }
   );
-
-  return threads;
 }
 
 /**
@@ -176,21 +174,20 @@ export async function searchSpansWithFilters(
   truncate: boolean,
   exclude?: OpikApi.SpanSearchStreamRequestPublicExcludeItem[]
 ): Promise<OpikApi.SpanPublic[]> {
-  const streamResponse = await apiClient.spans.searchSpans({
-    projectName,
-    filters: filters ?? undefined,
-    limit: maxResults,
-    truncate,
-    exclude,
-  });
-
-  const spans = await parseNdjsonStreamToArray<OpikApi.SpanPublic>(
-    streamResponse,
+  return readAllStreamPages(
+    (limit, lastRetrievedId) =>
+      apiClient.spans.searchSpans({
+        projectName,
+        filters: filters ?? undefined,
+        limit,
+        lastRetrievedId,
+        truncate,
+        exclude,
+      }),
     serialization.SpanPublic,
-    maxResults
+    "id",
+    { maxResults }
   );
-
-  return spans;
 }
 
 /**

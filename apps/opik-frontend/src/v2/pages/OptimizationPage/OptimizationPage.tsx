@@ -137,7 +137,7 @@ const OptimizationPage: React.FC = () => {
     optimization?.status === OPTIMIZATION_STATUS.COMPLETED &&
     improvedOverBaseline === false;
   const resultCandidate = noImprovement
-    ? baselineCandidate ?? bestCandidate
+    ? (baselineCandidate ?? bestCandidate)
     : bestCandidate;
 
   // Drives the panel copy, its severity, and the KPI score-card caption.
