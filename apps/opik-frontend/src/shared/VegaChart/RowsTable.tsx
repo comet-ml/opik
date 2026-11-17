@@ -14,6 +14,7 @@ import DataTable from "@/shared/DataTable/DataTable";
 import { DataTableWrapperProps } from "@/shared/DataTable/DataTableWrapper";
 import TypeHeader from "@/shared/DataTableHeaders/TypeHeader";
 import TextCell from "@/shared/DataTableCells/TextCell";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 
 /** A table "chart" is stored as `{"table": {"columns": [...]}}` in place of a Vega-Lite spec. */
 export const tableColumns = (spec: VegaSpec): string[] | null => {
@@ -98,10 +99,25 @@ const usePersistColumnWidths = (
   }, []);
 };
 
+// A column is never saved or drawn wider than the widget, which another viewer's screen may make narrow.
+const capWidths = (
+  widths: ColumnSizingState,
+  maxWidth: number,
+): ColumnSizingState =>
+  maxWidth > 0
+    ? Object.fromEntries(
+        Object.entries(widths).map(([id, width]) => [
+          id,
+          Math.min(width, maxWidth),
+        ]),
+      )
+    : widths;
+
 // The default table frame, scrolling inside the widget with the header stuck to its top; it hugs a short table.
+// Its own scrollbar styles keep the scrollbar visible where the OS hides it, so columns past the edge show.
 const RowsTableWrapper: React.FC<DataTableWrapperProps> = ({ children }) => (
   <div
-    className="relative max-h-full overflow-auto rounded-md border [&_thead[data-sticky-vertical]]:!top-0"
+    className="relative max-h-full overflow-auto rounded-md border [&::-webkit-scrollbar-thumb:hover]:bg-[var(--scrollbar-thumb-hover)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--scrollbar-thumb)] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar]:bg-transparent [&_thead[data-sticky-vertical]]:!top-0"
     data-table-scroll-container
   >
     {children}
@@ -194,25 +210,46 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
 
   const markWidthsPending = usePersistColumnWidths(onColumnsWidthChange);
 
+  const [frameWidth, setFrameWidth] = useState(0);
+  const { ref: frameRef } = useObserveResizeNode<HTMLDivElement>(
+    useCallback((node) => setFrameWidth(node.clientWidth), []),
+  );
+
+  // Widening the widget brings a capped column back to its saved width.
+  const shownSizing = useMemo(
+    () => capWidths(columnSizing, frameWidth),
+    [columnSizing, frameWidth],
+  );
+
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
-      columnSizing,
+      columnSizing: shownSizing,
       onColumnResize: ((updater) => {
         const next =
-          typeof updater === "function" ? updater(columnSizing) : updater;
-        markWidthsPending(next);
-        setColumnSizing(next);
+          typeof updater === "function" ? updater(shownSizing) : updater;
+        // Only the dragged column changes; the others keep their saved widths, which may suit a wider screen.
+        const dragged = Object.fromEntries(
+          Object.entries(next).filter(
+            ([id, width]) => width !== shownSizing[id],
+          ),
+        );
+        const widths = {
+          ...columnSizing,
+          ...capWidths(dragged, frameWidth),
+        };
+        markWidthsPending(widths);
+        setColumnSizing(widths);
       }) as OnChangeFn<ColumnSizingState>,
     }),
-    [columnSizing, markWidthsPending],
+    [columnSizing, shownSizing, frameWidth, markWidthsPending],
   );
 
   return (
     <div className="flex size-full flex-col gap-1">
       {note && <span className="comet-body-xs text-muted-slate">{note}</span>}
       {/* DataTable's root takes the height, so the frame can cap at it and scroll. */}
-      <div className="min-h-0 flex-1 [&>div]:h-full">
+      <div ref={frameRef} className="min-h-0 flex-1 [&>div]:h-full">
         <DataTable
           columns={columnDefs}
           data={sortedData}
