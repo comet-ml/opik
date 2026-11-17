@@ -1,6 +1,10 @@
 package com.comet.opik.infrastructure.db;
 
+import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.core.StreamWriteConstraints;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.util.RawValue;
 import com.google.common.base.Preconditions;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
@@ -25,6 +29,12 @@ import java.util.Map;
  */
 @UtilityClass
 public class JsonRowValues {
+
+    /**
+     * The deepest payload that can be embedded raw: the row object around it is one more level against the
+     * generator's {@code StreamWriteConstraints} nesting limit.
+     */
+    private static final int MAX_RAW_PAYLOAD_DEPTH = StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1;
 
     /**
      * A blank column name is as wrong as a null one -- {@code node.put("", value)} produces a row
@@ -113,5 +123,35 @@ public class JsonRowValues {
         checkField(field);
 
         node.put(field, value);
+    }
+
+    /**
+     * Writes a payload ({@code input}, {@code output}) and its slim copy into their {@code String} columns.
+     *
+     * <p>An object or array is embedded as raw JSON and streamed from the node when the row is written, rather
+     * than serialized to a {@code String} first and escaped again into the row. ClickHouse stores such a value
+     * verbatim in a {@code String} column ({@code input_format_json_read_objects_as_strings} and
+     * {@code input_format_json_read_arrays_as_strings}, which {@link JsonEachRowBulkInsert} sets per request),
+     * so the cells are the same text as {@link TruncationUtils#toJsonWithSlim(JsonNode)}.
+     *
+     * <p>Anything else is written as that text: ClickHouse would store a raw root string without its quotes and
+     * a raw {@code null} as an empty string, which are not the cells the string path writes. So is a payload
+     * nested deeper than {@code MAX_RAW_PAYLOAD_DEPTH}, which only fits the generator's nesting limit on its own.
+     */
+    public void putJsonWithSlim(@NonNull ObjectNode node, String field, String slimField,
+            @Nullable JsonNode value) {
+        checkField(field);
+        checkField(slimField);
+        if (value != null && value.isContainerNode()) {
+            var slim = TruncationUtils.toSlimJson(value, MAX_RAW_PAYLOAD_DEPTH);
+            if (slim.isPresent()) {
+                node.putRawValue(field, new RawValue(value));
+                node.putRawValue(slimField, new RawValue(slim.get()));
+                return;
+            }
+        }
+        var columns = TruncationUtils.toJsonWithSlim(value);
+        node.put(field, columns.json());
+        node.put(slimField, columns.slim());
     }
 }

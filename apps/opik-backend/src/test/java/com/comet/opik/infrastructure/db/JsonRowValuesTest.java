@@ -1,10 +1,18 @@
 package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.core.StreamWriteConstraints;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Covers {@link JsonRowValues#putDouble}, which decides how every {@code Float64} column on the
  * JSONEachRow write paths is spelled. The contract is parity with the R2DBC driver's own rendering, so
  * the finite case is pinned against {@code String.valueOf} rather than against a hand-picked literal.
+ * Also covers {@link JsonRowValues#putJsonWithSlim}, which embeds object and array payloads as raw JSON.
  */
 class JsonRowValuesTest {
 
@@ -81,5 +90,80 @@ class JsonRowValuesTest {
 
         assertThatThrownBy(() -> JsonRowValues.putDouble(node, "  ", 1.0))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static String randomText(int length) {
+        return RandomStringUtils.secure().nextAlphanumeric(length);
+    }
+
+    static Stream<JsonNode> containerPayloads() {
+        int max = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
+        return Stream.of(
+                JsonUtils.getJsonNodeFromString("{}"),
+                JsonUtils.getJsonNodeFromString("[]"),
+                JsonUtils.getJsonNodeFromString("{\"short\":\"%s\",\"n\":1,\"none\":null}"
+                        .formatted(randomText(20))),
+                JsonUtils.getJsonNodeFromString("[{\"long\":\"%s\"},\"%s\",1.5]"
+                        .formatted(randomText(max + 1), randomText(max * 2))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("containerPayloads")
+    @DisplayName("an object or array payload is embedded as raw JSON, with its slim copy")
+    void containerPayloadIsEmbeddedRaw(JsonNode payload) {
+        var node = JsonUtils.createObjectNode();
+
+        JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
+
+        var columns = TruncationUtils.toJsonWithSlim(payload);
+        assertThat(JsonUtils.writeValueAsString(node))
+                .isEqualTo("{\"input\":%s,\"input_slim\":%s}".formatted(columns.json(), columns.slim()));
+    }
+
+    private static JsonNode nestedArrays(int depth) {
+        JsonNode node = JsonNodeFactory.instance.arrayNode().add(randomText(10));
+        for (int level = 1; level < depth; level++) {
+            node = JsonNodeFactory.instance.arrayNode().add(node);
+        }
+        return node;
+    }
+
+    @Test
+    @DisplayName("a payload as deep as the row leaves room for is embedded raw, and still serializes")
+    void deepestPayloadIsEmbeddedRaw() {
+        var payload = nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH - 1);
+        var node = JsonUtils.createObjectNode();
+
+        JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
+
+        var json = payload.toString();
+        assertThat(JsonUtils.writeValueAsString(node))
+                .isEqualTo("{\"input\":%s,\"input_slim\":%s}".formatted(json, json));
+    }
+
+    static Stream<JsonNode> textPayloads() {
+        return Stream.of(
+                // One level deeper than the row leaves room for: it serializes alone, not embedded.
+                nestedArrays(StreamWriteConstraints.DEFAULT_MAX_DEPTH),
+                null,
+                JsonUtils.getJsonNodeFromString("null"),
+                JsonUtils.getJsonNodeFromString("42"),
+                JsonUtils.getJsonNodeFromString("\"%s\"".formatted(
+                        randomText(TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH + 1))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("textPayloads")
+    @DisplayName("any other payload is written as its JSON text")
+    void otherPayloadIsWrittenAsText(JsonNode payload) {
+        var node = JsonUtils.createObjectNode();
+
+        JsonRowValues.putJsonWithSlim(node, "input", "input_slim", payload);
+
+        var columns = TruncationUtils.toJsonWithSlim(payload);
+        var expected = JsonUtils.createObjectNode()
+                .put("input", columns.json())
+                .put("input_slim", columns.slim());
+        assertThat(node).isEqualTo(expected);
     }
 }

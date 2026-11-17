@@ -47,10 +47,6 @@ class TraceJsonRowMapper {
     ObjectNode toJsonRow(@NonNull Trace trace, @NonNull String userName, @NonNull String workspaceId,
             @NonNull String nowForBatch, boolean nonNullableColumns, int truncationSize) {
 
-        // Serialized once with their *_slim counterparts below.
-        var input = TruncationUtils.toJsonWithSlim(trace.input());
-        var output = TruncationUtils.toJsonWithSlim(trace.output());
-
         var node = JsonUtils.createObjectNode();
 
         node.put("id", trace.id().toString());
@@ -69,8 +65,9 @@ class TraceJsonRowMapper {
             node.putNull("end_time");
         }
 
-        node.put("input", input.json());
-        node.put("output", output.json());
+        // Each with its *_slim column, streamed from the node when the row is written.
+        JsonRowValues.putJsonWithSlim(node, "input", "input_slim", trace.input());
+        JsonRowValues.putJsonWithSlim(node, "output", "output_slim", trace.output());
         node.put("metadata", TruncationUtils.toJsonString(trace.metadata()));
 
         var tags = node.putArray("tags");
@@ -88,8 +85,6 @@ class TraceJsonRowMapper {
         node.put("visibility_mode", trace.visibilityMode() != null
                 ? trace.visibilityMode().getValue()
                 : VisibilityMode.DEFAULT.getValue());
-        node.put("input_slim", input.slim());
-        node.put("output_slim", output.slim());
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {

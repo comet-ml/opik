@@ -206,6 +206,8 @@ class JsonEachRowBulkInsertTest {
         assertThat(settingValue(captured.settings(), "date_time_input_format")).isEqualTo("best_effort");
         assertThat(settingValue(captured.settings(), "input_format_defaults_for_omitted_fields")).isEqualTo("1");
         assertThat(settingValue(captured.settings(), "input_format_json_read_numbers_as_strings")).isEqualTo("1");
+        assertThat(settingValue(captured.settings(), "input_format_json_read_objects_as_strings")).isEqualTo("1");
+        assertThat(settingValue(captured.settings(), "input_format_json_read_arrays_as_strings")).isEqualTo("1");
     }
 
     @Test

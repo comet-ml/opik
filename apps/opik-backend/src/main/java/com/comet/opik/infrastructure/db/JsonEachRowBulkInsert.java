@@ -188,6 +188,11 @@ public class JsonEachRowBulkInsert {
                 // non-nullable. Set explicitly rather than inherited from the server default,
                 // which would make correctness depend on an unrelated server-side setting.
                 .serverSetting("input_format_json_read_numbers_as_strings", "1")
+                // JsonRowValues.putJsonWithSlim embeds object and array payloads as raw JSON, and these
+                // store them verbatim in their String columns. Both default to 1; pinned here so the
+                // stored text does not depend on the server default.
+                .serverSetting("input_format_json_read_objects_as_strings", "1")
+                .serverSetting("input_format_json_read_arrays_as_strings", "1")
                 // The parallel parser splits the body on chunk boundaries and cannot carry one row
                 // across them, so a single row past 10x min_chunk_bytes_for_parallel_parsing -- 100
                 // MiB at the 10 MiB default -- is rejected with "Size of JSON object at position N

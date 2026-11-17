@@ -5,8 +5,10 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.io.SegmentedStringWriter;
 import com.fasterxml.jackson.core.util.BufferRecycler;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializable;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -21,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Iterator;
+import java.util.Optional;
 
 /**
  * Utility class for handling data truncation operations in DAO classes.
@@ -173,10 +176,11 @@ public final class TruncationUtils {
             return JsonWithSlim.builder().json(json).slim(json).build();
         }
 
-        String slim = switch (inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH)) {
+        String slim = switch (inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH, Integer.MAX_VALUE)) {
             case UNCHANGED -> json;
             case TRUNCATED -> writeSlimJsonString(node, DEFAULT_SLIM_STRING_MAX_LENGTH);
-            case REPARSE -> createSlimJsonString(json);
+            // TOO_DEEP is unreachable without a depth bound; the reparse is correct for any node.
+            case REPARSE, TOO_DEEP -> createSlimJsonString(json);
         };
 
         return JsonWithSlim.builder().json(json).slim(slim).build();
@@ -194,19 +198,64 @@ public final class TruncationUtils {
         public static final JsonWithSlim EMPTY = JsonWithSlim.builder().json("").slim("").build();
     }
 
+    /**
+     * The slim JSON of a payload node as a value that writes itself into the caller's generator, for a row that
+     * embeds the payload as raw JSON rather than as a string. Writes the same text
+     * {@link #toJsonWithSlim(JsonNode)} returns as {@code slim}, without materializing it as a {@code String}
+     * except on the reparse path.
+     *
+     * <p>Empty when the node nests more than {@code maxDepth} containers deep, so the caller can keep such a payload
+     * on the string path: embedded in an enclosing document, it would exceed the generator's nesting limit that
+     * {@code node.toString()} alone stays within. Checked in the same walk that inspects the strings.
+     *
+     * @param node     the payload node
+     * @param maxDepth the deepest container nesting to accept, the root container counting as one
+     * @return the slim JSON, written when the enclosing value is serialized, or empty if the node is too deep
+     */
+    public static Optional<JsonSerializable> toSlimJson(@NonNull JsonNode node, int maxDepth) {
+        SlimShape shape = inspect(node, DEFAULT_SLIM_STRING_MAX_LENGTH, maxDepth);
+        return switch (shape) {
+            case TOO_DEEP -> Optional.empty();
+            case UNCHANGED, TRUNCATED, REPARSE -> Optional.of(new SlimJson(node, shape));
+        };
+    }
+
+    private record SlimJson(JsonNode node, SlimShape shape) implements JsonSerializable {
+
+        @Override
+        public void serialize(JsonGenerator generator, SerializerProvider provider) throws IOException {
+            switch (shape) {
+                case UNCHANGED -> node.serialize(generator, provider);
+                case TRUNCATED -> writeSlimJson(generator, node, DEFAULT_SLIM_STRING_MAX_LENGTH, provider);
+                // TOO_DEEP is never constructed; the reparse is correct for any node.
+                case REPARSE, TOO_DEEP -> generator.writeRawValue(createSlimJsonString(node.toString()));
+            }
+        }
+
+        @Override
+        public void serializeWithType(JsonGenerator generator, SerializerProvider provider,
+                TypeSerializer typeSerializer) throws IOException {
+            serialize(generator, provider);
+        }
+    }
+
     private enum SlimShape {
         UNCHANGED,
         TRUNCATED,
-        REPARSE
+        REPARSE,
+        TOO_DEEP
     }
 
     /**
-     * Walks the node without allocating copies. Stops at the first value that needs the reparse path; otherwise
-     * reports whether any string value exceeds the max length.
+     * Walks the node without allocating copies. Stops at the first container deeper than {@code depthLeft} allows;
+     * otherwise reports whether any value needs the reparse path, or else whether any string value exceeds the
+     * max length.
      */
-    private static SlimShape inspect(JsonNode node, int maxStringLength) {
+    private static SlimShape inspect(JsonNode node, int maxStringLength, int depthLeft) {
         return switch (node.getNodeType()) {
-            case OBJECT, ARRAY -> inspectChildren(node.elements(), maxStringLength);
+            case OBJECT, ARRAY -> depthLeft <= 0
+                    ? SlimShape.TOO_DEEP
+                    : inspectChildren(node.elements(), maxStringLength, depthLeft - 1);
             case STRING -> node.textValue().length() > maxStringLength ? SlimShape.TRUNCATED : SlimShape.UNCHANGED;
             case NUMBER -> node.isFloat() || node.isBigDecimal() ? SlimShape.REPARSE : SlimShape.UNCHANGED;
             case BOOLEAN, NULL -> SlimShape.UNCHANGED;
@@ -214,14 +263,15 @@ public final class TruncationUtils {
         };
     }
 
-    private static SlimShape inspectChildren(Iterator<JsonNode> children, int maxStringLength) {
+    private static SlimShape inspectChildren(Iterator<JsonNode> children, int maxStringLength, int depthLeft) {
         SlimShape shape = SlimShape.UNCHANGED;
         while (children.hasNext()) {
-            switch (inspect(children.next(), maxStringLength)) {
-                case REPARSE -> {
-                    return SlimShape.REPARSE;
+            switch (inspect(children.next(), maxStringLength, depthLeft)) {
+                case TOO_DEEP -> {
+                    return SlimShape.TOO_DEEP;
                 }
-                case TRUNCATED -> shape = SlimShape.TRUNCATED;
+                case REPARSE -> shape = SlimShape.REPARSE;
+                case TRUNCATED -> shape = shape == SlimShape.UNCHANGED ? SlimShape.TRUNCATED : shape;
                 case UNCHANGED -> {
                 }
             }
