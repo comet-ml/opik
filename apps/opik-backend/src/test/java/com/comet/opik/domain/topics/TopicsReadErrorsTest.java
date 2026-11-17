@@ -6,13 +6,17 @@ import jakarta.ws.rs.core.HttpHeaders;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("topics read errors")
 class TopicsReadErrorsTest {
@@ -55,19 +59,19 @@ class TopicsReadErrorsTest {
         assertThat(TopicsReadErrors.isTooLarge(error)).isFalse();
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {159, 241})
-    @DisplayName("a query filtered by topic that stops at its time or memory guard is a 503 with Retry-After")
-    void guardCodeIs503(int code) {
-        var read = Mono.<Long>error(new RuntimeException(new ServerException(code, "Limit", 500, "query-id")));
-
-        assertBusy(catchThrowable(() -> TopicsReadErrors.busyOnFilterGuard(true, read).block()));
+    static Stream<Arguments> guardTrips() {
+        return Stream.of(
+                arguments("its time guard (159)", new RuntimeException(new ServerException(159, "Limit", 500,
+                        "query-id"))),
+                arguments("its memory guard (241)", new RuntimeException(new ServerException(241, "Limit", 500,
+                        "query-id"))),
+                arguments("the client timeout", new IllegalStateException(new TimeoutException("late"))));
     }
 
-    @Test
-    @DisplayName("a query filtered by topic that hits the client timeout is a 503 with Retry-After")
-    void clientTimeoutIs503() {
-        var read = Mono.<Long>error(new IllegalStateException(new TimeoutException("late")));
+    @ParameterizedTest(name = "a query filtered by topic that stops at {0} is a 503 with Retry-After")
+    @MethodSource("guardTrips")
+    void guardTripIs503(String name, Throwable error) {
+        var read = Mono.<Long>error(error);
 
         assertBusy(catchThrowable(() -> TopicsReadErrors.busyOnFilterGuard(true, read).block()));
     }

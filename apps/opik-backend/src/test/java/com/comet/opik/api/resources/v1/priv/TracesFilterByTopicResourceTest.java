@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
-import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.ProjectTopics.DayCount;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.TimeInterval;
@@ -16,7 +15,6 @@ import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
-import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -26,6 +24,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.TopicsReadTestUtils;
+import com.comet.opik.api.resources.utils.TopicsReadTestUtils.Caller;
 import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.api.resources.utils.TopicsTraces.TraceRow;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -34,11 +34,9 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
-import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.topics.Topic;
 import com.comet.opik.domain.topics.TopicDAO;
-import com.comet.opik.domain.topics.TopicProjectState;
 import com.comet.opik.domain.topics.TraceTopic;
 import com.comet.opik.domain.topics.TraceTopicsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -51,7 +49,6 @@ import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.awaitility.Awaitility;
@@ -87,7 +84,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
@@ -96,7 +92,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.savedState;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.topic;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -111,10 +108,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class TracesFilterByTopicResourceTest {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/topics";
-    private static final String USER = "user-" + UUID.randomUUID();
-    private static final String RATE_LIMIT_BUCKET = "getProjectTopics";
-    private static final int RATE_LIMIT = 3;
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
@@ -146,12 +139,6 @@ class TracesFilterByTopicResourceTest {
                         DATABASE_NAME))
                 .runtimeInfo(wireMock.runtimeInfo())
                 .redisUrl(redis.getRedisURI())
-                .rateLimitEnabled(true)
-                .limit(10_000L)
-                .workspaceLimit(10_000L)
-                .limitDurationInSeconds(60L)
-                .customLimits(Map.of(RATE_LIMIT_BUCKET, new LimitConfig("Get-Project-Topics", "get_project_topics",
-                        RATE_LIMIT, 60, "You have exceeded the rate limit for this operation.")))
                 .customConfigs(List.of(
                         new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
                         new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true"),
@@ -177,6 +164,7 @@ class TracesFilterByTopicResourceTest {
     private TraceTopicsDAO traceTopicsDAO;
     private OpikConfiguration opikConfig;
     private ConnectionFactory connectionFactory;
+    private TopicsReadTestUtils topics;
 
     @BeforeAll
     void setUpAll(ClientSupport client, Injector injector, OpikConfiguration opikConfig) {
@@ -190,6 +178,7 @@ class TracesFilterByTopicResourceTest {
         this.traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
         this.connectionFactory = injector.getInstance(ConnectionFactory.class);
         this.opikConfig = opikConfig;
+        this.topics = new TopicsReadTestUtils(wireMock.server(), client, baseUrl, projectClient, template, opikConfig);
     }
 
     @AfterEach
@@ -269,7 +258,7 @@ class TracesFilterByTopicResourceTest {
         var notInLogs = notInLogs(seed);
         var today = LocalDate.now(ZoneOffset.UTC);
 
-        var body = get(seed.caller(), seed.projectId());
+        var body = topics.get(seed.caller(), seed.projectId());
 
         assumeTrue(today.equals(body.today()), "the UTC day changed between the seed and the request");
         var window = List.of(
@@ -306,8 +295,8 @@ class TracesFilterByTopicResourceTest {
     @Test
     @DisplayName("a workspace without Topics: = and != give no trace, with no error")
     void workspaceWithoutTopics() {
-        var caller = caller();
-        var projectId = project(caller);
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
         createTraces(caller, projectId, 2);
         var topicId = UUID.randomUUID().toString();
 
@@ -480,9 +469,9 @@ class TracesFilterByTopicResourceTest {
      * retention deleted them, and their rows still count.
      */
     private Seed seed() {
-        var caller = caller();
-        var projectId = project(caller);
-        optIn(caller.workspaceId());
+        var caller = topics.caller();
+        var projectId = topics.project(caller);
+        topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
         var labelled = topic(caller.workspaceId(), projectId, today.minusDays(10), null);
         var arrived = topic(caller.workspaceId(), projectId, today.minusDays(10), null);
@@ -633,73 +622,4 @@ class TracesFilterByTopicResourceTest {
         return TraceFilter.builder().field(field).operator(operator).value(value).build();
     }
 
-    private record Caller(String apiKey, String workspaceName, String workspaceId) {
-    }
-
-    private Caller caller() {
-        var caller = new Caller(UUID.randomUUID().toString(), "ws-" + UUID.randomUUID(),
-                UUID.randomUUID().toString());
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), caller.apiKey(), caller.workspaceName(),
-                caller.workspaceId(), USER);
-        return caller;
-    }
-
-    private UUID project(Caller caller) {
-        return projectClient.createProject("topics-" + UUID.randomUUID(), caller.apiKey(), caller.workspaceName());
-    }
-
-    /** Enabled in ai_label_workspaces, and added to topics.enabledWorkspaces as a Helm change would. */
-    private void optIn(String workspaceId) {
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, true, "test");
-            return null;
-        });
-        var topics = opikConfig.getTopics();
-        var listed = new TreeSet<>(topics.enabledWorkspaceIds());
-        listed.add(workspaceId);
-        topics.setEnabledWorkspaces(String.join(",", listed));
-    }
-
-    private Invocation.Builder request(Caller caller, UUID projectId) {
-        return client.target(RESOURCE_PATH.formatted(baseUrl))
-                .queryParam("project_id", projectId)
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, caller.apiKey())
-                .header(RequestContext.WORKSPACE_HEADER, caller.workspaceName());
-    }
-
-    private ProjectTopics get(Caller caller, UUID projectId) {
-        try (var response = request(caller, projectId).get()) {
-            assertThat(response.getStatus()).isEqualTo(Response.Status.OK.getStatusCode());
-            return response.readEntity(ProjectTopics.class);
-        }
-    }
-
-    /** The state of a project a run saved. */
-    private static TopicProjectState savedState(String workspaceId, UUID projectId) {
-        var today = LocalDate.now(ZoneOffset.UTC);
-        return TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(workspaceId)
-                .rebuilds(1)
-                .firstBuiltAt(today.minusDays(20).atTime(2, 0).toInstant(ZoneOffset.UTC))
-                .lastRunId(ID_GENERATOR.generateId())
-                .lastSuccessAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                .windowUntil(today.atStartOfDay().toInstant(ZoneOffset.UTC))
-                .build();
-    }
-
-    private static Topic topic(String workspaceId, UUID projectId, LocalDate born, LocalDate retiredAt) {
-        var id = UUID.randomUUID();
-        return Topic.builder()
-                .id(id)
-                .workspaceId(workspaceId)
-                .projectId(projectId)
-                .name("Topic " + id)
-                .definition("Definition of " + id)
-                .born(born)
-                .retiredAt(retiredAt)
-                .retiredReason(retiredAt == null ? null : "merged")
-                .build();
-    }
 }
