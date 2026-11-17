@@ -18,6 +18,8 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -123,21 +125,6 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a failed mark counts the run once, with its workspace")
-    void failCountsOnce() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
-
-        assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
-
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.get("status")).isEqualTo("failed");
-            assertThat(point.get("error_code")).isEqualTo("timeout");
-            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
-            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
-        });
-    }
-
-    @Test
     @DisplayName("a run that had already ended is not counted again")
     void alreadyEndedIsNotCounted() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(0);
@@ -149,7 +136,7 @@ class TopicsRebuildServiceTest {
 
     @Test
     @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
-            + "counts it once")
+            + "counts it once, with its workspace")
     void markThatThrowsCountsNothing() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"))
@@ -160,12 +147,17 @@ class TopicsRebuildServiceTest {
         assertThat(meter.points("topics.runs")).isEmpty();
 
         assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
-        assertThat(meter.points("topics.runs")).singleElement()
-                .satisfies(point -> assertThat(point.get("error_code")).isEqualTo("timeout"));
+        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+            assertThat(point.get("status")).isEqualTo("failed");
+            assertThat(point.get("error_code")).isEqualTo("timeout");
+            assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
     }
 
     @Test
-    @DisplayName("an answer that cannot be read counts bad_answer, not ok, and fails the run once")
+    @DisplayName("an answer that cannot be read counts bad_answer, not ok, fails the run once, and the failed run "
+            + "does not label")
     void unreadableAnswerIsBadAnswer() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
         answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
@@ -181,6 +173,7 @@ class TopicsRebuildServiceTest {
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "qwen_bad_answer")).isEqualTo(1);
         assertThat(meter.points("topics.run.duration_seconds"))
                 .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -338,22 +331,6 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a saved run counts its run and rows with the workspace attributes")
-    void savedRunIsCounted() {
-        answer(FIXTURE.answer);
-
-        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
-        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.get("status")).isEqualTo("saved");
-            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
-        });
-        assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
-                .isEqualTo(TRACES);
-    }
-
-    @Test
     @DisplayName("a saved run then labels the rest of its window, after the MySQL commit and its own insert, until "
             + "its timeout less the slack")
     void savedRunLabelsTheWindow() {
@@ -372,17 +349,6 @@ class TopicsRebuildServiceTest {
         order.verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(projectId), deadline.capture(),
                 eq(TopicWindowLabelService.Trigger.RUN));
         assertThat(deadline.getValue()).isBetween(earliest, latest);
-    }
-
-    @Test
-    @DisplayName("a run that fails before its save does not label")
-    void failedRunDoesNotLabel() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
-        answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
-
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-
-        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -405,11 +371,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a saved nightly update records the Other share it saved in its stats, and its live topics and churn, "
             + "with its workspace")
     void nightlyUpdateIsCounted() throws Exception {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        // Most nights make no Qwen call; any that comes changes nothing.
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -446,10 +408,7 @@ class TopicsRebuildServiceTest {
             + "as a run's, then runs the labelling pass after its insert")
     @SuppressWarnings("unchecked")
     void nightlyUpdateSavesThenLabels() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -476,38 +435,13 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a nightly update whose state no longer names the run it read fails as a conflict and writes nothing")
-    void nightlyUpdateConflict() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
-        when(topicDAO.updateState(any(), eq(runId))).thenReturn(0);
-        var updateRunId = UUID.randomUUID();
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(updateRunId), any(), anyString(), anyString(), any()))
-                .thenReturn(1);
-
-        var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
-
-        assertThat(outcome.errorCode()).isEqualTo("save");
-        verify(topicDAO, never()).updateTopics(any());
-        verify(runDAO, never()).markSaved(eq(WORKSPACE_ID), eq(updateRunId), any(), any());
-        // The first build's insert and pass only.
-        verify(traceTopicsDAO, times(1)).insert(any());
-        verify(labelService, times(1)).labelWindow(any(), any(), any(), any());
-    }
-
-    @Test
     @DisplayName("a nightly update that leaves no live topic deletes the state and the prototypes, keeps the topics as "
             + "retired, and writes no labels")
     @SuppressWarnings("unchecked")
     void allRetiredDeletesTheList() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
+        firstBuildThenEmptyNaming();
         // The topics keep no prototype, so they hold no trace tonight and retire; the naming call births nothing.
         when(topicDAO.findPrototypes(WORKSPACE_ID, projectId)).thenReturn(List.of());
-        answer(emptyNaming());
         var updateRunId = UUID.randomUUID();
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
@@ -528,21 +462,26 @@ class TopicsRebuildServiceTest {
         verify(labelService, times(1)).labelWindow(any(), any(), any(), any());
     }
 
-    @Test
-    @DisplayName("a nightly update's MySQL save that fails writes no trace_topics row: the traces keep last night's")
-    void failedUpdateSaveWritesNoLabels() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"the state no longer names the run it read", "MySQL is down"})
+    @DisplayName("a nightly update whose MySQL save fails, as a conflict or with MySQL down, fails with save and "
+            + "writes no trace_topics row: the traces keep last night's")
+    void failedUpdateSaveWritesNoLabels(String failure) {
+        firstBuildThenEmptyNaming();
+        if (failure.equals("MySQL is down")) {
+            when(topicDAO.updateState(any(), eq(runId))).thenThrow(new IllegalStateException("MySQL down"));
+        } else {
+            when(topicDAO.updateState(any(), eq(runId))).thenReturn(0);
+        }
         var updateRunId = UUID.randomUUID();
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(updateRunId), any(), anyString(), anyString(), any()))
                 .thenReturn(1);
-        when(topicDAO.updateState(any(), eq(runId))).thenThrow(new IllegalStateException("MySQL down"));
 
         var outcome = service.nightlyUpdate(updateRunId, WORKSPACE_ID, projectId, night.plusDays(1));
 
         assertThat(outcome.errorCode()).isEqualTo("save");
+        verify(topicDAO, never()).updateTopics(any());
+        verify(runDAO, never()).markSaved(eq(WORKSPACE_ID), eq(updateRunId), any(), any());
         // The first build's insert and pass only.
         verify(traceTopicsDAO, times(1)).insert(any());
         verify(labelService, times(1)).labelWindow(any(), any(), any(), any());
@@ -552,10 +491,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a nightly update's trace_topics insert comes after its MySQL commit, and a failed insert is retried")
     void updateInsertAfterCommitIsRetried() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         var attempts = new AtomicInteger();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.defer(() -> attempts.incrementAndGet() <= 2
                 ? Mono.error(new IllegalStateException("ClickHouse down"))
@@ -576,10 +512,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a nightly update whose trace_topics insert fails every attempt stays saved, and its labelling pass "
             + "still runs")
     void updateInsertExhausted() {
-        answer(FIXTURE.answer);
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
-        readBackFirstBuild();
-        answer(emptyNaming());
+        firstBuildThenEmptyNaming();
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.error(new IllegalStateException("ClickHouse down")));
         var updateRunId = UUID.randomUUID();
 
@@ -682,6 +615,17 @@ class TopicsRebuildServiceTest {
         when(topicDAO.updateState(any(), eq(runId))).thenReturn(1);
     }
 
+    /**
+     * The first build, read back as the nightly update reads it, then a naming answer that changes nothing: most nights
+     * make no Qwen call, and any that comes changes nothing.
+     */
+    private void firstBuildThenEmptyNaming() {
+        answer(FIXTURE.answer);
+        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        readBackFirstBuild();
+        answer(emptyNaming());
+    }
+
     /** A naming answer that changes nothing. */
     private static JsonNode emptyNaming() {
         var naming = InferenceJson.MAPPER.createObjectNode();
@@ -692,12 +636,20 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a saved run records the Other share it saved in its stats, once, with its workspace")
+    @DisplayName("a saved run counts its run and rows, and records the Other share it saved in its stats, once, "
+            + "with its workspace")
     void otherShareIsTheSavedValue() throws Exception {
         answer(FIXTURE.answer);
 
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+            assertThat(point.get("status")).isEqualTo("saved");
+            assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
+        });
+        assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
+                .isEqualTo(TRACES);
         var stats = ArgumentCaptor.forClass(String.class);
         verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
         double saved = JsonUtils.getMapper().readTree(stats.getValue()).get("other_share").asDouble();
@@ -743,8 +695,7 @@ class TopicsRebuildServiceTest {
             var output = InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"Alpha Requests\", "
                     + "\"definition\": \"d\"}], \"assignment\": [{\"cluster\": " + matcher.group(1)
                     + ", \"topic\": 0}]}");
-            return Mono.just(GenerateResponse.builder().requestId("r-1").usage(new Usage(1_000, 200))
-                    .latencyMs(1_500).result(new GenerateResult(output)).build());
+            return Mono.just(response(output));
         });
 
         assertThat(service.firstBuild(runId, WORKSPACE_ID, projectId, night).status())
@@ -910,12 +861,12 @@ class TopicsRebuildServiceTest {
     }
 
     private void answer(JsonNode output) {
-        when(client.generate(any(), any())).thenReturn(Mono.just(GenerateResponse.builder()
-                .requestId("r-1")
-                .usage(new Usage(1_000, 200))
-                .latencyMs(1_500)
-                .result(new GenerateResult(output))
-                .build()));
+        when(client.generate(any(), any())).thenReturn(Mono.just(response(output)));
+    }
+
+    private static GenerateResponse response(JsonNode output) {
+        return GenerateResponse.builder().requestId("r-1").usage(new Usage(1_000, 200)).latencyMs(1_500)
+                .result(new GenerateResult(output)).build();
     }
 
     private static List<TopicWindowRow> window() {

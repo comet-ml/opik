@@ -54,7 +54,6 @@ public interface TopicDAO {
             """)
     int[] updateTopics(@BindMethods List<Topic> topics);
 
-    /** The projects among {@code projectIds} of the workspace with at least one live topic. */
     @SqlQuery("""
             SELECT DISTINCT project_id FROM topics
             WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND retired_at IS NULL
@@ -124,7 +123,6 @@ public interface TopicDAO {
     int markLabelsComplete(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId);
 
-    /** The projects of {@code workspaceIds} whose last saved run's labels are not complete, the oldest save first. */
     @SqlQuery("""
             SELECT workspace_id, project_id FROM topic_project_states
             WHERE workspace_id IN (<workspaceIds>) AND labels_complete = FALSE
@@ -144,10 +142,7 @@ public interface TopicDAO {
     int deleteStatesByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
-    /**
-     * Deletes the workspaces' topics whose project no longer exists: rows a failed delete on {@code ProjectsDeleted}
-     * left behind, or a save that committed after the project was deleted.
-     */
+    /** Deletes the workspaces' topics whose project no longer exists. */
     @SqlUpdate("""
             DELETE t FROM topics t
             LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id

@@ -9,7 +9,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -23,6 +26,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -111,34 +115,32 @@ class TopicsNightlyRulesTest {
 
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {
-                "a catch-all name|{\"name\": \"General Requests\", \"definition\": \"x\", \"clusters\": [0]}",
-                "an empty name|{\"name\": \"\", \"definition\": \"x\", \"clusters\": [0]}",
-                "a blank name|{\"name\": \" \\u00A0 \", \"definition\": \"x\", \"clusters\": [0]}",
-                "an unknown cluster|{\"name\": \"Weather\", \"definition\": \"x\", \"clusters\": [7]}",
-                "no new topic|"})
-        @DisplayName("an answer that gives a group no usable topic sends it to known Other")
-        void noName(String label, String entry) {
-            var state = state(0, topic("A"));
+                "a catch-all name|{\"name\": \"General Requests\", \"definition\": \"x\", \"clusters\": [0]}"
+                        + "|OTHER_NAME||1|",
+                "an empty name|{\"name\": \"\", \"definition\": \"x\", \"clusters\": [0]}|OTHER_NAME||1|",
+                "a blank name|{\"name\": \" \\u00A0 \", \"definition\": \"x\", \"clusters\": [0]}|OTHER_NAME||1|",
+                "an unknown cluster|{\"name\": \"Weather\", \"definition\": \"x\", \"clusters\": [7]}"
+                        + "|OTHER_NAME||1|",
+                "no new topic||OTHER_NAME||1|",
+                "a catch-all word inside, as in the first build"
+                        + "|{\"name\": \"General Job Search\", \"definition\": \"F.\", \"clusters\": [0]}"
+                        + "|BORN|1|2|General Job Search",
+                "a live topic's name"
+                        + "|{\"name\": \" TIRE search\", \"definition\": \"F.\", \"clusters\": [0]}|SAME_NAME|0|1|"})
+        @DisplayName("the name decides the group's outcome: no usable topic is known Other, a new name is born, "
+                + "a live topic's name joins that topic")
+        void nameDecides(String label, String entry, ForcedBirth.Result result, Integer topic, int live, String name) {
+            var state = state(0, topic("Tire Search"));
             var map = new LinkedHashMap<Integer, Integer>();
             var outcomes = force(state, List.of(group(0, 60, 0.95)), topics(state), map, 10,
                     named(Map.of("naming", newTopics(entry == null ? "" : entry))));
 
-            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.OTHER_NAME, null));
-            assertThat(map).containsOnly(Map.entry(0, NightlyUpdate.OTHER));
-            assertThat(state.liveCount()).isEqualTo(1);
-        }
-
-        @Test
-        @DisplayName("a name with a catch-all word inside is born, as in the first build")
-        void catchAllWordInside() {
-            var state = state(0, topic("A"));
-            var map = new LinkedHashMap<Integer, Integer>();
-            var outcomes = force(state, List.of(group(0, 60, 0.95)), topics(state), map, 10,
-                    named(Map.of("naming", newTopics(
-                            "{\"name\": \"General Job Search\", \"definition\": \"F.\", \"clusters\": [0]}"))));
-
-            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1));
-            assertThat(state.topic(1).getName()).isEqualTo("General Job Search");
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, result, topic));
+            assertThat(map).containsOnly(Map.entry(0, topic == null ? NightlyUpdate.OTHER : topic));
+            assertThat(state.liveCount()).isEqualTo(live);
+            if (name != null) {
+                assertThat(state.topic(topic).getName()).isEqualTo(name);
+            }
         }
 
         @Test
@@ -169,20 +171,6 @@ class TopicsNightlyRulesTest {
             assertThat(state.liveCount()).isEqualTo(2);
             assertThat(state.topic(1).getName()).isEqualTo("Tire Search");
             assertThat(state.topic(1).getDefinition()).isEqualTo("F.");
-        }
-
-        @Test
-        @DisplayName("a new name equal to a live topic's joins that topic")
-        void sameName() {
-            var state = state(0, topic("Tire Search"));
-            var map = new LinkedHashMap<Integer, Integer>();
-            var outcomes = force(state, List.of(group(0, 60, 0.95)), topics(state), map, 10,
-                    named(Map.of("naming",
-                            newTopics("{\"name\": \" TIRE search\", \"definition\": \"F.\", \"clusters\": [0]}"))));
-
-            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.SAME_NAME, 0));
-            assertThat(map).containsOnly(Map.entry(0, 0));
-            assertThat(state.liveCount()).isEqualTo(1);
         }
 
         @Test
@@ -308,32 +296,22 @@ class TopicsNightlyRulesTest {
             assertThat(state.live()).containsExactly(1, 2);
         }
 
-        @Test
-        @DisplayName("a topic that holds no trace retires the same night")
-        void noTrace() {
-            var state = state(0, topic("Empty"), topic("Big"));
-            var labels = new int[300];
-            Arrays.fill(labels, 1);
-
-            Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
-
-            assertThat(state.topic(0).getRetiredReason()).isEqualTo(RetiredReason.LOW_SHARE);
-            assertThat(state.live()).containsExactly(1);
-        }
-
-        @Test
-        @DisplayName("a small topic that holds a trace still needs three low nights")
-        void smallNeedsThreeNights() {
+        @ParameterizedTest(name = "{0} held traces: retires on night {1}")
+        @CsvSource({"0, 1", "1, 3"})
+        @DisplayName("a topic that holds no trace retires the same night; a small one that holds a trace needs three "
+                + "low nights")
+        void lowNightsByHeldTraces(int held, int nights) {
             var state = state(0, topic("Small"), topic("Big"));
             var labels = new int[300];
             Arrays.fill(labels, 1);
-            labels[0] = 0;
+            Arrays.fill(labels, 0, held, 0);
 
-            Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
-            Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
+            for (int night = 1; night < nights; night++) {
+                Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
 
-            assertThat(state.topic(0).getLowNights()).isEqualTo(2);
-            assertThat(state.live()).containsExactly(0, 1);
+                assertThat(state.topic(0).getLowNights()).isEqualTo(night);
+                assertThat(state.live()).containsExactly(0, 1);
+            }
 
             Lifecycle.retire(state, window(300, WINDOW_DAY), labels);
 
@@ -375,31 +353,28 @@ class TopicsNightlyRulesTest {
     @DisplayName("topic examples")
     class TopicExamples {
 
-        @Test
-        @DisplayName("with no repeated text, a topic's examples are its members nearest to a prototype, not the "
-                + "alphabetically first")
-        void nearest() {
-            var examples = examples("b", 0.90, "d", 0.99, "a", 0.80, "c", 0.95, "e", 0.97, "f", 0.85);
-
-            assertThat(examples).containsExactly("d", "e", "c", "b");
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("picks")
+        @DisplayName("a topic's examples: repeated texts first, most frequent first, then the members nearest to a "
+                + "prototype")
+        void pick(String label, Object[] members, List<String> expected) {
+            assertThat(examples(members)).containsExactly(expected.toArray(String[]::new));
         }
 
-        @Test
-        @DisplayName("repeated texts come first, most frequent first; the free slots go to the nearest members")
-        void someRepeats() {
-            var examples = examples("x", 0.80, "a", 0.97, "y", 0.70, "x", 0.80, "b", 0.98, "y", 0.70, "y", 0.70,
-                    "c", 0.99);
-
-            assertThat(examples).containsExactly("y", "x", "c", "b");
-        }
-
-        @Test
-        @DisplayName("with more repeated texts than slots, the most frequent fill them, equal counts by code point order")
-        void moreRepeatsThanSlots() {
-            var examples = examples("a", 0.99, "t", 0.5, "t", 0.5, "s", 0.5, "s", 0.5, "r", 0.5, "r", 0.5, "r", 0.5,
-                    "q", 0.5, "q", 0.5, "q", 0.5, "q", 0.5);
-
-            assertThat(examples).containsExactly("q", "r", "s", "t");
+        static Stream<Arguments> picks() {
+            return Stream.of(
+                    Arguments.of("no repeated text: the nearest members, not the alphabetically first",
+                            new Object[]{"b", 0.90, "d", 0.99, "a", 0.80, "c", 0.95, "e", 0.97, "f", 0.85},
+                            List.of("d", "e", "c", "b")),
+                    Arguments.of("some repeated texts: they come first, the free slots go to the nearest members",
+                            new Object[]{"x", 0.80, "a", 0.97, "y", 0.70, "x", 0.80, "b", 0.98, "y", 0.70, "y", 0.70,
+                                    "c", 0.99},
+                            List.of("y", "x", "c", "b")),
+                    Arguments.of("more repeated texts than slots: the most frequent fill them, equal counts by code "
+                            + "point order",
+                            new Object[]{"a", 0.99, "t", 0.5, "t", 0.5, "s", 0.5, "s", 0.5, "r", 0.5, "r", 0.5, "r",
+                                    0.5, "q", 0.5, "q", 0.5, "q", 0.5, "q", 0.5},
+                            List.of("q", "r", "s", "t")));
         }
 
         /** One live topic on EAST whose members are these (text, cosine to EAST) pairs, in trace order. */
@@ -718,33 +693,21 @@ class TopicsNightlyRulesTest {
             assertThat(state.getOtherPrototypes()).isEmpty();
         }
 
-        @Test
-        @DisplayName("a known-Other prototype exactly half of whose held traces were placed tonight stays in the memory")
-        void memoryHalfPlaced() {
+        @ParameterizedTest(name = "20 placed, {0} kept")
+        @ValueSource(ints = {20, 30})
+        @DisplayName("a known-Other prototype half or less of whose held traces were placed tonight stays in the "
+                + "memory and holds the rest in the final assignment")
+        void memoryHalfOrLessPlaced(int kept) {
             var state = state(1, topic("East", EAST));
             state.setOtherPrototypes(List.of(SOUTH));
 
-            var result = NightlyUpdate.run(state, window(memoryHeld(20, 20)), 10, assignGroup(1));
+            var result = NightlyUpdate.run(state, window(memoryHeld(20, kept)), 10, assignGroup(1));
 
             assertThat(result.forced()).contains(new ForcedBirth.Outcome(1, ForcedBirth.Result.ASSIGNED, 0));
             assertThat(state.topic(0).getPrototypes().get(1)).containsExactly(PLACED, within(1e-5f));
             assertThat(state.getOtherPrototypes()).singleElement().isSameAs(SOUTH);
-        }
-
-        @Test
-        @DisplayName("a known-Other prototype less than half of whose held traces were placed tonight stays in the memory "
-                + "and holds the rest in the final assignment")
-        void memoryLessThanHalfPlaced() {
-            var state = state(1, topic("East", EAST));
-            state.setOtherPrototypes(List.of(SOUTH));
-
-            var result = NightlyUpdate.run(state, window(memoryHeld(20, 30)), 10, assignGroup(1));
-
-            assertThat(result.forced()).contains(new ForcedBirth.Outcome(1, ForcedBirth.Result.ASSIGNED, 0));
-            assertThat(state.topic(0).getPrototypes().get(1)).containsExactly(PLACED, within(1e-5f));
-            assertThat(state.getOtherPrototypes()).singleElement().isSameAs(SOUTH);
-            assertThat(Arrays.copyOfRange(result.labels(), 60, 90)).containsOnly(PrototypeAssigner.OTHER);
-            NightlyUpdate.dropIdle(state, NightlyUpdate.assignFinal(state, window(memoryHeld(20, 30))));
+            assertThat(Arrays.copyOfRange(result.labels(), 60, 60 + kept)).containsOnly(PrototypeAssigner.OTHER);
+            NightlyUpdate.dropIdle(state, NightlyUpdate.assignFinal(state, window(memoryHeld(20, kept))));
             assertThat(state.getOtherPrototypes()).singleElement().isSameAs(SOUTH);
         }
 
@@ -902,19 +865,19 @@ class TopicsNightlyRulesTest {
 
         private static final int OTHER = PrototypeAssigner.OTHER;
 
-        @Test
-        @DisplayName("churn counts topic-to-topic moves, churn_any every move, over every window trace")
-        void churn() {
-            var result = TopicChurn.of(new int[]{0, 0, 1, OTHER}, new int[]{0, 1, OTHER, 0});
-
-            assertThat(result.churn()).isEqualTo(0.5);
-            assertThat(result.churnAny()).isEqualTo(0.75);
+        @ParameterizedTest(name = "[{0}] to [{1}]")
+        @CsvSource({"0 0 1 Other, 0 1 Other 0, 0.5, 0.75", "Other, 0, 0, 1"})
+        @DisplayName("churn counts topic-to-topic moves, churn_any every move, over every window trace; no trace in a "
+                + "topic both before and after is churn 0")
+        void churn(String before, String after, double churn, double churnAny) {
+            assertThat(TopicChurn.of(labels(before), labels(after))).isEqualTo(new TopicChurn.Churn(churn, churnAny));
         }
 
-        @Test
-        @DisplayName("no trace in a topic both before and after is churn 0")
-        void noTopicOnBothSides() {
-            assertThat(TopicChurn.of(new int[]{OTHER}, new int[]{0})).isEqualTo(new TopicChurn.Churn(0, 1));
+        /** Space-separated topic indexes; {@code Other} is {@link #OTHER}. */
+        private static int[] labels(String labels) {
+            return Arrays.stream(labels.split(" "))
+                    .mapToInt(label -> label.equals("Other") ? OTHER : Integer.parseInt(label))
+                    .toArray();
         }
 
         @Test
@@ -1149,14 +1112,6 @@ class TopicsNightlyRulesTest {
         var vectors = new ArrayList<float[]>();
         for (int i = 0; i < east + south + west; i++) {
             vectors.add(i < east ? EAST : i < east + south ? SOUTH : WEST);
-        }
-        return vectors;
-    }
-
-    private static List<float[]> directions(int east, int north) {
-        var vectors = new ArrayList<float[]>();
-        for (int i = 0; i < east + north; i++) {
-            vectors.add(i < east ? EAST : NORTH);
         }
         return vectors;
     }

@@ -44,8 +44,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * values: aggregate them with {@code max}. Workspace names are resolved when MySQL is read, never in a callback. Nothing
  * is published while the nightly job is off, nor before the first night ever, except the refresher's own heartbeat
  * ({@code state_age_seconds}) and the age since the last start, which counts from the refresher's start until a night
- * starts: both are published whenever the job is on. A read that fails keeps the last values and
- * counts in {@code state_refresh_failures}.
+ * starts: both are published whenever the job is on. A read that fails keeps the last values and counts in
+ * {@code state_refresh_failures}.
  *
  * <p>A gauge is one name, a description, and a list of series built at refresh: one more is a query and a
  * {@link #level} call.

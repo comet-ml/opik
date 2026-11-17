@@ -36,11 +36,7 @@ public interface TopicAlgorithm {
     /** The label of a trace in no topic. */
     int OTHER = -1;
 
-    /**
-     * Builds the first list of a project that has none.
-     *
-     * @param maxTopics the most topics the list may hold
-     */
+    /** Builds the first list of a project that has none. */
     FirstBuild firstBuild(Window window, int maxTopics, Context context);
 
     /**
@@ -100,8 +96,7 @@ public interface TopicAlgorithm {
          * that returns null instead counts the call as {@code bad_answer} too, and the run goes on: {@code generate}
          * returns null. A failed call throws and fails the run.
          *
-         * @param call the kind of call: picks its deadline and metric label
-         * @param tag  names the call in its request id ({@code <runId>:<tag>}) and the logs
+             * @param tag  names the call in its request id ({@code <runId>:<tag>}) and the logs
          */
         <T> T generate(Call call, String tag, String prompt, JsonNode schema, int maxTokens,
                 Function<JsonNode, T> read);

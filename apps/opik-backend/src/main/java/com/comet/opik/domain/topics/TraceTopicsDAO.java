@@ -61,11 +61,9 @@ public class TraceTopicsDAO {
 
     /**
      * The counting rule of the read API and of a run's topic counts, shared so the two cannot drift: the project's
-     * traces created in the window that Logs lists ({@link #LOGS_SOURCES}), each by its latest row. Topics are built
-     * from every labelled trace, but the counts take only the traces Logs lists, so a topic's count is the number of
-     * traces Logs lists for it; any version of a trace that matches keeps it, as in the traces list. Every row counts,
-     * run rows and arrival rows. The latest row is the greatest (last_updated_at, run_id). A trace whose latest row is a
-     * tombstone is left out ({@code HAVING}). The FROM to HAVING part of a select of one row per trace.
+     * traces created in the window that Logs lists, each by its latest row. Any version of a trace that matches keeps
+     * it, as in the traces list. Every row counts, run rows and arrival rows. The FROM to HAVING part of a select of
+     * one row per trace.
      */
     private static final String LATEST_ROW_PER_TRACE_IN_WINDOW = """
                 FROM trace_topics
@@ -187,8 +185,7 @@ public class TraceTopicsDAO {
 
     /**
      * Per topic id ({@link TraceTopic#OTHER} for Other) and UTC day of {@code trace_created_at}, the project's traces
-     * created in {@code [from, to)}. A trace counts by its latest row. Rows and memory are capped by the vectors job's
-     * window read guards ({@code topics.vectors.find}), time by {@code maxExecutionSeconds}.
+     * created in {@code [from, to)}.
      */
     public Flux<TopicDayCount> countByTopicAndDay(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
@@ -214,11 +211,7 @@ public class TraceTopicsDAO {
                         .build()));
     }
 
-    /**
-     * Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. A trace
-     * counts by its latest row. Rows and memory are capped by the window read's guards ({@code topics.vectors.find}),
-     * time by {@code maxExecutionSeconds}.
-     */
+    /** Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. */
     public Flux<TopicCount> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
             @NonNull Instant to, long maxExecutionSeconds) {
         var find = config.getVectors().getFind();

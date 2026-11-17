@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.time.Instant;
 
 /**
  * The 60 planted traces under {@code src/test/resources/topics/nightly/}: invented questions about a car's tire
@@ -22,15 +21,12 @@ final class TopicsNightlyFixture {
 
     final String[] intents;
     final float[] vectors;
-    final Instant[] createdAt;
 
     private TopicsNightlyFixture() {
         var traces = json("traces.json").get("traces");
         intents = new String[traces.size()];
-        createdAt = new Instant[traces.size()];
         for (int i = 0; i < traces.size(); i++) {
             intents[i] = traces.get(i).get("intent").asText();
-            createdAt[i] = Instant.parse(traces.get(i).get("created_at").asText());
         }
         vectors = floats("traces.f32");
     }

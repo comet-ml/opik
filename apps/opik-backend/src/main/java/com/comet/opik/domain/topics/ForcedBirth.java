@@ -33,15 +33,13 @@ import java.util.function.Supplier;
  * whose groups' share of the window is below {@value #MIN_NEW_SHARE} is not born, its groups are known Other
  * ({@link Result#OTHER_SMALL}). On a full list, the topic not born tonight with the lowest share of the window is
  * retired when that share is below the new topic's, else its groups are known Other; a topic's share here counts the
- * groups given to it tonight. A group the answers leave out is
- * known Other.
+ * groups given to it tonight. A group the answers leave out is known Other.
  */
 @Slf4j
 @UtilityClass
 public class ForcedBirth {
 
     static final double MIN_TIGHTNESS = 0.80;
-    /** A new topic needs this share of the window; below it, its groups stay in Other. */
     static final double MIN_NEW_SHARE = NightlyUpdate.BIG_SHARE;
     static final String NAMING_TAG = "naming";
     static final String NAMING_NEW_TAG = "naming_new";

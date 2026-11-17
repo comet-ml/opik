@@ -26,8 +26,6 @@ public class GroupSummaries {
     static final int FREQUENT = Math.max(2, EXAMPLES - 2);
 
     /**
-     * Sizes and shares only: what the author prompt reads.
-     *
      * @param labels per trace, the group in {@code [0, k)}
      * @param k      the number of groups
      */
@@ -50,8 +48,6 @@ public class GroupSummaries {
     }
 
     /**
-     * Sizes, shares, tightness and examples: what the nightly naming and verify prompts read.
-     *
      * @param texts   per trace
      * @param vectors per trace, unit length, {@code texts.length * dimensions}
      * @param labels  per trace, the group in {@code [0, k)}
@@ -130,9 +126,7 @@ public class GroupSummaries {
     }
 
     /**
-     * One group's examples: up to {@code frequent} texts that occur at least {@value #MIN_REPEATS} times, most frequent
-     * first (ties by code point order), then the most similar texts not already listed (ties by trace order), up to
-     * {@code total} in all. A text seen once is not "frequent": its slot goes to the most similar texts.
+     * One group's examples, by the rule on {@link #authorExamples}, with {@code sims} as nearness.
      *
      * @param members the group's traces, in trace order
      * @param sims    per trace, its similarity to the group: for a k-means group, its dot product with the centre;

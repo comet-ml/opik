@@ -113,10 +113,7 @@ public class AuthorApplier {
         return out.toString().toLowerCase(Locale.ROOT);
     }
 
-    /**
-     * The name is a catch-all as a whole ({@link #CATCH_ALL_NAME}), normalised as {@link #nameKey}: "Other Requests"
-     * is, with any run of spaces, tabs or no-break spaces inside; "General Job Search" is not.
-     */
+    /** {@link #CATCH_ALL_NAME} on the name normalised by {@link #nameKey}. */
     public static boolean isCatchAllName(@NonNull String name) {
         return CATCH_ALL_NAME.matcher(nameKey(name)).matches();
     }

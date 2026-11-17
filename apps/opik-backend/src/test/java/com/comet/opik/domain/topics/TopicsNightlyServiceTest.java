@@ -171,26 +171,6 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
-    @DisplayName("each project's decision is a night row with its skip reason and workspace; a failed count read too")
-    void decisions() {
-        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(UUID.randomUUID());
-
-        var result = service.runNight(START);
-
-        assertThat(result.saved()).isEqualTo(1);
-        assertThat(result.skipped()).isEqualTo(4);
-        assertThat(rows()).extracting(TopicNightProject::workspaceId, TopicNightProject::decision,
-                TopicNightProject::reason).containsExactlyInAnyOrder(
-                        tuple(WORKSPACE_ID, "skip", "small"),
-                        tuple(WORKSPACE_ID, "skip", "deleted"),
-                        tuple(WORKSPACE_ID, "skip", "already_saved"),
-                        tuple(WORKSPACE_ID, "skip", "locked"),
-                        tuple(WORKSPACE_ID, "nightly_update", null),
-                        tuple(BROKEN_WORKSPACE_ID, "count_failed", null));
-        assertThat(meter.points("topics.runs")).isEmpty();
-    }
-
-    @Test
     @DisplayName("a count read that fails skips only its own project: another project of the workspace still runs")
     void countFailurePerProject() {
         var other = UUID.randomUUID();
@@ -245,25 +225,6 @@ class TopicsNightlyServiceTest {
         } finally {
             runner.releaseRun();
         }
-    }
-
-    @Test
-    @DisplayName("a project with live topics gets a nightly update: its run and night row say so")
-    void nightlyUpdate() {
-        var runId = UUID.randomUUID();
-        when(rebuildService.startRun(WORKSPACE_ID, started, TopicRun.Mode.NIGHTLY_UPDATE)).thenReturn(runId);
-
-        var result = service.runNight(START);
-
-        assertThat(result.saved()).isEqualTo(1);
-        verify(rebuildService).nightlyUpdate(runId, WORKSPACE_ID, started, NIGHT);
-        verify(rebuildService, never()).firstBuild(any(), any(), any(), any());
-        assertThat(rows()).filteredOn(row -> started.equals(row.projectId())).singleElement().satisfies(row -> {
-            assertThat(row.decision()).isEqualTo("nightly_update");
-            assertThat(row.reason()).isNull();
-            assertThat(row.runId()).isEqualTo(runId);
-            assertThat(row.workspaceId()).isEqualTo(WORKSPACE_ID);
-        });
     }
 
     @Test
@@ -346,13 +307,19 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
-    @DisplayName("the night's record: a row per project with its decision, reason and run, and its end")
+    @DisplayName("the night's record: a row per project with its decision, skip reason, workspace and run, a nightly "
+            + "update for the project with live topics, a failed count read as its own row, and the record's end")
     void nightRecord() {
         var runId = UUID.randomUUID();
-        when(rebuildService.startRun(eq(WORKSPACE_ID), eq(started), any())).thenReturn(runId);
+        when(rebuildService.startRun(WORKSPACE_ID, started, TopicRun.Mode.NIGHTLY_UPDATE)).thenReturn(runId);
 
-        service.runNight(START);
+        var result = service.runNight(START);
 
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(4);
+        verify(rebuildService).nightlyUpdate(runId, WORKSPACE_ID, started, NIGHT);
+        verify(rebuildService, never()).firstBuild(any(), any(), any(), any());
+        assertThat(meter.points("topics.runs")).isEmpty();
         verify(nightDAO).start(eq(NIGHT), any());
         verify(nightDAO).deleteProjects(NIGHT);
         assertThat(rows()).extracting(TopicNightProject::workspaceId, TopicNightProject::projectId,

@@ -176,7 +176,7 @@ public class TopicWindowDAO {
 
     /**
      * Per project of {@code projectIds}, the traces with a vector created in {@code [from, to)}; a project with none is
-     * left out. Under the window read's row and memory guards, on 2 threads at a background priority.
+     * left out.
      */
     public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
@@ -224,10 +224,7 @@ public class TopicWindowDAO {
     }
 
     /**
-     * One page of the labelling pass over {@code [from, to)}, a slice of the window: up to {@code limit} traces after
-     * {@code after} (a trace id, or the empty string for the slice's start) without a {@code trace_topics} row of
-     * {@code runId}, in trace id order, with their vectors. Under the window read's guards, on 2 threads at a
-     * background priority.
+     * One page of {@link #READ_UNLABELLED}; {@code after} is a trace id, or the empty string for the slice's start.
      */
     public Flux<WindowVector> readUnlabelled(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull UUID runId, @NonNull Instant from, @NonNull Instant to, @NonNull String after, int limit,

@@ -51,6 +51,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
@@ -85,9 +88,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ailabels.AiLabelTaskLoader.CLASSPATH_DIRECTORY;
@@ -103,6 +109,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -222,6 +229,7 @@ class TopicVectorsTickTest {
         defaults.setEmbedTimeout(vectors.getEmbedTimeout());
         defaults.setMaxTracesPerTick(vectors.getMaxTracesPerTick());
         defaults.setTickInterval(vectors.getTickInterval());
+        defaults.setEmbedConcurrency(vectors.getEmbedConcurrency());
 
         // The job fires once at startup: wait for that tick to release the leader lock, so it can't race the tests.
         lockService.bestEffortLock(new LockService.Lock("topics:vectors:leader"), Mono.just(true), Mono.empty(),
@@ -252,6 +260,7 @@ class TopicVectorsTickTest {
         config().setEmbedTimeout(defaults.getEmbedTimeout());
         config().setMaxTracesPerTick(defaults.getMaxTracesPerTick());
         config().setTickInterval(defaults.getTickInterval());
+        config().setEmbedConcurrency(defaults.getEmbedConcurrency());
     }
 
     @Test
@@ -272,35 +281,9 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("vectors appear only for enabled workspaces, as the stub's unit-length vectors of the stored text")
-    void onlyEnabledWorkspaces() {
-        var enabled = List.of(enabledWorkspace(), enabledWorkspace());
-        var disabled = ID_GENERATOR.generateId().toString();
-        var projectId = ID_GENERATOR.generateId();
-        var labeled = new java.util.LinkedHashMap<String, List<UUID>>();
-        for (var workspaceId : List.of(enabled.getFirst(), enabled.getLast(), disabled)) {
-            labeled.put(workspaceId, labelTraces(workspaceId, projectId, 3, 1));
-        }
-
-        var result = tickService.tick(Instant.now());
-
-        assertThat(result.written()).isEqualTo(6);
-        for (var workspaceId : enabled) {
-            assertVectors(vectors(workspaceId, labeled.get(workspaceId)),
-                    expectedVectors(workspaceId, projectId, labeled.get(workspaceId), 1));
-        }
-        assertThat(vectors(disabled, labeled.get(disabled))).isEmpty();
-        var sent = wireMock.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
-        assertThat(sent).allSatisfy(request -> {
-            var body = json(request.getBodyAsString());
-            assertThat(enabled).contains(body.path("org_id").asText());
-            assertThat(body.path("cache").asBoolean(true)).isFalse();
-        });
-    }
-
-    @Test
-    @DisplayName("a workspace needs both opt-ins: the topics list alone or ai-labels alone gets no vectors, and taking "
-            + "it off either one drops it on the next tick")
+    @DisplayName("a workspace needs both opt-ins: the topics list alone or ai-labels alone gets no vectors, every "
+            + "embed call is an enabled workspace's with cache off, and taking it off either one drops it on the next "
+            + "tick")
     void topicsOptIn() {
         var both = enabledWorkspace();
         var other = enabledWorkspace();
@@ -326,6 +309,12 @@ class TopicVectorsTickTest {
         for (var workspaceId : List.of(aiLabelsOnly, listedOnly, listedWithoutAiLabelsRow)) {
             assertThat(vectors(workspaceId, labeled.get(workspaceId))).isEmpty();
         }
+        var sent = wireMock.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
+        assertThat(sent).allSatisfy(request -> {
+            var body = json(request.getBodyAsString());
+            assertThat(List.of(both, other)).contains(body.path("org_id").asText());
+            assertThat(body.path("cache").asBoolean(true)).isFalse();
+        });
 
         // Taken off the list (a deploy) or off ai-labels (no deploy): the next tick drops it; its vectors stay.
         setListed(both, false);
@@ -357,23 +346,6 @@ class TopicVectorsTickTest {
 
         assertVectors(vectors(workspaceId, List.of(traceId)),
                 List.of(vector(workspaceId, first, traceId, 1), vector(workspaceId, second, traceId, 2)));
-    }
-
-    @Test
-    @DisplayName("a second tick writes nothing new")
-    void idempotent() {
-        var workspaceId = enabledWorkspace();
-        var projectId = ID_GENERATOR.generateId();
-        var traceIds = labelTraces(workspaceId, projectId, 5, 1);
-        assertThat(tickService.tick(Instant.now()).written()).isEqualTo(5);
-        int calls = embedStub.calls.get();
-
-        var second = tickService.tick(Instant.now());
-
-        assertThat(second.written()).isZero();
-        assertThat(embedStub.calls.get()).isEqualTo(calls);
-        assertThat(countRows(workspaceId)).isEqualTo(5);
-        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
@@ -554,19 +526,37 @@ class TopicVectorsTickTest {
     void embedConcurrency() {
         config().setEmbedBatchSize(2);
         config().setEmbedConcurrency(2);
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        var traceIds = labelTraces(workspaceId, projectId, 9, 1);
+        // The first two calls each wait for the other: calls made one after another leave the first waiting alone.
+        var bothInFlight = new CountDownLatch(2);
+        var waitedAlone = new AtomicBoolean();
+        embedStub.beforeAnswer = () -> {
+            bothInFlight.countDown();
+            try {
+                if (!bothInFlight.await(5, TimeUnit.SECONDS)) {
+                    waitedAlone.set(true);
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        TopicVectorsTickService.TickResult result;
         try {
-            var workspaceId = enabledWorkspace();
-            var projectId = ID_GENERATOR.generateId();
-            var traceIds = labelTraces(workspaceId, projectId, 9, 1);
-
-            var result = tickService.tick(Instant.now());
-
-            assertThat(result.written()).isEqualTo(9);
-            assertThat(embedStub.callsFor(workspaceId)).isEqualTo(5);
-            assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+            result = tickService.tick(Instant.now());
         } finally {
-            config().setEmbedConcurrency(1);
+            while (bothInFlight.getCount() > 0) {
+                bothInFlight.countDown();
+            }
+            embedStub.beforeAnswer = null;
         }
+
+        assertThat(waitedAlone).isFalse();
+        assertThat(result.written()).isEqualTo(9);
+        assertThat(embedStub.callsFor(workspaceId)).isEqualTo(5);
+        assertVectors(vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
@@ -704,7 +694,7 @@ class TopicVectorsTickTest {
 
     @Test
     @DisplayName("with a cap of 5,000, one tick writes 5,000 of a drained project's 20,000 traces, oldest status "
-            + "first, and four ticks write all")
+            + "first, four ticks write all, and a fifth neither writes nor embeds")
     void cap() {
         var workspaceId = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
@@ -729,13 +719,23 @@ class TopicVectorsTickTest {
         }
 
         assertThat(countRows(workspaceId)).isEqualTo(20_000);
+        int calls = embedStub.calls.get();
         assertThat(tickService.tick(Instant.now()).written()).isZero();
+        assertThat(embedStub.calls.get()).isEqualTo(calls);
     }
 
-    @Test
-    @DisplayName("the workspace read's cap is per workspace, and a 429 with an unknown code backs off only its "
-            + "workspace")
-    void perWorkspaceCapAndBackOff() {
+    static Stream<Arguments> backOffs() {
+        return Stream.of(
+                arguments(429, "{\"error\":{\"code\":\"rate_limited\",\"message\":\"m\"}}"),
+                // An unknown code and no retryable flag.
+                arguments(503, "{\"error\":{\"code\":\"something_new\",\"message\":\"m\"}}"));
+    }
+
+    @ParameterizedTest(name = "status {0}")
+    @MethodSource("backOffs")
+    @DisplayName("the workspace read's cap is per workspace, and a 429, or a 5xx with an unknown code and no retryable "
+            + "flag, backs off only its workspace after one call")
+    void perWorkspaceCapAndBackOff(int status, String body) {
         config().setMaxTracesPerTick(4);
         config().setEmbedBatchSize(2);
         var throttled = enabledWorkspace();
@@ -746,7 +746,7 @@ class TopicVectorsTickTest {
         markDrained(healthy, healthyProject);
         var throttledTraces = labelTraces(throttled, throttledProject, 6, 1);
         var healthyTraces = labelTraces(healthy, healthyProject, 6, 1);
-        embedStub.fail(throttled, 429, "{\"error\":{\"code\":\"rate_limited\",\"message\":\"m\"}}");
+        embedStub.fail(throttled, status, body);
 
         var result = tickService.tick(Instant.now());
 
@@ -762,21 +762,6 @@ class TopicVectorsTickTest {
         assertVectors(vectors(throttled, throttledTraces),
                 expectedVectors(throttled, throttledProject, oldestFour(throttledTraces), 1));
         assertVectors(vectors(healthy, healthyTraces), expectedVectors(healthy, healthyProject, healthyTraces, 1));
-    }
-
-    @Test
-    @DisplayName("a 5xx with an unknown code and no retryable flag backs the workspace off after one call")
-    void backOffOnUnknown5xx() {
-        config().setEmbedBatchSize(2);
-        var workspaceId = enabledWorkspace();
-        labelTraces(workspaceId, 6, 1);
-        embedStub.fail(workspaceId, 503, "{\"error\":{\"code\":\"something_new\",\"message\":\"m\"}}");
-
-        var result = tickService.tick(Instant.now());
-
-        assertThat(embedStub.callsFor(workspaceId)).isOne();
-        assertThat(result.written()).isZero();
-        assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 6));
     }
 
     @Test

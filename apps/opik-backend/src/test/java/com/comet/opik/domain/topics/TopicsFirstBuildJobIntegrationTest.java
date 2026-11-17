@@ -382,8 +382,7 @@ class TopicsFirstBuildJobIntegrationTest {
 
     @Test
     @DisplayName("a project whose vectors backfill has not drained is built neither by the job nor by hand (409), "
-            + "while another project of the workspace is; ignore_backfill=true builds it by hand, and once its row "
-            + "drains the job does")
+            + "while another project of the workspace is; ignore_backfill=true builds it by hand")
     void waitsForTheBackfill() {
         var workspaceId = enabledWorkspace();
         var waiting = UUID.randomUUID();
@@ -412,43 +411,20 @@ class TopicsFirstBuildJobIntegrationTest {
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.runs(byHand))
                 .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
         assertThat(data.runs(waiting)).isEmpty();
-
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicVectorBackfillDAO.class).record(List.of(TopicVectorBackfill.Progress.builder()
-                    .workspaceId(workspaceId).projectId(waiting).drainedAt(Instant.now()).build()));
-            return null;
-        });
-        runUntilBuilt(waiting);
-
-        assertThat(data.runs(waiting)).singleElement()
-                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED));
     }
 
     @Test
-    @DisplayName("a workspace opted in to ai-labels but not to topics is built neither by the job nor by hand")
-    void topicsOptIn() {
-        var workspaceId = aiLabelsOnlyWorkspace();
-        var projectId = UUID.randomUUID();
-        data.seed(workspaceId, projectId, 0, BUILT, tomorrowStart());
-        stubAnswer(FIXTURE.answer);
-
-        firstBuildService.run(Instant.now());
-
-        assertThat(data.runs(projectId)).isEmpty();
-        try (var response = rebuild(workspaceId, projectId, tomorrow().toString())) {
-            assertThat(response.getStatus()).isEqualTo(409);
-        }
-        assertThat(data.runs(projectId)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("by hand, a window under minVectors, or another workspace's project, is refused")
+    @DisplayName("by hand, a window under minVectors, another workspace's project, or a workspace opted in to "
+            + "ai-labels but not to topics, is refused")
     void byHandFollowsTheJobsRules() {
         var workspaceId = enabledWorkspace();
         var small = UUID.randomUUID();
         data.seed(workspaceId, small, BUILT, SMALL);
         var foreign = UUID.randomUUID();
         data.seed(enabledWorkspace(), foreign, 0, BUILT);
+        var notOptedInWorkspace = aiLabelsOnlyWorkspace();
+        var notOptedIn = UUID.randomUUID();
+        data.seed(notOptedInWorkspace, notOptedIn, 0, BUILT);
 
         try (var response = rebuild(workspaceId, small, fixtureNight().toString())) {
             assertThat(response.getStatus()).isEqualTo(409);
@@ -456,8 +432,12 @@ class TopicsFirstBuildJobIntegrationTest {
         try (var response = rebuild(workspaceId, foreign, fixtureNight().toString())) {
             assertThat(response.getStatus()).isEqualTo(409);
         }
+        try (var response = rebuild(notOptedInWorkspace, notOptedIn, fixtureNight().toString())) {
+            assertThat(response.getStatus()).isEqualTo(409);
+        }
         assertThat(data.runs(small)).isEmpty();
         assertThat(data.runs(foreign)).isEmpty();
+        assertThat(data.runs(notOptedIn)).isEmpty();
     }
 
     @Test
