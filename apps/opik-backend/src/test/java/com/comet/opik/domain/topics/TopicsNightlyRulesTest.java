@@ -189,7 +189,8 @@ class TopicsNightlyRulesTest {
         void cappedNamesMerge() {
             var state = state(0, topic("A"));
             var map = new LinkedHashMap<Integer, Integer>();
-            var stem = "w".repeat(TopicText.MAX_NAME_LENGTH);
+            // 255: the stored name limit, as a literal so that a change to the constant fails this test.
+            var stem = "w".repeat(255);
             var outcomes = force(state, List.of(group(0, 60, 0.95), group(1, 50, 0.95)), topics(state), map, 10,
                     named(Map.of("naming", newTopics(
                             "{\"name\": \"" + stem + "x".repeat(45) + "\", \"definition\": \"F.\", \"clusters\": [0]}, "
