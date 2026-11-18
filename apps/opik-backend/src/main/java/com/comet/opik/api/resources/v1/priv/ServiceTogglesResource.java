@@ -46,9 +46,20 @@ public class ServiceTogglesResource {
 
     /**
      * The same rule as the topics read API: topics on, and the caller's workspace eligible. Otherwise the API answers
-     * 501 or status disabled. The eligibility check reads MySQL only for a workspace in the Helm list.
+     * 501 or status disabled. The eligibility check reads MySQL only for a workspace in the Helm list. A failed read
+     * turns topics off for this response, so the other toggles still load.
      */
     private boolean isTopicsEnabled() {
-        return config.getTopics().isEnabled() && topicWorkspaces.isEligible(requestContext.get().getWorkspaceId());
+        if (!config.getTopics().isEnabled()) {
+            return false;
+        }
+        var workspaceId = requestContext.get().getWorkspaceId();
+        try {
+            return topicWorkspaces.isEligible(workspaceId);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to read topics eligibility for workspace '{}', topics_enabled is false", workspaceId,
+                    exception);
+            return false;
+        }
     }
 }
