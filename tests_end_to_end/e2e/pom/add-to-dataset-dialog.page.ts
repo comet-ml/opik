@@ -75,19 +75,77 @@ export class AddToDatasetDialogPage {
     return this.root.getByTestId(`mapping-row-${fieldName}`);
   }
 
+  /**
+   * A row for a column the TARGET DATASET already has, listed under "Additional
+   * fields".
+   *
+   * `useFieldMappings` namespaces these row ids `existing:<column>` to keep
+   * them apart from a custom row a user named the same thing, so the id is not
+   * the field name and `mappingRow()` cannot address them. The namespace is
+   * also what makes this locator discriminating: a row matching it came from
+   * the dataset's own column list, not from the fixed fields, the quick-add
+   * chips or anything the user typed.
+   */
+  existingMappingRow(column: string): Locator {
+    return this.root.getByTestId(`mapping-row-existing:${column}`);
+  }
+
+  /**
+   * A row Opik fills itself, keyed by the enrichment option that produced it
+   * (`includeMetadata`, `includeTags`, …) — which `useFieldMappings` uses
+   * verbatim as the row id.
+   */
+  managedMappingRow(option: string): Locator {
+    return this.root.getByTestId(`mapping-row-${option}`);
+  }
+
+  /**
+   * Any REMOVABLE mapping row, addressed by the field name its remove control
+   * carries (`aria-label="Remove <field>"`).
+   *
+   * Needed because re-pointing an Opik-managed row changes its id: the row
+   * stops being managed and becomes a custom one with a freshly minted
+   * `custom-N` id, so neither `managedMappingRow` nor any id-based locator
+   * still resolves it. The field NAME is the one thing the re-point preserves.
+   *
+   * Not usable for the two fixed rows (`input`, `expected_output`): they render
+   * no remove control at all, which is exactly what `mappingRow` is for.
+   */
+  mappingRowNamed(fieldName: string): Locator {
+    return this.root
+      .getByTestId(/^mapping-row-/)
+      .filter({
+        has: this.page.getByRole('button', { name: `Remove ${fieldName}`, exact: true }),
+      });
+  }
+
   /** The source-path button inside a mapping row; its text is the current path. */
   mappingRowSource(fieldName: string): Locator {
-    return this.mappingRow(fieldName).getByTestId('path-source-trigger');
+    return this.rowSource(this.mappingRow(fieldName));
+  }
+
+  /** The source-path button of an arbitrary mapping row. */
+  rowSource(row: Locator): Locator {
+    return row.getByTestId('path-source-trigger');
+  }
+
+  /**
+   * The remove control of an arbitrary mapping row.
+   *
+   * `FieldRowShell` renders the same button whether or not the row may be
+   * removed — a disabled one when the caller passed a `removeDisabledReason`
+   * instead of an `onRemove` — so "listed but not removable" is a state this
+   * locator can assert rather than one that reads as a missing button.
+   */
+  rowRemoveButton(row: Locator, fieldName: string): Locator {
+    return row.getByRole('button', { name: `Remove ${fieldName}`, exact: true });
   }
 
   /**
    * Re-point a mapping row at `path`, driving the same JSON tree a user does.
    *
-   * `parents` are expanded in order first: the tree only renders a node's
-   * children once its parent is expanded, and the popover opens expanded only
-   * as far as the row's *current* path. Each node carries
-   * `data-testid="json-tree-node-<path>"`, so both the chevron and the leaf are
-   * addressed by the path they stand for rather than by position.
+   * For a row whose id IS its field name — the two fixed rows. See
+   * `setRowSource` for the rest, and `selectTreePath` for how `parents` works.
    */
   async setMappingSource(
     fieldName: string,
@@ -95,16 +153,106 @@ export class AddToDatasetDialogPage {
     parents: string[] = [],
   ): Promise<void> {
     return test.step(`Map "${fieldName}" to ${path}`, async () => {
-      await this.mappingRowSource(fieldName).click();
-      for (const parent of parents) {
-        await this.page.getByTestId(`json-tree-node-${parent}`).getByRole('button').click();
-      }
-      await this.page.getByTestId(`json-tree-node-${path}`).click();
+      await this.setRowSource(this.mappingRow(fieldName), fieldName, path, parents);
+    });
+  }
+
+  /**
+   * The same re-point against an arbitrary row, for the rows whose id is not
+   * their field name (`existing:<column>`, a re-pointed managed row).
+   *
+   * The row is asserted to resolve to exactly one element before it is driven:
+   * a locator that matched two rows would otherwise click whichever came first
+   * and then assert about it, reporting on a mapping the caller never named.
+   */
+  async setRowSource(
+    row: Locator,
+    fieldName: string,
+    path: string,
+    parents: string[] = [],
+  ): Promise<void> {
+    return test.step(`Map "${fieldName}" to ${path}`, async () => {
+      await expect(row, `exactly one "${fieldName}" mapping row`).toHaveCount(1);
+      await this.rowSource(row).click();
+      await this.selectTreePath(path, parents);
       await expect(
-        this.mappingRowSource(fieldName),
+        this.rowSource(row),
         `the "${fieldName}" row now reads from ${path}`,
       ).toHaveText(path);
     });
+  }
+
+  /**
+   * Use the picker's "Leave unmapped" link to clear a row's path.
+   *
+   * Only rows the dialog hands an `onPathClear` offer it, and only once a path
+   * is already set — `PathSourcePicker` renders the link on `onClear && path`.
+   * So this is the one control that distinguishes "a dataset column the user
+   * chose not to fill" from "a column that was never mapped", and the
+   * `Not mapped` placeholder it falls back to is that state's only rendering.
+   */
+  async leaveRowUnmapped(row: Locator, fieldName: string): Promise<void> {
+    return test.step(`Leave "${fieldName}" unmapped`, async () => {
+      await expect(row, `exactly one "${fieldName}" mapping row`).toHaveCount(1);
+      await this.rowSource(row).click();
+      // Page-scoped, like the tree nodes below: the picker's popover is
+      // portalled to the body, outside the dialog this POM is rooted at.
+      await this.page.getByRole('button', { name: 'Leave unmapped', exact: true }).click();
+      await expect(
+        this.rowSource(row),
+        `the "${fieldName}" row reads back as unmapped`,
+      ).toHaveText('Not mapped');
+    });
+  }
+
+  /**
+   * Re-point an Opik-managed row at `path`, the way a user replaces Opik's own
+   * enrichment for that field.
+   *
+   * Two things happen at once. The row stops being managed — it becomes a
+   * custom row with a new id, now showing the path instead of
+   * "<label> · filled by Opik" — and the enrichment option behind it is
+   * switched off, which is what makes the submitted request carry
+   * `include_<option>: false`. Only the first is visible on the row, so a
+   * caller has to assert the second against the request the dialog sends.
+   */
+  async remapManagedRow(
+    option: string,
+    fieldName: string,
+    path: string,
+    parents: string[] = [],
+  ): Promise<void> {
+    return test.step(`Re-point Opik's "${fieldName}" at ${path}`, async () => {
+      const managed = this.managedMappingRow(option);
+      await expect(managed, `exactly one Opik-filled row for ${option}`).toHaveCount(1);
+      await this.rowSource(managed).click();
+      await this.selectTreePath(path, parents);
+
+      // Addressed by field name from here on: the re-point replaced the row's
+      // id, so `managed` no longer resolves.
+      const row = this.mappingRowNamed(fieldName);
+      await expect(row, `exactly one "${fieldName}" row after the re-point`).toHaveCount(1);
+      await expect(
+        this.rowSource(row),
+        `the "${fieldName}" row now reads from ${path}`,
+      ).toHaveText(path);
+    });
+  }
+
+  /**
+   * Pick `path` out of the open JSON tree popover.
+   *
+   * `parents` are expanded in order first: the tree only renders a node's
+   * children once its parent is expanded, and the popover opens expanded only
+   * as far as the row's *current* path. Each node carries
+   * `data-testid="json-tree-node-<path>"`, so both the chevron and the leaf are
+   * addressed by the path they stand for rather than by position.
+   */
+  private async selectTreePath(path: string, parents: string[]): Promise<void> {
+    for (const parent of parents) {
+      await this.page.getByTestId(`json-tree-node-${parent}`).getByRole('button').click();
+    }
+    await this.page.getByTestId(`json-tree-node-${path}`).click();
   }
 
   /**

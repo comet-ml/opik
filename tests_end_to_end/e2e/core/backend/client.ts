@@ -130,6 +130,21 @@ export interface ComparePairedRowRef {
 }
 
 /**
+ * One column the dataset-items endpoint derives from the stored items' keys —
+ * the `columns` half of `GET /v1/private/datasets/{id}/items`, which no other
+ * helper here keeps.
+ *
+ * `types` is the set of JSON types seen for that key across the version, and it
+ * is carried rather than dropped because it is the only place the API says a
+ * field is still a number (or still an object) after an edit elsewhere in the
+ * record.
+ */
+export interface DatasetItemColumnRef {
+  name: string;
+  types: string[];
+}
+
+/**
  * A dataset item read back with its tags. Separate from `DatasetItemRef`
  * because a filter-scoped batch update is asserted on exactly which rows did
  * and did not gain a tag, so `tags` must be present on every row rather than
@@ -3306,6 +3321,40 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         );
         if (content.length < pageSize) return items;
       }
+    },
+
+    /**
+     * The `columns` the dataset-items endpoint derives from what is stored —
+     * the field list the Records grid builds its data columns from, and the one
+     * the Add-to-dataset dialog's `useDatasetColumns` reads to decide which
+     * rows to list under "Additional fields".
+     *
+     * Through `rawFetch` rather than the pinned SDK: the SDK's page shape drops
+     * `columns` entirely, and the whole point of this read is the derived
+     * column list rather than the rows. `size: 1` and `truncate` for the same
+     * reason the FE hook sends them — the columns are a property of the version,
+     * not of the page, so fetching payloads to learn them is waste.
+     *
+     * Sorted by name so a caller can compare the whole set: the endpoint's own
+     * order is not specified, and a `find()` over it would pass just as well
+     * against a response that also carried a column it should not have.
+     */
+    async listDatasetItemColumns(datasetId: string): Promise<DatasetItemColumnRef[]> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${datasetId}/items`,
+        { query: new URLSearchParams({ page: '1', size: '1', truncate: 'true' }) },
+      );
+      if (status !== 200) {
+        throw new Error(`listDatasetItemColumns: ${datasetId} answered ${status}: ${message}`);
+      }
+      const columns = (json as { columns?: Array<{ name?: unknown; types?: unknown }> }).columns ?? [];
+      return columns
+        .map((column) => ({
+          name: String(column.name ?? ''),
+          types: Array.isArray(column.types) ? column.types.map(String) : [],
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
 
     /**
