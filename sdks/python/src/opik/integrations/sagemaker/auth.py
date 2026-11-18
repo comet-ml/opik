@@ -14,16 +14,12 @@ def _in_aws_sagemaker() -> bool:
 
 
 class SagemakerAuth(httpx.Auth):
-    # The signature covers the body, so httpx must read a streamed body first.
-    requires_request_body = True
-
     def __init__(self, auth_provider: Any) -> None:
         self.auth_provider = auth_provider
 
     def auth_flow(self, request):  # type: ignore
         if not _in_aws_sagemaker():
             yield request
-            return
 
         url, signed_headers = self.auth_provider.get_signed_request(
             str(request.url), request.method, request.headers, request.content
