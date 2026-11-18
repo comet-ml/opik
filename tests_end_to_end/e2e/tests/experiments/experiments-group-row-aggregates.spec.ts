@@ -1,6 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
 import { displayedCost } from '@e2e/core/money';
+import { displayedDuration } from '@e2e/core/duration';
 
 /**
  * The grouped Experiments list opik#9374 made the page's default, and what its
@@ -49,27 +50,6 @@ import { displayedCost } from '@e2e/core/money';
  * "no data", which is not the same as having asserted a value. Tagging them
  * would read as coverage of aggregates nobody checked.
  */
-
-/**
- * What the UI renders for a duration in ms.
- *
- * Mirrors `formatDuration(value)` in `apps/opik-frontend/src/lib/date.ts`,
- * whose default `onlySeconds` branch is
- * `${round(ms / 1000, ms > 100 ? 1 : ms > 10 ? 2 : 3)}s`. Mirrored rather than
- * approximated because the assertion is an exact cell comparison: a
- * `toFixed(1)` version would read "4.0s" where the page shows "4.2s" — and
- * trailing zeros are dropped by JS number formatting, so a round 4000ms renders
- * "4s" and not "4.0s".
- *
- * Local to this spec rather than shared: nothing else in the estate pins a
- * rendered duration. `core/money.ts` exists because five specs had copied the
- * cost formatter; if a second duration assertion lands, this moves there.
- */
-const displayedDuration = (milliseconds: number): string => {
-  const precision = milliseconds > 100 ? 1 : milliseconds > 10 ? 2 : 3;
-  const factor = 10 ** precision;
-  return `${Math.round((milliseconds / 1000) * factor) / factor}s`;
-};
 
 /** The default grouping's prefix for a group whose value is a dataset. */
 const GROUP_PREFIX = 'Dataset';

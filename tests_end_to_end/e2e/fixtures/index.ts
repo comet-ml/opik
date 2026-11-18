@@ -1,4 +1,4 @@
-export { test, expect } from './dataset-column-mapping.fixture';
+export { test, expect } from './comparison-stats-filters.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -771,3 +771,9 @@ export {
   DCM_EXISTING_COLUMN,
   DCM_SEED_ITEM_DATA,
 } from './dataset-column-mapping.fixture';
+export type {
+  ComparisonStatsRowRef,
+  ComparisonStatsFiltersRef,
+  ComparisonStatsFiltersFixtures,
+} from './comparison-stats-filters.fixture';
+export { CSF_ROWS, CSF_SCORE_NAME } from './comparison-stats-filters.fixture';

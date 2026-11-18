@@ -4,6 +4,34 @@ import { loadEnvConfig } from '../config/env.config';
 import { ItemReturnNav } from './item-return-nav.page';
 import { VersionRecordsSidebarPage } from './version-records-sidebar.page';
 
+/**
+ * One "name → value" row of the record panel, as it is RENDERED.
+ *
+ * The panel is the only place three facts about a row are visible at once, and
+ * each of them is a different claim:
+ *
+ *  - `name` is the Field name box's current content, which is what a rename
+ *    changes and what the stored key is supposed to become;
+ *  - `value` is the value textarea's content, which after a commit is the only
+ *    place a STALE in-session snapshot shows itself — the grid cell beside it
+ *    reads from the server;
+ *  - `message` is the validation line under the row, `null` when the row has
+ *    none.
+ *
+ * Read as data rather than asserted through a locator because the rows are
+ * only tellable apart by their content: every row carries the same
+ * `dataset-field-row` testid and the same `Field name` label, and after an
+ * invalid rename a row's value box loses the accessible name (`<field> value`)
+ * that would otherwise identify it. A spec therefore compares the whole
+ * panel — which is also what catches a validation error landing on the row the
+ * user never touched.
+ */
+export interface RenderedFieldRow {
+  name: string;
+  value: string;
+  message: string | null;
+}
+
 export class DatasetItemsPage {
   constructor(
     private readonly page: Page,
@@ -264,6 +292,43 @@ export class DatasetItemsPage {
     return this.page
       .getByRole('tabpanel', { name: 'Records' })
       .locator(`th[data-header-id="${headerId}"]`);
+  }
+
+  /**
+   * Every row of the OPEN record panel, in render order, as `RenderedFieldRow`.
+   *
+   * Render order is the panel's own: `dataToFieldRows` lists the dataset's
+   * schema columns first (the items endpoint returns them alphabetically) and
+   * then any key only this record has. A spec comparing the whole array is
+   * therefore also asserting that order, which is what makes a duplicate-name
+   * assertion precise — `getFieldRowErrors` walks the rows in exactly this
+   * order and gives the name to the first claimant, so WHICH row ends up
+   * flagged is a consequence of it.
+   *
+   * The panel is asserted to hold at least one row first, so an empty answer
+   * means "no fields" rather than "called before the panel mounted".
+   */
+  async readItemEditorRows(): Promise<RenderedFieldRow[]> {
+    return test.step('Read the record panel\'s field rows as rendered', async () => {
+      const rows = this.editItemPanel.getByTestId('dataset-field-row');
+      await expect(rows.first(), 'the record panel renders at least one field row').toBeVisible();
+      return rows.evaluateAll((elements) =>
+        elements.map((element) => {
+          const name = element.querySelector('input');
+          const value = element.querySelector('textarea');
+          // `:scope > p` rather than any descendant `p`: the validation line is
+          // `FieldRowShell`'s `message` slot, a direct child of the row's outer
+          // div, and scoping it there keeps a future `note` slot from reading
+          // as an error.
+          const message = element.querySelector(':scope > p');
+          return {
+            name: (name as HTMLInputElement | null)?.value ?? '',
+            value: (value as HTMLTextAreaElement | null)?.value ?? '',
+            message: message === null ? null : (message.textContent ?? '').trim(),
+          };
+        }),
+      );
+    });
   }
 
   async closeItemEditor(): Promise<void> {

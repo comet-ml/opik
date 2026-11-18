@@ -4503,6 +4503,70 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/datasets/{id}/items/experiments/items/stats` — the
+     * column statistics the compare grid renders in its own headers, for the
+     * same `filters` the grid's row read carries.
+     *
+     * A sibling of `compareItemsPage` rather than part of it, because the two
+     * are separate requests over separate queries that are allowed to
+     * disagree — and disagreeing is the defect opik#9618 fixed, where the
+     * stats query's filters sat in an INNER JOIN `ON` instead of a `WHERE`. A
+     * helper that returned both from one call could not express "the rows
+     * answered and the statistics did not".
+     *
+     * Raw fetch, and the status returned rather than thrown on, for the two
+     * usual reasons together: the pinned SDK has no binding for this path, and
+     * a stats call that answers 500 under one filter shape and 200 under
+     * another is precisely what a caller here is asserting — so the status is
+     * part of the answer, not an error to raise.
+     *
+     * `stats` is kept as the server's own `{name, type, value}` triples
+     * (`ProjectStatRef`), unflattened. A `Record<string, number>` would be
+     * easier to read and would lose two things a caller needs: `duration`
+     * arrives as a `{p50, p90, p99}` object rather than a scalar, and a stat
+     * being ABSENT (no `feedback_scores.<name>` under an `is empty` filter) is
+     * a different answer from one present and zero.
+     */
+    async compareItemsStats(args: {
+      datasetId: string;
+      experimentIds: string[];
+      filters?: BackendFilter[];
+    }): Promise<{ status: number; message: string; stats: ProjectStatRef[] }> {
+      const query = new URLSearchParams({
+        experiment_ids: JSON.stringify(args.experimentIds),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/datasets/${args.datasetId}/items/experiments/items/stats`,
+        { query },
+      );
+      if (status !== 200) return { status, message, stats: [] };
+
+      const body = (json ?? {}) as { stats?: unknown };
+      if (!Array.isArray(body.stats)) {
+        throw new Error(
+          `compareItemsStats: dataset ${args.datasetId} answered 200 without a \`stats\` array — ` +
+            `got ${JSON.stringify(body).slice(0, 200)}. An empty statistics row and a malformed ` +
+            'answer are different findings and must not read alike.',
+        );
+      }
+      return {
+        status,
+        message,
+        stats: body.stats.map((stat) => {
+          const item = (stat ?? {}) as { name?: unknown; type?: unknown; value?: unknown };
+          if (typeof item.name !== 'string' || item.name === '') {
+            throw new Error(
+              `compareItemsStats: a stat arrived with no name: ${JSON.stringify(stat)}`,
+            );
+          }
+          return { name: item.name, type: String(item.type), value: item.value };
+        }),
+      };
+    },
+
+    /**
      * `POST /v1/private/workspaces/metrics/spans` — the aggregation a dashboard
      * Time series widget plots when it is scoped to "All projects in the
      * workspace". Raw fetch because the pinned SDK has no binding for it, and
