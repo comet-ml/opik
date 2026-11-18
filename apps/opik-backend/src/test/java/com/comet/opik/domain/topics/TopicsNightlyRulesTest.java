@@ -965,6 +965,18 @@ class TopicsNightlyRulesTest {
             assertInvariant(() -> NightInvariants.check(state, 2), "norm 'NaN'");
         }
 
+        @Test
+        @DisplayName("a known-Other prototype with the wrong dimension or not of unit length fails the run")
+        void otherPrototypes() {
+            var wrongDimension = state(0, topic("A", EAST));
+            wrongDimension.setOtherPrototypes(List.of(new float[]{1, 0, 0}));
+            assertInvariant(() -> NightInvariants.check(wrongDimension, 2), "'3' values");
+
+            var notUnit = state(0, topic("A", EAST));
+            notUnit.setOtherPrototypes(List.of(new float[]{1, 1}));
+            assertInvariant(() -> NightInvariants.check(notUnit, 2), "norm");
+        }
+
         private static void assertInvariant(Runnable check, String message) {
             assertThatThrownBy(check::run).isInstanceOfSatisfying(TopicsRunException.class, exception -> {
                 assertThat(exception.getCode()).isEqualTo(Code.INVARIANT);
