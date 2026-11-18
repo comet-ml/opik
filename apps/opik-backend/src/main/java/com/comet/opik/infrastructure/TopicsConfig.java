@@ -138,7 +138,7 @@ public class TopicsConfig {
         }
     }
 
-    /** The first-build job: builds the list of a project that has none yet. */
+    /** The nightly job: updates the topic list of each project that has one. */
     @Data
     public static class NightlyConfig {
 
@@ -157,6 +157,7 @@ public class TopicsConfig {
         private Duration budget;
     }
 
+    /** The first-build job: builds the list of a project that has none yet. */
     @Data
     public static class FirstBuildConfig {
 
