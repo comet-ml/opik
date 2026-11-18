@@ -78,7 +78,7 @@ const POPULATED_DATASET = {
     { name: "expected_output" },
     { name: "metadata" },
     { name: "bucket" },
-    { name: "tone" },
+    { name: "category" },
   ],
   total: 412,
 };
@@ -244,7 +244,7 @@ describe("AddToDatasetDialog", () => {
     openDropdownAndSelect("Test Dataset 1");
 
     expect(
-      screen.getByRole("button", { name: "Add 1 item" }),
+      screen.getByRole("button", { name: "Add 1 trace" }),
     ).toBeInTheDocument();
   });
 
@@ -458,7 +458,9 @@ describe("AddToDatasetDialog", () => {
 
     openDropdownAndSelect("Test Dataset 1");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -490,7 +492,9 @@ describe("AddToDatasetDialog", () => {
 
     openDropdownAndSelect("Test Dataset 1");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -520,7 +524,9 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Usage metrics"));
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -553,7 +559,9 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Comments"));
     fireEvent.click(screen.getByLabelText("Metadata"));
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -610,7 +618,9 @@ describe("AddToDatasetDialog", () => {
     fireEvent.keyDown(document, { key: "ArrowDown" });
     fireEvent.keyDown(document, { key: "Enter" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -670,7 +680,9 @@ describe("AddToDatasetDialog", () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -690,7 +702,9 @@ describe("AddToDatasetDialog", () => {
     fireEvent.keyDown(document, { key: "ArrowDown" });
     fireEvent.keyDown(document, { key: "Enter" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -735,7 +749,9 @@ describe("AddToDatasetDialog", () => {
 
     expect(screen.getByPlaceholderText("Field name")).toHaveValue("tone");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -782,7 +798,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(screen.getByText("Field name is already used")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
     ).toBeDisabled();
 
     fireEvent.change(screen.getByPlaceholderText("Field name"), {
@@ -790,7 +806,7 @@ describe("AddToDatasetDialog", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
     ).toBeEnabled();
   });
 
@@ -806,7 +822,9 @@ describe("AddToDatasetDialog", () => {
     fireEvent.keyDown(document, { key: "ArrowUp" });
     fireEvent.keyDown(document, { key: "Enter" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -831,13 +849,39 @@ describe("AddToDatasetDialog", () => {
 
     fireEvent.click(screen.getByText("Tags"));
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
         expect.objectContaining({
           fieldMappings: { input: "input", expected_output: "output" },
           enrichmentOptions: expect.objectContaining({ include_tags: true }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("should re-point an Opik-managed row to another field", async () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openRowExplorer("includeTags");
+    navigateToPath(2);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: expect.objectContaining({ tags: "input.tone" }),
+          enrichmentOptions: expect.objectContaining({ include_tags: false }),
         }),
         expect.any(Object),
       );
@@ -855,7 +899,9 @@ describe("AddToDatasetDialog", () => {
     openRowExplorer("expected_output");
     navigateToPath(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -942,33 +988,39 @@ describe("AddToDatasetDialog", () => {
     );
   });
 
-  it("should offer the dataset's existing columns as chips", async () => {
+  it("should list the dataset's existing columns as rows that can't be removed", async () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
     await enableAdvancedMapping();
 
-    const chips = within(screen.getByTestId("quick-add-chips"));
-
-    expect(chips.getByText("bucket")).toBeInTheDocument();
-    expect(chips.getByText("tone")).toBeInTheDocument();
-    expect(chips.queryByText("input")).not.toBeInTheDocument();
-    expect(chips.queryByText("expected_output")).not.toBeInTheDocument();
-    expect(chips.queryByText("metadata")).not.toBeInTheDocument();
+    ["bucket", "category"].forEach((column) => {
+      const row = screen.getByTestId(`mapping-row-existing:${column}`);
+      expect(within(row).getByText("Not mapped")).toBeInTheDocument();
+      expect(
+        within(row).getByRole("button", { name: `Remove ${column}` }),
+      ).toBeDisabled();
+    });
+    expect(
+      screen.queryByTestId("mapping-row-existing:metadata"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("quick-add-chips")?.textContent ?? "",
+    ).not.toContain("bucket");
   });
 
-  it("should add a row named after the dataset column and map it", async () => {
+  it("should map an existing column", async () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
     await enableAdvancedMapping();
 
-    fireEvent.click(
-      within(screen.getByTestId("quick-add-chips")).getByText("bucket"),
-    );
+    openRowExplorer("existing:bucket");
     navigateToPath(2);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -1021,29 +1073,37 @@ describe("AddToDatasetDialog", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("should block submit while a chip-added row has no source", async () => {
+  it("should let an existing column stay unmapped, or be cleared again", async () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
     await enableAdvancedMapping();
 
-    fireEvent.click(
-      within(screen.getByTestId("quick-add-chips")).getByText("bucket"),
-    );
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(screen.getByText("Select a field to map")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
-    ).toBeDisabled();
-
-    openRowExplorer("custom-1");
+    openRowExplorer("existing:bucket");
     navigateToPath(2);
+    openRowExplorer("existing:bucket");
+    fireEvent.click(screen.getByRole("button", { name: "Leave unmapped" }));
 
-    expect(screen.queryByText("Select a field to map")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
-    ).toBeEnabled();
+      within(screen.getByTestId("mapping-row-existing:bucket")).getByText(
+        "Not mapped",
+      ),
+    ).toBeInTheDocument();
+
+    const submit = screen.getByRole("button", {
+      name: /^Add \d+ (trace|span)s?$/,
+    });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fieldMappings: { input: "input", expected_output: "output" },
+        }),
+        expect.any(Object),
+      );
+    });
   });
 
   it("keeps rows without an input field out of basic mode", () => {
@@ -1075,7 +1135,9 @@ describe("AddToDatasetDialog", () => {
       screen.queryByText(/Only rows with input fields/),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Add \d+ (trace|span)s?$/ }),
+    );
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
