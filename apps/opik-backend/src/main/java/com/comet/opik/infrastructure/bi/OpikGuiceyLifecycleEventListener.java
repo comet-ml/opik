@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.SpanWeeksBackfillJob;
 import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
+import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
@@ -72,6 +73,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setProjectLastUpdatedFlushJob();
                 setAnnotationQueueRoutingFlushJob();
                 setAiLabelsJob();
+                setTopicVectorsJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
                 setOptimizationStalledReaperJob();
@@ -189,6 +191,18 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         scheduleRepeatingJob(AiLabelsJob.class, aiLabelsConfig.getTickInterval().toJavaDuration(), null);
+    }
+
+    private void setTopicVectorsJob() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+
+        if (!topicsConfig.isEnabled()) {
+            log.info("Topic vectors are disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(TopicVectorsJob.class, topicsConfig.getVectors().getTickInterval().toJavaDuration(),
+                null);
     }
 
     private void setLocalRunnerReaperJob() {
