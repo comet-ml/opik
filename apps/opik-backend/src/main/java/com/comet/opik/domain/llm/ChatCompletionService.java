@@ -185,7 +185,7 @@ public class ChatCompletionService {
             var status = findProviderHttpStatus(runtimeException)
                     .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
-            logProviderFailure(runtimeException);
+            logProviderFailure(runtimeException, status);
 
             var detail = buildDetailedErrorMessage(runtimeException);
             // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
@@ -495,7 +495,7 @@ public class ChatCompletionService {
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
-        logProviderFailure(runtimeException);
+        logProviderFailure(runtimeException, llmProviderError.getCode());
 
         // the redacted cause also marks the message as the provider's, so a server error is logged without it
         var cause = ProviderFailures.redacted(runtimeException);
@@ -536,12 +536,12 @@ public class ChatCompletionService {
             Optional<ErrorMessage> providerError = getLlmProviderError(llmProviderClient, throwable);
 
             if (providerError.isPresent()) {
-                logProviderFailure(throwable);
+                logProviderFailure(throwable, providerError.get().getCode());
                 handlers.handleError(providerError.get());
             } else {
 
                 if (throwable instanceof BadRequestException userMessage) {
-                    logProviderFailure(userMessage);
+                    logProviderFailure(userMessage, userMessage.getResponse().getStatus());
                     handlers.handleError(
                             new ErrorMessage(userMessage.getResponse().getStatus(), userMessage.getMessage()));
                     return;
@@ -551,7 +551,7 @@ public class ChatCompletionService {
                 // the 500 that a bare ErrorMessage(String) defaults to.
                 var providerStatus = findProviderHttpStatus(throwable);
                 if (providerStatus.isPresent()) {
-                    logProviderFailure(throwable);
+                    logProviderFailure(throwable, providerStatus.get());
                     handlers.handleError(new ErrorMessage(providerStatus.get(),
                             buildDetailedErrorMessage(throwable)));
                     return;
@@ -567,6 +567,12 @@ public class ChatCompletionService {
     /** A failure the provider's status or envelope explains, so its type is enough: see {@link ProviderFailures}. */
     private static void logProviderFailure(Throwable throwable) {
         log.warn("{}, error type '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, ProviderFailures.rootType(throwable));
+    }
+
+    /** As {@link #logProviderFailure(Throwable)}, plus the status: a number, so it carries no provider text. */
+    private static void logProviderFailure(Throwable throwable, int status) {
+        log.warn("{}, error type '{}', status '{}'", UNEXPECTED_ERROR_CALLING_LLM_PROVIDER,
+                ProviderFailures.rootType(throwable), status);
     }
 
     /**
