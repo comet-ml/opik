@@ -294,3 +294,4 @@ throw new DestinationGuardException("destination '%s' has no valid host".formatt
 - [testing.md](testing.md) - PODAM, naming, assertion patterns
 - [migrations.md](migrations.md) - Liquibase format for MySQL/ClickHouse
 - [permissions.md](permissions.md) - `@RequiredPermissions` annotation guidance for endpoints
+- [streaming.md](streaming.md) - Cursor-stream endpoints: request record, resource, DAO ordering and cursor, tests
