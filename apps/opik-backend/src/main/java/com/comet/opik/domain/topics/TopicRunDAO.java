@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -123,6 +124,14 @@ public interface TopicRunDAO {
 
     @SqlUpdate("DELETE FROM topic_runs WHERE started_at < :before")
     int deleteStartedBefore(@Bind("before") Instant before);
+
+    @SqlQuery("""
+            SELECT * FROM topic_runs
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            ORDER BY started_at DESC, run_id DESC
+            LIMIT 1
+            """)
+    Optional<TopicRun> findNewest(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
 
     @SqlQuery("SELECT * FROM topic_runs WHERE workspace_id = :workspaceId AND run_id = :runId")
     @Nullable TopicRun findById(@Bind("workspaceId") String workspaceId, @Bind("runId") UUID runId);

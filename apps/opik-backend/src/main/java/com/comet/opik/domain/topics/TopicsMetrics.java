@@ -1,7 +1,9 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.ProjectTopics;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -15,7 +17,9 @@ import java.time.Duration;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics. Every metric carries {@code workspace_id} and {@code workspace_name}.
+ * The topic builds' and the topics read API's metrics. Every metric of one workspace's work carries
+ * {@code workspace_id} and {@code workspace_name}; {@code topics.api.duration_seconds} has neither, where every
+ * caller's workspace would add series.
  */
 @Singleton
 public class TopicsMetrics {
@@ -24,6 +28,7 @@ public class TopicsMetrics {
     static final String ERROR_START_FAILED = "start_failed";
     /** Housekeeping failed a run its pod left {@code running}: the code {@code TopicRunDAO.failAbandoned} writes. */
     static final String ERROR_ABANDONED = "abandoned";
+    static final String API_STATUS_ERROR = "error";
 
     private static final AttributeKey<String> STATUS = stringKey("status");
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
@@ -38,6 +43,7 @@ public class TopicsMetrics {
     private final LongCounter qwenCalls;
     private final LongCounter saveRows;
     private final DoubleHistogram otherShare;
+    private final DoubleHistogram apiDuration;
 
     @Inject
     public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
@@ -69,6 +75,10 @@ public class TopicsMetrics {
                 .setDescription("Share of a saved run's traces labelled Other, among the traces it read (the window, "
                         + "or its sample): the stats.other_share of its topic_runs row")
                 .build();
+        this.apiDuration = meter.histogramBuilder("topics.api.duration_seconds").setUnit("s")
+                .setDescription("Duration of a topics read API request after its project check, by status: ready, "
+                        + "collecting, disabled, error")
+                .build();
     }
 
     void run(@NonNull String workspaceId, @NonNull TopicRun.Status status, String errorCode) {
@@ -93,5 +103,10 @@ public class TopicsMetrics {
 
     void otherShare(@NonNull String workspaceId, double share) {
         otherShare.record(share, names.of(workspaceId));
+    }
+
+    void apiRequest(ProjectTopics.Status status, @NonNull Duration duration) {
+        apiDuration.record(duration.toNanos() / 1e9,
+                Attributes.of(STATUS, status == null ? API_STATUS_ERROR : status.getValue()));
     }
 }
