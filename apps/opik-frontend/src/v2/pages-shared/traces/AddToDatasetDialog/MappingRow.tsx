@@ -57,8 +57,8 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   const isManaged = row.kind === "managed";
   const isCustom = row.kind === "custom";
   const managedLabel = isManaged
-    ? QUICK_ADD_CHIPS.find((chip) => chip.option === row.option)?.label ??
-      row.name
+    ? (QUICK_ADD_CHIPS.find((chip) => chip.option === row.option)?.label ??
+      row.name)
     : undefined;
 
   const renderCoverage = () => {
