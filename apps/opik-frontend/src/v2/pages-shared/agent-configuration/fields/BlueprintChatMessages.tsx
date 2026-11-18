@@ -50,7 +50,7 @@ const getContentText = (content: LLMMessage["content"]): string => {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((part) => (part.type === "text" ? part.text ?? "" : ""))
+      .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
       .filter(Boolean)
       .join("\n\n");
   }

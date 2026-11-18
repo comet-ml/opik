@@ -5,43 +5,56 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.domain.topics.TopicVectorsTickService;
+import com.comet.opik.infrastructure.DistributedLockConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.redis.RedisModule;
 import com.google.inject.Injector;
+import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongCounterBuilder;
 import io.opentelemetry.api.metrics.Meter;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.quartz.Scheduler;
+import org.redisson.Redisson;
+import org.redisson.api.RedissonReactiveClient;
+import org.redisson.config.Config;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -105,56 +118,6 @@ class TopicVectorsJobTest {
         interrupt();
 
         assertThat(cancelled).isTrue();
-    }
-
-    @Test
-    @DisplayName("a shutdown cancels the in-flight tick despite a later fire, frees the leader lock, starts no tick")
-    void shutdownCancelsInFlightTick() throws InterruptedException {
-        var held = new AtomicBoolean();
-        var cancelled = new AtomicInteger();
-        when(leaderLock()).thenAnswer(invocation -> {
-            Mono<Object> action = invocation.getArgument(1);
-            Mono<Void> fallback = invocation.getArgument(2);
-            // As RedissonLockService does: one holder, the action off the caller's thread, and the lock released when
-            // the action ends, a cancel included.
-            return Mono.defer(() -> held.compareAndSet(false, true)
-                    ? action.subscribeOn(Schedulers.boundedElastic())
-                            .doOnCancel(cancelled::incrementAndGet)
-                            .doFinally(__ -> held.set(false))
-                    : fallback.then(Mono.empty()));
-        });
-        when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
-                .thenReturn(Mono.just(true));
-        var started = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        when(tickService.tick(any(Instant.class))).thenAnswer(invocation -> {
-            started.countDown();
-            try {
-                release.await();
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-            }
-            return null;
-        });
-        var listener = startedListener();
-        try {
-            job.doJob(null);
-            assertThat(started.await(10, TimeUnit.SECONDS)).isTrue();
-            // A second fire while the tick runs finds the lock held. It must not detach the running tick.
-            job.doJob(null);
-            verify(ticks).add(1, outcome(TopicVectorsJob.LOCK_HELD));
-
-            listener.onEvent(event(GuiceyLifecycle.ApplicationShutdown));
-
-            assertThat(cancelled).hasValue(1);
-            assertThat(held).isFalse();
-            job.doJob(null);
-            verify(lockService, times(2)).bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), any(Mono.class),
-                    any(Mono.class), eq(LEASE), eq(Duration.ZERO));
-            verify(tickService).tick(any(Instant.class));
-        } finally {
-            release.countDown();
-        }
     }
 
     @Test
@@ -281,30 +244,6 @@ class TopicVectorsJobTest {
                 eq(LEASE), eq(Duration.ZERO));
     }
 
-    /** The lifecycle listener after the app's start, with this test's job and topics config in its injector. */
-    private OpikGuiceyLifecycleEventListener startedListener() {
-        var jobManager = mock(GuiceJobManager.class);
-        when(jobManager.getScheduler()).thenReturn(mock(Scheduler.class));
-        var configuration = mock(OpikConfiguration.class);
-        when(configuration.getTopics()).thenReturn(config);
-        var injector = mock(Injector.class);
-        when(injector.getInstance(GuiceJobManager.class)).thenReturn(jobManager);
-        when(injector.getInstance(OpikConfiguration.class)).thenReturn(configuration);
-        when(injector.getInstance(TopicVectorsJob.class)).thenReturn(job);
-        var run = mock(InjectorPhaseEvent.class);
-        when(run.getType()).thenReturn(GuiceyLifecycle.ApplicationRun);
-        when(run.getInjector()).thenReturn(injector);
-        var listener = new OpikGuiceyLifecycleEventListener();
-        listener.onEvent(run);
-        return listener;
-    }
-
-    private static GuiceyLifecycleEvent event(GuiceyLifecycle type) {
-        var event = mock(GuiceyLifecycleEvent.class);
-        when(event.getType()).thenReturn(type);
-        return event;
-    }
-
     private static Attributes outcome(String outcome) {
         return Attributes.of(TopicVectorsJob.OUTCOME, outcome);
     }
@@ -330,6 +269,140 @@ class TopicVectorsJobTest {
             job.interrupt();
         } catch (org.quartz.UnableToInterruptJobException exception) {
             throw new IllegalStateException(exception);
+        }
+    }
+
+    /**
+     * A pod shutdown through the lifecycle listener's {@code ApplicationShutdown} event, with a tick in flight on a real
+     * Redis lock. The tick is detached from its Quartz fire, so only the listener's interrupt reaches it. Its fields
+     * shadow the outer ones: here the job runs on a real lock service.
+     */
+    @Nested
+    @DisplayName("on shutdown")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class Shutdown {
+
+        // Its own Redis database: the container is reused across classes, and this class flushes it before each test.
+        private static final int DATABASE = 10;
+        // Far longer than any wait below: a lock still held after the shutdown would fail the test, not expire in it.
+        private static final Duration LEASE = Duration.ofMinutes(10);
+
+        private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+        private RedissonReactiveClient redisClient;
+
+        private OpikConfiguration opikConfig;
+        private TopicVectorsTickService tickService;
+        private LockService lockService;
+        private TopicVectorsJob job;
+        private Injector injector;
+        private Scheduler scheduler;
+        private OpikGuiceyLifecycleEventListener listener;
+
+        @BeforeAll
+        void beforeAll() {
+            redis.start();
+            var config = new Config();
+            config.useSingleServer().setAddress(redis.getRedisURI()).setDatabase(DATABASE);
+            redisClient = Redisson.create(config).reactive();
+        }
+
+        @AfterAll
+        void afterAll() {
+            redisClient.shutdown();
+        }
+
+        @BeforeEach
+        void setUp() throws Exception {
+            redisClient.getKeys().flushdb().block();
+            var redisModule = new RedisModule();
+            lockService = spy(redisModule.lockService(redisClient,
+                    DistributedLockConfig.builder().lockTimeoutMS(5_000).ttlInSeconds(60).build(),
+                    redisModule.lockMetrics()));
+            opikConfig = TestConfigUtils.loadConfigTest();
+            opikConfig.getTopics().setEnabled(true);
+            tickService = mock(TopicVectorsTickService.class);
+            when(tickService.leaderLease()).thenReturn(LEASE);
+            job = new TopicVectorsJob(opikConfig.getTopics(), tickService, lockService,
+                    meterOf(mock(LongCounter.class)));
+
+            injector = mock(Injector.class);
+            var jobManager = mock(GuiceJobManager.class);
+            scheduler = mock(Scheduler.class);
+            when(injector.getInstance(GuiceJobManager.class)).thenReturn(jobManager);
+            when(injector.getInstance(OpikConfiguration.class)).thenReturn(opikConfig);
+            when(injector.getInstance(TopicVectorsJob.class)).thenReturn(job);
+            when(jobManager.getScheduler()).thenReturn(scheduler);
+            when(scheduler.getJobKeys(any())).thenReturn(Set.of());
+
+            listener = new OpikGuiceyLifecycleEventListener();
+            var run = mock(InjectorPhaseEvent.class);
+            when(run.getType()).thenReturn(GuiceyLifecycle.ApplicationRun);
+            when(run.getInjector()).thenReturn(injector);
+            listener.onEvent(run);
+        }
+
+        @AfterEach
+        void tearDown() throws Exception {
+            job.interrupt();
+        }
+
+        @Test
+        @DisplayName("cancels the tick in flight, frees the leader lock at once and starts no new tick; a fire during the "
+                + "tick does not detach it")
+        void shutdownCancelsTheTickInFlight() throws Exception {
+            var started = new CountDownLatch(1);
+            var interrupted = new CountDownLatch(1);
+            var release = new CountDownLatch(1);
+            when(tickService.tick(any())).thenAnswer(invocation -> {
+                started.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException exception) {
+                    interrupted.countDown();
+                    Thread.currentThread().interrupt();
+                }
+                return null;
+            });
+
+            job.doJob(null);
+            assertThat(started.await(10, TimeUnit.SECONDS)).isTrue();
+            // A fire during the tick skips on the leader lock: it must not take the tick's place in the job.
+            job.doJob(null);
+            assertThat(tryLeaderLock()).isFalse();
+
+            shutdown();
+
+            assertThat(interrupted.await(10, TimeUnit.SECONDS)).isTrue();
+            await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(tryLeaderLock()).isTrue());
+            verify(scheduler).shutdown(false);
+
+            // A fire Quartz still delivers after the shutdown takes no lock.
+            clearInvocations(lockService);
+            job.doJob(null);
+            verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any());
+            verify(tickService).tick(any());
+        }
+
+        @Test
+        @DisplayName("disabled topics do not create the job at shutdown, and the scheduler still shuts down")
+        void disabledJobIsNotCreated() throws Exception {
+            opikConfig.getTopics().setEnabled(false);
+
+            shutdown();
+
+            verify(injector, never()).getInstance(TopicVectorsJob.class);
+            verify(scheduler).shutdown(false);
+        }
+
+        private void shutdown() {
+            var event = mock(GuiceyLifecycleEvent.class);
+            when(event.getType()).thenReturn(GuiceyLifecycle.ApplicationShutdown);
+            listener.onEvent(event);
+        }
+
+        private boolean tryLeaderLock() {
+            return Boolean.TRUE.equals(lockService.bestEffortLock(TopicVectorsJob.LEADER_LOCK, Mono.just(true),
+                    Mono.empty(), Duration.ofSeconds(5), Duration.ZERO).block());
         }
     }
 }

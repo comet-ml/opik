@@ -102,16 +102,7 @@ export class OllamaClient {
                 case 500:
                     throw new OpikApi.InternalServerError(_response.error.body, _response.rawResponse);
                 case 503:
-                    throw new OpikApi.ServiceUnavailableError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ServiceUnavailableError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -209,16 +200,7 @@ export class OllamaClient {
                         _response.rawResponse,
                     );
                 case 503:
-                    throw new OpikApi.ServiceUnavailableError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ServiceUnavailableError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

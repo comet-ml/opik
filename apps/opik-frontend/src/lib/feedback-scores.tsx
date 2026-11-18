@@ -39,9 +39,9 @@ export function getIsMultiValueFeedbackScore(
 ): value_by_author is FeedbackScoreValueByAuthorMap {
   return Boolean(
     value_by_author &&
-      typeof value_by_author === "object" &&
-      !Array.isArray(value_by_author) &&
-      Object.keys(value_by_author).length > 1,
+    typeof value_by_author === "object" &&
+    !Array.isArray(value_by_author) &&
+    Object.keys(value_by_author).length > 1,
   );
 }
 

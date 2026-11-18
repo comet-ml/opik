@@ -125,7 +125,7 @@ const PlaygroundOutputScoresContainer: React.FC<
       ? pickedRuleIdsOf(trace)
       : notRun
         ? []
-        : pickerRuleIds ?? [];
+        : (pickerRuleIds ?? []);
     return scoreNamesOf(scoringRulesOf(rules, pickedRuleIds));
   }, [rules, trace, notRun, pickerRuleIds]);
 

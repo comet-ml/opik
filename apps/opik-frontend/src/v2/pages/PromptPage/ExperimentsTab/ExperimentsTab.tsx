@@ -55,7 +55,6 @@ import {
 } from "@/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import useTablePageSize from "@/hooks/useTablePageSize";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
@@ -316,7 +315,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           areAggregatedScores: true,
           aggregationKey: "feedback_scores",
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
@@ -429,6 +427,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     columnsOrder,
     setColumnsOrder,
     getExperimentRowId,
+    getExperimentRowClassName,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
@@ -503,7 +502,6 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
-            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -537,6 +535,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
+        getRowClassName={getExperimentRowClassName}
         columnPinning={columnPinningConfig}
         noData={<DataTableNoData title={noDataText} />}
         TableBody={DataTableVirtualBody}
