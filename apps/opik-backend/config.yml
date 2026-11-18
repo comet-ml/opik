@@ -1718,6 +1718,11 @@ llmProviderClient:
   # Description: OpenRouter API URL, used when a workspace's OpenRouter provider has no base URL. Decisions models
   #   such as TypeSafe Jev call the same URL with the trailing /v1 replaced by /alpha/decisions
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}
+  # Default: empty
+  # Description: OpenRouter Decisions API URL, used by decisions models such as TypeSafe Jev when a workspace's
+  #   OpenRouter provider has no base URL. When empty, it is openRouterUrl with the trailing /v1 replaced by
+  #   /alpha/decisions
+  openRouterDecisionsUrl: ${LLM_PROVIDER_OPENROUTER_DECISIONS_URL:-}
 
   vertexAIClient:
     # Default: https://www.googleapis.com/auth/cloud-platform

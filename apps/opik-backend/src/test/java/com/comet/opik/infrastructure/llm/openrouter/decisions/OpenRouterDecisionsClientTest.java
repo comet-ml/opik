@@ -281,6 +281,23 @@ class OpenRouterDecisionsClientTest {
     }
 
     @Test
+    void configuredDecisionsUrlIsUsedWhenTheProviderHasNoBaseUrl() {
+        var overridePath = "/override/decisions";
+        wireMock.server().stubFor(post(urlEqualTo(overridePath))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        clientConfig.setOpenRouterDecisionsUrl(wireMock.runtimeInfo().getHttpBaseUrl() + overridePath);
+        try {
+            decisionsClient.decide(request(), apiConfig(Map.of())).block();
+        } finally {
+            clientConfig.setOpenRouterDecisionsUrl(null);
+        }
+
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(overridePath)));
+        wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
     void baseUrlWithoutV1FailsWithoutCallingAnyHost() {
         var config = LlmProviderClientApiConfig.builder()
                 .apiKey(apiKey)

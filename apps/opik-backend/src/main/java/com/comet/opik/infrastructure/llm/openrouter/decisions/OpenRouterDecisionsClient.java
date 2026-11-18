@@ -91,10 +91,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
-        var openRouterUrl = StringUtils.isNotBlank(config.baseUrl())
-                ? config.baseUrl()
-                : llmProviderClientConfig.getOpenRouterUrl();
-        var decisionsUrl = decisionsUrl(openRouterUrl);
+        var decisionsUrl = targetUrl(config.baseUrl());
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
                 .requestFunction(httpClient -> httpClient.target(decisionsUrl))
                 .requestCustomizer(builder -> {
@@ -122,6 +119,16 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .errorMessageFunction(this::extractErrorMessage)
                 .build();
         return client.executePostWithRetry(httpRequest);
+    }
+
+    private String targetUrl(String baseUrl) {
+        if (StringUtils.isNotBlank(baseUrl)) {
+            return decisionsUrl(baseUrl);
+        }
+        if (StringUtils.isNotBlank(llmProviderClientConfig.getOpenRouterDecisionsUrl())) {
+            return llmProviderClientConfig.getOpenRouterDecisionsUrl();
+        }
+        return decisionsUrl(StringUtils.defaultString(llmProviderClientConfig.getOpenRouterUrl()));
     }
 
     static String decisionsUrl(@NonNull String openRouterUrl) {
