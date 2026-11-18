@@ -57,8 +57,9 @@ public class ServiceTogglesResource {
         try {
             return topicWorkspaces.isEligible(workspaceId);
         } catch (RuntimeException exception) {
-            log.warn("Failed to read topics eligibility for workspace '{}', topics_enabled is false", workspaceId,
-                    exception);
+            // No stack trace: during an outage every toggles request lands here.
+            log.warn("Failed to read topics eligibility for workspace '{}', topics_enabled is false: {}", workspaceId,
+                    exception.toString());
             return false;
         }
     }
