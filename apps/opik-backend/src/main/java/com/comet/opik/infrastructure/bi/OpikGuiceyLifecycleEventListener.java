@@ -404,6 +404,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             log.info("GuiceJobManager instance already cleared, nothing to shutdown");
             return;
         }
+        interruptTopicsJobs();
         var scheduler = jobManager.getScheduler();
         try {
             log.info("Attempting to delete all jobs from the scheduler...");
@@ -421,6 +422,22 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
         guiceJobManager.set(null);
         log.info("Cleared GuiceJobManager instance");
+    }
+
+    /**
+     * A topics job runs detached from its Quartz fire, so the scheduler's shutdown never reaches it: interrupt it here,
+     * which cancels its run in flight and frees its lock. The checks match {@link #setTopicsFirstBuildJob()}, so a
+     * disabled job is never created at shutdown. A failure is logged, and the rest of the shutdown still runs.
+     */
+    private void interruptTopicsJobs() {
+        try {
+            var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+            if (topicsConfig.isEnabled() && topicsConfig.getFirstBuild().isEnabled()) {
+                injector.get().getInstance(TopicsFirstBuildJob.class).interrupt();
+            }
+        } catch (Exception exception) {
+            log.warn("Error interrupting the topics jobs during scheduler shutdown", exception);
+        }
     }
 
     private void setLlmModelRegistryRefreshJob() {
