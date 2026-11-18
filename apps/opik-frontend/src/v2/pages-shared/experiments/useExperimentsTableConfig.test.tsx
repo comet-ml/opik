@@ -11,8 +11,25 @@ import { SORT_DIRECTION } from "@/types/sorting";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
-  Link: ({ children }: { children: React.ReactNode }) => (
-    <a data-testid="link">{children}</a>
+  Link: ({
+    to,
+    params,
+    search,
+    children,
+  }: {
+    to: string;
+    params: Record<string, string>;
+    search: Record<string, unknown>;
+    children: React.ReactNode;
+  }) => (
+    <a
+      data-testid="link"
+      data-to={to}
+      data-params={JSON.stringify(params)}
+      data-search={JSON.stringify(search)}
+    >
+      {children}
+    </a>
   ),
 }));
 
@@ -99,7 +116,7 @@ describe("useExperimentsTableConfig", () => {
 });
 
 describe("grouped experiment name", () => {
-  it("renders the name as plain text inside the link, without an underline", () => {
+  it("renders the name as plain text inside a link to the experiment's compare page", () => {
     const nameColumn = findColumn(COLUMN_NAME_ID);
     const context = {
       row: {
@@ -112,8 +129,20 @@ describe("grouped experiment name", () => {
     render(<ResourceCell {...context} />);
 
     const name = screen.getByText("my experiment");
+    const link = screen.getByTestId("link");
     expect(name).not.toHaveClass("underline");
-    expect(screen.getByTestId("link")).toContainElement(name);
+    expect(link).toContainElement(name);
+    expect(link.dataset.to).toBe(
+      "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
+    );
+    expect(JSON.parse(link.dataset.params ?? "{}")).toEqual({
+      workspaceName: "ws",
+      projectId: "active-project",
+      datasetId: "ds-1",
+    });
+    expect(JSON.parse(link.dataset.search ?? "{}")).toEqual({
+      experiments: ["exp-1"],
+    });
   });
 
   describe("cell clicks", () => {
