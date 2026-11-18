@@ -1,4 +1,4 @@
-import { test, expect, PROVIDER_GROUP, REGISTRY_MODEL } from '@e2e/fixtures';
+import { test, expect, PROVIDER_GROUP } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { VERTEX_AI_MODEL } from '@e2e/pom/model-availability';
 
@@ -129,10 +129,12 @@ test.describe(
       { tag: ['@cap:playground.run-error-info'] },
       async ({ providerKeys, backendClient }) => {
         await test.step('The workspace has a Vertex AI key that cannot be read', async () => {
-          await providerKeys.ensureBuiltIn(
-            VERTEX_AI_MODEL.provider,
-            [REGISTRY_MODEL.gemini2],
-          );
+          // `VERTEX_AI_MODEL` carries all three names this spec needs — the
+          // picker's label, the backend's model id and the provider key's own
+          // type — and they differ; see its own comment.
+          await providerKeys.ensureBuiltIn(VERTEX_AI_MODEL.provider, [
+            VERTEX_AI_MODEL.displayName,
+          ]);
         });
 
         await test.step('POST /v1/private/chat/completions answers 400 and the fixed sentence', async () => {
@@ -172,10 +174,9 @@ test.describe(
         test.setTimeout(180_000);
 
         await test.step('The workspace has a Vertex AI key that cannot be read', async () => {
-          await providerKeys.ensureBuiltIn(
-            VERTEX_AI_MODEL.provider,
-            [REGISTRY_MODEL.gemini2],
-          );
+          await providerKeys.ensureBuiltIn(VERTEX_AI_MODEL.provider, [
+            VERTEX_AI_MODEL.displayName,
+          ]);
         });
 
         await test.step('Confirm server-side that the key really is refused, before opening a browser', async () => {
@@ -209,7 +210,7 @@ test.describe(
             await playground.selectModelFromProvider(
               0,
               PROVIDER_GROUP.vertexAi,
-              REGISTRY_MODEL.gemini2,
+              VERTEX_AI_MODEL.displayName,
             );
             await playground.configureVariant(0, { userPrompt: USER_PROMPT });
 
