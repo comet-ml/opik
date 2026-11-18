@@ -9,7 +9,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
-import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -37,7 +36,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * {@code topic_vectors}; migration 000148 explains its layout. Reads drop a key whose latest row has
+ * {@code topic_vectors}; migration 000149 explains its layout. Reads drop a key whose latest row has
  * {@code is_deleted = 1}. It reads ai-labels' {@code ai_label_status} and {@code ai_labels} and never writes them.
  */
 @Slf4j
@@ -325,27 +324,16 @@ public class TopicVectorsDAO {
                 });
     }
 
-    /**
-     * Done statuses of {@code task} updated in {@code [lowerBound, upperBound]}, of traces created at or after
-     * {@code createdAfter}, without a vector, oldest first: the whole workspace in one read.
-     */
-    public Flux<TopicVectorCandidate> findUnvectored(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Instant lowerBound, @NonNull Instant upperBound, @NonNull Instant createdAfter, int limit,
-            long maxExecutionSeconds) {
-        return findUnvectored(workspaceId, task, lowerBound, upperBound, createdAfter, null, null, List.of(), limit,
-                maxExecutionSeconds);
-    }
-
-    /**
-     * {@link #findUnvectored(String, String, Instant, Instant, Instant, int, long)} narrowed: to the traces created
-     * before {@code createdBefore} when it is not null (a slice), to {@code projectId} when it is not null, and to the
-     * projects not in {@code excludedProjectIds}.
-     */
-    public Flux<TopicVectorCandidate> findUnvectored(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Instant lowerBound, @NonNull Instant upperBound, @NonNull Instant createdAfter,
-            @Nullable Instant createdBefore, @Nullable UUID projectId, @NonNull Collection<UUID> excludedProjectIds,
-            int limit, long maxExecutionSeconds) {
-        var find = config.getVectors().getFind();
+    /** The window read {@code find} describes; see {@link TopicVectorsFind}. */
+    public Flux<TopicVectorCandidate> findUnvectored(@NonNull TopicVectorsFind find) {
+        var workspaceId = find.workspaceId();
+        var lowerBound = find.lowerBound();
+        var createdAfter = find.createdAfter();
+        var createdBefore = find.createdBefore();
+        var projectId = find.projectId();
+        var excludedProjectIds = find.excludedProjectIds();
+        var limit = find.limit();
+        var guards = config.getVectors().getFind();
         // The guards go into the SETTINGS clause, which ClickHouse can't take as bound parameters. The values are
         // validated config numbers, never input.
         var template = getSTWithLogComment(FIND_UNVECTORED, "topics:find_unvectored", workspaceId, null,
@@ -354,17 +342,17 @@ public class TopicVectorsDAO {
                 .add("project", projectId != null)
                 .add("excluded", !excludedProjectIds.isEmpty())
                 .add("created_before", createdBefore != null)
-                .add("max_rows_to_read", find.getMaxRowsToRead())
-                .add("max_memory_usage", find.getMaxMemoryUsage())
-                .add("max_execution_time", maxExecutionSeconds);
+                .add("max_rows_to_read", guards.getMaxRowsToRead())
+                .add("max_memory_usage", guards.getMaxMemoryUsage())
+                .add("max_execution_time", find.maxExecutionSeconds());
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
-                            .bind("task", task)
+                            .bind("task", find.task())
                             .bind("created_after_micros", toEpochMicros(createdAfter))
                             .bind("lower_bound_micros", toEpochMicros(lowerBound))
-                            .bind("upper_bound_micros", toEpochMicros(upperBound))
+                            .bind("upper_bound_micros", toEpochMicros(find.upperBound()))
                             .bind("limit", limit)
                             .bind("non_blank", NON_BLANK);
                     if (projectId != null) {

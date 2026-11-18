@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ServiceUnavailableException;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +68,7 @@ public class TopicsFirstBuildService {
     private final @NonNull TopicsBackfillGate backfillGate;
     private final @NonNull TopicWindowLabelService labelService;
 
+    @Builder(toBuilder = true)
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
@@ -254,7 +256,8 @@ public class TopicsFirstBuildService {
             try {
                 long traces = windowVectors(workspaceId, projectId, from, to);
                 if (traces >= build.getMinVectors()) {
-                    found.add(new Candidate(workspaceId, projectId, traces));
+                    found.add(
+                            Candidate.builder().workspaceId(workspaceId).projectId(projectId).vectors(traces).build());
                 }
             } catch (RuntimeException exception) {
                 log.warn("Topics first builds count read failed, workspace '{}', project '{}'; it is read again the "
