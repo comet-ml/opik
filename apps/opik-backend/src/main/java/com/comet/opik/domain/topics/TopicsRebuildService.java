@@ -68,7 +68,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsRebuildService {
 
-    static final int DIMENSIONS = TopicVectorsTickService.EMBED_DIMENSIONS;
+    static final int DIMENSIONS = TopicAlgorithm.DIMENSIONS;
     static final int MAX_TOPICS = 10;
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;

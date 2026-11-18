@@ -35,6 +35,9 @@ public interface TopicAlgorithm {
     /** The label of a trace in no topic. */
     int OTHER = -1;
 
+    /** The values per vector: the embedding model's output size. */
+    int DIMENSIONS = 384;
+
     /** Builds the first list of a project that has none. */
     FirstBuild firstBuild(Window window, int maxTopics, Context context);
 
