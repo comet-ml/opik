@@ -78,7 +78,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsRebuildService {
 
-    static final int DIMENSIONS = TopicVectorsTickService.EMBED_DIMENSIONS;
+    static final int DIMENSIONS = TopicAlgorithm.DIMENSIONS;
     static final int MAX_TOPICS = 10;
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
@@ -118,7 +118,7 @@ public class TopicsRebuildService {
     private final @NonNull TopicAlgorithm algorithm;
 
     /** How a run ended. {@code errorCode} is null for a saved run. */
-    @Builder
+    @Builder(toBuilder = true)
     public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
     }
 
@@ -276,7 +276,8 @@ public class TopicsRebuildService {
             stats.put("vectors", n);
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
-            var built = algorithm.firstBuild(new TopicAlgorithm.Window(window.texts(), window.vectors()), MAX_TOPICS,
+            var built = algorithm.firstBuild(
+                    TopicAlgorithm.Window.builder().texts(window.texts()).vectors(window.vectors()).build(), MAX_TOPICS,
                     this);
             var topics = topics(built);
             var prototypes = prototypes(built, topics);

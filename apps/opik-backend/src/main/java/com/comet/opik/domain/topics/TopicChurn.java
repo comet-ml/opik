@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.google.common.base.Preconditions;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -13,6 +14,7 @@ import lombok.experimental.UtilityClass;
 @UtilityClass
 public class TopicChurn {
 
+    @Builder(toBuilder = true)
     public record Churn(double churn, double churnAny) {
     }
 
@@ -33,7 +35,9 @@ public class TopicChurn {
                 movedTopic += moved ? 1 : 0;
             }
         }
-        return new Churn(inTopics == 0 ? 0 : (double) movedTopic / inTopics,
-                before.length == 0 ? 0 : (double) changed / before.length);
+        return Churn.builder()
+                .churn(inTopics == 0 ? 0 : (double) movedTopic / inTopics)
+                .churnAny(before.length == 0 ? 0 : (double) changed / before.length)
+                .build();
     }
 }

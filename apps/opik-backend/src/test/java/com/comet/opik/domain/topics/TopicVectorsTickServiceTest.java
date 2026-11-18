@@ -73,12 +73,11 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -398,14 +397,14 @@ class TopicVectorsTickServiceTest {
 
             service.tick(NOW);
             var shortLower = NOW.minus(Duration.ofHours(24));
-            verify(dao).findUnvectored(WORKSPACE_ID, TopicVectorsTickService.TASK, shortLower, NOW,
-                    shortLower.minus(horizonAndSlack), 5_000, FIND_SECONDS);
+            verify(dao).findUnvectored(windowRead(WORKSPACE_ID, shortLower, NOW, shortLower.minus(horizonAndSlack),
+                    5_000, FIND_SECONDS));
 
             longWindowDue();
             var result = service.tick(NOW);
             assertThat(result.longWindowPass()).isTrue();
-            verify(dao).findUnvectored(WORKSPACE_ID, TopicVectorsTickService.TASK, APPLIES_FROM, NOW,
-                    APPLIES_FROM.minus(horizonAndSlack), 5_000, FIND_SECONDS);
+            verify(dao).findUnvectored(windowRead(WORKSPACE_ID, APPLIES_FROM, NOW,
+                    APPLIES_FROM.minus(horizonAndSlack), 5_000, FIND_SECONDS));
         }
 
         @Test
@@ -419,8 +418,8 @@ class TopicVectorsTickServiceTest {
 
             assertThat(result.longWindowPass()).isTrue();
             var lower = NOW.minus(Duration.ofDays(12));
-            verify(dao).findUnvectored(WORKSPACE_ID, TopicVectorsTickService.TASK, lower, NOW,
-                    lower.minus(Duration.ofDays(7).plus(Duration.ofDays(1))), 5_000, FIND_SECONDS);
+            verify(dao).findUnvectored(windowRead(WORKSPACE_ID, lower, NOW,
+                    lower.minus(Duration.ofDays(7).plus(Duration.ofDays(1))), 5_000, FIND_SECONDS));
             assertThat(TopicVectorsTickService.longWindow(TestConfigUtils.loadConfigTest().getTopics().getVectors()))
                     .isEqualTo(io.dropwizard.util.Duration.days(7));
         }
@@ -1170,8 +1169,8 @@ class TopicVectorsTickServiceTest {
             var lowerBound = TopicVectorsTickService.lowerBound(APPLIES_FROM, start, window);
             var createdAfter = TopicVectorsTickService.createdAfter(lowerBound, Duration.ofDays(7),
                     Duration.ofDays(1));
-            return on.findUnvectored(workspaceId, TopicVectorsTickService.TASK, lowerBound, start, createdAfter,
-                    limit, maxExecutionSeconds);
+            return on.findUnvectored(windowRead(workspaceId, lowerBound, start, createdAfter, limit,
+                    maxExecutionSeconds));
         }
     }
 
@@ -1230,11 +1229,11 @@ class TopicVectorsTickServiceTest {
                 return Mono.empty();
             });
             // Every read answers the same backlog and records its window, so this takes any bounds.
-            when(dao.findUnvectored(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), any(Instant.class),
-                    any(Instant.class), any(Instant.class), anyInt(), anyLong())).thenAnswer(invocation -> {
-                        Instant lowerBound = invocation.getArgument(2);
-                        Instant upperBound = invocation.getArgument(3);
-                        windowsRead.add(Duration.between(lowerBound, upperBound));
+            when(dao.findUnvectored(argThat(find -> find.workspaceId().equals(WORKSPACE_ID)
+                    && find.task().equals(TopicVectorsTickService.TASK)))).thenAnswer(invocation -> {
+                        TopicVectorsFind find = invocation.getArgument(0);
+                        Instant upperBound = find.upperBound();
+                        windowsRead.add(Duration.between(find.lowerBound(), upperBound));
                         return Flux.fromStream(IntStream.range(0, unvectored)
                                 .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, upperBound.minusSeconds(60))));
                     });
@@ -1437,17 +1436,8 @@ class TopicVectorsTickServiceTest {
 
         /** Every read takes any bounds: the fake selects by them, and the tests check the reads it recorded. */
         private void stubClickHouse() {
-            when(dao.findUnvectored(anyString(), eq(TopicVectorsTickService.TASK), any(Instant.class),
-                    any(Instant.class), any(Instant.class), anyInt(), anyLong()))
-                    .thenAnswer(invocation -> read(invocation.getArgument(0), null, List.of(),
-                            invocation.getArgument(2), invocation.getArgument(3), invocation.getArgument(4), null,
-                            invocation.getArgument(5)));
-            when(dao.findUnvectored(anyString(), eq(TopicVectorsTickService.TASK), any(Instant.class),
-                    any(Instant.class), any(Instant.class), nullable(Instant.class), nullable(UUID.class),
-                    anyCollection(), anyInt(), anyLong()))
-                    .thenAnswer(invocation -> read(invocation.getArgument(0), invocation.getArgument(6),
-                            invocation.getArgument(7), invocation.getArgument(2), invocation.getArgument(3),
-                            invocation.getArgument(4), invocation.getArgument(5), invocation.getArgument(8)));
+            when(dao.findUnvectored(argThat(find -> find.task().equals(TopicVectorsTickService.TASK))))
+                    .thenAnswer(invocation -> read(invocation.getArgument(0)));
             stubSummaryOfEachKey(dao);
             when(dao.insert(anyList())).thenAnswer(invocation -> {
                 List<TopicVector> vectors = invocation.getArgument(0);
@@ -1464,8 +1454,15 @@ class TopicVectorsTickServiceTest {
                     .thenAnswer(invocation -> Mono.just(Map.copyOf(vectorCounts)));
         }
 
-        private Flux<TopicVectorCandidate> read(String workspaceId, UUID projectId, Collection<UUID> excluded,
-                Instant lowerBound, Instant upperBound, Instant createdAfter, Instant createdBefore, int limit) {
+        private Flux<TopicVectorCandidate> read(TopicVectorsFind find) {
+            var workspaceId = find.workspaceId();
+            var projectId = find.projectId();
+            var excluded = find.excludedProjectIds();
+            var lowerBound = find.lowerBound();
+            var upperBound = find.upperBound();
+            var createdAfter = find.createdAfter();
+            var createdBefore = find.createdBefore();
+            var limit = find.limit();
             reads.add(new Read(workspaceId, projectId, List.copyOf(excluded), createdAfter, createdBefore));
             if (projectId != null && failingProjects.contains(projectId)) {
                 return Flux.error(new IllegalStateException("read failed"));
@@ -1764,9 +1761,9 @@ class TopicVectorsTickServiceTest {
             var recent = trace(drained, NOW.minusSeconds(60));
             // What one read of the whole window selects, before anything is embedded.
             var window = TopicVectorsTickService.lowerBound(APPLIES_FROM, NOW, LONG_WINDOW);
-            var unsliced = read(WORKSPACE_ID, null, List.of(backlog.projectId()), window, NOW,
-                    NOW.minus(Duration.ofDays(15)), null, 5_000).map(TopicVectorCandidate::traceId).collectList()
-                    .block();
+            var unsliced = read(windowRead(WORKSPACE_ID, window, NOW, NOW.minus(Duration.ofDays(15)), 5_000, 0)
+                    .toBuilder().excludedProjectIds(List.of(backlog.projectId())).build())
+                    .map(TopicVectorCandidate::traceId).collectList().block();
             reads.clear();
 
             var result = service.tick(NOW);
@@ -2045,8 +2042,7 @@ class TopicVectorsTickServiceTest {
             when(lockService.lockUsingToken(eq(TopicVectorsTickService.LONG_WINDOW_LOCK), any(Duration.class)))
                     .thenReturn(Mono.just(false));
             // The reads take any bounds and keys: these tests are about the calls between them.
-            when(dao.findUnvectored(anyString(), eq(TopicVectorsTickService.TASK), any(Instant.class),
-                    any(Instant.class), any(Instant.class), anyInt(), anyLong()))
+            when(dao.findUnvectored(argThat(find -> find.task().equals(TopicVectorsTickService.TASK))))
                     .thenAnswer(invocation -> Flux.fromIterable(candidates));
             when(dao.findSummaries(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
                     .thenAnswer(invocation -> Flux.fromIterable(candidates)
@@ -2333,6 +2329,20 @@ class TopicVectorsTickServiceTest {
                 .version(2)
                 .appliesFrom(Instant.parse("2026-11-10T00:00:00Z"))
                 .history(List.of(AiLabelTask.Version.builder().version(1).appliesFrom(APPLIES_FROM).build()))
+                .build();
+    }
+
+    /** A read of the whole workspace's window, as the tick makes it when nothing narrows it. */
+    private static TopicVectorsFind windowRead(String workspaceId, Instant lowerBound, Instant upperBound,
+            Instant createdAfter, int limit, long maxExecutionSeconds) {
+        return TopicVectorsFind.builder()
+                .workspaceId(workspaceId)
+                .task(TopicVectorsTickService.TASK)
+                .lowerBound(lowerBound)
+                .upperBound(upperBound)
+                .createdAfter(createdAfter)
+                .limit(limit)
+                .maxExecutionSeconds(maxExecutionSeconds)
                 .build();
     }
 

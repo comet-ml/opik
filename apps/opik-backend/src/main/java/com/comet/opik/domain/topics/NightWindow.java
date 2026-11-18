@@ -11,7 +11,7 @@ import java.time.Instant;
  * The traces of one night's window, in time order: intent text, unit vector ({@code dimensions} values each) and
  * creation time. {@code night} is the window's end (exclusive), {@code from} its start.
  */
-@Builder
+@Builder(toBuilder = true)
 public record NightWindow(@NonNull String[] texts, @NonNull float[] vectors, @NonNull Instant[] createdAt,
         @NonNull Instant from, @NonNull Instant night, int dimensions) {
 

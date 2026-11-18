@@ -61,7 +61,7 @@ public class ForcedBirth {
         for (var candidate : ordered) {
             if (candidate.tightness() < MIN_TIGHTNESS) {
                 map.put(candidate.group(), NightlyUpdate.OTHER);
-                outcomes.add(new Outcome(candidate.group(), Result.OTHER_LOOSE, null));
+                outcomes.add(Outcome.builder().group(candidate.group()).result(Result.OTHER_LOOSE).build());
                 continue;
             }
             forced.add(candidate);
@@ -114,10 +114,10 @@ public class ForcedBirth {
                 for (int id : ids) {
                     if (allowAssign) {
                         map.put(id, live.get(key));
-                        outcomes.add(new Outcome(id, Result.SAME_NAME, live.get(key)));
+                        outcomes.add(Outcome.builder().group(id).result(Result.SAME_NAME).topic(live.get(key)).build());
                     } else {
                         map.put(id, NightlyUpdate.OTHER);
-                        outcomes.add(new Outcome(id, Result.OTHER_NAME, null));
+                        outcomes.add(Outcome.builder().group(id).result(Result.OTHER_NAME).build());
                     }
                 }
                 continue;
@@ -141,7 +141,7 @@ public class ForcedBirth {
             if (share < MIN_NEW_SHARE) {
                 for (int id : group.groups()) {
                     map.put(id, NightlyUpdate.OTHER);
-                    outcomes.add(new Outcome(id, Result.OTHER_SMALL, null));
+                    outcomes.add(Outcome.builder().group(id).result(Result.OTHER_SMALL).build());
                 }
                 continue;
             }
@@ -159,7 +159,7 @@ public class ForcedBirth {
                 if (lowest == null || share(byTopic, lowest, groupShares, outcomes) >= share) {
                     for (int id : group.groups()) {
                         map.put(id, NightlyUpdate.OTHER);
-                        outcomes.add(new Outcome(id, Result.OTHER_FULL, null));
+                        outcomes.add(Outcome.builder().group(id).result(Result.OTHER_FULL).build());
                     }
                     continue;
                 }
@@ -168,7 +168,7 @@ public class ForcedBirth {
             int born = state.born(TopicText.name(group.name()), group.definition());
             for (int id : group.groups()) {
                 map.put(id, born);
-                outcomes.add(new Outcome(id, Result.BORN, born));
+                outcomes.add(Outcome.builder().group(id).result(Result.BORN).topic(born).build());
             }
         }
         if (!rejected.isEmpty()) {
@@ -177,7 +177,7 @@ public class ForcedBirth {
         for (int id : byGroup.keySet()) {
             if (!map.containsKey(id)) {
                 map.put(id, NightlyUpdate.OTHER);
-                outcomes.add(new Outcome(id, Result.OTHER_NAME, null));
+                outcomes.add(Outcome.builder().group(id).result(Result.OTHER_NAME).build());
             }
         }
     }
@@ -196,7 +196,8 @@ public class ForcedBirth {
             if (group != null && byGroup.containsKey(group) && !done.contains(group) && topic != null
                     && state.topic(topic).isLive()) {
                 pairs.add(new int[]{group, topic});
-                prompts.add(new TopicPrompts.VerifyPair(byTopic.get(topic), byGroup.get(group)));
+                prompts.add(
+                        TopicPrompts.VerifyPair.builder().topic(byTopic.get(topic)).group(byGroup.get(group)).build());
                 done.add(group);
             }
         }
@@ -209,7 +210,7 @@ public class ForcedBirth {
             int topic = pairs.get(n)[1];
             if (answers.getOrDefault(n, false)) {
                 map.put(group, topic);
-                outcomes.add(new Outcome(group, Result.ASSIGNED, topic));
+                outcomes.add(Outcome.builder().group(group).result(Result.ASSIGNED).topic(topic).build());
             } else {
                 rejected.add(byGroup.get(group));
             }
