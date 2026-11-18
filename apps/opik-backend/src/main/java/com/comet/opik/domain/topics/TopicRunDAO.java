@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -76,6 +77,26 @@ public interface TopicRunDAO {
             WHERE status = 'running' AND started_at < :startedBefore
             """)
     int failAbandoned(@Bind("startedBefore") Instant startedBefore, @Bind("now") Instant now);
+
+    /**
+     * Of {@code projectIds}, those whose last {@code failures} runs all failed ({@code abandoned} included), the latest
+     * started at or after {@code since}: the night pauses them. A saved or running run among the last {@code failures}
+     * ends the streak.
+     */
+    @SqlQuery("""
+            SELECT project_id FROM (
+                SELECT project_id, status, started_at,
+                    ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY started_at DESC, run_id DESC) AS recency
+                FROM topic_runs
+                WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            ) latest
+            WHERE recency <= :failures
+            GROUP BY project_id
+            HAVING COUNT(*) = :failures AND SUM(status = 'failed') = :failures AND MAX(started_at) >= :since
+            """)
+    Set<UUID> findPausedProjectIds(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds,
+            @Bind("failures") int failures, @Bind("since") Instant since);
 
     /**
      * Of {@code projectIds}, those with a failed {@code first_build} run since their last saved run, {@code abandoned}
