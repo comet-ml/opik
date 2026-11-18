@@ -36,7 +36,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * {@code topic_vectors}; migration 000148 explains its layout. Reads drop a key whose latest row has
+ * {@code topic_vectors}; migration 000149 explains its layout. Reads drop a key whose latest row has
  * {@code is_deleted = 1}. It reads ai-labels' {@code ai_label_status} and {@code ai_labels} and never writes them.
  */
 @Slf4j
