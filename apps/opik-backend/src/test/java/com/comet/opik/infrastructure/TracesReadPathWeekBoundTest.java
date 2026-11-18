@@ -287,8 +287,7 @@ class TracesReadPathWeekBoundTest {
     }
 
     private Stream<Arguments> everySiteBoundsWhatItCanDeriveAndFallsBackOtherwise() {
-        // Each trigger reaches that site for an id carrying the given id_at, and returns that id. Reading the fields
-        // at call time rather than capturing them: @MethodSource runs before @BeforeAll has wired the clients in.
+        // Each trigger reaches that site for an id carrying the given id_at, and returns that id.
         var getById = onTraceAt(trace -> traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY));
         var batchUpdate = onTraceAt(trace -> batchUpdateTags(Set.of(trace.id())));
         var patchStored = onTraceAt(trace -> patch(trace.id(), nameUpdate(trace)));
