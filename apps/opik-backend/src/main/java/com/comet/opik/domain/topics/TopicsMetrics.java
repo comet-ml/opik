@@ -20,7 +20,8 @@ import java.util.Optional;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics. Every metric carries {@code workspace_id} and {@code workspace_name}.
+ * The topic builds' metrics. Every metric of one workspace's work carries {@code workspace_id} and
+ * {@code workspace_name}; only {@code topics.nightly.budget_used_seconds}, a whole night's, has neither.
  */
 @Singleton
 public class TopicsMetrics {
@@ -51,6 +52,7 @@ public class TopicsMetrics {
     private final DoubleHistogram otherShare;
     private final LongCounter firstBuildGate;
     private final LongCounter labelPasses;
+    private final DoubleHistogram budgetUsed;
     private final DoubleHistogram liveTopics;
     private final LongCounter retired;
     private final LongCounter born;
@@ -117,6 +119,9 @@ public class TopicsMetrics {
                         + "resume: the first-build job going on with a pass that did not finish) and outcome "
                         + "(complete, or incomplete when the pass was cut or failed)")
                 .build();
+        this.budgetUsed = meter.histogramBuilder("topics.nightly.budget_used_seconds").setUnit("s")
+                .setDescription("Wall time of the night, from its start to its last run's end")
+                .build();
         this.liveTopics = meter.histogramBuilder("topics.topics.live")
                 .setDescription("Live topics of a project after each saved nightly update")
                 .build();
@@ -173,6 +178,10 @@ public class TopicsMetrics {
         var attributes = names.of(workspaceId);
         churn.record(value.churn(), attributes);
         churnAny.record(value.churnAny(), attributes);
+    }
+
+    void budgetUsed(@NonNull Duration duration) {
+        budgetUsed.record(duration.toNanos() / 1e9);
     }
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
