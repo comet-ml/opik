@@ -7,6 +7,7 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -209,7 +210,8 @@ public class TopicsMetrics {
         firstBuildGate.add(1, names.builder(workspaceId).put(OUTCOME, state.getValue()).build());
     }
 
-    void apiRequest(ProjectTopics.Status status, @NonNull Duration duration) {
+    /** {@code status} is null when the request failed before it had one: recorded as {@code error}. */
+    void apiRequest(@Nullable ProjectTopics.Status status, @NonNull Duration duration) {
         apiDuration.record(duration.toNanos() / 1e9,
                 Attributes.of(STATUS, status == null ? API_STATUS_ERROR : status.getValue()));
     }
