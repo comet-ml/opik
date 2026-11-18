@@ -27,6 +27,7 @@ import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -79,6 +80,7 @@ class TopicsRebuildServiceTest {
     private TraceTopicsDAO traceTopicsDAO;
     private InferenceClient client;
     private TopicWindowDAO windowDAO;
+    private TopicWindowLabelService labelService;
     private TopicsRebuildService service;
     private Function<TopicAlgorithm, TopicsRebuildService> serviceWith;
 
@@ -100,6 +102,9 @@ class TopicsRebuildServiceTest {
                 .thenReturn(Flux.fromIterable(window()));
         when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(Set.of(projectId)), any(), any(), anyLong()))
                 .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(projectId, TRACES)));
+        labelService = mock(TopicWindowLabelService.class);
+        when(labelService.labelWindow(any(), any(), any(), any()))
+                .thenReturn(TopicWindowLabelService.Pass.builder().complete(true).build());
         when(topicDAO.findStates(any(), any())).thenReturn(List.of());
         when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
@@ -109,7 +114,7 @@ class TopicsRebuildServiceTest {
         var names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
         var metrics = new TopicsMetrics(meter.meter, names);
         serviceWith = algorithm -> new TopicsRebuildService(TestConfigUtils.loadConfigTest().getTopics(), template,
-                windowDAO, traceTopicsDAO, client, idGenerator, metrics, algorithm);
+                windowDAO, traceTopicsDAO, client, idGenerator, metrics, labelService, algorithm);
         service = serviceWith.apply(new KMeansTopicAlgorithm());
     }
 
@@ -162,6 +167,7 @@ class TopicsRebuildServiceTest {
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "qwen_bad_answer")).isEqualTo(1);
         assertThat(meter.points("topics.run.duration_seconds"))
                 .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -198,6 +204,7 @@ class TopicsRebuildServiceTest {
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
         assertThat(meter.sum("topics.runs", "status", "saved")).isZero();
         assertThat(meter.points("topics.save.rows")).isEmpty();
+        verify(labelService, never()).labelWindow(any(), any(), any(), any());
     }
 
     @Test
@@ -315,6 +322,27 @@ class TopicsRebuildServiceTest {
         assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
         assertThat(interrupted).isTrue();
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
+    }
+
+    @Test
+    @DisplayName("a saved run then labels the rest of its window, after the MySQL commit and its own insert, until "
+            + "its timeout less the slack")
+    void savedRunLabelsTheWindow() {
+        answer(FIXTURE.answer);
+        var timeout = TestConfigUtils.loadConfigTest().getTopics().getBuild().getProjectTimeout().toJavaDuration();
+        var earliest = Instant.now().plus(timeout).minus(TopicsRebuildService.LABEL_SLACK);
+
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+
+        var latest = Instant.now().plus(timeout).minus(TopicsRebuildService.LABEL_SLACK);
+        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        var deadline = ArgumentCaptor.forClass(Instant.class);
+        var order = inOrder(runDAO, traceTopicsDAO, labelService);
+        order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), any());
+        order.verify(traceTopicsDAO).insert(any());
+        order.verify(labelService).labelWindow(eq(WORKSPACE_ID), eq(projectId), deadline.capture(),
+                eq(TopicWindowLabelService.Trigger.RUN));
+        assertThat(deadline.getValue()).isBetween(earliest, latest);
     }
 
     @Test
