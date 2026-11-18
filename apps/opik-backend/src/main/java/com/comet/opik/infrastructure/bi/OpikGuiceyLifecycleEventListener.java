@@ -445,7 +445,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         try {
             injector.get().getInstance(jobClass).interrupt();
         } catch (Exception exception) {
-            log.warn("Error interrupting {} during scheduler shutdown", jobClass.getSimpleName(), exception);
+            log.warn("Error interrupting jobClass='{}' during scheduler shutdown", jobClass.getSimpleName(), exception);
         }
     }
 
