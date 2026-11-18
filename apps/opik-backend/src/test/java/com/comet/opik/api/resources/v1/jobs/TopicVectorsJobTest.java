@@ -376,11 +376,12 @@ class TopicVectorsJobTest {
             await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(tryLeaderLock()).isTrue());
             verify(scheduler).shutdown(false);
 
-            // A fire Quartz still delivers after the shutdown takes no lock.
-            clearInvocations(lockService);
+            // A fire Quartz still delivers after the shutdown takes no lock and starts no tick.
+            verify(tickService).tick(any());
+            clearInvocations(lockService, tickService);
             job.doJob(null);
             verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any());
-            verify(tickService).tick(any());
+            verify(tickService, never()).tick(any());
         }
 
         @Test
