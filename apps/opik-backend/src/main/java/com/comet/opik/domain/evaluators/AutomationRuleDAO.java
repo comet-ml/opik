@@ -15,7 +15,6 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -67,18 +66,6 @@ public interface AutomationRuleDAO {
             @Bind("workspaceId") String workspaceId,
             @Bind("namePrefix") String namePrefix,
             @Define("excludeRuleId") @Bind("excludeRuleId") UUID excludeRuleId);
-
-    /**
-     * Returns the currently stored name of a rule, or empty if it does not exist. Used on update to skip
-     * name resolution entirely for non-name edits (OPIK-7371).
-     * <p>
-     * Deliberately a single-column projection rather than the full rule payload: the registered
-     * {@link AutomationRuleRowMapper} dispatches on {@code action} to {@link AutomationRuleEvaluatorModel},
-     * so returning a whole rule would require joining {@code automation_rule_evaluators} and deserializing
-     * the {@code code} payload (the full LLM-as-judge prompt) on every update just to read this one column.
-     */
-    @SqlQuery("SELECT name FROM automation_rules WHERE id = :id AND workspace_id = :workspaceId")
-    Optional<String> findNameById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules

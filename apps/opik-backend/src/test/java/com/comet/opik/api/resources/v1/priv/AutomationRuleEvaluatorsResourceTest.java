@@ -1558,6 +1558,67 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
+        Stream<Arguments> updateEvaluator__whenTypeChanges__thenReturnConflictAndKeepRuleUnchanged() {
+            return Stream.of(
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
+                            factory.manufacturePojo(
+                                    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void updateEvaluator__whenTypeChanges__thenReturnConflictAndKeepRuleUnchanged(
+                AutomationRuleEvaluator<?, ?> automationRuleEvaluator,
+                AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var id = evaluatorsResourceClient.createEvaluator(
+                    automationRuleEvaluator.toBuilder().projectIds(Set.of(projectId)).build(),
+                    WORKSPACE_NAME, API_KEY);
+            AutomationRuleEvaluator<?, ?> expectedEvaluator;
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                expectedEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+            }
+            var typeChange = automationRuleEvaluatorUpdate.toBuilder().projectIds(Set.of(projectId)).build();
+            var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, """
+                    Evaluator type cannot be changed from '%s' to '%s'. \
+                    Delete the rule and create a new one with the new type."""
+                    .formatted(automationRuleEvaluator.getType().getType(), typeChange.getType().getType()));
+
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, typeChange, API_KEY, HttpStatus.SC_CONFLICT)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                assertThat(actualResponse.readEntity(AutomationRuleEvaluator.class))
+                        .usingRecursiveComparison()
+                        .isEqualTo(expectedEvaluator);
+            }
+            var actualPage = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, null, null, WORKSPACE_NAME, API_KEY);
+            assertThat(actualPage.content())
+                    .usingRecursiveFieldByFieldElementComparator()
+                    .containsExactly(expectedEvaluator);
+        }
+
         @ParameterizedTest
         @MethodSource
         @DisplayName("Should update enabled status correctly")

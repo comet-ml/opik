@@ -4,9 +4,11 @@ import com.comet.opik.api.evaluators.AutomationRule;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import lombok.Builder;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -43,6 +45,19 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             WHERE id = :id
             """)
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
+
+    @Builder(toBuilder = true)
+    record StoredEvaluatorRule(String name, String type) {
+    }
+
+    @SqlQuery("""
+            SELECT rule.name, evaluator.type
+            FROM automation_rules rule
+            JOIN automation_rule_evaluators evaluator ON evaluator.id = rule.id
+            WHERE rule.id = :id AND rule.workspace_id = :workspaceId
+            """)
+    @RegisterConstructorMapper(StoredEvaluatorRule.class)
+    Optional<StoredEvaluatorRule> findNameAndTypeById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     /**
      * Query 1: Find rules WITHOUT project associations (clean, no duplication).

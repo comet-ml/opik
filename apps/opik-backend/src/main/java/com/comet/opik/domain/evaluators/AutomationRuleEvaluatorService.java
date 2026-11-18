@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.LogCriteria;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.evaluators.AutomationRule;
@@ -102,6 +103,9 @@ public interface AutomationRuleEvaluatorService {
 class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorService {
 
     private static final String EVALUATOR_ALREADY_EXISTS = "AutomationRuleEvaluator already exists";
+    private static final String EVALUATOR_TYPE_CHANGE_NOT_ALLOWED = """
+            Evaluator type cannot be changed from '%s' to '%s'. \
+            Delete the rule and create a new one with the new type.""";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -286,14 +290,20 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var ruleDAO = handle.attach(AutomationRuleDAO.class);
 
             try {
+                var storedRule = dao.findNameAndTypeById(id, workspaceId).orElseThrow(this::newNotFoundException);
+                var storedType = AutomationRuleEvaluatorType.fromString(storedRule.type());
+                if (storedType != evaluatorUpdate.getType()) {
+                    throw new ConflictException(EVALUATOR_TYPE_CHANGE_NOT_ALLOWED
+                            .formatted(storedType.getType(), evaluatorUpdate.getType().getType()));
+                }
+
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
                 // Only resolve a unique name on an actual rename. A non-name edit (sampling rate, enabled,
                 // filters) must never rename the rule, even if a same-named rule already exists in the
                 // project (e.g. legacy duplicates). This guard stays outside resolveUniqueName because it is
                 // specific to update - a create has no current name to compare against (OPIK-7371).
-                String currentName = ruleDAO.findNameById(id, workspaceId).orElse(null);
-                String uniqueName = Objects.equals(requestedName, currentName)
+                String uniqueName = Objects.equals(requestedName, storedRule.name())
                         ? requestedName
                         : resolveUniqueName(ruleDAO, requestedName, projectIds, workspaceId, id);
 
