@@ -25,11 +25,13 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.googleai.GoogleAiGeminiTokenUsage;
 import dev.langchain4j.model.openai.OpenAiTokenUsage;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -38,6 +40,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -57,6 +60,10 @@ import static org.mockito.Mockito.when;
  */
 class OnlineEvaluationRecorderTest {
 
+    private static final String ACTUAL_MODEL = "claude-" + RandomStringUtils.secure().nextAlphanumeric(16);
+    private static final String PROVIDER = "provider-" + RandomStringUtils.secure().nextAlphanumeric(16);
+    private static final String PROJECT_NAME = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+
     private final TraceService traceService = mock(TraceService.class);
     private final SpanService spanService = mock(SpanService.class);
     private final LlmProviderFactory llmProviderFactory = mock(LlmProviderFactory.class);
@@ -69,12 +76,12 @@ class OnlineEvaluationRecorderTest {
     @BeforeEach
     void setUp() {
         when(llmProviderFactory.getResolvedModelInfo(anyString()))
-                .thenReturn(new ResolvedModelInfo("claude-actual", "anthropic"));
+                .thenReturn(new ResolvedModelInfo(ACTUAL_MODEL, PROVIDER));
     }
 
     private EvaluationRecorder recorder() {
         return onlineEvaluationRecorder.begin(
-                EvaluatedTrace.builder().id("trace-1").projectId(UUID.randomUUID()).projectName("proj")
+                EvaluatedTrace.builder().id("trace-1").projectId(UUID.randomUUID()).projectName(PROJECT_NAME)
                         .name("name").build(),
                 UUID.randomUUID(), "rule", "model", "workspace", "user");
     }
@@ -162,33 +169,49 @@ class OnlineEvaluationRecorderTest {
                 "prompt_tokens", 10, "completion_tokens", 5, "total_tokens", 15));
     }
 
-    @Test
-    void recordsModelReportedByResponseOnLlmSpan() {
-        stubSpanWrites();
-        var response = ChatResponse.builder().aiMessage(AiMessage.from("ok"))
-                .modelName("claude-actual-20260917")
-                .tokenUsage(AnthropicTokenUsage.builder().inputTokenCount(10).outputTokenCount(5).build())
-                .build();
-
-        recorder().recordLlmCall(request(), Mono.just(response)).block();
-
-        // The dated snapshot that answered wins over the configured alias.
-        assertThat(capturedSpan().model()).isEqualTo("claude-actual-20260917");
+    private static Stream<Arguments> recordsLlmSpanModel() {
+        var reportedModel = ACTUAL_MODEL + "-" + RandomStringUtils.secure().nextNumeric(8);
+        return Stream.of(
+                Arguments.of(reportedModel, reportedModel),
+                Arguments.of(null, ACTUAL_MODEL),
+                Arguments.of("", ACTUAL_MODEL),
+                Arguments.of("   ", ACTUAL_MODEL));
     }
 
     @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"   "})
-    void keepsConfiguredModelOnLlmSpanWhenResponseNamesNone(String modelName) {
+    @MethodSource
+    void recordsLlmSpanModel(String responseModel, String expectedModel) {
         stubSpanWrites();
-        var response = ChatResponse.builder().aiMessage(AiMessage.from("ok"))
-                .modelName(modelName)
-                .tokenUsage(AnthropicTokenUsage.builder().inputTokenCount(10).outputTokenCount(5).build())
+        var prompt = RandomStringUtils.secure().nextAlphanumeric(32);
+        var answer = RandomStringUtils.secure().nextAlphanumeric(32);
+        var inputTokens = RandomUtils.secure().randomInt(1, 1_000);
+        var outputTokens = RandomUtils.secure().randomInt(1, 1_000);
+        var request = ChatRequest.builder().messages(UserMessage.from(prompt)).build();
+        var response = ChatResponse.builder().aiMessage(AiMessage.from(answer))
+                .modelName(responseModel)
+                .tokenUsage(AnthropicTokenUsage.builder()
+                        .inputTokenCount(inputTokens).outputTokenCount(outputTokens).build())
                 .build();
 
-        recorder().recordLlmCall(request(), Mono.just(response)).block();
+        recorder().recordLlmCall(request, Mono.just(response)).block();
 
-        assertThat(capturedSpan().model()).isEqualTo("claude-actual");
+        var expectedSpan = Span.builder()
+                .projectName(PROJECT_NAME)
+                .type(SpanType.llm)
+                .name("llm_call")
+                .input(JsonUtils.valueToTree(
+                        Map.of("messages", List.of(Map.of("role", "user", "content", prompt)))))
+                .output(JsonUtils.valueToTree(Map.of("output", answer)))
+                .model(expectedModel)
+                .provider(PROVIDER)
+                .usage(Map.of("prompt_tokens", inputTokens, "completion_tokens", outputTokens,
+                        "total_tokens", inputTokens + outputTokens))
+                .source(Source.EVALUATOR)
+                .build();
+        assertThat(capturedSpan())
+                .usingRecursiveComparison()
+                .ignoringFields("id", "traceId", "startTime", "endTime")
+                .isEqualTo(expectedSpan);
     }
 
     @Test

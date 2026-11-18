@@ -61,8 +61,8 @@ class EvaluationEntityFactory {
     private final @NonNull @Config("responseFormatting") ResponseFormattingConfig responseFormattingConfig;
 
     /**
-     * One {@code llm} span per LLM round-trip; carries usage + resolved model/provider for costing. The model named by
-     * the response (the dated snapshot that answered) wins over the configured alias, as in {@link #decisionSpan}.
+     * One {@code llm} span per LLM round-trip; carries usage + resolved model/provider for costing. The model reported
+     * by the response, when there is one, wins over the configured one, as in {@link #decisionSpan}.
      */
     Span llmSpan(EvaluationContext eval, ChatRequest request, ChatResponse response, Throwable error, Instant start) {
         var spanBuilder = Span.builder()
