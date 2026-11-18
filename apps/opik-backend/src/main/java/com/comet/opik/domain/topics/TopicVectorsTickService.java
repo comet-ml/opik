@@ -600,13 +600,18 @@ public class TopicVectorsTickService {
                     : Optional.ofNullable(createdBefore).orElse(window.start()).minus(sliceSize);
             var createdAfter = sliceStart.isAfter(window.createdAfter()) ? sliceStart : window.createdAfter();
             int remaining = limit - candidates.size();
-            // The short overload when nothing narrows the read; both render the same query.
-            var slice = createdBefore == null && projectId == null && excludedProjectIds.isEmpty()
-                    ? dao.findUnvectored(workspaceId, TASK, window.lowerBound(), window.start(), createdAfter,
-                            remaining, maxExecutionSeconds(left))
-                    : dao.findUnvectored(workspaceId, TASK, window.lowerBound(), window.start(), createdAfter,
-                            createdBefore, projectId, excludedProjectIds, remaining, maxExecutionSeconds(left));
-            var rows = slice.collectList().block();
+            var rows = dao.findUnvectored(TopicVectorsFind.builder()
+                    .workspaceId(workspaceId)
+                    .task(TASK)
+                    .lowerBound(window.lowerBound())
+                    .upperBound(window.start())
+                    .createdAfter(createdAfter)
+                    .createdBefore(createdBefore)
+                    .projectId(projectId)
+                    .excludedProjectIds(excludedProjectIds)
+                    .limit(remaining)
+                    .maxExecutionSeconds(maxExecutionSeconds(left))
+                    .build()).collectList().block();
             candidates.addAll(rows);
             if (rows.size() >= remaining) {
                 return new WindowRead(candidates, false);

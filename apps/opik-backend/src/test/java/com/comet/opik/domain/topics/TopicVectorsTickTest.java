@@ -545,9 +545,15 @@ class TopicVectorsTickTest {
         TopicVectorsTickService.TickResult tripped;
         try {
             // ClickHouse's TOO_MANY_ROWS: the guard, not some other failure, fails the read.
-            assertThatThrownBy(() -> vectorsDAO.findUnvectored(workspaceId, TASK,
-                    Instant.now().minus(1, ChronoUnit.HOURS), Instant.now(), Instant.EPOCH, 100, 10)
-                    .collectList().block())
+            assertThatThrownBy(() -> vectorsDAO.findUnvectored(TopicVectorsFind.builder()
+                    .workspaceId(workspaceId)
+                    .task(TASK)
+                    .lowerBound(Instant.now().minus(1, ChronoUnit.HOURS))
+                    .upperBound(Instant.now())
+                    .createdAfter(Instant.EPOCH)
+                    .limit(100)
+                    .maxExecutionSeconds(10)
+                    .build()).collectList().block())
                     .hasStackTraceContaining("Code: 158");
             tripped = metered.tick(Instant.now());
         } finally {

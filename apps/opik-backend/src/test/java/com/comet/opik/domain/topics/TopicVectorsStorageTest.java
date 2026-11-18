@@ -262,8 +262,8 @@ class TopicVectorsStorageTest {
         tables.insertStatusAt(workspaceId, projectId, unicodeBlank, 1, oldest.plusSeconds(3));
         tables.insertStatusAt(workspaceId, projectId, usable, 1, oldest.plusSeconds(4));
 
-        var found = vectorsDAO.findUnvectored(workspaceId, TASK, Instant.now().minus(1, ChronoUnit.HOURS),
-                Instant.now(), Instant.EPOCH, 1, 10).collectList().block();
+        var found = vectorsDAO.findUnvectored(windowRead(workspaceId, Instant.now().minus(1, ChronoUnit.HOURS),
+                Instant.now(), Instant.EPOCH).limit(1).build()).collectList().block();
 
         // Written by insertStatusAt, so its updated_at is known too.
         assertThat(found).containsExactly(candidate(workspaceId, projectId, usable, 1).toBuilder()
@@ -388,7 +388,7 @@ class TopicVectorsStorageTest {
         var lower = now.minus(1, ChronoUnit.HOURS);
         var upper = Instant.now();
 
-        var unsliced = vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, createdAfter, 100, 10)
+        var unsliced = vectorsDAO.findUnvectored(windowRead(workspaceId, lower, upper, createdAfter).build())
                 .collectList().block();
 
         // Per project: 7 traces, less the one with a vector and the one before the bound.
@@ -411,8 +411,8 @@ class TopicVectorsStorageTest {
                     .toList();
             assertThat(sliced(workspaceId, projectId, List.of(), lower, upper, now, createdAfter, slice).stream()
                     .sorted(byKey)).containsExactlyElementsOf(ofProject);
-            assertThat(vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, createdAfter, null, projectId,
-                    List.of(), 100, 10).collectList().block().stream().sorted(byKey))
+            assertThat(vectorsDAO.findUnvectored(windowRead(workspaceId, lower, upper, createdAfter)
+                    .projectId(projectId).build()).collectList().block().stream().sorted(byKey))
                     .containsExactlyElementsOf(ofProject);
         }
         // Without the second project: the first project's.
@@ -555,8 +555,9 @@ class TopicVectorsStorageTest {
         while (true) {
             var sliceStart = (createdBefore == null ? start : createdBefore).minus(slice);
             var from = sliceStart.isAfter(createdAfter) ? sliceStart : createdAfter;
-            candidates.addAll(vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, from, createdBefore,
-                    projectId, excluded, 100, 10).collectList().block());
+            candidates.addAll(vectorsDAO.findUnvectored(windowRead(workspaceId, lower, upper, from)
+                    .createdBefore(createdBefore).projectId(projectId).excludedProjectIds(excluded).build())
+                    .collectList().block());
             if (!from.isAfter(createdAfter)) {
                 return candidates;
             }
@@ -586,8 +587,21 @@ class TopicVectorsStorageTest {
     }
 
     private List<TopicVectorCandidate> findUnvectored(String workspaceId, Instant lower, Instant createdAfter) {
-        return vectorsDAO.findUnvectored(workspaceId, TASK, lower, Instant.now(), createdAfter, 100, 10)
+        return vectorsDAO.findUnvectored(windowRead(workspaceId, lower, Instant.now(), createdAfter).build())
                 .collectList().block();
+    }
+
+    /** A window read of {@link TopicVectorsFixtures#TASK} with room for 100 candidates and 10 s. */
+    private static TopicVectorsFind.TopicVectorsFindBuilder windowRead(String workspaceId, Instant lowerBound,
+            Instant upperBound, Instant createdAfter) {
+        return TopicVectorsFind.builder()
+                .workspaceId(workspaceId)
+                .task(TASK)
+                .lowerBound(lowerBound)
+                .upperBound(upperBound)
+                .createdAfter(createdAfter)
+                .limit(100)
+                .maxExecutionSeconds(10);
     }
 
     private void insertExperimentItem(String workspaceId, UUID traceId) {
