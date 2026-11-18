@@ -345,7 +345,8 @@ public class TopicsNightlyService {
         var found = new ArrayList<Candidate>();
         for (var project : listed) {
             if (!Instant.now().isBefore(budgetEnd)) {
-                uncounted.add(Candidate.builder().workspaceId(project.workspaceId()).projectId(project.projectId()).build());
+                uncounted.add(
+                        Candidate.builder().workspaceId(project.workspaceId()).projectId(project.projectId()).build());
                 continue;
             }
             try {

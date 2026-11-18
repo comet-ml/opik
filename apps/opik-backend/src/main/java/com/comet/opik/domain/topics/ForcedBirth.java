@@ -196,7 +196,8 @@ public class ForcedBirth {
             if (group != null && byGroup.containsKey(group) && !done.contains(group) && topic != null
                     && state.topic(topic).isLive()) {
                 pairs.add(new int[]{group, topic});
-                prompts.add(TopicPrompts.VerifyPair.builder().topic(byTopic.get(topic)).group(byGroup.get(group)).build());
+                prompts.add(
+                        TopicPrompts.VerifyPair.builder().topic(byTopic.get(topic)).group(byGroup.get(group)).build());
                 done.add(group);
             }
         }

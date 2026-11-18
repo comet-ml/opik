@@ -283,7 +283,8 @@ public class TopicsNightlyGauges implements Managed {
 
     private static void add(Map<String, List<Series>> levels, String name, AttributesBuilder attributes,
             long value) {
-        levels.computeIfAbsent(name, key -> new ArrayList<>()).add(Series.builder().attributes(attributes.build()).value(value).build());
+        levels.computeIfAbsent(name, key -> new ArrayList<>())
+                .add(Series.builder().attributes(attributes.build()).value(value).build());
     }
 
     private void level(Meter meter, String name, String description) {
