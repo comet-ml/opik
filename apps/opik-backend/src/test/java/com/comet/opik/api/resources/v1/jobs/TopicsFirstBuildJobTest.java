@@ -229,6 +229,7 @@ class TopicsFirstBuildJobTest {
 
             job.doJob(null);
             assertThat(started.await(10, TimeUnit.SECONDS)).isTrue();
+            verify(firstBuildService).run(any());
             // A fire during the run skips on the leader lock: it must not take the run's place in the job.
             job.doJob(null);
             assertThat(tryLeaderLock()).isFalse();
@@ -240,10 +241,10 @@ class TopicsFirstBuildJobTest {
             verify(scheduler).shutdown(false);
 
             // A fire Quartz still delivers after the shutdown takes no lock.
-            clearInvocations(lockService);
+            clearInvocations(lockService, firstBuildService);
             job.doJob(null);
             verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any());
-            verify(firstBuildService).run(any());
+            verify(firstBuildService, never()).run(any());
         }
 
         @Test
