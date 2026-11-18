@@ -7,7 +7,7 @@
 -- the date's topic_night_projects rows. outcome is 'failed' when the night threw, or when a pod that died left it
 -- 'running' (the next night's housekeeping fails it). The state gauges read this table; rows go after
 -- topics.build.runsRetention.
-CREATE TABLE topic_nights
+CREATE TABLE IF NOT EXISTS topic_nights
 (
     night       DATE                                   NOT NULL,
     started_at  TIMESTAMP(6)                           NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE topic_nights
 -- nightly_update, skip (reason small, deleted, locked, already_saved, paused or no_list), not_reached or count_failed
 -- (the project's window count failed); run_id is the run the night started, null when none started. Rows go with
 -- their night.
-CREATE TABLE topic_night_projects
+CREATE TABLE IF NOT EXISTS topic_night_projects
 (
     id           CHAR(36)     NOT NULL,
     night        DATE         NOT NULL,
