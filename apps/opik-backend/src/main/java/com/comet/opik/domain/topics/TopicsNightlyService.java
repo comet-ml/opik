@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -89,6 +90,8 @@ public class TopicsNightlyService {
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull LockService lockService;
     private final @NonNull IdGenerator idGenerator;
+    /** The time the budget is measured against; tests replace it. */
+    Supplier<Instant> now = Instant::now;
 
     /** What one night did, by project. */
     @Builder(toBuilder = true)
@@ -121,7 +124,7 @@ public class TopicsNightlyService {
      * decisions to the earlier run's rows.
      */
     public NightResult runNight(@NonNull Instant start) {
-        var began = Instant.now();
+        var began = now.get();
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC);
         var record = new NightRecord(night, began);
         record.start();
@@ -156,7 +159,7 @@ public class TopicsNightlyService {
                 Thread.ofPlatform().name("topics-nightly-", 0).daemon(true).factory());
         try {
             for (var candidate : candidates) {
-                if (Thread.currentThread().isInterrupted() || !Instant.now().isBefore(budgetEnd)) {
+                if (Thread.currentThread().isInterrupted() || !now.get().isBefore(budgetEnd)) {
                     notReached++;
                     record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
                     continue;
@@ -178,7 +181,7 @@ public class TopicsNightlyService {
                     }
                     try {
                         // The lock can wait up to its own limit: a run must still start within the budget.
-                        if (!Instant.now().isBefore(budgetEnd)) {
+                        if (!now.get().isBefore(budgetEnd)) {
                             notReached++;
                             record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
                             continue;
@@ -199,7 +202,7 @@ public class TopicsNightlyService {
             // Not close(): it waits for every task, and a run stopped by its timeout may ignore the interrupt.
             executor.shutdownNow();
         }
-        var used = Duration.between(began, Instant.now());
+        var used = Duration.between(began, now.get());
         metrics.budgetUsed(used);
         log.info("Topics night '{}' finished, saved '{}', failed '{}', skipped '{}', not reached '{}', seconds '{}'",
                 night, saved, failed, skipped, notReached, used.toSeconds());
@@ -350,7 +353,7 @@ public class TopicsNightlyService {
         var skipped = new ArrayList<Skipped>();
         var found = new ArrayList<Candidate>();
         for (var project : listed) {
-            if (!Instant.now().isBefore(budgetEnd)) {
+            if (!now.get().isBefore(budgetEnd)) {
                 uncounted.add(
                         Candidate.builder().workspaceId(project.workspaceId()).projectId(project.projectId()).build());
                 continue;
