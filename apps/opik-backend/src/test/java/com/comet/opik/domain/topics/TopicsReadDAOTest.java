@@ -284,7 +284,7 @@ class TopicsReadDAOTest {
             assertThat(dao.findLive(workspaceId, projectId)).extracting(Topic::id).containsExactly(live.id());
             assertThat(dao.findLive(workspaceId(), projectId)).isEmpty();
             assertThat(dao.findStates(workspaceId, List.of(projectId)))
-                    .singleElement().usingRecursiveComparison().isEqualTo(state);
+                    .singleElement().isEqualTo(state);
             assertThat(dao.findStates(workspaceId(), List.of(projectId))).isEmpty();
             return null;
         });
