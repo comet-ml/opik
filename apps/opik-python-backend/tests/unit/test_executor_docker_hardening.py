@@ -31,14 +31,6 @@ def clean_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-@pytest.fixture(autouse=True)
-def max_user_namespaces(tmp_path, monkeypatch):
-    path = tmp_path / "max_user_namespaces"
-    path.write_text(f"{random.randint(1, 100_000)}\n")
-    monkeypatch.setattr(docker_daemon_config, "MAX_USER_NAMESPACES_PATH", str(path))
-    return path
-
-
 @pytest.mark.parametrize("hardening", [None, "", "false", "False"])
 def test_containers_are_not_hardened_without_setting(monkeypatch, hardening):
     if hardening is not None:
@@ -136,7 +128,7 @@ def test_daemon_config_keeps_mounted_settings(tmp_path, monkeypatch, allow_netwo
 
     write_hardened_config(str(operator_config_path), str(hardened_config_path))
 
-    expected = {**mounted_config, "userns-remap": "default", **expected_network_config}
+    expected = {**mounted_config, **expected_network_config}
     assert json.loads(hardened_config_path.read_text()) == expected
     assert json.loads(operator_config_path.read_text()) == mounted_config
 
@@ -146,39 +138,8 @@ def test_daemon_config_without_mounted_file(tmp_path):
 
     write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
 
-    expected = {"userns-remap": "default", "bridge": "none", "iptables": False, "ip6tables": False}
+    expected = {"bridge": "none", "iptables": False, "ip6tables": False}
     assert json.loads(hardened_config_path.read_text()) == expected
-
-
-def test_daemon_config_with_user_namespaces_disabled_fails(tmp_path, max_user_namespaces):
-    max_user_namespaces.write_text("0\n")
-    hardened_config_path = tmp_path / "daemon.json"
-
-    with pytest.raises(ValueError, match=r"^user namespaces are disabled on this host \(.+ is 0\)"):
-        write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
-
-    assert not hardened_config_path.exists()
-
-
-@pytest.mark.parametrize("limit", ["", "-1", "abc", "1.5", "١٢"])
-def test_daemon_config_with_malformed_user_namespace_limit_fails(tmp_path, max_user_namespaces, limit):
-    max_user_namespaces.write_text(f"{limit}\n")
-    hardened_config_path = tmp_path / "daemon.json"
-
-    with pytest.raises(ValueError, match=r"^.+max_user_namespaces must hold a non-negative integer, not "):
-        write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
-
-    assert not hardened_config_path.exists()
-
-
-def test_daemon_config_with_unreadable_user_namespace_limit_fails(tmp_path, max_user_namespaces):
-    max_user_namespaces.unlink()
-    hardened_config_path = tmp_path / "daemon.json"
-
-    with pytest.raises(FileNotFoundError):
-        write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
-
-    assert not hardened_config_path.exists()
 
 
 def test_malformed_mounted_daemon_config_fails(tmp_path):
@@ -223,7 +184,7 @@ def test_entrypoint_contract_prints_config_path_when_on(monkeypatch, capsys, con
 
     docker_daemon_config.main()
 
-    expected_config = {"userns-remap": "default", "bridge": "none", "iptables": False, "ip6tables": False}
+    expected_config = {"bridge": "none", "iptables": False, "ip6tables": False}
     output = capsys.readouterr()
     assert output.out == f"{config_paths[1]}\n"
     assert output.err == f"Docker daemon hardening enabled, config: {config_paths[1]}\n"
@@ -248,35 +209,3 @@ def test_entrypoint_contract_fails_startup(
     assert exit_info.value.code.startswith("Docker daemon hardening failed")
     assert expected_error in exit_info.value.code
     assert capsys.readouterr().out == ""
-
-
-def test_entrypoint_contract_fails_startup_with_user_namespaces_disabled(
-    monkeypatch, capsys, config_paths, max_user_namespaces
-):
-    monkeypatch.setenv(HARDENING_ENV_VAR, "true")
-    max_user_namespaces.write_text("0\n")
-
-    with pytest.raises(SystemExit) as exit_info:
-        docker_daemon_config.main()
-
-    expected = (
-        f"Docker daemon hardening failed ({config_paths[0]} -> {config_paths[1]}): user namespaces are disabled on "
-        f"this host ({max_user_namespaces} is 0), so executor containers can't start with {HARDENING_ENV_VAR}=true; "
-        "allow user namespaces on the node (user.max_user_namespaces)"
-    )
-    assert exit_info.value.code == expected
-    assert capsys.readouterr().out == ""
-    assert not config_paths[1].exists()
-
-
-@pytest.mark.parametrize("hardening", [None, "false"])
-def test_entrypoint_contract_ignores_user_namespaces_when_off(
-    monkeypatch, capsys, config_paths, max_user_namespaces, hardening
-):
-    if hardening is not None:
-        monkeypatch.setenv(HARDENING_ENV_VAR, hardening)
-    max_user_namespaces.write_text("0\n")
-
-    docker_daemon_config.main()
-
-    assert capsys.readouterr() == ("", "")

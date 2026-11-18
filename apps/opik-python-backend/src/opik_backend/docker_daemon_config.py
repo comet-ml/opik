@@ -4,7 +4,6 @@ entrypoint.sh runs this file as a script before starting dockerd, so it imports 
 """
 import json
 import os
-import re
 import sys
 
 HARDENING_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_HARDENING"
@@ -13,7 +12,6 @@ OPERATOR_CONFIG_PATH = "/etc/docker/daemon.json"
 # Outside /etc/docker, which an operator may mount read-only, and not under /tmp, which the dind
 # startup script replaces with a fresh tmpfs before dockerd reads its config.
 HARDENED_CONFIG_PATH = "/run/opik-dockerd/daemon.json"
-MAX_USER_NAMESPACES_PATH = "/proc/sys/user/max_user_namespaces"
 
 
 def hardening_enabled() -> bool:
@@ -27,24 +25,8 @@ def hardening_enabled() -> bool:
     raise ValueError(f"{HARDENING_ENV_VAR} must be true or false, not {value[:32]!r}")
 
 
-def check_user_namespaces_allowed(max_user_namespaces_path: str) -> None:
-    """userns-remap needs the host to allow user namespaces. With the limit at 0, user namespace creation is disabled:
-    dockerd still starts but every executor container fails to, so the backend would look healthy while rejecting
-    every evaluation. An unreadable limit or one that isn't a non-negative integer fails too."""
-    with open(max_user_namespaces_path) as f:
-        limit = f.read().strip()
-    if not re.fullmatch(r"[0-9]+", limit, flags=re.ASCII):
-        raise ValueError(f"{max_user_namespaces_path} must hold a non-negative integer, not {limit[:32]!r}")
-    if int(limit) == 0:
-        raise ValueError(
-            f"user namespaces are disabled on this host ({max_user_namespaces_path} is 0), so executor containers "
-            f"can't start with {HARDENING_ENV_VAR}=true; allow user namespaces on the node (user.max_user_namespaces)"
-        )
-
-
 def hardened_daemon_config(config: dict, allow_network: bool) -> dict:
-    # Root in an executor container maps to an unprivileged host uid range.
-    hardened = {**config, "userns-remap": "default"}
+    hardened = dict(config)
     if not allow_network:
         # Executor containers without network access need no bridge or firewall rules in the daemon.
         hardened.update({"bridge": "none", "iptables": False, "ip6tables": False})
@@ -52,7 +34,6 @@ def hardened_daemon_config(config: dict, allow_network: bool) -> dict:
 
 
 def write_hardened_config(operator_config_path: str, hardened_config_path: str) -> None:
-    check_user_namespaces_allowed(MAX_USER_NAMESPACES_PATH)
     config = {}
     if os.path.exists(operator_config_path):
         with open(operator_config_path) as f:

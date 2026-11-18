@@ -382,11 +382,9 @@ component:
       PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
       PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
       # Docker strategy only. "true" starts executor containers with no capabilities, a read-only root
-      # filesystem with a small /tmp and a process limit, and runs the in-container Docker daemon with user
-      # namespace remapping (root in an executor container is an unprivileged uid outside it) and, while
-      # PYTHON_CODE_EXECUTOR_ALLOW_NETWORK is "false", without a bridge network or iptables rules. Metrics
-      # that write outside /tmp or start many processes fail. Needs nodes that allow user namespaces: with
-      # user.max_user_namespaces at 0 (the Bottlerocket default, incl. EKS Auto Mode) startup fails. Off by default.
+      # filesystem with a small /tmp and a process limit, and, while PYTHON_CODE_EXECUTOR_ALLOW_NETWORK is
+      # "false", runs the in-container Docker daemon without a bridge network or iptables rules. Metrics
+      # that write outside /tmp or start many processes fail. Off by default.
       PYTHON_CODE_EXECUTOR_DOCKER_HARDENING: "false"
       # Process limit and /tmp size per executor container when hardening is on.
       PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT: "64"
