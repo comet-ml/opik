@@ -27,6 +27,8 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.topics.TopicReadService;
+import com.comet.opik.domain.topics.TopicsReadErrors;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -156,6 +158,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull @Config OpikConfiguration config;
+    private final @NonNull TopicReadService topicReadService;
 
     @Override
     @WithSpan
@@ -471,9 +474,11 @@ class TraceServiceImpl implements TraceService {
 
     private Mono<TraceSearchCriteria> findProjectAndVerifyVisibility(TraceSearchCriteria criteria) {
         return projectService.resolveProjectIdAndVerifyVisibility(criteria.projectId(), criteria.projectName())
-                .map(projectId -> criteria.toBuilder()
-                        .projectId(projectId)
-                        .build());
+                .flatMap(projectId -> topicReadService.filterScope(criteria.filters(), projectId)
+                        .map(topicScope -> criteria.toBuilder()
+                                .projectId(projectId)
+                                .topicScope(topicScope.orElse(null))
+                                .build()));
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -721,8 +726,8 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMap(resolvedCriteria -> template
-                        .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection))
+                .flatMap(resolvedCriteria -> TopicsReadErrors.busyOnFilterGuard(resolvedCriteria.topicScope() != null,
+                        template.nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection)))
                         .flatMap(tracePage -> {
                             // If stripAttachments=false, reinject attachments into all traces
                             var reinjectAttachments = !resolvedCriteria.stripAttachments();
@@ -811,7 +816,8 @@ class TraceServiceImpl implements TraceService {
     @WithSpan
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMap(dao::getStats)
+                .flatMap(resolvedCriteria -> TopicsReadErrors.busyOnFilterGuard(resolvedCriteria.topicScope() != null,
+                        dao.getStats(resolvedCriteria)))
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 
