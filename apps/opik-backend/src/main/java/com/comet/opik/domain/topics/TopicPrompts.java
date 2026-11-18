@@ -150,12 +150,13 @@ public class TopicPrompts {
      * A live topic as the naming and verify prompts show it: {@code id} is its 1-based position in the live list,
      * {@code topic} its index in the night's topic list; shares and examples from the night's assignment.
      */
-    @Builder
+    @Builder(toBuilder = true)
     public record PromptTopic(int id, int topic, @NonNull String name, @NonNull String definition, double share,
             double recentShare, @NonNull List<String> examples) {
     }
 
     /** One verify pair: a live topic and a candidate group given to it. */
+    @Builder(toBuilder = true)
     public record VerifyPair(@NonNull PromptTopic topic, @NonNull GroupSummary group) {
     }
 

@@ -95,6 +95,7 @@ public class TopicsNightlyService {
     public record NightResult(int saved, int failed, int skipped, int notReached) {
     }
 
+    @Builder(toBuilder = true)
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
@@ -344,12 +345,13 @@ public class TopicsNightlyService {
         var found = new ArrayList<Candidate>();
         for (var project : listed) {
             if (!Instant.now().isBefore(budgetEnd)) {
-                uncounted.add(new Candidate(project.workspaceId(), project.projectId(), 0));
+                uncounted.add(Candidate.builder().workspaceId(project.workspaceId()).projectId(project.projectId()).build());
                 continue;
             }
             try {
                 long traces = windowVectors(project.workspaceId(), project.projectId(), from, to);
-                var candidate = new Candidate(project.workspaceId(), project.projectId(), traces);
+                var candidate = Candidate.builder().workspaceId(project.workspaceId()).projectId(project.projectId())
+                        .vectors(traces).build();
                 if (traces >= build.getMinVectors()) {
                     found.add(candidate);
                 } else {
