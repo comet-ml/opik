@@ -25,11 +25,19 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import emptyExperimentsLightUrl from "/images/empty-experiments-light.svg";
 import emptyExperimentsDarkUrl from "/images/empty-experiments-dark.svg";
 
-const TAB_EVALUATION_METHOD: Record<string, EVALUATION_METHOD> = {
-  test_suites: EVALUATION_METHOD.TEST_SUITE,
-  datasets: EVALUATION_METHOD.DATASET,
-};
-const DEFAULT_TAB = "test_suites";
+const TABS = [
+  {
+    key: "test_suites",
+    label: "Test suites",
+    evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
+  },
+  {
+    key: "datasets",
+    label: "Datasets",
+    evaluationMethod: EVALUATION_METHOD.DATASET,
+  },
+];
+const DEFAULT_TAB = TABS[0];
 
 const ExperimentsPage: React.FC = () => {
   const activeProjectId = useActiveProjectId();
@@ -39,7 +47,7 @@ const ExperimentsPage: React.FC = () => {
   // saved state, so switching tabs clears them to let the new tab load its own.
   const [{ tab }, setTabQuery] = useQueryParams(
     {
-      tab: withDefault(StringParam, DEFAULT_TAB),
+      tab: withDefault(StringParam, DEFAULT_TAB.key),
       search: StringParam,
       filters: JsonParam,
       page: NumberParam,
@@ -48,7 +56,7 @@ const ExperimentsPage: React.FC = () => {
     },
     { updateType: "replaceIn" },
   );
-  const activeTab = TAB_EVALUATION_METHOD[tab] ? tab : DEFAULT_TAB;
+  const activeTab = TABS.find(({ key }) => key === tab) ?? DEFAULT_TAB;
 
   const handleTabChange = useCallback(
     (value: string) => {
@@ -135,28 +143,24 @@ const ExperimentsPage: React.FC = () => {
               direction="horizontal"
               limitWidth
             >
-              <Tabs value={activeTab} onValueChange={handleTabChange}>
+              <Tabs value={activeTab.key} onValueChange={handleTabChange}>
                 <TabsList variant="segmented-primary" className="w-fit">
-                  <TabsTrigger
-                    variant="segmented-primary"
-                    value="test_suites"
-                    className="px-1.5 py-0"
-                  >
-                    Test suites
-                  </TabsTrigger>
-                  <TabsTrigger
-                    variant="segmented-primary"
-                    value="datasets"
-                    className="px-1.5 py-0"
-                  >
-                    Datasets
-                  </TabsTrigger>
+                  {TABS.map(({ key, label }) => (
+                    <TabsTrigger
+                      key={key}
+                      variant="segmented-primary"
+                      value={key}
+                      className="px-1.5 py-0"
+                    >
+                      {label}
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
               </Tabs>
             </PageBodyStickyContainer>
             <GeneralDatasetsTab
-              key={activeTab}
-              evaluationMethod={TAB_EVALUATION_METHOD[activeTab]}
+              key={activeTab.key}
+              evaluationMethod={activeTab.evaluationMethod}
               isExistencePending={isExistencePending}
             />
           </>
