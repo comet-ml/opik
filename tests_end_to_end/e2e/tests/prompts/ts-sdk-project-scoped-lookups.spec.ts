@@ -41,6 +41,14 @@ import { test, expect } from '@e2e/fixtures';
  * to sit under the spec's own `@area:` and the dataset claim belongs to
  * `datasets`. Under-claiming is the safe direction: an untagged assertion still
  * fails the build when it breaks, it just does not count as coverage.
+ *
+ * The SECOND test carries no `@cap:` at all, by that same rule: it is the
+ * missing-project branch of `getDatasets` end to end and touches no prompt, so
+ * nothing in it would fail if prompt scoping broke. It was tagged
+ * `prompts.sdk-seeded-visible` when this spec landed; the 2.2.149 review pass
+ * dropped the tag rather than let a prompts capability answer for a dataset
+ * assertion. If the `datasets` area ever wants this branch counted, the test
+ * moves to a spec declaring `@area:datasets`.
  */
 
 /**
@@ -137,7 +145,14 @@ test.describe(
 
     test(
       'a project that does not exist has no datasets, rather than all of them',
-      { tag: ['@cap:prompts.sdk-seeded-visible'] },
+      // No `@cap:`, by the same rule the header's Tagging section states for the
+      // test above: every assertion below is about `getDatasets`, so the claim
+      // belongs to `datasets` and a `@cap:` has to sit under this spec's own
+      // `@area:prompts`. Tagging `prompts.sdk-seeded-visible` here would make a
+      // prompts capability answer for a test that would still pass with prompt
+      // scoping entirely broken. Under-claiming is the safe direction — this
+      // test still fails the build when the 404 fallback regresses, it just
+      // does not count as prompt coverage.
       async ({ projectScopedTsClients, backendClient, testNamespace }) => {
         // QA: failing on staging for 2.2.144 for the same reason as the test
         // above — the estate's pinned `opik` is 2.2.131, which predates

@@ -133,7 +133,18 @@ test.describe(
   () => {
     test(
       'three exports sharing one OTLP trace id, each with top-level spans, all land on one trace',
-      { tag: ['@cap:traces.otel-project-routing'] },
+      // No `@cap:`. This test held `traces.otel-project-routing` when the spec
+      // landed, and the 2.2.140 review pass recorded in the taxonomy that the
+      // tag was wrong here: the project is pinned by the header throughout and
+      // the seed comment below says out loud that "routing is not the subject",
+      // so `opik.project_name` handling could break entirely and this test
+      // would still pass. The 2.2.149 pass dropped the tag rather than leave a
+      // permanent false green on the key — the behaviour this test DOES assert
+      // (OTLP batch/trace-root conflict resumption) has no capability of its
+      // own, and inventing one is a QA-owned decision, not a review's. The
+      // taxonomy note beside `otel-project-routing` carries the open question.
+      // The SECOND test below keeps the tag: a cross-project export refused as
+      // an IdentifierMismatchException IS a claim about routing.
       async ({ backendClient, project, testNamespace, page }) => {
         // Five spans through three awaited exports, an ingestion poll, two
         // listing reads and a panel walk — more than the 90s default allows

@@ -293,12 +293,15 @@ areas:
       # an untested UI dialog read as covered for good.
       #
       # OPEN, needs a human call — raised by the 2.2.140 release pass's review,
-      # not by the spec's author. otel-batch-onto-existing-trace.spec.ts
-      # (opik#9312 / OPIK-9053) tags this key for BOTH its tests, and only the
-      # second one is about routing. That one is: an export naming a different
-      # project for a trace that already exists must stay an
-      # IdentifierMismatchException 409 and store nothing, which is the line
-      # 9312's own comment draws and the thing its fix could have broken.
+      # not by the spec's author; HALF-RESOLVED by the 2.2.149 pass's review,
+      # which dropped the bad tag. What is left is the denominator question.
+      #
+      # otel-batch-onto-existing-trace.spec.ts (opik#9312 / OPIK-9053) tagged
+      # this key for BOTH its tests, and only the second one is about routing.
+      # That one is: an export naming a different project for a trace that
+      # already exists must stay an IdentifierMismatchException 409 and store
+      # nothing, which is the line 9312's own comment draws and the thing its
+      # fix could have broken. It still carries the tag.
       #
       # Its FIRST test is not. Three exports sharing one OTLP trace id, each
       # carrying parentless spans, all landing on the trace the first one
@@ -310,10 +313,19 @@ areas:
       # conflict resumption; orphan-span-at-trace-root is the panel's tree shape
       # and trace-span-ingestion is a load key.
       #
-      # Either add a capability for it (ingest-batch-trace-conflict, say) or drop
-      # the tag from that first test and leave the behaviour honestly uncovered.
-      # Do not let it sit here as a silent widening of otel-project-routing — the
-      # same call list-suites' dedup half is still waiting on.
+      # So the 2.2.149 review took the second of the two options this note
+      # offered — the first test now carries NO `@cap:`, which leaves the
+      # behaviour honestly uncovered instead of leaving a permanent false green
+      # on this key. Dropping a wrong tag needs no decision; creating a key does,
+      # which is why the review stopped there.
+      #
+      # STILL OPEN for a human: whether OTLP batch/trace-root conflict
+      # resumption deserves a capability of its own (ingest-batch-trace-conflict,
+      # say). The behaviour is asserted by a spec that runs on every t2 — it is
+      # the coverage MAP that does not show it. Adding the key makes that
+      # visible and costs one tag edit; declining it is a decision that this
+      # estate counts OTLP ingestion only by where spans route. The same call
+      # list-suites' dedup half is still waiting on.
       otel-project-routing:   { covered: false, note: "Which project an OTLP export's spans land in — the `opik.project_name` resource/span attribute, with the `projectName` header demoted to a fallback (OPIK-8888 / opik#9036). otel-project-name-routing.spec.ts covers: a resource-level name get-or-creating its project and holding the export on one trace; per-span names splitting one export across two projects; the exact 150-code-point limit, with 151 and 224 refused and falling back to the header; no attribute at all following the header; NFC and NFD spellings of one name collapsing to a single project holding one trace; the attribute being dropped from stored span metadata rather than kept; and the auto-created project's Logs Spans view agreeing with GET /v1/private/spans on both the footer total and the rendered row ids. The header-named project is read back as a bystander in every case, so a span written to BOTH projects fails. Distinct from span-model-cost-tokens, which also reaches this endpoint but asserts the pre-PR HEADER path and pins its spans to a caller-minted trace via opik.trace_id — the one thing a routing assertion must not do. NOT covered, deliberately: a multi-project export sharing ONE OTLP trace id, which on 2.2.111 intermittently answers 409 and silently drops spans (7 of 8 four-project exports lost 14 of 32 spans in exploration). It is a race rather than a shape, so every multi-project export in the spec gives each span its own OTLP trace id; the collision is reported as a defect instead of pinned, because a spec that asserts a race fails at random. As of the 2.2.140 release pass one more routing claim lands, from otel-batch-onto-existing-trace.spec.ts's SECOND test (see the OPEN note above about its first): two SEPARATE exports sharing one OTLP trace id, the second naming a different project through `opik.project_name`, must still be refused 409 with the identifier-mismatch message specifically — accepting it would merge two services' traces, which nothing else can see — with the other project asserted to hold no span and no trace, and the owning project asserted untouched as the bystander. Deterministic where the one-export fan-out above is not: the Redis otelTraceId key includes the project, so a second project derives its Opik trace id afresh from convertOtelIdToUUIDv7(otelTraceId, minStartMs) and the two collide only when the exports agree on the MILLISECOND too, which that test pins via the new postOtelExport startTimeMs. Still NOT covered: a span carrying an explicit opik.trace_id for a trace in another project, which exploration found is accepted and stored as an orphan — pre-existing, and a design question rather than a behaviour to pin." }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj, note: "single-trace tagging from the panel, plus bulk tagging from the Logs table through the Manage shared tags dialog — a different endpoint (PATCH /traces/batch, not /traces/{id}) and the only one whose failure modes are about scope: the outgoing request asserted to be a single batch PATCH naming exactly the selected ids and carrying tags_to_add rather than a replacement list, three of five non-contiguous rows selected, every trace seeded with a tag of its own so a replace can be told from a merge, both bystanders asserted unchanged (one of them inside the selection's span), and the whole project swept so an over-reaching batch cannot hide behind the five named traces" }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
