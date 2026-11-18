@@ -94,6 +94,7 @@ export {
   type AlertTriggerConfigRef,
   DEFAULT_EXPERIMENT_GROUPS,
   type ExperimentGroupAggregationsEntry,
+  type ExperimentGroupsResponse,
   type ThreadRowRef,
   type ThreadDetail,
   type StatPercentiles,

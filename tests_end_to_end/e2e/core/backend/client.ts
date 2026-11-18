@@ -1632,6 +1632,35 @@ export interface ExperimentGroupAggregationsEntry {
   durationP50?: number;
   durationP90?: number;
   durationP99?: number;
+  /**
+   * `feedback_scores`, flattened to name -> average, or `undefined` when the
+   * payload carried no array at all.
+   *
+   * A separate shape from the numeric aggregates above because the wire form is
+   * a `List<FeedbackScoreAverage>` rather than a scalar, and because the group
+   * row renders every entry of it: `FeedbackScoreListCell.Aggregation` reads
+   * `feedback_scores` out of `meta.aggregationMap` and joins
+   * `"<name> (avg): <value>"` over the whole list, so a spec that compared one
+   * name would pass against a cell that also named two it should not have.
+   *
+   * `undefined` is kept distinct from `{}` for the same reason the cost fields
+   * are optional: a group that reports no scores at all and one that reports an
+   * empty list are different answers from the server, even though the UI
+   * renders both as an empty cell.
+   */
+  feedbackScores?: Record<string, number>;
+}
+
+/** One group in `GET /v1/private/experiments/groups`, and what it answered. */
+export interface ExperimentGroupsResponse {
+  /** The HTTP status, verbatim — this endpoint is permission-gated (opik#9492). */
+  status: number;
+  message: string;
+  /**
+   * Group value -> its label, for the top level of the grouping. `null` when
+   * the response carried no `content` object.
+   */
+  groups: Record<string, string | null> | null;
 }
 
 export interface ThreadRowRef {
@@ -1840,6 +1869,39 @@ type RawEvaluator = {
  * helper that flattened all of them would disagree with the UI on exactly the
  * suite that has two evaluators, and report that disagreement as a product bug.
  */
+/**
+ * A `List<FeedbackScoreAverage>` from the wire, flattened to name -> average.
+ *
+ * `undefined` when the field was absent rather than an array: the backend omits
+ * an aggregate it has nothing to report, and "this group reports no scores" is a
+ * different answer from "this group reports an empty list of them". Collapsing
+ * the two to `{}` is the `?? 0` mistake in map form.
+ *
+ * Throws on a nameless entry or a non-finite value rather than dropping it. A
+ * dropped entry would make a downstream comparison against the rendered cell
+ * pass for having compared fewer scores than the page is showing, which is the
+ * one failure a spec reading this is here to catch.
+ */
+function toScoreAverages(raw: unknown, context: string): Record<string, number> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: Record<string, number> = {};
+  for (const node of raw) {
+    const entry = (node ?? {}) as { name?: unknown; value?: unknown };
+    if (typeof entry.name !== 'string' || entry.name === '') {
+      throw new Error(`${context} carried a nameless feedback score: ${JSON.stringify(node)}`);
+    }
+    const value = Number(entry.value);
+    if (!Number.isFinite(value)) {
+      throw new Error(
+        `${context} score '${entry.name}' is not a finite number ` +
+          `(got ${JSON.stringify(entry.value)})`,
+      );
+    }
+    out[entry.name] = value;
+  }
+  return out;
+}
+
 function toAssertionNames(evaluators: unknown): string[] {
   const first = (Array.isArray(evaluators) ? evaluators : [])[0] as RawEvaluator | undefined;
   if (!first || first.type !== 'llm_judge') return [];
@@ -5012,6 +5074,43 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           }
           return [score.name, value];
         }),
+      );
+    },
+
+    /**
+     * The same read as `getExperimentFeedbackScores`, for a caller whose
+     * subject IS an experiment with no scores: `null` when the payload carried
+     * no `feedback_scores` array at all.
+     *
+     * A separate method rather than an option, because the two contracts are
+     * opposite and both are right for their callers. `getExperimentFeedbackScores`
+     * throws on an absent array on purpose — nearly every caller has just run an
+     * `evaluate()` and "nothing aggregated" is the failure it is there to catch,
+     * which an empty map would silently pass. A caller seeding a DELIBERATELY
+     * unscored experiment needs the absence reported rather than thrown, and
+     * reaching for the strict helper there is what makes the seed's own proof
+     * fail as a fixture error.
+     *
+     * `null` and `{}` are kept apart for the reason the group aggregates are:
+     * the server omitting the array and the server reporting an empty one are
+     * different answers, and a spec asserting "this experiment has no score"
+     * should say which one it saw.
+     */
+    async getExperimentFeedbackScoresOrNone(
+      id: string,
+    ): Promise<Record<string, number> | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/experiments/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getExperimentFeedbackScoresOrNone: experiment ${id} read answered ${status}: ${message}`,
+        );
+      }
+      const scores = (json as { feedback_scores?: unknown } | null)?.feedback_scores;
+      return (
+        toScoreAverages(scores, `GET /v1/private/experiments/${id}`) ?? null
       );
     },
 
@@ -8692,9 +8791,61 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           durationP50: duration ? num(duration.p50) : undefined,
           durationP90: duration ? num(duration.p90) : undefined,
           durationP99: duration ? num(duration.p99) : undefined,
+          feedbackScores: toScoreAverages(
+            aggregations.feedback_scores,
+            `GET /v1/private/experiments/groups/aggregations group '${groupValue}'`,
+          ),
         };
       }
       return out;
+    },
+
+    /**
+     * `GET /v1/private/experiments/groups` — the group TREE the Experiments
+     * table renders its group rows from (opik#9374).
+     *
+     * The sibling of `getExperimentGroupAggregations`: that one answers the
+     * numbers on a group row, this one answers which group rows exist at all.
+     * `GeneralDatasetsTab` fires both on every load of the page's default
+     * state, and opik#9492 newly gated BOTH behind `EXPERIMENT_VIEW` — so a
+     * spec about that state has to drive both, not just the one whose numbers
+     * it compares.
+     *
+     * Returns the status rather than throwing on it, unlike every other read
+     * here. The subject is the status: a permission-gated endpoint answering
+     * 200 for a permitted caller is the claim, and a helper that threw would
+     * turn "the gate named a permission nobody holds" into a seeding error
+     * attributed to the fixture rather than an assertion failure that names the
+     * endpoint. `groups` is still parsed so the same call can say the rows are
+     * the right ones.
+     */
+    async getExperimentGroups(args: {
+      projectId: string;
+      /** The `groups` array, already JSON. Defaults to the page's own default. */
+      groups?: string;
+      /** `types`, as JSON. Defaults to `["regular"]`, which is what the page sends. */
+      types?: string;
+    }): Promise<ExperimentGroupsResponse> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        groups: args.groups ?? DEFAULT_EXPERIMENT_GROUPS,
+        types: args.types ?? JSON.stringify(['regular']),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments/groups',
+        { query },
+      );
+      const content = (json as { content?: unknown } | null)?.content;
+      if (content === null || content === undefined || typeof content !== 'object') {
+        return { status, message, groups: null };
+      }
+      const groups: Record<string, string | null> = {};
+      for (const [groupValue, node] of Object.entries(content as Record<string, unknown>)) {
+        const entry = (node ?? {}) as Record<string, unknown>;
+        groups[groupValue] = typeof entry.label === 'string' ? entry.label : null;
+      }
+      return { status, message, groups };
     },
 
     /**

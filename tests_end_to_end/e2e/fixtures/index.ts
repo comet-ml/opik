@@ -1,4 +1,4 @@
-export { test, expect } from './grouped-dataset-experiments.fixture';
+export { test, expect } from './scored-group-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -741,3 +741,9 @@ export type {
   GroupedDatasetExperimentsRef,
   GroupedDatasetExperimentsFixtures,
 } from './grouped-dataset-experiments.fixture';
+export type {
+  ScoredGroupExperimentRef,
+  ScoredGroupExperimentsRef,
+  ScoredGroupExperimentsFixtures,
+} from './scored-group-experiments.fixture';
+export { SCORED_GROUP_SCORE_NAME } from './scored-group-experiments.fixture';
