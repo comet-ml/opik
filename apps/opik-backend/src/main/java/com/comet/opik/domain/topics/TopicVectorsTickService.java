@@ -82,6 +82,9 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * The rows in MySQL only say which projects the backfill still has to read. Work per tick is bounded per read by
  * {@code maxTracesPerTick} and in total by the tick budget; what is left is found again by the next tick. Workspaces
  * are visited from an offset that moves every tick, so none is always last.
+ *
+ * <p>After each vectors insert, in both phases, {@link TopicsArrivalService} gives the chunk's traces their topic on
+ * arrival, best effort and within {@code topics.arrival.timeout} per tick in all.
  */
 @Slf4j
 @Singleton
@@ -137,6 +140,7 @@ public class TopicVectorsTickService {
     private final LockService lockService;
     private final AiLabelTaskRegistry registry;
     private final TopicsWorkspaceNames workspaceNames;
+    private final TopicsArrivalService arrivalService;
     private final Clock clock;
 
     /**
@@ -222,6 +226,7 @@ public class TopicVectorsTickService {
         private int cuts;
         // The workspaces an embed call backed off for: not called again this tick, in either phase.
         private final Set<String> backedOff = new HashSet<>();
+        private final TopicsArrivalService.Tick arrival = arrivalService.tick();
 
         String name(String workspaceId) {
             return names.computeIfAbsent(workspaceId, workspaceNames::name);
@@ -271,16 +276,18 @@ public class TopicVectorsTickService {
             @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig, @NonNull TopicWorkspaceService workspaces,
             @NonNull TopicVectorsDAO dao, @NonNull TopicVectorBackfillService backfills,
             @NonNull InferenceClient client, @NonNull LockService lockService,
-            @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames) {
+            @NonNull AiLabelTaskRegistry registry, @NonNull TopicsWorkspaceNames workspaceNames,
+            @NonNull TopicsArrivalService arrivalService) {
         this(config, aiLabelsConfig, workspaces, dao, backfills, client, lockService, registry, workspaceNames,
-                GlobalOpenTelemetry.get().getMeter("opik.topics"), Clock.systemUTC());
+                arrivalService, GlobalOpenTelemetry.get().getMeter("opik.topics"), Clock.systemUTC());
     }
 
     TopicVectorsTickService(@NonNull TopicsConfig config, @NonNull AiLabelsConfig aiLabelsConfig,
             @NonNull TopicWorkspaceService workspaces, @NonNull TopicVectorsDAO dao,
             @NonNull TopicVectorBackfillService backfills, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelTaskRegistry registry,
-            @NonNull TopicsWorkspaceNames workspaceNames, @NonNull Meter meter, @NonNull Clock clock) {
+            @NonNull TopicsWorkspaceNames workspaceNames, @NonNull TopicsArrivalService arrivalService,
+            @NonNull Meter meter, @NonNull Clock clock) {
         this.config = config;
         this.aiLabelsConfig = aiLabelsConfig;
         this.workspaces = workspaces;
@@ -290,6 +297,7 @@ public class TopicVectorsTickService {
         this.lockService = lockService;
         this.registry = registry;
         this.workspaceNames = workspaceNames;
+        this.arrivalService = arrivalService;
         this.clock = clock;
 
         meter.gaugeBuilder("topics.vectors.oldest_unvectored_seconds").setUnit("s")
@@ -355,7 +363,7 @@ public class TopicVectorsTickService {
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
-                .setDescription("Duration of each tick phase: discover, find, embed, backfill")
+                .setDescription("Duration of each tick phase: discover, find, embed (with the arrival steps), backfill")
                 .build();
     }
 
@@ -840,6 +848,8 @@ public class TopicVectorsTickService {
                     continue;
                 }
                 written.addAll(vectors);
+                // One hook for both phases.
+                tally.arrival.label(workspaceId, tally.name(workspaceId), vectors, deadline);
             }
             if (written.isEmpty()) {
                 continue;
@@ -986,7 +996,7 @@ public class TopicVectorsTickService {
      * Shutdown disposes the tick, which interrupts its thread; {@code block()} then throws with the
      * {@link InterruptedException} as the cause. The tick must stop there instead of going on to the next workspace.
      */
-    private static void rethrowIfInterrupted(RuntimeException exception) {
+    static void rethrowIfInterrupted(RuntimeException exception) {
         if (Exceptions.unwrap(exception) instanceof InterruptedException || Thread.currentThread().isInterrupted()) {
             Thread.currentThread().interrupt();
             throw exception;

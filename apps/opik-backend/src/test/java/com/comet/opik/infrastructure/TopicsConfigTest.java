@@ -165,4 +165,28 @@ class TopicsConfigTest {
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
     }
+
+    static Stream<Arguments> arrivalTimeouts() {
+        return Stream.of(
+                arguments("config-test.yml", Duration.seconds(5), List.of()),
+                arguments("1s", Duration.seconds(1), List.of()),
+                arguments("60s", Duration.seconds(60), List.of()),
+                arguments("under 1s", Duration.milliseconds(999), List.of("arrival.timeout")),
+                arguments("over 60s", Duration.seconds(61), List.of("arrival.timeout")));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("arrivalTimeouts")
+    void arrivalTimeoutBounds(String description, Duration timeout, List<String> expectedViolations) {
+        var topics = TestConfigUtils.loadConfigTest().getTopics();
+        assertThat(topics.getArrival().isEnabled()).isTrue();
+        topics.getArrival().setTimeout(timeout);
+
+        var violations = VALIDATOR.validate(topics).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .filter(path -> path.startsWith("arrival."))
+                .toList();
+
+        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+    }
 }
