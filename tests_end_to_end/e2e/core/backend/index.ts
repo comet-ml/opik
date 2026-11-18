@@ -22,6 +22,7 @@ export {
   type RawApiResult,
   type LlmCatalogEffortRef,
   type LlmCatalogModelRef,
+  type ChatCompletionRef,
   type BackendSort,
   type MetricSeries,
   type MetricInterval,

@@ -233,6 +233,38 @@ export interface LlmCatalogModelRef {
   effort: LlmCatalogEffortRef;
 }
 
+/**
+ * The body of a BLOCKING `POST /v1/private/chat/completions`, reduced to what a
+ * spec about a provider path reads back.
+ *
+ * Only the blocking shape is modelled: a streamed call answers
+ * `text/event-stream` and carries its usage on the final chunk, which is a
+ * different contract and a different parse. The playground only ever sends
+ * `stream: true`, so this is the half no UI assertion can reach.
+ *
+ * Every field is `| null` rather than optional for the reason the span shapes
+ * give: a completion that came back with no `usage` block at all and one that
+ * came back with an empty one are different answers, and a provider path that
+ * stopped mapping the vendor's token counters must not read as one that mapped
+ * them to nothing.
+ */
+export interface ChatCompletionRef {
+  /** The model id the server echoes — the provider-qualified one it resolved. */
+  model: string | null;
+  /** `choices[0].message.content`, the assistant's whole reply. */
+  content: string | null;
+  /**
+   * The usage counters, verbatim.
+   *
+   * Not summed or normalised here: a provider may report a `total_tokens`
+   * LARGER than `prompt_tokens + completion_tokens` (Gemini bills thinking
+   * tokens into the total and not into either half), so the relation between
+   * them is the caller's claim to make about its own provider, not this
+   * client's to assume.
+   */
+  usage: Record<string, number> | null;
+}
+
 /** One row of the dataset's Version history tab. */
 export interface DatasetVersionRef {
   /**
@@ -1845,6 +1877,39 @@ function toMetricSeries(json: unknown): MetricSeries[] {
       value: p.value ?? null,
     })),
   }));
+}
+
+/**
+ * The decoded body of a blocking chat completion, or null when the body is not
+ * one.
+ *
+ * "Not one" is every refusal: the endpoint answers an error envelope with the
+ * same content type, and a mapper that produced `{model: '', content: '', usage:
+ * {}}` for it would let a spec assert about an answer that was never given.
+ * `choices` carrying no `message` is the same case — a streamed chunk shape
+ * (`delta`) reaching this parser means the caller sent `stream: true`, and the
+ * blocking fields it would read are genuinely absent rather than empty.
+ */
+function toChatCompletionRef(json: unknown): ChatCompletionRef | null {
+  const body = json as
+    | {
+        model?: unknown;
+        choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: Record<string, unknown>;
+      }
+    | null;
+  const message = body?.choices?.[0]?.message;
+  if (!message) return null;
+  const usage = body?.usage;
+  return {
+    model: typeof body?.model === 'string' ? body.model : null,
+    content: typeof message.content === 'string' ? message.content : null,
+    usage: usage
+      ? Object.fromEntries(
+          Object.entries(usage).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+        )
+      : null,
+  };
 }
 
 /**
@@ -6353,14 +6418,20 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * through.** A caller probing the gate must therefore send an effort the
      * row cannot accept, which is refused for free; see
      * `probeAnthropicEffortGate` for the sentinel that makes that reliable.
+     *
+     * `completion` is the decoded body of a request that DID reach a provider —
+     * the other half of this endpoint, which a gate assertion never sees. Null
+     * whenever the body is not a completion (every refusal, whose text is in
+     * `message`), so a caller asserting about an answer has to establish it got
+     * one before reading it.
      */
     async postChatCompletion(args: {
       model: string;
       /** Lowercase roles — this endpoint deserializes langchain4j's own enum. */
       messages?: Array<{ role: string; content: string }>;
       customParameters?: Record<string, unknown>;
-    }): Promise<RawApiResult> {
-      const { status, message, location } = await rawFetch(
+    }): Promise<RawApiResult & { completion: ChatCompletionRef | null }> {
+      const { status, message, location, json } = await rawFetch(
         'POST',
         '/v1/private/chat/completions',
         {
@@ -6373,7 +6444,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           },
         },
       );
-      return { status, message, location };
+      return { status, message, location, completion: toChatCompletionRef(json) };
     },
 
     async deleteAutomationRule(projectId: string, ruleId: string): Promise<void> {
