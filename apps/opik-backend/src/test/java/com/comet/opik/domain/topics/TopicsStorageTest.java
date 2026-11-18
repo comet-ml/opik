@@ -20,6 +20,7 @@ import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
 import org.jdbi.v3.core.mapper.reflect.ConstructorMapper;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,6 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -44,7 +44,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,13 +55,12 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * The topics tables and their reads against real ClickHouse and MySQL: the {@code topic_vectors} window reads, the
- * {@code trace_topics} read shape, and the project-delete cleanup. No run builds here: tests seed vectors and rows
- * directly and call the DAOs and the listener.
+ * The labelling pass's storage and the project-delete cleanup against real ClickHouse and MySQL: the rows and run
+ * counts a pass writes, and what deleting a project removes. No run builds here: tests seed vectors and a saved list
+ * directly and call the label service and the listener. {@link TopicsDaoStorageTest} covers the DAO reads.
  */
 @DisplayName("topics storage")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -73,9 +71,8 @@ class TopicsStorageTest {
     private static final int WINDOW_DAYS = 30;
     private static final Instant NIGHT = Instant.parse("2026-10-15T00:00:00Z");
     private static final TopicsTestData.Traces TRACES = TopicsTestData.Traces.synthetic(BUILT, NIGHT, 7);
-    /** One trace every 72 minutes over the window: a window larger than {@link #SAMPLE}. */
+    /** One trace every 72 minutes over the window. */
     private static final int SPREAD = 600;
-    private static final int SAMPLE = 150;
     private static final TopicsTestData.Traces SPREAD_TRACES = TopicsTestData.Traces.spread(SPREAD, NIGHT,
             WINDOW_DAYS, 3);
     /** The runbook's query of a topic's share run by run ("Saving and labelling"). */
@@ -125,7 +122,6 @@ class TopicsStorageTest {
     private TransactionTemplate template;
     private TransactionTemplateAsync clickHouseTemplate;
     private TopicVectorsDAO vectorsDAO;
-    private TopicWindowDAO windowDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService labelService;
     private TopicsProjectDeletedListener projectDeletedListener;
@@ -136,7 +132,7 @@ class TopicsStorageTest {
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
-            @Jit TopicWindowDAO windowDAO, @Jit TraceTopicsDAO traceTopicsDAO,
+            @Jit TraceTopicsDAO traceTopicsDAO,
             @Jit TopicWindowLabelService labelService, @Jit TopicsProjectDeletedListener projectDeletedListener,
             ConnectionFactory connectionFactory) {
         this.connectionFactory = connectionFactory;
@@ -144,7 +140,6 @@ class TopicsStorageTest {
         this.template = template;
         this.clickHouseTemplate = clickHouseTemplate;
         this.vectorsDAO = vectorsDAO;
-        this.windowDAO = windowDAO;
         this.traceTopicsDAO = traceTopicsDAO;
         this.labelService = labelService;
         this.projectDeletedListener = projectDeletedListener;
@@ -152,29 +147,12 @@ class TopicsStorageTest {
         this.spreadData = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, SPREAD_TRACES);
     }
 
-    @Test
-    @DisplayName("a trace_topics read drops a trace whose latest row is a tombstone, and keeps one whose tombstone is older")
-    void traceTopicsReadsSkipTombstones() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        var tombstoned = TRACES.traceIds().get(0);
-        var revived = TRACES.traceIds().get(1);
-        var untouched = TRACES.traceIds().get(2);
-        var topicId = UUID.randomUUID();
-        var createdAt = Instant.parse("2026-11-01T10:00:00Z");
-        var earlier = Instant.parse("2026-11-02T00:00:00Z");
-        var later = Instant.parse("2026-11-03T00:00:00Z");
-        // The tombstone comes after the live row, so the trace is gone.
-        data.insertTraceTopic(workspaceId, projectId, tombstoned, createdAt, topicId, earlier, 0);
-        data.insertTraceTopic(workspaceId, projectId, tombstoned, createdAt, topicId, later, 1);
-        // The tombstone comes before the live row: the dedup keeps the live row, so the trace stays.
-        data.insertTraceTopic(workspaceId, projectId, revived, createdAt, topicId, earlier, 1);
-        data.insertTraceTopic(workspaceId, projectId, revived, createdAt, topicId, later, 0);
-        data.insertTraceTopic(workspaceId, projectId, untouched, createdAt, TraceTopic.OTHER, earlier, 0);
-
-        assertThat(data.traceTopics(workspaceId, projectId))
-                .extracting(TraceTopic::traceId, TraceTopic::topicId)
-                .containsExactlyInAnyOrder(tuple(revived, topicId), tuple(untouched, TraceTopic.OTHER));
+    @AfterAll
+    void afterAll() {
+        clickHouse.stop();
+        zookeeper.stop();
+        mysql.stop();
+        network.close();
     }
 
     @Test
@@ -197,177 +175,6 @@ class TopicsStorageTest {
     }
 
     @Test
-    @DisplayName("the window count runs on 2 threads under the row guard at a background priority; the window read "
-            + "stops after 120 s")
-    void readsCarryTheirGuards() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        data.seed(workspaceId, projectId, 0, BUILT);
-
-        // As a first-build run reads: the count of its projects under 60 s, a run's window under 120 s.
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60)
-                .collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT));
-        assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 120).collectList().block())
-                .hasSize(BUILT);
-
-        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
-        assertThat(guards("topics:count_window", workspaceId))
-                .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
-        // The count's memory bound rests on these two.
-        assertThat(settings("topics:count_window", workspaceId, "optimize_aggregation_in_order", "max_block_size"))
-                .containsExactly(List.of("1", "8192"));
-        assertThat(guards("topics:read_window", workspaceId))
-                .containsExactly(List.of("2", maxRowsToRead, "", "120"));
-    }
-
-    @Test
-    @DisplayName("the window count and the window read skip the vectors of deleted traces")
-    void deletedVectorsAreNotRead() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        data.seed(workspaceId, projectId, 0, BUILT);
-        var deleted = TRACES.traceIds().subList(0, 10);
-        // deleteByKeys runs deleteByTraceIds, the trace-delete cascade's delete, as the system user.
-        vectorsDAO.deleteByKeys(workspaceId, deleted.stream()
-                .map(traceId -> TopicTraceKey.builder().projectId(projectId).traceId(traceId).build())
-                .toList()).block();
-
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - deleted.size()));
-        assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
-                .extracting(TopicWindowRow::traceId)
-                .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(deleted.size(), BUILT));
-    }
-
-    @Test
-    @DisplayName("the window reads drop a vector whose latest row is a tombstone, and keep one whose tombstone is older")
-    void tombstonedVectorsAreNotRead() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        data.seed(workspaceId, projectId, 0, BUILT);
-        var tombstoned = TRACES.traceIds().subList(0, 10);
-        var revived = TRACES.traceIds().subList(10, 20);
-        // The tombstone comes after the live row, so the key is gone.
-        data.insertVectorTombstones(workspaceId, projectId, tombstoned, 3_600);
-        // The tombstone comes before the live row: the dedup keeps the live row, so the key stays.
-        data.insertVectorTombstones(workspaceId, projectId, revived, -3_600);
-
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - tombstoned.size()));
-        assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
-                .extracting(TopicWindowRow::traceId)
-                .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(tombstoned.size(), BUILT));
-    }
-
-    @Test
-    @DisplayName("a tombstone stamped at the same time as its live row loses, in the count and in both reads")
-    void tiedTombstoneLoses() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        data.seed(workspaceId, projectId, 0, BUILT);
-        var tied = TRACES.traceIds().subList(0, 10);
-        // A merge would keep one row of each tied key; the queries are checked on the rows as written.
-        data.withoutMerges(() -> {
-            data.insertTiedVectorTombstones(workspaceId, projectId, tied);
-
-            assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList()
-                    .block()).containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT));
-            assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
-                    .extracting(TopicWindowRow::traceId).containsAll(tied).hasSize(BUILT);
-            assertThat(windowDAO.readUnlabelled(workspaceId, projectId, UUID.randomUUID(), from(), to(), "", BUILT,
-                    60).collectList().block())
-                    .extracting(TopicWindowDAO.WindowVector::traceId).containsAll(tied).hasSize(BUILT);
-        });
-    }
-
-    @Test
-    @DisplayName("the window count is exact per project asked for, at the minVectors boundary too: a relabelled trace "
-            + "counts once, a trace counts while one of its task versions is live, and a project with none is left out")
-    void countIsExactAtTheBoundary() {
-        var workspaceId = UUID.randomUUID().toString();
-        int minVectors = opikConfig.getTopics().getBuild().getMinVectors();
-        var below = UUID.randomUUID();
-        var at = UUID.randomUUID();
-        var above = UUID.randomUUID();
-        data.seed(workspaceId, below, 0, minVectors - 1);
-        data.seed(workspaceId, at, 0, minVectors);
-        data.seed(workspaceId, above, 0, minVectors + 1);
-        var gone = UUID.randomUUID();
-        data.seed(workspaceId, gone, 0, 10);
-        data.insertVectorTombstones(workspaceId, gone, TRACES.traceIds().subList(0, 10), 3_600);
-        var mixed = UUID.randomUUID();
-        data.seed(workspaceId, mixed, 0, 12);
-        var ids = TRACES.traceIds();
-        // Traces 0 to 3 get version 2. Version 1 of traces 0 and 1 is deleted: they stay, by version 2.
-        data.relabel(workspaceId, mixed, ids.subList(0, 4));
-        data.insertVersionOneTombstones(workspaceId, mixed, ids.subList(0, 2), 3_600);
-        // Both versions of trace 2 are deleted, and the only version of traces 4 and 5.
-        data.insertVectorTombstones(workspaceId, mixed, List.of(ids.get(2)), 3_600);
-        data.insertVersionOneTombstones(workspaceId, mixed, ids.subList(4, 6), 3_600);
-        // Trace 6's tombstone is older than its live row: it stays.
-        data.insertVersionOneTombstones(workspaceId, mixed, List.of(ids.get(6)), -3_600);
-
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(below, at, above, gone, mixed), from(), to(), 60)
-                .collectList().block())
-                .containsExactlyInAnyOrder(
-                        new TopicWindowDAO.ProjectCount(below, minVectors - 1),
-                        new TopicWindowDAO.ProjectCount(at, minVectors),
-                        new TopicWindowDAO.ProjectCount(above, minVectors + 1),
-                        new TopicWindowDAO.ProjectCount(mixed, 12 - 3));
-        assertThat(windowDAO.countByProject(workspaceId, Set.of(below, gone), from(), to(), 60).collectList().block())
-                .containsExactly(new TopicWindowDAO.ProjectCount(below, minVectors - 1));
-    }
-
-    @Test
-    @DisplayName("a window larger than the limit is read as an even sample of it, not as its newest traces")
-    void sampleIsEven() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        spreadData.seed(workspaceId, projectId, 0, SPREAD);
-
-        var sample = windowDAO.readWindow(workspaceId, projectId, from(), to(), SAMPLE, 120).collectList().block();
-
-        assertThat(sample).hasSize(SAMPLE);
-        // About 5 traces a day; the newest 150 would cover the last 7.5 days only.
-        assertThat(sample.stream().map(row -> LocalDate.ofInstant(row.traceCreatedAt(), ZoneOffset.UTC)).distinct())
-                .hasSizeGreaterThanOrEqualTo(26);
-        var middle = from().plus(Duration.ofDays(WINDOW_DAYS / 2));
-        assertThat(sample.stream().filter(row -> row.traceCreatedAt().isBefore(middle)).count())
-                .isBetween((long) SAMPLE * 35 / 100, (long) SAMPLE * 65 / 100);
-    }
-
-    @Test
-    @DisplayName("the sample is the same on every read, and a window a day later keeps most of it")
-    void sampleIsStable() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        spreadData.seed(workspaceId, projectId, 0, SPREAD);
-
-        var first = sampleIds(workspaceId, projectId, from(), to(), SAMPLE);
-
-        assertThat(sampleIds(workspaceId, projectId, from(), to(), SAMPLE)).isEqualTo(first);
-        // The window loses its first day, about 20 traces of which about 5 were sampled.
-        var later = new HashSet<>(sampleIds(workspaceId, projectId, from().plus(Duration.ofDays(1)),
-                to().plus(Duration.ofDays(1)), SAMPLE));
-        later.retainAll(first);
-        assertThat(later).hasSizeGreaterThanOrEqualTo(SAMPLE - 20);
-    }
-
-    @Test
-    @DisplayName("a window of the limit's size or less is read whole")
-    void smallWindowIsReadWhole() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        spreadData.seed(workspaceId, projectId, 0, SPREAD);
-
-        assertThat(sampleIds(workspaceId, projectId, from(), to(), SPREAD))
-                .containsExactlyInAnyOrderElementsOf(SPREAD_TRACES.traceIds());
-        assertThat(sampleIds(workspaceId, projectId, from(), to(), SPREAD + 1))
-                .containsExactlyInAnyOrderElementsOf(SPREAD_TRACES.traceIds());
-    }
-
-    @Test
     @DisplayName("the labelling pass gives every window trace exactly one row of the saved run, by its prototypes; a "
             + "trace that has one keeps it, a trace outside the window gets none, and a second pass has nothing left")
     void labellingPassLabelsTheWindow() {
@@ -378,7 +185,7 @@ class TopicsStorageTest {
         spreadData.seed(workspaceId, projectId, 0, 20, NIGHT.plus(Duration.ofDays(WINDOW_DAYS + 1)));
         var runId = UUID.randomUUID();
         var topicId = UUID.randomUUID();
-        int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+        int dimensions = TopicAlgorithm.DIMENSIONS;
         var vectors = saveList(workspaceId, projectId, runId, topicId);
         // The run's own insert, or an earlier cut pass, labelled 30 traces.
         var labelledBefore = UUID.randomUUID();
@@ -418,7 +225,7 @@ class TopicsStorageTest {
         assertThat(again.complete()).isTrue();
         assertThat(again.labelled()).isZero();
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
-        assertThat(guards("topics:read_unlabelled", workspaceId))
+        assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
     }
 
@@ -497,55 +304,10 @@ class TopicsStorageTest {
         saved.remove("topic_counts");
         assertThat(saved).isEqualTo(TopicsTestData.json(stats));
         var find = opikConfig.getTopics().getVectors().getFind();
-        assertThat(guards("topics:count_by_topic", workspaceId))
+        assertThat(data.queryGuards("topics:count_by_topic", workspaceId))
                 .containsExactly(List.of("2", String.valueOf(find.getMaxRowsToRead()), "", "120"));
-        assertThat(settings("topics:count_by_topic", workspaceId, "max_memory_usage", "max_threads"))
+        assertThat(data.queryLogSettings("topics:count_by_topic", workspaceId, "max_memory_usage", "max_threads"))
                 .containsExactly(List.of(String.valueOf(find.getMaxMemoryUsage()), "2"));
-    }
-
-    @Test
-    @DisplayName("the labels are marked complete only for the run the state names: an older run's pass marks nothing")
-    void labelsCompleteOnlyForTheLastRun() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        data.savedList(workspaceId, projectId, NIGHT, BUILT);
-        var lastRunId = data.state(projectId).lastRunId();
-
-        int older = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                .markLabelsComplete(workspaceId, projectId, UUID.randomUUID()));
-
-        assertThat(older).isZero();
-        assertThat(data.state(projectId).labelsComplete()).isFalse();
-
-        int last = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                .markLabelsComplete(workspaceId, projectId, lastRunId));
-
-        assertThat(last).isEqualTo(1);
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
-    }
-
-    @Test
-    @DisplayName("the passes to resume are the workspaces' projects whose labels are not complete, the oldest save "
-            + "first, whatever order they were saved in")
-    void labelsIncompleteOldestFirst() {
-        var workspaceId = UUID.randomUUID().toString();
-        var newest = UUID.randomUUID();
-        var oldest = UUID.randomUUID();
-        var middle = UUID.randomUUID();
-        var complete = UUID.randomUUID();
-        data.savedList(workspaceId, newest, NIGHT, BUILT);
-        data.savedList(workspaceId, oldest, NIGHT.minus(Duration.ofDays(3)), BUILT);
-        data.savedList(workspaceId, middle, NIGHT.minus(Duration.ofDays(1)), BUILT);
-        data.savedList(workspaceId, complete, NIGHT.minus(Duration.ofDays(4)), BUILT);
-        var completeRunId = data.state(complete).lastRunId();
-        template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                .markLabelsComplete(workspaceId, complete, completeRunId));
-        data.savedList(UUID.randomUUID().toString(), UUID.randomUUID(), NIGHT.minus(Duration.ofDays(5)), BUILT);
-
-        var unfinished = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findLabelsIncomplete(List.of(workspaceId)));
-
-        assertThat(unfinished).extracting(TopicDAO.ProjectKey::projectId).containsExactly(oldest, middle, newest);
     }
 
     @Test
@@ -738,19 +500,12 @@ class TopicsStorageTest {
         });
     }
 
-    private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {
-        return windowDAO.readWindow(workspaceId, projectId, from, to, limit, 120)
-                .map(TopicWindowRow::traceId)
-                .collectList()
-                .block();
-    }
-
     /**
      * A saved list of one topic: its state names {@code runId}, trace 0 and trace 2 are the topic's prototypes, trace 1
      * a known-Other one. Returns the three vectors.
      */
     private List<float[]> saveList(String workspaceId, UUID projectId, UUID runId, UUID topicId) {
-        int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+        int dimensions = TopicAlgorithm.DIMENSIONS;
         var vectors = new ArrayList<float[]>();
         for (int i = 0; i < 3; i++) {
             vectors.add(Arrays.copyOfRange(TRACES.vectors(), i * dimensions, (i + 1) * dimensions));
@@ -833,31 +588,5 @@ class TopicsStorageTest {
                         .runId(runId.toString())
                         .build())
                 .toList()).block();
-    }
-
-    /**
-     * The distinct {@code max_threads}, {@code max_rows_to_read}, {@code priority} and {@code max_execution_time} the
-     * workspace's finished {@code queryName} queries ran with, an empty string for a setting left at its default.
-     */
-    private List<List<String>> guards(String queryName, String workspaceId) {
-        return settings(queryName, workspaceId, "max_threads", "max_rows_to_read", "priority", "max_execution_time");
-    }
-
-    /** The distinct values of the named settings the workspace's finished {@code queryName} queries ran with. */
-    private List<List<String>> settings(String queryName, String workspaceId, String... names) {
-        return clickHouseTemplate.nonTransaction(connection -> Mono
-                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                .thenMany(Flux.from(connection.createStatement("""
-                        SELECT DISTINCT arrayMap(name -> Settings[name], :names) AS settings
-                        FROM system.query_log
-                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
-                        """)
-                        .bind("names", names)
-                        .bind("log_comment", queryName + ":" + workspaceId + ":%")
-                        .execute()))
-                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("settings", String[].class))))
-                .collectList())
-                .block();
     }
 }

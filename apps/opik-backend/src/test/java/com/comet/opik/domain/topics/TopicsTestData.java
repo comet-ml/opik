@@ -42,6 +42,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 final class TopicsTestData {
 
     static final String GENERATE_PATH = "/v1/generate";
+    /** The embed model every seeded vector names. */
+    static final String EMBED_MODEL = "bge-small-en-v1.5";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull TransactionTemplateAsync clickHouseTemplate;
@@ -51,7 +53,7 @@ final class TopicsTestData {
 
     /**
      * Traces to seed as vectors: trace {@code i} has {@code traceIds[i]}, {@code createdAt[i]}, {@code texts[i]} and
-     * the {@code i}-th {@link TopicVectorsTickService#EMBED_DIMENSIONS} floats of {@code vectors}. {@code night} is the
+     * the {@code i}-th {@link TopicAlgorithm#DIMENSIONS} floats of {@code vectors}. {@code night} is the
      * start of the day after the last trace, so the traces are the window of that night.
      */
     record Traces(List<UUID> traceIds, List<Instant> createdAt, String[] texts, float[] vectors, Instant night) {
@@ -76,7 +78,7 @@ final class TopicsTestData {
         /** Trace {@code i} at {@code first + i * step}; its id, then its vector, are drawn in trace order. */
         private static Traces of(int count, Instant night, Instant first, Duration step, Random random,
                 TimeBasedEpochGenerator ids) {
-            int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+            int dimensions = TopicAlgorithm.DIMENSIONS;
             var traceIds = new ArrayList<UUID>(count);
             var createdAt = new ArrayList<Instant>(count);
             var texts = new String[count];
@@ -119,7 +121,7 @@ final class TopicsTestData {
                 INSERT INTO projects (id, name, workspace_id, last_updated_trace_at) VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE last_updated_trace_at = GREATEST(IFNULL(last_updated_trace_at, ?), ?)
                 """, projectId.toString(), "topics-" + projectId, workspaceId, lastTrace, lastTrace, lastTrace));
-        int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+        int dimensions = TopicAlgorithm.DIMENSIONS;
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
             var vector = new ArrayList<Float>(dimensions);
@@ -132,7 +134,7 @@ final class TopicsTestData {
                     .traceId(traces.traceIds().get(i))
                     .traceCreatedAt(traces.createdAt().get(i).plus(shift))
                     .taskVersion(1)
-                    .embedModel(TopicVectorsTickService.EMBED_MODEL)
+                    .embedModel(EMBED_MODEL)
                     .embedDimensions(dimensions)
                     .text(traces.texts()[i])
                     .vector(vector)
@@ -156,7 +158,7 @@ final class TopicsTestData {
         var runId = UUID.randomUUID();
         var topicId = UUID.randomUUID();
         var savedAt = night.plus(Duration.ofHours(2));
-        var vector = TopicPrototype.encode(new float[TopicVectorsTickService.EMBED_DIMENSIONS]);
+        var vector = TopicPrototype.encode(new float[TopicAlgorithm.DIMENSIONS]);
         template.inTransaction(WRITE, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
             topicDAO.insertState(TopicProjectState.builder()
@@ -357,6 +359,33 @@ final class TopicsTestData {
                 .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
                 .execute())
                 .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+    }
+
+    /**
+     * The distinct {@code max_threads}, {@code max_rows_to_read}, {@code priority} and {@code max_execution_time} the
+     * workspace's finished {@code queryName} queries ran with, an empty string for a setting left at its default.
+     */
+    List<List<String>> queryGuards(String queryName, String workspaceId) {
+        return queryLogSettings(queryName, workspaceId, "max_threads", "max_rows_to_read", "priority",
+                "max_execution_time");
+    }
+
+    /** The distinct values of the named settings the workspace's finished {@code queryName} queries ran with. */
+    List<List<String>> queryLogSettings(String queryName, String workspaceId, String... names) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .thenMany(Flux.from(connection.createStatement("""
+                        SELECT DISTINCT arrayMap(name -> Settings[name], :names) AS settings
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
+                        """)
+                        .bind("names", names)
+                        .bind("log_comment", queryName + ":" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> result.map((row, metadata) -> List.of(row.get("settings", String[].class))))
+                .collectList())
                 .block();
     }
 
