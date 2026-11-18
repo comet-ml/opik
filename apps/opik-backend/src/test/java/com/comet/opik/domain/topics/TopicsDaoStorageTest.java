@@ -40,12 +40,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -539,6 +541,28 @@ class TopicsDaoStorageTest {
 
     private static Instant to() {
         return NIGHT;
+    }
+
+    @Test
+    @DisplayName("one query reads the prototypes of several projects of one workspace, each in position order, and "
+            + "nothing of another workspace")
+    void prototypesOfSeveralProjects() {
+        var workspaceId = UUID.randomUUID().toString();
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        var notAsked = UUID.randomUUID();
+        var otherWorkspace = UUID.randomUUID();
+        data.savedList(workspaceId, first, NIGHT, 10);
+        data.savedList(workspaceId, second, NIGHT, 10);
+        data.savedList(workspaceId, notAsked, NIGHT, 10);
+        data.savedList(UUID.randomUUID().toString(), otherWorkspace, NIGHT, 10);
+
+        var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findPrototypes(workspaceId, List.of(first, second, otherWorkspace)));
+
+        assertThat(rows).extracting(TopicPrototype::projectId, TopicPrototype::position)
+                .containsExactlyElementsOf(Stream.of(first, second).sorted(Comparator.comparing(UUID::toString))
+                        .flatMap(projectId -> Stream.of(tuple(projectId, 0), tuple(projectId, 1))).toList());
     }
 
     @Test
