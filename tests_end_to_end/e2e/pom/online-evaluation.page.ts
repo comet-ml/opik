@@ -982,11 +982,8 @@ export class OnlineEvaluationPage {
   /**
    * The score name each question block DISPLAYS, in order.
    *
-   * Displayed, not stored, and the difference is the point: a template leaves
-   * its main question unnamed and `ScoreNameTitle` falls back to the rule name
-   * for it, so what is on screen for the first block is the rule's name while
-   * the named extras ("Polite tone") show their own. A spec asserting the
-   * fallback is asserting the thing the author actually sees.
+   * The main question takes the rule name, so the first block shows the rule's
+   * name while the named extras ("Polite tone") show their own.
    */
   async readQuestionNames(): Promise<string[]> {
     return test.step('read the score names the Questions card shows', async () => {

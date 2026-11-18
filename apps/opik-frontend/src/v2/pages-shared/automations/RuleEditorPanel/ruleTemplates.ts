@@ -30,7 +30,7 @@ export const getRuleTemplateOptions = (
 };
 
 // The main score takes the rule name, and a judge's main score description is
-// hidden and cleared on save, so neither is part of the template.
+// hidden and cleared when a new rule is saved, so neither is part of the template.
 const toComparable = (
   { messages, schema }: TemplateContent,
   uiType: UI_EVALUATORS_RULE_TYPE,
