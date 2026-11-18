@@ -63,10 +63,7 @@ import useGroupedExperimentsList, {
 } from "@/hooks/useGroupedExperimentsList";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
 import useExperimentsPinning from "@/v2/pages-shared/experiments/useExperimentsPinning";
-import {
-  FILTER_AND_GROUP_COLUMNS,
-  useExperimentsGroupsAndFilters,
-} from "@/v2/pages-shared/experiments/useExperimentsGroupsAndFilters";
+import { useExperimentsGroupsAndFilters } from "@/v2/pages-shared/experiments/useExperimentsGroupsAndFilters";
 import { useExperimentsFeedbackScores } from "@/v2/pages-shared/experiments/useExperimentsFeedbackScores";
 import { useExperimentsAutoExpandingLogic } from "@/v2/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/v2/pages-shared/experiments/useExpandingConfig";
@@ -83,9 +80,7 @@ import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import ItemSourceCell, {
-  ITEM_SOURCE_LABEL,
-} from "@/v2/pages-shared/experiments/ItemSourceCell";
+import ItemSourceCell from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
   DATASET_TYPE,
   EVALUATION_METHOD,
@@ -124,6 +119,7 @@ const NO_DYNAMIC_SCORES_COLUMNS: DynamicColumn[] = [];
 type TabConfig = {
   storageKeyPrefix: string;
   datasetType: DATASET_TYPE;
+  itemSourceLabel: string;
   versionLabel: string;
   excludedColumnIds: string[];
   defaultSelectedColumns: string[];
@@ -136,6 +132,7 @@ const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
   [EVALUATION_METHOD.TEST_SUITE]: {
     storageKeyPrefix: "experiments-test-suites",
     datasetType: DATASET_TYPE.TEST_SUITE,
+    itemSourceLabel: "Test suite",
     versionLabel: "Test suite version",
     excludedColumnIds: [COLUMN_FEEDBACK_SCORES_ID],
     defaultSelectedColumns: [
@@ -153,6 +150,7 @@ const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
   [EVALUATION_METHOD.DATASET]: {
     storageKeyPrefix: "experiments-datasets",
     datasetType: DATASET_TYPE.DATASET,
+    itemSourceLabel: "Dataset",
     versionLabel: "Dataset version",
     excludedColumnIds: ["pass_rate"],
     defaultSelectedColumns: [
@@ -213,6 +211,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
   const {
     storageKeyPrefix,
     datasetType,
+    itemSourceLabel,
     versionLabel,
     excludedColumnIds,
     defaultSelectedColumns,
@@ -290,7 +289,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_DATASET_ID,
-        label: ITEM_SOURCE_LABEL,
+        label: itemSourceLabel,
         type: COLUMN_TYPE.string,
         cell: ItemSourceCell as never,
         customMeta: {
@@ -448,7 +447,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     return allColumns.filter(
       (column) => !excludedColumnIds.includes(column.id),
     );
-  }, [versionLabel, excludedColumnIds]);
+  }, [versionLabel, itemSourceLabel, excludedColumnIds]);
 
   const evaluationMethodFilters = useMemo<Filter[]>(
     () => [getEvaluationMethodFilter(evaluationMethod)],
@@ -463,13 +462,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores({ projectId: activeProjectId ?? undefined });
 
-  const { groups, setGroups, filtersAndGroupsConfig } =
+  const { groups, setGroups, filtersAndGroupsConfig, filterAndGroupColumns } =
     useExperimentsGroupsAndFilters({
       storageKeyPrefix,
       sortedColumns,
       filters: queryFilters,
       projectId: activeProjectId,
       datasetType,
+      itemSourceLabel,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -570,6 +570,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     sortedColumns,
     setSortedColumns,
     datasetTypeMap,
+    itemSourceLabel,
   });
 
   const handleRowClick = useCallback(
@@ -633,7 +634,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: ITEM_SOURCE_LABEL,
+              label: itemSourceLabel,
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -673,14 +674,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                 const groupField = groups[index]?.field;
                 const groupLabel =
                   groupField === COLUMN_DATASET_ID
-                    ? ITEM_SOURCE_LABEL
+                    ? itemSourceLabel
                     : calculateGroupLabel(groups[index]);
 
                 return {
                   label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted item source"
+                      ? `Deleted ${itemSourceLabel.toLowerCase()}`
                       : label || value || "Undefined",
                 };
               }),
@@ -743,6 +744,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     return Object.values(groupsMap);
   }, [
     hasGroups,
+    itemSourceLabel,
     experiments,
     flattenGroups,
     groups,
@@ -802,13 +804,13 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             dimension="sm"
           ></SearchInput>
           <GroupsButton
-            columns={FILTER_AND_GROUP_COLUMNS}
+            columns={filterAndGroupColumns}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
           />
           <FiltersButton
-            columns={FILTER_AND_GROUP_COLUMNS}
+            columns={filterAndGroupColumns}
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}

@@ -137,10 +137,18 @@ const ExperimentsPage: React.FC = () => {
             >
               <Tabs value={activeTab} onValueChange={handleTabChange}>
                 <TabsList variant="segmented-primary" className="w-fit">
-                  <TabsTrigger variant="segmented-primary" value="test_suites">
+                  <TabsTrigger
+                    variant="segmented-primary"
+                    value="test_suites"
+                    className="px-1.5 py-0"
+                  >
                     Test suites
                   </TabsTrigger>
-                  <TabsTrigger variant="segmented-primary" value="datasets">
+                  <TabsTrigger
+                    variant="segmented-primary"
+                    value="datasets"
+                    className="px-1.5 py-0"
+                  >
                     Datasets
                   </TabsTrigger>
                 </TabsList>

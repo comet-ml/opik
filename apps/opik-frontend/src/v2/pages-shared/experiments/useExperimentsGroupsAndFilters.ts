@@ -56,6 +56,9 @@ export type UseExperimentsGroupsAndFiltersProps = {
   promptId?: string;
   projectId?: string | null;
   datasetType?: DATASET_TYPE;
+  // Replaces "Item source" in the Filter by / Group by copy when the page lists
+  // a single type.
+  itemSourceLabel?: string;
 };
 
 export const useExperimentsGroupsAndFilters = ({
@@ -65,6 +68,7 @@ export const useExperimentsGroupsAndFilters = ({
   promptId,
   projectId,
   datasetType,
+  itemSourceLabel,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
@@ -81,6 +85,9 @@ export const useExperimentsGroupsAndFilters = ({
           keyComponentProps: {
             className: "w-full min-w-72",
             ...(projectId && { projectId }),
+            ...(itemSourceLabel && {
+              placeholder: `Select a ${itemSourceLabel.toLowerCase()}`,
+            }),
             ...(datasetType && {
               filters: [
                 {
@@ -114,12 +121,25 @@ export const useExperimentsGroupsAndFilters = ({
         }),
       },
     }),
-    [filters, sortedColumns, promptId, projectId, datasetType],
+    [filters, sortedColumns, promptId, projectId, datasetType, itemSourceLabel],
+  );
+
+  const filterAndGroupColumns = useMemo(
+    () =>
+      itemSourceLabel
+        ? FILTER_AND_GROUP_COLUMNS.map((column) =>
+            column.id === COLUMN_DATASET_ID
+              ? { ...column, label: itemSourceLabel }
+              : column,
+          )
+        : FILTER_AND_GROUP_COLUMNS,
+    [itemSourceLabel],
   );
 
   return {
     groups,
     setGroups,
     filtersAndGroupsConfig,
+    filterAndGroupColumns,
   };
 };
