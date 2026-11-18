@@ -898,6 +898,7 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: PT10S
+    topics_day_counts: PT5M
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1041,6 +1042,9 @@ topics:
     interval: 10m
     budget: 9m
     backfillMaxWait: 72h
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
 
 # Python evaluator configuration
 pythonEvaluator:

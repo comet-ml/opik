@@ -5,10 +5,12 @@ import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.validation.BreakdownConfigValidation;
+import com.comet.opik.domain.topics.TopicFilterScope;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -33,7 +35,8 @@ public record ProjectMetricRequest(
         List<@NotNull @Valid TraceThreadFilter> threadFilters,
         @Valid BreakdownConfig breakdown,
         @JsonIgnore UUID uuidFromTime,
-        @JsonIgnore UUID uuidToTime) {
+        @JsonIgnore UUID uuidToTime,
+        @JsonIgnore @Nullable TopicFilterScope topicScope) {
 
     /**
      * Check if breakdown is enabled for this request.
