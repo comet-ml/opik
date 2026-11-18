@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -55,8 +56,11 @@ public class AuthorApplier {
                 continue;
             }
             mine.forEach(j -> claimed[j] = true);
-            topics.add(new NewTopic(TopicText.name(topic.name()), TopicText.pythonStrip(topic.definition()),
-                    List.copyOf(mine)));
+            topics.add(NewTopic.builder()
+                    .name(TopicText.name(topic.name()))
+                    .definition(TopicText.pythonStrip(topic.definition()))
+                    .groups(List.copyOf(mine))
+                    .build());
         }
         var other = new ArrayList<Integer>();
         for (int j = 0; j < k; j++) {
@@ -64,7 +68,7 @@ public class AuthorApplier {
                 other.add(j);
             }
         }
-        return new Applied(List.copyOf(topics), List.copyOf(other));
+        return Applied.builder().topics(List.copyOf(topics)).other(List.copyOf(other)).build();
     }
 
     /**
@@ -88,7 +92,7 @@ public class AuthorApplier {
             var clusters = new LinkedHashSet<Integer>();
             bySize.forEach(topic -> clusters.addAll(topic.clusters()));
             var head = bySize.getFirst();
-            out.add(new AuthorAnswer.Topic(head.name(), head.definition(), List.copyOf(clusters)));
+            out.add(head.toBuilder().clusters(List.copyOf(clusters)).build());
         }
         return out;
     }
@@ -130,10 +134,12 @@ public class AuthorApplier {
     }
 
     /** A topic to create, with its groups in the order the answer listed them. */
+    @Builder(toBuilder = true)
     public record NewTopic(@NonNull String name, @NonNull String definition, @NonNull List<Integer> groups) {
     }
 
     /** The new topics in creation order, and the groups that went to Other, ascending. */
+    @Builder(toBuilder = true)
     public record Applied(@NonNull List<NewTopic> topics, @NonNull List<Integer> other) {
     }
 }

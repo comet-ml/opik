@@ -16,7 +16,7 @@ import java.util.List;
  * the applier sends every unclaimed group to Other. Unknown keys are ignored; anything else off the schema, text
  * included, is {@code qwen_bad_answer}.
  */
-@Builder
+@Builder(toBuilder = true)
 public record AuthorAnswer(@NonNull List<Topic> topics) {
 
     /**
@@ -64,15 +64,20 @@ public record AuthorAnswer(@NonNull List<Topic> topics) {
         }
         var topics = new ArrayList<Topic>(names.size());
         for (int t = 0; t < names.size(); t++) {
-            topics.add(new Topic(names.get(t), definitions.get(t), List.copyOf(clusters.get(t))));
+            topics.add(Topic.builder()
+                    .name(names.get(t))
+                    .definition(definitions.get(t))
+                    .clusters(List.copyOf(clusters.get(t)))
+                    .build());
         }
-        return new AuthorAnswer(List.copyOf(topics));
+        return AuthorAnswer.builder().topics(List.copyOf(topics)).build();
     }
 
     private static TopicsRunException bad(String message, Throwable cause) {
         return new TopicsRunException(Code.QWEN_BAD_ANSWER, message, cause);
     }
 
+    @Builder(toBuilder = true)
     public record Topic(@NonNull String name, @NonNull String definition, @NonNull List<Integer> clusters) {
     }
 }

@@ -89,7 +89,7 @@ public class TopicWindowLabelService {
      * window's exact count. {@code complete} is true when no trace of the window is left without a row of the run; false when the
      * pass was cut, and a later call finishes it.
      */
-    @Builder
+    @Builder(toBuilder = true)
     public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete) {
     }
 
