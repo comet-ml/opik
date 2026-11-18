@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -11,6 +12,10 @@ import lombok.NonNull;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -19,6 +24,10 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  */
 @Singleton
 public class TopicsMetrics {
+
+    static final String FIRST_BUILD_GATE = "topics.first_build.gate";
+    static final String FIRST_BUILD_LONGEST_WAIT = "topics.first_build.gate.longest_wait_seconds";
+    static final String FIRST_BUILD_WAITING = "topics.first_build.waiting_projects";
 
     /** The run could not start: its {@code topic_runs} insert, or the read before it, failed. */
     static final String ERROR_START_FAILED = "start_failed";
@@ -39,7 +48,17 @@ public class TopicsMetrics {
     private final LongCounter qwenCalls;
     private final LongCounter saveRows;
     private final DoubleHistogram otherShare;
+    private final LongCounter firstBuildGate;
     private final LongCounter labelPasses;
+    private volatile FirstBuildState firstBuildState;
+
+    /**
+     * What one first-build run saw, per workspace, with the workspace names resolved when the run set it: the longest
+     * backfill wait in seconds, and the projects waiting for a list.
+     */
+    private record FirstBuildState(@NonNull Instant until, @NonNull Map<Attributes, Long> longestWaitSeconds,
+            @NonNull Map<Attributes, Long> waitingProjects) {
+    }
 
     @Inject
     public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
@@ -66,6 +85,26 @@ public class TopicsMetrics {
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
+        this.firstBuildGate = meter.counterBuilder(FIRST_BUILD_GATE)
+                .setDescription("Projects without a list each first-build run found, by the outcome of the vectors "
+                        + "backfill gate: open (the project's backfill drained), waiting, timed_out_open (the backfill "
+                        + "ran past topics.firstBuild.backfillMaxWait and at least 99% of its traces have a vector, so "
+                        + "the list is built) or timed_out_waiting (past it with fewer: the project keeps waiting)")
+                .build();
+        meter.gaugeBuilder(FIRST_BUILD_LONGEST_WAIT).ofLongs().setUnit("s")
+                .setDescription("Per workspace, how long the oldest vectors backfill a first build waits for has run, "
+                        + "as the last first-build run on this pod saw it; 0 with no waiting project. Published for "
+                        + "two first-build intervals after a run: aggregate with max")
+                .buildWithCallback(measurement -> firstBuildState()
+                        .ifPresent(state -> state.longestWaitSeconds().forEach(
+                                (attributes, seconds) -> measurement.record(seconds, attributes))));
+        meter.gaugeBuilder(FIRST_BUILD_WAITING).ofLongs()
+                .setDescription("Per workspace, the projects with enough vectors and no list whose first failed first "
+                        + "build started more than a day ago, as the last first-build run on this pod saw them. "
+                        + "Published for two first-build intervals after a run: aggregate with max")
+                .buildWithCallback(measurement -> firstBuildState()
+                        .ifPresent(state -> state.waitingProjects().forEach(
+                                (attributes, projects) -> measurement.record(projects, attributes))));
         this.labelPasses = meter.counterBuilder("topics.label.passes")
                 .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
                         + "resume: the first-build job going on with a pass that did not finish) and outcome "
@@ -105,5 +144,27 @@ public class TopicsMetrics {
 
     void otherShare(@NonNull String workspaceId, double share) {
         otherShare.record(share, names.of(workspaceId));
+    }
+
+    void firstBuildGate(@NonNull String workspaceId, @NonNull TopicsBackfillGate.State state) {
+        firstBuildGate.add(1, names.builder(workspaceId).put(OUTCOME, state.getValue()).build());
+    }
+
+    /**
+     * A first-build run's longest backfill wait and its projects waiting for a list, per workspace, published for
+     * {@code kept} from now.
+     */
+    void firstBuildState(@NonNull Map<String, Duration> longestWaits, @NonNull Map<String, Long> waitingProjects,
+            @NonNull Duration kept) {
+        var seconds = new LinkedHashMap<Attributes, Long>();
+        longestWaits.forEach((workspaceId, wait) -> seconds.put(names.of(workspaceId), wait.toSeconds()));
+        var waiting = new LinkedHashMap<Attributes, Long>();
+        waitingProjects.forEach((workspaceId, projects) -> waiting.put(names.of(workspaceId), projects));
+        firstBuildState = new FirstBuildState(Instant.now().plus(kept), seconds, waiting);
+    }
+
+    private Optional<FirstBuildState> firstBuildState() {
+        var state = firstBuildState;
+        return state != null && Instant.now().isBefore(state.until()) ? Optional.of(state) : Optional.empty();
     }
 }

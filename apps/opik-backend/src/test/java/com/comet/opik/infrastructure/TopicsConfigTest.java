@@ -135,7 +135,11 @@ class TopicsConfigTest {
                 arguments("max vectors equal to the min vectors", (Consumer<TopicsConfig>) topics -> {
                     topics.getBuild().setMinVectors(500);
                     topics.getBuild().setMaxVectors(500);
-                }, List.of()));
+                }, List.of()),
+                arguments("first-build budget equal to its interval", (Consumer<TopicsConfig>) topics -> {
+                    topics.getFirstBuild().setInterval(Duration.minutes(10));
+                    topics.getFirstBuild().setBudget(Duration.minutes(10));
+                }, List.of("firstBuild.budgetValid")));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -146,7 +150,7 @@ class TopicsConfigTest {
 
         var violations = VALIDATOR.validate(topics).stream()
                 .map(violation -> violation.getPropertyPath().toString())
-                .filter(path -> path.startsWith("build."))
+                .filter(path -> path.startsWith("build.") || path.startsWith("firstBuild."))
                 .toList();
 
         assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);

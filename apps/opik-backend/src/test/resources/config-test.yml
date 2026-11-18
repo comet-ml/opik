@@ -1030,6 +1030,11 @@ topics:
     maxVectors: 100000
     qwenDeadline: 120s
     runsRetention: 90d
+  firstBuild:
+    enabled: true
+    interval: 10m
+    budget: 9m
+    backfillMaxWait: 72h
 
 # Python evaluator configuration
 pythonEvaluator:
