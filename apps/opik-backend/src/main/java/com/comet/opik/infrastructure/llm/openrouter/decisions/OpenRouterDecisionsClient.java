@@ -23,6 +23,8 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -99,14 +101,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .requestCustomizer(builder -> {
                     builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
                             .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
-                    // the shared client still inflates a compressed reply, so every body read is capped too;
-                    // a stored header replaces the one Opik sets
-                    builder.acceptEncoding("identity");
-                    var headers = ProviderHeadersHttpClient.normalizedProviderHeaders(config.headers());
-                    if (!headers.containsKey(HttpHeaders.AUTHORIZATION)) {
-                        builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
-                    }
-                    headers.forEach(builder::header);
+                    builder.headers(requestHeaders(config));
                 })
                 .retryPolicy(RetryUtils.handleHttpErrors(
                         Optional.ofNullable(llmProviderClientConfig.getMaxAttempts()).orElse(DEFAULT_MAX_ATTEMPTS),
@@ -121,6 +116,24 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .errorMessageFunction(this::extractErrorMessage)
                 .build();
         return client.executePostWithRetry(httpRequest);
+    }
+
+    /**
+     * The stored headers, which replace the ones Opik sets, as on the chat path; the JSON body sets Content-Type.
+     * Asks for an uncompressed reply, but the shared client still inflates a compressed one, so every body read is
+     * capped too.
+     */
+    private static MultivaluedMap<String, Object> requestHeaders(LlmProviderClientApiConfig config) {
+        var stored = ProviderHeadersHttpClient.normalizedProviderHeaders(config.headers());
+        var headers = new MultivaluedHashMap<String, Object>();
+        if (!stored.containsKey(HttpHeaders.ACCEPT_ENCODING)) {
+            headers.putSingle(HttpHeaders.ACCEPT_ENCODING, "identity");
+        }
+        if (!stored.containsKey(HttpHeaders.AUTHORIZATION)) {
+            headers.putSingle(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey());
+        }
+        stored.forEach(headers::putSingle);
+        return headers;
     }
 
     private String targetUrl(String baseUrl) {

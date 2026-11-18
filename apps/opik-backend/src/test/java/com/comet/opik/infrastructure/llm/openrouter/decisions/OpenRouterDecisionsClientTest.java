@@ -138,20 +138,43 @@ class OpenRouterDecisionsClientTest {
     }
 
     @Test
-    void storedHeadersAreNormalizedAndAStoredAuthorizationReplacesTheApiKey() {
+    void sendsTheApiKeyAndAsksForNoCompression() {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
                         .withBody(SUCCESS_BODY)));
+
+        decisionsClient.decide(request(), apiConfig(Map.of())).block();
+
+        var sent = wireMock.server().getAllServeEvents().getFirst().getRequest().getHeaders();
+        assertThat(sent.getHeader("Authorization").values()).containsExactly("Bearer " + apiKey);
+        assertThat(sent.getHeader("Accept-Encoding").values()).containsExactly("identity");
+        assertThat(sent.getHeader("Content-Type").values()).containsExactly("application/json");
+    }
+
+    @Test
+    void storedHeadersAreNormalizedAndReplaceTheOnesOpikSets() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        var authorization = "Bearer " + RandomStringUtils.secure().nextAlphanumeric(16);
+        var custom = RandomStringUtils.secure().nextAlphanumeric(16);
         var headers = new HashMap<String, String>();
-        headers.put("authorization", "Bearer stored");
+        headers.put("authorization", authorization);
+        headers.put("accept-encoding", "br");
+        headers.put("content-type", "text/plain");
+        headers.put("X-Custom", custom);
         headers.put(" ", "no name");
         headers.put("X-Empty", null);
 
         decisionsClient.decide(request(), apiConfig(headers)).block();
 
-        var sent = wireMock.server().getAllServeEvents().getFirst().getRequest();
-        assertThat(sent.getHeaders().getHeader("Authorization").values()).containsExactly("Bearer stored");
-        assertThat(sent.containsHeader("X-Empty")).isFalse();
+        var sent = wireMock.server().getAllServeEvents().getFirst().getRequest().getHeaders();
+        assertThat(sent.getHeader("Authorization").values()).containsExactly(authorization);
+        assertThat(sent.getHeader("Accept-Encoding").values()).containsExactly("br");
+        // the body is always JSON, so its type is the one sent
+        assertThat(sent.getHeader("Content-Type").values()).containsExactly("application/json");
+        assertThat(sent.getHeader("X-Custom").values()).containsExactly(custom);
+        assertThat(sent.keys()).doesNotContain(" ", "X-Empty");
     }
 
     @ParameterizedTest
