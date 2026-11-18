@@ -52,6 +52,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -179,6 +180,13 @@ class TracesFilterByTopicResourceTest {
         this.connectionFactory = injector.getInstance(ConnectionFactory.class);
         this.opikConfig = opikConfig;
         this.topics = new TopicsReadTestUtils(wireMock.server(), client, baseUrl, projectClient, template, opikConfig);
+    }
+
+    @AfterAll
+    void afterAll() {
+        clickHouse.stop();
+        zookeeper.stop();
+        network.close();
     }
 
     @AfterEach
