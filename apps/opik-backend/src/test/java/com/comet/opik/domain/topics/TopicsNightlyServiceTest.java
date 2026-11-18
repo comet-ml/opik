@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -216,9 +217,12 @@ class TopicsNightlyServiceTest {
     @DisplayName("a project whose lock is taken after the budget's end is not_reached: no run starts, and its lock "
             + "and the run slot are given back")
     void lockTakenAfterBudgetEnd() {
-        config.getNightly().setBudget(io.dropwizard.util.Duration.seconds(1));
+        // The test owns the clock: it stands still until the project's lock is taken, then jumps past the budget.
+        var clock = new AtomicReference<>(Instant.now());
+        service.now = clock::get;
+        config.getNightly().setBudget(io.dropwizard.util.Duration.minutes(10));
         doAnswer(invocation -> {
-            Thread.sleep(1_200);
+            clock.set(clock.get().plus(Duration.ofHours(1)));
             return Mono.just(true);
         }).when(lockService).lockUsingToken(eq(TopicsProjectRunner.projectLock(started)), any());
 
