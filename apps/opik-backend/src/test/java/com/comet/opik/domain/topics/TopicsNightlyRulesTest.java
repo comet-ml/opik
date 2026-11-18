@@ -174,6 +174,24 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
+        @DisplayName("two new names equal in their first 255 characters form one topic with the capped name")
+        void cappedNamesMerge() {
+            var state = state(0, topic("A"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var stem = "w".repeat(TopicText.MAX_NAME_LENGTH);
+            var outcomes = force(state, List.of(group(0, 60, 0.95), group(1, 50, 0.95)), topics(state), map, 10,
+                    named(Map.of("naming", newTopics(
+                            "{\"name\": \"" + stem + "x".repeat(45) + "\", \"definition\": \"F.\", \"clusters\": [0]}, "
+                                    + "{\"name\": \"" + stem + "y".repeat(45)
+                                    + "\", \"definition\": \"G.\", \"clusters\": [1]}"))));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1),
+                    new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 1));
+            assertThat(state.liveCount()).isEqualTo(2);
+            assertThat(state.topic(1).getName()).isEqualTo(stem);
+        }
+
+        @Test
         @DisplayName("a verified assign joins the topic; a rejected one goes to the second, new-only call")
         void assigns() {
             var state = state(0, topic("A"), topic("B"));
