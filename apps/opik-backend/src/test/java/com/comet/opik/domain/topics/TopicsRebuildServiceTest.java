@@ -496,6 +496,11 @@ class TopicsRebuildServiceTest {
             }
 
             @Override
+            public Update update(NightState state, NightWindow window, int maxTopics, Context context) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public Optional<Labeller> labeller(List<TopicPrototype> prototypes) {
                 return Optional.empty();
             }

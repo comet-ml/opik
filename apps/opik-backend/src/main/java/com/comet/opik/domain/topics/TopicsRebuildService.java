@@ -114,10 +114,15 @@ public class TopicsRebuildService {
 
     /** A NaN or infinite value fails too. */
     static boolean isUnit(@NonNull float[] values) {
-        return values.length == DIMENSIONS && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
+        return isUnit(values, DIMENSIONS);
     }
 
-    private static double norm(float[] values) {
+    /** As {@link #isUnit(float[])}, for {@code dimensions} values: the night's check of its prototypes. */
+    static boolean isUnit(@NonNull float[] values, int dimensions) {
+        return values.length == dimensions && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
+    }
+
+    static double norm(float[] values) {
         double sum = 0;
         for (float value : values) {
             sum += (double) value * value;
@@ -368,6 +373,12 @@ public class TopicsRebuildService {
             try {
                 // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
                 var answer = read.apply(output);
+                if (answer == null) {
+                    metrics.qwen(workspaceId, call, "bad_answer");
+                    log.warn("Topics run '{}' answer could not be read, call '{}', project '{}'", runId, tag,
+                            projectId);
+                    return null;
+                }
                 metrics.qwen(workspaceId, call, "ok");
                 return answer;
             } catch (TopicsRunException exception) {
@@ -379,6 +390,8 @@ public class TopicsRebuildService {
         private Duration deadline(TopicAlgorithm.Call call) {
             return switch (call) {
                 case AUTHOR -> config.getBuild().getQwenDeadline().toJavaDuration();
+                case NAMING -> config.getBuild().getNamingDeadline().toJavaDuration();
+                case VERIFY -> config.getBuild().getVerifyDeadline().toJavaDuration();
             };
         }
 

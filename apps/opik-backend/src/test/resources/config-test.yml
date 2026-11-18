@@ -1029,6 +1029,8 @@ topics:
     windowDays: 30
     maxVectors: 100000
     qwenDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
     runsRetention: 90d
 
 # Python evaluator configuration

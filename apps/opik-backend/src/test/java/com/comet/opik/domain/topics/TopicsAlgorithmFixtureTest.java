@@ -111,6 +111,8 @@ class TopicsAlgorithmFixtureTest {
         // The fixture's summaries list up to 3 repeated texts, then the nearest ones, 5 in all.
         var standExamples = GroupSummaries.authorExamples(fixture.intents, fixture.vectors,
                 fixture.sklearnTraceLabels(merged), fixture.centres, D, 3, 2);
+        var nightSummaries = GroupSummaries.summarize(fixture.intents, fixture.vectors,
+                fixture.sklearnTraceLabels(merged), fixture.centres, D);
         assertThat(summaries).hasSize(expected.size());
         for (int j = 0; j < summaries.size(); j++) {
             var actual = summaries.get(j);
@@ -119,6 +121,11 @@ class TopicsAlgorithmFixtureTest {
             assertThat(actual.size()).isEqualTo(want.get("size").asInt());
             assertThat(actual.share()).isEqualTo(want.get("share").asDouble());
             assertThat(standExamples.get(j)).containsExactlyElementsOf(TopicsFixture.strings(want.get("examples")));
+            // The night's summary of the same group: its tightness, and the same examples by the same rule.
+            var night = nightSummaries.get(j);
+            assertThat(night.size()).isEqualTo(actual.size());
+            assertThat(night.tightness()).isCloseTo(want.get("coherence").asDouble(), within(1e-9));
+            assertThat(night.examples()).containsExactlyElementsOf(TopicsFixture.strings(want.get("examples")));
         }
         var examples = GroupSummaries.authorExamples(fixture.intents, fixture.vectors,
                 fixture.sklearnTraceLabels(merged), fixture.centres, D, 5, 5);
