@@ -17,6 +17,7 @@ import {
   EXPERIMENTS_LIST_POLLING_INTERVAL_MS,
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import { Filters } from "@/types/filters";
 import { PinningConfig } from "@/shared/DataTable/DataTable";
 
 const MAX_PINNED_FETCH_SIZE = 100;
@@ -27,6 +28,7 @@ type UseExperimentsPinningParams = {
   projectId?: string;
   pinnedIds: string[];
   setPinnedIds: Dispatch<SetStateAction<string[]>>;
+  filters?: Filters;
   enabled: boolean;
   polling?: boolean;
 };
@@ -37,6 +39,7 @@ const useExperimentsPinning = ({
   projectId,
   pinnedIds,
   setPinnedIds,
+  filters,
   enabled,
   polling = false,
 }: UseExperimentsPinningParams) => {
@@ -50,6 +53,7 @@ const useExperimentsPinning = ({
       workspaceName,
       projectId,
       experimentIds: missingIds,
+      filters,
       page: 1,
       size: MAX_PINNED_FETCH_SIZE,
     },

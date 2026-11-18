@@ -1,9 +1,18 @@
 import React, { useCallback, useRef, useState } from "react";
 
 import { Plus } from "lucide-react";
-import { JsonParam, useQueryParam } from "use-query-params";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+  useQueryParams,
+  withDefault,
+} from "use-query-params";
 
 import { Button } from "@/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
+import { EVALUATION_METHOD } from "@/types/datasets";
 import { useActiveProjectId } from "@/store/AppStore";
 import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -16,10 +25,53 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import emptyExperimentsLightUrl from "/images/empty-experiments-light.svg";
 import emptyExperimentsDarkUrl from "/images/empty-experiments-dark.svg";
 
+const TABS = [
+  {
+    key: "test_suites",
+    label: "Test suites",
+    evaluationMethod: EVALUATION_METHOD.TEST_SUITE,
+  },
+  {
+    key: "datasets",
+    label: "Datasets",
+    evaluationMethod: EVALUATION_METHOD.DATASET,
+  },
+];
+const DEFAULT_TAB = TABS[0];
+
 const ExperimentsPage: React.FC = () => {
   const activeProjectId = useActiveProjectId();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
+  // The tabs share the table's URL params, and the URL wins over each tab's
+  // saved state, so switching tabs clears them to let the new tab load its own.
+  const [{ tab }, setTabQuery] = useQueryParams(
+    {
+      tab: withDefault(StringParam, DEFAULT_TAB.key),
+      search: StringParam,
+      filters: JsonParam,
+      page: NumberParam,
+      groups: JsonParam,
+      limits: JsonParam,
+    },
+    { updateType: "replaceIn" },
+  );
+  const activeTab = TABS.find(({ key }) => key === tab) ?? DEFAULT_TAB;
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setTabQuery({
+        tab: value,
+        search: undefined,
+        filters: undefined,
+        page: undefined,
+        groups: undefined,
+        limits: undefined,
+      });
+    },
+    [setTabQuery],
+  );
+
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
   );
@@ -85,7 +137,33 @@ const ExperimentsPage: React.FC = () => {
             docsUrl={buildDocsUrl("/evaluation/overview")}
           />
         ) : (
-          <GeneralDatasetsTab isExistencePending={isExistencePending} />
+          <>
+            <PageBodyStickyContainer
+              className="pb-1 pt-3"
+              direction="horizontal"
+              limitWidth
+            >
+              <Tabs value={activeTab.key} onValueChange={handleTabChange}>
+                <TabsList variant="segmented-primary" className="w-fit">
+                  {TABS.map(({ key, label }) => (
+                    <TabsTrigger
+                      key={key}
+                      variant="segmented-primary"
+                      value={key}
+                      className="px-1.5 py-0"
+                    >
+                      {label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </PageBodyStickyContainer>
+            <GeneralDatasetsTab
+              key={activeTab.key}
+              evaluationMethod={activeTab.evaluationMethod}
+              isExistencePending={isExistencePending}
+            />
+          </>
         )}
         <AddExperimentDialog
           key={resetDialogKeyRef.current}
