@@ -76,6 +76,7 @@ public class CipxTraceIdentityDAO {
             long agentsLinked,
             long agentsAmbiguous,
             @NonNull String cipxVersion,
+            @NonNull String sessionSource,
             @NonNull Instant lastUpdatedAt,
             List<String> skillsScope,
             List<String> skillsRoot,
@@ -166,6 +167,7 @@ public class CipxTraceIdentityDAO {
                     .agentsLinked(asUInt32(session.path("agents_linked"), "agents_linked", rejected))
                     .agentsAmbiguous(asUInt32(session.path("agents_ambiguous"), "agents_ambiguous", rejected))
                     .cipxVersion(session.path("cipx_version").asText(""))
+                    .sessionSource(session.path("session_source").asText(""))
                     .lastUpdatedAt(lastUpdatedAt)
                     .skillsScope(Collections.nCopies(skillsRoot.size(), "repo"))
                     .skillsRoot(skillsRoot)
@@ -234,7 +236,7 @@ public class CipxTraceIdentityDAO {
                  billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                  files_added, files_deleted, lines_added, lines_deleted,
-                 agents_dispatched, agents_linked, agents_ambiguous, cipx_version, last_updated_at,
+                 agents_dispatched, agents_linked, agents_ambiguous, cipx_version, session_source, last_updated_at,
                  `skills.scope`, `skills.root`, `skills.name`, `skills.version_id`, skills_status,
                  `instruction_files.scope`, `instruction_files.path`, `instruction_files.version_id`,
                  instruction_files_status)
@@ -273,6 +275,7 @@ public class CipxTraceIdentityDAO {
                         :agents_linked<item.index>,
                         :agents_ambiguous<item.index>,
                         :cipx_version<item.index>,
+                        :session_source<item.index>,
                         :last_updated_at<item.index>,
                         :skills_scope<item.index>,
                         :skills_root<item.index>,
@@ -312,7 +315,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 40 parameters per row tuple in template order.
+        // (repeats dedup), then 41 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -346,6 +349,7 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.agentsLinked())
                     .bind(index++, row.agentsAmbiguous())
                     .bind(index++, row.cipxVersion())
+                    .bind(index++, row.sessionSource())
                     .bind(index++, ClickHouseDateTimeFormat.formatMicros(row.lastUpdatedAt()))
                     .bind(index++, row.skillsScope().toArray(String[]::new))
                     .bind(index++, row.skillsRoot().toArray(String[]::new))
