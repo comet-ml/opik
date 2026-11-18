@@ -45,6 +45,7 @@ import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -170,6 +171,13 @@ class TopicsReadResourceTest {
         this.opikConfig = opikConfig;
         this.topics = new TopicsReadTestUtils(wireMock.server(), client, baseUrl,
                 new ProjectResourceClient(client, baseUrl, PodamFactoryUtils.newPodamFactory()), template, opikConfig);
+    }
+
+    @AfterAll
+    void afterAll() {
+        clickHouse.stop();
+        zookeeper.stop();
+        network.close();
     }
 
     @AfterEach
