@@ -138,6 +138,48 @@ export const REGISTRY_MODEL = {
   geminiWithoutThinkingOff: 'Gemini 2.5 Pro',
 } as const;
 
+/**
+ * The two OpenAI rows 2.2.148 shipped whose curated `effort` is REFUSED, while
+ * every sibling `gpt-6.x` row accepts it (opik#9608's provider-model sync).
+ *
+ * Deliberately a SECOND list rather than two more `REGISTRY_MODEL` keys. That
+ * map is "one model per panel behaviour, the cheapest member of its class";
+ * these two are neither cheap nor a class — they are two specific ids a
+ * release shipped, named here so the exemption they need is auditable in one
+ * place instead of blending into a list a reader scans for behaviours.
+ *
+ * ## Why they need naming at all
+ *
+ * `llm-model-policy`'s forbidden fragments include `astra` and `gpt-6`,
+ * precisely so no spec can drift onto OpenAI's newest and most expensive
+ * entries. Both ids match. They are registered unbilled on the same basis as
+ * the Claude Opus ids above: the specs using them SELECT the model and READ
+ * the model-settings panel, and never press Run — the playground spec never
+ * submits a completion and the rule-editor spec never submits the form. See
+ * `playground-openai-effort-options-match-catalog.spec.ts`.
+ *
+ * ## Both spellings, on purpose
+ *
+ * The two tables under test are keyed differently — the pickers by display
+ * label, the catalog by provider id — and a spec comparing one against the
+ * other has to be able to name both. `label` is also what the policy guard
+ * matches on, so it cannot be read out of the catalog at run time and must be
+ * written down here; the specs assert the catalog's own label still equals it,
+ * so a re-labelled row fails loudly rather than selecting something else.
+ */
+export const EFFORT_REFUSED_OPENAI_MODELS = [
+  {
+    /** The first OpenAI entry in the catalog as of 2.2.148. */
+    displayName: 'GPT 6.2 Astra',
+    catalogId: 'gpt-6.2-astra',
+  },
+  {
+    /** Its sibling, shipped in the same sync with the same refused shape. */
+    displayName: 'GPT 6.2 Sol',
+    catalogId: 'gpt-6.2-sol',
+  },
+] as const;
+
 export interface ModelRegistryProvidersRef {
   /** The provider types the model pickers will offer, all of them configured. */
   providers: readonly string[];
@@ -199,6 +241,10 @@ export interface ModelRegistryProvidersFixtures {
 export const test = baseTest.extend<ModelRegistryProvidersFixtures>({
   modelRegistryProviders: async ({}, use) => {
     for (const model of Object.values(REGISTRY_MODEL)) registerUnbilledModel(model);
+    // Read through the panels and never run — see EFFORT_REFUSED_OPENAI_MODELS.
+    for (const { displayName } of EFFORT_REFUSED_OPENAI_MODELS) {
+      registerUnbilledModel(displayName);
+    }
 
     const added: string[] = [];
     // Tracked per provider rather than inferred from "the runner holds some

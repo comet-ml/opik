@@ -1,4 +1,4 @@
-export { test, expect } from './scored-group-experiments.fixture';
+export { test, expect } from './govcloud-bedrock-cost-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -316,6 +316,7 @@ export {
   REGISTRY_PROVIDERS,
   PROVIDER_GROUP,
   REGISTRY_MODEL,
+  EFFORT_REFUSED_OPENAI_MODELS,
 } from './model-registry-providers.fixture';
 export type {
   ExperimentMessagePanelRef,
@@ -747,3 +748,8 @@ export type {
   ScoredGroupExperimentsFixtures,
 } from './scored-group-experiments.fixture';
 export { SCORED_GROUP_SCORE_NAME } from './scored-group-experiments.fixture';
+export type {
+  GovCloudBedrockCostSeed,
+  GovCloudBedrockCostSpansRef,
+  GovCloudBedrockCostSpansFixtures,
+} from './govcloud-bedrock-cost-spans.fixture';
