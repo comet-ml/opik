@@ -1597,8 +1597,8 @@ class AutomationRuleEvaluatorsResourceTest {
             }
             var typeChange = automationRuleEvaluatorUpdate.toBuilder().projectIds(Set.of(projectId)).build();
             var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, """
-                    Evaluator type cannot be changed from '%s' to '%s'. \
-                    Delete the rule and create a new one with the new type."""
+                    Evaluator type cannot be changed, delete the rule and create a new one with the new type, \
+                    currentType '%s', requestedType '%s'"""
                     .formatted(automationRuleEvaluator.getType().getType(), typeChange.getType().getType()));
 
             try (var actualResponse = evaluatorsResourceClient.updateEvaluator(

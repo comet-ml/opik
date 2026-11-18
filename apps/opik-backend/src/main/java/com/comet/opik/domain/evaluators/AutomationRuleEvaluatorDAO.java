@@ -5,6 +5,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import lombok.Builder;
+import lombok.NonNull;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -47,7 +48,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @Builder(toBuilder = true)
-    record StoredEvaluatorRule(String name, String type) {
+    record StoredEvaluatorRule(@NonNull String name, @NonNull String type) {
     }
 
     @SqlQuery("""

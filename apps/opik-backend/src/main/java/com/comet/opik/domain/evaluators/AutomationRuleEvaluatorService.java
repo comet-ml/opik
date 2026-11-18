@@ -104,8 +104,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     private static final String EVALUATOR_ALREADY_EXISTS = "AutomationRuleEvaluator already exists";
     private static final String EVALUATOR_TYPE_CHANGE_NOT_ALLOWED = """
-            Evaluator type cannot be changed from '%s' to '%s'. \
-            Delete the rule and create a new one with the new type.""";
+            Evaluator type cannot be changed, delete the rule and create a new one with the new type, \
+            currentType '%s', requestedType '%s'""";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
