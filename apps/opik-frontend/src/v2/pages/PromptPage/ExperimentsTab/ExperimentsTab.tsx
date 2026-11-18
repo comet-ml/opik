@@ -495,7 +495,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
-            layout="icon"
+            layout="add"
           />
           <GroupsButton
             columns={FILTER_AND_GROUP_COLUMNS}
