@@ -94,9 +94,11 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("a live topic's size is its count in the labels")
+        @DisplayName("a topic's size is its count in the labels, and a topic retired tonight ends at 0")
         void sizes() {
-            var state = state(0, topic("Quiet"), topic("Busy"));
+            var state = state(0, topic("Quiet"), topic("Busy"), topic("Retired"));
+            state.topic(2).setSize(5);
+            state.retire(2, NightState.RetiredReason.LOW_SHARE);
             var labels = new int[100];
             Arrays.fill(labels, 1);
 
@@ -104,6 +106,7 @@ class TopicsNightlyRulesTest {
 
             assertThat(state.topic(0).getSize()).isZero();
             assertThat(state.topic(1).getSize()).isEqualTo(100);
+            assertThat(state.topic(2).getSize()).isZero();
         }
     }
 
