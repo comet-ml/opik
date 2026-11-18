@@ -58,7 +58,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  *
  * <p>The save commits one MySQL transaction first: the project's state, the new topics, its prototypes and the run as
  * {@code saved}. Then it inserts {@code trace_topics} for the traces it read, retried up to {@value #INSERT_RETRIES}
- * times. A failure before the commit writes nothing but the failed run. The topics' sizes and the run's Other share are those of the traces it read: on a sampled
+ * times. A failure before the commit writes nothing but the failed run. Last, {@link TopicWindowLabelService} labels
+ * the rest of the window with the saved list, until the run's timeout comes near; it also labels the traces of an
+ * insert that still failed. The topics' sizes and the run's Other share are those of the traces it read: on a sampled
  * window, of the sample.
  */
 @Slf4j
@@ -92,6 +94,8 @@ public class TopicsRebuildService {
             Code.SAVE);
     /** The longest the insert after the commit takes: every attempt to its stop, plus the backoffs and some slack. */
     static final Duration INSERT_BOUND = Duration.ofSeconds(READ_SECONDS * (INSERT_RETRIES + 1) + 30);
+    /** The labelling pass after the save ends this long before the run's timeout, so the run returns before it. */
+    static final Duration LABEL_SLACK = Duration.ofSeconds(30);
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -100,6 +104,7 @@ public class TopicsRebuildService {
     private final @NonNull InferenceClient client;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TopicsMetrics metrics;
+    private final @NonNull TopicWindowLabelService labelService;
     private final @NonNull TopicAlgorithm algorithm;
 
     /** How a run ended. {@code errorCode} is null for a saved run. */
@@ -164,11 +169,14 @@ public class TopicsRebuildService {
     }
 
     /**
-     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window. The save
-     * leaves the labels incomplete. Never throws: a failure is recorded on the run and returned.
+     * Builds the project's first topic list for {@code night}, the UTC date whose start ends the window, then labels
+     * the rest of the window until {@code topics.build.projectTimeout} minus {@link #LABEL_SLACK} from the start. The
+     * save leaves the labels incomplete; the pass marks them complete when it finishes, else the first-build job goes on
+     * with it. Never throws: a failure is recorded on the run and returned.
      */
     public Outcome firstBuild(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night) {
+        var deadline = Instant.now().plus(config.getBuild().getProjectTimeout().toJavaDuration()).minus(LABEL_SLACK);
         var run = new Run(runId, workspaceId, projectId, night);
         try {
             run.build();
@@ -178,6 +186,11 @@ public class TopicsRebuildService {
             return run.failed(Code.TIMEOUT, exception);
         } catch (RuntimeException exception) {
             return run.failed(Thread.currentThread().isInterrupted() ? Code.TIMEOUT : Code.INTERNAL, exception);
+        }
+        var pass = labelService.labelWindow(workspaceId, projectId, deadline, TopicWindowLabelService.Trigger.RUN);
+        if (!pass.complete()) {
+            log.info("Topics run '{}' saved, project '{}', but its labelling pass did not finish; the first-build job "
+                    + "goes on with it", runId, projectId);
         }
         return Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
     }
