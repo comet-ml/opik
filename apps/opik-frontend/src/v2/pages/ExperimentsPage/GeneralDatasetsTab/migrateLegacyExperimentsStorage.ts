@@ -19,14 +19,13 @@ const copyIfAbsent = <T>(
   const raw = localStorage.getItem(legacyKey);
   if (raw === null) return;
 
-  let value: T;
   try {
-    value = JSON.parse(raw);
+    localStorage.setItem(newKey, JSON.stringify(transform(JSON.parse(raw))));
   } catch {
-    // A corrupt legacy value must not break the page; the tab falls back to its defaults.
-    return;
+    // Runs during the tab's first render, so a corrupt or wrongly shaped legacy
+    // value (e.g. `{}` where an array is expected) must not throw: skip this
+    // key and let it fall back to its default.
   }
-  localStorage.setItem(newKey, JSON.stringify(transform(value)));
 };
 
 // Before the Test suites / Datasets split, the page saved one set of choices

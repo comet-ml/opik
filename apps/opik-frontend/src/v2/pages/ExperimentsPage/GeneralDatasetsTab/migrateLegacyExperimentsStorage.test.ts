@@ -86,4 +86,18 @@ describe("migrateLegacyExperimentsStorage", () => {
     expect(localStorage.getItem(`${PREFIX}-selected-columns-v2`)).toBeNull();
     expect(localStorage.getItem(`${PREFIX}-columns-order`)).toBeNull();
   });
+
+  it("skips wrongly shaped legacy values and still migrates the rest", () => {
+    setLegacy("selected-columns-v2", {});
+    setLegacy("columns-order", null);
+    setLegacy("columns-sort", [null]);
+    setLegacy("columns-width", { name: 300 });
+
+    expect(migrate).not.toThrow();
+
+    expect(localStorage.getItem(`${PREFIX}-selected-columns-v2`)).toBeNull();
+    expect(localStorage.getItem(`${PREFIX}-columns-order`)).toBeNull();
+    expect(localStorage.getItem(`${PREFIX}-columns-sort`)).toBeNull();
+    expect(read("columns-width")).toEqual({ name: 300 });
+  });
 });
