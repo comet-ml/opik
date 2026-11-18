@@ -29,15 +29,13 @@ interface BaseFeedbackDefinitionsSelectBoxProps {
   onInnerDialogOpenChange?: (open: boolean) => void;
 }
 
-interface SingleSelectFeedbackDefinitionsProps
-  extends BaseFeedbackDefinitionsSelectBoxProps {
+interface SingleSelectFeedbackDefinitionsProps extends BaseFeedbackDefinitionsSelectBoxProps {
   value: string;
   onChange: (value: string) => void;
   multiselect?: false;
 }
 
-interface MultiSelectFeedbackDefinitionsProps
-  extends BaseFeedbackDefinitionsSelectBoxProps {
+interface MultiSelectFeedbackDefinitionsProps extends BaseFeedbackDefinitionsSelectBoxProps {
   value: string[];
   onChange: (value: string[]) => void;
   multiselect: true;

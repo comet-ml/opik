@@ -77,6 +77,9 @@ on:
         description: "The version that was built"
         value: ${{ jobs.set-version.outputs.version }}
 
+permissions:
+  contents: read
+
 jobs:
 
   set-version:
@@ -134,6 +137,9 @@ jobs:
             fi
             
   build-backend:
+    permissions:
+      contents: read
+      packages: write
     needs:
       - set-version
     secrets: inherit
@@ -150,6 +156,9 @@ jobs:
       build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-sandbox-executor-python:
+    permissions:
+      contents: read
+      packages: write
     if: ${{ !inputs.is_adhoc }}
     needs:
       - set-version
@@ -166,6 +175,9 @@ jobs:
       build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-python-backend:
+    permissions:
+      contents: read
+      packages: write
     if: always() && needs.set-version.result == 'success'
     needs:
       - set-version
@@ -197,6 +209,9 @@ jobs:
   #     is_release: ${{ inputs.is_release || false }}
 
   build-frontend:
+    permissions:
+      contents: read
+      packages: write
     needs:
       - set-version
     secrets: inherit

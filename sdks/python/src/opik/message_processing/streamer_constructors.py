@@ -2,6 +2,7 @@ from typing import List, Optional
 
 
 from . import (
+    data_loss,
     queue_consumer,
     messages,
     message_queue,
@@ -27,11 +28,13 @@ def construct_online_streamer(
     message_processor: message_processors.ChainedMessageProcessor,
     url_override: str,
     fallback_replay_manager: replay_manager.ReplayManager,
+    data_loss_tracker: data_loss.DataLossTracker,
 ) -> streamer.Streamer:
     streamer = construct_streamer(
         message_processor=message_processor,
         file_uploader=file_uploader,
         fallback_replay_manager=fallback_replay_manager,
+        data_loss_tracker=data_loss_tracker,
         n_consumers=n_consumers,
         use_batching=use_batching,
         use_attachment_extraction=use_attachment_extraction,
@@ -60,6 +63,7 @@ def construct_streamer(
     use_batching: bool,
     use_attachment_extraction: bool,
     max_queue_size: Optional[int],
+    data_loss_tracker: Optional[data_loss.DataLossTracker] = None,
 ) -> streamer.Streamer:
     message_queue_: message_queue.MessageQueue[messages.BaseMessage] = (
         message_queue.MessageQueue(max_length=max_queue_size)
@@ -89,6 +93,7 @@ def construct_streamer(
             use_attachment_extraction
         ),
         fallback_replay_manager=fallback_replay_manager,
+        data_loss_tracker=data_loss_tracker or data_loss.DataLossTracker(),
     )
 
     return streamer_

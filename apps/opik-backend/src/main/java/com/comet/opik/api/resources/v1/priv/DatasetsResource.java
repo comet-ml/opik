@@ -297,6 +297,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetByIdentifier", summary = "Get dataset by name", description = "Get dataset by name", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(Dataset.View.Public.class)
     public Response getDatasetByIdentifier(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
@@ -323,6 +324,7 @@ public class DatasetsResource {
     @Operation(operationId = "expandDataset", summary = "Expand dataset with synthetic samples", description = "Generate synthetic dataset samples using LLM based on existing data patterns", responses = {
             @ApiResponse(responseCode = "200", description = "Generated synthetic samples", content = @Content(schema = @Schema(implementation = DatasetExpansionResponse.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response expandDataset(
             @PathParam("id") UUID datasetId,
@@ -342,6 +344,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetItemById", summary = "Get dataset item by id", description = "Get dataset item by id", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item resource", content = @Content(schema = @Schema(implementation = DatasetItem.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetItem.View.Public.class)
     public Response getDatasetItemById(@PathParam("itemId") @NotNull UUID itemId) {
 
@@ -362,6 +365,7 @@ public class DatasetsResource {
     @Operation(operationId = "batchUpdateDatasetItems", summary = "Batch update dataset items", description = "Update multiple dataset items", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response batchUpdate(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatchUpdate.class))) @Valid @NotNull DatasetItemBatchUpdate batchUpdate) {
@@ -394,6 +398,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "404", description = "Dataset item not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response patchDatasetItem(
             @PathParam("itemId") @NotNull UUID itemId,
@@ -416,6 +421,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetItems", summary = "Get dataset items", description = "Get dataset items", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset items resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetItem.View.Public.class)
     public Response getDatasetItems(
             @PathParam("id") UUID id,
@@ -460,6 +466,7 @@ public class DatasetsResource {
                     ErrorMessage.class
             }), maxItems = 2000)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public ChunkedOutput<JsonNode> streamDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
             @Context HttpServletResponse httpResponse) {
@@ -565,6 +572,7 @@ public class DatasetsResource {
             the fields are null, carry-forward rows are read from the destination's prior version.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatch.class))) @JsonView({
@@ -604,6 +612,7 @@ public class DatasetsResource {
     @Operation(operationId = "createDatasetItemsFromTraces", summary = "Create dataset items from traces", description = "Create dataset items from traces with enriched metadata", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_EDIT, WorkspaceUserPermission.PROJECT_DATA_VIEW})
     @RateLimited
     public Response createDatasetItemsFromTraces(
             @PathParam("dataset_id") UUID datasetId,
@@ -631,6 +640,7 @@ public class DatasetsResource {
     @Operation(operationId = "createDatasetItemsFromSpans", summary = "Create dataset items from spans", description = "Create dataset items from spans with enriched metadata", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_EDIT, WorkspaceUserPermission.PROJECT_DATA_VIEW})
     @RateLimited
     public Response createDatasetItemsFromSpans(
             @PathParam("dataset_id") UUID datasetId,
@@ -660,6 +670,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createDatasetItemsFromCsv(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
@@ -692,6 +703,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "202", description = "Accepted - JSON processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createDatasetItemsFromJson(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
@@ -740,6 +752,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "404", description = "Dataset or version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Version conflict - baseVersion is not the latest", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     @JsonView(DatasetVersion.View.Public.class)
     public Response applyDatasetItemChanges(
@@ -823,6 +836,7 @@ public class DatasetsResource {
     @Operation(operationId = "findDatasetItemsWithExperimentItems", summary = "Find dataset items with experiment items", description = "Find dataset items with experiment items", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_VIEW, WorkspaceUserPermission.EXPERIMENT_VIEW})
     @JsonView(ExperimentItem.View.Compare.class)
     public Response findDatasetItemsWithExperimentItems(
             @PathParam("id") UUID datasetId,
@@ -918,6 +932,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetExperimentItemsStats", summary = "Get experiment items stats for dataset", description = "Get experiment items stats for dataset", responses = {
             @ApiResponse(responseCode = "200", description = "Experiment items stats resource", content = @Content(schema = @Schema(implementation = com.comet.opik.api.ProjectStats.class)))
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_VIEW, WorkspaceUserPermission.EXPERIMENT_VIEW})
     @JsonView({com.comet.opik.api.ProjectStats.ProjectStatItem.View.Public.class})
     @SuppressWarnings("unchecked")
     public Response getDatasetExperimentItemsStats(
@@ -953,6 +968,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetItemsOutputColumns", summary = "Get dataset items output columns", description = "Get dataset items output columns", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item output columns", content = @Content(schema = @Schema(implementation = PageColumns.class)))
     })
+    @RequiredPermissions({WorkspaceUserPermission.DATASET_VIEW, WorkspaceUserPermission.EXPERIMENT_VIEW})
     public Response getDatasetItemsOutputColumns(
             @PathParam("id") @NotNull UUID datasetId,
             @QueryParam("experiment_ids") String experimentIdsQueryParam) {
@@ -997,6 +1013,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetExportJob.View.Public.class)
     @RateLimited
     public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
@@ -1029,6 +1046,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetExportJob.View.Public.class)
     public Response getDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
 
@@ -1051,6 +1069,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -1071,6 +1090,7 @@ public class DatasetsResource {
     @Operation(operationId = "getDatasetExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
             @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetExportJob.class))))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetExportJob.View.Public.class)
     public Response getDatasetExportJobs() {
 
@@ -1095,6 +1115,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "400", description = "Export job is not ready for download"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     public Response downloadDatasetExport(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

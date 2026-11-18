@@ -111,6 +111,8 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: "26"
+          cache: npm
+          cache-dependency-path: apps/opik-frontend/package-lock.json
 
       - name: Install dependencies
         if: steps.resolve.outputs.has_token == 'true'
@@ -163,8 +165,8 @@ jobs:
           echo "Staged ${count} TypeScript files from the plugin; manifest present and named correctly."
 
       # All three run even if an earlier one fails, so a PR sees every problem in
-      # one go. eslint is scoped to the plugin: core files are already linted by
-      # the code quality workflow.
+      # one go. oxlint and oxfmt are scoped to the plugin: core files are already
+      # checked by the code quality workflow.
       - name: Typecheck, lint and validate dependencies
         if: steps.resolve.outputs.has_token == 'true'
         working-directory: apps/opik-frontend
@@ -176,8 +178,13 @@ jobs:
           npm run typecheck || failed=1
           echo "::endgroup::"
 
-          echo "::group::eslint (plugin sources)"
-          npx eslint src/plugins/ai-spend --max-warnings=0 || failed=1
+          echo "::group::oxlint and oxfmt (plugin sources)"
+          # Pass the files, not the folder: both tools skip gitignored paths when
+          # they walk a folder, and src/plugins/ai-spend is gitignored. -L follows a
+          # symlinked plugin, as in the local reproduction below.
+          mapfile -t plugin_files < <(find -L src/plugins/ai-spend -type f \( -name '*.ts' -o -name '*.tsx' \))
+          npx oxlint --max-warnings=0 "${plugin_files[@]}" || failed=1
+          npx oxfmt --check "${plugin_files[@]}" || failed=1
           echo "::endgroup::"
 
           echo "::group::dependency-cruiser"
@@ -185,6 +192,6 @@ jobs:
           echo "::endgroup::"
 
           if [ "${failed}" -ne 0 ]; then
-            echo "::error title=Frontend checks fail with the ai-spend plugin staged::Reproduce locally: symlink or copy a sibling opik-plugin-ai-spend checkout's src/ into apps/opik-frontend/src/plugins/ai-spend, then from apps/opik-frontend run: npm run typecheck && npx eslint src/plugins/ai-spend --max-warnings=0 && npm run deps:validate. (bash scripts/dev-runner.sh --lint-fe is close but not equivalent -- it lints the whole src tree with --fix, plus stylelint, none of which this check runs.) Keep the shared surface backward compatible, or land the matching plugin change first and add 'ai-spend-plugin-ref: <branch>' to this PR body."
+            echo "::error title=Frontend checks fail with the ai-spend plugin staged::Reproduce locally: symlink or copy a sibling opik-plugin-ai-spend checkout's src/ into apps/opik-frontend/src/plugins/ai-spend, then from apps/opik-frontend run: npm run typecheck && npm run deps:validate, then run npx oxlint --max-warnings=0 and npx oxfmt --check on the plugin's .ts/.tsx files (pass the files: a folder path is skipped because it is gitignored). (bash scripts/dev-runner.sh --lint-fe is close but not equivalent -- it lints and formats the whole src tree with --fix, plus stylelint, none of which this check runs.) Keep the shared surface backward compatible, or land the matching plugin change first and add 'ai-spend-plugin-ref: <branch>' to this PR body."
             exit 1
           fi

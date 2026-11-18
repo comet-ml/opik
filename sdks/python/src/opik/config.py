@@ -420,12 +420,6 @@ class OpikConfig(pydantic_settings.BaseSettings):
     def is_localhost_installation(self) -> bool:
         return "localhost" in self.url_override
 
-    @property
-    def guardrails_backend_host(self) -> str:
-        if self.guardrails_url_override is not None:
-            return self.guardrails_url_override
-        return url_helpers.get_base_url(self.url_override) + "guardrails/"
-
     @pydantic.field_validator("api_key", mode="before")
     @classmethod
     def _normalize_api_key(cls, value: Optional[str]) -> Optional[str]:

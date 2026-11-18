@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import PromptModelSelect from "./PromptModelSelect";
@@ -77,10 +85,10 @@ const makeOverflow = (listViewport: HTMLElement) => {
 };
 
 describe("PromptModelSelect", () => {
-  let scrollBy: ReturnType<typeof vi.fn>;
+  let scrollBy: Mock<Element["scrollBy"]>;
 
   beforeEach(() => {
-    scrollBy = vi.fn();
+    scrollBy = vi.fn<Element["scrollBy"]>();
     vi.spyOn(Element.prototype, "scrollBy").mockImplementation(scrollBy);
   });
 
@@ -115,11 +123,29 @@ describe("PromptModelSelect", () => {
     const { onChange } = renderPicker();
 
     fireEvent.mouseEnter(screen.getByText("Anthropic"));
-    fireEvent.pointerUp(
-      within(screen.getByRole("dialog")).getByRole("option", {
-        name: "Claude Opus 4.1",
-      }),
+    const option = within(screen.getByRole("dialog")).getByRole("option", {
+      name: "Claude Opus 4.1",
+    });
+    // Radix Select picks on pointerup only for a mouse press; touch and pen pick on click.
+    fireEvent.pointerDown(option, { pointerType: "mouse" });
+    fireEvent.pointerUp(option, { pointerType: "mouse" });
+
+    expect(onChange).toHaveBeenCalledWith(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+      PROVIDER_TYPE.ANTHROPIC,
     );
+  });
+
+  it("names the picked model's own provider when a search hid the hovered row", () => {
+    const { onChange } = renderPicker();
+
+    fireEvent.mouseEnter(screen.getByText("OpenAI"));
+    fireEvent.change(screen.getByPlaceholderText("Search model"), {
+      target: { value: "Opus" },
+    });
+    const option = screen.getByRole("option", { name: "Claude Opus 4.1" });
+    fireEvent.pointerDown(option, { pointerType: "mouse" });
+    fireEvent.pointerUp(option, { pointerType: "mouse" });
 
     expect(onChange).toHaveBeenCalledWith(
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,

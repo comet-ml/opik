@@ -352,11 +352,10 @@ const highlightedMessages = (
   registry: Map<string, FakeHighlight>,
   name: string,
 ) =>
-  (registry.get(name)?.ranges ?? []).map(
-    (range) =>
-      range.startContainer.parentElement
-        ?.closest("[data-trace-message-id]")
-        ?.getAttribute("data-trace-message-id"),
+  (registry.get(name)?.ranges ?? []).map((range) =>
+    range.startContainer.parentElement
+      ?.closest("[data-trace-message-id]")
+      ?.getAttribute("data-trace-message-id"),
   );
 
 const searchFor = (value: string) =>

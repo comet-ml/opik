@@ -41,7 +41,7 @@ const ollieChats = new Map<
 >();
 
 const useTrackOllieSession = (chatKeyRef: React.MutableRefObject<string>) => {
-  const unsubscribe = useRef<() => void>();
+  const unsubscribe = useRef<(() => void) | undefined>(undefined);
   useEffect(() => () => unsubscribe.current?.(), []);
   return useCallback(() => {
     unsubscribe.current?.();
@@ -180,7 +180,9 @@ const useAnnotatorViewEditor = ({
 
   const [isDrafting, setIsDrafting] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
-  const draftingTimer = useRef<ReturnType<typeof setTimeout>>();
+  const draftingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const stopDrafting = useCallback(() => {
     clearTimeout(draftingTimer.current);
     setIsDrafting(false);

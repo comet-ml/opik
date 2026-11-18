@@ -1,9 +1,10 @@
 import dataclasses
 import logging
 import math
+import numbers
 import statistics
 from collections import defaultdict
-from typing import List, Optional, Dict
+from typing import Any, List, Optional, Dict
 
 from opik import _logging
 from opik.evaluation import test_result
@@ -73,9 +74,10 @@ def calculate_aggregated_statistics(
                 failed_by_name[score_result.name] += 1
                 continue
 
-            # Only include successful scores with valid values
-            if _is_valid_score_value(score_result.value):
-                scores_by_name[score_result.name].append(score_result.value)
+            # Only include successful scores with valid values, as plain floats:
+            # `statistics` can't mix numpy scalars with floats.
+            if is_valid_score_value(score_result.value):
+                scores_by_name[score_result.name].append(float(score_result.value))
 
     if failed_by_name:
         _logging.log_once_at_level(logging.WARNING, FAILED_SCORES_MESSAGE, LOGGER)
@@ -98,6 +100,10 @@ def calculate_aggregated_statistics(
     return aggregated_scores
 
 
-def _is_valid_score_value(value: float) -> bool:
-    """Check if a score value is valid for statistical calculations."""
-    return isinstance(value, (int, float)) and math.isfinite(value)
+def is_valid_score_value(value: Any) -> bool:
+    """Check if a score value is valid for statistical calculations.
+
+    Any finite real number is, including numpy scalars such as ``np.float32``
+    and ``np.int64``.
+    """
+    return isinstance(value, numbers.Real) and math.isfinite(value)

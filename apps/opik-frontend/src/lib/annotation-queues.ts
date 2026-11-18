@@ -7,6 +7,7 @@ import { isObjectThread } from "@/lib/traces";
 import { CommentItem, CommentItems } from "@/types/comment";
 import {
   findValueByAuthor,
+  getAuthorName,
   hasAnyValueByAuthor,
   hasValuesByAuthor,
 } from "@/lib/feedback-scores";
@@ -167,7 +168,9 @@ export const getDistinctAnnotatorCount = (
   (item.feedback_scores || []).forEach((score) => {
     if (!feedbackScoreNames.includes(score.name)) return;
     if (hasValuesByAuthor(score)) {
-      Object.keys(score.value_by_author).forEach((a) => authors.add(a));
+      Object.entries(score.value_by_author).forEach(([key, entry]) =>
+        authors.add(getAuthorName(key, entry)),
+      );
     } else if (score.last_updated_by) {
       authors.add(score.last_updated_by);
     }

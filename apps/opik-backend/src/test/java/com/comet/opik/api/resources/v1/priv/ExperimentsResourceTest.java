@@ -56,6 +56,7 @@ import com.comet.opik.api.resources.utils.ExperimentsTestUtils;
 import com.comet.opik.api.resources.utils.ListComparators;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProtectedEndpoint;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -177,6 +178,9 @@ import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryPara
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_CREATE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -421,6 +425,49 @@ class ExperimentsResourceTest {
             try (var response = experimentResourceClient.callCreate(experiment, apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
+        }
+
+        static Stream<ProtectedEndpoint> protectedEndpoints() {
+            var base = "/v1/private/experiments";
+            var id = UUID.randomUUID();
+            return Stream.of(
+                    ProtectedEndpoint.get(base, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + id, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base, EXPERIMENT_CREATE),
+                    ProtectedEndpoint.put(base + "/cancel", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/execute", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.patch(base + "/" + id, EXPERIMENT_CREATE),
+                    ProtectedEndpoint.patch(base + "/batch", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/delete", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/finish", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/items", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.post(base + "/items/delete", EXPERIMENT_CREATE),
+                    ProtectedEndpoint.put(base + "/items/bulk", EXPERIMENT_CREATE, TRACE_SPAN_THREAD_LOG),
+                    ProtectedEndpoint.get(base + "/groups", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/groups/aggregations", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base + "/stream", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/items/" + id, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.post(base + "/items/stream", EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/feedback-scores/names", EXPERIMENT_VIEW));
+        }
+
+        @ParameterizedTest
+        @MethodSource("protectedEndpoints")
+        @DisplayName("Experiment endpoints pass exactly their required permissions to auth endpoint")
+        void annotatedEndpointPassesExactlyItsRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+            endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
+        }
+
+        @ParameterizedTest
+        @MethodSource("permissionDenials")
+        @DisplayName("Experiment endpoints return 403 when a required permission is denied")
+        void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> permissionDenials() {
+            return ProtectedEndpoint.permissionDenials(protectedEndpoints());
         }
     }
 
@@ -1490,6 +1537,65 @@ class ExperimentsResourceTest {
             return Stream.of(
                     Arguments.of(Operator.IS_NOT_EMPTY, true),
                     Arguments.of(Operator.IS_EMPTY, false));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when filtering by evaluation method, then find, groups and group aggregations return only matching experiments")
+        void findByFilterEvaluationMethod(Operator operator, EvaluationMethod expectedMethod) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetExperiment = generateExperiment().toBuilder()
+                    .evaluationMethod(EvaluationMethod.DATASET)
+                    .build();
+            var testSuiteExperiment = generateExperiment().toBuilder()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .build();
+            experimentResourceClient.create(datasetExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(testSuiteExperiment, apiKey, workspaceName);
+
+            var expectedExperiment = expectedMethod == EvaluationMethod.TEST_SUITE
+                    ? testSuiteExperiment
+                    : datasetExperiment;
+            var expectedDatasetId = getAndAssert(expectedExperiment.id(), expectedExperiment, workspaceName, apiKey)
+                    .datasetId()
+                    .toString();
+
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.EVALUATION_METHOD)
+                    .operator(operator)
+                    .value(EvaluationMethod.TEST_SUITE.getValue())
+                    .build());
+            var groups = List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build());
+
+            var actualPage = experimentResourceClient.findExperiments(1, 10, null, null, null, null, false, null,
+                    null, filters, apiKey, workspaceName, HttpStatus.SC_OK);
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).extracting(Experiment::id).containsExactly(expectedExperiment.id());
+
+            var actualGroups = experimentResourceClient.findGroups(groups, Set.of(ExperimentType.REGULAR), filters,
+                    null,
+                    apiKey,
+                    workspaceName, HttpStatus.SC_OK);
+            assertThat(actualGroups.content()).containsOnlyKeys(expectedDatasetId);
+
+            var actualAggregations = experimentResourceClient.findGroupsAggregations(groups,
+                    Set.of(ExperimentType.REGULAR),
+                    filters, null,
+                    apiKey, workspaceName, HttpStatus.SC_OK);
+            assertThat(actualAggregations.content()).containsOnlyKeys(expectedDatasetId);
+            assertThat(actualAggregations.content().get(expectedDatasetId).aggregations().experimentCount())
+                    .isEqualTo(1L);
+        }
+
+        private Stream<Arguments> findByFilterEvaluationMethod() {
+            return Stream.of(
+                    Arguments.of(Operator.EQUAL, EvaluationMethod.TEST_SUITE),
+                    Arguments.of(Operator.NOT_EQUAL, EvaluationMethod.DATASET));
         }
 
         @ParameterizedTest

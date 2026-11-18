@@ -23,6 +23,7 @@ import com.comet.opik.infrastructure.llm.customllm.AuthTokenProvider;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmClientGenerator;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.gemini.GeminiClientGenerator;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
@@ -481,6 +482,20 @@ class LlmProviderFactoryTest {
                 RELAXED_GUARD);
 
         assertThat(llmProviderFactory.getLlmProvider(model.toString())).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
+
+    @ParameterizedTest
+    @MethodSource("decisionModels")
+    @DisplayName("getLlmProvider returns the provider the decisions catalog names, so the key matches the client")
+    void testGetLlmProvider_matchesTheDecisionsCatalog(DecisionModels.DecisionModel model) {
+        var llmProviderFactory = new LlmProviderFactoryImpl(mock(LlmProviderApiKeyService.class),
+                createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai"), registryService, RELAXED_GUARD);
+
+        assertThat(llmProviderFactory.getLlmProvider(model.name())).isEqualTo(model.provider());
+    }
+
+    static Stream<DecisionModels.DecisionModel> decisionModels() {
+        return DecisionModels.ALL.stream();
     }
 
     @Test

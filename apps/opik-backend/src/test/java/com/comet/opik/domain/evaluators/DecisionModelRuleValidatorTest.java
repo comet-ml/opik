@@ -9,6 +9,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudg
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelApi;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class DecisionModelRuleValidatorTest {
 
     private static final String JEV_MODEL = "~typesafe/jev-latest";
+    private static final String LUNA_MODEL = "gpt-6-luna";
 
     private static final LlmAsJudgeMessage USER_MESSAGE = LlmAsJudgeMessage.builder()
             .role(ChatMessageType.USER)
@@ -124,6 +126,75 @@ class DecisionModelRuleValidatorTest {
         assertThatThrownBy(() -> validator.validate(rule))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Thread rules don't support decisions models");
+    }
+
+    @ParameterizedTest(name = "{0}, api {1}")
+    @MethodSource
+    void acceptsValidDecisionsRules(String model, LlmAsJudgeModelApi api) {
+        var code = code(JEV_MODEL, List.of(USER_MESSAGE), VARIABLES, List.of(BOOLEAN_SCORE)).toBuilder()
+                .model(LlmAsJudgeModelParameters.builder().name(model).api(api).build())
+                .build();
+
+        assertThatCode(() -> validator.validate(traceRule(code))).doesNotThrowAnyException();
+    }
+
+    static Stream<Arguments> acceptsValidDecisionsRules() {
+        return Stream.of(
+                Arguments.of(JEV_MODEL, null),
+                Arguments.of(JEV_MODEL, LlmAsJudgeModelApi.DECISIONS),
+                Arguments.of(LUNA_MODEL, LlmAsJudgeModelApi.DECISIONS));
+    }
+
+    @Test
+    void checksGpt6LunaRulesOnlyWhenTheyAskForTheDecisionsApi() {
+        // Numeric score: invalid for a decisions model, fine for a chat judge.
+        var chatCode = code(LUNA_MODEL, List.of(USER_MESSAGE), VARIABLES,
+                List.of(score("quality", LlmAsJudgeOutputSchemaType.DOUBLE)));
+        var decisionsCode = chatCode.toBuilder().model(decisionsModel(LUNA_MODEL)).build();
+
+        assertThatCode(() -> validator.validate(traceRule(chatCode))).doesNotThrowAnyException();
+        assertThatThrownBy(() -> validator.validate(traceRule(decisionsCode)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("only support Boolean scores, score 'quality'");
+    }
+
+    @Test
+    void rejectsTheDecisionsApiOnAModelWithoutOne() {
+        var traceRule = traceRule(code("gpt-4o", List.of(USER_MESSAGE), VARIABLES, List.of(BOOLEAN_SCORE))
+                .toBuilder()
+                .model(decisionsModel("gpt-4o"))
+                .build());
+        var threadRule = threadRule(decisionsModel("gpt-4o"));
+
+        assertThatThrownBy(() -> validator.validate(traceRule))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Model 'gpt-4o' has no Decisions API");
+        assertThatThrownBy(() -> validator.validate(threadRule))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Model 'gpt-4o' has no Decisions API");
+    }
+
+    @Test
+    void rejectsGpt6LunaThreadRulesOnTheDecisionsApi() {
+        assertThatCode(() -> validator.validate(threadRule(model(LUNA_MODEL)))).doesNotThrowAnyException();
+        assertThatThrownBy(() -> validator.validate(threadRule(decisionsModel(LUNA_MODEL))))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Thread rules don't support decisions models");
+    }
+
+    private static AutomationRuleEvaluatorTraceThreadLlmAsJudge threadRule(LlmAsJudgeModelParameters model) {
+        return AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
+                .name("rule")
+                .code(TraceThreadLlmAsJudgeCode.builder()
+                        .model(model)
+                        .messages(List.of(USER_MESSAGE))
+                        .schema(List.of(BOOLEAN_SCORE))
+                        .build())
+                .build();
+    }
+
+    private static LlmAsJudgeModelParameters decisionsModel(String name) {
+        return LlmAsJudgeModelParameters.builder().name(name).api(LlmAsJudgeModelApi.DECISIONS).build();
     }
 
     private static AutomationRuleEvaluatorLlmAsJudge traceRule(LlmAsJudgeCode code) {

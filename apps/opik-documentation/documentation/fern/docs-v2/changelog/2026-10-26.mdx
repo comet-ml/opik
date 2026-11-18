@@ -1,0 +1,47 @@
+## New Online Evaluation Rule Editor
+
+Creating an online evaluation rule now happens in a side panel. Click **Evaluator**, choose **LLM-as-a-Judge**, **Decision model** or **Code evaluator**, and set the name and prompt or code on the left, with the scope, filtering and sampling, scores and cost limit on the right. A new judge or decision model starts from a set of templates that already use the right variable for the scope you picked, or you can click **Type your prompt** to write your own. The **Enabled** toggle in the footer lets you create a rule paused and switch it on later.
+
+<Frame>
+  <img src="/img/production/online_evaluation_llm_judge_panel.png" alt="The rule editor panel for a new LLM-as-a-Judge evaluator" />
+</Frame>
+
+[Learn more in the Online Evaluation rules docs](/production/online-evaluation/rules).
+
+## Cohere Integration
+
+Opik now has a native integration for the [Cohere](https://cohere.com/) Python SDK. Wrap your client with `track_cohere` and every `chat()` and `chat_stream()` call is logged with its messages, response, model and token usage. The async client is supported too, so Command models show up next to the rest of your traces.
+
+[Learn more in the Cohere integration docs](/integrations/cohere).
+
+## Bug Fixes & Improvements
+
+- **View an older dataset or test suite version** — Open a version from the history to browse its items without restoring it.
+- **Playground runs on the server** — Running a Playground experiment on a regular dataset and stopping it now happen on the server, and results stay on screen while a run progresses. Runs on an empty dataset or test suite are blocked, and rate limit or rejected-role errors say what to do next.
+- **Multiple media parts from one variable** — A single Playground variable holding a list now sends one image, video or audio part per entry.
+- **OpenTelemetry project routing** — Set the `opik.project_name` attribute on spans to send them to a specific project, which helps when a Collector processor drops the `projectName` header.
+- **Environment filter on threads** — The Threads tab can be filtered by environment, and the logging guide explains how threads get theirs.
+- **Internal traces in threads** — Thread Messages hide internal traces behind a toggle and mark them with an Internal badge.
+- **Alert custom fields** — Alerts take optional custom fields that are included in the EventBridge event.
+- **New models** — Claude Haiku 5.5 and Sonnet 5.5 are available in the Playground and online evaluation, and the online evaluation defaults for OpenAI and OpenRouter are GPT 5.5.
+- **Model parameters follow each model** — Reasoning effort levels, defaults and OpenRouter parameters now match what each model supports, and base64 images, video and audio are sent to Vertex AI as inline data.
+- **Clearer project name errors** — Creating a project with a name that already exists shows a clear message.
+- **Prompt library and Playground** — Saving to the prompt library twice by double-clicking creates one version, and unsaved edits to a library prompt are kept when you leave the Playground.
+- **Test suites** — Runs finish when the assertion judge can't run, falling back to the next provider.
+- **OpenAI Decisions API tracing** — The Python and TypeScript OpenAI integrations log Decisions API calls.
+- **SDK tracing** — Bedrock `invoke_model` Claude and Nova streams keep their tool calls, thinking and citation blocks, parallel tool calls from streamed TypeScript OpenAI responses stay separate, and Gemini thinking and tool-use prompt tokens are counted in TypeScript usage.
+- **SDK evaluation** — Aggregates report how many scores they left out, and conversation windows whose assistant reply has no text are not graded.
+- **Pricing** — OpenTelemetry spans that report the provider as its API host are priced, and workspace metrics include authored feedback scores.
+- **Self-hosting** — Redis Sentinel is supported, with a [setup guide](/self-host/configure/redis-sentinel), and the Python SDK is published to PyPI with Trusted Publishing.
+- **Dashboards** — The **Add widget** menu makes dashboard editing and Ollie widgets easier to find.
+- **Documentation** — New judge metric and judge alignment tutorials, a guide to separating dev, staging and prod with environments, and updated guides for test suite assertions, Diagnostics and OpenTelemetry.
+
+## Performance Improvements
+
+- **Faster span and trace reads** — Span, trace and thread reads, plus project size and feedback score name lookups, are bounded to the project's span weeks, and large span and trace write payloads are streamed.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.103...2.2.119)
+
+_Releases_: `2.2.104`, `2.2.105`, `2.2.106`, `2.2.107`, `2.2.108`, `2.2.109`, `2.2.110`, `2.2.111`, `2.2.112`, `2.2.113`, `2.2.114`, `2.2.115`, `2.2.116`, `2.2.117`, `2.2.118`, `2.2.119`

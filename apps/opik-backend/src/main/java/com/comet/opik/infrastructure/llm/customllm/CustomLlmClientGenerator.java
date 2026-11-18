@@ -46,7 +46,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .ifPresent(readTimeout -> openAiClientBuilder.readTimeout(readTimeout.toJavaDuration()));
 
         return openAiClientBuilder
-                .apiKey(config.apiKey())
+                .apiKey(clientApiKey(config))
                 .build();
     }
 
@@ -72,7 +72,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .baseUrl(baseUrl)
                 .httpClientBuilder(newHttpClientBuilder(config))
                 .modelName(actualModelName)
-                .apiKey(config.apiKey())
+                .apiKey(clientApiKey(config))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -85,6 +85,15 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         // Pass custom parameters directly to constructor since builder inheritance
         // doesn't allow us to chain our custom methods cleanly
         return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
+    }
+
+    /**
+     * The key the OpenAI client sends as {@code Authorization: Bearer <key>} whenever it isn't null. A token-auth
+     * provider stores a blank one, and InterceptingHttpClient supplies the fetched token instead, so the client gets
+     * none rather than sending an empty bearer that would then have to be dropped.
+     */
+    private static String clientApiKey(LlmProviderClientApiConfig config) {
+        return config.authConfig() != null ? null : config.apiKey();
     }
 
     HttpClient newHttpClient(@NonNull LlmProviderClientApiConfig config) {
