@@ -18,7 +18,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.client.Entity;
@@ -35,7 +34,6 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
@@ -170,7 +168,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 body = response.hasEntity()
                         ? JsonUtils.readValue(readSuccessBody(response), DecisionsResponse.class)
                         : null;
-            } catch (IOException | ProcessingException | IllegalStateException | UncheckedIOException unreadable) {
+            } catch (IOException | RuntimeException unreadable) {
                 // redacted as on the chat path: a parse error can quote the upstream body
                 throw new InternalServerErrorException(
                         "OpenRouter Decisions API returned an unreadable response, status '%s'".formatted(status),
@@ -203,7 +201,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
         OpenRouterErrorMessage errorResponse;
         try {
             errorResponse = JsonUtils.readValue(readErrorBody(response), OpenRouterErrorMessage.class);
-        } catch (IOException | ProcessingException | IllegalStateException | UncheckedIOException unreadable) {
+        } catch (IOException | RuntimeException unreadable) {
             // the type only: the message can quote the upstream body or name the destination
             log.debug("Failed to read OpenRouter error response, error type '{}'",
                     unreadable.getClass().getSimpleName());
