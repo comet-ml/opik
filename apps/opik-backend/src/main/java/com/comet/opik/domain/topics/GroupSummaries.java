@@ -123,7 +123,7 @@ public class GroupSummaries {
         return s;
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     public record GroupSummary(int group, int size, double share) {
     }
 }

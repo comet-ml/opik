@@ -441,7 +441,7 @@ public class KMeans {
     }
 
     /** {@code centres} are {@code k * dimensions} unit-length float32 values; {@code inertia} is the weighted one. */
-    @Builder
+    @Builder(toBuilder = true)
     public record Result(@NonNull int[] labels, @NonNull float[] centres, double inertia, int iterations) {
     }
 
