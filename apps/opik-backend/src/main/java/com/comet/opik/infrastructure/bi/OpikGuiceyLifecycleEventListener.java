@@ -40,6 +40,7 @@ import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
+import org.quartz.UnableToInterruptJobException;
 import org.quartz.impl.matchers.GroupMatcher;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
@@ -390,6 +391,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             log.info("GuiceJobManager instance already cleared, nothing to shutdown");
             return;
         }
+        interruptTopicsJobs();
         var scheduler = jobManager.getScheduler();
         try {
             log.info("Attempting to delete all jobs from the scheduler...");
@@ -407,6 +409,22 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
         guiceJobManager.set(null);
         log.info("Cleared GuiceJobManager instance");
+    }
+
+    /**
+     * Interrupts the scheduled topics jobs. Their doJob() returns before the run ends, so Quartz never interrupts them
+     * on shutdown: without this call the run goes on and keeps its lock until the lock's lease ends. A job that is not
+     * scheduled is skipped, so shutdown never creates it.
+     */
+    private void interruptTopicsJobs() {
+        try {
+            var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+            if (topicsConfig.isEnabled()) {
+                injector.get().getInstance(TopicVectorsJob.class).interrupt();
+            }
+        } catch (RuntimeException | UnableToInterruptJobException exception) {
+            log.warn("Error interrupting the topics jobs during scheduler shutdown", exception);
+        }
     }
 
     private void setLlmModelRegistryRefreshJob() {
