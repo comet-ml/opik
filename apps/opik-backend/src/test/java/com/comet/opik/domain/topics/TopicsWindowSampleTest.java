@@ -201,7 +201,7 @@ class TopicsWindowSampleTest {
      * weekday texts and vectors near one direction, weekend traces weekend texts and vectors near another.
      */
     private static TopicsTestData.Traces weeklyTraces() {
-        int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
+        int dimensions = TopicAlgorithm.DIMENSIONS;
         var random = new Random(5);
         var ids = Generators.timeBasedEpochGenerator(random);
         var weekday = unit(random, dimensions);
