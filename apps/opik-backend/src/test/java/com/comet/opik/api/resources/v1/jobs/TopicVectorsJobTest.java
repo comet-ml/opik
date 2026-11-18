@@ -6,8 +6,12 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.domain.topics.TopicVectorsTickService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.google.inject.Injector;
+import io.dropwizard.jobs.GuiceJobManager;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongCounterBuilder;
@@ -16,12 +20,20 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.quartz.Scheduler;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
+import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
+import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,6 +105,56 @@ class TopicVectorsJobTest {
         interrupt();
 
         assertThat(cancelled).isTrue();
+    }
+
+    @Test
+    @DisplayName("a shutdown cancels the in-flight tick despite a later fire, frees the leader lock, starts no tick")
+    void shutdownCancelsInFlightTick() throws InterruptedException {
+        var held = new AtomicBoolean();
+        var cancelled = new AtomicInteger();
+        when(leaderLock()).thenAnswer(invocation -> {
+            Mono<Object> action = invocation.getArgument(1);
+            Mono<Void> fallback = invocation.getArgument(2);
+            // As RedissonLockService does: one holder, the action off the caller's thread, and the lock released when
+            // the action ends, a cancel included.
+            return Mono.defer(() -> held.compareAndSet(false, true)
+                    ? action.subscribeOn(Schedulers.boundedElastic())
+                            .doOnCancel(cancelled::incrementAndGet)
+                            .doFinally(__ -> held.set(false))
+                    : fallback.then(Mono.empty()));
+        });
+        when(lockService.lockUsingToken(TopicVectorsJob.TICK_LOCK, Duration.ofSeconds(59)))
+                .thenReturn(Mono.just(true));
+        var started = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        when(tickService.tick(any(Instant.class))).thenAnswer(invocation -> {
+            started.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        });
+        var listener = startedListener();
+        try {
+            job.doJob(null);
+            assertThat(started.await(10, TimeUnit.SECONDS)).isTrue();
+            // A second fire while the tick runs finds the lock held. It must not detach the running tick.
+            job.doJob(null);
+            verify(ticks).add(1, outcome(TopicVectorsJob.LOCK_HELD));
+
+            listener.onEvent(event(GuiceyLifecycle.ApplicationShutdown));
+
+            assertThat(cancelled).hasValue(1);
+            assertThat(held).isFalse();
+            job.doJob(null);
+            verify(lockService, times(2)).bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), any(Mono.class),
+                    any(Mono.class), eq(LEASE), eq(Duration.ZERO));
+            verify(tickService).tick(any(Instant.class));
+        } finally {
+            release.countDown();
+        }
     }
 
     @Test
@@ -217,6 +279,30 @@ class TopicVectorsJobTest {
     private Mono<Object> leaderLock() {
         return lockService.bestEffortLock(eq(TopicVectorsJob.LEADER_LOCK), any(Mono.class), any(Mono.class),
                 eq(LEASE), eq(Duration.ZERO));
+    }
+
+    /** The lifecycle listener after the app's start, with this test's job and topics config in its injector. */
+    private OpikGuiceyLifecycleEventListener startedListener() {
+        var jobManager = mock(GuiceJobManager.class);
+        when(jobManager.getScheduler()).thenReturn(mock(Scheduler.class));
+        var configuration = mock(OpikConfiguration.class);
+        when(configuration.getTopics()).thenReturn(config);
+        var injector = mock(Injector.class);
+        when(injector.getInstance(GuiceJobManager.class)).thenReturn(jobManager);
+        when(injector.getInstance(OpikConfiguration.class)).thenReturn(configuration);
+        when(injector.getInstance(TopicVectorsJob.class)).thenReturn(job);
+        var run = mock(InjectorPhaseEvent.class);
+        when(run.getType()).thenReturn(GuiceyLifecycle.ApplicationRun);
+        when(run.getInjector()).thenReturn(injector);
+        var listener = new OpikGuiceyLifecycleEventListener();
+        listener.onEvent(run);
+        return listener;
+    }
+
+    private static GuiceyLifecycleEvent event(GuiceyLifecycle type) {
+        var event = mock(GuiceyLifecycleEvent.class);
+        when(event.getType()).thenReturn(type);
+        return event;
     }
 
     private static Attributes outcome(String outcome) {

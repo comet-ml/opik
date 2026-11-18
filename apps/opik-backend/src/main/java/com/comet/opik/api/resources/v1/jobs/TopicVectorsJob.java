@@ -18,15 +18,13 @@ import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.quartz.UnableToInterruptJobException;
 import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -43,6 +41,9 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * Holding the leader lock until expiry instead would stretch the interval to the lease, which is longer than the
  * interval; a lease of one interval would let a long tick overlap the next. The tick itself is
  * {@link TopicVectorsTickService#tick(Instant)}.
+ *
+ * <p>A pod shutdown interrupts the job before it stops the scheduler. The interrupt cancels every in-flight tick of
+ * this pod, which releases the leader lock, and no tick starts after it.
  *
  * <p>Across the cluster, {@code topics.vectors.ticks} counts about one {@value #RAN} per interval.
  */
@@ -62,8 +63,9 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
     static final String FAILED = "failed";
     static final List<String> OUTCOMES = List.of(RAN, NOT_DUE, LOCK_HELD, FAILED);
 
-    private final AtomicBoolean interrupted = new AtomicBoolean(false);
-    private final AtomicReference<Disposable> subscription = new AtomicReference<>();
+    // The ticks of this pod that have not ended yet. doJob() returns before its tick ends, so a later fire can start
+    // while a long tick still runs: the interrupt must reach each of them.
+    private final Disposable.Composite inFlight = Disposables.composite();
     private final TopicsConfig config;
     private final TopicVectorsTickService tickService;
     private final LockService lockService;
@@ -94,11 +96,14 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
 
     @Override
     public void doJob(JobExecutionContext context) {
-        if (!config.isEnabled() || interrupted.get()) {
+        // The tick's slot in inFlight, filled once subscribed. After an interrupt inFlight refuses the slot, so no tick
+        // starts. An interrupt that lands later disposes the slot, which disposes the subscription it gets.
+        var tick = Disposables.swap();
+        if (!config.isEnabled() || !inFlight.add(tick)) {
             return;
         }
         var start = Instant.now();
-        Disposable disposable = lockService.bestEffortLock(
+        tick.update(lockService.bestEffortLock(
                 LEADER_LOCK,
                 Mono.fromRunnable(() -> tickIfDue(start)),
                 Mono.fromRunnable(() -> {
@@ -107,19 +112,14 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
                 }),
                 tickService.leaderLease(),
                 Duration.ZERO)
+                .doFinally(__ -> inFlight.remove(tick))
                 .subscribe(
                         __ -> {
                         },
                         error -> {
                             count(FAILED);
                             log.error("Topic vectors tick failed", error);
-                        });
-        subscription.set(disposable);
-        // An interrupt between subscribe() and set() found nothing to dispose: dispose here. Whichever of the two
-        // threads takes the subscription out disposes it, so it is disposed exactly once.
-        if (interrupted.get()) {
-            Optional.ofNullable(subscription.getAndSet(null)).ifPresent(Disposable::dispose);
-        }
+                        }));
     }
 
     /**
@@ -155,8 +155,7 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
 
     @Override
     public void interrupt() throws UnableToInterruptJobException {
-        interrupted.set(true);
-        Optional.ofNullable(subscription.getAndSet(null)).ifPresent(Disposable::dispose);
-        log.info("TopicVectorsJob interrupted, cancelling any in-flight tick");
+        inFlight.dispose();
+        log.info("TopicVectorsJob interrupted, cancelled the in-flight ticks");
     }
 }
