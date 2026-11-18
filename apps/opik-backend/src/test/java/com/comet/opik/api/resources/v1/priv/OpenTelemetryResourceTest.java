@@ -289,6 +289,31 @@ class OpenTelemetryResourceTest {
                     HttpStatus.SC_BAD_REQUEST, expectedError);
         }
 
+        Stream<Arguments> invalidJsonBodies() {
+            return Stream.of(
+                    arguments("not valid JSON", "{",
+                            "Unexpected end-of-input: expected close marker for Object (start marker at [Source: "
+                                    + "REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, "
+                                    + "column: 1])"),
+                    arguments("valid JSON that does not fit the OTLP message", "{\"unknownField\":1}",
+                            "Cannot find field: unknownField in message "
+                                    + "opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidJsonBodies")
+        @DisplayName("answer 400, not 500, when the JSON body cannot be parsed")
+        void testOtelRequestWithInvalidJson(String description, String body, String parserError) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "Invalid JSON message, error: '%s'".formatted(parserError));
+
+            otelResourceClient.exportJsonTraces(Entity.json(body), projectName, workspaceName, okApikey,
+                    HttpStatus.SC_BAD_REQUEST, expectedError);
+        }
+
         @Test
         @DisplayName("answer an oversized protobuf body, rejected before the resource, with a protobuf 413")
         void testOtelRequestOverSizeLimit() {

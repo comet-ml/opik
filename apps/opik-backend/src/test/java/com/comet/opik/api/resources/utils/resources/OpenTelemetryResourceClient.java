@@ -3,8 +3,10 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Status;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -44,6 +46,15 @@ public class OpenTelemetryResourceClient {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             assertThat(response.getMediaType().toString()).isEqualTo(PROTOBUF);
             assertThat(parseStatus(response)).isEqualTo(expectedError);
+        }
+    }
+
+    /** Exports a JSON batch and asserts the status and the whole JSON error the endpoint answers with. */
+    public void exportJsonTraces(Entity<?> payload, String projectName, String workspaceName, String apiKey,
+            int expectedStatus, ErrorMessage expectedError) {
+        try (var response = post(payload, MediaType.APPLICATION_JSON, projectName, workspaceName, apiKey)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
         }
     }
 
