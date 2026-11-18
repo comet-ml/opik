@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000149_create_trace_topics
+--changeset yaroslavb:000150_create_trace_topics
 --comment: Create trace_topics, the topic of each trace as a run (and later the arrival path) assigned it (OPIK-8987)
 
 -- trace_topics holds one row per trace and assignment: every saved run gives each trace of its window a row (the
@@ -16,11 +16,11 @@
 --     with arrival rows. An arrival row written after a run (a relabel) so cannot merge away the run row a read by
 --     run_id looks for. A trace keeps at most two rows after merges; the "latest per trace" readers dedupe by
 --     trace, not by the sort key, so they read the same answer either way.
---   * id_at and the partition key are topic_vectors' (000148), so retention and the trace-delete cascade prune the same
+--   * id_at and the partition key are topic_vectors' (000149), so retention and the trace-delete cascade prune the same
 --     weekly partitions as for the trace. No TTL: a row lives exactly as long as its trace.
 --   * idx_trace_created_at: trace_created_at never changes for a key, so a minmax index on it is safe before dedup;
 --     the topic counts read a window of trace_created_at.
--- Codecs follow topic_vectors (000148).
+-- Codecs follow topic_vectors (000149).
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.trace_topics ON CLUSTER '{cluster}'
 (
     workspace_id     String                                          CODEC(ZSTD(3)),
