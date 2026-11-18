@@ -24,6 +24,7 @@ import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -145,11 +146,14 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
-                .doOnError(withMdc(mdc, error -> userFacingLogger
-                        .error("Unexpected error while scoring spanId '{}' with rule '{}', error type '{}'",
+                .doOnError(withMdc(mdc, error -> DecisionsUrlException.find(error).ifPresentOrElse(
+                        urlError -> userFacingLogger.error("Error while scoring spanId '{}' with rule '{}': {}",
+                                span.id(), message.ruleName(), urlError.getMessage()),
+                        () -> userFacingLogger.error(
+                                "Unexpected error while scoring spanId '{}' with rule '{}', error type '{}'",
                                 span.id(), message.ruleName(),
                                 // the type only: a provider's text can be in any message of the chain
-                                ProviderFailures.rootType(error))))
+                                ProviderFailures.rootType(error)))))
                 .then();
     }
 

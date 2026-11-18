@@ -57,7 +57,7 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
      * still hold them: a blank name or a missing value is left out, and of names differing only in case, the one
      * sorting last wins.
      */
-    private static Map<String, String> normalizedProviderHeaders(Map<String, String> headers) {
+    public static Map<String, String> normalizedProviderHeaders(Map<String, String> headers) {
         if (MapUtils.isEmpty(headers)) {
             return Map.of();
         }
