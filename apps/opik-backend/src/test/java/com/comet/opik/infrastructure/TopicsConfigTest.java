@@ -128,6 +128,16 @@ class TopicsConfigTest {
                     topics.getBuild().setProjectTimeout(Duration.minutes(2));
                     topics.getBuild().setQwenDeadline(Duration.minutes(2));
                 }, List.of("build.qwenDeadlineValid")),
+                arguments("naming deadline equal to the project timeout", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setProjectTimeout(Duration.minutes(2));
+                    topics.getBuild().setQwenDeadline(Duration.minutes(1));
+                    topics.getBuild().setNamingDeadline(Duration.minutes(2));
+                }, List.of("build.namingDeadlineValid")),
+                arguments("verify deadline equal to the project timeout", (Consumer<TopicsConfig>) topics -> {
+                    topics.getBuild().setProjectTimeout(Duration.minutes(2));
+                    topics.getBuild().setQwenDeadline(Duration.minutes(1));
+                    topics.getBuild().setVerifyDeadline(Duration.minutes(2));
+                }, List.of("build.verifyDeadlineValid")),
                 arguments("max vectors under the min vectors", (Consumer<TopicsConfig>) topics -> {
                     topics.getBuild().setMinVectors(500);
                     topics.getBuild().setMaxVectors(400);
