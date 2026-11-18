@@ -41,6 +41,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
+    @Valid @NotNull @JsonProperty
+    private BuildConfig build;
+
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
      * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
@@ -51,6 +54,55 @@ public class TopicsConfig {
                 .map(String::strip)
                 .filter(workspaceId -> !workspaceId.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Data
+    public static class BuildConfig {
+
+        /** One project's run is stopped and failed with {@code timeout} after this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 2, unit = TimeUnit.HOURS)
+        private Duration projectTimeout;
+
+        /** A project is built when its window holds at least this many traces with a vector. */
+        @JsonProperty
+        @Min(2) @Max(100_000) private int minVectors;
+
+        /** The window: this many whole UTC days before the day the window ends on. */
+        @JsonProperty
+        @Min(1) @Max(90) private int windowDays;
+
+        /**
+         * A larger window is sampled: the run finds topics on this many of its traces, spread evenly by a hash of the
+         * trace id, and then labels every trace of the window.
+         */
+        @JsonProperty
+        @Min(100) @Max(100_000) private int maxVectors;
+
+        /** The deadline of the Qwen call that names the groups. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration qwenDeadline;
+
+        /** {@code topic_runs} rows are deleted after this. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.DAYS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration runsRetention;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
+            return qwenDeadline == null || projectTimeout == null
+                    || qwenDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
+            return maxVectors >= minVectors;
+        }
     }
 
     @Data

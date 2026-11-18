@@ -1023,6 +1023,13 @@ topics:
       maxExecutionTime: 30s
       createdAtSlack: 1d
       sliceSize: 1d
+  build:
+    projectTimeout: 15m
+    minVectors: 100
+    windowDays: 30
+    maxVectors: 100000
+    qwenDeadline: 120s
+    runsRetention: 90d
 
 # Python evaluator configuration
 pythonEvaluator:
