@@ -37,10 +37,10 @@ public class Lifecycle {
         }
     }
 
-    /** Each live topic's size: its count in the labels after the retire reassignment. */
+    /** Each topic's size: its count in the labels after the retire reassignment; 0 for a retired topic. */
     public static void sizes(@NonNull NightState state, @NonNull int[] labels) {
         var counts = counts(state, labels);
-        for (int t : state.live()) {
+        for (int t = 0; t < counts.length; t++) {
             state.topic(t).setSize(counts[t]);
         }
     }
