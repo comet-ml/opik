@@ -36,11 +36,13 @@ import io.dropwizard.jobs.GuiceJobManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.CronScheduleBuilder;
+import org.quartz.InterruptableJob;
 import org.quartz.JobBuilder;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
+import org.quartz.UnableToInterruptJobException;
 import org.quartz.impl.matchers.GroupMatcher;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycleListener;
@@ -425,18 +427,26 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     }
 
     /**
-     * A topics job runs detached from its Quartz fire, so the scheduler's shutdown never reaches it: interrupt it here,
-     * which cancels its run in flight and frees its lock. The checks match {@link #setTopicsFirstBuildJob()}, so a
-     * disabled job is never created at shutdown. A failure is logged, and the rest of the shutdown still runs.
+     * Interrupts the scheduled topics jobs. Their doJob() returns before the run ends, so Quartz never interrupts them
+     * on shutdown: without this call the run goes on and keeps its lock until the lock's lease ends. A job that is not
+     * scheduled is skipped, so shutdown never creates it.
      */
     private void interruptTopicsJobs() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+        if (topicsConfig.isEnabled()) {
+            interruptJob(TopicVectorsJob.class);
+        }
+        if (topicsConfig.isEnabled() && topicsConfig.getFirstBuild().isEnabled()) {
+            interruptJob(TopicsFirstBuildJob.class);
+        }
+    }
+
+    /** One guarded interrupt per job, so a failure in one job does not skip the next. */
+    private void interruptJob(Class<? extends InterruptableJob> jobClass) {
         try {
-            var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
-            if (topicsConfig.isEnabled() && topicsConfig.getFirstBuild().isEnabled()) {
-                injector.get().getInstance(TopicsFirstBuildJob.class).interrupt();
-            }
-        } catch (Exception exception) {
-            log.warn("Error interrupting the topics jobs during scheduler shutdown", exception);
+            injector.get().getInstance(jobClass).interrupt();
+        } catch (RuntimeException | UnableToInterruptJobException exception) {
+            log.warn("Error interrupting '{}' during scheduler shutdown", jobClass.getSimpleName(), exception);
         }
     }
 
