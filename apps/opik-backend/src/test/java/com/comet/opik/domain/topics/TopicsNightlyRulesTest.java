@@ -82,6 +82,17 @@ class TopicsNightlyRulesTest {
                     exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_TIMEOUT));
         }
 
+        @Test
+        @DisplayName("a pair answered both ways is not verified; a pair answered twice the same way is")
+        void conflictingAnswers() {
+            var verdicts = Verifier.ask("verify_naming", pairs, (tag, prompt, schema, maxTokens) -> json("""
+                    {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
+                    {"pair": 1, "same": true}]}
+                    """));
+
+            assertThat(verdicts).containsOnly(Map.entry(1, true));
+        }
+
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {"missing|", "null|, \"same\": null", "a string|, \"same\": \"true\"",
                 "a number|, \"same\": 1"})
