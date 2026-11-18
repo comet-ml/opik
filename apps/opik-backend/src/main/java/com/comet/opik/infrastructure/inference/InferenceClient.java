@@ -4,6 +4,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
 import com.comet.opik.infrastructure.http.HttpModule;
+import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.dropwizard.client.JerseyClientConfiguration;
@@ -27,6 +30,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -40,10 +44,10 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 /**
- * Client for the opik-inference v1 API: the batch endpoints, and the synchronous {@link #decide} that guardrail checks
- * use. Its retries mirror the Python client's: up to 2, backing off 0.1 s then
- * 0.2 s or honoring {@code Retry-After}, except that a submit answered with {@code quota_exceeded} fails at once, so
- * the caller can back that one workspace off.
+ * Client for the opik-inference v1 API: the batch endpoints, {@code /v1/embed}, {@code /v1/generate}, and the
+ * synchronous {@link #decide} that guardrail checks use. Its retries mirror the Python client's: up to 2, backing off
+ * 0.1 s then 0.2 s or honoring {@code Retry-After}, except that a submit, embed or generate answered with
+ * {@code quota_exceeded} fails at once, so the caller can back that one workspace off.
  * <p>
  * Every call takes a deadline: each attempt's connect and read timeouts are cut to the time left, no retry starts that
  * can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without sending anything.
@@ -53,6 +57,9 @@ import java.util.function.Function;
  * {@code maxConcurrentDecides}, the most decide calls in flight; a call over it fails with {@code client_busy} after the
  * usual retries. A call cut off at its deadline frees its caller, but its thread reads on until the response ends and
  * keeps its slot until then, so a slow service ties up decide's slots, never the shared client.
+ * <p>
+ * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body
+ * longer than {@code aiLabels.inference.maxResponseBytes} fails the call the same way.
  * <p>
  * Constructed whether or not ai-labels is enabled: the url and credential are only required when a call is made.
  */
@@ -64,6 +71,9 @@ public class InferenceClient {
     static final Duration BASE_BACKOFF = Duration.ofMillis(100);
     public static final int MAX_BATCH_ITEMS = 10_000;
     public static final int MAX_STATUS_JOB_IDS = 1_000;
+    public static final int MAX_EMBED_INPUTS = 256;
+    /** The service rejects an embed {@code deadline_ms} above this. */
+    static final Duration MAX_EMBED_DEADLINE = Duration.ofSeconds(60);
 
     /**
      * The service reads and enqueues the whole body before it answers a submit, so the read timeout grows by a second
@@ -76,6 +86,17 @@ public class InferenceClient {
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
     private static final String JOB_PATH_TEMPLATE = "v1/batch/jobs/{job_id}";
     private static final String JOBS_STATUS_PATH = "v1/batch/jobs/status";
+    private static final String EMBED_PATH = "v1/embed";
+    private static final String GENERATE_PATH = "v1/generate";
+
+    /**
+     * A relaxed guard checks no address or scheme: opik-inference is an internal service. It is set on every request
+     * only so that closing the response ends its connection instead of reading the rest of the body, see
+     * {@code DestinationGuardJerseyClientBuilder}; a body read to its end keeps its connection for reuse.
+     */
+    private static final DestinationGuard CLOSE_WITHOUT_DRAINING = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .build();
 
     private final @NonNull Client client;
     private final @NonNull AiLabelsConfig config;
@@ -164,6 +185,78 @@ public class InferenceClient {
                 .map(BatchJobStatusResponse::jobs);
     }
 
+    /** One vector per input, in the inputs' order, from the realtime embedding pool. Retried like a submit. */
+    public Mono<EmbedResponse> embed(@NonNull EmbedRequest request, @NonNull Instant deadline) {
+        Preconditions.checkArgument(!request.inputs().isEmpty() && request.inputs().size() <= MAX_EMBED_INPUTS,
+                "an embed call takes 1 to '%s' inputs, inputs '%s'", MAX_EMBED_INPUTS, request.inputs().size());
+        return Mono.defer(() -> {
+            var left = Duration.between(Instant.now(), deadline);
+            if (left.toMillis() < 1) {
+                return Mono.error(InferenceException.outOfTime());
+            }
+            var withIds = request.toBuilder()
+                    .requestId(newRequestId())
+                    .deadlineMs(Math.min(left.toMillis(), MAX_EMBED_DEADLINE.toMillis()))
+                    .build();
+            // Serialized once, so every retry sends the same bytes and the same request_id.
+            var body = InferenceJson.writeBytes(withIds);
+            return execute(Call.<EmbedResponse>builder()
+                    .method(HttpMethod.POST)
+                    .path(EMBED_PATH)
+                    .target(base -> base.path(EMBED_PATH))
+                    .body(body)
+                    .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
+                    .deadline(deadline)
+                    .type(EmbedResponse.class)
+                    .failFastOnQuotaExceeded(true)
+                    .build());
+        });
+    }
+
+    /**
+     * One completion, answered in the call. Retried like a submit: a retry sends the same bytes, so the same
+     * {@code request_id}, and a {@code quota_exceeded} answer fails at once. So does {@code schema_violation}: the
+     * service checks the answer against the schema, and the same bytes at temperature 0 give the same answer. The
+     * request's {@code deadline_ms} is the caller's, if set, cut to the time left before {@code deadline} and to the
+     * lane's maximum; the read timeout is the base read timeout plus that deadline, as the service holds the connection
+     * until the model answers.
+     */
+    public Mono<GenerateResponse> generate(@NonNull GenerateRequest request, @NonNull Instant deadline) {
+        Preconditions.checkArgument(!request.messages().isEmpty(), "a generate call takes at least one message");
+        Preconditions.checkArgument(
+                request.maxTokens() >= BatchGenerateItem.MIN_MAX_TOKENS
+                        && request.maxTokens() <= BatchGenerateItem.MAX_MAX_TOKENS,
+                "max_tokens must be between '%s' and '%s', maxTokens '%s'", BatchGenerateItem.MIN_MAX_TOKENS,
+                BatchGenerateItem.MAX_MAX_TOKENS, request.maxTokens());
+        Preconditions.checkArgument(request.deadlineMs() == null || request.deadlineMs() > 0,
+                "a generate deadline must be positive, deadlineMs '%s'", request.deadlineMs());
+        return Mono.defer(() -> {
+            var left = Duration.between(Instant.now(), deadline);
+            if (left.toMillis() < 1) {
+                return Mono.error(InferenceException.outOfTime());
+            }
+            var deadlineMs = Math.min(request.deadlineMs() == null ? Long.MAX_VALUE : request.deadlineMs(),
+                    Math.min(left.toMillis(), request.lane().getMaxDeadline().toMillis()));
+            var withIds = request.toBuilder()
+                    .requestId(request.requestId() == null ? newRequestId() : request.requestId())
+                    .deadlineMs(deadlineMs)
+                    .build();
+            var body = InferenceJson.writeBytes(withIds);
+            return execute(Call.<GenerateResponse>builder()
+                    .method(HttpMethod.POST)
+                    .path(GENERATE_PATH)
+                    .target(base -> base.path(GENERATE_PATH))
+                    .body(body)
+                    .readTimeout(config.getInference().getReadTimeout().toJavaDuration()
+                            .plusMillis(deadlineMs))
+                    .deadline(deadline)
+                    .type(GenerateResponse.class)
+                    .failFastOnQuotaExceeded(true)
+                    .failFastOnSchemaViolation(true)
+                    .build());
+        });
+    }
+
     /**
      * One synchronous decide call: every question answered about the same state. {@code request.deadlineMs()}, when
      * set, is the time the service may spend; {@code deadline} bounds the client, retries included, and should leave
@@ -234,6 +327,7 @@ public class InferenceClient {
         }).onErrorResume(InferenceException.class, exception -> {
             if (attempt >= MAX_RETRIES || !exception.isRetryable()
                     || (call.failFastOnQuotaExceeded() && exception.isQuotaExceeded())
+                    || (call.failFastOnSchemaViolation() && exception.isSchemaViolation())
                     || (call.failFastOnDeadlineExceeded() && exception.isDeadlineExceeded())) {
                 return Mono.error(exception);
             }
@@ -269,6 +363,8 @@ public class InferenceClient {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + inference.getCredential())
                     // opik-inference never redirects, and following one would send the credential where it points.
                     .property(ClientProperties.FOLLOW_REDIRECTS, false)
+                    // A body over the cap could otherwise keep the read going as long as the service sends it.
+                    .property(DestinationGuardDnsResolver.PROPERTY, CLOSE_WITHOUT_DRAINING)
                     .property(ClientProperties.CONNECT_TIMEOUT,
                             timeoutMillis(inference.getConnectTimeout().toJavaDuration(), left))
                     .property(ClientProperties.READ_TIMEOUT, timeoutMillis(call.readTimeout(), left));
@@ -312,12 +408,13 @@ public class InferenceClient {
     private <T> T read(Call<T> call, Response response) {
         try (response) {
             var status = response.getStatus();
-            byte[] body;
-            try {
-                body = response.hasEntity() ? response.readEntity(byte[].class) : new byte[0];
-            } catch (ProcessingException exception) {
-                // A connection reset or truncated body after the headers: as retryable as one before them.
-                throw InferenceException.transport(exception);
+            var maxBytes = config.getInference().getMaxResponseBytes();
+            var body = readBody(response, maxBytes);
+            if (body.length > maxBytes) {
+                // Not retryable: the same request would only get the same body again.
+                throw new InferenceException(InferenceErrorCode.UPSTREAM_ERROR.getValue(), false, status, null, null,
+                        new IllegalStateException("response body exceeds aiLabels.inference.maxResponseBytes '%d'"
+                                .formatted(maxBytes)));
             }
             if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
                 // Redirects are not followed, and the same request would only be redirected again.
@@ -341,6 +438,22 @@ public class InferenceClient {
         }
     }
 
+    /** Up to one byte past {@code maxBytes}, so a longer body is seen without holding more of it. */
+    private static byte[] readBody(Response response, long maxBytes) {
+        try {
+            // hasEntity reads ahead, so it can fail like the read itself.
+            if (!response.hasEntity()) {
+                return new byte[0];
+            }
+            try (var body = response.readEntity(InputStream.class)) {
+                return body.readNBytes(Math.toIntExact(maxBytes + 1));
+            }
+        } catch (IOException | ProcessingException exception) {
+            // A connection reset or truncated body after the headers: as retryable as one before them.
+            throw InferenceException.transport(exception);
+        }
+    }
+
     /** The timeout cut to the time left, and at least 1 ms: Jersey reads 0 as no timeout at all. */
     private static int timeoutMillis(Duration timeout, Duration left) {
         return (int) Math.clamp((timeout.compareTo(left) <= 0 ? timeout : left).toMillis(), 1, Integer.MAX_VALUE);
@@ -360,6 +473,7 @@ public class InferenceClient {
             @NonNull Instant deadline,
             @NonNull Class<T> type,
             boolean failFastOnQuotaExceeded,
+            boolean failFastOnSchemaViolation,
             boolean failFastOnDeadlineExceeded,
             boolean realtime) {
     }
