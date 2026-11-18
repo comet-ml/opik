@@ -413,7 +413,7 @@ class TopicsNightlyJobTest {
             logger.setLevel(level);
         }
 
-        var texts = Arrays.asList(NIGHTLY.intents);
+        var texts = List.of(NIGHTLY.intents);
         var messages = appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
         assertThat(messages).filteredOn(message -> message.contains("prompt, call 'naming'")).singleElement()
                 .satisfies(message -> assertThat(message).containsPattern("chars '\\d+', sha256 '[0-9a-f]{64}'"));
