@@ -2749,6 +2749,15 @@ topics:
     #  Default: 90d
     #  Description: topic_runs rows are deleted after this. At most 365d
     runsRetention: ${TOPICS_BUILD_RUNS_RETENTION:-90d}
+  # Guards of a trace query filtered by topic (trace list, count and stats, trace KPI cards, trace metrics). ClickHouse
+  # settings on the whole query, only when the filters have a topic. A trip answers 503 with Retry-After
+  filter:
+    #  Default: 30s
+    #  Description: ClickHouse max_execution_time of the query, whole seconds from 1s to 10m
+    maxExecutionTime: ${TOPICS_FILTER_MAX_EXECUTION_TIME:-30s}
+    #  Default: 4294967296 (4 GiB)
+    #  Description: ClickHouse max_memory_usage of the query, in bytes; the trace read and the topic subquery together
+    maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
