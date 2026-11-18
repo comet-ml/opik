@@ -10,7 +10,6 @@ export type RuleScopeLabel = 'Threads' | 'Traces' | 'Spans';
 
 export interface CreateRuleLLMJudgeFields {
   name: string;
-  /** Template label as shown in the template tabs. */
   template: 'Hallucination' | 'Moderation' | 'Answer relevance' | 'Tool correctness';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
@@ -260,7 +259,6 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /** One tab of the template row above the prompt or the questions: "Custom" or a template label. */
   templateTab(label: string): Locator {
     return this.panel.locator('button[aria-pressed]', { hasText: new RegExp(`^${label}$`) });
   }
@@ -616,11 +614,6 @@ export class OnlineEvaluationPage {
     return ((await this.modelPicker.textContent()) ?? '').trim();
   }
 
-  /**
-   * The model-parameters gear. Absent (not disabled) when the model has nothing
-   * a rule can set. It has no accessible name (its label is a tooltip), hence
-   * the icon filter.
-   */
   get judgeModelParametersTrigger(): Locator {
     return this.panel
       .locator('button[aria-haspopup="menu"]')
@@ -979,12 +972,6 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /**
-   * The score name each question block DISPLAYS, in order.
-   *
-   * The main question takes the rule name, so the first block shows the rule's
-   * name while the named extras ("Polite tone") show their own.
-   */
   async readQuestionNames(): Promise<string[]> {
     return test.step('read the score names the Questions card shows', async () => {
       const names = await this.panel

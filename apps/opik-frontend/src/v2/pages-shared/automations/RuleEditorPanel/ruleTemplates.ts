@@ -29,22 +29,26 @@ export const getRuleTemplateOptions = (
   return [];
 };
 
-// The main score takes the rule name, and a judge's main score description is
-// hidden and cleared when a new rule is saved, so neither is part of the template.
 const toComparable = (
   { messages, schema }: TemplateContent,
   uiType: UI_EVALUATORS_RULE_TYPE,
-) => ({
-  messages: messages.map(({ role, content }) => ({ role, content })),
-  schema: schema.map(({ name, description, type }, index) => ({
-    name: index === 0 ? "" : name,
-    description:
-      index === 0 && uiType === UI_EVALUATORS_RULE_TYPE.llm_judge
-        ? ""
-        : description,
-    type,
-  })),
-});
+) => {
+  const isMainDescriptionClearedOnSave =
+    uiType === UI_EVALUATORS_RULE_TYPE.llm_judge;
+
+  return {
+    messages: messages.map(({ role, content }) => ({ role, content })),
+    schema: schema.map(({ name, description, type }, index) => {
+      const isMainScore = index === 0;
+      return {
+        name: isMainScore ? "" : name,
+        description:
+          isMainScore && isMainDescriptionClearedOnSave ? "" : description,
+        type,
+      };
+    }),
+  };
+};
 
 export const findSelectedTemplate = (
   content: TemplateContent,
