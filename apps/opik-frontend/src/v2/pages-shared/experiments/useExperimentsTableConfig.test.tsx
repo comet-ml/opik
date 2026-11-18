@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, renderHook, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { CellContext, Row as TableRow } from "@tanstack/react-table";
 
 import { useExperimentsTableConfig } from "./useExperimentsTableConfig";
@@ -114,6 +114,51 @@ describe("grouped experiment name", () => {
     const name = screen.getByText("my experiment");
     expect(name).not.toHaveClass("underline");
     expect(screen.getByTestId("link")).toContainElement(name);
+  });
+
+  describe("cell clicks", () => {
+    const renderNameCell = (onRowClick: () => void) => {
+      const nameColumn = findColumn(COLUMN_NAME_ID);
+      const context = {
+        row: {
+          id: "exp-1",
+          depth: 1,
+          original: { id: "exp-1", name: "my experiment", dataset_id: "ds-1" },
+          getIsSelected: () => false,
+          getCanSelect: () => true,
+          toggleSelected: vi.fn(),
+        },
+        column: { columnDef: { meta: nameColumn?.meta } },
+        table: { options: { meta: {} } },
+      } as unknown as CellContext<Row, unknown>;
+      (context as unknown as { cell: unknown }).cell = {
+        getContext: () => context,
+      };
+
+      const renderCell = nameColumn?.cell as (
+        context: CellContext<Row, unknown>,
+      ) => React.ReactNode;
+
+      return render(<div onClick={onRowClick}>{renderCell(context)}</div>);
+    };
+
+    it("lets clicks on the empty part of the name cell reach the row", () => {
+      const onRowClick = vi.fn();
+      const { container } = renderNameCell(onRowClick);
+
+      fireEvent.click(container.firstElementChild!.firstElementChild!);
+
+      expect(onRowClick).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps checkbox clicks from opening the experiment", () => {
+      const onRowClick = vi.fn();
+      renderNameCell(onRowClick);
+
+      fireEvent.click(screen.getByRole("checkbox"));
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
   });
 });
 
