@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -209,6 +210,27 @@ class TopicsNightlyServiceTest {
 
         assertThat(service.runNight(START).saved()).isEqualTo(1);
         assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a project whose lock is taken after the budget's end is not_reached: no run starts, and its lock "
+            + "and the run slot are given back")
+    void lockTakenAfterBudgetEnd() {
+        config.getNightly().setBudget(io.dropwizard.util.Duration.seconds(1));
+        doAnswer(invocation -> {
+            Thread.sleep(1_200);
+            return Mono.just(true);
+        }).when(lockService).lockUsingToken(eq(TopicsProjectRunner.projectLock(started)), any());
+
+        var result = service.runNight(START);
+
+        assertThat(result.saved()).isZero();
+        verify(rebuildService, never()).startRun(eq(WORKSPACE_ID), eq(started), any());
+        verify(lockService).unlockUsingToken(TopicsProjectRunner.projectLock(started));
+        assertThat(rows()).filteredOn(row -> started.equals(row.projectId()))
+                .extracting(TopicNightProject::decision).containsExactly("not_reached");
+        assertThat(runner.acquireRun(Duration.ZERO)).isTrue();
+        runner.releaseRun();
     }
 
     @Test
