@@ -128,6 +128,10 @@ class TopicVectorsStorageTest {
     @AfterAll
     void afterAll() {
         wireMock.server().stop();
+        clickHouse.stop();
+        zookeeper.stop();
+        mysql.stop();
+        network.close();
     }
 
     @Test
