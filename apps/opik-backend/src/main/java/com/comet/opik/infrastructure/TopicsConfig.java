@@ -132,6 +132,7 @@ public class TopicsConfig {
         }
     }
 
+    /** The nightly job: updates the topic list of each project that has one. */
     @Data
     public static class NightlyConfig {
 
