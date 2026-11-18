@@ -46,8 +46,6 @@ import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -146,21 +144,28 @@ class TopicVectorsTickServiceTest {
         assertThat(TopicVectorsTickService.lowerBound(APPLIES_FROM, NOW, window)).isEqualTo(expected);
     }
 
-    static Stream<Arguments> backOffs() {
+    static Stream<Arguments> inferenceErrors() {
         return Stream.of(
-                arguments(429, "rate_limited", false, true),
-                arguments(429, "quota_exceeded", true, true),
-                arguments(503, "something_new", false, true),
-                arguments(502, "upstream_error", true, true),
-                arguments(400, "invalid_request", false, false),
-                arguments(403, "org_not_allowed", false, false));
+                arguments(429, "rate_limited", false, true, false),
+                arguments(429, "quota_exceeded", true, true, false),
+                arguments(503, "something_new", false, true, false),
+                arguments(502, "upstream_error", true, true, false),
+                arguments(503, "overloaded", true, true, false),
+                arguments(409, "something_new", true, true, false),
+                arguments(400, "invalid_request", false, false, true),
+                arguments(403, "org_not_allowed", false, false, true),
+                arguments(413, "input_too_long", false, false, true));
     }
 
-    @ParameterizedTest(name = "status {0}, code {1}, retryable {2}: backs off {3}")
-    @MethodSource("backOffs")
-    @DisplayName("any 429 or 5xx backs the workspace off, whatever its code")
-    void backsOff(int status, String code, boolean retryable, boolean expected) {
-        assertThat(TopicVectorsTickService.backsOff(inferenceException(status, code, retryable))).isEqualTo(expected);
+    @ParameterizedTest(name = "status {0}, code {1}, retryable {2}: backs off {3}, halves the chunk {4}")
+    @MethodSource("inferenceErrors")
+    @DisplayName("any 429, 5xx or retryable error backs the workspace off, whatever its code; only a non-retryable 4xx "
+            + "other than 429 halves the chunk")
+    void backsOffOrHalves(int status, String code, boolean retryable, boolean backsOff, boolean halves) {
+        var exception = inferenceException(status, code, retryable);
+
+        assertThat(TopicVectorsTickService.backsOff(exception)).isEqualTo(backsOff);
+        assertThat(TopicVectorsTickService.isRejectedInput(exception)).isEqualTo(halves);
     }
 
     @Nested
@@ -194,6 +199,29 @@ class TopicVectorsTickServiceTest {
         }
     }
 
+    /** Two invalid embeddings for one chunk, and the size of each embedding the chunk gets (null for null). */
+    static Stream<Arguments> invalidEmbeddings() {
+        var full = vectorOf("x");
+        var withNull = new ArrayList<>(full);
+        withNull.set(7, null);
+        return Stream.of(
+                arguments("a null embedding and a null element", Arrays.<List<Float>>asList(null, withNull),
+                        Arrays.asList(null, 384, 384)),
+                arguments("383 and 768 numbers",
+                        List.of(full.subList(0, TopicVectorsTickService.EMBED_DIMENSIONS - 1),
+                                Stream.concat(full.stream(), full.stream()).toList()),
+                        List.of(383, 768, 384)));
+    }
+
+    static Stream<Arguments> unusableAnswers() {
+        return Stream.of(
+                arguments("an empty answer", Mono.empty()),
+                arguments("an answer without a result", Mono.just(EmbedResponse.builder().build())),
+                arguments("a result without embeddings", Mono.just(EmbedResponse.builder()
+                        .result(EmbedResult.builder().embeddings(null).build())
+                        .build())));
+    }
+
     @Nested
     @DisplayName("tick")
     class Tick {
@@ -206,7 +234,7 @@ class TopicVectorsTickServiceTest {
         private TopicWorkspaceService workspaces;
         private AiLabelTaskRegistry registry;
         private TestMeter meter;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final List<EmbedRequest> requests = Collections.synchronizedList(new ArrayList<>());
         private final List<TopicVector> inserted = Collections.synchronizedList(new ArrayList<>());
@@ -226,7 +254,7 @@ class TopicVectorsTickServiceTest {
             workspaces = mock(TopicWorkspaceService.class);
             registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
                     registry, names(), noArrival(), meter.meter, clock);
@@ -305,20 +333,17 @@ class TopicVectorsTickServiceTest {
                     TopicVectorsTickService.MISSING_SUMMARY, 1));
         }
 
-        @Test
-        @DisplayName("a null embedding and a null element cost only their own traces, the rest of the chunk is written")
-        void nullEmbeddingAndNullElement() {
-            var nullEmbedding = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(3));
-            var nullElement = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2));
-            var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
-            var candidates = List.of(nullEmbedding, nullElement, normal);
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("com.comet.opik.domain.topics.TopicVectorsTickServiceTest#invalidEmbeddings")
+        @DisplayName("an invalid embedding costs only its own trace, the rest of the chunk is written")
+        void invalidEmbeddingCostsOnlyItsTrace(String name, List<List<Float>> invalid, List<Integer> sizes) {
+            var candidates = IntStream.range(0, 3)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(3 - i)))
+                    .toList();
+            var normal = candidates.get(2);
             stub(candidates, candidate -> "intent of " + candidate.traceId());
             var texts = candidates.stream().map(candidate -> "intent of " + candidate.traceId()).toList();
-            var withNull = new ArrayList<>(vectorOf("x"));
-            withNull.set(7, null);
-            var embeddings = new ArrayList<List<Float>>();
-            embeddings.add(null);
-            embeddings.add(withNull);
+            var embeddings = new ArrayList<>(invalid);
             embeddings.add(vectorOf("intent of " + normal.traceId()));
             answerEmbed(embedRequest(WORKSPACE_ID, texts), EmbedResponse.builder()
                     .result(EmbedResult.builder().embeddings(embeddings).build())
@@ -326,39 +351,18 @@ class TopicVectorsTickServiceTest {
 
             var result = service.tick(NOW);
 
+            assertThat(embeddings).extracting(embedding -> embedding == null ? null : embedding.size())
+                    .containsExactlyElementsOf(sizes);
             assertThat(inserted).extracting(TopicVector::traceId).containsExactly(normal.traceId());
             assertThat(result.written()).isOne();
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
         }
 
-        @Test
-        @DisplayName("a vector shorter or longer than 384 costs only its own trace, the rest of the chunk is written")
-        void wrongLengthVector() {
-            var shorter = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(3));
-            var longer = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2));
-            var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1));
-            var candidates = List.of(shorter, longer, normal);
-            stub(candidates, candidate -> "intent of " + candidate.traceId());
-            var texts = candidates.stream().map(candidate -> "intent of " + candidate.traceId()).toList();
-            var full = vectorOf("x");
-            var embeddings = List.of(full.subList(0, TopicVectorsTickService.EMBED_DIMENSIONS - 1),
-                    Stream.concat(full.stream(), full.stream()).toList(),
-                    vectorOf("intent of " + normal.traceId()));
-            answerEmbed(embedRequest(WORKSPACE_ID, texts), EmbedResponse.builder()
-                    .result(EmbedResult.builder().embeddings(embeddings).build())
-                    .build());
-
-            var result = service.tick(NOW);
-
-            assertThat(embeddings).extracting(List::size).containsExactly(383, 768, 384);
-            assertThat(inserted).extracting(TopicVector::traceId).containsExactly(normal.traceId());
-            assertThat(result.written()).isOne();
-            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
-        }
-
-        @Test
-        @DisplayName("a response without embeddings counts its whole chunk as invalid, and the next chunk still runs")
-        void nullEmbeddingsList() {
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("com.comet.opik.domain.topics.TopicVectorsTickServiceTest#unusableAnswers")
+        @DisplayName("an answer without embeddings counts its whole chunk as invalid, throws nothing, and the next "
+                + "chunk still runs")
+        void unusableAnswer(String name, Mono<EmbedResponse> answer) {
             config.getVectors().setEmbedBatchSize(2);
             var candidates = IntStream.range(0, 4)
                     .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(4 - i)))
@@ -367,9 +371,7 @@ class TopicVectorsTickServiceTest {
             var texts = candidates.stream().map(candidate -> "intent of " + candidate.traceId()).toList();
             var first = embedRequest(WORKSPACE_ID, texts.subList(0, 2));
             var second = embedRequest(WORKSPACE_ID, texts.subList(2, 4));
-            answerEmbed(first, EmbedResponse.builder()
-                    .result(EmbedResult.builder().embeddings(null).build())
-                    .build());
+            doReturn(answer).when(client).embed(first, NOW.plus(EMBED_TIMEOUT));
 
             var result = service.tick(NOW);
 
@@ -378,23 +380,6 @@ class TopicVectorsTickServiceTest {
             verifyNoMoreInteractions(client);
             assertThat(inserted).extracting(TopicVector::traceId)
                     .containsExactly(candidates.get(2).traceId(), candidates.get(3).traceId());
-            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
-        }
-
-        @Test
-        @DisplayName("an empty answer or one without a result counts the chunk as invalid and throws nothing")
-        void nullResult() {
-            config.getVectors().setEmbedBatchSize(1);
-            var candidates = List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(2)),
-                    candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1)));
-            stub(candidates, c -> "intent");
-            // Both chunks send the same request: the first answer is empty, the second has no result.
-            doReturn(Mono.empty(), Mono.just(EmbedResponse.builder().build())).when(client)
-                    .embed(embedRequest(WORKSPACE_ID, List.of("intent")), NOW.plus(EMBED_TIMEOUT));
-
-            var result = service.tick(NOW);
-
-            assertThat(inserted).isEmpty();
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INVALID_VECTOR, 2));
         }
 
@@ -534,21 +519,6 @@ class TopicVectorsTickServiceTest {
                             .map(TopicVectorCandidate::traceId).toList());
             assertThat(result.written()).isEqualTo(4);
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 1));
-        }
-
-        @Test
-        @DisplayName("a 4xx that is retryable, or a 429, is not halved: the workspace backs off")
-        void retryableOrThrottledIsNotHalved() {
-            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(400, "invalid_request", false)))
-                    .isTrue();
-            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(413, "input_too_long", false)))
-                    .isTrue();
-            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(429, "quota_exceeded", true)))
-                    .isFalse();
-            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(409, "something_new", true)))
-                    .isFalse();
-            assertThat(TopicVectorsTickService.isRejectedInput(inferenceException(503, "overloaded", true)))
-                    .isFalse();
         }
 
         @Test
@@ -804,11 +774,7 @@ class TopicVectorsTickServiceTest {
         void noWindowReadUnderASecondLeft(long leftMillis, int reads) {
             var start = NOW.minus(config.getVectors().getTickBudget().toJavaDuration()).plusMillis(leftMillis);
             when(findUnvectored(dao, WORKSPACE_ID, start, SHORT_WINDOW, 5_000, 1)).thenReturn(Flux.empty());
-            var appender = new ListAppender<ILoggingEvent>();
-            var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
-            appender.start();
-            logger.addAppender(appender);
-            try {
+            withTickLog(log -> {
                 service.tick(start);
 
                 findUnvectored(verify(dao, times(reads)), WORKSPACE_ID, start, SHORT_WINDOW, 5_000, 1);
@@ -817,12 +783,10 @@ class TopicVectorsTickServiceTest {
                         any(Instant.class), anyLong());
                 verify(dao, times(reads)).countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong());
                 verifyNoMoreInteractions(dao);
-                assertThat(appender.list)
+                assertThat(log.list)
                         .filteredOn(event -> event.getFormattedMessage().contains("workspaces not read"))
                         .hasSize(1 - reads);
-            } finally {
-                logger.detachAppender(appender);
-            }
+            });
         }
 
         @Test
@@ -832,15 +796,11 @@ class TopicVectorsTickServiceTest {
             var newer = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(20));
             var normal = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(10));
             stub(List.of(oldest, newer, normal), candidate -> candidate == normal ? "fine" : "   ");
-            var appender = new ListAppender<ILoggingEvent>();
-            var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
-            appender.start();
-            logger.addAppender(appender);
-            try {
+            withTickLog(log -> {
                 var result = service.tick(NOW);
 
                 assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.MISSING_SUMMARY, 2));
-                assertThat(appender.list)
+                assertThat(log.list)
                         .filteredOn(event -> event.getFormattedMessage().contains("without a summary"))
                         .singleElement()
                         .satisfies(event -> {
@@ -850,9 +810,7 @@ class TopicVectorsTickServiceTest {
                                     .contains("traces '2'")
                                     .contains("oldest '" + oldest.traceId() + "'");
                         });
-            } finally {
-                logger.detachAppender(appender);
-            }
+            });
         }
 
         @Test
@@ -951,15 +909,7 @@ class TopicVectorsTickServiceTest {
         @DisplayName("the deleted-trace check runs once per workspace, after its last chunk, reading 1,000 keys at a "
                 + "time")
         void oneDeletedTraceCheckPerWorkspace() {
-            var candidates = IntStream.range(0, 1_001)
-                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1_001 - i)))
-                    .toList();
-            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, config.getVectors().getMaxTracesPerTick(),
-                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
-            stubSummaries(WORKSPACE_ID, candidates.subList(0, 1_000), candidate -> "intent of " + candidate.traceId(),
-                    BUDGET_SECONDS);
-            stubSummaries(WORKSPACE_ID, candidates.subList(1_000, 1_001),
-                    candidate -> "intent of " + candidate.traceId(), BUDGET_SECONDS);
+            var candidates = stubThousandAndOneTraces();
 
             var result = service.tick(NOW);
 
@@ -977,16 +927,8 @@ class TopicVectorsTickServiceTest {
         @DisplayName("a failed read of a later chunk of the deleted-trace check keeps the deletes of the chunk before "
                 + "it, and keeps only its own vectors as written")
         void laterDeletedTraceCheckChunkFailure() {
-            var candidates = IntStream.range(0, 1_001)
-                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1_001 - i)))
-                    .toList();
+            var candidates = stubThousandAndOneTraces();
             var deleted = candidates.get(500);
-            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, config.getVectors().getMaxTracesPerTick(),
-                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
-            stubSummaries(WORKSPACE_ID, candidates.subList(0, 1_000), candidate -> "intent of " + candidate.traceId(),
-                    BUDGET_SECONDS);
-            stubSummaries(WORKSPACE_ID, candidates.subList(1_000, 1_001),
-                    candidate -> "intent of " + candidate.traceId(), BUDGET_SECONDS);
             var first = keys(candidates.subList(0, 1_000));
             var last = keys(candidates.subList(1_000, 1_001));
             when(dao.findStatusKeys(WORKSPACE_ID, TopicVectorsTickService.TASK, first, BUDGET_SECONDS))
@@ -1177,6 +1119,23 @@ class TopicVectorsTickServiceTest {
             verifyNoInteractions(dao);
         }
 
+        /**
+         * Stubs a short-window tick at {@code NOW} with 1,001 traces. A summary read takes at most 1,000 keys, so
+         * their summaries come in two reads.
+         */
+        private List<TopicVectorCandidate> stubThousandAndOneTraces() {
+            var candidates = IntStream.range(0, 1_001)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1_001 - i)))
+                    .toList();
+            when(findUnvectored(dao, WORKSPACE_ID, NOW, SHORT_WINDOW, config.getVectors().getMaxTracesPerTick(),
+                    FIND_SECONDS)).thenReturn(Flux.fromIterable(candidates));
+            stubSummaries(WORKSPACE_ID, candidates.subList(0, 1_000), candidate -> "intent of " + candidate.traceId(),
+                    BUDGET_SECONDS);
+            stubSummaries(WORKSPACE_ID, candidates.subList(1_000, 1_001),
+                    candidate -> "intent of " + candidate.traceId(), BUDGET_SECONDS);
+            return candidates;
+        }
+
         /** Stubs a short-window tick at {@code NOW}. */
         private void stub(List<TopicVectorCandidate> candidates, Function<TopicVectorCandidate, String> text) {
             stub(SHORT_WINDOW, candidates, text);
@@ -1227,7 +1186,7 @@ class TopicVectorsTickServiceTest {
         private static final Duration INTERVAL = Duration.ofMinutes(1);
 
         private TopicsConfig config;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final Map<String, Instant> lockedUntil = new HashMap<>();
         private final List<Duration> windowsRead = new ArrayList<>();
@@ -1246,7 +1205,7 @@ class TopicVectorsTickServiceTest {
             var lockService = mock(LockService.class);
             var workspaces = mock(TopicWorkspaceService.class);
             var registry = mock(AiLabelTaskRegistry.class);
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService,
                     registry, names(), noArrival(), new TestMeter().meter, clock);
@@ -1279,12 +1238,7 @@ class TopicVectorsTickServiceTest {
                         return Flux.fromStream(IntStream.range(0, unvectored)
                                 .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, upperBound.minusSeconds(60))));
                     });
-            when(dao.findSummaries(eq(WORKSPACE_ID), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
-                    .thenAnswer(invocation -> {
-                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
-                        return Flux.fromIterable(keys).map(key -> TopicSummary.builder().projectId(key.projectId())
-                                .traceId(key.traceId()).taskVersion(1).summary("intent of " + key.traceId()).build());
-                    });
+            stubSummaryOfEachKey(dao);
             when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
                 EmbedRequest request = invocation.getArgument(0);
                 clock.advance(embedTime);
@@ -1294,11 +1248,7 @@ class TopicVectorsTickServiceTest {
                 List<TopicVector> rows = invocation.getArgument(0);
                 return Mono.just((long) rows.size());
             });
-            when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
-                    .thenAnswer(invocation -> {
-                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
-                        return Flux.fromIterable(keys);
-                    });
+            stubNoDeletedTrace(dao);
         }
 
         // The tick lock lasts 59 s and each pod fires at its own second, so ticks are 59 to 61 s apart.
@@ -1445,7 +1395,7 @@ class TopicVectorsTickServiceTest {
         private LockService lockService;
         private TopicWorkspaceService workspaces;
         private TestMeter meter;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final List<TopicVectorCandidate> unvectored = new ArrayList<>();
         private final List<UUID> embedded = new ArrayList<>();
@@ -1467,7 +1417,7 @@ class TopicVectorsTickServiceTest {
             workspaces = mock(TopicWorkspaceService.class);
             var registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
                     lockService, registry, names(), noArrival(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
@@ -1498,12 +1448,7 @@ class TopicVectorsTickServiceTest {
                     .thenAnswer(invocation -> read(invocation.getArgument(0), invocation.getArgument(6),
                             invocation.getArgument(7), invocation.getArgument(2), invocation.getArgument(3),
                             invocation.getArgument(4), invocation.getArgument(5), invocation.getArgument(8)));
-            when(dao.findSummaries(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
-                    .thenAnswer(invocation -> {
-                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
-                        return Flux.fromIterable(keys).map(key -> TopicSummary.builder().projectId(key.projectId())
-                                .traceId(key.traceId()).taskVersion(1).summary("intent of " + key.traceId()).build());
-                    });
+            stubSummaryOfEachKey(dao);
             when(dao.insert(anyList())).thenAnswer(invocation -> {
                 List<TopicVector> vectors = invocation.getArgument(0);
                 vectors.forEach(vector -> {
@@ -1512,11 +1457,7 @@ class TopicVectorsTickServiceTest {
                 });
                 return Mono.just((long) vectors.size());
             });
-            when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
-                    .thenAnswer(invocation -> {
-                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
-                        return Flux.fromIterable(keys);
-                    });
+            stubNoDeletedTrace(dao);
             when(dao.findBackfillProjects(anyString(), eq(TopicVectorsTickService.TASK), any(Instant.class),
                     any(Instant.class), anyLong())).thenAnswer(invocation -> Flux.fromIterable(discoverable));
             when(dao.countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong()))
@@ -1919,31 +1860,27 @@ class TopicVectorsTickServiceTest {
                     .forEach(i -> undrained(WORKSPACE_ID, NOW.minusSeconds(i)));
             // Time for a window read, not for an embed call: the backfill phase does not start, so none is drained.
             clock.advance(Duration.ofSeconds(BUDGET_SECONDS - 5));
-            var appender = new ListAppender<ILoggingEvent>();
-            var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
-            appender.start();
-            logger.addAppender(appender);
+            withTickLog(log -> {
+                var result = service.tick(NOW);
 
-            var result = service.tick(NOW);
+                assertThat(result.written()).isZero();
+                assertThat(reads).isEmpty();
+                // Visible to an operator: counted as not read, and without a value in the oldest-unvectored gauge.
+                assertThat(meter.observeGauge()).isEmpty();
+                verify(meter.counter("topics.vectors.workspaces_not_read")).add(1, workspace(WORKSPACE_ID).build());
+                var warnings = log.list.stream()
+                        .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count();
+                assertThat(warnings).isOne();
 
-            assertThat(result.written()).isZero();
-            assertThat(reads).isEmpty();
-            // Visible to an operator: counted as not read, and without a value in the oldest-unvectored gauge.
-            assertThat(meter.observeGauge()).isEmpty();
-            verify(meter.counter("topics.vectors.workspaces_not_read")).add(1, workspace(WORKSPACE_ID).build());
-            var warnings = appender.list.stream()
-                    .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count();
-            assertThat(warnings).isOne();
-
-            // Still over: counted again, logged once.
-            clock.advance(Duration.ofMinutes(1));
-            service.tick(clock.instant().minusSeconds(BUDGET_SECONDS - 5));
-            verify(meter.counter("topics.vectors.workspaces_not_read"), times(2)).add(1,
-                    workspace(WORKSPACE_ID).build());
-            assertThat(appender.list.stream()
-                    .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count())
-                    .isOne();
-            logger.detachAppender(appender);
+                // Still over: counted again, logged once.
+                clock.advance(Duration.ofMinutes(1));
+                service.tick(clock.instant().minusSeconds(BUDGET_SECONDS - 5));
+                verify(meter.counter("topics.vectors.workspaces_not_read"), times(2)).add(1,
+                        workspace(WORKSPACE_ID).build());
+                assertThat(log.list.stream()
+                        .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count())
+                        .isOne();
+            });
         }
 
         @Test
@@ -2082,7 +2019,7 @@ class TopicVectorsTickServiceTest {
         private TopicsConfig config;
         private TopicVectorsDAO dao;
         private InferenceClient client;
-        private TestClock clock;
+        private TopicsTestClock clock;
         private TopicVectorsTickService service;
         private final List<TopicVectorCandidate> candidates = new ArrayList<>();
         private final List<UUID> inserted = Collections.synchronizedList(new ArrayList<>());
@@ -2100,7 +2037,7 @@ class TopicVectorsTickServiceTest {
             var lockService = mock(LockService.class);
             var workspaces = mock(TopicWorkspaceService.class);
             var registry = mock(AiLabelTaskRegistry.class);
-            clock = new TestClock(NOW);
+            clock = new TopicsTestClock(NOW);
             service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, allDrained(), client,
                     lockService, registry, names(), noArrival(), new TestMeter().meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
@@ -2119,11 +2056,7 @@ class TopicVectorsTickServiceTest {
                 vectors.forEach(vector -> inserted.add(vector.traceId()));
                 return Mono.just((long) vectors.size());
             });
-            when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
-                    .thenAnswer(invocation -> {
-                        Collection<TopicTraceKey> keys = invocation.getArgument(2);
-                        return Flux.fromIterable(keys);
-                    });
+            stubNoDeletedTrace(dao);
         }
 
         @Test
@@ -2350,6 +2283,38 @@ class TopicVectorsTickServiceTest {
                 .thenReturn(Mono.just(Map.of()));
     }
 
+    /** The deleted-trace check finds every key it is asked for: no trace is deleted while it is embedded. */
+    private static void stubNoDeletedTrace(TopicVectorsDAO dao) {
+        when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                .thenAnswer(invocation -> {
+                    Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                    return Flux.fromIterable(keys);
+                });
+    }
+
+    /** Every summary read answers each key with "intent of" its trace id, whatever the workspace. */
+    private static void stubSummaryOfEachKey(TopicVectorsDAO dao) {
+        when(dao.findSummaries(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                .thenAnswer(invocation -> {
+                    Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                    return Flux.fromIterable(keys).map(key -> TopicSummary.builder().projectId(key.projectId())
+                            .traceId(key.traceId()).taskVersion(1).summary("intent of " + key.traceId()).build());
+                });
+    }
+
+    /** Runs {@code body} with a list appender on the tick's logger, and detaches it even if {@code body} fails. */
+    private static void withTickLog(Consumer<ListAppender<ILoggingEvent>> body) {
+        var appender = new ListAppender<ILoggingEvent>();
+        var logger = (Logger) LoggerFactory.getLogger(TopicVectorsTickService.class);
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            body.accept(appender);
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
     /** A deterministic, non-unit 384-number vector per text; "zero" gives the zero vector. */
     static List<Float> vectorOf(String text) {
         if (text.equals("zero")) {
@@ -2423,35 +2388,6 @@ class TopicVectorsTickServiceTest {
             return constructor.newInstance(code, retryable, httpStatus, null, null, null);
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException(exception);
-        }
-    }
-
-    /** A clock that stands still until a test moves it, so every deadline, time left and age the tick uses is exact. */
-    static final class TestClock extends Clock {
-
-        private volatile Instant now;
-
-        TestClock(Instant now) {
-            this.now = now;
-        }
-
-        void advance(Duration duration) {
-            now = now.plus(duration);
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return now;
         }
     }
 

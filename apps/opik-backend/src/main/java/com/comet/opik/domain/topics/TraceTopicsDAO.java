@@ -60,9 +60,7 @@ public class TraceTopicsDAO {
 
     /**
      * Traces per topic among the project's traces created in the window that Logs lists, each by its latest row. Any
-     * version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows. The
-     * latest row is the greatest (last_updated_at, run_id). A trace whose latest row is a tombstone is left out
-     * ({@code HAVING}).
+     * version of a trace that matches keeps it, as in the traces list. Every row counts, run rows and arrival rows.
      */
     private static final String COUNT_BY_TOPIC = """
             SELECT latest_topic AS topic_id, count() AS traces
@@ -167,11 +165,7 @@ public class TraceTopicsDAO {
                 });
     }
 
-    /**
-     * Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. A trace
-     * counts by its latest row. Rows and memory are capped by the window read's guards ({@code topics.vectors.find}),
-     * time by {@code maxExecutionSeconds}.
-     */
+    /** Per topic id ({@link TraceTopic#OTHER} for Other), the project's traces created in {@code [from, to)}. */
     public Flux<TopicCount> countByTopic(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant from,
             @NonNull Instant to, long maxExecutionSeconds) {
         var find = config.getVectors().getFind();

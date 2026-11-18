@@ -24,7 +24,6 @@ final class TopicsFixture {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     final Instant night;
-    final Instant windowFrom;
     final List<UUID> traceIds = new ArrayList<>();
     final List<Instant> createdAt = new ArrayList<>();
     final String[] intents;
@@ -37,7 +36,6 @@ final class TopicsFixture {
     private TopicsFixture() {
         var window = json("window.json");
         night = Instant.parse(window.get("night").asText());
-        windowFrom = Instant.parse(window.get("window_from").asText());
         var traces = window.get("traces");
         intents = new String[traces.size()];
         for (int i = 0; i < traces.size(); i++) {

@@ -68,8 +68,8 @@ CREATE TABLE IF NOT EXISTS topic_project_states
   COLLATE = utf8mb4_unicode_ci;
 
 -- One row per run on a project: written 'running' when the run starts and set to 'saved' in the save transaction, or to
--- 'failed' with a reason. stats is a JSON summary (vectors, unique texts, k, topics, Other share, Qwen calls, seconds,
--- provisional). Rows are deleted after topics.build.runsRetention (90 days).
+-- 'failed' with a reason. stats is a JSON summary of the run. Rows are deleted after topics.build.runsRetention (90
+-- days).
 CREATE TABLE IF NOT EXISTS topic_runs
 (
     run_id        CHAR(36)                                   NOT NULL,

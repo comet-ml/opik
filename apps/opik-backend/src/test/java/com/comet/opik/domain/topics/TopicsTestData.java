@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -57,28 +58,9 @@ final class TopicsTestData {
 
         /** {@code count} traces of random unit vectors, ten minutes apart, the last one ten minutes before night. */
         static Traces synthetic(int count, Instant night, long seed) {
-            int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
-            var random = new Random(seed);
-            var traceIds = new ArrayList<UUID>(count);
-            var createdAt = new ArrayList<Instant>(count);
-            var texts = new String[count];
-            var vectors = new float[count * dimensions];
-            for (int i = 0; i < count; i++) {
-                var created = night.minus(Duration.ofMinutes(10L * (count - i)));
-                createdAt.add(created);
-                traceIds.add(Generators.timeBasedEpochGenerator().construct(created.toEpochMilli()));
-                texts[i] = "intent " + i;
-                double norm = 0;
-                for (int t = 0; t < dimensions; t++) {
-                    var value = (float) random.nextGaussian();
-                    vectors[i * dimensions + t] = value;
-                    norm += value * value;
-                }
-                for (int t = 0; t < dimensions; t++) {
-                    vectors[i * dimensions + t] /= (float) Math.sqrt(norm);
-                }
-            }
-            return new Traces(List.copyOf(traceIds), List.copyOf(createdAt), texts, vectors, night);
+            var step = Duration.ofMinutes(10);
+            return of(count, night, night.minus(step.multipliedBy(count)), step, new Random(seed),
+                    Generators.timeBasedEpochGenerator());
         }
 
         /**
@@ -86,17 +68,21 @@ final class TopicsTestData {
          * UUID v7 with tails from {@code seed}, so the same seed gives the same ids.
          */
         static Traces spread(int count, Instant night, int days, long seed) {
-            int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
             var random = new Random(seed);
-            var ids = Generators.timeBasedEpochGenerator(random);
-            var step = Duration.ofDays(days).dividedBy(count);
-            var start = night.minus(Duration.ofDays(days));
+            return of(count, night, night.minus(Duration.ofDays(days)), Duration.ofDays(days).dividedBy(count), random,
+                    Generators.timeBasedEpochGenerator(random));
+        }
+
+        /** Trace {@code i} at {@code first + i * step}; its id, then its vector, are drawn in trace order. */
+        private static Traces of(int count, Instant night, Instant first, Duration step, Random random,
+                TimeBasedEpochGenerator ids) {
+            int dimensions = TopicVectorsTickService.EMBED_DIMENSIONS;
             var traceIds = new ArrayList<UUID>(count);
             var createdAt = new ArrayList<Instant>(count);
             var texts = new String[count];
             var vectors = new float[count * dimensions];
             for (int i = 0; i < count; i++) {
-                var created = start.plus(step.multipliedBy(i));
+                var created = first.plus(step.multipliedBy(i));
                 createdAt.add(created);
                 traceIds.add(ids.construct(created.toEpochMilli()));
                 texts[i] = "intent " + i;

@@ -46,12 +46,8 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  *
  * <p>A project runs when its workspace is opted in to topics (and ai-labels), it has a live topic, and its window (the
  * {@code topics.build.windowDays} whole UTC days before the night) holds at least {@code topics.build.minVectors} traces
- * with a vector. A project without a list is the first-build job's ({@link TopicsFirstBuildService}). Under the
- * project's lock the night checks again that its last saved run does not cover the night already and that it still has
- * a live topic. Projects run stalest first: the oldest {@code window_until}, and among equals the smallest. None starts
- * after {@code topics.nightly.budget}; those left run the next night. A project whose last {@value #PAUSE_FAILURES}
- * runs failed is paused for {@value #PAUSE_NIGHTS} nights. Each run is {@link TopicsProjectRunner#run}: its own
- * thread, stopped and failed with {@code timeout} after {@code topics.build.projectTimeout}.
+ * with a vector. A project without a list is the first-build job's ({@link TopicsFirstBuildService}). Projects run in
+ * {@link #queueOrder}; none starts after {@code topics.nightly.budget}, and those left run the next night.
  *
  * <p>Each night writes its record as it goes: its {@code topic_nights} row when it starts and ends, and one
  * {@code topic_night_projects} row per project as it decides it. The state gauges ({@link TopicsNightlyGauges}) read it.
@@ -102,7 +98,6 @@ public class TopicsNightlyService {
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
-    /** A project the night listed and skipped, with why. */
     private record Skipped(@NonNull Candidate candidate, @NonNull String reason) {
     }
 
@@ -439,10 +434,10 @@ public class TopicsNightlyService {
     }
 
     /**
-     * The night's record in {@code topic_nights} and {@code topic_night_projects}, written as the night goes: a row per
-     * decision, which the state gauges publish. Its start must succeed, or the night does not run. A later write that fails is logged and the night goes on: the state gauges then show it, a missing
-     * end as a night left running, which the next night's housekeeping fails. The first failed write of a night is a
-     * WARN with its error, the others DEBUG, and the night's end WARNs how many failed.
+     * Its start must succeed, or the night does not run. A later write that fails is logged and the night goes on: the
+     * state gauges then show it, a missing end as a night left running, which the next night's housekeeping fails. The
+     * first failed write of a night is a WARN with its error, the others DEBUG, and the night's end WARNs how many
+     * failed.
      */
     private final class NightRecord {
 

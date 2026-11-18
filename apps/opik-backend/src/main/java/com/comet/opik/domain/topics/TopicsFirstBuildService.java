@@ -35,11 +35,10 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  *
  * <p>A job run takes the projects of the opted-in workspaces (topics and ai-labels) that have no list, had a trace
  * written in the window, hold at least {@code topics.build.minVectors} traces with a vector in it, whose vectors
- * backfill has drained ({@link TopicsBackfillGate}), and whose last failed first build is old enough: a project waits 1
- * hour after its first failure, 6 hours after its second and a day after each later one. It builds them one at a time,
- * the most vectors first, each under its project's lock, until {@code topics.firstBuild.budget} is used. The window ends
- * at tomorrow's start (UTC), so it holds today's traces so far. A project that cannot start is skipped, and the run goes
- * on.
+ * backfill has drained ({@link TopicsBackfillGate}), and whose last failed first build is old enough ({@link
+ * #RETRY_DELAYS}). It builds them one at a time, the most vectors first, each under its project's lock, until {@code
+ * topics.firstBuild.budget} is used. The window ends at tomorrow's start (UTC), so it holds today's traces so far. A
+ * project that cannot start is skipped, and the run goes on.
  */
 @Slf4j
 @Singleton
@@ -86,17 +85,15 @@ public class TopicsFirstBuildService {
         return config.getFirstBuild().getBudget().toJavaDuration().plus(runner.projectLease());
     }
 
-    /** The wait after {@code failures} failed first builds of a project. */
     static Duration retryDelay(int failures) {
         return RETRY_DELAYS.get(Math.min(failures, RETRY_DELAYS.size()) - 1);
     }
 
     /**
      * The job's run: the runs' housekeeping and the delete of deleted projects' topic data, then the labelling passes
-     * that did not finish ({@link #resumeLabels}), then the first builds of {@link #candidates}, one at a time, until the
-     * budget is used. The passes go first but stop at half the budget when a first build waits, so a project with
-     * unfinished labels and a project with no list both get a turn in every run. The window ends at the start of the
-     * day after {@code start} (UTC).
+     * that did not finish ({@link #resumeLabels}), then the first builds of {@link #candidates}, one at a time, until
+     * the budget is used. The passes go first but stop at half the budget when a first build waits, so a project with
+     * unfinished labels and a project with no list both get a turn in every run.
      */
     public void run(@NonNull Instant start) {
         var began = Instant.now();
@@ -351,11 +348,9 @@ public class TopicsFirstBuildService {
 
     /**
      * Starts the project's first build now and returns its run id. The run goes on in the background with the same
-     * timeout, and its outcome is its {@code topic_runs} row. The window ends at {@code night}'s start (UTC). The
-     * workspace must be opted in to topics, the window must hold {@code minVectors} traces with a vector, and only one
-     * run by hand goes at a time across the cluster. No other run may hold this pod's run slot: a run by hand does not
-     * wait for it. The project's vectors backfill must have drained, unless {@code ignoreBackfill}: the operator's way
-     * to build a project whose backfill cannot drain. A failed first build's wait does not apply.
+     * timeout, and its outcome is its {@code topic_runs} row. The window ends at {@code night}'s start (UTC). {@code
+     * ignoreBackfill} is the operator's way to build a project whose backfill cannot drain. A failed first build's wait
+     * does not apply.
      *
      * @throws ConflictException           when the workspace is not opted in, the window is too small, a run of the
      *                                     project, another run by hand or another run on this pod is in progress, the

@@ -26,16 +26,12 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -348,7 +344,7 @@ class InferenceClientTest {
 
     @Test
     void responseBodyOverTheCapIsNotReadToItsEnd() throws IOException {
-        try (var endless = new EndlessBodyServer()) {
+        try (var endless = KeepAliveServer.endless()) {
             var config = maxResponseBytes(1024);
             config.getInference().setUrl(endless.url());
             client = new InferenceClient(TestHttpClientUtils.client(), config);
@@ -853,63 +849,6 @@ class InferenceClientTest {
                                 .build()))
                         .build()))
                 .build();
-    }
-
-    /** Answers every request with a chunked body that never ends, until the client closes the connection. */
-    private static final class EndlessBodyServer implements AutoCloseable {
-
-        private static final byte[] HEADERS = ("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                + "Transfer-Encoding: chunked\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
-        private static final byte[] CHUNK = ("2000\r\n" + " ".repeat(0x2000) + "\r\n")
-                .getBytes(StandardCharsets.US_ASCII);
-
-        private final ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
-        private final List<Socket> accepted = new CopyOnWriteArrayList<>();
-
-        EndlessBodyServer() throws IOException {
-            Thread.ofVirtual().start(this::accept);
-        }
-
-        String url() {
-            return "http://%s:%d".formatted(serverSocket.getInetAddress().getHostAddress(),
-                    serverSocket.getLocalPort());
-        }
-
-        int connections() {
-            return accepted.size();
-        }
-
-        private void accept() {
-            while (true) {
-                try {
-                    var socket = serverSocket.accept();
-                    accepted.add(socket);
-                    Thread.ofVirtual().start(() -> writeForever(socket));
-                } catch (IOException exception) {
-                    // closed
-                    return;
-                }
-            }
-        }
-
-        private static void writeForever(Socket socket) {
-            try (var output = socket.getOutputStream()) {
-                output.write(HEADERS);
-                while (true) {
-                    output.write(CHUNK);
-                }
-            } catch (IOException exception) {
-                // the client closed the connection
-            }
-        }
-
-        @Override
-        public void close() throws IOException {
-            serverSocket.close();
-            for (var socket : accepted) {
-                socket.close();
-            }
-        }
     }
 
     private static BatchGenerateRequest generateRequest(int items, int contentLength) {

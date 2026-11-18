@@ -94,7 +94,6 @@ public class TopicsBackfillGate {
         }
     }
 
-    /** Reads the rows of {@code workspaceIds}, once. */
     public Gate read(@NonNull Collection<String> workspaceIds, @NonNull Instant now) {
         Map<String, Map<UUID, TopicVectorBackfill>> rows = workspaceIds.isEmpty()
                 ? Map.of()

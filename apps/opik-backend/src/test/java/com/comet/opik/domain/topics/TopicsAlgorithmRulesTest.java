@@ -48,14 +48,6 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
-        @DisplayName("shares format as 100 * size / n, rounded as Python's f-format")
-        void shares() {
-            assertThat(TopicText.fixed(100 * ((double) 122 / 400), 1)).isEqualTo("30.5");
-            assertThat(TopicText.fixed(100 * ((double) 1 / 3), 1)).isEqualTo("33.3");
-            assertThat(TopicText.fixed(100 * ((double) 1 / 8), 1)).isEqualTo("12.5");
-        }
-
-        @Test
         @DisplayName("code point order puts an emoji after U+FFFD, unlike String.compareTo")
         void codePointOrder() {
             var emoji = "🚀";

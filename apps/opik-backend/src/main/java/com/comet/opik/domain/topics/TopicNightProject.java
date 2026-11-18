@@ -25,7 +25,6 @@ public record TopicNightProject(
     public static final String SKIP = "skip";
     /** The night's budget ran out before the project: it runs the next night. */
     public static final String NOT_REACHED = "not_reached";
-    /** The decision of a project's row when its window count read failed. */
     public static final String COUNT_FAILED = "count_failed";
 
     /**

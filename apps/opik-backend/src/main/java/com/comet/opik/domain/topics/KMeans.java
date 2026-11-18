@@ -15,12 +15,10 @@ import java.util.concurrent.CancellationException;
  * one seeded {@link SplittableRandom}, the restart with the lowest weighted inertia kept. Centres are L2-normalized after
  * the fit. A cluster left empty by an update takes the point farthest from its centre, so none stays empty.
  *
- * <p>Lloyd keeps Elkan's bounds (an upper bound on each point's distance to its centre, a lower bound to every other
- * centre, half the distances between centres), so a point is measured again only against the centres those bounds do
- * not rule out; the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product
- * a plain loop in double over the dimensions in order, so the sums run in the same order on every machine. Only an
- * empty cluster's new point is picked with the direct sum of {@code (x - c)²}, as plain Lloyd does. The bounds take
- * {@code n * k} doubles.
+ * <p>Lloyd keeps Elkan's bounds, so a point is measured again only against the centres those bounds do not rule out;
+ * the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product a plain loop in
+ * double over the dimensions in order, so the sums run in the same order on every machine. Only an empty cluster's new
+ * point is picked with the direct sum of {@code (x - c)²}, as plain Lloyd does. The bounds take {@code n * k} doubles.
  *
  * <p>The dot product can move to the Java Vector API once that API is final (out of incubator): at 100,000 points of
  * 384 dimensions, k = 50, a Vector API dot product made this fit 2.9 times faster than the scalar loop.
