@@ -1032,6 +1032,10 @@ topics:
     namingDeadline: 30s
     verifyDeadline: 60s
     runsRetention: 90d
+  nightly:
+    enabled: true
+    schedule: "0 0 2 * * ?"
+    budget: 2h
 
 # Python evaluator configuration
 pythonEvaluator:

@@ -74,9 +74,16 @@ final class TopicsTestMeter {
         when(meter.gaugeBuilder(anyString())).thenAnswer(invocation -> {
             String name = invocation.getArgument(0);
             var builder = mock(DoubleGaugeBuilder.class, RETURNS_SELF);
-            doAnswer(build -> doubleGauges.put(name, build.getArgument(0))).when(builder).buildWithCallback(any());
+            // A second TopicsMetrics on the same meter registers the name again: return no gauge, not the old callback.
+            doAnswer(build -> {
+                doubleGauges.put(name, build.getArgument(0));
+                return null;
+            }).when(builder).buildWithCallback(any());
             var longs = mock(LongGaugeBuilder.class, RETURNS_SELF);
-            doAnswer(build -> longGauges.put(name, build.getArgument(0))).when(longs).buildWithCallback(any());
+            doAnswer(build -> {
+                longGauges.put(name, build.getArgument(0));
+                return null;
+            }).when(longs).buildWithCallback(any());
             doReturn(longs).when(builder).ofLongs();
             return builder;
         });

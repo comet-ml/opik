@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -43,6 +44,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
 
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
@@ -126,6 +130,24 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;
         }
+    }
+
+    @Data
+    public static class NightlyConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. */
+        @JsonProperty
+        private boolean enabled;
+
+        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project starts after this much of the night has passed; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
     }
 
     @Data
