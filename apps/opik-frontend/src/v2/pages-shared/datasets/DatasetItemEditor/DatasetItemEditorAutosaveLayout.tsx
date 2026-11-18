@@ -122,7 +122,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
               tags={tags}
               onAddTag={handleAddTag}
               onDeleteTag={handleDeleteTag}
-              size="sm"
+              size="md"
               align="start"
             />
           </div>

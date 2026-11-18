@@ -72,7 +72,7 @@ const AddItemPanelWrapperContent: React.FC<{
               onDeleteTag={(tag) =>
                 setTags((prev) => prev.filter((t) => t !== tag))
               }
-              size="sm"
+              size="md"
               align="start"
               showAddLabelWhenEmpty={showAddTagLabel}
             />

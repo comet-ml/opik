@@ -9,7 +9,10 @@ import { JsonObject } from "@/types/shared";
 import { cn } from "@/lib/utils";
 import PathSourcePicker from "./PathSourcePicker";
 import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
-import { MappingRow as MappingRowType } from "./fieldMappingTypes";
+import {
+  MappingRow as MappingRowType,
+  QUICK_ADD_CHIPS,
+} from "./fieldMappingTypes";
 import { FieldRowError } from "./useFieldMappings";
 import { FieldCoverage } from "./useFieldCoverage";
 
@@ -53,6 +56,10 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
 }) => {
   const isManaged = row.kind === "managed";
   const isCustom = row.kind === "custom";
+  const managedLabel = isManaged
+    ? QUICK_ADD_CHIPS.find((chip) => chip.option === row.option)?.label ??
+      row.name
+    : undefined;
 
   const renderCoverage = () => {
     if (!coverage || coverage.covered >= coverage.total) return null;
@@ -102,7 +109,11 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
     return (
       <PathSourcePicker
         fieldName={row.name}
-        path={isManaged ? row.name : row.path}
+        path={isManaged ? undefined : row.path}
+        sourceLabel={managedLabel && `${managedLabel} · filled by Opik`}
+        headerText={
+          managedLabel && `Pick a field to replace Opik's ${managedLabel}`
+        }
         placeholder={onPathClear ? "Not mapped" : undefined}
         badge={renderCoverage()}
         invalid={rowError === "no_path"}

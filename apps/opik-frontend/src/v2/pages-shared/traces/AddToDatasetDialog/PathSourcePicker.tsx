@@ -10,6 +10,9 @@ type PathSourcePickerProps = {
   fieldName?: string;
   path?: string;
   placeholder?: string;
+  // Shown instead of a path when the value is filled by Opik rather than mapped.
+  sourceLabel?: string;
+  headerText?: string;
   badge?: React.ReactNode;
   invalid?: boolean;
   treeData: JsonObject;
@@ -26,6 +29,8 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
   fieldName,
   path,
   placeholder = "Select a field",
+  sourceLabel,
+  headerText,
   badge,
   invalid,
   treeData,
@@ -49,14 +54,20 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
         invalid && "border-destructive",
       )}
     >
-      <span
-        className={cn(
-          "comet-code min-w-0 flex-1 truncate text-xs",
-          path ? "text-foreground" : "text-light-slate",
-        )}
-      >
-        {path || placeholder}
-      </span>
+      {!path && sourceLabel ? (
+        <span className="comet-body-xs min-w-0 flex-1 truncate text-muted-slate">
+          {sourceLabel}
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "comet-code min-w-0 flex-1 truncate text-xs",
+            path ? "text-foreground" : "text-light-slate",
+          )}
+        >
+          {path || placeholder}
+        </span>
+      )}
       {badge}
       <ChevronDown className="size-3 shrink-0 text-muted-slate" />
     </button>
@@ -65,7 +76,8 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
   const header = (
     <div className="flex items-center gap-2 border-b px-3 py-2">
       <span className="comet-body-xs-accented min-w-0 flex-1 truncate">
-        {name ? `Select a field to map to: ${name}` : "Add field"}
+        {headerText ??
+          (name ? `Select a field to map to: ${name}` : "Add field")}
       </span>
       {onClear && path && (
         <Button
