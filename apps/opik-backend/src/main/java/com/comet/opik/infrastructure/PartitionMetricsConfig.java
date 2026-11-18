@@ -51,6 +51,15 @@ public class PartitionMetricsConfig {
     @JsonProperty
     private boolean tieredStorageEnabled;
 
+    /**
+     * How far behind now the tiered-storage window ends, so rows still buffered for {@code system.query_log} and
+     * {@code system.part_log} (7.5 s flush by default) land in the next window instead of being skipped.
+     */
+    @NotNull @JsonProperty
+    @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+    private Duration tieredStorageLogFlushLag = Duration.seconds(15);
+
     /** Derived: the parsed, stripped, blank-free list of LWD tables, deduplicated so no table is scanned twice. */
     public List<String> getLwdTables() {
         return Arrays.stream(lwdTables.split(","))

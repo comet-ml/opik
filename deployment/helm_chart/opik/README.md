@@ -558,6 +558,7 @@ Call opik api on http://localhost:5173/api
 | partitionMetrics.interval | string | `"5m"` |  |
 | partitionMetrics.lwdTables | string | `"traces,spans"` |  |
 | partitionMetrics.tieredStorageEnabled | bool | `false` |  |
+| partitionMetrics.tieredStorageLogFlushLag | string | `"15s"` |  |
 | redis.architecture | string | `"standalone"` |  |
 | redis.auth.enabled | bool | `true` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |

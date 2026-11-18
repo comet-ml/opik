@@ -24,6 +24,7 @@ import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple4;
@@ -77,6 +78,11 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private static final AttributeKey<String> SOURCE_KEY = stringKey("source");
     private static final AttributeKey<String> CODE_KEY = stringKey("code");
 
+    private static final String PARTITION_METRIC = "opik.clickhouse.partition.%s";
+    private static final String TIERED_TABLE_METRIC = "opik.clickhouse.tiered_table.%s";
+    private static final String SOURCE_ALL = "all";
+    private static final String SOURCE_COLD = "cold";
+
     /** {@code partitionCounts}: exact distinct partitions per table, then per range. */
     @Builder(toBuilder = true)
     private record Snapshot(
@@ -92,11 +98,16 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                 .build();
     }
 
+    @Builder(toBuilder = true)
     private record TieredStats(
             List<TieredReadStat> reads,
             List<TieredReadFailureStat> failures,
             List<MoveErrorStat> moveErrors) {
-        private static final TieredStats EMPTY = new TieredStats(List.of(), List.of(), List.of());
+        private static final TieredStats EMPTY = TieredStats.builder()
+                .reads(List.of())
+                .failures(List.of())
+                .moveErrors(List.of())
+                .build();
     }
 
     private final ClickHousePartitionMetricsDAO partitionMetricsDAO;
@@ -125,70 +136,75 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.clickhouse");
 
         // Aggregated one series per table (partition counts are the only non-per-partition metrics).
-        meter.gaugeBuilder("opik.clickhouse.partition.count").ofLongs()
+        meter.gaugeBuilder(PARTITION_METRIC.formatted("count")).ofLongs()
                 .setDescription("Number of active partitions per table")
                 .buildWithCallback(measurement -> snapshot.get().partitionCounts()
                         .forEach((table, byRange) -> measurement.record(
                                 byRange.values().stream().mapToLong(Long::longValue).sum(),
                                 Attributes.of(TABLE_KEY, table))));
-        meter.gaugeBuilder("opik.clickhouse.partition.range_count").ofLongs()
-                .setDescription("Number of active partitions per table by range "
-                        + "(in_range, out_of_range_future, out_of_range_past)")
+        meter.gaugeBuilder(PARTITION_METRIC.formatted("range_count")).ofLongs()
+                .setDescription("""
+                        Number of active partitions per table by range \
+                        (in_range, out_of_range_future, out_of_range_past)""")
                 .buildWithCallback(measurement -> snapshot.get().partitionCounts()
                         .forEach((table, byRange) -> byRange.forEach((range, count) -> measurement.record(count,
                                 Attributes.of(TABLE_KEY, table, RANGE_KEY, range.getValue())))));
 
         // Per-(table, partition) series sourced from system.parts.
-        registerPartitionGauge(meter, "opik.clickhouse.partition.size_bytes",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("size_bytes"),
                 "Total size on disk of active parts per partition", PartitionStat::bytes);
-        registerPartitionGauge(meter, "opik.clickhouse.partition.max_part_size_bytes",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("max_part_size_bytes"),
                 "Largest single active part size per partition (max by table = largest active part)",
                 PartitionStat::maxPartBytes);
-        registerPartitionGauge(meter, "opik.clickhouse.partition.parts",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("parts"),
                 "Number of active parts per partition", PartitionStat::parts);
-        registerPartitionGauge(meter, "opik.clickhouse.partition.rows",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("rows"),
                 "Total physical rows (including LWD-masked) of active parts per partition", PartitionStat::rows);
-        registerPartitionGauge(meter, "opik.clickhouse.partition.last_activity_seconds",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("last_activity_seconds"),
                 "Unix timestamp of the most recent part modification per partition",
                 PartitionStat::lastActivityEpochSeconds);
-        registerPartitionGauge(meter, "opik.clickhouse.partition.cold_bytes",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("cold_bytes"),
                 "Size on disk of active parts on object-storage (cold tier) disks per partition",
                 PartitionStat::coldBytes);
-        registerPartitionGauge(meter, "opik.clickhouse.partition.ttl_move_due_parts",
+        registerPartitionGauge(meter, PARTITION_METRIC.formatted("ttl_move_due_parts"),
                 "Active parts on local disks whose move TTL has expired per partition",
                 PartitionStat::ttlMoveDueParts);
 
         // Per-(table, partition) series sourced from the LWD mask scan.
-        registerLwdGauge(meter, "opik.clickhouse.partition.lwd_rows",
+        registerLwdGauge(meter, PARTITION_METRIC.formatted("lwd_rows"),
                 "Number of lightweight-deleted (masked) rows per partition", LwdStat::lwdRows);
 
         // Per-table series over the last poll interval, sourced from system.query_log and system.part_log.
-        meter.gaugeBuilder("opik.clickhouse.tiered_table.queries").ofLongs()
-                .setDescription("Finished SELECTs on a cold-tier table over the last poll interval, "
-                        + "by source (all, cold = read the cold tier)")
+        meter.gaugeBuilder(TIERED_TABLE_METRIC.formatted("queries")).ofLongs()
+                .setDescription("""
+                        Finished SELECTs on a cold-tier table over the last poll interval, \
+                        by source (all, cold = read the cold tier)""")
                 .buildWithCallback(measurement -> snapshot.get().tieredStats().reads().forEach(stat -> {
-                    measurement.record(stat.queries(), Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, "all"));
+                    measurement.record(stat.queries(), Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, SOURCE_ALL));
                     measurement.record(stat.coldQueries(),
-                            Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, "cold"));
+                            Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, SOURCE_COLD));
                 }));
-        meter.gaugeBuilder("opik.clickhouse.tiered_table.query_duration_p99_ms").ofLongs()
-                .setDescription("p99 duration of finished SELECTs on a cold-tier table over the last poll interval, "
-                        + "by source (all, cold = read the cold tier)")
+        meter.gaugeBuilder(TIERED_TABLE_METRIC.formatted("query_duration_p99_ms")).ofLongs()
+                .setDescription("""
+                        p99 duration of finished SELECTs on a cold-tier table over the last poll interval, \
+                        by source (all, cold = read the cold tier)""")
                 .buildWithCallback(measurement -> snapshot.get().tieredStats().reads().forEach(stat -> {
-                    measurement.record(stat.p99Millis(), Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, "all"));
+                    measurement.record(stat.p99Millis(),
+                            Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, SOURCE_ALL));
                     // No cold reads means no cold p99, not a p99 of 0.
                     if (stat.coldQueries() > 0) {
                         measurement.record(stat.coldP99Millis(),
-                                Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, "cold"));
+                                Attributes.of(TABLE_KEY, stat.table(), SOURCE_KEY, SOURCE_COLD));
                     }
                 }));
-        meter.gaugeBuilder("opik.clickhouse.tiered_table.failed_queries").ofLongs()
-                .setDescription("Queries on a cold-tier table that failed with a cold-read error over the last "
-                        + "poll interval, by ClickHouse error name")
+        meter.gaugeBuilder(TIERED_TABLE_METRIC.formatted("failed_queries")).ofLongs()
+                .setDescription("""
+                        Queries on a cold-tier table that failed with a cold-read error over the last poll interval, \
+                        by ClickHouse error name""")
                 .buildWithCallback(measurement -> snapshot.get().tieredStats().failures()
                         .forEach(stat -> measurement.record(stat.failedQueries(),
                                 Attributes.of(TABLE_KEY, stat.table(), CODE_KEY, stat.code()))));
-        meter.gaugeBuilder("opik.clickhouse.tiered_table.move_errors").ofLongs()
+        meter.gaugeBuilder(TIERED_TABLE_METRIC.formatted("move_errors")).ofLongs()
                 .setDescription("Failed part moves (e.g. hot to cold) over the last poll interval")
                 .buildWithCallback(measurement -> snapshot.get().tieredStats().moveErrors()
                         .forEach(
@@ -260,19 +276,25 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
             return Mono.just(TieredStats.EMPTY);
         }
         var window = config.getInterval().toJavaDuration();
+        var logFlushLag = config.getTieredStorageLogFlushLag().toJavaDuration();
         return Mono.zip(
-                orEmpty(partitionMetricsDAO.getTieredReadStats(window), "tiered read stats"),
-                orEmpty(partitionMetricsDAO.getTieredReadFailures(window), "tiered read failures"),
-                orEmpty(partitionMetricsDAO.getMoveErrors(window), "move errors"))
-                .map(result -> new TieredStats(result.getT1(), result.getT2(), result.getT3()));
+                orEmpty(partitionMetricsDAO.getTieredReadStats(window, logFlushLag), "tiered read stats"),
+                orEmpty(partitionMetricsDAO.getTieredReadFailures(window, logFlushLag), "tiered read failures"),
+                orEmpty(partitionMetricsDAO.getMoveErrors(window, logFlushLag), "move errors"))
+                .map(result -> TieredStats.builder()
+                        .reads(result.getT1())
+                        .failures(result.getT2())
+                        .moveErrors(result.getT3())
+                        .build());
     }
 
-    private static <T> Mono<List<T>> orEmpty(Mono<List<T>> query, String name) {
-        return query.onErrorResume(exception -> {
-            log.warn("ClickHouse partition metrics: '{}' query failed, partition gauges still refreshed", name,
-                    exception);
-            return Mono.just(List.of());
-        });
+    private static <T> Mono<List<T>> orEmpty(Flux<T> query, String name) {
+        return query.collectList()
+                .onErrorResume(exception -> {
+                    log.warn("ClickHouse partition metrics: query failed, partition gauges still refreshed, query '{}'",
+                            name, exception);
+                    return Mono.just(List.of());
+                });
     }
 
     /** Empty while there are no projects; not cached then, so the lookup is retried next poll. */
@@ -285,7 +307,8 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                 .map(earliest -> earliest.map(date -> {
                     var start = PartitionRange.floorFor(date);
                     cachedPartitionRangeStart.set(start);
-                    log.info("ClickHouse partition metrics: partition range starts '{}', from install date '{}'",
+                    log.info(
+                            "ClickHouse partition metrics: partition range from install date, start '{}', install date '{}'",
                             start, date);
                     return start;
                 }));
@@ -308,7 +331,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                 .lwdStats(lwdStats)
                 .tieredStats(result.getT4())
                 .build());
-        log.debug("ClickHouse partition metrics refreshed: '{}' partitions as '{}' series, '{}' LWD series",
+        log.debug("ClickHouse partition metrics refreshed, partitions '{}', series '{}', LWD series '{}'",
                 result.getT1().size(), partitionStats.size(), lwdStats.size());
     }
 
