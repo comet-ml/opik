@@ -95,6 +95,9 @@ class JSDivergence(_DistributionMetricBase):
         track: Whether to automatically track metric results.
         project_name: Optional tracking project name.
 
+    Raises:
+        ValueError: If ``base`` is non-finite or less than or equal to ``1.0``.
+
     Note:
         Requires :mod:`scipy` to be installed.
 
@@ -203,6 +206,9 @@ class JSDistance(JSDivergence):
         name: Display name for the metric result.
         track: Whether to automatically track metric results.
         project_name: Optional tracking project name.
+
+    Raises:
+        ValueError: If ``base`` is non-finite or less than or equal to ``1.0``.
 
     Example:
         >>> from opik.evaluation.metrics import JSDistance
