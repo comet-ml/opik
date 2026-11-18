@@ -12,15 +12,17 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.Accessors;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
-// Holds the genai Client the langchain4j model is built on, and closes the model; see close().
-@Slf4j
+/**
+ * A Vertex AI chat model that inlines remote media before each call, and holds the Gen AI {@link Client} it is built
+ * on. Nothing to close: the client runs on the HTTP client every Vertex AI call shares, see
+ * {@link VertexAIClientGenerator}.
+ */
 @RequiredArgsConstructor
 @Accessors(fluent = true)
-class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
+class VertexAiChatModel implements ChatModel {
 
     private final @NonNull ChatModel delegate;
     @Getter
@@ -47,23 +49,5 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
     @Override
     public Set<Capability> supportedCapabilities() {
         return delegate.supportedCapabilities();
-    }
-
-    /**
-     * Closes the delegate only. The client is left open: closing it would shut the dispatcher and empty the connection
-     * pool that every Vertex AI call shares, see {@link VertexAIClientGenerator}, and it holds nothing else. The
-     * per-request close of OPIK-7847 targeted the old {@code VertexAI} client's GAX executor, which google-genai on the
-     * shared HTTP client doesn't have.
-     */
-    @Override
-    public void close() {
-        // A no-op with today's delegate, but only it can release anything it owns.
-        try {
-            if (delegate instanceof AutoCloseable closeable) {
-                closeable.close();
-            }
-        } catch (Exception e) {
-            log.warn("Failed to close the delegate Vertex AI model", e);
-        }
     }
 }

@@ -77,8 +77,8 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
     });
   };
 
-  const visibleSelectedCount = dataKeys.filter(
-    (key) => selectedKeys?.includes(key),
+  const visibleSelectedCount = dataKeys.filter((key) =>
+    selectedKeys?.includes(key),
   ).length;
   const allKeysSelected =
     dataKeys.length > 0 && visibleSelectedCount === dataKeys.length;

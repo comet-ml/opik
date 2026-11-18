@@ -106,7 +106,7 @@ export const GroupRow = <TColumnData,>({
               <Button
                 variant="minimal"
                 size="icon-xs"
-                className="cursor-move "
+                className="cursor-move"
                 {...listeners}
               >
                 <GripVertical className="size-3" />

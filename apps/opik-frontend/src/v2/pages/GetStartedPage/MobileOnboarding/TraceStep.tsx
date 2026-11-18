@@ -96,7 +96,7 @@ const SPANS: SpanNode[] = [
 ];
 
 function buildConnectorInfo(spans: SpanNode[]): boolean[][] {
-  const info: boolean[][] = new Array(spans.length);
+  const info: boolean[][] = Array.from({ length: spans.length });
   const hasFollowing: boolean[] = [];
 
   for (let i = spans.length - 1; i >= 0; i--) {

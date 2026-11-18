@@ -135,21 +135,21 @@ export class AddToDatasetDialogPage {
   }
 
   /**
-   * The submit button. Its label counts the selected rows ("Add 1 item"), which
+   * The submit button. Its label counts the selected rows ("Add 1 trace"), which
    * is also the only thing distinguishing it from "Add to dataset" in the
    * empty-selection state — so the count is part of the name on purpose.
    */
-  submitButton(itemCount: number): Locator {
+  submitButton(itemCount: number, entity: 'trace' | 'span' = 'trace'): Locator {
     return this.root.getByRole('button', {
-      name: `Add ${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
+      name: `Add ${itemCount} ${itemCount === 1 ? entity : `${entity}s`}`,
       exact: true,
     });
   }
 
   /** Submit, and wait for the dialog to close. */
-  async submit(itemCount: number): Promise<void> {
-    return test.step(`Submit the dialog (${itemCount} item(s))`, async () => {
-      await this.submitButton(itemCount).click();
+  async submit(itemCount: number, entity: 'trace' | 'span' = 'trace'): Promise<void> {
+    return test.step(`Submit the dialog (${itemCount} ${entity}(s))`, async () => {
+      await this.submitButton(itemCount, entity).click();
       await expect(this.root, 'the dialog closes on submit').toBeHidden();
     });
   }

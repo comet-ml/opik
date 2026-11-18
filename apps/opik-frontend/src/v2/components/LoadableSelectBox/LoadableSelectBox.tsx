@@ -215,12 +215,12 @@ export const LoadableSelectBox = ({
       const newSelectedValues = selectedValues.filter(
         (v) => !filteredValuesSet.has(v),
       );
-      onChange && (onChange as (value: string[]) => void)(newSelectedValues);
+      if (onChange) (onChange as (value: string[]) => void)(newSelectedValues);
     } else {
       const newSelectedValues = [
         ...new Set([...selectedValues, ...filteredOptions.map((o) => o.value)]),
       ];
-      onChange && (onChange as (value: string[]) => void)(newSelectedValues);
+      if (onChange) (onChange as (value: string[]) => void)(newSelectedValues);
     }
   }, [
     multiselect,
@@ -369,12 +369,12 @@ export const LoadableSelectBox = ({
                         const newSelectedValues = isSelected(option.value)
                           ? selectedValues.filter((v) => v !== option.value)
                           : [...selectedValues, option.value];
-                        onChange &&
+                        if (onChange)
                           (onChange as (value: string[]) => void)(
                             newSelectedValues,
                           );
                       } else {
-                        onChange &&
+                        if (onChange)
                           (onChange as (value: string) => void)(option.value);
                         openChangeHandler(false);
                       }

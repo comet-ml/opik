@@ -44,7 +44,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     : `Compare (${experimentsIds.length})`;
 
   useEffect(() => {
-    title && setBreadcrumbParam("compare", "Compare", title);
+    if (title) setBreadcrumbParam("compare", "Compare", title);
     return () => setBreadcrumbParam("compare", "Compare", "");
   }, [title, setBreadcrumbParam]);
 

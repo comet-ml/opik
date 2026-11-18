@@ -188,7 +188,7 @@ const setMarkProperty = (unit: Unit, key: string, value: unknown) => {
 
 const setScaleProperty = (channel: Channel, key: string, value: unknown) => {
   if (!channel) return;
-  const scale = { ...((channel.scale as Unit) ?? {}) };
+  const scale = { ...(channel.scale as Unit) };
   if (scale[key] === undefined) scale[key] = value;
   channel.scale = scale;
 };
@@ -213,7 +213,7 @@ const setChannelProperty = (
   value: unknown,
 ) => {
   if (!channel || channel[part] === null) return;
-  const props = { ...((channel[part] as Unit) ?? {}) };
+  const props = { ...(channel[part] as Unit) };
   if (props[key] === undefined) props[key] = value;
   channel[part] = props;
 };
@@ -371,13 +371,13 @@ export const prepareVegaSpec = (
   const data = prepared.data as Record<string, unknown> | undefined;
   const values = rows
     ? coerceNumericRows(rows)
-    : (data?.values as VegaRows | undefined) ?? [];
+    : ((data?.values as VegaRows | undefined) ?? []);
   if (rows) {
     // Live rows always win: a spec carrying its own `values` (or any other source) would show stale data.
     const name = typeof data?.name === "string" ? data.name : VEGA_ROWS_DATASET;
     prepared.data = { name };
     prepared.datasets = {
-      ...((prepared.datasets as object) ?? {}),
+      ...(prepared.datasets as object),
       [name]: values,
     };
   }

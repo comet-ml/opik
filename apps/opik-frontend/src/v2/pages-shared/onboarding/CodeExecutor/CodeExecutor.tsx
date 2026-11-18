@@ -82,7 +82,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-md border  bg-primary-foreground ${
+      className={`relative overflow-hidden rounded-md border bg-primary-foreground ${
         consoleIsOpened ? "border-border" : "border-transparent"
       }`}
     >

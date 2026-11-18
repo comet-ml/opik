@@ -227,8 +227,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   const dataToView = useMemo(() => {
     return spanId
-      ? find(spansData?.content || [], (span: Span) => span.id === spanId) ??
-          trace
+      ? (find(spansData?.content || [], (span: Span) => span.id === spanId) ??
+          trace)
       : trace;
   }, [spanId, spansData?.content, trace]);
 
@@ -333,7 +333,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     return {
       onChange: (shift: 1 | -1) => {
         const rowId = shift > 0 ? nextRowId : previousRowId;
-        rowId && handleRowSelect(rowId);
+        if (rowId) handleRowSelect(rowId);
       },
       hasNext: Boolean(nextRowId),
       hasPrevious: Boolean(previousRowId),
