@@ -1,5 +1,9 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
+import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.fasterxml.jackson.databind.node.TextNode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -8,6 +12,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.SplittableRandom;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -58,6 +65,89 @@ class TopicsAlgorithmRulesTest {
             assertThat(" x".strip()).isEqualTo(" x");
             assertThat(TopicText.pythonStrip("a b")).isEqualTo("a b");
             assertThat(TopicText.pythonStrip(" \t ")).isEmpty();
+        }
+
+        @ParameterizedTest(name = "{0} is a catch-all as a whole: {1}")
+        @CsvSource({
+                "Other, true",
+                "OTHERS, true",
+                "' Miscellaneous Requests ', true",
+                "'Other  Requests', true",
+                "'Other\tRequests', true",
+                "'General\u00A0Questions', true",
+                "General Questions, true",
+                "Various Tasks, true",
+                "Mixed, true",
+                "Mixed Requests, true",
+                "Mixed Martial Arts, false",
+                "General Job Search, false",
+                "Other and System Events, false",
+                "Generalization Help, false",
+                "Weekly Sales Summaries, false"})
+        @DisplayName("catch-all names: the author's rule drops a name only when it is a catch-all as a whole")
+        void catchAllName(String name, boolean expected) {
+            assertThat(AuthorApplier.isCatchAllName(name)).isEqualTo(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("the author answer")
+    class Answer {
+
+        @Test
+        @DisplayName("an object parses as is, unknown keys ignored")
+        void object() throws IOException {
+            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree(
+                    "{\"topics\": [], \"assignment\": [], \"note\": 1}"));
+            assertThat(answer.topics()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("each cluster goes to the topic of its first mention; -1 and an index off the list end in Other")
+        void perCluster() throws IOException {
+            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \"A\", "
+                    + "\"definition\": \"a\"}, {\"name\": \"B\", \"definition\": \"b\"}], \"assignment\": ["
+                    + "{\"cluster\": 0, \"topic\": 1}, {\"cluster\": 1, \"topic\": 0}, {\"cluster\": 0, \"topic\": 0}, "
+                    + "{\"cluster\": 2, \"topic\": -1}, {\"cluster\": 3, \"topic\": 7}]}"));
+
+            assertThat(answer.topics()).extracting(AuthorAnswer.Topic::name).containsExactly("A", "B");
+            assertThat(answer.topics().get(0).clusters()).containsExactly(1);
+            assertThat(answer.topics().get(1).clusters()).containsExactly(0);
+            var groups = IntStream.range(0, 4).mapToObj(j -> GroupSummary.builder().group(j).size(10).build())
+                    .toList();
+            assertThat(AuthorApplier.apply(answer, groups, 10).other()).containsExactly(2, 3);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "{\"topics\": []}",
+                "{\"assignment\": []}",
+                "{\"topics\": [{\"name\": \"A\"}], \"assignment\": []}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1.5, \"topic\": 0}]}",
+                "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1}]}",
+                "{\"topics\": [{\"name\": 3, \"definition\": \"d\"}], \"assignment\": []}",
+                "[1, 2]"})
+        @DisplayName("an answer off the schema is qwen_bad_answer")
+        void bad(String json) throws IOException {
+            var node = InferenceJson.MAPPER.readTree(json);
+            assertThatThrownBy(() -> AuthorAnswer.parse(node))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
+        }
+
+        @Test
+        @DisplayName("a textual output is qwen_bad_answer, even one holding a valid answer; the error keeps no text")
+        void textIsBad() {
+            var text = "{\"topics\": [{\"name\": \"user-secret-text\", \"definition\": \"d\"}], \"assignment\": []}";
+            assertThatThrownBy(() -> AuthorAnswer.parse(TextNode.valueOf(text)))
+                    .isInstanceOfSatisfying(TopicsRunException.class, exception -> {
+                        assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER);
+                        assertThat(exception.getCause()).isNull();
+                        assertThat(exception.getMessage()).doesNotContain("user-secret-text");
+                    });
+            assertThatThrownBy(() -> AuthorAnswer.parse(null))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
         }
     }
 
@@ -118,6 +208,168 @@ class TopicsAlgorithmRulesTest {
                     .containsExactly("y", "w", "v");
             assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 2, 2).get(0))
                     .containsExactly("y", "w", "v", "x");
+        }
+
+        @Test
+        @DisplayName("the prompt lists the groups largest first with a whole-percent share and the given examples")
+        void prompt() {
+            var groups = List.of(
+                    GroupSummary.builder().group(0).size(10).share(0.1).build(),
+                    GroupSummary.builder().group(1).size(40).share(0.4).build(),
+                    GroupSummary.builder().group(2).size(0).build());
+
+            var prompt = TopicPrompts.author(groups, 10, List.of(List.of("zero"), List.of("one", "uno"), List.of()));
+
+            assertThat(prompt)
+                    .contains("at most 10 topics")
+                    .contains(
+                            "  cluster 1: 40% of traffic\n    - one\n    - uno\n  cluster 0: 10% of traffic\n    - zero")
+                    .contains("\"assignment\"")
+                    .doesNotContain("cluster 2:", "{clusters}");
+        }
+    }
+
+    @Nested
+    @DisplayName("apply")
+    class Apply {
+
+        private final List<GroupSummary> groups = IntStream.range(0, 14)
+                .mapToObj(j -> GroupSummary.builder().group(j).size(100 - j).build())
+                .toList();
+
+        @Test
+        @DisplayName("11 topics keep the 10 largest; catch-alls are dropped before the cut")
+        void cap() {
+            var topics = new ArrayList<AuthorAnswer.Topic>();
+            topics.add(new AuthorAnswer.Topic("Other Stuff", "d", List.of(0)));
+            for (int j = 1; j <= 11; j++) {
+                topics.add(new AuthorAnswer.Topic("Topic " + j, "d", List.of(j)));
+            }
+            var applied = AuthorApplier.apply(new AuthorAnswer(topics), groups, 10);
+            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+                    .containsExactly("Topic 1", "Topic 2", "Topic 3", "Topic 4", "Topic 5", "Topic 6", "Topic 7",
+                            "Topic 8", "Topic 9", "Topic 10");
+            assertThat(applied.other()).containsExactly(0, 11, 12, 13);
+        }
+
+        @Test
+        @DisplayName("a group goes to the largest topic that lists it; invalid and repeated ids are ignored")
+        void claims() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorAnswer.Topic(" Small ", " d ", List.of(5, 99, -1)),
+                    new AuthorAnswer.Topic("Big", "d", List.of(1, 2, 2, 5)),
+                    new AuthorAnswer.Topic("Empty", "d", List.of(1))));
+            var applied = AuthorApplier.apply(answer, groups, 10);
+            assertThat(applied.topics()).hasSize(1);
+            assertThat(applied.topics().getFirst().name()).isEqualTo("Big");
+            assertThat(applied.topics().getFirst().groups()).containsExactly(1, 2, 5);
+            assertThat(applied.other()).containsExactly(0, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13);
+        }
+
+        @Test
+        @DisplayName("names and definitions are stripped as Python strips them; ties keep the answer's order")
+        void strip() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorAnswer.Topic(" B ", " b ", List.of(3)),
+                    new AuthorAnswer.Topic("A", "a", List.of(4, -5))));
+            var flat = IntStream.range(0, 6)
+                    .mapToObj(j -> GroupSummary.builder().group(j).size(10).build()).toList();
+            var applied = AuthorApplier.apply(answer, flat, 10);
+            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsExactly("B", "A");
+            assertThat(applied.topics().getFirst().definition()).isEqualTo("b");
+        }
+
+        @Test
+        @DisplayName("topics with the same name merge into the largest one, at the first one's place")
+        void sameNames() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorAnswer.Topic("Email Drafting", "small", List.of(9, 4)),
+                    new AuthorAnswer.Topic("Billing", "d", List.of(2)),
+                    new AuthorAnswer.Topic(" email\u00A0 drafting", "large", List.of(3, 4)),
+                    new AuthorAnswer.Topic("Email Drafts", "d", List.of(10))));
+            var applied = AuthorApplier.apply(answer, groups, 10);
+            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+                    .containsExactly("email\u00A0 drafting", "Billing", "Email Drafts");
+            var email = applied.topics().getFirst();
+            assertThat(email.definition()).isEqualTo("large");
+            assertThat(email.groups()).containsExactly(3, 4, 9);
+        }
+
+        @Test
+        @DisplayName("a blank name is no name: its groups go to Other and it takes no slot")
+        void blankName() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorAnswer.Topic(" \u00A0 ", "d", List.of(1)),
+                    new AuthorAnswer.Topic("Billing", "d", List.of(2))));
+            var applied = AuthorApplier.apply(answer, groups, 1);
+            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsExactly("Billing");
+            assertThat(applied.other()).contains(1).doesNotContain(2);
+        }
+
+        @Test
+        @DisplayName("a name over 255 code points is cut to 255, so the save can't fail on it")
+        void longName() {
+            var name = "\uD83D\uDE00".repeat(300);
+            var answer = new AuthorAnswer(List.of(new AuthorAnswer.Topic(name, "d", List.of(1))));
+            var stored = AuthorApplier.apply(answer, groups, 10).topics().getFirst().name();
+            assertThat(stored.codePointCount(0, stored.length())).isEqualTo(TopicText.MAX_NAME_LENGTH);
+            assertThat(TopicText.name(" Billing ")).isEqualTo("Billing");
+        }
+
+        @Test
+        @DisplayName("the name key strips, collapses whitespace as Python does, and lower-cases")
+        void nameKey() {
+            assertThat(AuthorApplier.nameKey("\u00A0 Email \t\u2003Drafting \n")).isEqualTo("email drafting");
+            assertThat(AuthorApplier.nameKey("   ")).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("assignment")
+    class Assignment {
+
+        @Test
+        @DisplayName("ties go to the lower prototype; below 0.75 is Other")
+        void ties() {
+            var a = new float[]{1, 0};
+            var assigner = new PrototypeAssigner(List.of(a, a.clone()), List.of(0, 1), List.of(), 2);
+            assertThat(assigner.assign(new float[]{1, 0, 0.7f, 0.71414284f})).containsExactly(0,
+                    PrototypeAssigner.OTHER);
+        }
+
+        @Test
+        @DisplayName("a known-Other prototype at 0.95 or more to a topic prototype is left out")
+        void gate() {
+            var topic = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var assigner = new PrototypeAssigner(List.of(topic), List.of(0), List.of(close, far), 2);
+            assertThat(assigner.gatedOther()).isEqualTo(1);
+            assertThat(assigner.prototypeCount()).isEqualTo(2);
+            assertThat(assigner.assign(new float[]{0.96f, 0.28f, 0, 1})).containsExactly(0, PrototypeAssigner.OTHER);
+        }
+
+        @Test
+        @DisplayName("the kept Other prototypes alone assign as all of them do, and none is within 0.95 of a topic")
+        void keptOther() {
+            var topic = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var all = new PrototypeAssigner(List.of(topic), List.of(0), List.of(close, far), 2);
+
+            assertThat(all.keptOther()).containsExactly(far);
+            for (var other : all.keptOther()) {
+                assertThat((double) other[0] * topic[0] + (double) other[1] * topic[1])
+                        .isLessThan(PrototypeAssigner.OTHER_GATE);
+            }
+            var kept = new PrototypeAssigner(List.of(topic), List.of(0), all.keptOther(), 2);
+            assertThat(kept.gatedOther()).isZero();
+            var vectors = new float[2 * 360];
+            for (int d = 0; d < 360; d++) {
+                vectors[2 * d] = (float) Math.cos(Math.toRadians(d));
+                vectors[2 * d + 1] = (float) Math.sin(Math.toRadians(d));
+            }
+            assertThat(kept.assign(vectors)).containsExactly(all.assign(vectors));
         }
     }
 
