@@ -18,6 +18,7 @@ import com.comet.opik.api.resources.v1.jobs.SpanWeeksBackfillJob;
 import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.api.resources.v1.jobs.TopicsFirstBuildJob;
+import com.comet.opik.api.resources.v1.jobs.TopicsNightlyJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
@@ -75,6 +76,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setAnnotationQueueRoutingFlushJob();
                 setAiLabelsJob();
                 setTopicVectorsJob();
+                setTopicsNightlyJob();
                 setTopicsFirstBuildJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
@@ -205,6 +207,17 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(TopicVectorsJob.class, topicsConfig.getVectors().getTickInterval().toJavaDuration(),
                 null);
+    }
+
+    private void setTopicsNightlyJob() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+
+        if (!topicsConfig.isEnabled() || !topicsConfig.getNightly().isEnabled()) {
+            log.info("Topics nightly job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleCronJob(TopicsNightlyJob.class, topicsConfig.getNightly().getSchedule());
     }
 
     private void setTopicsFirstBuildJob() {
