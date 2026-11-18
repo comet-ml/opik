@@ -10,6 +10,7 @@ import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.topics.TopicReadService;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -41,6 +42,7 @@ import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -96,6 +98,9 @@ class TraceServiceImplTest {
     @Mock
     private AttachmentReinjectorService attachmentReinjectorService;
 
+    @Mock
+    private TopicReadService topicReadService;
+
     private final DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig = DatabaseAnalyticsDataModelConfig
             .builder()
             .build();
@@ -108,6 +113,8 @@ class TraceServiceImplTest {
         // Mock AttachmentStripperService to return JsonNode unchanged (no stripping for tests)
         lenient().when(attachmentStripperService.stripAttachments(any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0)); // Return first argument (JsonNode) unchanged
+        // No topic filter in these searches: no topic scope
+        lenient().when(topicReadService.filterScope(any(), any())).thenReturn(Mono.just(Optional.empty()));
 
         traceService = newTraceService(databaseAnalyticsDataModelConfig);
     }
@@ -127,7 +134,8 @@ class TraceServiceImplTest {
                 attachmentStripperService,
                 attachmentService,
                 attachmentReinjectorService,
-                opikConfiguration);
+                opikConfiguration,
+                topicReadService);
     }
 
     @Nested

@@ -1042,6 +1042,9 @@ topics:
     interval: 10m
     budget: 9m
     backfillMaxWait: 72h
+  filter:
+    maxExecutionTime: 30s
+    maxMemoryUsage: 4294967296
 
 # Python evaluator configuration
 pythonEvaluator:
