@@ -7,8 +7,8 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
 
 /**
  * An OpenRouter id that opik#9364 dropped from the price table prices to
- * NOTHING and silently leaves the trace's roll-up, while an id that opik#9365
- * only de-labelled keeps its amount.
+ * NOTHING and silently leaves the trace's roll-up, while an id that kept its row
+ * keeps its amount.
  *
  * 2.2.139 regenerates `model_prices_openrouter.json` and the curated catalog
  * together, and the two moved different rows. The user-visible consequence the
@@ -32,25 +32,32 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *
  * Every span is logged with `usage` and no `total_cost`, so each amount is the
  * server's own lookup against the shipped file rather than something the seed
- * asserted back to itself. And the vectors form a 2x2 over two independent
- * facts — still in the price table, still labelled in the catalog:
+ * asserted back to itself. The four vectors:
  *
  *   id                                      label   priced
  *   poolside/laguna-s-2.1                   no      no
  *   nousresearch/hermes-3-llama-3.1-405b    no      no
- *   meta-llama/llama-3.1-70b-instruct       no      YES  ($1.44)
- *   qwen/qwen3.8-27b                        YES     YES  ($2.025)
+ *   meta-llama/llama-3.1-70b-instruct       YES     YES  ($1.44)
+ *   qwen/qwen3.8-27b                        YES     YES  ($2.26)
  *
  * Both amounts come from the fixture's pins, which track a generated file and
- * move between releases — opik#9585 re-priced the third row for 2.2.146. The
- * figures here are a reader's orientation, not the assertion.
+ * move between releases — opik#9585's 2.2.146 regen re-priced BOTH the third and
+ * the fourth row. The figures here are a reader's orientation, not the
+ * assertion.
  *
- * The third row is what stops this passing by accident. A build that shipped no
- * price file at all, or read a stale copy, or stopped resolving OpenRouter ids,
- * prices it wrongly and fails here — where a spec that only asserted "the two
- * removed ids are unpriced" would go green. The fourth row keeps
- * `catalogLabelled` from being a constant, so the catalog half is asserting
- * something too.
+ * The two priced rows are what stop this passing by accident. A build that
+ * shipped no price file at all, or read a stale copy, or stopped resolving
+ * OpenRouter ids, prices them wrongly and fails here — where a spec that only
+ * asserted "the two removed ids are unpriced" would go green. They sit under two
+ * different vendor prefixes, so a lookup that resolved one vendor and not the
+ * other cannot satisfy both.
+ *
+ * QA: this was authored as a 2x2, with meta-llama as a de-labelled-but-billed
+ * cell (opik#9365). opik#9608's provider-model sync re-labelled that row, so the
+ * label axis has collapsed — both priced rows are labelled now, and the only
+ * label contrast left is against the de-listed pair. The pricing claims, which
+ * are what `@cap:traces.span-model-cost-tokens` names, are unaffected. See the
+ * fixture's self-check for what restoring the cell would need.
  *
  * ## Not claimed
  *
@@ -158,7 +165,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:traces'] },
   () => {
     test(
-      'a de-listed OpenRouter id is attributed no cost at all and adds nothing to the trace, while the id that only lost its label is still billed',
+      'a de-listed OpenRouter id is attributed no cost at all and adds nothing to the trace, while the ids that kept their rows are still billed',
       { tag: ['@cap:traces.span-model-cost-tokens'] },
       async ({ openRouterRemovedRowSpans, project, backendClient }) => {
         // No page. The subject is the amount the price lookup resolves; the
@@ -210,7 +217,7 @@ test.describe(
           }
         });
 
-        await test.step('The de-labelled id is still billed at its own shipped rates', async () => {
+        await test.step('The surviving meta-llama id is still billed at its own shipped rates', async () => {
           // The half that makes the step above a finding rather than a
           // tautology: same provider, same token counts, same release — and
           // still priced. A build that had lost the price file wholesale fails
@@ -221,16 +228,16 @@ test.describe(
           // row ($0.40/M both ways to $0.72/M) — which failed on the literal
           // while the fixture was still the place the header tells a reader to
           // update. One source for a generated number.
-          const delabelled = seedFor(openRouterRemovedRowSpans, 'llama-delabelled');
+          const control = seedFor(openRouterRemovedRowSpans, 'llama-priced-control');
           expect(
-            delabelled.expectedCost,
-            'the de-labelled vector must carry a pinned amount — it is the priced control',
+            control.expectedCost,
+            'the meta-llama vector must carry a pinned amount — it is the priced control',
           ).not.toBeNull();
           expect(
-            costOf(byName, openRouterRemovedRowSpans, 'llama-delabelled'),
-            `meta-llama/llama-3.1-70b-instruct: de-labelled by 9365, still in the price table ` +
-              `(${delabelled.workings})`,
-          ).toBeCloseTo(delabelled.expectedCost!, 9);
+            costOf(byName, openRouterRemovedRowSpans, 'llama-priced-control'),
+            `meta-llama/llama-3.1-70b-instruct: still in the price table ` +
+              `(${control.workings})`,
+          ).toBeCloseTo(control.expectedCost!, 9);
         });
 
         await test.step("Every priced row is billed at its own rate, and the two rates differ", async () => {
@@ -271,7 +278,7 @@ test.describe(
           ).toBeCloseTo(openRouterRemovedRowSpans.expectedTraceCost, 9);
         });
 
-        await test.step('All four ids are still SERVED by the model catalog, and only the priced-and-labelled one has a label', async () => {
+        await test.step('All four ids are still SERVED by the model catalog, and the de-listed pair carry no label', async () => {
           // What turns "these spans are unpriced" into the user-facing finding:
           // the ids are still runnable. A row the catalog had dropped entirely
           // would make an unpriced span unremarkable — nothing can produce one —
@@ -299,14 +306,14 @@ test.describe(
               expect(
                 row!.label,
                 `'${seed.catalogId}' must still carry a catalog label, or there is nothing for ` +
-                  'the de-labelled vectors to be contrasted against',
+                  'the unlabelled vectors to be contrasted against',
               ).not.toBeNull();
               expect(row!.label, `'${seed.catalogId}' label is not blank`).not.toBe('');
             } else {
               expect(
                 row!.label,
-                `'${seed.catalogId}' was de-labelled, so the picker no longer offers it while ` +
-                  'the id stays runnable',
+                `'${seed.catalogId}' carries no catalog label, so the picker does not offer it ` +
+                  'while the id stays runnable',
               ).toBeNull();
             }
           }
