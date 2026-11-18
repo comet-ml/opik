@@ -160,6 +160,17 @@ def test_daemon_config_with_user_namespaces_disabled_fails(tmp_path, max_user_na
     assert not hardened_config_path.exists()
 
 
+@pytest.mark.parametrize("limit", ["", "-1", "abc", "1.5", "١٢"])
+def test_daemon_config_with_malformed_user_namespace_limit_fails(tmp_path, max_user_namespaces, limit):
+    max_user_namespaces.write_text(f"{limit}\n")
+    hardened_config_path = tmp_path / "daemon.json"
+
+    with pytest.raises(ValueError, match=r"^.+max_user_namespaces must hold a non-negative integer, not "):
+        write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
+
+    assert not hardened_config_path.exists()
+
+
 def test_daemon_config_with_unreadable_user_namespace_limit_fails(tmp_path, max_user_namespaces):
     max_user_namespaces.unlink()
     hardened_config_path = tmp_path / "daemon.json"

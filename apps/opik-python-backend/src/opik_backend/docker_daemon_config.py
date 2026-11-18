@@ -4,6 +4,7 @@ entrypoint.sh runs this file as a script before starting dockerd, so it imports 
 """
 import json
 import os
+import re
 import sys
 
 HARDENING_ENV_VAR = "PYTHON_CODE_EXECUTOR_DOCKER_HARDENING"
@@ -27,12 +28,14 @@ def hardening_enabled() -> bool:
 
 
 def check_user_namespaces_allowed(max_user_namespaces_path: str) -> None:
-    """userns-remap needs the host to allow user namespaces. With the limit at 0 (the Bottlerocket default) dockerd
-    still starts but every executor container fails to, so the backend would look healthy while rejecting every
-    evaluation. An unreadable limit fails too."""
+    """userns-remap needs the host to allow user namespaces. With the limit at 0, user namespace creation is disabled:
+    dockerd still starts but every executor container fails to, so the backend would look healthy while rejecting
+    every evaluation. An unreadable limit or one that isn't a non-negative integer fails too."""
     with open(max_user_namespaces_path) as f:
         limit = f.read().strip()
-    if limit == "0":
+    if not re.fullmatch(r"[0-9]+", limit, flags=re.ASCII):
+        raise ValueError(f"{max_user_namespaces_path} must hold a non-negative integer, not {limit[:32]!r}")
+    if int(limit) == 0:
         raise ValueError(
             f"user namespaces are disabled on this host ({max_user_namespaces_path} is 0), so executor containers "
             f"can't start with {HARDENING_ENV_VAR}=true; allow user namespaces on the node (user.max_user_namespaces)"
