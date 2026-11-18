@@ -338,6 +338,18 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
+        @DisplayName("the winner: ties to the earlier prototype, a gated known-Other one never wins, below 0.75 none")
+        void winners() {
+            var a = new float[]{1, 0};
+            var close = new float[]{0.96f, 0.28f};
+            var far = new float[]{0, 1};
+            var assigner = new PrototypeAssigner(List.of(a, a.clone()), List.of(0, 1), List.of(close, far), 2);
+
+            assertThat(assigner.winners(new float[]{1, 0, 0.96f, 0.28f, 0, 1, 0.6f, -0.8f}))
+                    .containsExactly(0, 0, 2, PrototypeAssigner.NO_WINNER);
+        }
+
+        @Test
         @DisplayName("a known-Other prototype at 0.95 or more to a topic prototype is left out")
         void gate() {
             var topic = new float[]{1, 0};
