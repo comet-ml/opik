@@ -65,6 +65,8 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
     private static final String CHAT_API_SUFFIX = "/v1";
     private static final String DECISIONS_API_SUFFIX = "/alpha/decisions";
+    private static final int SUCCESS_BODY_MAX_BYTES = 1024 * 1024;
+    private static final Duration DEFAULT_BODY_DEADLINE = Duration.ofSeconds(60);
 
     /**
      * Retried in-process on top of the 503/504 that {@link RetriableHttpClient} already retries: rate limit, bad
@@ -97,8 +99,8 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                 .requestCustomizer(builder -> {
                     builder.property(ClientProperties.FOLLOW_REDIRECTS, false)
                             .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
-                    // as for chat: no compressed reply, as an inflated body has no bound, and a stored header
-                    // replaces the one Opik sets
+                    // the shared client still inflates a compressed reply, so every body read is capped too;
+                    // a stored header replaces the one Opik sets
                     builder.acceptEncoding("identity");
                     var headers = ProviderHeadersHttpClient.normalizedProviderHeaders(config.headers());
                     if (!headers.containsKey(HttpHeaders.AUTHORIZATION)) {
@@ -152,8 +154,10 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
         if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
             DecisionsResponse body;
             try {
-                body = response.hasEntity() ? response.readEntity(DecisionsResponse.class) : null;
-            } catch (ProcessingException unreadable) {
+                body = response.hasEntity()
+                        ? JsonUtils.readValue(readSuccessBody(response), DecisionsResponse.class)
+                        : null;
+            } catch (IOException | ProcessingException | IllegalStateException | UncheckedIOException unreadable) {
                 // redacted as on the chat path: a parse error can quote the upstream body
                 throw new InternalServerErrorException(
                         "OpenRouter Decisions API returned an unreadable response, status '%s'".formatted(status),
@@ -198,18 +202,30 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
         return UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
     }
 
-    /**
-     * At most {@code providerErrorBodyMaxSize} bytes, read within the read timeout as a whole, as for a custom
-     * provider: the base URL can be the workspace's. Closing the body before its end cancels the connection.
-     */
+    private byte[] readSuccessBody(Response response) throws IOException {
+        var bytes = readBody(response, SUCCESS_BODY_MAX_BYTES + 1);
+        if (bytes.length > SUCCESS_BODY_MAX_BYTES) {
+            throw new IOException("the body is over the size limit");
+        }
+        return bytes;
+    }
+
     private byte[] readErrorBody(Response response) throws IOException {
-        int maxBytes = Math.toIntExact(llmProviderClientConfig.getProviderErrorBodyMaxSize().toBytes());
-        var readTimeout = Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
-                .map(io.dropwizard.util.Duration::toJavaDuration);
+        return readBody(response, Math.toIntExact(llmProviderClientConfig.getProviderErrorBodyMaxSize().toBytes()));
+    }
+
+    /**
+     * At most {@code maxBytes}, read within the read timeout as a whole, as for a custom provider: the base URL can
+     * be the workspace's. Closing the body before its end cancels the connection.
+     */
+    private byte[] readBody(Response response, int maxBytes) throws IOException {
+        var within = Optional.ofNullable(llmProviderClientConfig.getReadTimeout())
+                .map(io.dropwizard.util.Duration::toJavaDuration)
+                .orElse(DEFAULT_BODY_DEADLINE);
         try (var body = response.readEntity(InputStream.class);
-                var deadline = readTimeout.map(within -> BodyDeadline.closing(body, within)).orElse(null)) {
+                var deadline = BodyDeadline.closing(body, within)) {
             var bytes = body.readNBytes(maxBytes);
-            if (deadline != null && deadline.expired()) {
+            if (deadline.expired()) {
                 throw new IOException("the deadline closed the body");
             }
             return bytes;

@@ -19,6 +19,7 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.client.Client;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -30,9 +31,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPOutputStream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -211,6 +217,42 @@ class OpenRouterDecisionsClientTest {
                         .doesNotContain("upstream-secret"));
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void successBodyOverTheSizeLimitFails(boolean gzip) throws IOException {
+        var body = SUCCESS_BODY.replaceFirst("\\{", "{" + " ".repeat(1024 * 1024)).getBytes(StandardCharsets.UTF_8);
+        var reply = aResponse().withStatus(200).withHeader("Content-Type", "application/json");
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(gzip
+                ? reply.withHeader("Content-Encoding", "gzip").withBody(gzip(body))
+                : reply.withBody(body)));
+        // the gzip client inflates as the production client does
+        var client = gzip ? newDecisionsClient(RELAXED_GUARD, TestHttpClientUtils.gzipClient()) : decisionsClient;
+
+        assertThatThrownBy(() -> client.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOf(InternalServerErrorException.class)
+                .hasMessage("OpenRouter Decisions API returned an unreadable response, status '200'");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {200, 400})
+    void bodyThatArrivesSlowlyStopsAtTheDeadline(int status) {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(status).withHeader("Content-Type", "application/json")
+                        .withBody(status == 200 ? SUCCESS_BODY : ERROR_BODY)
+                        .withChunkedDribbleDelay(10, 6_000)));
+        // each chunk comes within the read timeout, but the whole body does not
+        clientConfig.setReadTimeout(Duration.seconds(1));
+        long start = System.nanoTime();
+        try {
+            assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                    .isInstanceOf(status == 200 ? InternalServerErrorException.class : ClientErrorException.class);
+        } finally {
+            clientConfig.setReadTimeout(Duration.seconds(5));
+        }
+
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(4_000);
+    }
+
     @Test
     void timeoutIsNotRetriedInProcess() {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
@@ -343,8 +385,20 @@ class OpenRouterDecisionsClientTest {
     }
 
     private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard) {
-        return new OpenRouterDecisionsClient(new RetriableHttpClient(TestHttpClientUtils.client()), clientConfig,
-                guard, new ProviderErrorMessageValidator(clientConfig));
+        return newDecisionsClient(guard, TestHttpClientUtils.client());
+    }
+
+    private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard, Client httpClient) {
+        return new OpenRouterDecisionsClient(new RetriableHttpClient(httpClient), clientConfig, guard,
+                new ProviderErrorMessageValidator(clientConfig));
+    }
+
+    private static byte[] gzip(byte[] bytes) throws IOException {
+        var compressed = new ByteArrayOutputStream();
+        try (var gzip = new GZIPOutputStream(compressed)) {
+            gzip.write(bytes);
+        }
+        return compressed.toByteArray();
     }
 
     private DecisionsRequest request() {
