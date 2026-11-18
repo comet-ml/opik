@@ -11,8 +11,6 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.comet.opik.domain.topics.TopicsRebuildService.DIMENSIONS;
-
 /**
  * The topic algorithm in use. A first build merges identical texts, k-means them into fine groups, has Qwen name topics
  * over the groups, and assigns every trace to its nearest prototype with {@link PrototypeAssigner}: the topic

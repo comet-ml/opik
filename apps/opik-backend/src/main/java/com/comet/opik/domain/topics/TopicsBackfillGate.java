@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +64,7 @@ public class TopicsBackfillGate {
     }
 
     /** The backfill rows of some workspaces as read at {@code now}, by workspace and project. */
+    @Builder(toBuilder = true)
     public record Gate(@NonNull Instant now, @NonNull Instant freshSince, @NonNull Duration maxWait,
             @NonNull Map<String, Map<UUID, TopicVectorBackfill>> rows) {
 
@@ -103,7 +105,11 @@ public class TopicsBackfillGate {
                         .collect(Collectors.groupingBy(TopicVectorBackfill::workspaceId,
                                 Collectors.toMap(TopicVectorBackfill::projectId, Function.identity())));
         var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
-        return new Gate(now, now.minus(interval.multipliedBy(2)),
-                config.getFirstBuild().getBackfillMaxWait().toJavaDuration(), rows);
+        return Gate.builder()
+                .now(now)
+                .freshSince(now.minus(interval.multipliedBy(2)))
+                .maxWait(config.getFirstBuild().getBackfillMaxWait().toJavaDuration())
+                .rows(rows)
+                .build();
     }
 }

@@ -36,6 +36,9 @@ public interface TopicAlgorithm {
     /** The label of a trace in no topic. */
     int OTHER = -1;
 
+    /** The values per vector: the embedding model's output size. */
+    int DIMENSIONS = 384;
+
     /** Builds the first list of a project that has none. */
     FirstBuild firstBuild(Window window, int maxTopics, Context context);
 
@@ -66,7 +69,7 @@ public interface TopicAlgorithm {
         /**
          * The topic of each vector: a topic's id, or {@link TraceTopic#OTHER}.
          *
-         * @param vectors {@value TopicsRebuildService#DIMENSIONS} values per vector, one after another
+         * @param vectors {@value #DIMENSIONS} values per vector, one after another
          */
         UUID[] label(float[] vectors);
     }
@@ -110,8 +113,9 @@ public interface TopicAlgorithm {
 
     /**
      * The window a build reads: per trace, in time order, its intent text and its vector of
-     * {@value TopicsRebuildService#DIMENSIONS} values ({@code vectors} holds them one after another).
+     * {@value #DIMENSIONS} values ({@code vectors} holds them one after another).
      */
+    @Builder(toBuilder = true)
     record Window(@NonNull String[] texts, @NonNull float[] vectors) {
 
         public int size() {
