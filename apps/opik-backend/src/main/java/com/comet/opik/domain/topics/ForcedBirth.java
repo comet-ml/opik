@@ -98,7 +98,7 @@ public class ForcedBirth {
         state.live().forEach(t -> live.put(AuthorApplier.nameKey(state.topic(t).getName()), t));
         var groups = new LinkedHashMap<String, NewGroup>();
         for (var entry : NightJson.objects(answer == null ? null : answer.get("new"))) {
-            var name = text(entry.get("name"));
+            var name = TopicText.name(text(entry.get("name")));
             var ids = new LinkedHashSet<Integer>();
             for (var id : NightJson.integers(entry.get("clusters"))) {
                 if (id != null && byGroup.containsKey(id) && !done.contains(id)) {
