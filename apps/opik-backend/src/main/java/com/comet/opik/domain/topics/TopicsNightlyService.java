@@ -177,6 +177,12 @@ public class TopicsNightlyService {
                         continue;
                     }
                     try {
+                        // The lock can wait up to its own limit: a run must still start within the budget.
+                        if (!Instant.now().isBefore(budgetEnd)) {
+                            notReached++;
+                            record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
+                            continue;
+                        }
                         switch (runOne(executor, candidate, night, record)) {
                             case SAVED -> saved++;
                             case FAILED -> failed++;
