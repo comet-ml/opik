@@ -148,6 +148,10 @@ class TopicsFirstBuildJobIntegrationTest {
     @AfterAll
     void afterAll() {
         wireMock.stop();
+        clickHouse.stop();
+        zookeeper.stop();
+        mysql.stop();
+        network.close();
     }
 
     @BeforeEach
