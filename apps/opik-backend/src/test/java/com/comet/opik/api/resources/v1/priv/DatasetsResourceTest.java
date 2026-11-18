@@ -191,6 +191,7 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.ignoredFieldsPlus;
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_CREATE;
@@ -363,7 +364,7 @@ class DatasetsResourceTest {
         assertThat(actualEntity.id()).isEqualTo(id);
         assertThat(actualEntity).usingRecursiveComparison()
                 .ignoringFields(DATASET_IGNORED_FIELDS)
-                .isEqualTo(expected);
+                .isEqualTo(withDefaultProject(List.of(expected), workspaceName, apiKey).getFirst());
 
         assertThat(actualEntity.lastUpdatedBy()).isEqualTo(USER);
         assertThat(actualEntity.createdBy()).isEqualTo(USER);
@@ -1823,7 +1824,7 @@ class DatasetsResourceTest {
                 var actualEntity = actualResponse.readEntity(Dataset.class);
                 assertThat(actualEntity).usingRecursiveComparison()
                         .ignoringFields(DATASET_IGNORED_FIELDS)
-                        .isEqualTo(dataset);
+                        .isEqualTo(withDefaultProject(List.of(dataset), TEST_WORKSPACE, API_KEY).getFirst());
             }
         }
 
@@ -2352,7 +2353,8 @@ class DatasetsResourceTest {
                     .filter(__ -> expectedContent.size() < defaultPageSize)
                     .forEach(expectedContent::add);
 
-            findAndAssertPage(actualEntity, defaultPageSize, expectedContent.size() + 1, 1, expectedContent);
+            findAndAssertPage(actualEntity, workspaceName, apiKey, defaultPageSize, expectedContent.size() + 1, 1,
+                    expectedContent);
         }
 
         @Test
@@ -2385,7 +2387,8 @@ class DatasetsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, pageSize, expected1.size() + expected2.size(), 1, expectedContent);
+            findAndAssertPage(actualEntity, workspaceName, apiKey, pageSize, expected1.size() + expected2.size(), 1,
+                    expectedContent);
         }
 
         @Test
@@ -2412,7 +2415,8 @@ class DatasetsResourceTest {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, expected.size(), expected.size(), 1, expected.reversed());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expected.size(), expected.size(), 1,
+                    expected.reversed());
         }
 
         @ParameterizedTest
@@ -2684,7 +2688,7 @@ class DatasetsResourceTest {
 
             assertThat(actualEntity.content())
                     .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
-                    .containsExactlyElementsOf(allDatasets);
+                    .containsExactlyElementsOf(withDefaultProject(allDatasets, workspaceName, apiKey));
         }
 
         @ParameterizedTest
@@ -3065,7 +3069,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(dataset1));
+            findAndAssertPage(actualEntity, TEST_WORKSPACE, API_KEY, 1, 1, 1, List.of(dataset1));
         }
 
         @Test
@@ -3096,7 +3100,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 0, 0, 1, List.of());
         }
 
         @Test
@@ -3233,7 +3237,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, 0, 0, 1, List.of());
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 0, 0, 1, List.of());
         }
 
         @ParameterizedTest
@@ -3264,7 +3268,7 @@ class DatasetsResourceTest {
 
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3304,7 +3308,8 @@ class DatasetsResourceTest {
 
                         var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-                        findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+                        findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(),
+                                expectedDatasets.size(), 1,
                                 expectedDatasets.reversed());
                     });
 
@@ -3350,7 +3355,8 @@ class DatasetsResourceTest {
 
                         var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
 
-                        findAndAssertPage(actualEntity, expectedMatchedDatasets.size(), expectedMatchedDatasets.size(),
+                        findAndAssertPage(actualEntity, workspaceName, apiKey, expectedMatchedDatasets.size(),
+                                expectedMatchedDatasets.size(),
                                 1,
                                 expectedMatchedDatasets.reversed());
                     });
@@ -3475,7 +3481,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
                     promptVersion);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3538,7 +3544,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetPage(apiKey, workspaceName, expectedDatasets.size(),
                     promptVersion);
 
-            findAndAssertPage(actualEntity, expectedDatasets.size(), expectedDatasets.size(), 1,
+            findAndAssertPage(actualEntity, workspaceName, apiKey, expectedDatasets.size(), expectedDatasets.size(), 1,
                     expectedDatasets.reversed());
         }
 
@@ -3583,7 +3589,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 2, 2, 1, List.of(testSuite, regularDataset));
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 2, 2, 1, List.of(testSuite, regularDataset));
         }
 
         @ParameterizedTest
@@ -3626,7 +3632,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
+            findAndAssertPage(actualEntity, workspaceName, apiKey, 1, 1, 1, List.of(expected));
         }
 
         @Test
@@ -3672,8 +3678,24 @@ class DatasetsResourceTest {
 
     }
 
-    private void findAndAssertPage(Dataset.DatasetPage actualEntity, int expected, int total, int page,
-            List<Dataset> expectedContent) {
+    /**
+     * Datasets created without a project are created in the Default Project.
+     */
+    private List<Dataset> withDefaultProject(List<Dataset> expectedDatasets, String workspaceName, String apiKey) {
+        if (expectedDatasets.stream().allMatch(dataset -> dataset.projectId() != null)) {
+            return expectedDatasets;
+        }
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        return expectedDatasets.stream()
+                .map(dataset -> dataset.projectId() == null
+                        ? dataset.toBuilder().projectId(defaultProjectId).build()
+                        : dataset)
+                .toList();
+    }
+
+    private void findAndAssertPage(Dataset.DatasetPage actualEntity, String workspaceName, String apiKey,
+            int expected, int total, int page, List<Dataset> expectedContent) {
+        expectedContent = withDefaultProject(expectedContent, workspaceName, apiKey);
         assertThat(actualEntity.size()).isEqualTo(expected);
         assertThat(actualEntity.content()).hasSize(expected);
         assertThat(actualEntity.page()).isEqualTo(page);

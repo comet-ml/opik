@@ -169,9 +169,9 @@ class PromptServiceImpl implements PromptService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName);
 
-        if (StringUtils.isNotBlank(promptRequest.projectName()) && promptRequest.projectId() == null) {
-            var project = projectService.getOrCreate(workspaceId, promptRequest.projectName(), userName);
-            builder.projectId(project.id());
+        if (promptRequest.projectId() == null) {
+            var projectName = StringUtils.defaultIfBlank(promptRequest.projectName(), ProjectService.DEFAULT_PROJECT);
+            builder.projectId(projectService.getOrCreate(workspaceId, projectName, userName).id());
         }
 
         var newPrompt = builder.build();
@@ -327,6 +327,17 @@ class PromptServiceImpl implements PromptService {
                 });
     }
 
+    /**
+     * A request without a project keeps versioning the project-less prompt of that name, as before. When there is
+     * none, the prompt is looked up and created in the Default Project, so no new prompt is stored without a project.
+     */
+    private Prompt getOrCreatePromptWithoutProject(String workspaceId, String name, String userName,
+            TemplateStructure templateStructure) {
+        return Optional.ofNullable(findByNameScoped(workspaceId, name, null))
+                .orElseGet(() -> getOrCreatePrompt(workspaceId, name, userName, templateStructure,
+                        projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, userName).id()));
+    }
+
     private Prompt findByNameScoped(String workspaceId, String name, UUID projectId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
@@ -367,11 +378,15 @@ class PromptServiceImpl implements PromptService {
 
         TemplateStructure templateStructure = createPromptVersion.templateStructure();
 
-        UUID projectId = resolveProjectId(createPromptVersion.projectId(), createPromptVersion.projectName(),
-                workspaceId, userName);
+        UUID requestedProjectId = resolveProjectId(createPromptVersion.projectId(),
+                createPromptVersion.projectName(), workspaceId, userName);
 
-        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure,
-                projectId);
+        Prompt prompt = requestedProjectId == null
+                ? getOrCreatePromptWithoutProject(workspaceId, createPromptVersion.name(), userName,
+                        templateStructure)
+                : getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure,
+                        requestedProjectId);
+        UUID projectId = prompt.projectId();
 
         Set<String> environments = createPromptVersion.version().environments() == null
                 ? Set.of()

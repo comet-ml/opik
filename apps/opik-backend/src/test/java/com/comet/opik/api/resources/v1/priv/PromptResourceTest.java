@@ -121,6 +121,7 @@ import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -1195,7 +1196,7 @@ class PromptResourceTest {
                                     .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
-                    .isEqualTo(updatedPrompt);
+                    .isEqualTo(withDefaultProject(List.of(updatedPrompt), API_KEY, TEST_WORKSPACE).getFirst());
         }
 
         @Test
@@ -2096,6 +2097,7 @@ class PromptResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var actualPrompt = response.readEntity(Prompt.class);
+            expectedPrompt = withDefaultProject(List.of(expectedPrompt), apiKey, workspaceName).getFirst();
 
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
@@ -3227,8 +3229,8 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when prompt has no project and project_name is provided, then fall back to workspace-level and return it")
-        void whenPromptHasNoProjectAndProjectNameProvided__thenFallBackToWorkspaceAndReturnIt() {
+        @DisplayName("when prompt is in the Default Project and another project_name is provided, then return not found")
+        void whenPromptInDefaultProjectAndOtherProjectNameProvided__thenReturnNotFound() {
             var projectName = "project-" + UUID.randomUUID();
             projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -3240,41 +3242,7 @@ class PromptResourceTest {
                     .templateStructure(TemplateStructure.TEXT)
                     .build();
 
-            // Create prompt version with no project (workspace-level)
-            var createRequest = CreatePromptVersion.builder()
-                    .name(prompt.name())
-                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
-                            .createdBy(USER)
-                            .build())
-                    .build();
-
-            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
-
-            // Retrieve with a project name: project-level lookup misses, falls back to workspace-wide and finds it
-            var retrieveRequest = PromptVersionRetrieve.builder()
-                    .name(prompt.name())
-                    .projectName(projectName)
-                    .build();
-
-            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
-        }
-
-        @Test
-        @DisplayName("when the prompt has no project, fall back to the legacy prompt and return X-Opik-Deprecation header")
-        void whenProjectNameDoesNotMatch__thenReturnDeprecationHeader() {
-            var projectName = "project-" + UUID.randomUUID();
-            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
-
-            var prompt = buildPrompt()
-                    .lastUpdatedBy(USER)
-                    .createdBy(USER)
-                    .template(null)
-                    .latestVersion(null)
-                    .templateStructure(TemplateStructure.TEXT)
-                    .build();
-
-            // No project on the create request: this is a legacy project-less prompt, the only kind the
-            // deprecated workspace fallback is meant to resolve.
+            // Create prompt version with no project, so in the Default Project
             var createRequest = CreatePromptVersion.builder()
                     .name(prompt.name())
                     .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
@@ -3291,10 +3259,7 @@ class PromptResourceTest {
 
             try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
                     TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
-                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
-                                prompt.name()));
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
 
@@ -3731,8 +3696,24 @@ class PromptResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var promptPage = response.readEntity(Prompt.PromptPage.class);
-            assertPromptsPage(promptPage, expectedPrompts, expectedTotal, page);
+            assertPromptsPage(promptPage, withDefaultProject(expectedPrompts, apiKey, workspaceName), expectedTotal,
+                    page);
         }
+    }
+
+    /**
+     * Prompts created without a project are created in the Default Project.
+     */
+    private List<Prompt> withDefaultProject(List<Prompt> expectedPrompts, String apiKey, String workspaceName) {
+        if (expectedPrompts.stream().allMatch(prompt -> prompt.projectId() != null)) {
+            return expectedPrompts;
+        }
+        var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, apiKey, workspaceName).id();
+        return expectedPrompts.stream()
+                .map(prompt -> prompt.projectId() == null
+                        ? prompt.toBuilder().projectId(defaultProjectId).build()
+                        : prompt)
+                .toList();
     }
 
     private void findProjectPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
