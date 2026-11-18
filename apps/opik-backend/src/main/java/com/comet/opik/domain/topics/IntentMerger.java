@@ -60,7 +60,7 @@ public class IntentMerger {
      * The unique texts in code point order, each one's count, first trace and vector, and per trace the index of its
      * text.
      */
-    @Builder
+    @Builder(toBuilder = true)
     public record Merged(
             @NonNull String[] texts,
             @NonNull int[] weights,
