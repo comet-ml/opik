@@ -4,6 +4,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetExperimentItemStreamRequest;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -16,6 +17,7 @@ import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRetrieveRequest;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
@@ -594,7 +596,7 @@ public class DatasetResourceClient {
     }
 
     public Response callGetDatasetItemsWithExperimentItems(UUID datasetId, String experimentIds,
-            String datasetVersion, Integer size, List<? extends Filter> filters, String apiKey, String workspaceName) {
+            String datasetVersions, Integer size, List<? extends Filter> filters, String apiKey, String workspaceName) {
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .path("items")
@@ -609,8 +611,8 @@ public class DatasetResourceClient {
             webTarget = webTarget.queryParam("experiment_ids", experimentIds);
         }
 
-        if (StringUtils.isNotBlank(datasetVersion)) {
-            webTarget = webTarget.queryParam("dataset_version", datasetVersion);
+        if (datasetVersions != null) {
+            webTarget = webTarget.queryParam("dataset_versions", datasetVersions);
         }
 
         if (CollectionUtils.isNotEmpty(filters)) {
@@ -985,6 +987,31 @@ public class DatasetResourceClient {
 
     public Response callStreamDatasetItems(DatasetItemStreamRequest request, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public List<ExperimentItem> streamDatasetExperimentItems(DatasetExperimentItemStreamRequest request,
+            String apiKey, String workspaceName) {
+        try (var response = callStreamDatasetExperimentItems(request, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(String.class).lines()
+                    .filter(line -> !line.isBlank())
+                    .map(line -> JsonUtils.readValue(line, ExperimentItem.class))
+                    .toList();
+        }
+    }
+
+    public Response callStreamDatasetExperimentItems(DatasetExperimentItemStreamRequest request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("experiments")
                 .path("items")
                 .path("stream")
                 .request()
