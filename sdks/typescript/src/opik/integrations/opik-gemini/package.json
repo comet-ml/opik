@@ -1,7 +1,7 @@
 {
   "name": "opik-gemini",
   "description": "Opik TypeScript and JavaScript SDK integration with Google Gemini AI",
-  "version": "2.2.146",
+  "version": "2.2.147",
   "engines": {
     "node": ">=18"
   },
