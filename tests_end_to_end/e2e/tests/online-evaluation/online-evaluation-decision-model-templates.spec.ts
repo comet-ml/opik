@@ -2,28 +2,28 @@ import { test, expect } from '@e2e/fixtures';
 import { OnlineEvaluationPage } from '@e2e/pom/online-evaluation.page';
 
 /**
- * The two prompts `decisionModelTemplates.ts` builds its six cards from. Which
- * card gets which is the whole subject of the first test, so they are spelled
- * out here rather than derived from the card list.
+ * The two prompts `decisionModelTemplates.ts` builds its six templates from.
+ * Which template gets which is the whole subject of the first test, so they are
+ * spelled out here rather than derived from the template list.
  */
 const INPUT_AND_OUTPUT = 'INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}';
 const OUTPUT_ONLY = 'OUTPUT:\n{{output}}';
 
-interface DecisionModelCard {
-  /** Card label, which is also the name the card gives an unnamed rule. */
+interface DecisionModelTemplate {
+  /** Tab label, which is also the name the template gives an unnamed rule. */
   label: string;
   prompt: string;
-  /** Every question the card applies, in order. */
+  /** Every question the template applies, in order. */
   questions: string[];
   /**
-   * The score names the card applies, in order — `null` where the template
-   * leaves the score unnamed and the Questions card falls back to the rule
-   * name, which by then is the card's own label.
+   * The score names the template applies, in order — `null` where the
+   * template leaves the score unnamed and the Questions card falls back to the
+   * rule name, which by then is the template's own label.
    */
   names: (string | null)[];
 }
 
-const DECISION_MODEL_CARDS: DecisionModelCard[] = [
+const DECISION_MODEL_TEMPLATES: DecisionModelTemplate[] = [
   {
     label: 'Task completion',
     prompt: INPUT_AND_OUTPUT,
@@ -68,45 +68,46 @@ const DECISION_MODEL_CARDS: DecisionModelCard[] = [
   },
 ];
 
-function cardByLabel(label: string): DecisionModelCard {
-  const card = DECISION_MODEL_CARDS.find((candidate) => candidate.label === label);
-  if (!card) throw new Error(`no decision-model card expectation named '${label}'`);
+function templateByLabel(label: string): DecisionModelTemplate {
+  const card = DECISION_MODEL_TEMPLATES.find((candidate) => candidate.label === label);
+  if (!card) throw new Error(`no decision-model template expectation named '${label}'`);
   return card;
 }
 
 /** What `readQuestionNames` must show once `label` has auto-named the rule. */
-function displayedNames(card: DecisionModelCard): string[] {
+function displayedNames(card: DecisionModelTemplate): string[] {
   return card.names.map((name) => name ?? card.label);
 }
 
 /**
- * The six decision-model start cards a new rule opens on (opik#9143,
- * OPIK-8372), and what each one writes.
+ * The six decision-model template tabs (opik#9143, OPIK-8372), what each one
+ * writes, and the Custom tab that keeps the author's own work while they try
+ * a template.
  *
- * A card is a prompt plus a question list, and the editor shows both — but what
+ * A template is a prompt plus a question list, and the editor shows both — but what
  * reaches the judge is the PERSISTED prompt, score names and variable map, and
  * only the prompt and the questions are on screen. So the apply is asserted
  * through the editor and the save through the API, which is the disagreement
- * worth catching: a card wired to another card's prompt, or one that applied
+ * worth catching: a template wired to another template's prompt, or one that applied
  * the first of its questions and dropped the rest, looks identical to a correct
  * one until the rule runs.
  *
  * `online-evaluation-jev-decision-model.spec.ts` already creates a rule from
- * the Task completion card, and deliberately does not cover this: it overwrites
+ * the Task completion template, and deliberately does not cover this: it overwrites
  * the applied question with its own before saving, and asserts roles and score
  * TYPES rather than what the template put there. Both specs would stay green
- * for a Support reply card that lost two of its three questions.
+ * for a Support reply template that lost two of its three questions.
  *
  * Deterministic and free. No provider call is ever made — the rules are created
  * and never scored — and a decisions model needs no provider key for the editor
  * to offer it, so nothing here depends on what the workspace already holds.
  */
 test.describe(
-  'Online Evaluation — decision model start cards',
+  'Online Evaluation — decision model template tabs',
   { tag: ['@t2-cuj', '@area:online-evaluation'] },
   () => {
     test(
-      'every card applies its own prompt and its whole question list',
+      'every template applies its own prompt and its whole question list',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
       async ({ project, page }) => {
         const rules = new OnlineEvaluationPage(page);
@@ -116,35 +117,35 @@ test.describe(
           await rules.waitForReady();
         });
 
-        for (const card of DECISION_MODEL_CARDS) {
-          // A fresh panel per card, so each assertion is about what the card
-          // APPLIES and not about what survived the card before it. Cancelled
-          // rather than saved: the save path is the next two tests.
-          await test.step(`The "${card.label}" card applies its prompt and questions`, async () => {
-            await rules.openCreateRulePanelOnStartCards('Decision model');
-            // Untouched, so the card's own auto-naming is observable below.
+        for (const card of DECISION_MODEL_TEMPLATES) {
+          // A fresh panel per template, so each assertion is about what the
+          // template APPLIES and not about what survived the one before it.
+          // Cancelled rather than saved: the save path is the next two tests.
+          await test.step(`The "${card.label}" template applies its prompt and questions`, async () => {
+            await rules.openCreateRulePanel('Decision model');
+            // Untouched, so the template's own auto-naming is observable below.
             await expect(rules.nameInput, 'a new rule starts unnamed').toHaveValue('');
 
-            await rules.chooseStartCard(card.label);
+            await rules.chooseTemplateTab(card.label);
 
             await expect(
               rules.nameInput,
-              'choosing a card names the rule after it',
+              'choosing a template names the rule after it',
             ).toHaveValue(card.label);
             expect(
               await rules.readPromptText(),
-              `the "${card.label}" card's prompt`,
+              `the "${card.label}" template's prompt`,
             ).toBe(card.prompt);
             // Compared as a whole list, not searched: a partial apply keeps the
             // first question and drops the rest, which a per-question check
             // would walk straight past.
             expect(
               await rules.readQuestions(),
-              `the "${card.label}" card's questions, all of them and in order`,
+              `the "${card.label}" template's questions, all of them and in order`,
             ).toEqual(card.questions);
             expect(
               await rules.readQuestionNames(),
-              `the "${card.label}" card's score names`,
+              `the "${card.label}" template's score names`,
             ).toEqual(displayedNames(card));
 
             await rules.cancelPanel();
@@ -154,19 +155,18 @@ test.describe(
     );
 
     test(
-      'a rule saved from the Support reply card keeps all three of its questions',
+      'a rule saved from the Support reply template keeps all three of its questions',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
-        const card = cardByLabel('Support reply');
+        const card = templateByLabel('Support reply');
         const ruleName = `${testNamespace}-support-reply`;
         const rules = new OnlineEvaluationPage(page);
 
-        const ruleId = await test.step('Create a rule from the Support reply card', async () => {
+        const ruleId = await test.step('Create a rule from the Support reply template', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRulePanelOnStartCards('Decision model');
-          await rules.chooseStartCard(card.label);
-          // The card has just auto-named the rule after itself; this replaces
+          await rules.openCreateRulePanel('Decision model', card.label);
+          // The template has just auto-named the rule after itself; this replaces
           // that with the run-namespaced name, which is what the main score
           // ends up being filed under and what the assertions below expect.
           await rules.nameInput.fill(ruleName);
@@ -177,14 +177,14 @@ test.describe(
           return rules.submitPanelAndCaptureRuleId();
         });
 
-        await test.step('The stored prompt is the card\'s, as one user turn', async () => {
+        await test.step('The stored prompt is the template\'s, as one user turn', async () => {
           const messages = await backendClient.getLlmJudgeMessages(ruleId);
           expect(messages, 'a decisions model takes a single message').toHaveLength(1);
           expect(messages[0].role, 'and it is a USER turn').toBe('USER');
-          expect(messages[0].content, 'carrying the card\'s prompt').toBe(card.prompt);
+          expect(messages[0].content, 'carrying the template\'s prompt').toBe(card.prompt);
         });
 
-        await test.step('All three questions persist, keeping the names the card gave them', async () => {
+        await test.step('All three questions persist, keeping the names the template gave them', async () => {
           const { code } = await backendClient.getLlmJudgeRuleBody(ruleId);
           // The whole schema compared at once — every field of every entry.
           // Each question is one score, so a dropped question is a score the
@@ -192,7 +192,7 @@ test.describe(
           // filed under; both are invisible in the editor after the save.
           expect(
             code.schema,
-            'the three questions the card applied, as three BOOLEAN scores',
+            'the three questions the template applied, as three BOOLEAN scores',
           ).toEqual([
             {
               // `prepareForSubmit` names the unnamed main score after the rule.
@@ -209,17 +209,19 @@ test.describe(
           const { code } = await backendClient.getLlmJudgeRuleBody(ruleId);
           expect(
             code.variables,
-            'both of the card prompt\'s variables, and nothing else',
+            'both of the template prompt\'s variables, and nothing else',
           ).toEqual({ input: 'input', output: 'output' });
         });
 
-        await test.step('Reopening the rule shows the card\'s questions, not the cards', async () => {
+        await test.step('Reopening the rule shows the template\'s questions, on its tab', async () => {
           await expect(rules.ruleRow(ruleName)).toHaveCount(1);
           await rules.openEditRulePanelByName(ruleName);
+          // The main score is now stored under the rule name, and the tab still
+          // matches: the main score name is the rule's, not the template's.
           await expect(
-            rules.startCards,
-            'a rule that already has a prompt opens on the editor, not on the cards',
-          ).toHaveCount(0);
+            rules.templateTab(card.label),
+            'a rule saved unchanged from a template reopens on that template',
+          ).toHaveAttribute('aria-pressed', 'true');
           expect(await rules.readQuestions(), 'the questions hydrate back').toEqual(
             card.questions,
           );
@@ -233,18 +235,17 @@ test.describe(
     );
 
     test(
-      'a rule saved from an output-only card does not gain an input variable',
+      'a rule saved from an output-only template does not gain an input variable',
       { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
       async ({ project, backendClient, testNamespace, automationRulesCleanup, page }) => {
-        const card = cardByLabel('Moderation');
+        const card = templateByLabel('Moderation');
         const ruleName = `${testNamespace}-moderation`;
         const rules = new OnlineEvaluationPage(page);
 
-        const ruleId = await test.step('Create a rule from the Moderation card', async () => {
+        const ruleId = await test.step('Create a rule from the Moderation template', async () => {
           await rules.goto(project.id);
           await rules.waitForReady();
-          await rules.openCreateRulePanelOnStartCards('Decision model');
-          await rules.chooseStartCard(card.label);
+          await rules.openCreateRulePanel('Decision model', card.label);
           await rules.nameInput.fill(ruleName);
           return rules.submitPanelAndCaptureRuleId();
         });
@@ -258,7 +259,7 @@ test.describe(
         await test.step('So the variable map names the output and nothing else', async () => {
           const { code } = await backendClient.getLlmJudgeRuleBody(ruleId);
           // The interesting half of this spec, and the reason an output-only
-          // card is worth saving at all: the variable map is derived from the
+          // template is worth saving at all: the variable map is derived from the
           // prompt at submit time, so a map still carrying `input` would hand
           // the judge a field this template never asks about — and the editor
           // shows no variable map at all, so nothing on screen would say so.
@@ -269,6 +270,56 @@ test.describe(
           expect(code.schema, 'and it declares its one question').toEqual([
             { name: ruleName, type: 'BOOLEAN', description: card.questions[0] },
           ]);
+        });
+      },
+    );
+
+    test(
+      'Custom keeps the author\'s own question while they try a template, and takes an edited template',
+      { tag: ['@cap:online-evaluation.create-llm-judge-rule'] },
+      async ({ project, page }) => {
+        const OWN_QUESTION = 'Does the output offer the user a refund?';
+        const EDITED_QUESTION = 'Does the output contain profanity?';
+        const supportReply = templateByLabel('Support reply');
+        const rules = new OnlineEvaluationPage(page);
+
+        await test.step('Write a question of your own on the Custom tab', async () => {
+          await rules.goto(project.id);
+          await rules.waitForReady();
+          await rules.openCreateRulePanel('Decision model');
+          await expect(
+            rules.templateTab('Custom'),
+            'a new rule opens on the Custom tab',
+          ).toHaveAttribute('aria-pressed', 'true');
+          await rules.mainQuestionInput.fill(OWN_QUESTION);
+        });
+
+        await test.step('A template replaces it on screen', async () => {
+          await rules.chooseTemplateTab(supportReply.label);
+          expect(await rules.readQuestions(), 'the template\'s questions').toEqual(
+            supportReply.questions,
+          );
+        });
+
+        await test.step('Custom gives it back, and drops the name the template set', async () => {
+          await rules.chooseTemplateTab('Custom');
+          // The whole list: a restore that merged the template into Custom
+          // would keep the author's question and still be wrong.
+          expect(await rules.readQuestions(), 'only the author\'s own question').toEqual([
+            OWN_QUESTION,
+          ]);
+          await expect(rules.nameInput, 'the rule is unnamed again').toHaveValue('');
+        });
+
+        await test.step('An edit on a template tab moves the content to Custom', async () => {
+          await rules.chooseTemplateTab('Moderation');
+          await rules.mainQuestionInput.fill(EDITED_QUESTION);
+          await expect(
+            rules.templateTab('Custom'),
+            'the edited template is now the Custom content',
+          ).toHaveAttribute('aria-pressed', 'true');
+          expect(await rules.readQuestions()).toEqual([EDITED_QUESTION]);
+          await rules.cancelPanel();
         });
       },
     );

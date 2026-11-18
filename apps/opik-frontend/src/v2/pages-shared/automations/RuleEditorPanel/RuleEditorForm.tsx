@@ -23,7 +23,8 @@ import FilteringSamplingCard from "@/v2/pages-shared/automations/RuleEditorPanel
 import ScoreConfigurationCard from "@/v2/pages-shared/automations/RuleEditorPanel/ScoreConfigurationCard";
 import CostLimitField from "@/v2/pages-shared/automations/RuleEditorPanel/CostLimitField";
 import DecisionModelPromptField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelPromptField";
-import DecisionModelQuestionsCard from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsCard";
+import DecisionModelQuestionsField from "@/v2/pages-shared/automations/RuleEditorPanel/DecisionModelQuestionsField";
+import TemplateTabs from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateTabs";
 import CodeEvaluatorField from "@/v2/pages-shared/automations/RuleEditorPanel/CodeEvaluatorField";
 import { RuleDefaultModel } from "@/v2/pages-shared/automations/RuleEditorPanel/useRuleDefaultModel";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -60,6 +61,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
     form,
     changeScope,
     applyTemplate,
+    selectCustom,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
@@ -125,6 +127,7 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
   const isDecisionModelRule =
     ruleType === UI_EVALUATORS_RULE_TYPE.decision_model;
   const isSpanScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.span;
+  const hasPrompt = form.watch("llmJudgeDetails.messages").length > 0;
   const isCodeBlocked =
     ruleType === UI_EVALUATORS_RULE_TYPE.python_code &&
     !isPythonEvaluatorEnabled;
@@ -141,6 +144,13 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
               <div className="h-full overflow-y-auto">
                 <div className="flex min-h-full flex-col gap-4 pb-3 pt-5">
                   <RuleNameField form={form} />
+                  {(isLLMJudge || isDecisionModelRule) && (
+                    <TemplateTabs
+                      form={form}
+                      onSelectTemplate={applyTemplate}
+                      onSelectCustom={selectCustom}
+                    />
+                  )}
                   {isLLMJudge && (
                     <JudgePromptField
                       form={form}
@@ -150,10 +160,9 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                     />
                   )}
                   {isDecisionModelRule && (
-                    <DecisionModelPromptField
+                    <DecisionModelQuestionsField
                       form={form}
                       onSelectTemplate={applyTemplate}
-                      datasetColumnNames={datasetColumnNames}
                     />
                   )}
                   {ruleType === UI_EVALUATORS_RULE_TYPE.python_code && (
@@ -181,8 +190,11 @@ const RuleEditorForm: React.FC<RuleEditorFormProps> = ({
                   />
                   <FilteringSamplingCard form={form} projectId={projectId} />
                   {isLLMJudge && <ScoreConfigurationCard form={form} />}
-                  {isDecisionModelRule && (
-                    <DecisionModelQuestionsCard form={form} />
+                  {isDecisionModelRule && hasPrompt && (
+                    <DecisionModelPromptField
+                      form={form}
+                      datasetColumnNames={datasetColumnNames}
+                    />
                   )}
                   {isLLMJudge && !isSpanScope && <CostLimitField form={form} />}
                 </div>

@@ -1,25 +1,26 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
 
-import { LLM_MESSAGE_ROLE, LLMPromptTemplate } from "@/types/llm";
+import { LLMPromptTemplate } from "@/types/llm";
 import { PromptVariableEditorHandle } from "@/v2/pages-shared/llm/PromptVariableEditor/PromptVariableEditor";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import { JudgeTemplateOption } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
+import { createBlankRulePrompt } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 const useTemplateStart = (
   form: UseFormReturn<EvaluationRuleFormType>,
-  editorRef: React.RefObject<PromptVariableEditorHandle | null>,
   onSelectTemplate: (template: LLMPromptTemplate, label: string) => void,
+  editorRef?: React.RefObject<PromptVariableEditorHandle | null>,
 ) => {
   const focusEditor = () =>
-    window.setTimeout(() => editorRef.current?.focusAtEnd());
+    window.setTimeout(() => editorRef?.current?.focusAtEnd());
 
   return {
     showStartCards: !form.watch("llmJudgeDetails.messages").length,
     startBlank: () => {
       form.setValue(
         "llmJudgeDetails.messages",
-        [{ id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content: "" }],
+        createBlankRulePrompt(form.getValues("uiType")),
         { shouldDirty: true },
       );
       form.clearErrors("llmJudgeDetails.messages");

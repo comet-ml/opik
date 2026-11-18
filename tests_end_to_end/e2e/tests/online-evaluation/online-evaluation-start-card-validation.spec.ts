@@ -171,12 +171,12 @@ test.describe(
 
         await test.step('Create is refused, and the start error is the only one shown', async () => {
           await rules.submitButton.click();
-          // Exhaustive, and that is the assertion. The Questions card sits in
-          // the other column with an empty Main question box, and the
-          // decision-model refinement used to flag it here — "Write the
-          // question for this score", for a question the author cannot have
-          // written because the cards are still covering the prompt. It is
-          // skipped until a card is chosen, and this is what says so.
+          // Exhaustive, and that is the assertion. The form already holds an
+          // empty Main question behind the cards, and the decision-model
+          // refinement used to flag it here — "Write the question for this
+          // score", for a question the author cannot have written because the
+          // cards are covering it. It is skipped until a card is chosen, and
+          // this is what says so.
           await expect
             .poll(() => rules.panelErrorMessages(), {
               message: 'the editor settles on exactly the start error',

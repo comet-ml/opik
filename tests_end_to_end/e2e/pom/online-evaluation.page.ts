@@ -10,7 +10,7 @@ export type RuleScopeLabel = 'Threads' | 'Traces' | 'Spans';
 
 export interface CreateRuleLLMJudgeFields {
   name: string;
-  /** Template label as shown in the Templates menu. */
+  /** Template label as shown in the template tabs. */
   template: 'Hallucination' | 'Moderation' | 'Answer relevance' | 'Tool correctness';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
@@ -257,6 +257,18 @@ export class OnlineEvaluationPage {
     return test.step(`start from the "${label}" card`, async () => {
       await this.startCards.getByRole('button', { name: new RegExp(`^${label}`) }).click();
       await expect(this.startCards).toHaveCount(0);
+    });
+  }
+
+  /** One tab of the template row above the prompt or the questions: "Custom" or a template label. */
+  templateTab(label: string): Locator {
+    return this.panel.locator('button[aria-pressed]', { hasText: new RegExp(`^${label}$`) });
+  }
+
+  async chooseTemplateTab(label: string): Promise<void> {
+    return test.step(`choose the "${label}" template tab`, async () => {
+      await this.templateTab(label).click();
+      await expect(this.templateTab(label)).toHaveAttribute('aria-pressed', 'true');
     });
   }
 
@@ -606,8 +618,8 @@ export class OnlineEvaluationPage {
 
   /**
    * The model-parameters gear. Absent (not disabled) when the model has nothing
-   * a rule can set. It has no accessible name (its label is a tooltip), and the
-   * Templates button is another menu trigger, hence the icon filter.
+   * a rule can set. It has no accessible name (its label is a tooltip), hence
+   * the icon filter.
    */
   get judgeModelParametersTrigger(): Locator {
     return this.panel
@@ -875,11 +887,7 @@ export class OnlineEvaluationPage {
 
   /** Replaces the prompt and scores, and (when creating) sets the name to the template label. */
   async applyJudgeTemplate(label: CreateRuleLLMJudgeFields['template']): Promise<void> {
-    return test.step(`apply the "${label}" judge template`, async () => {
-      await this.panel.getByRole('button', { name: 'Templates' }).click();
-      await this.page.getByRole('menuitem', { name: new RegExp(`^${label}`) }).click();
-      await expect(this.page.getByRole('menu')).toHaveCount(0);
-    });
+    return this.chooseTemplateTab(label);
   }
 
   /** The panel's one CodeMirror editor: the prompt, or the code of a code evaluator. */

@@ -55,12 +55,17 @@ import {
   nameInlineVariables,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
+  createBlankRulePrompt,
   DEFAULT_DECISION_MODEL_DATA,
   DEFAULT_LLM_AS_JUDGE_DATA,
   FILTER_COLUMNS_BY_SCOPE,
   DEFAULT_PYTHON_CODE_DATA,
   DEFAULT_SAMPLING_RATE,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
+import {
+  findSelectedTemplate,
+  getRuleTemplateOptions,
+} from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
 
 const DERIVED_FIELDS = [
   "llmJudgeDetails.variables",
@@ -221,6 +226,12 @@ type ScopeDraft = {
   [K in ScopeDraftField]: FieldPathValue<EvaluationRuleFormType, K>;
 } & { autoName: string };
 
+type CustomDraft = {
+  llmJudgeDetails: FieldPathValue<EvaluationRuleFormType, "llmJudgeDetails">;
+  autoName: string;
+  ruleName: string;
+};
+
 type UseRuleEditorFormParams = {
   ruleType: UI_EVALUATORS_RULE_TYPE;
   projectId?: string;
@@ -291,6 +302,9 @@ const useRuleEditorForm = ({
     Partial<Record<EVALUATORS_RULE_SCOPE, ScopeDraft>>
   >({});
   const autoNameRef = useRef("");
+  const customDraftsRef = useRef<
+    Partial<Record<EVALUATORS_RULE_SCOPE, CustomDraft>>
+  >({});
 
   const isDefaultName = useCallback(() => {
     const name = form.getValues("ruleName").trim();
@@ -341,9 +355,27 @@ const useRuleEditorForm = ({
     [form, isDefaultName, setAutoName],
   );
 
+  const isOnTemplate = useCallback(() => {
+    const uiType = form.getValues("uiType");
+    return Boolean(
+      findSelectedTemplate(
+        form.getValues("llmJudgeDetails"),
+        getRuleTemplateOptions(uiType, form.getValues("scope")),
+        uiType,
+      ),
+    );
+  }, [form]);
+
   const applyTemplate = useCallback(
     (template: LLMPromptTemplate, label: string) => {
       const current = form.getValues("llmJudgeDetails");
+      if (!isOnTemplate()) {
+        customDraftsRef.current[form.getValues("scope")] = cloneDeep({
+          llmJudgeDetails: current,
+          autoName: autoNameRef.current,
+          ruleName: form.getValues("ruleName").trim(),
+        });
+      }
       const [templateMainScore, ...templateScores] = cloneDeep(template.schema);
       const mainScoreName = isEdit ? (current.schema[0]?.name ?? "") : "";
       form.setValue(
@@ -362,8 +394,45 @@ const useRuleEditorForm = ({
       form.clearErrors("llmJudgeDetails");
       if (!isEdit && isDefaultName()) setAutoName(label);
     },
-    [form, isEdit, isDefaultName, setAutoName],
+    [form, isEdit, isDefaultName, setAutoName, isOnTemplate],
   );
+
+  const selectCustom = useCallback(() => {
+    if (!isOnTemplate()) return;
+    const uiType = form.getValues("uiType");
+    const scope = form.getValues("scope");
+    const llmJudgeDetails = form.getValues("llmJudgeDetails");
+    const draft = customDraftsRef.current[scope];
+    const custom =
+      draft?.llmJudgeDetails ?? cloneDeep(getDefaultJudgeData(uiType)[scope]);
+    const [customMainScore, ...customScores] = custom.schema;
+    const draftMainScoreName = customMainScore?.name ?? "";
+    const isOwnMainScoreName =
+      Boolean(draft) && draftMainScoreName !== draft?.ruleName;
+    const mainScoreName = isEdit
+      ? (llmJudgeDetails.schema[0]?.name ?? "")
+      : isOwnMainScoreName
+        ? draftMainScoreName
+        : "";
+    form.setValue(
+      "llmJudgeDetails",
+      {
+        ...custom,
+        schema: customMainScore
+          ? [{ ...customMainScore, name: mainScoreName }, ...customScores]
+          : [],
+        messages: custom.messages.length
+          ? custom.messages
+          : createBlankRulePrompt(uiType),
+        model: llmJudgeDetails.model,
+        config: llmJudgeDetails.config,
+        maxCostUsd: llmJudgeDetails.maxCostUsd,
+      },
+      { shouldDirty: true },
+    );
+    form.clearErrors("llmJudgeDetails");
+    if (!isEdit && isDefaultName()) setAutoName(draft?.autoName ?? "");
+  }, [form, isEdit, isDefaultName, setAutoName, isOnTemplate]);
 
   const prepareForSubmit = useCallback(() => {
     const values = form.getValues();
@@ -498,6 +567,7 @@ const useRuleEditorForm = ({
     form,
     changeScope,
     applyTemplate,
+    selectCustom,
     prepareForSubmit,
     buildRule,
     convertCodeSignature,
