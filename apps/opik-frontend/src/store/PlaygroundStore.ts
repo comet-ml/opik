@@ -45,7 +45,7 @@ const markOutputStale = (
   output: PlaygroundOutput,
   changes: PlaygroundRunInputChange[],
 ): PlaygroundOutput => {
-  const previousChanges = output.stale ? output.staleChanges ?? [] : [];
+  const previousChanges = output.stale ? (output.staleChanges ?? []) : [];
   const staleChanges = union(previousChanges, changes);
 
   if (output.stale && staleChanges.length === previousChanges.length) {

@@ -280,7 +280,7 @@ class SpanWeeksReadFixtures {
     }
 
     /** A span's week from its own v7 timestamp, independently of the production week calculation. */
-    private long week(UUID spanId) {
+    long week(UUID spanId) {
         var monday = LocalDate.ofInstant(Instant.ofEpochMilli(spanId.getMostSignificantBits() >>> 16), ZoneOffset.UTC)
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         return Math.min(Long.parseLong(monday.format(DateTimeFormatter.BASIC_ISO_DATE)), PAST_CEILING_WEEK);

@@ -1015,7 +1015,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
-    // Latest-version dedup instead of FINAL: alert windows hold few spans, so FINAL's per-part overhead dominated.
+    /**
+     * Latest-version dedup instead of FINAL: alert windows hold few spans, so FINAL's per-part overhead dominated.
+     * <p>
+     * The window bounds trace_id only, so the spans' weeks come from {@code span_weeks}, which indexes them by trace,
+     * or else from a key-only pre-pass over {@code spans}, which itself opens every week.
+     */
     private static final String GET_TOTAL_COST = """
             SELECT
                 sum(total_estimated_cost) AS total_cost
@@ -1026,7 +1031,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <if(project_ids)> AND project_id IN :project_ids <endif>
                     <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                     <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
-                    <if(spans_partitioned)>
+                    <if(span_weeks_bound)>
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
+                        SELECT DISTINCT id_week FROM span_weeks
+                        WHERE workspace_id = :workspace_id
+                        <if(project_ids)> AND project_id IN :project_ids <endif>
+                        <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                        <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>)
+                    <elseif(spans_partitioned)>
                     AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN (
                         SELECT DISTINCT toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) FROM spans
                         WHERE workspace_id = :workspace_id
@@ -1625,9 +1637,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 stTemplate.add("project_ids", true);
             }
 
-            // Only GET_TOTAL_COST reads it: the key-only week pre-pass cut its CPU ~30% on partitioned spans.
+            // Only GET_TOTAL_COST reads these: the key-only week pre-pass cut its CPU ~30% on partitioned spans.
             if (spanColumnsNonNullable()) {
                 stTemplate.add("spans_partitioned", true);
+            }
+            if (spanWeeksReadBounded()) {
+                stTemplate.add("span_weeks_bound", true);
             }
 
             // Add uuid_from_time flag
@@ -1847,6 +1862,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private boolean spanColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
+
+    private boolean spanWeeksReadBounded() {
+        return configuration.getDatabaseAnalyticsDataModel().spanWeeksReadBounded();
     }
 
     private static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(

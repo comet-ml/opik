@@ -360,22 +360,20 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   }, [annotationQueue.feedback_definition_names]);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
-            statisticDataFormater: formatScoreDisplay,
-          }) as ColumnData<Thread>,
-      ),
-    ];
+    return dynamicScoresColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
+        }) as ColumnData<Thread>,
+    );
   }, [dynamicScoresColumns]);
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);

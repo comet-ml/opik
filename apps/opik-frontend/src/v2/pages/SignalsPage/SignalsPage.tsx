@@ -159,7 +159,7 @@ const SignalsPage: React.FC<{ showClosed?: boolean }> = ({
     { enabled: guidanceEnabled },
   );
   const resolvedCount = resolvedPage?.total ?? 0;
-  const notUsefulCount = guidanceEnabled ? notUsefulPage?.total ?? 0 : 0;
+  const notUsefulCount = guidanceEnabled ? (notUsefulPage?.total ?? 0) : 0;
 
   const [closedTabParam, setClosedTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",

@@ -67,7 +67,7 @@ export function ServerSyncProvider({ children }: ServerSyncProviderProps) {
     const serverMap = config?.color_map ?? null;
     const hasOverrides = Object.keys(previewColor).length > 0;
     const colorMap = hasOverrides
-      ? { ...(serverMap ?? {}), ...previewColor }
+      ? { ...serverMap, ...previewColor }
       : serverMap;
 
     return {

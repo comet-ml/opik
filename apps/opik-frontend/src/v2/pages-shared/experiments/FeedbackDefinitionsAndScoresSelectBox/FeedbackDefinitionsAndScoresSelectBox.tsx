@@ -29,15 +29,13 @@ interface BaseFeedbackDefinitionsAndScoresSelectBoxProps {
   placeholder?: string;
 }
 
-interface SingleSelectProps
-  extends BaseFeedbackDefinitionsAndScoresSelectBoxProps {
+interface SingleSelectProps extends BaseFeedbackDefinitionsAndScoresSelectBoxProps {
   value: string;
   onChange: (value: string) => void;
   multiselect?: false;
 }
 
-interface MultiSelectProps
-  extends BaseFeedbackDefinitionsAndScoresSelectBoxProps {
+interface MultiSelectProps extends BaseFeedbackDefinitionsAndScoresSelectBoxProps {
   value: string[];
   onChange: (value: string[]) => void;
   multiselect: true;
