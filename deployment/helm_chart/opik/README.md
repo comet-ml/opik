@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.145](https://img.shields.io/badge/Version-2.2.145-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.145](https://img.shields.io/badge/AppVersion-2.2.145-informational?style=flat-square)
+![Version: 2.2.148](https://img.shields.io/badge/Version-2.2.148-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.148](https://img.shields.io/badge/AppVersion-2.2.148-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -429,6 +429,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
+| component.python-backend.automountServiceAccountToken | bool | `true` |  |
 | component.python-backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.python-backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
 | component.python-backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
@@ -450,6 +451,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_CPU_SHARES | string | `"512"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_HARDENING | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT | string | `"64"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE | string | `"16m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |

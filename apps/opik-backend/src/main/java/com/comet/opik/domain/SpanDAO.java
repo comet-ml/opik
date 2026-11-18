@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
@@ -1248,12 +1249,18 @@ public class SpanDAO {
      * scope only — so it is always a primary-key-prunable {@code LIMIT 1}. It intentionally does not support
      * filters, search, trace_id, type, or time ranges: no consumer needs them, and adding them back would
      * reintroduce a full-project COUNT fallback.
+     * <p>
+     * With {@code <recent_weeks>}, only the previous, current and next week (see {@link #existsByProjectId}). The
+     * week set is the partition key of the partitioned table, so it opens no other week; the id lower bound serves
+     * the unpartitioned table through its {@code id} minmax index.
      */
     private static final String EXISTS_BY_PROJECT_ID = """
             SELECT 1 AS exist
             FROM spans
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
+            <if(recent_weeks)>AND id >= :recent_from_id
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :recent_weeks<endif>
             <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
@@ -2131,6 +2138,7 @@ public class SpanDAO {
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull WorkspacesService workspacesService;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -2944,14 +2952,31 @@ public class SpanDAO {
                         SpanPage.empty(page, sortingFactory.getSortableFields())));
     }
 
+    /**
+     * Probes the recent weeks first, as the traces probe does, and every week only for a project with no span in
+     * them, so the answer is that of the unbounded probe.
+     */
     @WithSpan
     public Mono<Boolean> existsByProjectId(@NonNull SpanSearchCriteria spanSearchCriteria) {
+        return existsByProjectId(spanSearchCriteria, true)
+                .filter(Boolean::booleanValue)
+                .switchIfEmpty(Mono.defer(() -> existsByProjectId(spanSearchCriteria, false)));
+    }
+
+    private Mono<Boolean> existsByProjectId(SpanSearchCriteria spanSearchCriteria, boolean recentWeeksOnly) {
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> makeMonoContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(EXISTS_BY_PROJECT_ID, "exists_spans_by_project_id",
-                            workspaceId, userName, "");
-
                     var source = spanSearchCriteria.source();
+                    var details = source == null
+                            ? "project_id=%s".formatted(spanSearchCriteria.projectId())
+                            : "project_id=%s, source=%s".formatted(spanSearchCriteria.projectId(), source);
+                    var template = getSTWithLogComment(EXISTS_BY_PROJECT_ID,
+                            recentWeeksOnly ? "exists_spans_by_project_id" : "exists_spans_by_project_id_all_weeks",
+                            workspaceId, userName, details);
+                    if (recentWeeksOnly) {
+                        template.add("recent_weeks", true);
+                    }
+
                     var sourceLegacy = source == null
                             ? Optional.<String>empty()
                             : Source.legacyFallbackDbValue(source.getValue());
@@ -2970,8 +2995,15 @@ public class SpanDAO {
                         statement.bind("source", source.getValue());
                         sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
                     }
+                    if (recentWeeksOnly) {
+                        var previousMonday = WeeklyPartitions.previousMonday();
+                        statement.bind("recent_from_id", instantToUUIDMapper.toLowerBound(previousMonday).toString());
+                        statement.bind("recent_weeks",
+                                WeeklyPartitions.recentWeeks(previousMonday).toArray(Long[]::new));
+                    }
 
-                    Segment segment = startSegment("spans", "Clickhouse", "existsByProjectId");
+                    Segment segment = startSegment("spans", "Clickhouse",
+                            recentWeeksOnly ? "existsByProjectId" : "existsByProjectIdAllWeeks");
 
                     return Mono.from(statement.execute())
                             .doFinally(signalType -> endSegment(segment))
