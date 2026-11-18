@@ -128,7 +128,7 @@ def test_daemon_config_keeps_mounted_settings(tmp_path, monkeypatch, allow_netwo
 
     write_hardened_config(str(operator_config_path), str(hardened_config_path))
 
-    expected = {**mounted_config, "userns-remap": "default", **expected_network_config}
+    expected = {**mounted_config, **expected_network_config}
     assert json.loads(hardened_config_path.read_text()) == expected
     assert json.loads(operator_config_path.read_text()) == mounted_config
 
@@ -138,7 +138,7 @@ def test_daemon_config_without_mounted_file(tmp_path):
 
     write_hardened_config(str(tmp_path / "missing.json"), str(hardened_config_path))
 
-    expected = {"userns-remap": "default", "bridge": "none", "iptables": False, "ip6tables": False}
+    expected = {"bridge": "none", "iptables": False, "ip6tables": False}
     assert json.loads(hardened_config_path.read_text()) == expected
 
 
@@ -184,7 +184,7 @@ def test_entrypoint_contract_prints_config_path_when_on(monkeypatch, capsys, con
 
     docker_daemon_config.main()
 
-    expected_config = {"userns-remap": "default", "bridge": "none", "iptables": False, "ip6tables": False}
+    expected_config = {"bridge": "none", "iptables": False, "ip6tables": False}
     output = capsys.readouterr()
     assert output.out == f"{config_paths[1]}\n"
     assert output.err == f"Docker daemon hardening enabled, config: {config_paths[1]}\n"
