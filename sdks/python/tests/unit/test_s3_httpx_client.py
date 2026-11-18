@@ -73,6 +73,25 @@ def test_get_httpx_client__no_hooks():
     assert client is not None
 
 
+def test_get_httpx_client__hook_sets_auth__request_sent_without_auth(
+    monkeypatch, respx_mock
+):
+    monkeypatch.setattr(opik.hooks.httpx_client_hook, "_httpx_client_hooks", [])
+
+    def set_auth(client: httpx.Client) -> None:
+        client.auth = httpx.BasicAuth("user", "fake-password")
+
+    opik.hooks.add_httpx_client_hook(
+        opik.hooks.HttpxClientHook(client_modifier=set_auth, client_init_arguments=None)
+    )
+    pre_sign_url = "https://s3.amazonaws.com/bucket/1?X-Amz-Signature=fake"
+    respx_mock.put(pre_sign_url).respond(200)
+
+    s3_httpx_client.get().put(pre_sign_url, content=b"data")
+
+    assert "Authorization" not in respx_mock.calls[0].request.headers
+
+
 def test_allowed_to_retry__remote_protocol_error__returns_true():
     request = httpx.Request("PUT", "https://s3.amazonaws.com/bucket/1")
     error = httpx.RemoteProtocolError(
