@@ -147,9 +147,9 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * policy, so each read is counted once. A read touched the cold tier when the cold disk's cache served any bytes,
      * from the cache or from object storage.
      *
-     * <p>{@code tiered_tables}: tables in the analytics database whose storage policy includes an object-storage disk,
-     * qualified as {@code database.table} the way {@code system.query_log.tables} lists them. It's evaluated once on
-     * the node that answers, then used as a constant by the replica fan-out.
+     * <p>{@code tiered_qualified_tables}: tables in the analytics database whose storage policy includes an
+     * object-storage disk, qualified as {@code database.table} the way {@code system.query_log.tables} lists them.
+     * It's evaluated once on the node that answers, then used as a constant by the replica fan-out.
      *
      * <p>The window ends the configured log flush lag in the past, so rows still buffered for the system log land in
      * the next window instead of being skipped. Its end is exclusive, so consecutive polls don't overlap;
@@ -161,7 +161,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 (SELECT groupArray(policy_name) FROM system.storage_policies
                     WHERE hasAny(disks, object_storage_disks)) AS tiered_policies,
                 (SELECT groupArray(concat(database, '.', name)) FROM system.tables
-                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_tables
+                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_qualified_tables
             SELECT
                 qualified_table,
                 toInt64(count()) AS queries,
@@ -170,7 +170,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 toInt64(if(countIf(cold) = 0, 0, quantileIf(0.99)(query_duration_ms, cold))) AS cold_p99_ms
             FROM (
                 SELECT
-                    arrayJoin(arrayIntersect(tables, tiered_tables)) AS qualified_table,
+                    arrayJoin(arrayIntersect(tables, tiered_qualified_tables)) AS qualified_table,
                     query_duration_ms,
                     ProfileEvents['CachedReadBufferReadFromSourceBytes']
                         + ProfileEvents['CachedReadBufferReadFromCacheBytes'] > 0 AS cold
@@ -178,7 +178,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 WHERE event_date >= toDate(now() - INTERVAL <window_start> SECOND)
                     AND event_time >= now() - INTERVAL <window_start> SECOND
                     AND less(event_time, now() - INTERVAL <window_end> SECOND)
-                    AND type = 'QueryFinish' AND query_kind = 'Select' AND hasAny(tables, tiered_tables)
+                    AND type = 'QueryFinish' AND query_kind = 'Select' AND hasAny(tables, tiered_qualified_tables)
             )
             GROUP BY qualified_table
             SETTINGS log_comment = '<log_comment>'
@@ -195,19 +195,19 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 (SELECT groupArray(policy_name) FROM system.storage_policies
                     WHERE hasAny(disks, object_storage_disks)) AS tiered_policies,
                 (SELECT groupArray(concat(database, '.', name)) FROM system.tables
-                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_tables
+                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_qualified_tables
             SELECT
                 qualified_table,
                 errorCodeToName(exception_code) AS code,
                 toInt64(count()) AS failed_queries
             FROM (
-                SELECT arrayJoin(arrayIntersect(tables, tiered_tables)) AS qualified_table, exception_code
+                SELECT arrayJoin(arrayIntersect(tables, tiered_qualified_tables)) AS qualified_table, exception_code
                 FROM clusterAllReplicas('{cluster}', system.query_log)
                 WHERE event_date >= toDate(now() - INTERVAL <window_start> SECOND)
                     AND event_time >= now() - INTERVAL <window_start> SECOND
                     AND less(event_time, now() - INTERVAL <window_end> SECOND)
                     AND type = 'ExceptionWhileProcessing' AND query_kind = 'Select'
-                    AND exception_code IN (33, 40, 86, 246, 499, 1000) AND hasAny(tables, tiered_tables)
+                    AND exception_code IN (33, 40, 86, 246, 499, 1000) AND hasAny(tables, tiered_qualified_tables)
             )
             GROUP BY qualified_table, code
             SETTINGS log_comment = '<log_comment>'
@@ -219,14 +219,14 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
                 (SELECT groupArray(policy_name) FROM system.storage_policies
                     WHERE hasAny(disks, object_storage_disks)) AS tiered_policies,
                 (SELECT groupArray(name) FROM system.tables
-                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_tables
+                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_table_names
             SELECT table AS table_name, toInt64(count()) AS move_errors
             FROM clusterAllReplicas('{cluster}', system.part_log)
             WHERE event_date >= toDate(now() - INTERVAL <window_start> SECOND)
                 AND event_time >= now() - INTERVAL <window_start> SECOND
                 AND less(event_time, now() - INTERVAL <window_end> SECOND)
                 AND event_type = 'MovePart' AND error != 0 AND database = :database_name
-                AND has(tiered_tables, table)
+                AND has(tiered_table_names, table)
             GROUP BY table
             SETTINGS log_comment = '<log_comment>'
             """;
