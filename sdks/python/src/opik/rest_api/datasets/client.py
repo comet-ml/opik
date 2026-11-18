@@ -849,7 +849,7 @@ class DatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         experiment_ids: typing.Optional[str] = None,
-        dataset_version: typing.Optional[str] = None,
+        dataset_versions: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -869,7 +869,7 @@ class DatasetsClient:
 
         experiment_ids : typing.Optional[str]
 
-        dataset_version : typing.Optional[str]
+        dataset_versions : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -898,7 +898,7 @@ class DatasetsClient:
             page=page,
             size=size,
             experiment_ids=experiment_ids,
-            dataset_version=dataset_version,
+            dataset_versions=dataset_versions,
             filters=filters,
             sorting=sorting,
             search=search,
@@ -1272,6 +1272,85 @@ class DatasetsClient:
         """
         _response = self._raw_client.start_dataset_export(id, request_options=request_options)
         return _response.data
+
+    def stream_dataset_experiment_items(
+        self,
+        *,
+        dataset_id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        dataset_versions: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_experiment_id: typing.Optional[str] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.Iterator[bytes]:
+        """
+        Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+        Optimizer trial, mini-batch and mutation experiments are excluded.
+
+        Rows are ordered by experiment, then dataset item. To read the next page, send the experiment_id and
+        id of the last row received as last_retrieved_experiment_id and last_retrieved_id; a page with fewer
+        rows than the limit is the last one.
+
+        Parameters
+        ----------
+        dataset_id : typing.Optional[str]
+            Dataset ID. Set this or dataset_name
+
+        dataset_name : typing.Optional[str]
+            Dataset name. Set this or dataset_id
+
+        project_name : typing.Optional[str]
+            Project of the dataset, used with dataset_name
+
+        dataset_versions : typing.Optional[typing.Sequence[str]]
+            Dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Returns 404 if any version does not exist
+
+        filters : typing.Optional[str]
+            JSON array of dataset item filters, evaluated against the newest version of each item that the experiments reference
+
+        limit : typing.Optional[int]
+            Maximum number of experiment items to return
+
+        last_retrieved_experiment_id : typing.Optional[str]
+            experiment_id of the last experiment item received. Set together with last_retrieved_id
+
+        last_retrieved_id : typing.Optional[str]
+            id of the last experiment item received. Set together with last_retrieved_experiment_id
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.Iterator[bytes]
+            Experiment items stream or error during process
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.stream_dataset_experiment_items()
+        """
+        with self._raw_client.stream_dataset_experiment_items(
+            dataset_id=dataset_id,
+            dataset_name=dataset_name,
+            project_name=project_name,
+            dataset_versions=dataset_versions,
+            filters=filters,
+            limit=limit,
+            last_retrieved_experiment_id=last_retrieved_experiment_id,
+            last_retrieved_id=last_retrieved_id,
+            truncate=truncate,
+            request_options=request_options,
+        ) as r:
+            yield from r.data
 
     def stream_dataset_items(
         self,
@@ -2449,7 +2528,7 @@ class AsyncDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         experiment_ids: typing.Optional[str] = None,
-        dataset_version: typing.Optional[str] = None,
+        dataset_versions: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         search: typing.Optional[str] = None,
@@ -2469,7 +2548,7 @@ class AsyncDatasetsClient:
 
         experiment_ids : typing.Optional[str]
 
-        dataset_version : typing.Optional[str]
+        dataset_versions : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -2501,7 +2580,7 @@ class AsyncDatasetsClient:
             page=page,
             size=size,
             experiment_ids=experiment_ids,
-            dataset_version=dataset_version,
+            dataset_versions=dataset_versions,
             filters=filters,
             sorting=sorting,
             search=search,
@@ -2905,6 +2984,89 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.start_dataset_export(id, request_options=request_options)
         return _response.data
+
+    async def stream_dataset_experiment_items(
+        self,
+        *,
+        dataset_id: typing.Optional[str] = OMIT,
+        dataset_name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        dataset_versions: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[str] = OMIT,
+        limit: typing.Optional[int] = OMIT,
+        last_retrieved_experiment_id: typing.Optional[str] = OMIT,
+        last_retrieved_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Stream the experiment items of every regular experiment on a dataset, one experiment item per line.
+        Optimizer trial, mini-batch and mutation experiments are excluded.
+
+        Rows are ordered by experiment, then dataset item. To read the next page, send the experiment_id and
+        id of the last row received as last_retrieved_experiment_id and last_retrieved_id; a page with fewer
+        rows than the limit is the last one.
+
+        Parameters
+        ----------
+        dataset_id : typing.Optional[str]
+            Dataset ID. Set this or dataset_name
+
+        dataset_name : typing.Optional[str]
+            Dataset name. Set this or dataset_id
+
+        project_name : typing.Optional[str]
+            Project of the dataset, used with dataset_name
+
+        dataset_versions : typing.Optional[typing.Sequence[str]]
+            Dataset version hashes or tags, such as 'latest'. Only experiments run against one of these versions are included; omit for every version. Returns 404 if any version does not exist
+
+        filters : typing.Optional[str]
+            JSON array of dataset item filters, evaluated against the newest version of each item that the experiments reference
+
+        limit : typing.Optional[int]
+            Maximum number of experiment items to return
+
+        last_retrieved_experiment_id : typing.Optional[str]
+            experiment_id of the last experiment item received. Set together with last_retrieved_id
+
+        last_retrieved_id : typing.Optional[str]
+            id of the last experiment item received. Set together with last_retrieved_experiment_id
+
+        truncate : typing.Optional[bool]
+            Truncate image included in either input, output or metadata
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.AsyncIterator[bytes]
+            Experiment items stream or error during process
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.stream_dataset_experiment_items()
+        asyncio.run(main())
+        """
+        async with self._raw_client.stream_dataset_experiment_items(
+            dataset_id=dataset_id,
+            dataset_name=dataset_name,
+            project_name=project_name,
+            dataset_versions=dataset_versions,
+            filters=filters,
+            limit=limit,
+            last_retrieved_experiment_id=last_retrieved_experiment_id,
+            last_retrieved_id=last_retrieved_id,
+            truncate=truncate,
+            request_options=request_options,
+        ) as r:
+            async for data in r.data:
+                yield data
 
     async def stream_dataset_items(
         self,
