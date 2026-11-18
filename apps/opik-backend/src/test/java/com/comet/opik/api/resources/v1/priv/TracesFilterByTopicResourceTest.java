@@ -184,6 +184,7 @@ class TracesFilterByTopicResourceTest {
 
     @AfterAll
     void afterAll() {
+        wireMock.server().stop();
         clickHouse.stop();
         zookeeper.stop();
         network.close();
