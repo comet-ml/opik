@@ -1049,7 +1049,7 @@ class TopicsNightlyJobTest {
                 .stream().filter(row -> labels.containsKey(row.traceId())).toList();
         assertThat(window).hasSize(labels.size()).isNotEmpty();
 
-        int dimensions = TopicsRebuildService.DIMENSIONS;
+        int dimensions = TopicAlgorithm.DIMENSIONS;
         var vectors = new float[window.size() * dimensions];
         for (int i = 0; i < window.size(); i++) {
             System.arraycopy(window.get(i).vector(), 0, vectors, i * dimensions, dimensions);

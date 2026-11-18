@@ -584,7 +584,7 @@ class TopicVectorsTickServiceTest {
             } else {
                 when(arrivalTemplate.inTransaction(any(TxConfig.class), any())).thenReturn(List.of());
                 when(algorithm.labeller(anyList())).thenReturn(Optional.of(vectors -> {
-                    var topics = new UUID[vectors.length / TopicsRebuildService.DIMENSIONS];
+                    var topics = new UUID[vectors.length / TopicAlgorithm.DIMENSIONS];
                     Arrays.fill(topics, TraceTopic.OTHER);
                     return topics;
                 }));

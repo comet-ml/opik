@@ -293,7 +293,7 @@ public class TopicsArrivalService {
 
     /** The vectors' values, one vector after another, as the labeller takes them. */
     private static float[] flatten(List<TopicVector> vectors) {
-        int dimensions = TopicsRebuildService.DIMENSIONS;
+        int dimensions = TopicAlgorithm.DIMENSIONS;
         var out = new float[vectors.size() * dimensions];
         for (int r = 0; r < vectors.size(); r++) {
             var values = vectors.get(r).vector();
