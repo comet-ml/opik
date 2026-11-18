@@ -200,6 +200,10 @@ class TopicsNightlyJobTest {
     @AfterAll
     void afterAll() {
         wireMock.stop();
+        clickHouse.stop();
+        zookeeper.stop();
+        mysql.stop();
+        network.close();
     }
 
     @BeforeEach
@@ -914,8 +918,8 @@ class TopicsNightlyJobTest {
                     .traceId(ID_GENERATOR.generateId())
                     .traceCreatedAt(day.plus(Duration.ofMinutes(i)))
                     .taskVersion(1)
-                    .embedModel(TopicVectorsTickService.EMBED_MODEL)
-                    .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
+                    .embedModel(TopicsTestData.EMBED_MODEL)
+                    .embedDimensions(TopicAlgorithm.DIMENSIONS)
                     .text(NIGHTLY.intents[i])
                     .vector(vector)
                     .build());
@@ -937,8 +941,8 @@ class TopicsNightlyJobTest {
                 .traceId(ID_GENERATOR.generateId())
                 .traceCreatedAt(secondNight().atStartOfDay(ZoneOffset.UTC).toInstant().plus(Duration.ofHours(1)))
                 .taskVersion(1)
-                .embedModel(TopicVectorsTickService.EMBED_MODEL)
-                .embedDimensions(TopicVectorsTickService.EMBED_DIMENSIONS)
+                .embedModel(TopicsTestData.EMBED_MODEL)
+                .embedDimensions(TopicAlgorithm.DIMENSIONS)
                 .text(NIGHTLY.intents[0])
                 .vector(vector)
                 .build();
