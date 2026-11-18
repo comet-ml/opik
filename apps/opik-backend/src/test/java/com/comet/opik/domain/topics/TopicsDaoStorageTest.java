@@ -8,11 +8,16 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
+import io.r2dbc.spi.ConnectionFactory;
+import org.jdbi.v3.core.mapper.reflect.ConstructorMapper;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +29,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -33,10 +39,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -46,7 +55,8 @@ import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The topics DAOs against real ClickHouse and MySQL: the {@code topic_vectors} window count and reads, the
- * {@code trace_topics} read shape, and the label-state reads of {@code topic_project_states}. Tests seed vectors and rows
+ * {@code trace_topics} read shape, writes, counts and deletes, and the label-state reads of
+ * {@code topic_project_states}. Tests seed vectors and rows
  * directly and call the DAOs; no service runs here.
  */
 @DisplayName("topics DAO storage")
@@ -101,17 +111,23 @@ class TopicsDaoStorageTest {
     private TransactionTemplate template;
     private TopicVectorsDAO vectorsDAO;
     private TopicWindowDAO windowDAO;
+    private TraceTopicsDAO traceTopicsDAO;
+    private TransactionTemplateAsync clickHouseTemplate;
+    private ConnectionFactory connectionFactory;
     private TopicsTestData data;
     private TopicsTestData spreadData;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
-            @Jit TopicWindowDAO windowDAO) {
+            @Jit TopicWindowDAO windowDAO, @Jit TraceTopicsDAO traceTopicsDAO, ConnectionFactory connectionFactory) {
         this.opikConfig = opikConfig;
         this.template = template;
         this.vectorsDAO = vectorsDAO;
         this.windowDAO = windowDAO;
+        this.traceTopicsDAO = traceTopicsDAO;
+        this.clickHouseTemplate = clickHouseTemplate;
+        this.connectionFactory = connectionFactory;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, TRACES);
         this.spreadData = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, SPREAD_TRACES);
     }
@@ -321,6 +337,100 @@ class TopicsDaoStorageTest {
     }
 
     @Test
+    @DisplayName("the topic counts take each inserted trace's latest row, per topic and Other, among the traces Logs "
+            + "lists: an experiment trace, a hidden trace and a tombstoned row are left out")
+    void insertedRowsAreCountedByTopic() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var ids = TRACES.traceIds().subList(0, 6);
+        var experiment = ids.get(2);
+        var hidden = ids.get(3);
+        var tombstoned = ids.get(4);
+        var topics = List.of(topicId, TraceTopic.OTHER, topicId, topicId, topicId, topicId);
+        insertRunRows(workspaceId, projectId, UUID.randomUUID(), ids, topics);
+        data.insertTraceTopic(workspaceId, projectId, tombstoned, TRACES.createdAt().get(4), topicId,
+                Instant.now().plus(Duration.ofHours(1)), 1);
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, ids.size())
+                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, ids.get(i),
+                        TRACES.createdAt().get(i)))
+                .map(row -> row.id().equals(experiment) ? row.toBuilder().source("experiment").build() : row)
+                .map(row -> row.id().equals(hidden) ? row.toBuilder().visibilityMode("hidden").build() : row)
+                .toList());
+
+        var counts = traceTopicsDAO.countByTopic(workspaceId, projectId, from(), to(), 60).collectList().block();
+
+        assertThat(counts).extracting(TraceTopicsDAO.TopicCount::topicId, TraceTopicsDAO.TopicCount::traces)
+                .containsExactlyInAnyOrder(tuple(topicId, 2L), tuple(TraceTopic.OTHER, 1L));
+    }
+
+    @Test
+    @DisplayName("the trace-delete cascade deletes the rows of the given traces of the given project only")
+    void deleteByTraceIdsDeletesOnlyThoseTraces() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var otherProjectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var ids = TRACES.traceIds().subList(0, 4);
+        insertRunRows(workspaceId, projectId, UUID.randomUUID(), ids, List.of(topicId, topicId, topicId, topicId));
+        insertRunRows(workspaceId, otherProjectId, UUID.randomUUID(), ids.subList(0, 1), List.of(topicId));
+
+        traceTopicsDAO.deleteByTraceIds(Set.copyOf(ids.subList(0, 2)), projectId)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .block();
+
+        assertThat(data.traceTopics(workspaceId, projectId)).extracting(TraceTopic::traceId)
+                .containsExactlyInAnyOrderElementsOf(ids.subList(2, 4));
+        assertThat(data.traceTopics(workspaceId, otherProjectId)).extracting(TraceTopic::traceId)
+                .containsExactly(ids.get(0));
+    }
+
+    @Test
+    @DisplayName("retention deletes the rows of traces below the cutoff, and keeps experiment-linked, newer and other "
+            + "workspaces' traces")
+    void retentionDeletesBelowTheCutoff() {
+        var workspaceId = UUID.randomUUID().toString();
+        var otherWorkspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var now = Instant.now();
+        var old = traceId(now.minus(20, ChronoUnit.DAYS));
+        var oldInExperiment = traceId(now.minus(20, ChronoUnit.DAYS));
+        var recent = traceId(now.minus(1, ChronoUnit.DAYS));
+        insertRows(workspaceId, projectId, topicId, List.of(old, oldInExperiment, recent));
+        insertRows(otherWorkspaceId, projectId, topicId, List.of(old));
+        insertExperimentItem(workspaceId, oldInExperiment);
+
+        traceTopicsDAO.deleteForRetention(List.of(workspaceId), traceId(now.minus(10, ChronoUnit.DAYS)),
+                traceId(now.minus(30, ChronoUnit.DAYS))).block();
+
+        assertThat(data.traceTopics(workspaceId, projectId)).extracting(TraceTopic::traceId)
+                .containsExactlyInAnyOrder(oldInExperiment, recent);
+        assertThat(data.traceTopics(otherWorkspaceId, projectId)).extracting(TraceTopic::traceId)
+                .containsExactly(old);
+    }
+
+    @Test
+    @DisplayName("bounded retention deletes from each workspace's own floor up to the cutoff")
+    void boundedRetentionDeletesFromTheFloor() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var topicId = UUID.randomUUID();
+        var now = Instant.now();
+        var belowFloor = traceId(now.minus(20, ChronoUnit.DAYS));
+        var aboveFloor = traceId(now.minus(12, ChronoUnit.DAYS));
+        var afterCutoff = traceId(now.minus(5, ChronoUnit.DAYS));
+        insertRows(workspaceId, projectId, topicId, List.of(belowFloor, aboveFloor, afterCutoff));
+
+        traceTopicsDAO.deleteForRetentionBounded(Map.of(workspaceId, traceId(now.minus(15, ChronoUnit.DAYS))),
+                traceId(now.minus(10, ChronoUnit.DAYS)), traceId(now.minus(30, ChronoUnit.DAYS))).block();
+
+        assertThat(data.traceTopics(workspaceId, projectId)).extracting(TraceTopic::traceId)
+                .containsExactlyInAnyOrder(belowFloor, afterCutoff);
+    }
+
+    @Test
     @DisplayName("the labels are marked complete only for the run the state names: an older run's pass marks nothing")
     void labelsCompleteOnlyForTheLastRun() {
         var workspaceId = UUID.randomUUID().toString();
@@ -372,6 +482,56 @@ class TopicsDaoStorageTest {
                 .block();
     }
 
+    /** Rows of one run: trace {@code traceIds[i]} of {@link #TRACES}, at its creation time, with {@code topicIds[i]}. */
+    private void insertRunRows(String workspaceId, UUID projectId, UUID runId, List<UUID> traceIds,
+            List<UUID> topicIds) {
+        traceTopicsDAO.insert(IntStream.range(0, traceIds.size())
+                .mapToObj(i -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(traceIds.get(i))
+                        .traceCreatedAt(TRACES.createdAt().get(TRACES.traceIds().indexOf(traceIds.get(i))))
+                        .topicId(topicIds.get(i))
+                        .source(TraceTopic.Source.RUN)
+                        .runId(runId.toString())
+                        .build())
+                .toList()).block();
+    }
+
+    /** One run row of {@code topicId} per trace, each created at its UUID v7 id's time. */
+    private void insertRows(String workspaceId, UUID projectId, UUID topicId, List<UUID> traceIds) {
+        traceTopicsDAO.insert(traceIds.stream()
+                .map(traceId -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(traceId)
+                        .traceCreatedAt(Instant.ofEpochMilli(traceId.getMostSignificantBits() >>> 16))
+                        .topicId(topicId)
+                        .source(TraceTopic.Source.RUN)
+                        .runId(UUID.randomUUID().toString())
+                        .build())
+                .toList()).block();
+    }
+
+    private static UUID traceId(Instant at) {
+        return Generators.timeBasedEpochGenerator().construct(at.toEpochMilli());
+    }
+
+    private void insertExperimentItem(String workspaceId, UUID traceId) {
+        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO experiment_items (id, experiment_id, dataset_item_id, trace_id, workspace_id)
+                VALUES (:id, :experiment_id, :dataset_item_id, :trace_id, :workspace_id)
+                """)
+                .bind("id", UUID.randomUUID().toString())
+                .bind("experiment_id", UUID.randomUUID().toString())
+                .bind("dataset_item_id", UUID.randomUUID().toString())
+                .bind("trace_id", traceId.toString())
+                .bind("workspace_id", workspaceId)
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
+    }
+
     /** The window that ends at the seeded traces' night. */
     private static Instant from() {
         return NIGHT.minus(Duration.ofDays(WINDOW_DAYS));
@@ -379,5 +539,195 @@ class TopicsDaoStorageTest {
 
     private static Instant to() {
         return NIGHT;
+    }
+
+    @Test
+    @DisplayName("the nightly save: topic updates, the state's compare-and-set, the live-topic reads, and the deletes "
+            + "of a list with no live topic")
+    void nightlySave() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var other = UUID.randomUUID();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        data.savedList(workspaceId, other, NIGHT, BUILT);
+        var state = data.state(projectId);
+        var topic = data.topics(projectId).getFirst();
+
+        assertThat(liveProjects(workspaceId, List.of(projectId, other, UUID.randomUUID())))
+                .containsExactlyInAnyOrder(projectId, other);
+        assertThat(liveProjects(List.of(workspaceId)))
+                .containsExactlyInAnyOrder(new TopicDAO.ProjectKey(workspaceId, projectId),
+                        new TopicDAO.ProjectKey(workspaceId, other));
+
+        var later = state.toBuilder().rebuilds(2).lastRunId(UUID.randomUUID())
+                .lastSuccessAt(NIGHT.plus(Duration.ofDays(1)))
+                .windowUntil(NIGHT.plus(Duration.ofDays(1))).labelsComplete(false).build();
+        int stale = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .updateState(later, UUID.randomUUID()));
+        assertThat(stale).isZero();
+        assertThat(data.state(projectId)).isEqualTo(state);
+
+        int saved = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .updateState(later, state.lastRunId()));
+        assertThat(saved).isEqualTo(1);
+        assertThat(data.state(projectId)).isEqualTo(later);
+
+        var retired = topic.toBuilder().name("Renamed").definition("Changed").retiredAt(LocalDate.of(2026, 10, 16))
+                .retiredReason("empty").lowNights(3).size(0).build();
+        var updated = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .updateTopics(List.of(retired)));
+        assertThat(updated).containsExactly(1);
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(allTopics(workspaceId, projectId)).singleElement()
+                .isEqualTo(retired.toBuilder().name(topic.name()).definition(topic.definition()).build());
+        assertThat(liveProjects(workspaceId, List.of(projectId, other))).containsExactly(other);
+        assertThat(liveProjects(List.of(workspaceId)))
+                .containsExactly(new TopicDAO.ProjectKey(workspaceId, other));
+
+        template.inTransaction(WRITE, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            assertThat(topicDAO.deletePrototypes(workspaceId, projectId)).isEqualTo(2);
+            assertThat(topicDAO.deleteState(workspaceId, projectId)).isEqualTo(1);
+            return null;
+        });
+        assertThat(data.prototypes(projectId)).isEmpty();
+        assertThat(data.state(projectId)).isNull();
+        assertThat(data.prototypes(other)).hasSize(2);
+        assertThat(data.state(other)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a project is paused when its last 3 runs failed and the latest started since the given time")
+    void pausedProjects() {
+        var workspaceId = UUID.randomUUID().toString();
+        var since = NIGHT.minus(Duration.ofDays(7));
+        var paused = UUID.randomUUID();
+        var savedLast = UUID.randomUUID();
+        var tooOld = UUID.randomUUID();
+        var twoFailures = UUID.randomUUID();
+        var savedBefore = UUID.randomUUID();
+        insertRuns(workspaceId, paused, NIGHT, TopicRun.Status.FAILED, TopicRun.Status.FAILED, TopicRun.Status.FAILED);
+        insertRuns(workspaceId, savedLast, NIGHT, TopicRun.Status.FAILED, TopicRun.Status.FAILED,
+                TopicRun.Status.SAVED);
+        insertRuns(workspaceId, tooOld, since.minus(Duration.ofDays(1)), TopicRun.Status.FAILED,
+                TopicRun.Status.FAILED, TopicRun.Status.FAILED);
+        insertRuns(workspaceId, twoFailures, NIGHT, TopicRun.Status.FAILED, TopicRun.Status.FAILED);
+        insertRuns(workspaceId, savedBefore, NIGHT, TopicRun.Status.SAVED, TopicRun.Status.FAILED,
+                TopicRun.Status.FAILED, TopicRun.Status.FAILED);
+
+        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class)
+                .findPausedProjectIds(workspaceId, List.of(paused, savedLast, tooOld, twoFailures, savedBefore), 3,
+                        since));
+
+        assertThat(found).containsExactlyInAnyOrder(paused, savedBefore);
+    }
+
+    @Test
+    @DisplayName("of the project ids asked for, only those of the workspace's existing projects are returned")
+    void existingProjectIds() {
+        var workspaceId = UUID.randomUUID().toString();
+        var existing = UUID.randomUUID();
+        var elsewhere = UUID.randomUUID();
+        data.project(workspaceId, existing);
+        data.project(UUID.randomUUID().toString(), elsewhere);
+
+        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findExistingProjectIds(workspaceId, List.of(existing, elsewhere, UUID.randomUUID())));
+
+        assertThat(found).containsExactly(existing);
+    }
+
+    @Test
+    @DisplayName("a night's record: its row as it starts and ends, its project rows, and a second start of the same "
+            + "night that replaces both")
+    void nightRecord() {
+        var night = LocalDate.of(2026, 1, 15);
+        var startedAt = Instant.parse("2026-01-15T02:00:00Z");
+        var finishedAt = startedAt.plus(Duration.ofHours(1));
+        var workspaceId = UUID.randomUUID().toString();
+        var row = TopicNightProject.builder()
+                .id(UUID.randomUUID())
+                .night(night)
+                .workspaceId(workspaceId)
+                .projectId(UUID.randomUUID())
+                .decision("skip")
+                .reason("small")
+                .build();
+        template.inTransaction(WRITE, handle -> {
+            var nightDAO = handle.attach(TopicNightDAO.class);
+            nightDAO.start(night, startedAt);
+            nightDAO.insertProjects(List.of(row));
+            return null;
+        });
+        assertThat(findNight(night)).isEqualTo(new TopicNight(night, startedAt, null, TopicNight.Outcome.RUNNING));
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicNightDAO.class)
+                    .end(new TopicNight(night, startedAt, finishedAt, TopicNight.Outcome.FINISHED));
+            return null;
+        });
+        assertThat(findNight(night)).isEqualTo(new TopicNight(night, startedAt, finishedAt,
+                TopicNight.Outcome.FINISHED));
+        assertThat(nightProjects(night))
+                .containsExactly(row);
+
+        var again = startedAt.plus(Duration.ofHours(5));
+        template.inTransaction(WRITE, handle -> {
+            var nightDAO = handle.attach(TopicNightDAO.class);
+            nightDAO.start(night, again);
+            nightDAO.deleteProjects(night);
+            return null;
+        });
+        assertThat(findNight(night)).isEqualTo(new TopicNight(night, again, null, TopicNight.Outcome.RUNNING));
+        assertThat(nightProjects(night))
+                .isEmpty();
+    }
+
+    private List<TopicNightProject> nightProjects(LocalDate night) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicNightDAO.class).findProjects(night));
+    }
+
+    private TopicNight findNight(LocalDate night) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicNightDAO.class).findByNight(night));
+    }
+
+    private List<UUID> liveProjects(String workspaceId, List<UUID> projectIds) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findProjectsWithLiveTopics(workspaceId, projectIds));
+    }
+
+    private List<TopicDAO.ProjectKey> liveProjects(List<String> workspaceIds) {
+        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+                .findProjectsWithLiveTopics(workspaceIds));
+    }
+
+    /** Every topic row of the project, retired ones included. */
+    private List<Topic> allTopics(String workspaceId, UUID projectId) {
+        return template.inTransaction(READ_ONLY, handle -> handle
+                .createQuery("SELECT * FROM topics WHERE workspace_id = :workspaceId AND project_id = :projectId")
+                .bind("workspaceId", workspaceId)
+                .bind("projectId", projectId.toString())
+                .map(ConstructorMapper.of(Topic.class))
+                .list());
+    }
+
+    /** Runs of the project with these statuses, oldest first, one hour apart, the last started at {@code latest}. */
+    private void insertRuns(String workspaceId, UUID projectId, Instant latest, TopicRun.Status... statuses) {
+        template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
+            for (int i = 0; i < statuses.length; i++) {
+                var startedAt = latest.minus(Duration.ofHours(statuses.length - 1 - i));
+                runDAO.insert(TopicRun.builder()
+                        .runId(UUID.randomUUID())
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .mode(TopicRun.Mode.NIGHTLY_UPDATE)
+                        .status(statuses[i])
+                        .startedAt(startedAt)
+                        .finishedAt(startedAt.plus(Duration.ofMinutes(5)))
+                        .build());
+            }
+            return null;
+        });
     }
 }
