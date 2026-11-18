@@ -54,6 +54,7 @@ import static com.comet.opik.domain.topics.TopicVectorsFixtures.expectedVectors;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.outputLabel;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.traceCreatedAt;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.vector;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
@@ -108,10 +109,15 @@ class TopicVectorsStorageTest {
     private AiLabelStatusDAO statusDAO;
     private AiLabelsDAO labelsDAO;
     private TopicVectorsTables tables;
+    private TransactionTemplate template;
+    private TopicVectorBackfillService backfillService;
 
     @BeforeAll
     void beforeAll(TransactionTemplate template, TransactionTemplateAsync templateAsync,
-            @Jit TopicVectorsDAO vectorsDAO, @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO) {
+            @Jit TopicVectorsDAO vectorsDAO, @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO,
+            @Jit TopicVectorBackfillService backfillService) {
+        this.template = template;
+        this.backfillService = backfillService;
         this.templateAsync = templateAsync;
         this.vectorsDAO = vectorsDAO;
         this.statusDAO = statusDAO;
@@ -256,8 +262,8 @@ class TopicVectorsStorageTest {
         tables.insertStatusAt(workspaceId, projectId, unicodeBlank, 1, oldest.plusSeconds(3));
         tables.insertStatusAt(workspaceId, projectId, usable, 1, oldest.plusSeconds(4));
 
-        var found = vectorsDAO.findUnvectored(workspaceId, TASK, Instant.now().minus(1, ChronoUnit.HOURS),
-                Instant.now(), Instant.EPOCH, 1, 10).collectList().block();
+        var found = vectorsDAO.findUnvectored(windowRead(workspaceId, Instant.now().minus(1, ChronoUnit.HOURS),
+                Instant.now(), Instant.EPOCH).limit(1).build()).collectList().block();
 
         // Written by insertStatusAt, so its updated_at is known too.
         assertThat(found).containsExactly(candidate(workspaceId, projectId, usable, 1).toBuilder()
@@ -382,7 +388,7 @@ class TopicVectorsStorageTest {
         var lower = now.minus(1, ChronoUnit.HOURS);
         var upper = Instant.now();
 
-        var unsliced = vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, createdAfter, 100, 10)
+        var unsliced = vectorsDAO.findUnvectored(windowRead(workspaceId, lower, upper, createdAfter).build())
                 .collectList().block();
 
         // Per project: 7 traces, less the one with a vector and the one before the bound.
@@ -405,8 +411,8 @@ class TopicVectorsStorageTest {
                     .toList();
             assertThat(sliced(workspaceId, projectId, List.of(), lower, upper, now, createdAfter, slice).stream()
                     .sorted(byKey)).containsExactlyElementsOf(ofProject);
-            assertThat(vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, createdAfter, null, projectId,
-                    List.of(), 100, 10).collectList().block().stream().sorted(byKey))
+            assertThat(vectorsDAO.findUnvectored(windowRead(workspaceId, lower, upper, createdAfter)
+                    .projectId(projectId).build()).collectList().block().stream().sorted(byKey))
                     .containsExactlyElementsOf(ofProject);
         }
         // Without the second project: the first project's.
@@ -461,6 +467,86 @@ class TopicVectorsStorageTest {
                 .containsExactlyInAnyOrder(tuple(first, 0L), tuple(second, 0L));
     }
 
+    @Test
+    @DisplayName("the backfill table: a started row is not started again, a discovery keeps a row's start and drained "
+            + "mark, progress never passes the total, and rows not checked for long start again")
+    void backfillTable() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
+        var third = ID_GENERATOR.generateId();
+        var t0 = Instant.parse("2026-11-01T10:00:00.123456Z");
+        List.of(first, second, third).forEach(projectId -> tables.project(workspaceId, projectId));
+        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        backfillService.start(List.of(row.projectId(first).build(), row.projectId(second).build()));
+        backfillService.start(List.of(row.projectId(first).startedAt(t0.plusSeconds(60)).build()));
+        var t1 = t0.plusSeconds(100);
+        backfillService.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId)
+                .projectId(first).drainedAt(t1).written(5).build()));
+
+        var started = backfillService.findByKeys(workspaceId, List.of(first, second, third));
+        // Never discovered, so its total is 0 and nothing written counts yet.
+        assertThat(started).isEqualTo(Map.of(
+                first, row.projectId(first).startedAt(t0).drainedAt(t1).build(),
+                second, row.projectId(second).startedAt(t0).drainedAt(null).build()));
+        assertThat(backfillService.findUndrained(List.of(workspaceId)))
+                .isEqualTo(Map.of(workspaceId, List.of(started.get(second))));
+
+        var t2 = t0.plusSeconds(200);
+        var t3 = t0.plusSeconds(300);
+        var found = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t3).checkedAt(t3);
+        backfillService.discovered(workspaceId, List.of(
+                found.projectId(first).lastDoneAt(t2).tracesTotal(10).tracesDone(4).build(),
+                found.projectId(third).lastDoneAt(t2).tracesTotal(7).tracesDone(0).build()), t3, t0.minusSeconds(1));
+        var progress = TopicVectorBackfill.Progress.builder().workspaceId(workspaceId).projectId(third).written(5)
+                .build();
+        backfillService.record(List.of(progress, progress));
+
+        assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
+                // Its start and drained mark are kept; the counts and the latest status are the discovery's.
+                first, found.projectId(first).startedAt(t0).drainedAt(t1).lastDoneAt(t2).tracesTotal(10)
+                        .tracesDone(4).build(),
+                // Not found by the discovery, but checked with its workspace.
+                second, row.projectId(second).startedAt(t0).checkedAt(t3).drainedAt(null).build(),
+                // New: starts a backfill. 5 + 5 written of 7.
+                third, found.projectId(third).startedAt(t3).drainedAt(null).lastDoneAt(t2).tracesTotal(7)
+                        .tracesDone(7).build()));
+
+        // The tick comes back long after t3: every row starts again.
+        var t4 = t3.plus(3, ChronoUnit.DAYS);
+        backfillService.discovered(workspaceId, List.of(), t4, t4.minus(2, ChronoUnit.DAYS));
+
+        var all = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicVectorBackfillDAO.class).findByWorkspaceIds(List.of(workspaceId)));
+        assertThat(all).hasSize(3).allSatisfy(reset -> {
+            assertThat(reset.startedAt()).isEqualTo(t4);
+            assertThat(reset.checkedAt()).isEqualTo(t4);
+            assertThat(reset.drainedAt()).isNull();
+            assertThat(reset.tracesTotal()).isZero();
+            assertThat(reset.tracesDone()).isZero();
+        });
+    }
+
+    @Test
+    @DisplayName("a discovery removes the rows of projects that no longer exist, also one it was about to write again")
+    void discoveryRemovesRowsOfDeletedProjects() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var kept = ID_GENERATOR.generateId();
+        var deleted = ID_GENERATOR.generateId();
+        tables.project(workspaceId, kept);
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        // Left behind by a failed delete on ProjectsDeleted.
+        backfillService.start(List.of(row.projectId(kept).build(), row.projectId(deleted).build()));
+
+        // The deleted project's statuses are still there, so the discovery finds it again.
+        int removed = backfillService.discovered(workspaceId, List.of(row.projectId(kept).tracesTotal(3).build(),
+                row.projectId(deleted).tracesTotal(3).build()), t0.plusSeconds(60), t0);
+
+        assertThat(removed).isOne();
+        assertThat(backfillService.findByKeys(workspaceId, List.of(kept, deleted))).containsOnlyKeys(kept);
+    }
+
     /** The window read as the tick walks it: slices counted back from {@code start}, the newest open-ended. */
     private List<TopicVectorCandidate> sliced(String workspaceId, UUID projectId, List<UUID> excluded,
             Instant lower, Instant upper, Instant start, Instant createdAfter, Duration slice) {
@@ -469,8 +555,9 @@ class TopicVectorsStorageTest {
         while (true) {
             var sliceStart = (createdBefore == null ? start : createdBefore).minus(slice);
             var from = sliceStart.isAfter(createdAfter) ? sliceStart : createdAfter;
-            candidates.addAll(vectorsDAO.findUnvectored(workspaceId, TASK, lower, upper, from, createdBefore,
-                    projectId, excluded, 100, 10).collectList().block());
+            candidates.addAll(vectorsDAO.findUnvectored(windowRead(workspaceId, lower, upper, from)
+                    .createdBefore(createdBefore).projectId(projectId).excludedProjectIds(excluded).build())
+                    .collectList().block());
             if (!from.isAfter(createdAfter)) {
                 return candidates;
             }
@@ -500,8 +587,21 @@ class TopicVectorsStorageTest {
     }
 
     private List<TopicVectorCandidate> findUnvectored(String workspaceId, Instant lower, Instant createdAfter) {
-        return vectorsDAO.findUnvectored(workspaceId, TASK, lower, Instant.now(), createdAfter, 100, 10)
+        return vectorsDAO.findUnvectored(windowRead(workspaceId, lower, Instant.now(), createdAfter).build())
                 .collectList().block();
+    }
+
+    /** A window read of {@link TopicVectorsFixtures#TASK} with room for 100 candidates and 10 s. */
+    private static TopicVectorsFind.TopicVectorsFindBuilder windowRead(String workspaceId, Instant lowerBound,
+            Instant upperBound, Instant createdAfter) {
+        return TopicVectorsFind.builder()
+                .workspaceId(workspaceId)
+                .task(TASK)
+                .lowerBound(lowerBound)
+                .upperBound(upperBound)
+                .createdAfter(createdAfter)
+                .limit(100)
+                .maxExecutionSeconds(10);
     }
 
     private void insertExperimentItem(String workspaceId, UUID traceId) {
