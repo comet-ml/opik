@@ -53,10 +53,11 @@ public class PartitionMetricsConfig {
 
     /**
      * How far behind now the tiered-storage window ends, so rows still buffered for {@code system.query_log} and
-     * {@code system.part_log} (7.5 s flush by default) land in the next window instead of being skipped.
+     * {@code system.part_log} (7.5 s flush by default) land in the next window instead of being skipped. Whole
+     * seconds, as the logs' {@code event_time} is; capped at 5 min so the gauges don't trail reality by more.
      */
     @NotNull @JsonProperty
-    @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
     private Duration tieredStorageLogFlushLag = Duration.seconds(15);
 

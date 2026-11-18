@@ -72,7 +72,7 @@ public interface ClickHousePartitionMetricsDAO {
     /** Queries on tiered tables that failed with a cold-read error code, over the same window. */
     Flux<TieredReadFailureStat> getTieredReadFailures(Duration window, Duration logFlushLag);
 
-    /** Failed part moves (e.g. hot to cold) from {@code system.part_log} on every replica, over the same window. */
+    /** Failed part moves on tiered tables (e.g. hot to cold), from {@code system.part_log}, over the same window. */
     Flux<MoveErrorStat> getMoveErrors(Duration window, Duration logFlushLag);
 }
 
@@ -214,12 +214,19 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
             """;
 
     private static final String MOVE_ERRORS_SQL = """
+            WITH
+                (SELECT groupArray(name) FROM system.disks WHERE type = 'ObjectStorage') AS object_storage_disks,
+                (SELECT groupArray(policy_name) FROM system.storage_policies
+                    WHERE hasAny(disks, object_storage_disks)) AS tiered_policies,
+                (SELECT groupArray(name) FROM system.tables
+                    WHERE database = :database_name AND has(tiered_policies, storage_policy)) AS tiered_tables
             SELECT table AS table_name, toInt64(count()) AS move_errors
             FROM clusterAllReplicas('{cluster}', system.part_log)
             WHERE event_date >= toDate(now() - INTERVAL <window_start> SECOND)
                 AND event_time >= now() - INTERVAL <window_start> SECOND
                 AND less(event_time, now() - INTERVAL <window_end> SECOND)
                 AND event_type = 'MovePart' AND error != 0 AND database = :database_name
+                AND has(tiered_tables, table)
             GROUP BY table
             SETTINGS log_comment = '<log_comment>'
             """;
