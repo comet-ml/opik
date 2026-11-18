@@ -176,7 +176,7 @@ const GroupsButton = <TColumnData,>({
 
   return (
     <Popover onOpenChange={setOpen} open={open}>
-      <TooltipWrapper content={isIconLayout ? "Groups" : undefined}>
+      <TooltipWrapper content={isIconLayout ? "Group" : undefined}>
         <PopoverTrigger asChild>
           <Button
             variant={variant}
@@ -193,7 +193,7 @@ const GroupsButton = <TColumnData,>({
                 <span className="ml-1.5">{validGroups.length}</span>
               ) : null
             ) : (
-              <span className="ml-1.5">{`Groups (${validGroups.length})`}</span>
+              <span className="ml-1.5">{`Group (${validGroups.length})`}</span>
             )}
           </Button>
         </PopoverTrigger>
@@ -201,7 +201,7 @@ const GroupsButton = <TColumnData,>({
       <PopoverContent className="min-w-[340px] px-8 py-6" align={align}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
-            <span className="comet-title-s">Groups</span>
+            <span className="comet-title-s">Group</span>
             <Button
               variant="ghost"
               size="sm"

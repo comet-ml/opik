@@ -100,7 +100,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
 
   const isExperimentMode = !!datasetId;
   const activeType = isExperimentMode
-    ? storedDatasetType ?? DATASET_TYPE.DATASET
+    ? (storedDatasetType ?? DATASET_TYPE.DATASET)
     : pendingType;
 
   const { data: rulesData } = useRulesList(
@@ -139,7 +139,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
 
       const ruleIds =
         type === DATASET_TYPE.DATASET
-          ? scoresByDatasetId[newPlainId] ?? null
+          ? (scoresByDatasetId[newPlainId] ?? null)
           : [];
       setSelectedRuleIds(ruleIds);
 

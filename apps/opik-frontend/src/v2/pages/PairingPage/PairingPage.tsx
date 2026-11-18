@@ -7,7 +7,7 @@ import PairingStatusScreen, {
   RunnerVariant,
 } from "@/shared/PairingStatusScreen/PairingStatusScreen";
 
-function uuidFromBytes(bytes: Uint8Array): string {
+function uuidFromBytes(bytes: Uint8Array<ArrayBuffer>): string {
   const h = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(
     16,
@@ -15,7 +15,7 @@ function uuidFromBytes(bytes: Uint8Array): string {
   )}-${h.slice(20)}`;
 }
 
-function uuidToBytes(uuid: string): Uint8Array {
+function uuidToBytes(uuid: string): Uint8Array<ArrayBuffer> {
   const hex = uuid.replace(/-/g, "");
   return Uint8Array.from({ length: 16 }, (_, i) =>
     parseInt(hex.slice(i * 2, i * 2 + 2), 16),
@@ -24,7 +24,7 @@ function uuidToBytes(uuid: string): Uint8Array {
 
 interface PairingPayload {
   sessionId: string;
-  activationKey: Uint8Array;
+  activationKey: Uint8Array<ArrayBuffer>;
   projectId: string;
   runnerName: string;
   runnerType: RunnerVariant;
@@ -56,7 +56,7 @@ function parsePairingPayload(fragment: string): PairingPayload {
 }
 
 async function computeActivationHmac(
-  activationKey: Uint8Array,
+  activationKey: Uint8Array<ArrayBuffer>,
   sessionId: string,
   runnerName: string,
 ): Promise<string> {
@@ -81,9 +81,9 @@ async function computeActivationHmac(
 }
 
 async function deriveBridgeKey(
-  activationKey: Uint8Array,
+  activationKey: Uint8Array<ArrayBuffer>,
   sessionId: string,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const salt = uuidToBytes(sessionId);
   const info = new TextEncoder().encode("opik-bridge-v1");
 

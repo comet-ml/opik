@@ -32,7 +32,7 @@ const toMermaidNode = (
   const isSubgraph = element.classList.contains("cluster");
   const rawId = isSubgraph
     ? element.id
-    : element.getAttribute("data-id") ?? element.id;
+    : (element.getAttribute("data-id") ?? element.id);
   const domId = rawId.startsWith(`${diagramId}-`)
     ? rawId.slice(diagramId.length + 1)
     : rawId;

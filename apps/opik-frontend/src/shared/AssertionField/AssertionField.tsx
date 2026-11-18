@@ -12,8 +12,10 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 
-interface AssertionFieldProps
-  extends Omit<TextareaAutosizeProps, "className" | "disabled" | "readOnly"> {
+interface AssertionFieldProps extends Omit<
+  TextareaAutosizeProps,
+  "className" | "disabled" | "readOnly"
+> {
   isReadOnly?: boolean;
   onRemove?: () => void;
 }

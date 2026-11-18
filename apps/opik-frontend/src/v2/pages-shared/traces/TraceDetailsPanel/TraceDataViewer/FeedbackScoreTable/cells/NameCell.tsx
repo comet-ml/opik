@@ -26,7 +26,7 @@ const NameCell = (context: CellContext<ExpandingFeedbackScoreRow, string>) => {
           <Button
             variant="minimal"
             size="sm"
-            className="-ml-8 pl-2  pr-1"
+            className="-ml-8 pl-2 pr-1"
             onClick={(event) => {
               row.toggleExpanded();
               event.stopPropagation();

@@ -19,7 +19,6 @@ class DashboardPublic(UniversalBaseModel):
     """
 
     name: str
-    slug: typing.Optional[str] = None
     type: typing.Optional[DashboardPublicType] = None
     scope: typing.Optional[DashboardPublicScope] = None
     description: typing.Optional[str] = None

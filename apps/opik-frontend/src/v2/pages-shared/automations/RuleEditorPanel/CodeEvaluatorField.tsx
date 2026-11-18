@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { UseFormReturn } from "react-hook-form";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { pythonLanguage } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
 

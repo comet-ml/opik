@@ -6,7 +6,7 @@ import { cn, isStringMarkdown } from "@/lib/utils";
 import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import remarkGfm from "node_modules/remark-gfm/lib";
+import remarkGfm from "remark-gfm";
 import { isNull } from "lodash";
 import { MARKDOWN_REHYPE_PLUGINS } from "@/lib/markdown";
 import SyntaxHighlighterSearch from "@/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
@@ -19,7 +19,7 @@ export interface MarkdownHighlighterProps {
   modeSelector: ReactNode;
   copyButton: ReactNode;
   withSearch?: boolean;
-  scrollRef?: React.RefObject<HTMLDivElement>;
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   maxHeight?: string;
   transparent?: boolean;

@@ -284,7 +284,7 @@ const AddEditCloneDashboardDialog: React.FC<
               type: mode === "create" ? values.dashboardType : dashboard?.type,
               scope:
                 mode === "create"
-                  ? dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE
+                  ? (dashboardScope ?? DASHBOARD_SCOPE.WORKSPACE)
                   : dashboard?.scope,
             },
           },
