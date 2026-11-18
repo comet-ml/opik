@@ -1,4 +1,4 @@
-export { test, expect } from './govcloud-bedrock-cost-spans.fixture';
+export { test, expect } from './dataset-column-mapping.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -753,3 +753,21 @@ export type {
   GovCloudBedrockCostSpansRef,
   GovCloudBedrockCostSpansFixtures,
 } from './govcloud-bedrock-cost-spans.fixture';
+export type {
+  EditableRecordDatasetRef,
+  EditableRecordDatasetFixtures,
+} from './editable-record-dataset.fixture';
+export {
+  EDITABLE_RECORD_DATA,
+  BYSTANDER_RECORD_DATA,
+} from './editable-record-dataset.fixture';
+export type {
+  DatasetColumnMappingRef,
+  DatasetColumnMappingFixtures,
+} from './dataset-column-mapping.fixture';
+export {
+  DCM_TRACE_INPUT,
+  DCM_TRACE_OUTPUT,
+  DCM_EXISTING_COLUMN,
+  DCM_SEED_ITEM_DATA,
+} from './dataset-column-mapping.fixture';
