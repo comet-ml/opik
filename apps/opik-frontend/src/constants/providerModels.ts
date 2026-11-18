@@ -23,6 +23,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
   [PROVIDER_TYPE.OPEN_AI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GPT_6_2_ASTRA,
+      label: "GPT 6.2 Astra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_6_2_SOL,
+      label: "GPT 6.2 Sol",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_6_1_SOL,
       label: "GPT 6.1 Sol",
     },
@@ -610,6 +618,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meituan/longcat-2.0",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_70B_INSTRUCT,
+      label: "meta-llama/llama-3.1-70b-instruct",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_1_8B_INSTRUCT,
       label: "meta-llama/llama-3.1-8b-instruct",
     },
@@ -1065,6 +1077,22 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_1_TERRA_PRO,
       label: "openai/gpt-6.1-terra-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_2_ASTRA,
+      label: "openai/gpt-6.2-astra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_2_ASTRA_PRO,
+      label: "openai/gpt-6.2-astra-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_2_SOL,
+      label: "openai/gpt-6.2-sol",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_6_2_SOL_PRO,
+      label: "openai/gpt-6.2-sol-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_CHAT_LATEST,
@@ -1743,6 +1771,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_ARGON_CYBER_PERMISSIVE,
       label: "Gemini 4 Argon Cyber Permissive",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_CARBON,
+      label: "Gemini 4 Carbon",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_CARBON_CYBER_PERMISSIVE,
+      label: "Gemini 4 Carbon Cyber Permissive",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_HYDROGEN,
+      label: "Gemini 4 Hydrogen",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
