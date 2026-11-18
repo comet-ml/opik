@@ -2384,6 +2384,95 @@ class TracesResourceTest {
             var id = generator.generate();
             getAndAssertTraceNotFound(id, API_KEY, TEST_WORKSPACE);
         }
+
+        @Test
+        @DisplayName("when the same trace id exists in two projects, then span aggregates and scores come only from the returned trace's project")
+        void getTrace__whenTraceIdExistsInTwoProjects__thenAggregatesAreScopedToReturnedProject() {
+            // The batch endpoints accept a trace id that already exists in another project (issue #7473).
+            var sharedId = generator.generate();
+            var projectNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            traceResourceClient.batchCreateTraces(
+                    List.of(createTrace().toBuilder().id(sharedId).projectName(projectNameA).build()),
+                    API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(
+                    List.of(createTrace().toBuilder().id(sharedId).projectName(projectNameB).build()),
+                    API_KEY, TEST_WORKSPACE);
+
+            // Project A: one llm span. Project B: one llm span and one tool span, different provider.
+            var spanA = collisionSpan(projectNameA, sharedId, SpanType.llm, "openai", "0.10", 3);
+            var spanB1 = collisionSpan(projectNameB, sharedId, SpanType.llm, "anthropic", "0.15", 7);
+            var spanB2 = collisionSpan(projectNameB, sharedId, SpanType.tool, null, "0.05", 11);
+            batchCreateSpansAndAssert(List.of(spanA, spanB1, spanB2), API_KEY, TEST_WORKSPACE);
+
+            traceResourceClient.feedbackScores(List.of(
+                    collisionScore(sharedId, projectNameA, "quality", "0.2"),
+                    collisionScore(sharedId, projectNameB, "quality", "0.9"),
+                    collisionScore(sharedId, projectNameB, "helpfulness", "1.0")),
+                    API_KEY, TEST_WORKSPACE);
+            spanResourceClient.feedbackScores(List.of(
+                    collisionScore(spanA.id(), projectNameA, "accuracy", "0.3"),
+                    collisionScore(spanB1.id(), projectNameB, "accuracy", "0.7")),
+                    API_KEY, TEST_WORKSPACE);
+
+            var projectIdA = getProjectId(projectNameA, TEST_WORKSPACE, API_KEY);
+            var projectIdB = getProjectId(projectNameB, TEST_WORKSPACE, API_KEY);
+
+            var actualTrace = traceResourceClient.getById(sharedId, TEST_WORKSPACE, API_KEY);
+
+            // Which project the by-id lookup returns is not what this test pins; that the numbers match it is.
+            assertThat(actualTrace.projectId()).isIn(projectIdA, projectIdB);
+            boolean isA = actualTrace.projectId().equals(projectIdA);
+
+            assertThat(actualTrace.totalEstimatedCost())
+                    .isEqualByComparingTo(new BigDecimal(isA ? "0.10" : "0.20"));
+            assertThat(actualTrace.usage()).isEqualTo(Map.of("prompt_tokens", isA ? 3L : 18L));
+            assertThat(actualTrace.spanCount()).isEqualTo(isA ? 1 : 2);
+            assertThat(actualTrace.llmSpanCount()).isEqualTo(1);
+            assertThat(actualTrace.hasToolSpans()).isEqualTo(!isA);
+            assertThat(actualTrace.providers()).containsExactly(isA ? "openai" : "anthropic");
+
+            assertThat(actualTrace.feedbackScores())
+                    .extracting(FeedbackScore::name)
+                    .containsExactlyInAnyOrderElementsOf(isA ? List.of("quality") : List.of("quality", "helpfulness"));
+            assertThat(actualTrace.feedbackScores())
+                    .filteredOn(score -> "quality".equals(score.name()))
+                    .singleElement()
+                    .satisfies(score -> assertThat(score.value())
+                            .isEqualByComparingTo(new BigDecimal(isA ? "0.2" : "0.9")));
+
+            assertThat(actualTrace.spanFeedbackScores())
+                    .singleElement()
+                    .satisfies(score -> {
+                        assertThat(score.name()).isEqualTo("accuracy");
+                        assertThat(score.value()).isEqualByComparingTo(new BigDecimal(isA ? "0.3" : "0.7"));
+                    });
+        }
+
+        private Span collisionSpan(String projectName, UUID traceId, SpanType type, String provider, String cost,
+                int promptTokens) {
+            return factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(null)
+                    .type(type)
+                    .provider(provider)
+                    .usage(Map.of("prompt_tokens", promptTokens))
+                    .totalEstimatedCost(new BigDecimal(cost))
+                    .feedbackScores(null)
+                    .build();
+        }
+
+        private FeedbackScoreBatchItem collisionScore(UUID id, String projectName, String name, String value) {
+            return FeedbackScoreBatchItem.builder()
+                    .id(id)
+                    .projectName(projectName)
+                    .name(name)
+                    .value(new BigDecimal(value))
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
     }
 
     private Trace createTrace() {
