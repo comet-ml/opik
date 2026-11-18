@@ -12,6 +12,7 @@ OPERATOR_CONFIG_PATH = "/etc/docker/daemon.json"
 # Outside /etc/docker, which an operator may mount read-only, and not under /tmp, which the dind
 # startup script replaces with a fresh tmpfs before dockerd reads its config.
 HARDENED_CONFIG_PATH = "/run/opik-dockerd/daemon.json"
+MAX_USER_NAMESPACES_PATH = "/proc/sys/user/max_user_namespaces"
 
 
 def hardening_enabled() -> bool:
@@ -25,6 +26,19 @@ def hardening_enabled() -> bool:
     raise ValueError(f"{HARDENING_ENV_VAR} must be true or false, not {value[:32]!r}")
 
 
+def check_user_namespaces_allowed(max_user_namespaces_path: str) -> None:
+    """userns-remap needs the host to allow user namespaces. With the limit at 0 (the Bottlerocket default) dockerd
+    still starts but every executor container fails to, so the backend would look healthy while rejecting every
+    evaluation. An unreadable limit fails too."""
+    with open(max_user_namespaces_path) as f:
+        limit = f.read().strip()
+    if limit == "0":
+        raise ValueError(
+            f"user namespaces are disabled on this host ({max_user_namespaces_path} is 0), so executor containers "
+            f"can't start with {HARDENING_ENV_VAR}=true; allow user namespaces on the node (user.max_user_namespaces)"
+        )
+
+
 def hardened_daemon_config(config: dict, allow_network: bool) -> dict:
     # Root in an executor container maps to an unprivileged host uid range.
     hardened = {**config, "userns-remap": "default"}
@@ -35,6 +49,7 @@ def hardened_daemon_config(config: dict, allow_network: bool) -> dict:
 
 
 def write_hardened_config(operator_config_path: str, hardened_config_path: str) -> None:
+    check_user_namespaces_allowed(MAX_USER_NAMESPACES_PATH)
     config = {}
     if os.path.exists(operator_config_path):
         with open(operator_config_path) as f:
