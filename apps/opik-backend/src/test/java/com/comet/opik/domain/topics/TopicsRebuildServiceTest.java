@@ -832,7 +832,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("a prototype passes the check before the save only with 384 values and unit length, NaN fails")
     void unitPrototype() {
         int d = TopicsRebuildService.DIMENSIONS;
-        assertThat(d).isEqualTo(TopicVectorsTickService.EMBED_DIMENSIONS);
+        assertThat(d).isEqualTo(TopicAlgorithm.DIMENSIONS);
         var unit = unit(d, 0, 0.6, 1, 0.8);
         assertThat(TopicsRebuildService.isUnit(unit)).isTrue();
         var nearUnit = unit.clone();

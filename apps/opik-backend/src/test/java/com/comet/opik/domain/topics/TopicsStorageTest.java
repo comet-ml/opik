@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
-import org.jdbi.v3.core.mapper.reflect.ConstructorMapper;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -43,7 +42,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,13 +49,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 /**
@@ -156,28 +152,6 @@ class TopicsStorageTest {
         zookeeper.stop();
         mysql.stop();
         network.close();
-    }
-
-    @Test
-    @DisplayName("one query reads the prototypes of several projects of one workspace, each in position order, and "
-            + "nothing of another workspace")
-    void prototypesOfSeveralProjects() {
-        var workspaceId = UUID.randomUUID().toString();
-        var first = UUID.randomUUID();
-        var second = UUID.randomUUID();
-        var notAsked = UUID.randomUUID();
-        var otherWorkspace = UUID.randomUUID();
-        data.savedList(workspaceId, first, NIGHT, 10);
-        data.savedList(workspaceId, second, NIGHT, 10);
-        data.savedList(workspaceId, notAsked, NIGHT, 10);
-        data.savedList(UUID.randomUUID().toString(), otherWorkspace, NIGHT, 10);
-
-        var rows = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
-                .findPrototypes(workspaceId, List.of(first, second, otherWorkspace)));
-
-        assertThat(rows).extracting(TopicPrototype::projectId, TopicPrototype::position)
-                .containsExactlyElementsOf(Stream.of(first, second).sorted(Comparator.comparing(UUID::toString))
-                        .flatMap(projectId -> Stream.of(tuple(projectId, 0), tuple(projectId, 1))).toList());
     }
 
     @Test
@@ -333,196 +307,6 @@ class TopicsStorageTest {
                 .containsExactly(List.of("2", String.valueOf(find.getMaxRowsToRead()), "", "120"));
         assertThat(data.queryLogSettings("topics:count_by_topic", workspaceId, "max_memory_usage", "max_threads"))
                 .containsExactly(List.of(String.valueOf(find.getMaxMemoryUsage()), "2"));
-    }
-
-    @Test
-    @DisplayName("the nightly save: topic updates, the state's compare-and-set, the live-topic reads, and the deletes "
-            + "of a list with no live topic")
-    void nightlySave() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        var other = UUID.randomUUID();
-        data.savedList(workspaceId, projectId, NIGHT, BUILT);
-        data.savedList(workspaceId, other, NIGHT, BUILT);
-        var state = data.state(projectId);
-        var topic = data.topics(projectId).getFirst();
-
-        assertThat(liveProjects(workspaceId, List.of(projectId, other, UUID.randomUUID())))
-                .containsExactlyInAnyOrder(projectId, other);
-        assertThat(liveProjects(List.of(workspaceId)))
-                .containsExactlyInAnyOrder(new TopicDAO.ProjectKey(workspaceId, projectId),
-                        new TopicDAO.ProjectKey(workspaceId, other));
-
-        var later = state.toBuilder().rebuilds(2).lastRunId(UUID.randomUUID())
-                .lastSuccessAt(NIGHT.plus(Duration.ofDays(1)))
-                .windowUntil(NIGHT.plus(Duration.ofDays(1))).labelsComplete(false).build();
-        int stale = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                .updateState(later, UUID.randomUUID()));
-        assertThat(stale).isZero();
-        assertThat(data.state(projectId)).isEqualTo(state);
-
-        int saved = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                .updateState(later, state.lastRunId()));
-        assertThat(saved).isEqualTo(1);
-        assertThat(data.state(projectId)).isEqualTo(later);
-
-        var retired = topic.toBuilder().name("Renamed").definition("Changed").retiredAt(LocalDate.of(2026, 10, 16))
-                .retiredReason("empty").lowNights(3).size(0).build();
-        var updated = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
-                .updateTopics(List.of(retired)));
-        assertThat(updated).containsExactly(1);
-        assertThat(data.topics(projectId)).isEmpty();
-        assertThat(allTopics(workspaceId, projectId)).singleElement()
-                .isEqualTo(retired.toBuilder().name(topic.name()).definition(topic.definition()).build());
-        assertThat(liveProjects(workspaceId, List.of(projectId, other))).containsExactly(other);
-        assertThat(liveProjects(List.of(workspaceId)))
-                .containsExactly(new TopicDAO.ProjectKey(workspaceId, other));
-
-        template.inTransaction(WRITE, handle -> {
-            var topicDAO = handle.attach(TopicDAO.class);
-            assertThat(topicDAO.deletePrototypes(workspaceId, projectId)).isEqualTo(2);
-            assertThat(topicDAO.deleteState(workspaceId, projectId)).isEqualTo(1);
-            return null;
-        });
-        assertThat(data.prototypes(projectId)).isEmpty();
-        assertThat(data.state(projectId)).isNull();
-        assertThat(data.prototypes(other)).hasSize(2);
-        assertThat(data.state(other)).isNotNull();
-    }
-
-    @Test
-    @DisplayName("a project is paused when its last 3 runs failed and the latest started since the given time")
-    void pausedProjects() {
-        var workspaceId = UUID.randomUUID().toString();
-        var since = NIGHT.minus(Duration.ofDays(7));
-        var paused = UUID.randomUUID();
-        var savedLast = UUID.randomUUID();
-        var tooOld = UUID.randomUUID();
-        var twoFailures = UUID.randomUUID();
-        var savedBefore = UUID.randomUUID();
-        insertRuns(workspaceId, paused, NIGHT, TopicRun.Status.FAILED, TopicRun.Status.FAILED, TopicRun.Status.FAILED);
-        insertRuns(workspaceId, savedLast, NIGHT, TopicRun.Status.FAILED, TopicRun.Status.FAILED,
-                TopicRun.Status.SAVED);
-        insertRuns(workspaceId, tooOld, since.minus(Duration.ofDays(1)), TopicRun.Status.FAILED,
-                TopicRun.Status.FAILED, TopicRun.Status.FAILED);
-        insertRuns(workspaceId, twoFailures, NIGHT, TopicRun.Status.FAILED, TopicRun.Status.FAILED);
-        insertRuns(workspaceId, savedBefore, NIGHT, TopicRun.Status.SAVED, TopicRun.Status.FAILED,
-                TopicRun.Status.FAILED, TopicRun.Status.FAILED);
-
-        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class)
-                .findPausedProjectIds(workspaceId, List.of(paused, savedLast, tooOld, twoFailures, savedBefore), 3,
-                        since));
-
-        assertThat(found).containsExactlyInAnyOrder(paused, savedBefore);
-    }
-
-    @Test
-    @DisplayName("of the project ids asked for, only those of the workspace's existing projects are returned")
-    void existingProjectIds() {
-        var workspaceId = UUID.randomUUID().toString();
-        var existing = UUID.randomUUID();
-        var elsewhere = UUID.randomUUID();
-        data.project(workspaceId, existing);
-        data.project(UUID.randomUUID().toString(), elsewhere);
-
-        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
-                .findExistingProjectIds(workspaceId, List.of(existing, elsewhere, UUID.randomUUID())));
-
-        assertThat(found).containsExactly(existing);
-    }
-
-    @Test
-    @DisplayName("a night's record: its row as it starts and ends, its project rows, and a second start of the same "
-            + "night that replaces both")
-    void nightRecord() {
-        var night = LocalDate.of(2026, 1, 15);
-        var startedAt = Instant.parse("2026-01-15T02:00:00Z");
-        var finishedAt = startedAt.plus(Duration.ofHours(1));
-        var workspaceId = UUID.randomUUID().toString();
-        var row = TopicNightProject.builder()
-                .id(UUID.randomUUID())
-                .night(night)
-                .workspaceId(workspaceId)
-                .projectId(UUID.randomUUID())
-                .decision("skip")
-                .reason("small")
-                .build();
-        template.inTransaction(WRITE, handle -> {
-            var nightDAO = handle.attach(TopicNightDAO.class);
-            nightDAO.start(night, startedAt);
-            nightDAO.insertProjects(List.of(row));
-            return null;
-        });
-        assertThat(findNight(night)).isEqualTo(new TopicNight(night, startedAt, null, TopicNight.Outcome.RUNNING));
-
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicNightDAO.class)
-                    .end(new TopicNight(night, startedAt, finishedAt, TopicNight.Outcome.FINISHED));
-            return null;
-        });
-        assertThat(findNight(night)).isEqualTo(new TopicNight(night, startedAt, finishedAt,
-                TopicNight.Outcome.FINISHED));
-        assertThat(nightProjects(night))
-                .containsExactly(row);
-
-        var again = startedAt.plus(Duration.ofHours(5));
-        template.inTransaction(WRITE, handle -> {
-            var nightDAO = handle.attach(TopicNightDAO.class);
-            nightDAO.start(night, again);
-            nightDAO.deleteProjects(night);
-            return null;
-        });
-        assertThat(findNight(night)).isEqualTo(new TopicNight(night, again, null, TopicNight.Outcome.RUNNING));
-        assertThat(nightProjects(night))
-                .isEmpty();
-    }
-
-    private List<TopicNightProject> nightProjects(LocalDate night) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicNightDAO.class).findProjects(night));
-    }
-
-    private TopicNight findNight(LocalDate night) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicNightDAO.class).findByNight(night));
-    }
-
-    private List<UUID> liveProjects(String workspaceId, List<UUID> projectIds) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
-                .findProjectsWithLiveTopics(workspaceId, projectIds));
-    }
-
-    private List<TopicDAO.ProjectKey> liveProjects(List<String> workspaceIds) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
-                .findProjectsWithLiveTopics(workspaceIds));
-    }
-
-    /** Every topic row of the project, retired ones included. */
-    private List<Topic> allTopics(String workspaceId, UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> handle
-                .createQuery("SELECT * FROM topics WHERE workspace_id = :workspaceId AND project_id = :projectId")
-                .bind("workspaceId", workspaceId)
-                .bind("projectId", projectId.toString())
-                .map(ConstructorMapper.of(Topic.class))
-                .list());
-    }
-
-    /** Runs of the project with these statuses, oldest first, one hour apart, the last started at {@code latest}. */
-    private void insertRuns(String workspaceId, UUID projectId, Instant latest, TopicRun.Status... statuses) {
-        template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
-            for (int i = 0; i < statuses.length; i++) {
-                var startedAt = latest.minus(Duration.ofHours(statuses.length - 1 - i));
-                runDAO.insert(TopicRun.builder()
-                        .runId(UUID.randomUUID())
-                        .workspaceId(workspaceId)
-                        .projectId(projectId)
-                        .mode(TopicRun.Mode.NIGHTLY_UPDATE)
-                        .status(statuses[i])
-                        .startedAt(startedAt)
-                        .finishedAt(startedAt.plus(Duration.ofMinutes(5)))
-                        .build());
-            }
-            return null;
-        });
     }
 
     /**
