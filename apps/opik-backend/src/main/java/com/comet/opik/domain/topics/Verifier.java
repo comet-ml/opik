@@ -3,13 +3,14 @@ package com.comet.opik.domain.topics;
 import lombok.experimental.UtilityClass;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
 /**
  * The batched verify call of the naming step: every group the naming gave to a live topic goes into one Qwen call,
  * groups largest first. An answer entry counts when its {@code pair} is an integer in range and its {@code same} is a
- * boolean. A pair without such an answer is not verified. A failed call fails the run.
+ * boolean. A pair without such an answer, or answered both ways, is not verified. A failed call fails the run.
  */
 @UtilityClass
 public class Verifier {
@@ -23,15 +24,20 @@ public class Verifier {
      */
     static Map<Integer, Boolean> ask(String tag, List<TopicPrompts.VerifyPair> prompts, NightLlm llm) {
         var answers = new HashMap<Integer, Boolean>();
+        var conflicting = new HashSet<Integer>();
         var answer = llm.generate(tag, TopicPrompts.verify(prompts), TopicPrompts.VERIFY_SCHEMA,
                 BASE_TOKENS + TOKENS_PER_PAIR * prompts.size());
         for (var entry : NightJson.objects(answer == null ? null : answer.get("answers"))) {
             var pair = NightJson.integer(entry.get("pair"));
             var same = entry.get("same");
             if (pair != null && pair >= 0 && pair < prompts.size() && same != null && same.isBoolean()) {
-                answers.put(pair, same.booleanValue());
+                var previous = answers.putIfAbsent(pair, same.booleanValue());
+                if (previous != null && previous != same.booleanValue()) {
+                    conflicting.add(pair);
+                }
             }
         }
+        conflicting.forEach(answers::remove);
         return answers;
     }
 }
