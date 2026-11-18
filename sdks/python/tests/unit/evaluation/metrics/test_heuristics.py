@@ -590,6 +590,30 @@ def test_kl_divergence_avg_direction():
     assert result.value >= 0.0
 
 
+@pytest.mark.parametrize("smoothing", [math.nan, math.inf, -math.inf])
+def test_kl_divergence__non_finite_smoothing__raises_value_error(smoothing):
+    with pytest.raises(ValueError, match="smoothing must be finite"):
+        KLDivergence(smoothing=smoothing, track=False)
+
+
+@pytest.mark.parametrize(
+    "smoothing,expected",
+    [
+        (-1.0, math.log(2) / 3),
+        (0.0, math.log(2) / 3),
+        (0.25, math.log(11 / 7) / 3),
+        (1.0, math.log(5 / 4) / 3),
+    ],
+)
+def test_kl_divergence__finite_smoothing__retains_score(smoothing, expected):
+    metric = KLDivergence(smoothing=smoothing, track=False)
+
+    result = metric.score(output="cat cat dog", reference="cat dog dog")
+
+    # The two probabilities are 2/3 and 1/3; negative smoothing stays clamped to zero.
+    assert result.value == pytest.approx(expected)
+
+
 @pytest.mark.parametrize(
     "direction,output,reference,missing_token",
     [

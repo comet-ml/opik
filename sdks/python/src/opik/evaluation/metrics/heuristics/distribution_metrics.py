@@ -260,7 +260,7 @@ class KLDivergence(_DistributionMetricBase):
         direction: Direction to compute (``"pq"``, ``"qp"``, or ``"avg"`` for
             symmetric).
         normalize: Whether to normalise token counts to probabilities first.
-        smoothing: Additive smoothing constant to avoid divide-by-zero. With
+        smoothing: Finite additive smoothing constant to avoid divide-by-zero. With
             ``smoothing=0.0`` a token missing from the direction's reference
             side makes the divergence infinite and the metric raises instead
             of returning a score (see ``Raises``).
@@ -269,6 +269,7 @@ class KLDivergence(_DistributionMetricBase):
         project_name: Optional tracking project name.
 
     Raises:
+        ValueError: If ``direction`` is unsupported or ``smoothing`` is not finite.
         MetricComputationError:
             - If ``output`` or ``reference`` is empty, or tokenizes to no tokens.
             - If ``smoothing=0.0`` and the distribution a direction integrates
@@ -298,6 +299,8 @@ class KLDivergence(_DistributionMetricBase):
     ) -> None:
         if direction not in {"pq", "qp", "avg"}:
             raise ValueError("direction must be one of {'pq', 'qp', 'avg'}")
+        if not math.isfinite(smoothing):
+            raise ValueError("smoothing must be finite")
         super().__init__(
             tokenizer=tokenizer,
             name=name,
