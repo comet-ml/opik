@@ -82,6 +82,17 @@ class TopicsNightlyRulesTest {
                     exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_TIMEOUT));
         }
 
+        @Test
+        @DisplayName("a pair answered both ways is not verified; a pair answered twice the same way is")
+        void conflictingAnswers() {
+            var verdicts = Verifier.ask("verify_naming", pairs, (tag, prompt, schema, maxTokens) -> json("""
+                    {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
+                    {"pair": 1, "same": true}]}
+                    """));
+
+            assertThat(verdicts).containsOnly(Map.entry(1, true));
+        }
+
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {"missing|", "null|, \"same\": null", "a string|, \"same\": \"true\"",
                 "a number|, \"same\": 1"})
@@ -171,6 +182,24 @@ class TopicsNightlyRulesTest {
             assertThat(state.liveCount()).isEqualTo(2);
             assertThat(state.topic(1).getName()).isEqualTo("Tire Search");
             assertThat(state.topic(1).getDefinition()).isEqualTo("F.");
+        }
+
+        @Test
+        @DisplayName("two new names equal in their first 255 characters form one topic with the capped name")
+        void cappedNamesMerge() {
+            var state = state(0, topic("A"));
+            var map = new LinkedHashMap<Integer, Integer>();
+            var stem = "w".repeat(TopicText.MAX_NAME_LENGTH);
+            var outcomes = force(state, List.of(group(0, 60, 0.95), group(1, 50, 0.95)), topics(state), map, 10,
+                    named(Map.of("naming", newTopics(
+                            "{\"name\": \"" + stem + "x".repeat(45) + "\", \"definition\": \"F.\", \"clusters\": [0]}, "
+                                    + "{\"name\": \"" + stem + "y".repeat(45)
+                                    + "\", \"definition\": \"G.\", \"clusters\": [1]}"))));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.BORN, 1),
+                    new ForcedBirth.Outcome(1, ForcedBirth.Result.BORN, 1));
+            assertThat(state.liveCount()).isEqualTo(2);
+            assertThat(state.topic(1).getName()).isEqualTo(stem);
         }
 
         @Test
@@ -934,6 +963,18 @@ class TopicsNightlyRulesTest {
             var state = state(0, topic("A", new float[]{Float.NaN, 0}));
 
             assertInvariant(() -> NightInvariants.check(state, 2), "norm 'NaN'");
+        }
+
+        @Test
+        @DisplayName("a known-Other prototype with the wrong dimension or not of unit length fails the run")
+        void otherPrototypes() {
+            var wrongDimension = state(0, topic("A", EAST));
+            wrongDimension.setOtherPrototypes(List.of(new float[]{1, 0, 0}));
+            assertInvariant(() -> NightInvariants.check(wrongDimension, 2), "'3' values");
+
+            var notUnit = state(0, topic("A", EAST));
+            notUnit.setOtherPrototypes(List.of(new float[]{1, 1}));
+            assertInvariant(() -> NightInvariants.check(notUnit, 2), "norm");
         }
 
         private static void assertInvariant(Runnable check, String message) {
