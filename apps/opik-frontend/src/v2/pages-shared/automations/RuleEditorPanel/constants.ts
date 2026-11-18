@@ -71,7 +71,7 @@ export const createRulePrompt = (content = ""): LLMMessage[] => [
 export const DECISION_MODEL_DEFAULT_PROMPT =
   "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}";
 
-export const createBlankRulePrompt = (uiType: UI_EVALUATORS_RULE_TYPE) =>
+export const createInitialRulePrompt = (uiType: UI_EVALUATORS_RULE_TYPE) =>
   createRulePrompt(
     uiType === UI_EVALUATORS_RULE_TYPE.decision_model
       ? DECISION_MODEL_DEFAULT_PROMPT

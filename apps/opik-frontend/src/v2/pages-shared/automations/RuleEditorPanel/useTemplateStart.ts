@@ -5,7 +5,7 @@ import { LLMPromptTemplate } from "@/types/llm";
 import { PromptVariableEditorHandle } from "@/v2/pages-shared/llm/PromptVariableEditor/PromptVariableEditor";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/RuleEditorPanel/schema";
 import { JudgeTemplateOption } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
-import { createBlankRulePrompt } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
+import { createInitialRulePrompt } from "@/v2/pages-shared/automations/RuleEditorPanel/constants";
 
 const useTemplateStart = (
   form: UseFormReturn<EvaluationRuleFormType>,
@@ -20,7 +20,7 @@ const useTemplateStart = (
     startBlank: () => {
       form.setValue(
         "llmJudgeDetails.messages",
-        createBlankRulePrompt(form.getValues("uiType")),
+        createInitialRulePrompt(form.getValues("uiType")),
         { shouldDirty: true },
       );
       form.clearErrors("llmJudgeDetails.messages");

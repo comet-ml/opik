@@ -55,7 +55,7 @@ import {
   nameInlineVariables,
 } from "@/v2/pages-shared/automations/RuleEditorPanel/inlineVariableMappings";
 import {
-  createBlankRulePrompt,
+  createInitialRulePrompt,
   DEFAULT_DECISION_MODEL_DATA,
   DEFAULT_LLM_AS_JUDGE_DATA,
   FILTER_COLUMNS_BY_SCOPE,
@@ -423,7 +423,7 @@ const useRuleEditorForm = ({
           : [],
         messages: custom.messages.length
           ? custom.messages
-          : createBlankRulePrompt(uiType),
+          : createInitialRulePrompt(uiType),
         model: llmJudgeDetails.model,
         config: llmJudgeDetails.config,
         maxCostUsd: llmJudgeDetails.maxCostUsd,
