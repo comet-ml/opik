@@ -161,7 +161,7 @@ public class NightlyUpdate {
         }
         var assigner = new PrototypeAssigner(vectors, owners, state.getOtherPrototypes(), window.dimensions());
         var winners = assigner.winners(window.vectors());
-        return new FinalAssignment(assigner, assigner.owners(winners), winners);
+        return FinalAssignment.builder().assigner(assigner).labels(assigner.owners(winners)).winners(winners).build();
     }
 
     /**
@@ -325,6 +325,7 @@ public class NightlyUpdate {
      * Step e's result: the labels and, per trace, the prototype that won it, in {@code assigner}'s order, or
      * {@link PrototypeAssigner#NO_WINNER}.
      */
+    @Builder(toBuilder = true)
     record FinalAssignment(@NonNull PrototypeAssigner assigner, @NonNull int[] labels, @NonNull int[] winners) {
     }
 
@@ -334,7 +335,7 @@ public class NightlyUpdate {
      * known-Other prototype holds is Other), the Other count before the night's decisions, the candidates and the big
      * ones, the naming outcomes and the group map at the end.
      */
-    @Builder
+    @Builder(toBuilder = true)
     public record Result(@NonNull int[] labels, @NonNull int[] before, int unassigned,
             @NonNull List<Integer> candidates, @NonNull List<Integer> big, @NonNull List<ForcedBirth.Outcome> forced,
             @NonNull Map<Integer, Integer> groupMap) {

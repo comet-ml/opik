@@ -10,6 +10,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
@@ -76,6 +77,7 @@ public class TopicsNightlyGauges implements Managed {
     private static final AttributeKey<String> STATUS = stringKey("status");
 
     /** One series of a level gauge: its attributes, with the workspace name resolved at refresh, and its count. */
+    @Builder(toBuilder = true)
     record Series(@NonNull Attributes attributes, long value) {
     }
 
@@ -83,6 +85,7 @@ public class TopicsNightlyGauges implements Managed {
      * What one refresh read. {@code runningSince} is null when no night runs, {@code lastNightOutcome} before the first
      * night ends.
      */
+    @Builder(toBuilder = true)
     record Snapshot(@NonNull Instant lastStartedAt, Instant runningSince, TopicNight.Outcome lastNightOutcome,
             @NonNull Map<String, List<Series>> levels) {
     }
@@ -261,7 +264,8 @@ public class TopicsNightlyGauges implements Managed {
         }
         perWorkspace(levels, STALE_PROJECTS, read.eligible(), read.stale());
         perWorkspace(levels, STARVED_PROJECTS, read.eligible(), read.starved());
-        return new Snapshot(read.lastStartedAt(), read.runningSince(), read.lastNightOutcome(), Map.copyOf(levels));
+        return Snapshot.builder().lastStartedAt(read.lastStartedAt()).runningSince(read.runningSince())
+                .lastNightOutcome(read.lastNightOutcome()).levels(Map.copyOf(levels)).build();
     }
 
     /** Every eligible workspace, 0 unless counted: the series exists before its first problem. */
@@ -279,7 +283,8 @@ public class TopicsNightlyGauges implements Managed {
 
     private static void add(Map<String, List<Series>> levels, String name, AttributesBuilder attributes,
             long value) {
-        levels.computeIfAbsent(name, key -> new ArrayList<>()).add(new Series(attributes.build(), value));
+        levels.computeIfAbsent(name, key -> new ArrayList<>())
+                .add(Series.builder().attributes(attributes.build()).value(value).build());
     }
 
     private void level(Meter meter, String name, String description) {

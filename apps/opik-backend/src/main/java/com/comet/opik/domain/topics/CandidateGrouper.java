@@ -77,7 +77,7 @@ public class CandidateGrouper {
      * The grouping of the unassigned traces: per unassigned trace its group, the groups' unit centres
      * ({@code k * dimensions}), every group's summary and the candidates among them, in group order.
      */
-    @Builder
+    @Builder(toBuilder = true)
     public record Grouping(@NonNull int[] unassigned, @NonNull int[] labels, @NonNull float[] centres,
             @NonNull List<GroupSummary> groups, @NonNull List<GroupSummary> candidates) {
 
