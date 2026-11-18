@@ -17,6 +17,7 @@ import com.comet.opik.infrastructure.inference.EmbedResponse;
 import com.comet.opik.infrastructure.inference.EmbedResult;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
+import com.comet.opik.infrastructure.lock.LockService;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleGaugeBuilder;
@@ -52,6 +53,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -69,10 +72,12 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -88,9 +93,10 @@ class TopicVectorsTickServiceTest {
     private static final String WORKSPACE_ID = ID_GENERATOR.generateId().toString();
     private static final Instant NOW = Instant.parse("2026-11-20T12:00:00Z");
     private static final Instant APPLIES_FROM = Instant.parse("2026-11-01T00:00:00Z");
-    // config-test.yml's topics.vectors: the window and the embed timeout. With the clock at the tick's start, a window
+    // config-test.yml's topics.vectors: the windows and the embed timeout. With the clock at the tick's start, a window
     // read gets find.maxExecutionTime (30 s, under the 50 s budget), and a later read the whole budget.
     private static final Duration SHORT_WINDOW = Duration.ofHours(24);
+    private static final Duration LONG_WINDOW = Duration.ofDays(7);
     private static final Duration EMBED_TIMEOUT = Duration.ofSeconds(10);
     private static final long FIND_SECONDS = 30;
     private static final long BUDGET_SECONDS = 50;
@@ -217,7 +223,9 @@ class TopicVectorsTickServiceTest {
 
         private TopicsConfig config;
         private TopicVectorsDAO dao;
+        private TopicVectorBackfillService backfills;
         private InferenceClient client;
+        private LockService lockService;
         private TopicWorkspaceService workspaces;
         private AiLabelTaskRegistry registry;
         private TestMeter meter;
@@ -231,16 +239,26 @@ class TopicVectorsTickServiceTest {
         @SuppressWarnings("unchecked")
         void setUp() {
             config = TestConfigUtils.loadConfigTest().getTopics();
+            // One slice covers any window here, so the daily pass is one read, as the fresh phase's.
+            config.getVectors().getFind().setSliceSize(io.dropwizard.util.Duration.days(365));
             dao = mock(TopicVectorsDAO.class);
+            stubNoDiscovery(dao);
+            backfills = allDrained();
             client = mock(InferenceClient.class);
+            lockService = mock(LockService.class);
             workspaces = mock(TopicWorkspaceService.class);
             registry = mock(AiLabelTaskRegistry.class);
             meter = new TestMeter();
             clock = new TopicsTestClock(NOW);
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, registry,
-                    names(), meter.meter, clock);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService,
+                    registry, names(), meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
             when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
+            // The long-window pass is not due unless a test says so.
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(false));
+            when(lockService.unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK)).thenReturn(Mono.empty());
             // A chunk no test stubs gets the vectors of its own inputs, so this takes any request and deadline.
             when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
                 EmbedRequest request = invocation.getArgument(0);
@@ -365,22 +383,90 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
-        @DisplayName("the window never starts before applies_from, and bounds trace_created_at by the ai-labels "
-                + "horizon plus the slack")
+        @DisplayName("the short and the long window never start before applies_from, and both bound trace_created_at "
+                + "by the ai-labels horizon plus the slack")
         void windowBounds() {
             stub(List.of(), candidate -> "");
+            config.getVectors().setLongWindow(io.dropwizard.util.Duration.days(30));
+            stub(Duration.ofDays(30), List.of(), candidate -> "");
             var horizonAndSlack = Duration.ofDays(7).plus(Duration.ofDays(1));
 
             service.tick(NOW);
-            var lower = NOW.minus(Duration.ofHours(24));
-            verify(dao).findUnvectored(windowRead(WORKSPACE_ID, lower, NOW, lower.minus(horizonAndSlack), 5_000,
-                    FIND_SECONDS));
+            var shortLower = NOW.minus(Duration.ofHours(24));
+            verify(dao).findUnvectored(windowRead(WORKSPACE_ID, shortLower, NOW, shortLower.minus(horizonAndSlack),
+                    5_000, FIND_SECONDS));
 
-            config.getVectors().setWindow(io.dropwizard.util.Duration.days(30));
-            stub(Duration.ofDays(30), List.of(), candidate -> "");
-            service.tick(NOW);
+            longWindowDue();
+            var result = service.tick(NOW);
+            assertThat(result.longWindowPass()).isTrue();
             verify(dao).findUnvectored(windowRead(WORKSPACE_ID, APPLIES_FROM, NOW,
                     APPLIES_FROM.minus(horizonAndSlack), 5_000, FIND_SECONDS));
+        }
+
+        @Test
+        @DisplayName("with a backfill window, the long-window pass uses it instead of the long window")
+        void backfillWindow() {
+            config.getVectors().setBackfillWindow(io.dropwizard.util.Duration.days(12));
+            stub(Duration.ofDays(12), List.of(), candidate -> "");
+            longWindowDue();
+
+            var result = service.tick(NOW);
+
+            assertThat(result.longWindowPass()).isTrue();
+            var lower = NOW.minus(Duration.ofDays(12));
+            verify(dao).findUnvectored(windowRead(WORKSPACE_ID, lower, NOW,
+                    lower.minus(Duration.ofDays(7).plus(Duration.ofDays(1))), 5_000, FIND_SECONDS));
+            assertThat(TopicVectorsTickService.longWindow(TestConfigUtils.loadConfigTest().getTopics().getVectors()))
+                    .isEqualTo(io.dropwizard.util.Duration.days(7));
+        }
+
+        @Test
+        @DisplayName("the long-window pass stays due while its ticks reach the cap, and starts the interval once one "
+                + "finds fewer")
+        void longWindowUntilDrained() {
+            config.getVectors().setMaxTracesPerTick(2);
+            longWindowDue();
+            var lease = service.leaderLease();
+            var full = IntStream.range(0, 2)
+                    .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(9 - i)))
+                    .toList();
+            stub(LONG_WINDOW, full, candidate -> "intent of " + candidate.traceId());
+
+            assertThat(service.tick(NOW).written()).isEqualTo(2);
+
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, lease);
+            verify(lockService).unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK);
+            // Not drained: due again after one normal tick (1.5 tick intervals), so the short window is served too.
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
+            verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
+                    Duration.ofDays(1));
+
+            stub(LONG_WINDOW, List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1))),
+                    candidate -> "last");
+
+            assertThat(service.tick(NOW).written()).isOne();
+
+            var inOrder = inOrder(lockService);
+            inOrder.verify(lockService).unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK);
+            inOrder.verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofDays(1));
+        }
+
+        @Test
+        @DisplayName("a long-window pass cut by a back-off is not drained")
+        void longWindowNotDrainedAfterBackOff() {
+            longWindowDue();
+            stub(LONG_WINDOW, List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(1))),
+                    candidate -> "x");
+            var exception = inferenceException(503, "something_new", false);
+            doReturn(Mono.error(exception)).when(client)
+                    .embed(embedRequest(WORKSPACE_ID, List.of("x")), NOW.plus(EMBED_TIMEOUT));
+
+            var result = service.tick(NOW);
+
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 1));
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
+            verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
+                    Duration.ofDays(1));
         }
 
         @Test
@@ -481,13 +567,15 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
-        @DisplayName("a failed insert is skipped as insert_failed, and the next workspace still runs")
+        @DisplayName("a failed insert is skipped as insert_failed, keeps the long-window pass on, and the next "
+                + "workspace still runs")
         void insertFailure() {
+            longWindowDue();
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("failing", "healthy"));
             var failing = candidate("failing", NOW.minusSeconds(10));
             var healthy = candidate("healthy", NOW.minusSeconds(10));
-            when(findUnvectored(dao, "failing", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(failing));
-            when(findUnvectored(dao, "healthy", NOW, SHORT_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(healthy));
+            when(findUnvectored(dao, "failing", NOW, LONG_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(failing));
+            when(findUnvectored(dao, "healthy", NOW, LONG_WINDOW, 5_000, FIND_SECONDS)).thenReturn(Flux.just(healthy));
             stubSummaries("failing", List.of(failing), candidate -> "failing text", BUDGET_SECONDS);
             stubSummaries("healthy", List.of(healthy), candidate -> "healthy text", BUDGET_SECONDS);
             when(dao.insert(anyList())).thenAnswer(invocation -> {
@@ -504,6 +592,9 @@ class TopicVectorsTickServiceTest {
             assertThat(inserted).extracting(TopicVector::traceId).containsExactly(healthy.traceId());
             assertThat(result.written()).isEqualTo(1);
             assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.INSERT_FAILED, 1));
+            verify(lockService).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90));
+            verify(lockService, never()).lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK,
+                    Duration.ofDays(1));
         }
 
         @Test
@@ -598,6 +689,9 @@ class TopicVectorsTickServiceTest {
             config.getVectors().setTickBudget(io.dropwizard.util.Duration.milliseconds(1_500));
             config.getVectors().setEmbedTimeout(io.dropwizard.util.Duration.seconds(1));
             config.getVectors().setEmbedBatchSize(1);
+            // The lease follows the budget: the long-window pass is not due under the new one either.
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(false));
             var candidates = IntStream.range(0, 3)
                     .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5)))
                     .toList();
@@ -633,6 +727,10 @@ class TopicVectorsTickServiceTest {
                 service.tick(start);
 
                 findUnvectored(verify(dao, times(reads)), WORKSPACE_ID, start, SHORT_WINDOW, 5_000, 1);
+                // The discovery's two reads are window reads too: none with under a second left.
+                verify(dao, times(reads)).findBackfillProjects(anyString(), anyString(), any(Instant.class),
+                        any(Instant.class), anyLong());
+                verify(dao, times(reads)).countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong());
                 verifyNoMoreInteractions(dao);
                 assertThat(log.list)
                         .filteredOn(event -> event.getFormattedMessage().contains("workspaces not read"))
@@ -808,6 +906,24 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
+        @DisplayName("a trace id reused in another project counts as missed only for the project whose row the short "
+                + "window missed")
+        void missedKeyedByProject() {
+            longWindowDue();
+            var traceId = ID_GENERATOR.generateId();
+            var old = candidate(traceId, 1, NOW.minus(Duration.ofDays(2)));
+            var recent = candidate(traceId, 1, NOW.minusSeconds(5));
+            stub(LONG_WINDOW, List.of(old, recent), candidate -> "intent of " + candidate.projectId());
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(2);
+            var missed = meter.counter("topics.vectors.long_window.missed");
+            verify(missed).add(1L, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(missed);
+        }
+
+        @Test
         @DisplayName("the gauge is published only while this pod's last tick is at most two tick intervals old")
         void gaugeGoesStale() {
             stub(List.of(), candidate -> "");
@@ -823,23 +939,30 @@ class TopicVectorsTickServiceTest {
         }
 
         @Test
-        @DisplayName("an embed failure is counted by status and code")
+        @DisplayName("an embed failure is counted by status and code, and a long-window pass counts only the old rows "
+                + "it wrote as missed")
         void metrics() {
             config.getVectors().setEmbedBatchSize(1);
-            var failing = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(10));
-            var fine = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5));
-            stub(List.of(failing, fine), candidate -> candidate == failing ? "bad" : "fine");
+            longWindowDue();
+            var old = candidate(ID_GENERATOR.generateId(), 1, NOW.minus(Duration.ofDays(2)));
+            var recent = candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5));
+            var oldFailing = candidate(ID_GENERATOR.generateId(), 1, NOW.minus(Duration.ofDays(3)));
+            stub(LONG_WINDOW, List.of(oldFailing, old, recent),
+                    candidate -> candidate == oldFailing ? "bad" : "fine " + candidate);
             var exception = inferenceException(400, "invalid_request", false);
             doReturn(Mono.error(exception)).when(client)
                     .embed(embedRequest(WORKSPACE_ID, List.of("bad")), NOW.plus(EMBED_TIMEOUT));
 
             var result = service.tick(NOW);
 
-            assertThat(result.written()).isOne();
+            assertThat(result.written()).isEqualTo(2);
             verify(meter.counter("topics.vectors.embed.failures"))
                     .add(1, workspace(WORKSPACE_ID).put(longKey("http_status"), 400L)
                             .put(stringKey("code"), "invalid_request")
                             .put(stringKey("error_type"), "InferenceException").build());
+            var missed = meter.counter("topics.vectors.long_window.missed");
+            verify(missed).add(1L, workspace(WORKSPACE_ID).build());
+            verifyNoMoreInteractions(missed);
         }
 
         @Test
@@ -847,8 +970,9 @@ class TopicVectorsTickServiceTest {
                 + "the tick resolved, never one looked up at scrape time")
         void workspaceAttributes() {
             var lookups = new java.util.concurrent.atomic.AtomicInteger();
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, registry,
-                    new TopicsWorkspaceNames(id -> {
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService,
+                    registry, new TopicsWorkspaceNames(id -> {
                         lookups.incrementAndGet();
                         return "name-" + id;
                     }, clock), meter.meter, clock);
@@ -870,8 +994,9 @@ class TopicVectorsTickServiceTest {
         @DisplayName("a failed name lookup costs only the name: the workspace is labelled with its id, and the tick "
                 + "writes as usual")
         void nameFallback() {
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, registry,
-                    new TopicsWorkspaceNames(id -> {
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService,
+                    registry, new TopicsWorkspaceNames(id -> {
                         throw new IllegalStateException("react service down");
                     }, clock), meter.meter, clock);
             stub(List.of(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(5))), candidate -> "intent");
@@ -894,8 +1019,9 @@ class TopicVectorsTickServiceTest {
             }, clock);
             names.name("b");
             looked.clear();
-            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, client, registry,
-                    names, meter.meter, clock);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService,
+                    registry, names, meter.meter, clock);
             when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
             var budget = config.getVectors().getTickBudget().toJavaDuration();
 
@@ -921,6 +1047,16 @@ class TopicVectorsTickServiceTest {
             assertThatThrownBy(() -> service.tick(NOW)).isExactlyInstanceOf(IllegalStateException.class)
                     .hasMessageContaining(TopicVectorsTickService.TASK);
             verifyNoInteractions(dao);
+        }
+
+        private void longWindowDue() {
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, service.leaderLease()))
+                    .thenReturn(Mono.just(true));
+            // The pass ends by setting the lock again: for the interval when drained, else for 1.5 tick intervals.
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofDays(1)))
+                    .thenReturn(Mono.just(true));
+            when(lockService.lockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK, Duration.ofSeconds(90)))
+                    .thenReturn(Mono.just(true));
         }
 
         @Test
@@ -986,6 +1122,1130 @@ class TopicVectorsTickServiceTest {
             return on.findUnvectored(windowRead(workspaceId, lowerBound, start, createdAfter, limit,
                     maxExecutionSeconds));
         }
+    }
+
+    /**
+     * The long-window pass's pace over several ticks. The lock service is a fake that keeps each key until its TTL
+     * runs out on the test clock, as Redis does, so the ticks decide "due" by the TTLs they really set.
+     */
+    @Nested
+    @DisplayName("long-window pace")
+    class LongWindowPace {
+
+        private static final Duration INTERVAL = Duration.ofMinutes(1);
+
+        private TopicsConfig config;
+        private TopicsTestClock clock;
+        private TopicVectorsTickService service;
+        private final Map<String, Instant> lockedUntil = new HashMap<>();
+        private final List<Duration> windowsRead = new ArrayList<>();
+        // What the next window reads answer, and how long each embed call takes.
+        private int unvectored;
+        private Duration embedTime = Duration.ZERO;
+
+        @BeforeEach
+        void setUp() {
+            config = TestConfigUtils.loadConfigTest().getTopics();
+            config.getVectors().getFind().setSliceSize(io.dropwizard.util.Duration.days(365));
+            var dao = mock(TopicVectorsDAO.class);
+            stubNoDiscovery(dao);
+            var backfills = allDrained();
+            var client = mock(InferenceClient.class);
+            var lockService = mock(LockService.class);
+            var workspaces = mock(TopicWorkspaceService.class);
+            var registry = mock(AiLabelTaskRegistry.class);
+            clock = new TopicsTestClock(NOW);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService,
+                    registry, names(), new TestMeter().meter, clock);
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
+            // SET NX PX and DEL on the test clock: any lock and TTL, because the TTLs are what the tests are about.
+            when(lockService.lockUsingToken(any(LockService.Lock.class), any(Duration.class)))
+                    .thenAnswer(invocation -> {
+                        LockService.Lock lock = invocation.getArgument(0);
+                        Duration ttl = invocation.getArgument(1);
+                        assertThat(ttl).isPositive();
+                        var until = lockedUntil.get(lock.key());
+                        if (until != null && until.isAfter(clock.instant())) {
+                            return Mono.just(false);
+                        }
+                        lockedUntil.put(lock.key(), clock.instant().plus(ttl));
+                        return Mono.just(true);
+                    });
+            when(lockService.unlockUsingToken(any(LockService.Lock.class))).thenAnswer(invocation -> {
+                LockService.Lock lock = invocation.getArgument(0);
+                lockedUntil.remove(lock.key());
+                return Mono.empty();
+            });
+            // Every read answers the same backlog and records its window, so this takes any bounds.
+            when(dao.findUnvectored(argThat(find -> find.workspaceId().equals(WORKSPACE_ID)
+                    && find.task().equals(TopicVectorsTickService.TASK)))).thenAnswer(invocation -> {
+                        TopicVectorsFind find = invocation.getArgument(0);
+                        Instant upperBound = find.upperBound();
+                        windowsRead.add(Duration.between(find.lowerBound(), upperBound));
+                        return Flux.fromStream(IntStream.range(0, unvectored)
+                                .mapToObj(i -> candidate(ID_GENERATOR.generateId(), 1, upperBound.minusSeconds(60))));
+                    });
+            stubSummaryOfEachKey(dao);
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                clock.advance(embedTime);
+                return Mono.just(embedded(request.inputs()));
+            });
+            when(dao.insert(anyList())).thenAnswer(invocation -> {
+                List<TopicVector> rows = invocation.getArgument(0);
+                return Mono.just((long) rows.size());
+            });
+            stubNoDeletedTrace(dao);
+        }
+
+        // The tick lock lasts 59 s and each pod fires at its own second, so ticks are 59 to 61 s apart.
+        @ParameterizedTest(name = "ticks {0} s apart")
+        @ValueSource(longs = {59, 60, 61})
+        @DisplayName("a pass that uses its whole budget and does not drain runs again after one short-window tick")
+        void budgetBoundPassEverySecondTick(long gapSeconds) {
+            // More than a tick embeds: 10 s per call and a 10 s embed timeout fill the 50 s budget with 5 calls.
+            unvectored = config.getVectors().getMaxTracesPerTick();
+            embedTime = EMBED_TIMEOUT;
+            var gap = Duration.ofSeconds(gapSeconds);
+
+            var first = tickAt(NOW);
+            assertThat(first.longWindowPass()).isTrue();
+            assertThat(first.written()).isEqualTo(5 * 256);
+            assertThat(clock.instant()).isEqualTo(NOW.plusSeconds(BUDGET_SECONDS));
+
+            assertThat(tickAt(NOW.plus(gap)).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(2))).longWindowPass()).isTrue();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(3))).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(4))).longWindowPass()).isTrue();
+            assertThat(windowsRead)
+                    .containsExactly(LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW);
+        }
+
+        @ParameterizedTest(name = "ticks {0} s apart")
+        @ValueSource(longs = {59, 60, 61})
+        @DisplayName("a pass that ends fast and does not drain runs again after one short-window tick")
+        void fastPassEverySecondTick(long gapSeconds) {
+            // At the cap, so not drained; the embed calls take no time.
+            config.getVectors().setMaxTracesPerTick(2);
+            unvectored = 2;
+            var gap = Duration.ofSeconds(gapSeconds);
+
+            assertThat(tickAt(NOW).longWindowPass()).isTrue();
+            assertThat(clock.instant()).isEqualTo(NOW);
+
+            assertThat(tickAt(NOW.plus(gap)).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(2))).longWindowPass()).isTrue();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(3))).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(gap.multipliedBy(4))).longWindowPass()).isTrue();
+            assertThat(windowsRead)
+                    .containsExactly(LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW, SHORT_WINDOW, LONG_WINDOW);
+        }
+
+        @Test
+        @DisplayName("a drained pass is not due again until longWindowInterval after the tick that drained it")
+        void drainedPassWaitsForTheInterval() {
+            // Under the cap and embedded in one 10 s call: drained at NOW + 10 s.
+            unvectored = 1;
+            embedTime = EMBED_TIMEOUT;
+            var drainedAt = NOW.plus(EMBED_TIMEOUT);
+            var interval = config.getVectors().getLongWindowInterval().toJavaDuration();
+
+            assertThat(tickAt(NOW).longWindowPass()).isTrue();
+            assertThat(clock.instant()).isEqualTo(drainedAt);
+
+            assertThat(tickAt(NOW.plus(INTERVAL)).longWindowPass()).isFalse();
+            assertThat(tickAt(NOW.plus(INTERVAL.multipliedBy(2))).longWindowPass()).isFalse();
+            assertThat(tickAt(drainedAt.plus(interval).minusSeconds(1)).longWindowPass()).isFalse();
+            assertThat(tickAt(drainedAt.plus(interval)).longWindowPass()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a pass that ends after its not-due time is due at the next tick")
+        void overrunPassIsDueAtTheNextTick() {
+            // One embed call that returns 95 s after the tick started: past 1.5 tick intervals, and the tick one
+            // interval after the start could not run, because this one held the leader lock.
+            config.getVectors().setMaxTracesPerTick(2);
+            unvectored = 2;
+            embedTime = Duration.ofSeconds(95);
+
+            assertThat(tickAt(NOW).longWindowPass()).isTrue();
+
+            embedTime = Duration.ZERO;
+            assertThat(tickAt(NOW.plus(INTERVAL.multipliedBy(2))).longWindowPass()).isTrue();
+        }
+
+        /** Moves the clock to {@code start}, as the job does when a pod's trigger fires, and runs the tick. */
+        private TopicVectorsTickService.TickResult tickAt(Instant start) {
+            clock.advance(Duration.between(clock.instant(), start));
+            return service.tick(start);
+        }
+    }
+
+    static Stream<Arguments> backfillOrders() {
+        var cap = 5_000;
+        var id1 = UUID.fromString("00000000-0000-7000-8000-000000000001");
+        var id2 = UUID.fromString("00000000-0000-7000-8000-000000000002");
+        return Stream.of(
+                // Both fit in one tick: the fewest remaining first.
+                arguments(backfill(id1, 4_000, 0, NOW), backfill(id2, 4_000, 3_000, NOW.minusSeconds(60)), cap, 1),
+                // Both fit, the same remaining: the most recently active first.
+                arguments(backfill(id1, 100, 0, NOW), backfill(id2, 100, 0, NOW.minusSeconds(1)), cap, -1),
+                // Both fit, the same remaining and activity: by project id.
+                arguments(backfill(id1, 100, 0, NOW), backfill(id2, 100, 0, NOW), cap, -1),
+                // One fits, one does not: the one that fits first, however old.
+                arguments(backfill(id1, 5_000, 0, NOW.minusSeconds(3_600)), backfill(id2, 5_001, 0, NOW), cap, -1),
+                // Neither fits: the most recently active first, whatever remains.
+                arguments(backfill(id1, 9_000, 0, NOW.minusSeconds(1)), backfill(id2, 90_000, 0, NOW), cap, 1),
+                // Neither fits, the same activity: by project id.
+                arguments(backfill(id1, 90_000, 0, NOW), backfill(id2, 9_000, 0, NOW), cap, -1),
+                // More done than total counts as nothing remaining.
+                arguments(backfill(id1, 10, 50, NOW.minusSeconds(1)), backfill(id2, 10, 9, NOW), cap, -1));
+    }
+
+    @ParameterizedTest(name = "{0} against {1}, cap {2}: {3}")
+    @MethodSource("backfillOrders")
+    @DisplayName("the backfill takes the projects that fit in one tick first, fewest remaining first, then the rest by "
+            + "latest activity")
+    void backfillOrder(TopicVectorBackfill first, TopicVectorBackfill second, int cap, int expected) {
+        var order = TopicVectorBackfill.backfillOrder(cap);
+
+        assertThat(Integer.signum(order.compare(first, second))).isEqualTo(expected);
+        assertThat(Integer.signum(order.compare(second, first))).isEqualTo(-expected);
+    }
+
+    private static TopicVectorBackfill backfill(UUID projectId, long total, long done, Instant lastDoneAt) {
+        return TopicVectorBackfill.builder().workspaceId(WORKSPACE_ID).projectId(projectId).startedAt(APPLIES_FROM)
+                .checkedAt(NOW).lastDoneAt(lastDoneAt).tracesTotal(total).tracesDone(done).build();
+    }
+
+    /**
+     * The three parts of a tick over projects. ClickHouse and the backfill table are fakes that keep state: a window
+     * read answers the traces without a vector that its bounds, project and exclusions select, an insert gives them
+     * their vector, and the table keeps each project's row. So the tests see what a tick embeds, by which read, and
+     * what it marks.
+     */
+    @Nested
+    @DisplayName("backfill by project")
+    class BackfillByProject {
+
+        private static final String OTHER_WORKSPACE = "other-workspace";
+
+        /** One window read as the tick made it. */
+        private record Read(String workspaceId, UUID projectId, List<UUID> excluded, Instant createdAfter,
+                Instant createdBefore) {
+        }
+
+        private TopicsConfig config;
+        private TopicVectorsDAO dao;
+        private TopicVectorBackfillService backfills;
+        private InferenceClient client;
+        private LockService lockService;
+        private TopicWorkspaceService workspaces;
+        private TestMeter meter;
+        private TopicsTestClock clock;
+        private TopicVectorsTickService service;
+        private final List<TopicVectorCandidate> unvectored = new ArrayList<>();
+        private final List<UUID> embedded = new ArrayList<>();
+        private final Map<UUID, TopicVectorBackfill> rows = new HashMap<>();
+        private final List<Read> reads = new ArrayList<>();
+        private final List<TopicBackfillProject> discoverable = new ArrayList<>();
+        private final Map<UUID, Long> vectorCounts = new HashMap<>();
+        private final Set<UUID> failingProjects = new java.util.HashSet<>();
+        private boolean recordFails;
+        private Duration embedTime = Duration.ZERO;
+
+        @BeforeEach
+        void setUp() {
+            config = TestConfigUtils.loadConfigTest().getTopics();
+            dao = mock(TopicVectorsDAO.class);
+            backfills = mock(TopicVectorBackfillService.class);
+            client = mock(InferenceClient.class);
+            lockService = mock(LockService.class);
+            workspaces = mock(TopicWorkspaceService.class);
+            var registry = mock(AiLabelTaskRegistry.class);
+            meter = new TestMeter();
+            clock = new TopicsTestClock(NOW);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, backfills, client,
+                    lockService, registry, names(), meter.meter, clock);
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
+            // The daily pass is not due unless a test says so; it ends by setting the lock again, for any time.
+            when(lockService.lockUsingToken(eq(TopicVectorsTickService.LONG_WINDOW_LOCK), any(Duration.class)))
+                    .thenReturn(Mono.just(false));
+            when(lockService.unlockUsingToken(TopicVectorsTickService.LONG_WINDOW_LOCK)).thenReturn(Mono.empty());
+            stubClickHouse();
+            stubBackfillTable();
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                clock.advance(embedTime);
+                return Mono.just(embedded(request.inputs()));
+            });
+        }
+
+        /** Every read takes any bounds: the fake selects by them, and the tests check the reads it recorded. */
+        private void stubClickHouse() {
+            when(dao.findUnvectored(argThat(find -> find.task().equals(TopicVectorsTickService.TASK))))
+                    .thenAnswer(invocation -> read(invocation.getArgument(0)));
+            stubSummaryOfEachKey(dao);
+            when(dao.insert(anyList())).thenAnswer(invocation -> {
+                List<TopicVector> vectors = invocation.getArgument(0);
+                vectors.forEach(vector -> {
+                    embedded.add(vector.traceId());
+                    unvectored.removeIf(candidate -> candidate.traceId().equals(vector.traceId()));
+                });
+                return Mono.just((long) vectors.size());
+            });
+            stubNoDeletedTrace(dao);
+            when(dao.findBackfillProjects(anyString(), eq(TopicVectorsTickService.TASK), any(Instant.class),
+                    any(Instant.class), anyLong())).thenAnswer(invocation -> Flux.fromIterable(discoverable));
+            when(dao.countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong()))
+                    .thenAnswer(invocation -> Mono.just(Map.copyOf(vectorCounts)));
+        }
+
+        private Flux<TopicVectorCandidate> read(TopicVectorsFind find) {
+            var workspaceId = find.workspaceId();
+            var projectId = find.projectId();
+            var excluded = find.excludedProjectIds();
+            var lowerBound = find.lowerBound();
+            var upperBound = find.upperBound();
+            var createdAfter = find.createdAfter();
+            var createdBefore = find.createdBefore();
+            var limit = find.limit();
+            reads.add(new Read(workspaceId, projectId, List.copyOf(excluded), createdAfter, createdBefore));
+            if (projectId != null && failingProjects.contains(projectId)) {
+                return Flux.error(new IllegalStateException("read failed"));
+            }
+            return Flux.fromIterable(unvectored.stream()
+                    .filter(candidate -> candidate.workspaceId().equals(workspaceId))
+                    .filter(candidate -> projectId == null || candidate.projectId().equals(projectId))
+                    .filter(candidate -> !excluded.contains(candidate.projectId()))
+                    .filter(candidate -> !candidate.statusUpdatedAt().isBefore(lowerBound)
+                            && !candidate.statusUpdatedAt().isAfter(upperBound))
+                    .filter(candidate -> !candidate.traceCreatedAt().isBefore(createdAfter))
+                    .filter(candidate -> createdBefore == null || candidate.traceCreatedAt().isBefore(createdBefore))
+                    .sorted(java.util.Comparator.comparing(TopicVectorCandidate::statusUpdatedAt))
+                    .limit(limit)
+                    .toList());
+        }
+
+        /** The table takes any workspace, key and row: it is the state the tests read back. */
+        private void stubBackfillTable() {
+            when(backfills.findUndrained(anyCollection())).thenAnswer(invocation -> {
+                Collection<String> workspaceIds = invocation.getArgument(0);
+                return rows.values().stream()
+                        .filter(row -> row.drainedAt() == null && workspaceIds.contains(row.workspaceId()))
+                        .collect(java.util.stream.Collectors.groupingBy(TopicVectorBackfill::workspaceId));
+            });
+            when(backfills.findByKeys(anyString(), anyCollection())).thenAnswer(invocation -> {
+                Collection<UUID> projectIds = invocation.getArgument(1);
+                return rows.values().stream().filter(row -> projectIds.contains(row.projectId()))
+                        .collect(java.util.stream.Collectors.toMap(TopicVectorBackfill::projectId,
+                                Function.identity()));
+            });
+            doAnswer(invocation -> {
+                List<TopicVectorBackfill> started = invocation.getArgument(0);
+                started.forEach(row -> rows.putIfAbsent(row.projectId(), row));
+                return null;
+            }).when(backfills).start(anyList());
+            doAnswer(invocation -> {
+                List<TopicVectorBackfill> found = invocation.getArgument(1);
+                found.forEach(row -> rows.merge(row.projectId(), row, (old, fresh) -> old.toBuilder()
+                        .checkedAt(fresh.checkedAt()).lastDoneAt(fresh.lastDoneAt())
+                        .tracesTotal(fresh.tracesTotal()).tracesDone(fresh.tracesDone()).build()));
+                return 0;
+            }).when(backfills).discovered(anyString(), anyList(), any(Instant.class), any(Instant.class));
+            doAnswer(invocation -> {
+                if (recordFails) {
+                    throw new IllegalStateException("MySQL is down");
+                }
+                List<TopicVectorBackfill.Progress> progress = invocation.getArgument(0);
+                progress.forEach(done -> rows.computeIfPresent(done.projectId(), (id, row) -> row.toBuilder()
+                        .drainedAt(done.drainedAt() != null ? done.drainedAt() : row.drainedAt())
+                        .tracesDone(row.tracesDone() + done.written()).build()));
+                return null;
+            }).when(backfills).record(anyList());
+        }
+
+        @Test
+        @DisplayName("two projects in backfill: the first drains and the tick goes on to the second, each trace "
+                + "embedded once")
+        void twoProjectsInOneTick() {
+            var first = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var second = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
+            var traces = Stream.of(first, first, first, second, second)
+                    .map(project -> trace(project, NOW.minusSeconds(3_600))).toList();
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(5);
+            assertThat(result.projectsDrained()).isEqualTo(2);
+            assertThat(embedded).containsExactlyInAnyOrderElementsOf(
+                    traces.stream().map(TopicVectorCandidate::traceId).toList());
+            assertThat(rows.get(first.projectId()).drainedAt()).isEqualTo(NOW);
+            assertThat(rows.get(second.projectId()).drainedAt()).isEqualTo(NOW);
+            // The workspace read leaves both out; then each project is read on its own, the most recent first.
+            assertThat(reads).extracting(Read::projectId).containsExactly(null, first.projectId(),
+                    second.projectId());
+            assertThat(reads.getFirst().excluded()).containsExactlyInAnyOrder(first.projectId(),
+                    second.projectId());
+            assertThat(unvectored).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the workspace read serves the drained projects and leaves the others to the backfill phase")
+        void freshPhaseSkipsUndrainedProjects() {
+            var drained = drained(WORKSPACE_ID);
+            var backlog = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var fresh = trace(drained, NOW.minusSeconds(30));
+            // Written inside the short window too: without the exclusion the workspace read would take it.
+            var old = trace(backlog, NOW.minusSeconds(40));
+            var requests = new ArrayList<List<String>>();
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                requests.add(request.inputs());
+                return Mono.just(embedded(request.inputs()));
+            });
+
+            var result = service.tick(NOW);
+
+            // One embed call per phase, each with its own trace: no trace is embedded by both.
+            assertThat(requests).containsExactly(List.of("intent of " + fresh.traceId()),
+                    List.of("intent of " + old.traceId()));
+            assertThat(embedded).containsExactly(fresh.traceId(), old.traceId());
+            assertThat(reads.getFirst()).isEqualTo(new Read(WORKSPACE_ID, null, List.of(backlog.projectId()),
+                    reads.getFirst().createdAfter(), null));
+            assertThat(result.projectsDrained()).isOne();
+        }
+
+        @Test
+        @DisplayName("a project marked drained has no done status without a vector in its window at the tick's start")
+        void drainedMeansNothingLeft() {
+            config.getVectors().setMaxTracesPerTick(2);
+            var small = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var large = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
+            trace(small, NOW.minusSeconds(3_600));
+            IntStream.range(0, 3).forEach(i -> trace(large, NOW.minusSeconds(7_200 + i)));
+            // Time for two embed calls: the small project's, and one turn of the large one.
+            embedTime = EMBED_TIMEOUT;
+            clock.advance(Duration.ofSeconds(BUDGET_SECONDS).minus(EMBED_TIMEOUT.multipliedBy(2)));
+
+            assertThat(service.tick(NOW).projectsDrained()).isOne();
+
+            assertThat(rows.get(small.projectId()).drainedAt()).isEqualTo(NOW);
+            assertThat(unvectored).noneMatch(candidate -> candidate.projectId().equals(small.projectId()));
+            // At the cap: one trace is left, so the project is not drained, and its two vectors are counted.
+            assertThat(rows.get(large.projectId()).drainedAt()).isNull();
+            assertThat(rows.get(large.projectId()).tracesDone()).isEqualTo(2);
+            assertThat(unvectored).hasSize(1);
+
+            embedTime = Duration.ZERO;
+            clock.advance(Duration.between(clock.instant(), NOW.plusSeconds(60)));
+            assertThat(service.tick(NOW.plusSeconds(60)).projectsDrained()).isOne();
+            assertThat(rows.get(large.projectId()).drainedAt()).isEqualTo(NOW.plusSeconds(60));
+            assertThat(unvectored).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a project whose read fails stays in backfill, is counted, and does not stop the next project")
+        void failingProjectRead() {
+            var broken = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var healthy = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
+            trace(broken, NOW.minusSeconds(3_600));
+            var kept = trace(healthy, NOW.minusSeconds(3_600));
+            failingProjects.add(broken.projectId());
+
+            var result = service.tick(NOW);
+
+            assertThat(result.projectsDrained()).isOne();
+            assertThat(embedded).containsExactly(kept.traceId());
+            assertThat(rows.get(broken.projectId()).drainedAt()).isNull();
+            assertThat(rows.get(healthy.projectId()).drainedAt()).isEqualTo(NOW);
+            verify(meter.counter("topics.vectors.read.failures")).add(1, workspace(WORKSPACE_ID)
+                    .put(stringKey("phase"), "backfill")
+                    .put(stringKey("error_type"), "IllegalStateException").build());
+        }
+
+        @Test
+        @DisplayName("a project new to a running workspace gets its row from the workspace read and is drained by "
+                + "the backfill phase of the same tick")
+        void newProjectDrainsAtOnce() {
+            var projectId = ID_GENERATOR.generateId();
+            var first = trace(WORKSPACE_ID, projectId, NOW.minusSeconds(30), NOW.minusSeconds(20));
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isOne();
+            assertThat(result.projectsDrained()).isOne();
+            assertThat(embedded).containsExactly(first.traceId());
+            assertThat(rows.get(projectId)).isEqualTo(TopicVectorBackfill.builder().workspaceId(WORKSPACE_ID)
+                    .projectId(projectId).startedAt(NOW).checkedAt(NOW).drainedAt(NOW)
+                    .lastDoneAt(first.statusUpdatedAt()).tracesDone(1).build());
+            // Found by the workspace read, embedded by the project's own read.
+            assertThat(reads).extracting(Read::projectId).containsExactly(null, projectId);
+
+            // The next tick's workspace read serves it like any drained project.
+            var next = trace(WORKSPACE_ID, projectId, NOW, NOW.plusSeconds(10));
+            clock.advance(Duration.ofMinutes(1));
+            assertThat(service.tick(NOW.plusSeconds(60)).written()).isOne();
+            assertThat(embedded).containsExactly(first.traceId(), next.traceId());
+            assertThat(reads).extracting(Read::projectId).containsExactly(null, projectId, null);
+        }
+
+        @Test
+        @DisplayName("workspaces take turns in the backfill phase, one project each")
+        void workspacesTakeTurns() {
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE));
+            var a1 = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var a2 = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
+            var b1 = undrained(OTHER_WORKSPACE, NOW.minusSeconds(10));
+            var b2 = undrained(OTHER_WORKSPACE, NOW.minusSeconds(20));
+
+            assertThat(service.tick(NOW).projectsDrained()).isEqualTo(4);
+
+            var order = reads.stream().map(Read::projectId).filter(java.util.Objects::nonNull).toList();
+            // The visiting order rotates with the tick, so either workspace may lead; then they alternate.
+            assertThat(order).isIn(
+                    List.of(a1.projectId(), b1.projectId(), a2.projectId(), b2.projectId()),
+                    List.of(b1.projectId(), a1.projectId(), b2.projectId(), a2.projectId()));
+        }
+
+        @Test
+        @DisplayName("after an embed back-off the workspace's other projects wait for the next tick, and none is "
+                + "marked drained")
+        void backOffStopsTheWorkspace() {
+            var first = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var second = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
+            trace(first, NOW.minusSeconds(3_600));
+            trace(second, NOW.minusSeconds(3_600));
+            when(client.embed(any(EmbedRequest.class), any(Instant.class)))
+                    .thenReturn(Mono.error(inferenceException(503, "something_new", false)));
+
+            var result = service.tick(NOW);
+
+            assertThat(result.projectsDrained()).isZero();
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 1));
+            assertThat(reads).extracting(Read::projectId).containsExactly(null, first.projectId());
+            assertThat(rows.values()).allMatch(row -> row.drainedAt() == null);
+        }
+
+        @Test
+        @DisplayName("progress that MySQL does not take leaves the projects in backfill: the next tick reads them "
+                + "again and marks them")
+        void recordFailure() {
+            var project = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            trace(project, NOW.minusSeconds(3_600));
+            recordFails = true;
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isOne();
+            assertThat(result.projectsDrained()).isZero();
+            assertThat(rows.get(project.projectId()).drainedAt()).isNull();
+
+            recordFails = false;
+            clock.advance(Duration.ofMinutes(1));
+            assertThat(service.tick(NOW.plusSeconds(60)).projectsDrained()).isOne();
+            assertThat(embedded).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("a large project is read in slices of trace creation time, newest first, that cover its window "
+                + "once: a trace on a slice edge and an old trace with a late status are each found once")
+        void largeProjectInSlices() {
+            var slice = Duration.ofDays(1);
+            var project = TopicVectorBackfill.builder().workspaceId(WORKSPACE_ID)
+                    .projectId(ID_GENERATOR.generateId()).startedAt(NOW).checkedAt(NOW).lastDoneAt(NOW)
+                    .tracesTotal(TopicVectorsTickService.ONE_SLICE_MAX_TRACES + 1).build();
+            rows.put(project.projectId(), project);
+            // Created exactly on the edge between the first and the second slice.
+            var onEdge = trace(WORKSPACE_ID, project.projectId(), NOW.minus(slice), NOW.minusSeconds(5));
+            // Created ten days ago, its status written an hour ago.
+            var late = trace(WORKSPACE_ID, project.projectId(), NOW.minus(Duration.ofDays(10)),
+                    NOW.minusSeconds(3_600));
+            var recent = trace(project, NOW.minusSeconds(60));
+
+            var result = service.tick(NOW);
+
+            assertThat(result.projectsDrained()).isOne();
+            // Newest slice first; in a slice, the oldest status first.
+            assertThat(embedded).containsExactly(recent.traceId(), onEdge.traceId(), late.traceId());
+            var slices = reads.stream().filter(read -> project.projectId().equals(read.projectId())).toList();
+            // 7 d window + 7 d horizon + 1 d slack = 15 slices of a day.
+            assertThat(slices).hasSize(15);
+            assertThat(slices.getFirst().createdBefore()).isNull();
+            assertThat(slices.getFirst().createdAfter()).isEqualTo(NOW.minus(slice));
+            for (int i = 1; i < slices.size(); i++) {
+                assertThat(slices.get(i).createdBefore()).isEqualTo(slices.get(i - 1).createdAfter());
+                assertThat(slices.get(i).createdAfter()).isEqualTo(NOW.minus(slice.multipliedBy(i + 1)));
+            }
+            assertThat(slices.getLast().createdAfter()).isEqualTo(NOW.minus(Duration.ofDays(15)));
+        }
+
+        @Test
+        @DisplayName("a small project is read in one query over its whole window")
+        void smallProjectInOneRead() {
+            var project = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            trace(WORKSPACE_ID, project.projectId(), NOW.minus(Duration.ofDays(10)), NOW.minusSeconds(3_600));
+
+            assertThat(service.tick(NOW).projectsDrained()).isOne();
+
+            assertThat(reads).filteredOn(read -> read.projectId() != null)
+                    .containsExactly(new Read(WORKSPACE_ID, project.projectId(), List.of(),
+                            NOW.minus(Duration.ofDays(15)), null));
+        }
+
+        @Test
+        @DisplayName("the daily pass reads the workspace in slices, without the projects in backfill, and finds the "
+                + "same traces as one read of the window")
+        void dailyPassInSlices() {
+            when(lockService.lockUsingToken(eq(TopicVectorsTickService.LONG_WINDOW_LOCK), any(Duration.class)))
+                    .thenReturn(Mono.just(true));
+            var drained = drained(WORKSPACE_ID);
+            var backlog = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var onEdge = trace(WORKSPACE_ID, drained.projectId(), NOW.minus(Duration.ofDays(2)),
+                    NOW.minus(Duration.ofDays(2)).plusSeconds(5));
+            var late = trace(WORKSPACE_ID, drained.projectId(), NOW.minus(Duration.ofDays(12)),
+                    NOW.minus(Duration.ofDays(3)));
+            var recent = trace(drained, NOW.minusSeconds(60));
+            // What one read of the whole window selects, before anything is embedded.
+            var window = TopicVectorsTickService.lowerBound(APPLIES_FROM, NOW, LONG_WINDOW);
+            var unsliced = read(windowRead(WORKSPACE_ID, window, NOW, NOW.minus(Duration.ofDays(15)), 5_000, 0)
+                    .toBuilder().excludedProjectIds(List.of(backlog.projectId())).build())
+                    .map(TopicVectorCandidate::traceId).collectList().block();
+            reads.clear();
+
+            var result = service.tick(NOW);
+
+            assertThat(result.longWindowPass()).isTrue();
+            var workspaceReads = reads.stream().filter(read -> read.projectId() == null).toList();
+            assertThat(workspaceReads).hasSize(15)
+                    .allMatch(read -> read.excluded().equals(List.of(backlog.projectId())));
+            assertThat(unsliced).containsExactlyInAnyOrder(recent.traceId(), onEdge.traceId(), late.traceId());
+            assertThat(embedded).containsExactlyInAnyOrderElementsOf(unsliced);
+            assertThat(embedded).doesNotHaveDuplicates();
+        }
+
+        @Test
+        @DisplayName("the discovery gives each project with done statuses a row with its counts, once per "
+                + "longWindowInterval, and again at once for a workspace enabled again")
+        void discovery() {
+            var known = drained(WORKSPACE_ID);
+            var fresh = ID_GENERATOR.generateId();
+            discoverable.add(TopicBackfillProject.builder().projectId(known.projectId()).traces(40)
+                    .lastDoneAt(NOW.minusSeconds(5)).build());
+            discoverable.add(TopicBackfillProject.builder().projectId(fresh).traces(100)
+                    .lastDoneAt(NOW.minusSeconds(9)).build());
+            // More vector rows than traces: capped at the total.
+            vectorCounts.put(known.projectId(), 45L);
+            vectorCounts.put(fresh, 60L);
+
+            service.tick(NOW);
+
+            var lowerBound = NOW.minus(LONG_WINDOW);
+            verify(dao).findBackfillProjects(WORKSPACE_ID, TopicVectorsTickService.TASK, lowerBound,
+                    lowerBound.minus(Duration.ofDays(8)), FIND_SECONDS);
+            verify(dao).countTracesWithVectorsByProject(WORKSPACE_ID, lowerBound, FIND_SECONDS);
+            verify(backfills).discovered(eq(WORKSPACE_ID), anyList(), eq(NOW), eq(NOW.minus(Duration.ofDays(2))));
+            // The known project keeps its start and its drained mark.
+            assertThat(rows.get(known.projectId())).isEqualTo(known.toBuilder().checkedAt(NOW)
+                    .lastDoneAt(NOW.minusSeconds(5)).tracesTotal(40).tracesDone(40).build());
+            // The new one starts a backfill; with nothing left to embed, this tick drains it.
+            assertThat(rows.get(fresh)).isEqualTo(TopicVectorBackfill.builder().workspaceId(WORKSPACE_ID)
+                    .projectId(fresh).startedAt(NOW).checkedAt(NOW).drainedAt(NOW)
+                    .lastDoneAt(NOW.minusSeconds(9)).tracesTotal(100).tracesDone(60).build());
+
+            clock.advance(Duration.ofHours(23));
+            service.tick(NOW.plus(Duration.ofHours(23)));
+            verify(dao, times(1)).findBackfillProjects(anyString(), anyString(), any(Instant.class),
+                    any(Instant.class), anyLong());
+
+            clock.advance(Duration.ofHours(1));
+            service.tick(NOW.plus(Duration.ofDays(1)));
+            verify(dao, times(2)).findBackfillProjects(anyString(), anyString(), any(Instant.class),
+                    any(Instant.class), anyLong());
+
+            // Out of the list for one tick, then back: discovered at its first tick.
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of());
+            clock.advance(Duration.ofMinutes(1));
+            service.tick(clock.instant());
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+            clock.advance(Duration.ofMinutes(1));
+            service.tick(clock.instant());
+            verify(dao, times(3)).findBackfillProjects(anyString(), anyString(), any(Instant.class),
+                    any(Instant.class), anyLong());
+        }
+
+        @Test
+        @DisplayName("a failed discovery is counted and tried again next tick, and the tick still serves traces")
+        void discoveryFailure() {
+            var project = drained(WORKSPACE_ID);
+            var kept = trace(project, NOW.minusSeconds(30));
+            when(dao.findBackfillProjects(anyString(), anyString(), any(Instant.class), any(Instant.class),
+                    anyLong())).thenReturn(Flux.error(new IllegalStateException("read failed")));
+
+            assertThat(service.tick(NOW).written()).isOne();
+
+            assertThat(embedded).containsExactly(kept.traceId());
+            verify(meter.counter("topics.vectors.read.failures")).add(1, workspace(WORKSPACE_ID)
+                    .put(stringKey("phase"), "discover")
+                    .put(stringKey("error_type"), "IllegalStateException").build());
+            clock.advance(Duration.ofMinutes(1));
+            service.tick(NOW.plusSeconds(60));
+            verify(dao, times(2)).findBackfillProjects(anyString(), anyString(), any(Instant.class),
+                    any(Instant.class), anyLong());
+        }
+
+        @Test
+        @DisplayName("a workspace with more projects in backfill than a read can leave out is not read as a whole: it "
+                + "is counted as not read every tick, and logged once")
+        void tooManyProjectsToLeaveOut() {
+            var drained = drained(WORKSPACE_ID);
+            trace(drained, NOW.minusSeconds(30));
+            IntStream.rangeClosed(0, TopicVectorsTickService.MAX_EXCLUDED_PROJECTS)
+                    .forEach(i -> undrained(WORKSPACE_ID, NOW.minusSeconds(i)));
+            // Time for a window read, not for an embed call: the backfill phase does not start, so none is drained.
+            clock.advance(Duration.ofSeconds(BUDGET_SECONDS - 5));
+            withTickLog(log -> {
+                var result = service.tick(NOW);
+
+                assertThat(result.written()).isZero();
+                assertThat(reads).isEmpty();
+                // Visible to an operator: counted as not read, and without a value in the oldest-unvectored gauge.
+                assertThat(meter.observeGauge()).isEmpty();
+                verify(meter.counter("topics.vectors.workspaces_not_read")).add(1, workspace(WORKSPACE_ID).build());
+                var warnings = log.list.stream()
+                        .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count();
+                assertThat(warnings).isOne();
+
+                // Still over: counted again, logged once.
+                clock.advance(Duration.ofMinutes(1));
+                service.tick(clock.instant().minusSeconds(BUDGET_SECONDS - 5));
+                verify(meter.counter("topics.vectors.workspaces_not_read"), times(2)).add(1,
+                        workspace(WORKSPACE_ID).build());
+                assertThat(log.list.stream()
+                        .filter(event -> event.getFormattedMessage().contains("workspace reads skipped")).count())
+                        .isOne();
+            });
+        }
+
+        @Test
+        @DisplayName("a large project alone takes turn after turn in one tick while the tick has time, not one cap")
+        void largeProjectUsesTheTick() {
+            config.getVectors().setMaxTracesPerTick(2);
+            var large = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            IntStream.range(0, 20).forEach(i -> trace(large, NOW.minusSeconds(7_200 + i)));
+            // 10 s per embed call and a 10 s embed timeout: the 50 s budget has time for 5 turns.
+            embedTime = EMBED_TIMEOUT;
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(10);
+            assertThat(result.projectsDrained()).isZero();
+            assertThat(rows.get(large.projectId()).tracesDone()).isEqualTo(10);
+            assertThat(reads).filteredOn(read -> read.projectId() != null).hasSize(5);
+            assertThat(clock.instant()).isEqualTo(NOW.plusSeconds(BUDGET_SECONDS));
+
+            // With time to spare, the same project is drained in one tick: 2 + 2 + 2 + 2 + 2 of 10, then an empty read.
+            embedTime = Duration.ZERO;
+            clock.advance(Duration.ofSeconds(10));
+            var next = service.tick(NOW.plusSeconds(60));
+            assertThat(next.written()).isEqualTo(10);
+            assertThat(next.projectsDrained()).isOne();
+            assertThat(unvectored).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a large project takes its workspace's turns; the other workspace still gets every second turn")
+        void largeProjectKeepsTheTurns() {
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID, OTHER_WORKSPACE));
+            config.getVectors().setMaxTracesPerTick(2);
+            var large = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            IntStream.range(0, 5).forEach(i -> trace(large, NOW.minusSeconds(7_200 + i)));
+            var b1 = undrained(OTHER_WORKSPACE, NOW.minusSeconds(10));
+            var b2 = undrained(OTHER_WORKSPACE, NOW.minusSeconds(20));
+
+            assertThat(service.tick(NOW).projectsDrained()).isEqualTo(3);
+
+            var order = reads.stream().map(Read::projectId).filter(java.util.Objects::nonNull).toList();
+            // 2 + 2 + 1 for the large project, in three turns; the visiting order decides who leads.
+            assertThat(order).isIn(
+                    List.of(large.projectId(), b1.projectId(), large.projectId(), b2.projectId(),
+                            large.projectId()),
+                    List.of(b1.projectId(), large.projectId(), b2.projectId(), large.projectId(),
+                            large.projectId()));
+        }
+
+        @Test
+        @DisplayName("the gauges publish, per workspace, the projects still in backfill after the tick and the age of "
+                + "the oldest of them")
+        void undrainedGauges() {
+            drained(WORKSPACE_ID);
+            var done = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            var stuck = undrained(WORKSPACE_ID, NOW.minusSeconds(20));
+            rows.put(stuck.projectId(), stuck.toBuilder().startedAt(NOW.minusSeconds(600)).build());
+            trace(stuck, NOW.minusSeconds(3_600));
+            failingProjects.add(stuck.projectId());
+
+            assertThat(service.tick(NOW).projectsDrained()).isOne();
+
+            assertThat(rows.get(done.projectId()).drainedAt()).isEqualTo(NOW);
+            assertThat(meter.observeGauge("topics.vectors.backfill.undrained_projects"))
+                    .isEqualTo(Map.of(WORKSPACE_ID, 1.0));
+            assertThat(meter.observeGauge("topics.vectors.backfill.oldest_started_seconds"))
+                    .isEqualTo(Map.of(WORKSPACE_ID, 600.0));
+
+            failingProjects.clear();
+            clock.advance(Duration.ofMinutes(1));
+            assertThat(service.tick(NOW.plusSeconds(60)).projectsDrained()).isOne();
+            assertThat(meter.observeGauge("topics.vectors.backfill.undrained_projects"))
+                    .isEqualTo(Map.of(WORKSPACE_ID, 0.0));
+            assertThat(meter.observeGauge("topics.vectors.backfill.oldest_started_seconds"))
+                    .isEqualTo(Map.of(WORKSPACE_ID, 0.0));
+            // Stale like the other gauge: not published by a pod that no longer ticks.
+            clock.advance(Duration.ofMinutes(2).plusMillis(1));
+            assertThat(meter.observeGauge("topics.vectors.backfill.undrained_projects")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the oldest-unvectored gauge counts only the drained projects' traces")
+        void oldestGaugeLeavesOutBackfill() {
+            var drained = drained(WORKSPACE_ID);
+            var backlog = undrained(WORKSPACE_ID, NOW.minusSeconds(10));
+            trace(drained, NOW.minusSeconds(30));
+            trace(backlog, NOW.minusSeconds(7_200));
+
+            service.tick(NOW);
+
+            assertThat(meter.observeGauge()).isEqualTo(Map.of(WORKSPACE_ID, 30.0));
+        }
+
+        private TopicVectorBackfill drained(String workspaceId) {
+            var row = TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(ID_GENERATOR.generateId())
+                    .startedAt(APPLIES_FROM).checkedAt(NOW.minusSeconds(60)).drainedAt(APPLIES_FROM)
+                    .lastDoneAt(NOW.minusSeconds(60)).build();
+            rows.put(row.projectId(), row);
+            return row;
+        }
+
+        private TopicVectorBackfill undrained(String workspaceId, Instant lastDoneAt) {
+            var row = TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(ID_GENERATOR.generateId())
+                    .startedAt(NOW.minusSeconds(60)).checkedAt(NOW.minusSeconds(60)).lastDoneAt(lastDoneAt).build();
+            rows.put(row.projectId(), row);
+            return row;
+        }
+
+        /** A done trace of {@code project} without a vector, created a minute before its status. */
+        private TopicVectorCandidate trace(TopicVectorBackfill project, Instant statusUpdatedAt) {
+            return trace(project.workspaceId(), project.projectId(), statusUpdatedAt.minusSeconds(60),
+                    statusUpdatedAt);
+        }
+
+        private TopicVectorCandidate trace(String workspaceId, UUID projectId, Instant createdAt,
+                Instant statusUpdatedAt) {
+            var trace = TopicVectorCandidate.builder().workspaceId(workspaceId).projectId(projectId)
+                    .traceId(ID_GENERATOR.generateId()).traceCreatedAt(createdAt).taskVersion(1)
+                    .statusUpdatedAt(statusUpdatedAt).build();
+            unvectored.add(trace);
+            return trace;
+        }
+    }
+
+    /**
+     * Several embed calls in flight. The calls run on other threads, so these tests hold a call with a latch or a
+     * barrier until the calls they need have started; none depends on timing. One trace per chunk, so a chunk is a
+     * call.
+     */
+    @Nested
+    @DisplayName("embed concurrency")
+    class EmbedConcurrency {
+
+        private static final long WAIT_SECONDS = 10;
+
+        private TopicsConfig config;
+        private TopicVectorsDAO dao;
+        private InferenceClient client;
+        private TopicsTestClock clock;
+        private TopicVectorsTickService service;
+        private final List<TopicVectorCandidate> candidates = new ArrayList<>();
+        private final List<UUID> inserted = Collections.synchronizedList(new ArrayList<>());
+        private final java.util.concurrent.atomic.AtomicInteger inFlight = new java.util.concurrent.atomic.AtomicInteger();
+        private final java.util.concurrent.atomic.AtomicInteger mostInFlight = new java.util.concurrent.atomic.AtomicInteger();
+        private final List<String> called = Collections.synchronizedList(new ArrayList<>());
+
+        @BeforeEach
+        void setUp() {
+            config = TestConfigUtils.loadConfigTest().getTopics();
+            config.getVectors().setEmbedBatchSize(1);
+            dao = mock(TopicVectorsDAO.class);
+            stubNoDiscovery(dao);
+            client = mock(InferenceClient.class);
+            var lockService = mock(LockService.class);
+            var workspaces = mock(TopicWorkspaceService.class);
+            var registry = mock(AiLabelTaskRegistry.class);
+            clock = new TopicsTestClock(NOW);
+            service = new TopicVectorsTickService(config, new AiLabelsConfig(), workspaces, dao, allDrained(), client,
+                    lockService, registry, names(), new TestMeter().meter, clock);
+            when(workspaces.eligibleWorkspaceIds()).thenReturn(List.of(WORKSPACE_ID));
+            when(registry.find(TopicVectorsTickService.TASK)).thenReturn(java.util.Optional.of(task()));
+            when(lockService.lockUsingToken(eq(TopicVectorsTickService.LONG_WINDOW_LOCK), any(Duration.class)))
+                    .thenReturn(Mono.just(false));
+            // The reads take any bounds and keys: these tests are about the calls between them.
+            when(dao.findUnvectored(argThat(find -> find.task().equals(TopicVectorsTickService.TASK))))
+                    .thenAnswer(invocation -> Flux.fromIterable(candidates));
+            when(dao.findSummaries(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                    .thenAnswer(invocation -> Flux.fromIterable(candidates)
+                            .map(candidate -> summary(candidate, 1, text(candidates.indexOf(candidate)))));
+            when(dao.insert(anyList())).thenAnswer(invocation -> {
+                List<TopicVector> vectors = invocation.getArgument(0);
+                vectors.forEach(vector -> inserted.add(vector.traceId()));
+                return Mono.just((long) vectors.size());
+            });
+            stubNoDeletedTrace(dao);
+        }
+
+        @Test
+        @DisplayName("with embedConcurrency 3, three calls are in flight together and never a fourth")
+        void neverMoreThanTheSetting() {
+            config.getVectors().setEmbedConcurrency(3);
+            traces(9);
+            // Each call waits for two others: it only returns if three really are in flight at once.
+            var together = new java.util.concurrent.CyclicBarrier(3);
+            onEmbed(index -> {
+                together.await(WAIT_SECONDS, TimeUnit.SECONDS);
+                return embedded(List.of(text(index)));
+            });
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(9);
+            assertThat(mostInFlight.get()).isEqualTo(3);
+            assertThat(inserted).containsExactlyElementsOf(traceIds());
+        }
+
+        @Test
+        @DisplayName("vectors are inserted in chunk order when a later chunk's call answers first")
+        void insertsInChunkOrder() {
+            config.getVectors().setEmbedConcurrency(2);
+            traces(4);
+            var secondAnswered = new java.util.concurrent.CountDownLatch(1);
+            onEmbed(index -> {
+                if (index == 0) {
+                    // The first chunk's call answers only after the second chunk's has.
+                    assertThat(secondAnswered.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+                }
+                if (index == 1) {
+                    secondAnswered.countDown();
+                }
+                return embedded(List.of(text(index)));
+            });
+
+            assertThat(service.tick(NOW).written()).isEqualTo(4);
+
+            assertThat(inserted).containsExactlyElementsOf(traceIds());
+        }
+
+        @Test
+        @DisplayName("after a back-off the calls in flight end and their vectors are inserted, and no new call starts")
+        void backOffLetsCallsInFlightEnd() {
+            config.getVectors().setEmbedConcurrency(2);
+            traces(5);
+            var secondStarted = new java.util.concurrent.CountDownLatch(1);
+            var firstFailed = new java.util.concurrent.CountDownLatch(1);
+            onEmbed(index -> {
+                if (index == 0) {
+                    // Fails while the second chunk's call is in flight.
+                    assertThat(secondStarted.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+                    firstFailed.countDown();
+                    throw inferenceException(503, "something_new", false);
+                }
+                secondStarted.countDown();
+                assertThat(firstFailed.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+                return embedded(List.of(text(index)));
+            });
+
+            var result = service.tick(NOW);
+
+            assertThat(called).containsExactlyInAnyOrder(text(0), text(1));
+            assertThat(inserted).containsExactly(candidates.get(1).traceId());
+            assertThat(result.written()).isOne();
+            // The failed chunk and the three never called.
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 4));
+        }
+
+        @Test
+        @DisplayName("a rejected chunk is halved in its own turn: its halves are called one after the other, so the "
+                + "calls in flight stay within the setting")
+        void halvingStaysInItsTurn() {
+            config.getVectors().setEmbedConcurrency(2);
+            config.getVectors().setEmbedBatchSize(4);
+            traces(16);
+            var bad = text(5);
+            // A call with the bad input is refused; any other answers after a moment, so calls overlap.
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                return Mono.fromCallable(() -> {
+                    int now = inFlight.incrementAndGet();
+                    mostInFlight.accumulateAndGet(now, Math::max);
+                    try {
+                        Thread.sleep(5);
+                        if (request.inputs().contains(bad)) {
+                            throw inferenceException(400, "invalid_request", false);
+                        }
+                        return embedded(request.inputs());
+                    } finally {
+                        inFlight.decrementAndGet();
+                    }
+                });
+            });
+
+            var result = service.tick(NOW);
+
+            assertThat(result.written()).isEqualTo(15);
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.EMBED_FAILED, 1));
+            assertThat(mostInFlight.get()).isLessThanOrEqualTo(2);
+            var expected = new ArrayList<>(traceIds());
+            expected.remove(5);
+            assertThat(inserted).containsExactlyElementsOf(expected);
+        }
+
+        @Test
+        @DisplayName("no call starts with less than the embed timeout left, and each call that starts gets all of it")
+        void noCallNearTheBudgetEnd() {
+            config.getVectors().setEmbedConcurrency(2);
+            traces(4);
+            // 15 s of the budget are left: two calls start together, each takes 10 s, none starts after them.
+            clock.advance(Duration.ofSeconds(BUDGET_SECONDS - 15));
+            var callStart = clock.instant();
+            var deadlines = Collections.synchronizedList(new ArrayList<Instant>());
+            var bothStarted = new java.util.concurrent.CyclicBarrier(2);
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                deadlines.add(invocation.getArgument(1));
+                return Mono.fromCallable(() -> {
+                    bothStarted.await(WAIT_SECONDS, TimeUnit.SECONDS);
+                    // One at a time: the test clock's advance is a read and a write.
+                    synchronized (clock) {
+                        clock.advance(EMBED_TIMEOUT);
+                    }
+                    return embedded(request.inputs());
+                });
+            });
+
+            var result = service.tick(NOW);
+
+            assertThat(deadlines).containsExactly(callStart.plus(EMBED_TIMEOUT), callStart.plus(EMBED_TIMEOUT));
+            assertThat(result.written()).isEqualTo(2);
+            assertThat(result.skipped()).isEqualTo(Map.of(TopicVectorsTickService.OVER_BUDGET, 2));
+        }
+
+        @Test
+        @DisplayName("an interrupt of the tick cancels the calls in flight and stops the tick")
+        void interruptCancelsCallsInFlight() throws InterruptedException {
+            config.getVectors().setEmbedConcurrency(2);
+            traces(4);
+            var started = new java.util.concurrent.CountDownLatch(2);
+            var cancelled = new java.util.concurrent.CountDownLatch(2);
+            // A call that never answers, whichever chunk it is.
+            when(client.embed(any(EmbedRequest.class), any(Instant.class)))
+                    .thenAnswer(invocation -> Mono.never().doOnSubscribe(subscription -> started.countDown())
+                            .doOnCancel(cancelled::countDown));
+            var failure = new AtomicReference<Throwable>();
+            var tick = new Thread(() -> {
+                try {
+                    service.tick(NOW);
+                } catch (RuntimeException exception) {
+                    failure.set(exception);
+                }
+            });
+            tick.start();
+            assertThat(started.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+
+            tick.interrupt();
+
+            tick.join(TimeUnit.SECONDS.toMillis(WAIT_SECONDS));
+            assertThat(tick.isAlive()).isFalse();
+            assertThat(failure.get()).isNotNull();
+            assertThat(cancelled.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+            assertThat(inserted).isEmpty();
+        }
+
+        /** What a call answers, by the index of its chunk's trace; may wait, and may throw the call's failure. */
+        private interface Answer {
+            EmbedResponse of(int index) throws Exception;
+        }
+
+        /** Every call, whichever its request and deadline, is counted while in flight and answered by {@code answer}. */
+        private void onEmbed(Answer answer) {
+            when(client.embed(any(EmbedRequest.class), any(Instant.class))).thenAnswer(invocation -> {
+                EmbedRequest request = invocation.getArgument(0);
+                var input = request.inputs().getFirst();
+                return Mono.fromCallable(() -> {
+                    called.add(input);
+                    int now = inFlight.incrementAndGet();
+                    mostInFlight.accumulateAndGet(now, Math::max);
+                    try {
+                        return answer.of(Integer.parseInt(input.substring("intent ".length())));
+                    } finally {
+                        inFlight.decrementAndGet();
+                    }
+                });
+            });
+        }
+
+        private void traces(int count) {
+            IntStream.range(0, count)
+                    .forEach(i -> candidates.add(candidate(ID_GENERATOR.generateId(), 1, NOW.minusSeconds(600 - i))));
+        }
+
+        private List<UUID> traceIds() {
+            return candidates.stream().map(TopicVectorCandidate::traceId).toList();
+        }
+
+        private static String text(int index) {
+            return "intent " + index;
+        }
+    }
+
+    /** A backfill table in which every project asked for has a drained row: the workspace reads serve them all. */
+    static TopicVectorBackfillService allDrained() {
+        var backfills = mock(TopicVectorBackfillService.class);
+        when(backfills.findByKeys(anyString(), anyCollection())).thenAnswer(invocation -> {
+            String workspaceId = invocation.getArgument(0);
+            Collection<UUID> projectIds = invocation.getArgument(1);
+            return projectIds.stream().collect(java.util.stream.Collectors.toMap(Function.identity(),
+                    projectId -> TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(projectId)
+                            .startedAt(APPLIES_FROM).checkedAt(NOW).drainedAt(APPLIES_FROM).lastDoneAt(NOW).build()));
+        });
+        return backfills;
+    }
+
+    /** The discovery finds no project, whatever the workspace and the window. */
+    static void stubNoDiscovery(TopicVectorsDAO dao) {
+        when(dao.findBackfillProjects(anyString(), anyString(), any(Instant.class), any(Instant.class), anyLong()))
+                .thenReturn(Flux.empty());
+        when(dao.countTracesWithVectorsByProject(anyString(), any(Instant.class), anyLong()))
+                .thenReturn(Mono.just(Map.of()));
+    }
+
+    /** The deleted-trace check finds every key it is asked for: no trace is deleted while it is embedded. */
+    private static void stubNoDeletedTrace(TopicVectorsDAO dao) {
+        when(dao.findStatusKeys(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                .thenAnswer(invocation -> {
+                    Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                    return Flux.fromIterable(keys);
+                });
+    }
+
+    /** Every summary read answers each key with "intent of" its trace id, whatever the workspace. */
+    private static void stubSummaryOfEachKey(TopicVectorsDAO dao) {
+        when(dao.findSummaries(anyString(), eq(TopicVectorsTickService.TASK), anyCollection(), anyLong()))
+                .thenAnswer(invocation -> {
+                    Collection<TopicTraceKey> keys = invocation.getArgument(2);
+                    return Flux.fromIterable(keys).map(key -> TopicSummary.builder().projectId(key.projectId())
+                            .traceId(key.traceId()).taskVersion(1).summary("intent of " + key.traceId()).build());
+                });
     }
 
     /** Runs {@code body} with a list appender on the tick's logger, and detaches it even if {@code body} fails. */
