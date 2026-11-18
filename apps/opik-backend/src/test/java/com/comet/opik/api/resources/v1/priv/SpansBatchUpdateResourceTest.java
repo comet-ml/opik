@@ -20,6 +20,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -413,6 +414,154 @@ class SpansBatchUpdateResourceTest {
             assertThat(span.errorInfo().exceptionType()).isEqualTo("ValidationError");
             assertThat(span.errorInfo().message()).isEqualTo("Invalid input");
             assertThat(span.ttft()).isEqualTo(123.45);
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch Update Cost:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BatchUpdateCost {
+
+        private static final String MODEL = "gpt-4o-2024-05-13";
+        private static final String PROVIDER = "openai";
+        private static final String UNPRICED_MODEL = "not-a-priced-model";
+        private static final Map<String, Integer> USAGE = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+        private static final Map<String, Integer> NEW_USAGE = Map.of("prompt_tokens", 4000, "completion_tokens",
+                2000);
+        private static final String ESTIMATED_COST_VERSION = "1.1";
+
+        private UUID traceId;
+
+        @BeforeEach
+        void setUp() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+            traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+        }
+
+        private UUID createSpan(String model, String provider, Map<String, Integer> usage, BigDecimal manualCost) {
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .parentSpanId(null)
+                    .metadata(null)
+                    .model(model)
+                    .provider(provider)
+                    .usage(usage)
+                    .totalEstimatedCost(manualCost)
+                    .totalEstimatedCostVersion(null)
+                    .build();
+            return spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+        }
+
+        private void batchUpdate(Set<UUID> ids, SpanUpdate update) {
+            spanResourceClient.batchUpdateSpans(SpanBatchUpdate.builder()
+                    .ids(ids)
+                    .update(update.toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .traceId(traceId)
+                            .build())
+                    .mergeTags(false)
+                    .build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        private static BigDecimal expectedCost(String model, String provider, Map<String, Integer> usage) {
+            var cost = CostService.calculateCost(model, provider, usage, null);
+            assertThat(cost).as("fixture must be priceable").isGreaterThan(BigDecimal.ZERO);
+            return cost;
+        }
+
+        Stream<Arguments> recalculateCostTestCases() {
+            return Stream.of(
+                    Arguments.of("an unpriced span gets model, provider and usage",
+                            null, null, null,
+                            SpanUpdate.builder().model(MODEL).provider(PROVIDER).usage(USAGE).build(),
+                            MODEL, PROVIDER, USAGE),
+                    Arguments.of("an unpriced model is corrected with the model only",
+                            UNPRICED_MODEL, PROVIDER, USAGE,
+                            SpanUpdate.builder().model(MODEL).build(),
+                            MODEL, PROVIDER, USAGE),
+                    Arguments.of("an auto-priced span gets new usage only",
+                            MODEL, PROVIDER, USAGE,
+                            SpanUpdate.builder().usage(NEW_USAGE).build(),
+                            MODEL, PROVIDER, NEW_USAGE));
+        }
+
+        @ParameterizedTest(name = "Success: batch update recalculates the estimated cost when {0}")
+        @MethodSource("recalculateCostTestCases")
+        void batchUpdate__whenPricingFieldsChange__thenRecalculateCost(String scenario, String storedModel,
+                String storedProvider, Map<String, Integer> storedUsage, SpanUpdate update, String expectedModel,
+                String expectedProvider, Map<String, Integer> expectedUsage) {
+            var id = createSpan(storedModel, storedProvider, storedUsage, null);
+            var costBefore = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY).totalEstimatedCost();
+            var expectedCost = expectedCost(expectedModel, expectedProvider, expectedUsage);
+            assertThat(costBefore).as("the update must change the cost").isNotEqualTo(expectedCost);
+
+            batchUpdate(Set.of(id), update);
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.model()).isEqualTo(expectedModel);
+            assertThat(actual.provider()).isEqualTo(expectedProvider);
+            assertThat(actual.usage()).isEqualTo(expectedUsage);
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(expectedCost);
+            assertThat(actual.totalEstimatedCostVersion()).isEqualTo(ESTIMATED_COST_VERSION);
+        }
+
+        @Test
+        @DisplayName("Success: one batch keeps a manual cost on one span and prices the other span")
+        void batchUpdate__whenBatchMixesManualAndUnpricedSpans__thenKeepManualCostPerSpan() {
+            var manualCost = new BigDecimal("0.42");
+            var manualId = createSpan(null, null, null, manualCost);
+            var unpricedId = createSpan(null, null, null, null);
+
+            batchUpdate(Set.of(manualId, unpricedId),
+                    SpanUpdate.builder().model(MODEL).provider(PROVIDER).usage(USAGE).build());
+
+            var manual = spanResourceClient.getById(manualId, TEST_WORKSPACE, API_KEY);
+            assertThat(manual.model()).isEqualTo(MODEL);
+            assertThat(manual.totalEstimatedCost()).isEqualByComparingTo(manualCost);
+            assertThat(manual.totalEstimatedCostVersion()).isNull();
+
+            var priced = spanResourceClient.getById(unpricedId, TEST_WORKSPACE, API_KEY);
+            assertThat(priced.model()).isEqualTo(MODEL);
+            assertThat(priced.totalEstimatedCost()).isEqualByComparingTo(expectedCost(MODEL, PROVIDER, USAGE));
+            assertThat(priced.totalEstimatedCostVersion()).isEqualTo(ESTIMATED_COST_VERSION);
+        }
+
+        @Test
+        @DisplayName("Success: an explicit cost in the batch update wins over the recalculated one")
+        void batchUpdate__whenUpdateHasExplicitCost__thenStoreItAsManualCost() {
+            var explicitCost = new BigDecimal("0.5");
+            var id = createSpan(MODEL, PROVIDER, USAGE, null);
+
+            batchUpdate(Set.of(id), SpanUpdate.builder()
+                    .model(MODEL)
+                    .provider(PROVIDER)
+                    .usage(NEW_USAGE)
+                    .totalEstimatedCost(explicitCost)
+                    .build());
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.usage()).isEqualTo(NEW_USAGE);
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(explicitCost);
+            assertThat(actual.totalEstimatedCostVersion()).isNull();
+        }
+
+        @Test
+        @DisplayName("Success: a batch update that changes no pricing fields keeps the stored cost and version")
+        void batchUpdate__whenUpdateHasNoPricingFields__thenKeepStoredCost() {
+            var id = createSpan(MODEL, PROVIDER, USAGE, null);
+            var stored = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(stored.totalEstimatedCost()).isNotNull();
+
+            batchUpdate(Set.of(id), SpanUpdate.builder().name("renamed").build());
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.name()).isEqualTo("renamed");
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo(stored.totalEstimatedCost());
+            assertThat(actual.totalEstimatedCostVersion()).isEqualTo(stored.totalEstimatedCostVersion());
         }
     }
 }
