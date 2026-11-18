@@ -176,7 +176,14 @@ test.describe(
               async () =>
                 (await backendClient.listDatasetItemsWithData(datasetColumnMapping.datasetId))
                   .length,
-              { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+              {
+                message:
+                  'the dataset to hold the seeded record plus the one this add created — a ' +
+                  'timeout here is the item write still becoming queryable, not the mapping ' +
+                  'having written the wrong thing',
+                timeout: 60_000,
+                intervals: [500, 1_000, 2_000],
+              },
             )
             .toBe(2);
 
