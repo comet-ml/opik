@@ -40,10 +40,9 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
  * </ul>
  * Holding the leader lock until expiry instead would stretch the interval to the lease, which is longer than the
  * interval; a lease of one interval would let a long tick overlap the next. The tick itself is
- * {@link TopicVectorsTickService#tick(Instant)}.
- *
- * <p>A pod shutdown interrupts the job before it stops the scheduler. The interrupt cancels every in-flight tick of
- * this pod, which releases the leader lock, and no tick starts after it.
+ * {@link TopicVectorsTickService#tick(Instant)}. A pod shutdown interrupts the job (the lifecycle listener does it
+ * before it stops the scheduler): it cancels every tick in flight, which frees the leader lock at once, and the job
+ * starts no new tick.
  *
  * <p>Across the cluster, {@code topics.vectors.ticks} counts about one {@value #RAN} per interval.
  */
@@ -63,8 +62,7 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
     static final String FAILED = "failed";
     static final List<String> OUTCOMES = List.of(RAN, NOT_DUE, LOCK_HELD, FAILED);
 
-    // The ticks of this pod that have not ended yet. doJob() returns before its tick ends, so a later fire can start
-    // while a long tick still runs: the interrupt must reach each of them.
+    // Every tick in flight, not only the last one: a tick can outlast the interval, and the next fire must not detach it.
     private final Disposable.Composite inFlight = Disposables.composite();
     private final TopicsConfig config;
     private final TopicVectorsTickService tickService;
@@ -96,10 +94,13 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
 
     @Override
     public void doJob(JobExecutionContext context) {
-        // The tick's slot in inFlight, filled once subscribed. After an interrupt inFlight refuses the slot, so no tick
-        // starts. An interrupt that lands later disposes the slot, which disposes the subscription it gets.
+        if (!config.isEnabled() || inFlight.isDisposed()) {
+            return;
+        }
+        // The tick is added before it is subscribed: an interrupt that comes first disposes it, and the update below
+        // then cancels the subscription.
         var tick = Disposables.swap();
-        if (!config.isEnabled() || !inFlight.add(tick)) {
+        if (!inFlight.add(tick)) {
             return;
         }
         var start = Instant.now();
@@ -112,7 +113,7 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
                 }),
                 tickService.leaderLease(),
                 Duration.ZERO)
-                .doFinally(__ -> inFlight.remove(tick))
+                .doFinally(signal -> inFlight.remove(tick))
                 .subscribe(
                         __ -> {
                         },
@@ -156,6 +157,6 @@ public class TopicVectorsJob extends Job implements InterruptableJob {
     @Override
     public void interrupt() throws UnableToInterruptJobException {
         inFlight.dispose();
-        log.info("TopicVectorsJob interrupted, cancelled the in-flight ticks");
+        log.info("TopicVectorsJob interrupted, cancelling any in-flight tick");
     }
 }
