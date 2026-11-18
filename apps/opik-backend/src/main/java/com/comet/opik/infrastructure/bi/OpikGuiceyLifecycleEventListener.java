@@ -36,6 +36,7 @@ import io.dropwizard.jobs.GuiceJobManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.CronScheduleBuilder;
+import org.quartz.InterruptableJob;
 import org.quartz.JobBuilder;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
@@ -431,13 +432,21 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
      * scheduled is skipped, so shutdown never creates it.
      */
     private void interruptTopicsJobs() {
+        var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
+        if (topicsConfig.isEnabled()) {
+            interruptJob(TopicVectorsJob.class);
+        }
+        if (topicsConfig.isEnabled() && topicsConfig.getFirstBuild().isEnabled()) {
+            interruptJob(TopicsFirstBuildJob.class);
+        }
+    }
+
+    /** One guarded interrupt per job, so a failure in one job does not skip the next. */
+    private void interruptJob(Class<? extends InterruptableJob> jobClass) {
         try {
-            var topicsConfig = injector.get().getInstance(OpikConfiguration.class).getTopics();
-            if (topicsConfig.isEnabled()) {
-                injector.get().getInstance(TopicVectorsJob.class).interrupt();
-            }
+            injector.get().getInstance(jobClass).interrupt();
         } catch (RuntimeException | UnableToInterruptJobException exception) {
-            log.warn("Error interrupting the topics jobs during scheduler shutdown", exception);
+            log.warn("Error interrupting '{}' during scheduler shutdown", jobClass.getSimpleName(), exception);
         }
     }
 
