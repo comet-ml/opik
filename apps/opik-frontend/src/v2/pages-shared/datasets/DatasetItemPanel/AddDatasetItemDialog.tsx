@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { EditorView } from "@codemirror/view";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror from "@/shared/CodeMirrorEditor/CodeMirrorEditor";
 import { jsonLanguage } from "@codemirror/lang-json";
 
 import { Button } from "@/ui/button";

@@ -2,7 +2,7 @@ import { DependencyList, useRef } from "react";
 import isEqual from "fast-deep-equal";
 
 export default function useDeepMemo<T>(factory: () => T, deps: DependencyList) {
-  const ref = useRef<{ deps: DependencyList; value: T }>();
+  const ref = useRef<{ deps: DependencyList; value: T } | undefined>(undefined);
 
   if (!ref.current || !isEqual(deps, ref.current.deps)) {
     const value = factory();

@@ -6,7 +6,6 @@ import api, {
   TRACES_REST_ENDPOINT,
   PROJECTS_REST_ENDPOINT,
   OPTIMIZATIONS_KEY,
-  AGENT_CONFIGS_KEY,
 } from "@/api/api";
 import { ProjectStats } from "@/types/assistant-sidebar";
 import { generateVisibilityFilters, processFilters } from "@/lib/filters";
@@ -77,13 +76,6 @@ export default function useProjectOnboardingStats(
       enabled,
     );
 
-  const { data: blueprintTotal, isFetched: blueprintsFetched } =
-    useOnboardingCountQuery(
-      AGENT_CONFIGS_KEY,
-      `/v1/private/agent-configs/blueprints/history/projects/${projectId}`,
-      enabled,
-    );
-
   // Memoize so consumers (e.g. the bridge context) get a stable reference
   // across refetches when values haven't changed. Without this, every 30s
   // refetch re-renders the hook, returns a new object, and cascades into a
@@ -93,9 +85,8 @@ export default function useProjectOnboardingStats(
       traceCount: traceTotal ?? 0,
       experimentCount: experimentTotal ?? 0,
       optimizationCount: optimizationTotal ?? 0,
-      blueprintVersionCount: blueprintTotal ?? 0,
     }),
-    [traceTotal, experimentTotal, optimizationTotal, blueprintTotal],
+    [traceTotal, experimentTotal, optimizationTotal],
   );
 
   if (!enabled) return undefined;
@@ -104,12 +95,7 @@ export default function useProjectOnboardingStats(
   // Using `isFetched` instead of `isLoading` avoids a flicker back to
   // `undefined` on each refetch when a query has errored (no cached data),
   // which would otherwise happen every 30s and cause the Ollie iframe to blink.
-  if (
-    !tracesFetched ||
-    !experimentsFetched ||
-    !optimizationsFetched ||
-    !blueprintsFetched
-  ) {
+  if (!tracesFetched || !experimentsFetched || !optimizationsFetched) {
     return undefined;
   }
 

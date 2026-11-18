@@ -278,6 +278,9 @@ export const extractIdFromLocation = (location: string) =>
 export const formatNumericData = (value: number, precision = 2) =>
   String(round(value, precision));
 
+export const formatCount = (count: number, unit?: string) =>
+  unit ? `${count} ${unit}${count === 1 ? "" : "s"}` : String(count);
+
 export const padDecimalsString = (
   raw: string,
   decimals: number,

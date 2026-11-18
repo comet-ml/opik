@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MockInstance } from "vitest";
 import {
   searchTracesWithFilters,
   searchSpansWithFilters,
@@ -9,17 +8,17 @@ import {
 } from "@/utils/searchHelpers";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import * as OpikApi from "@/rest_api/api";
-import * as streamUtils from "@/utils/stream";
+import { serialization } from "@/rest_api";
+import { createMockStream } from "../../mockUtils";
 import { createMockTraces, createMockSpans } from "./searchHelpersMocks";
 
-// Mock the stream parsing module
-vi.mock("@/utils/stream", async () => {
-  const actual = await vi.importActual<typeof streamUtils>("@/utils/stream");
-  return {
-    ...actual,
-    parseNdjsonStreamToArray: vi.fn(),
-  };
-});
+const toNdjsonStream = <T>(
+  items: T[],
+  schema: { jsonOrThrow: (value: T) => unknown }
+) =>
+  createMockStream(
+    items.map((item) => JSON.stringify(schema.jsonOrThrow(item))).join("\n")
+  );
 
 describe("searchHelpers", () => {
   describe("parseFilterString", () => {
@@ -212,7 +211,6 @@ describe("searchHelpers", () => {
 
   describe("searchTracesWithFilters", () => {
     let mockApiClient: OpikApiClientTemp;
-    let parseNdjsonSpy: MockInstance;
 
     beforeEach(() => {
       mockApiClient = {
@@ -220,21 +218,11 @@ describe("searchHelpers", () => {
           searchTraces: vi.fn(),
         },
       } as unknown as OpikApiClientTemp;
-
-      parseNdjsonSpy = vi
-        .spyOn(streamUtils, "parseNdjsonStreamToArray")
-        .mockResolvedValue([]);
-    });
-
-    afterEach(() => {
-      parseNdjsonSpy.mockRestore();
     });
 
     it("should call API with correct parameters and return parsed traces", async () => {
       const mockTraces = createMockTraces(2);
-      parseNdjsonSpy.mockResolvedValue(mockTraces);
-
-      const mockStream = {} as AsyncIterable<Uint8Array>;
+      const mockStream = toNdjsonStream(mockTraces, serialization.TracePublic);
       vi.spyOn(mockApiClient.traces, "searchTraces").mockResolvedValue(
         mockStream as never
       );
@@ -261,7 +249,7 @@ describe("searchHelpers", () => {
     });
 
     it("should handle null filters and pass as undefined to API", async () => {
-      const mockStream = {} as AsyncIterable<Uint8Array>;
+      const mockStream = createMockStream("");
       vi.spyOn(mockApiClient.traces, "searchTraces").mockResolvedValue(
         mockStream as never
       );
@@ -282,7 +270,7 @@ describe("searchHelpers", () => {
     });
 
     it("should handle complex filters with metadata and feedback keys", async () => {
-      const mockStream = {} as AsyncIterable<Uint8Array>;
+      const mockStream = createMockStream("");
       vi.spyOn(mockApiClient.traces, "searchTraces").mockResolvedValue(
         mockStream as never
       );
@@ -403,7 +391,6 @@ describe("searchHelpers", () => {
 
   describe("searchSpansWithFilters", () => {
     let mockApiClient: OpikApiClientTemp;
-    let parseNdjsonSpy: MockInstance;
 
     beforeEach(() => {
       mockApiClient = {
@@ -411,21 +398,11 @@ describe("searchHelpers", () => {
           searchSpans: vi.fn(),
         },
       } as unknown as OpikApiClientTemp;
-
-      parseNdjsonSpy = vi
-        .spyOn(streamUtils, "parseNdjsonStreamToArray")
-        .mockResolvedValue([]);
-    });
-
-    afterEach(() => {
-      parseNdjsonSpy.mockRestore();
     });
 
     it("should call API with correct parameters and return parsed spans", async () => {
       const mockSpans = createMockSpans(2);
-      parseNdjsonSpy.mockResolvedValue(mockSpans);
-
-      const mockStream = {} as AsyncIterable<Uint8Array>;
+      const mockStream = toNdjsonStream(mockSpans, serialization.SpanPublic);
       vi.spyOn(mockApiClient.spans, "searchSpans").mockResolvedValue(
         mockStream as never
       );
@@ -452,7 +429,7 @@ describe("searchHelpers", () => {
     });
 
     it("should handle null filters and pass as undefined to API", async () => {
-      const mockStream = {} as AsyncIterable<Uint8Array>;
+      const mockStream = createMockStream("");
       vi.spyOn(mockApiClient.spans, "searchSpans").mockResolvedValue(
         mockStream as never
       );
@@ -473,7 +450,7 @@ describe("searchHelpers", () => {
     });
 
     it("should handle complex filters with metadata and feedback keys", async () => {
-      const mockStream = {} as AsyncIterable<Uint8Array>;
+      const mockStream = createMockStream("");
       vi.spyOn(mockApiClient.spans, "searchSpans").mockResolvedValue(
         mockStream as never
       );

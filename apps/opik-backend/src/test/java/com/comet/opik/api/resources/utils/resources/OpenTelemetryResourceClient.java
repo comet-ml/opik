@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.rpc.Status;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -15,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class OpenTelemetryResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/otel/v1/traces";
+    private static final String PROTOBUF = "application/x-protobuf";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -24,6 +27,32 @@ public class OpenTelemetryResourceClient {
             String apiKey, int expectedStatus) {
         try (var response = post(payload, mediaType, projectName, workspaceName, apiKey)) {
             assertStatus(response, expectedStatus);
+        }
+    }
+
+    /**
+     * Exports a protobuf batch and asserts the status and, when given, the whole {@code google.rpc.Status} error the
+     * endpoint answers a protobuf request with.
+     */
+    public void exportProtobufTraces(Entity<?> payload, String projectName, String workspaceName, String apiKey,
+            int expectedStatus, Status expectedError) {
+        try (var response = post(payload, PROTOBUF, projectName, workspaceName, apiKey)) {
+            if (expectedError == null) {
+                assertStatus(response, expectedStatus);
+                return;
+            }
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            assertThat(response.getMediaType().toString()).isEqualTo(PROTOBUF);
+            assertThat(parseStatus(response)).isEqualTo(expectedError);
+        }
+    }
+
+    /** Reads a {@code google.rpc.Status} error body. */
+    public static Status parseStatus(Response response) {
+        try {
+            return Status.parseFrom(response.readEntity(byte[].class));
+        } catch (InvalidProtocolBufferException exception) {
+            throw new IllegalStateException(exception);
         }
     }
 

@@ -13,6 +13,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     spanLlmAsJudgeEnabled: core.serialization.boolean(),
     spanUserDefinedMetricPythonEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
+    guardrailsValidationsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
@@ -33,7 +34,6 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     agentInsightsEnabled: core.serialization.boolean(),
     agentInsightsGuidanceEnabled: core.serialization.boolean(),
     projectHomepageEnabled: core.serialization.boolean(),
-    onlineScoringTracingEnabled: core.serialization.boolean(),
     annotationQueueAutomationEnabled: core.serialization.boolean(),
     eventBridgeAlertsEnabled: core.serialization.boolean(),
     defaultPageSize: core.serialization.number().optional(),
@@ -47,6 +47,7 @@ export declare namespace ServiceTogglesConfig {
         spanLlmAsJudgeEnabled: boolean;
         spanUserDefinedMetricPythonEnabled: boolean;
         guardrailsEnabled: boolean;
+        guardrailsValidationsEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
@@ -67,7 +68,6 @@ export declare namespace ServiceTogglesConfig {
         agentInsightsEnabled: boolean;
         agentInsightsGuidanceEnabled: boolean;
         projectHomepageEnabled: boolean;
-        onlineScoringTracingEnabled: boolean;
         annotationQueueAutomationEnabled: boolean;
         eventBridgeAlertsEnabled: boolean;
         defaultPageSize?: number | null;

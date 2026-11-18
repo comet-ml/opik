@@ -8,7 +8,7 @@ import type { DotPosition } from "./ScatterDot";
 
 type UseBestTrialCardParams = {
   dotPositionsRef: React.MutableRefObject<Map<string, DotPosition>>;
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   bestCandidateId?: string;
   hoveredCandidateId?: string;
   candidateMap: Map<string, AggregatedCandidate>;

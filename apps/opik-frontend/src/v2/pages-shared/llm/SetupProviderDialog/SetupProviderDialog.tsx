@@ -142,7 +142,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
             { isEditing: false, hadAuthConfig: false },
           ) as ProviderAuthConfig;
         }
-        providerKeyData.base_url = data.url;
+        providerKeyData.base_url = data.url.trim();
         providerKeyData.provider_name = data.providerName;
         providerKeyData.configuration = {
           models: convertCustomProviderModels(

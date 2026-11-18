@@ -63,7 +63,7 @@ export default function useKpiComparison({
     // A failed or settling comparison shows none, rather than the change on rows from another moment.
     previousRows:
       window && !error && !isFetching && !value.isFetching
-        ? data ?? null
+        ? (data ?? null)
         : null,
     comparedWith: window ? `previous ${window.label}` : undefined,
     // A closed range compares with the same window after a refresh, so it runs again; an open one moves with the value,

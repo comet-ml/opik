@@ -8,7 +8,7 @@ import { JudgeTemplateOption } from "@/v2/pages-shared/automations/RuleEditorPan
 
 const useTemplateStart = (
   form: UseFormReturn<EvaluationRuleFormType>,
-  editorRef: React.RefObject<PromptVariableEditorHandle>,
+  editorRef: React.RefObject<PromptVariableEditorHandle | null>,
   onSelectTemplate: (template: LLMPromptTemplate, label: string) => void,
 ) => {
   const focusEditor = () =>

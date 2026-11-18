@@ -25,6 +25,7 @@ public class RequestContext {
     public static final String WORKSPACE_NAME = "workspaceName";
     public static final String SESSION_COOKIE = "sessionToken";
     public static final String WORKSPACE_ID = "workspaceId";
+    public static final String ORGANIZATION_ID = "organizationId";
     public static final String API_KEY = "apiKey";
     public static final String LIMIT = "Opik-%s-Limit";
     public static final String REMAINING_LIMIT = "Opik-%s-Remaining-Limit";

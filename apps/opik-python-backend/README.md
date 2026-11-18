@@ -20,6 +20,9 @@ Opik Python Backend is a service that runs Python code in a sandboxed environmen
     - `PYTHON_CODE_EXECUTOR_CPU_SHARES`: Docker CPU shares for containers, higher = higher priority (default: 512, Docker default is 1024)
     - `PYTHON_CODE_EXECUTOR_MEM_LIMIT`: Memory limit for executor containers, uses Docker format with single letter unit b/k/m/g (default: 256m)
     - `PYTHON_CODE_EXECUTOR_CPU_LIMIT`: Hard CPU limit per executor container in fractional CPUs, e.g. "0.5" = half a core (default: unset, no hard limit)
+    - `PYTHON_CODE_EXECUTOR_DOCKER_HARDENING`: `docker` strategy only. Set to `true` to start executor containers with all capabilities dropped, a read-only root filesystem with a small `noexec` `/tmp` and a process limit, and to run the in-container Docker daemon with user namespace remapping (`userns-remap`, so root in an executor container maps to an unprivileged uid range outside it) and, while `PYTHON_CODE_EXECUTOR_ALLOW_NETWORK` is `false`, without a bridge network or iptables rules (default: false). Metrics that write outside `/tmp` or start many processes fail. Any value other than `true` or `false` fails startup
+    - `PYTHON_CODE_EXECUTOR_DOCKER_PIDS_LIMIT`: process limit per executor container when hardening is on. A positive integer (default: 64)
+    - `PYTHON_CODE_EXECUTOR_DOCKER_TMPFS_SIZE`: size of the writable `/tmp` per executor container when hardening is on, e.g. `16m` (default: 16m)
     - `PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS`: Interval for collecting executor container CPU/memory metrics via Docker stats API (default: 60)
 
 ## Running the Flask service

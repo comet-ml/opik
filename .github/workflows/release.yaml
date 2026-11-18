@@ -37,6 +37,9 @@ on:
         description: 'The release version'
         value: ${{ jobs.set-version.outputs.version }}
 
+permissions:
+  contents: read
+
 jobs:
   set-version:
     runs-on: ubuntu-latest
@@ -67,6 +70,8 @@ jobs:
       preflight_non_blocking: ${{ inputs.ignore_pypi_preflight_failure }}
 
   create-git-tag:
+    permissions:
+      contents: write
     needs:
       - set-version
       - sdk-pypi-preflight
@@ -108,6 +113,9 @@ jobs:
           git push --no-verify origin "${RELEASE_VERSION}"
 
   release-apps:
+    permissions:
+      contents: write
+      packages: write
     needs:
       - set-version
       - create-git-tag
@@ -167,6 +175,8 @@ jobs:
       skip_commit_push: true
 
   publish-helm-chart:
+    permissions:
+      contents: write
     needs:
       - set-version
       - create-git-tag
@@ -176,6 +186,8 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
 
   create-github-release:
+    permissions:
+      contents: write
     needs:
       - set-version
       - create-git-tag

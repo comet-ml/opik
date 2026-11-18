@@ -61,7 +61,21 @@ jobs:
           cd ./tests
           uv pip install --system -r library_integration/llama_index/requirements.txt
 
+      - name: Download NLTK data for llama-index
+        # NLTK >=3.10.4 refuses the stopwords llama-index bundles in site-packages on the
+        # runner: uv hardlinks the files, and the runner's default ACL makes the folder
+        # writable by other accounts. llama-index reads NLTK_DATA before its bundled cache,
+        # so point it at a fresh, private folder instead.
+        # Remove once run-llama/llama_index#22839 is fixed upstream.
+        env:
+          NLTK_DATA: ${{ runner.temp }}/nltk_data
+        run: |
+          python -m nltk.downloader -q -e -d "$NLTK_DATA" stopwords punkt_tab
+          stat -c '%a %U:%G %n' "$NLTK_DATA" "$NLTK_DATA/corpora" "$NLTK_DATA/corpora/stopwords"
+
       - name: Run tests
+        env:
+          NLTK_DATA: ${{ runner.temp }}/nltk_data
         run: |
           cd ./tests/library_integration/llama_index/
           python -m pytest  -vv .

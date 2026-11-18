@@ -398,15 +398,19 @@ export const generateDataRowCellDef = <
         >
           <Checkbox
             variant="muted"
-            style={{
-              marginLeft: `${context.row.depth * 28}px`,
-            }}
             checked={context.row.getIsSelected()}
             disabled={!context.row.getCanSelect()}
             onCheckedChange={(value) => context.row.toggleSelected(!!value)}
             onClick={(event) => checkboxClickHandler(event, context)}
             aria-label="Select row"
           />
+          {context.row.depth > 0 && (
+            // Takes the expand chevron's space so names align with their group label
+            <ChevronRight
+              aria-hidden
+              className="invisible ml-1.5 size-4 shrink-0"
+            />
+          )}
           <div className="min-w-1 max-w-full">
             {flexRender(
               columDataFields.cell as never,
@@ -445,10 +449,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
           className="items-center p-0 pr-2"
           stopClickPropagation
         >
-          <div
-            className="flex max-w-full items-center overflow-hidden"
-            style={{ paddingLeft: `${context.row.depth * 20}px` }}
-          >
+          <div className="flex max-w-full items-center overflow-hidden">
             <Checkbox
               variant="muted"
               checked={

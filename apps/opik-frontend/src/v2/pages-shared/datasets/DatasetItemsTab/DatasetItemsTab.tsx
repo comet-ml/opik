@@ -48,7 +48,7 @@ import {
   injectColumnCallback,
   migrateSelectedColumns,
 } from "@/lib/table";
-import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DatasetItemsEmptyContent from "@/v2/pages-shared/datasets/DatasetItemsTab/DatasetItemsEmptyContent";
 import {
   buildDatasetFilterColumns,
   mapDynamicColumnTypesToColumnType,
@@ -59,6 +59,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import { useRowSelectionChange } from "./hooks/useRowSelectionChange";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   useIsDraftMode,
@@ -367,25 +368,11 @@ function DatasetItemsTab({
     [rowSelection, rows],
   );
 
-  const handleRowSelectionChange: typeof setRowSelection = useCallback(
-    (updaterOrValue) => {
-      setRowSelection((prev) => {
-        const next =
-          typeof updaterOrValue === "function"
-            ? updaterOrValue(prev)
-            : updaterOrValue;
-
-        if (
-          isAllItemsSelected &&
-          Object.keys(next).length < Object.keys(prev).length
-        ) {
-          setIsAllItemsSelected(false);
-        }
-
-        return next;
-      });
-    },
-    [isAllItemsSelected, setIsAllItemsSelected],
+  const handleRowSelectionChange = useRowSelectionChange(
+    rowSelection,
+    setRowSelection,
+    isAllItemsSelected,
+    setIsAllItemsSelected,
   );
 
   const effectiveIsAllItemsSelected = useMemo(
@@ -653,24 +640,12 @@ function DatasetItemsTab({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          <DataTableEmptyContent
+          <DatasetItemsEmptyContent
             title={noDataText}
-            description={
-              isDraftMode && deletedIds.size > 0
-                ? ""
-                : `Add ${itemName}s to run evaluations and measure performance.`
-            }
-          >
-            {!(isDraftMode && deletedIds.size > 0) && (
-              <button
-                onClick={onAddItem}
-                className="comet-body-s underline underline-offset-4 hover:text-primary"
-                data-testid="dataset-items-empty-add-button"
-              >
-                Add new {itemName}
-              </button>
-            )}
-          </DataTableEmptyContent>
+            itemName={itemName}
+            hasDeletedItemsInDraft={isDraftMode && deletedIds.size > 0}
+            onAddItem={onAddItem}
+          />
         }
       />
       <div className="flex justify-end py-4">

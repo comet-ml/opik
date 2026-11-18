@@ -263,7 +263,7 @@ export const getThinkingLevelOptions = (
   const params = getGeminiOrVertexListedParams(model);
   const levels = params
     ? getCatalogThinkingLevels(params)
-    : THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? [];
+    : (THINKING_LEVELS_BY_MODEL.get(model as PROVIDER_MODEL_TYPE) ?? []);
   return levels.map((value) => ({
     label: THINKING_LEVEL_LABELS[value],
     value,
@@ -750,8 +750,8 @@ export const getAnthropicThinkingEffortOptions = (
         return effort ? [effort] : [];
       })
     : supportsAnthropicThinkingEffort(model)
-      ? ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-          ?.thinkingEffortOptions ?? []
+      ? (ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+          ?.thinkingEffortOptions ?? [])
       : [];
   return [
     ...(levels.length > 0 && thinksOnlyWhenAsked(model)
@@ -843,7 +843,7 @@ export const getOpenAIReasoningEffortOptions = (
   const capabilities = OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE];
   const responsesApiOnly =
     openAiPipelineMode === "responses_api"
-      ? capabilities?.responsesApiOnlyEffortOptions ?? []
+      ? (capabilities?.responsesApiOnlyEffortOptions ?? [])
       : [];
 
   return [

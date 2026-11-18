@@ -89,17 +89,15 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   }, [onWidthChange]);
 
   const handleToggle = useCallback(() => {
-    setIsOpen((prev) => {
-      const next = !prev;
-      setAssistantSidebarOpen(next);
-      onWidthChange(
-        next
-          ? getStoredAssistantSidebarWidth()
-          : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
-      );
-      return next;
-    });
-  }, [onWidthChange]);
+    const next = !isOpen;
+    setIsOpen(next);
+    setAssistantSidebarOpen(next);
+    onWidthChange(
+      next
+        ? getStoredAssistantSidebarWidth()
+        : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+    );
+  }, [isOpen, onWidthChange]);
 
   let variant: AssistantSurfaceVariant;
   if (surface === "page") {

@@ -11,7 +11,6 @@ export interface ProjectStats {
   traceCount: number;
   experimentCount: number;
   optimizationCount: number;
-  blueprintVersionCount: number;
 }
 
 export interface BridgeContext {

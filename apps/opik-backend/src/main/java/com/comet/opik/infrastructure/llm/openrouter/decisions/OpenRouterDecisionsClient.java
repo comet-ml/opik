@@ -1,8 +1,12 @@
 package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -42,7 +46,7 @@ import java.util.Set;
  */
 @Slf4j
 @RequiredArgsConstructor
-public class OpenRouterDecisionsClient {
+public class OpenRouterDecisionsClient implements DecisionsClient {
 
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
@@ -63,6 +67,12 @@ public class OpenRouterDecisionsClient {
     private final @NonNull RetriableHttpClient client;
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
+    @Override
+    public LlmProvider provider() {
+        return LlmProvider.OPEN_ROUTER;
+    }
+
+    @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()

@@ -22,7 +22,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @DeleteTraceThreadsValidation
 public record DeleteTraceThreads(
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, project_id must be provided") String projectName,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(max = Project.NAME_MAX_LENGTH, message = "cannot exceed {max} characters") @Schema(description = "If null, project_id must be provided") String projectName,
         @Schema(description = "If null, project_name must be provided") UUID projectId,
         @Valid @NotEmpty @Size(min = 1, max = 1000) List<@NotBlank String> threadIds) {
 

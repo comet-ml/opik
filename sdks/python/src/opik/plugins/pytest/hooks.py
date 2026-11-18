@@ -114,6 +114,12 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA.get(nodeid)
             if report is None or trace_data is None:
                 continue
+            # pytest.skip() in the test body gives a skipped report, and an
+            # xfail test that fails or unexpectedly passes carries `wasxfail`.
+            # pytest reports none of them as passed or failed, and neither
+            # does the terminal summary, so they get no "Passed" score.
+            if getattr(report, "skipped", False) or hasattr(report, "wasxfail"):
+                continue
 
             traces_feedback_scores.append(
                 BatchFeedbackScoreDict(

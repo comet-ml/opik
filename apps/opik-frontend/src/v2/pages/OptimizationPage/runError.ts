@@ -1,5 +1,5 @@
 // Built dynamically so the ESC control char never appears in source (avoids
-// eslint no-control-regex). Matches ANSI SGR sequences like ESC[31m / ESC[0m.
+// no-control-regex). Matches ANSI SGR sequences like ESC[31m / ESC[0m.
 const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 const ERROR_LINE_RE = /error|exception|traceback|failed|fatal/i;
 

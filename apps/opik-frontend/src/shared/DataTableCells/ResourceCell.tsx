@@ -5,6 +5,7 @@ import isNumber from "lodash/isNumber";
 import { CellContext } from "@tanstack/react-table";
 
 import { Explainer } from "@/types/shared";
+import { formatCount } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
@@ -66,6 +67,7 @@ type GroupCustomMeta = {
   valueKey: string;
   labelKey: string;
   countAggregationKey?: string;
+  countUnit?: string;
   explainer?: Explainer;
   getResource?: (cellData: unknown) => RESOURCE_TYPE;
 } & CustomMeta;
@@ -82,6 +84,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getIsDeleted,
     getResource,
     countAggregationKey,
+    countUnit,
     explainer,
   } = (custom ?? {}) as GroupCustomMeta;
 
@@ -104,7 +107,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ? get(data, countAggregationKey, undefined)
       : undefined;
 
-  const countText = isNumber(count) ? `(${count})` : "";
+  const countText = isNumber(count) ? formatCount(count, countUnit) : "";
 
   return (
     <CellWrapper
@@ -124,7 +127,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       ) : (
         <div>-</div>
       )}
-      <div className="flex shrink-0 items-center">
+      <div className="ml-auto flex shrink-0 items-center text-light-slate">
         {countText}
         {isDeleted && explainer && (
           <ExplainerIcon {...explainer} className="ml-1" />
