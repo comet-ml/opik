@@ -22,9 +22,9 @@ import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -146,9 +146,9 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
-                .doOnError(withMdc(mdc, error -> DecisionsUrlException.find(error).ifPresentOrElse(
-                        urlError -> userFacingLogger.error("Error while scoring spanId '{}' with rule '{}': {}",
-                                span.id(), message.ruleName(), urlError.getMessage()),
+                .doOnError(withMdc(mdc, error -> ProviderRequestRefusedException.from(error).ifPresentOrElse(
+                        refused -> userFacingLogger.error("Error while scoring spanId '{}' with rule '{}': {}",
+                                span.id(), message.ruleName(), refused.getMessage()),
                         () -> userFacingLogger.error(
                                 "Unexpected error while scoring spanId '{}' with rule '{}', error type '{}'",
                                 span.id(), message.ruleName(),

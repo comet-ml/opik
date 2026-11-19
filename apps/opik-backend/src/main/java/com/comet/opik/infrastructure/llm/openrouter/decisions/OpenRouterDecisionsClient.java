@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
@@ -41,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
+import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL;
 
 /**
  * Client for the OpenRouter Decisions API ({@code POST /api/alpha/decisions}), which serves decisions models
@@ -93,6 +95,11 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     @Override
     public Mono<DecisionsResponse> decide(@NonNull DecisionsRequest request,
             @NonNull LlmProviderClientApiConfig config) {
+        // deferred, so a refused URL fails the Mono and reaches the caller's error mapping
+        return Mono.defer(() -> execute(request, config));
+    }
+
+    private Mono<DecisionsResponse> execute(DecisionsRequest request, LlmProviderClientApiConfig config) {
         var decisionsUrl = targetUrl(config.baseUrl());
         var httpRequest = RetriableHttpClient.Request.<DecisionsResponse>builder()
                 .requestFunction(httpClient -> httpClient.target(decisionsUrl))
@@ -149,11 +156,11 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
         try {
             uri = new URI(openRouterUrl.trim());
         } catch (URISyntaxException invalidUrl) {
-            throw new DecisionsUrlException();
+            throw new ProviderRequestRefusedException(OPENROUTER_DECISIONS_URL);
         }
         var path = StringUtils.stripEnd(uri.getRawPath(), "/");
         if (uri.getRawAuthority() == null || !StringUtils.endsWith(path, CHAT_API_SUFFIX)) {
-            throw new DecisionsUrlException();
+            throw new ProviderRequestRefusedException(OPENROUTER_DECISIONS_URL);
         }
         return uri.getScheme() + "://" + uri.getRawAuthority()
                 + StringUtils.removeEnd(path, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX

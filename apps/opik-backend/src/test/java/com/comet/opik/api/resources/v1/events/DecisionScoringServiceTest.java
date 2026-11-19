@@ -238,6 +238,16 @@ class DecisionScoringServiceTest {
     }
 
     @Test
+    void decideMapsARefusedRequestToABadRequestWithItsFixedText() {
+        var failure = new ProviderRequestRefusedException(
+                ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL);
+
+        assertThatThrownBy(() -> decideFailingWith(failure))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(failure.getMessage());
+    }
+
+    @Test
     void decideKeepsAProviderStatusError() {
         var failure = new ClientErrorException("OpenRouter Decisions API request failed", 402);
 

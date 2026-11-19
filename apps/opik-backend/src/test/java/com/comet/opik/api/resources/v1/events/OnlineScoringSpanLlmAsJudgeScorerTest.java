@@ -25,12 +25,12 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsResponse;
 import com.comet.opik.infrastructure.llm.openai.OpenAiDecisionsClient;
-import com.comet.opik.infrastructure.llm.openrouter.decisions.DecisionsUrlException;
 import com.comet.opik.infrastructure.llm.openrouter.decisions.OpenRouterDecisionsClient;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -40,6 +40,7 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -523,20 +524,23 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     }
 
     @Test
-    void decisionModelBaseUrlErrorIsShownInTheRuleLog() {
+    void decisionModelRefusedRequestIsShownInTheRuleLog() {
         var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
         var span = createSpan();
         var clientConfig = LlmProviderClientApiConfig.builder().apiKey("key").build();
-        var urlError = new DecisionsUrlException();
+        var refused = new ProviderRequestRefusedException(
+                ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL);
 
         when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
-        when(decisionsClient.decide(any(), eq(clientConfig))).thenReturn(Mono.error(urlError));
+        when(decisionsClient.decide(any(), eq(clientConfig))).thenReturn(Mono.error(refused));
 
-        assertThatThrownBy(() -> scorer.score(buildMessage(span, code)).block()).isSameAs(urlError);
+        assertThatThrownBy(() -> scorer.score(buildMessage(span, code)).block())
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(refused.getMessage());
 
         verify(userFacingLogger).error("Error while scoring spanId '{}' with rule '{}': {}",
-                span.id(), "rule", urlError.getMessage());
+                span.id(), "rule", refused.getMessage());
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
 import com.comet.opik.infrastructure.net.DestinationGuard;
@@ -56,6 +57,8 @@ class OpenRouterDecisionsClientTest {
     private static final String PATH = "/api/alpha/decisions";
     private static final int MAX_ATTEMPTS = 2;
     private static final int ERROR_BODY_MAX_SIZE = 1024;
+    private static final String URL_REFUSED = new ProviderRequestRefusedException(
+            ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL).getMessage();
 
     // Real response and error bodies captured from the OpenRouter Decisions API.
     private static final String SUCCESS_BODY = """
@@ -369,9 +372,12 @@ class OpenRouterDecisionsClientTest {
                 .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/proxy")
                 .build();
 
-        assertThatThrownBy(() -> decisionsClient.decide(request(), config).block())
-                .isInstanceOf(DecisionsUrlException.class)
-                .hasMessage(DecisionsUrlException.MESSAGE);
+        // the error is in the Mono, so it reaches the caller's error mapping
+        var decided = decisionsClient.decide(request(), config);
+
+        assertThatThrownBy(decided::block)
+                .isInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(URL_REFUSED);
         assertThat(wireMock.server().getAllServeEvents()).isEmpty();
     }
 
@@ -403,8 +409,8 @@ class OpenRouterDecisionsClientTest {
             "not a url"})
     void decisionsUrlRejectsAPathWithoutTheTrailingV1(String openRouterUrl) {
         assertThatThrownBy(() -> OpenRouterDecisionsClient.decisionsUrl(openRouterUrl))
-                .isInstanceOf(DecisionsUrlException.class)
-                .hasMessage(DecisionsUrlException.MESSAGE);
+                .isInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(URL_REFUSED);
     }
 
     private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard) {
