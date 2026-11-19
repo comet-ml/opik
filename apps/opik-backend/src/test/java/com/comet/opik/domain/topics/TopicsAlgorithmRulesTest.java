@@ -188,7 +188,7 @@ class TopicsAlgorithmRulesTest {
         }
 
         @ParameterizedTest
-        @CsvSource({"0, 3, maxIterations must be positive", "150, 0, restarts must be positive"})
+        @CsvSource({"0, 3, maxIterations must be positive", MAX_ITERATIONS + ", 0, restarts must be positive"})
         @DisplayName("rejects a non-positive iteration cap and restart count")
         void invalidLimits(int maxIterations, int restarts, String message) {
             assertThatThrownBy(() -> KMeans.fit(new float[]{1, 0, 0, 1}, new double[]{1, 1}, 2, 1, 0, maxIterations,
@@ -229,11 +229,11 @@ class TopicsAlgorithmRulesTest {
 
         @ParameterizedTest(name = "n {0}, {1} dims, {2} clusters, noise {3}, k {4}, seed {5}, cap {6}, capped {7}")
         @CsvSource({
-                "1500, 384, 40, 0.15, 50, 0, 150, false",
-                "1500, 384, 40, 0.15, 50, 1, 150, false",
-                "2000, 13, 10, 0.5, 30, 0, 150, false",
+                "1500, 384, 40, 0.15, 50, 0, " + MAX_ITERATIONS + ", false",
+                "1500, 384, 40, 0.15, 50, 1, " + MAX_ITERATIONS + ", false",
+                "2000, 13, 10, 0.5, 30, 0, " + MAX_ITERATIONS + ", false",
                 // 20 distinct points, each repeated: k above that leaves clusters empty, reseeded on a duplicate.
-                "300, 16, 20, 0, 30, 0, 150, false",
+                "300, 16, 20, 0, 30, 0, " + MAX_ITERATIONS + ", false",
                 // Random directions: the fit stops at the cap.
                 "300, 8, 300, 10, 20, 0, 3, true"})
         @DisplayName("same labels, iterations and centres as the plain fit on a fixed synthetic set")
