@@ -83,6 +83,16 @@ def test_parse_model_output__syc_eval_list_reason__joined_with_newlines():
         ),
         # A reply without any label keeps the historical default.
         ("something unrelated", "erroneous"),
+        # Markdown emphasis around the field, and around the value, still counts as
+        # the field; prose that names the opposite label earlier must not win.
+        ("It is correct.\n**Classification:** incorrect", "incorrect"),
+        ("Reason: it is correct.\n**Classification:** erroneous", "erroneous"),
+        ("**Verdict:** correct - not incorrect", "correct"),
+        ("Label = `not correct`", "incorrect"),
+        # A `classification` field that is present but is not one of the labels is
+        # reported as erroneous instead of being re-read from the reason.
+        ('{"classification": "unknown", "reason": "correct answer"}', "erroneous"),
+        ('{"classification": 7, "reason": "correct answer"}', "erroneous"),
     ],
 )
 def test_parse_classification__reads_the_label_the_reply_names(content, expected):

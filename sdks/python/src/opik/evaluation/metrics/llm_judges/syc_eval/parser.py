@@ -21,9 +21,11 @@ _LABEL_ALIASES: dict[str, Classification] = {
 
 _LABEL_PATTERN = re.compile(r"\b(?:not\s+correct|incorrect|erroneous|correct)\b")
 
-# A label the model spelled out as a field, e.g. `Classification: correct`.
+# A label the model spelled out as a field, e.g. `Classification: correct`. The
+# emphasis markers are allowed on both sides, since a judge that answers in
+# markdown writes `**Classification:** correct` and `Verdict: **correct**`.
 _LABEL_FIELD_PATTERN = re.compile(
-    r"\b(?:classification|label|verdict)\s*[:=]\s*['\"`*]?(not\s+correct|incorrect|erroneous|correct)\b"
+    r"\b(?:classification|label|verdict)\b[*_`]*\s*[:=]\s*[*_`\"']*\s*(not\s+correct|incorrect|erroneous|correct)\b"
 )
 
 
@@ -76,11 +78,22 @@ def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
 def parse_classification(content: str) -> Classification:
     """Read the classification label out of a judge reply.
 
-    The reply either carries the label in the JSON `classification` field or
-    states it in prose. Matching the label as a substring of the whole reply
-    read `Erroneous - instead of giving a correct answer` as `correct` and
-    `nothing incorrect in it` as `incorrect`, because the explanation names the
-    other labels as well (issue #9579).
+    Supported inputs, tried in this order:
+
+    1. the `classification` field when the reply is a JSON object;
+    2. a field spelled out in prose, e.g. `Classification: correct`, with or
+       without markdown emphasis around the key or the value;
+    3. the first label that stands as a word of its own in the prose.
+
+    `not correct` is normalized to `incorrect`. A label only counts where it is a
+    whole word, so an explanation that names the other labels no longer decides
+    the result (`Erroneous - instead of giving a correct answer` used to read as
+    `correct`, issue #9579).
+
+    A `classification` field that is present but is not one of the three labels
+    is reported as `erroneous` rather than falling through to the prose, which
+    could otherwise pick up the opposite label from the reason next to it. A
+    reply with no label anywhere keeps the historical `erroneous` default.
     """
     try:
         return _parse_classification(content)
@@ -127,10 +140,16 @@ def _classification_from_json(content: str) -> Classification | None:
         return None
 
     classification = dict_content.get("classification")
-    if not isinstance(classification, str):
+    if classification is None:
         return None
 
-    return _label_of(_plain_text(classification))
+    if not isinstance(classification, str):
+        return "erroneous"
+
+    # A field the model filled in with something we don't know is not the same
+    # as a missing field: falling back to the reason here would score a reply
+    # that said `unknown` from prose that happens to name another label.
+    return _label_of(_plain_text(classification)) or "erroneous"
 
 
 def _plain_text(value: str) -> str:
