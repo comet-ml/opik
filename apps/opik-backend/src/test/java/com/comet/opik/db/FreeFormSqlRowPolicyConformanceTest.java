@@ -243,6 +243,46 @@ class FreeFormSqlRowPolicyConformanceTest {
         }
     }
 
+    /**
+     * Scalar subquery shapes the agent sends, each evaluating to the count {@code {q}} returns. {@code {t}} is the
+     * table, for shapes that also read it outside the scalar subquery.
+     */
+    static Stream<Arguments> scalarShapes() {
+        return Stream.of(
+                arguments("in an outer WHERE over a row generator",
+                        "SELECT count() FROM numbers(1000) WHERE number < ({q})"),
+                arguments("in arithmetic", "SELECT toUInt64(({q}) * 2 / 2)"),
+                arguments("nested", "SELECT (SELECT (SELECT ({q})))"),
+                arguments("in a JSON map", "SELECT JSONExtractUInt(toJSONString(map('n', toString(({q})))), 'n')"),
+                arguments("beside a scoped outer read", "SELECT ({q}) FROM {t} LIMIT 1"),
+                arguments("over a CTE", "WITH c AS ({q}) SELECT (SELECT * FROM c)"),
+                arguments("in a derived table", "SELECT max(n) FROM (SELECT ({q}) AS n)"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("scalarShapes")
+    @DisplayName("a scalar subquery cannot read past the scope of the query around it, on either account")
+    void scalarSubqueryShapesAreScoped(String name, String shape) {
+        var project = data.a1();
+        String workspace = project.workspace().id();
+        try (var standard = client(STANDARD); var extended = client(EXTENDED)) {
+            readTables().forEach(table -> {
+                String t = "%s.%s".formatted(DATABASE_NAME, table);
+                String own = shape.replace("{q}", "SELECT count() FROM " + t).replace("{t}", t);
+                String other = shape.replace("{q}", "SELECT count() FROM %s WHERE workspace_id = '%s'"
+                        .formatted(t, data.b().id())).replace("{t}", t);
+                assertThat(single(standard, own, workspace, project.id().toString()))
+                        .as("standard, %s, %s", name, table).isEqualTo(expected(table, false));
+                assertThat(single(standard, other, workspace, project.id().toString()))
+                        .as("standard, %s, other workspace, %s", name, table).isEqualTo("0");
+                assertThat(single(extended, own, workspace, "*"))
+                        .as("extended, %s, %s", name, table).isEqualTo(expected(table, true));
+                assertThat(single(extended, other, workspace, "*"))
+                        .as("extended, %s, other workspace, %s", name, table).isEqualTo("0");
+            });
+        }
+    }
+
     @ParameterizedTest
     @MethodSource("extendedProjectBoundTables")
     @DisplayName("the extended account's other project-bound tables: its project, or its workspace under '*'")
