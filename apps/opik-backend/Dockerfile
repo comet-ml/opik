@@ -25,7 +25,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
 # Plain AL2023 pinned to a dated release, not the amazoncorretto image: AL2023 locks yum to the base image's
 # release, so OS fixes only arrive with a newer one. Renovate moves the date forward weekly, and each date has
 # a fixed package set.
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261118.0@sha256:ec2bcf1212690ec004a23c1d29a4080acb1c96ba746a9b4bba5b4cd64b3db4b1
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261119.0@sha256:985137e5576397a78ac3160e8b1dbc4104fc20b8694307a98579fa40d8ac54dc
 
 # Same as the amazoncorretto:25-al2023 image, whose four Corretto packages are installed below.
 ENV LANG=C.UTF-8 \
