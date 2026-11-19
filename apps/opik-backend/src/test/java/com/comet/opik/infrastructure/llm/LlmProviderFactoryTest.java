@@ -286,6 +286,32 @@ class LlmProviderFactoryTest {
                         + " can set LLM_PROVIDER_DESTINATION_GUARD=relaxed)");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"http://127.0.0.1:8081/api/v1", "http://10.10.71.1/api/v1",
+            "http://169.254.169.254/api/v1"})
+    @DisplayName("Strict destination guard refuses an OpenRouter base_url for decision models before any call")
+    void getClientApiConfigRefusesInternalOpenRouterBaseUrlInStrictMode(String baseUrl) {
+        var llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String workspaceId = UUID.randomUUID().toString();
+        when(llmProviderApiKeyService.findByProviders(workspaceId, Set.of(LlmProvider.OPEN_ROUTER)))
+                .thenReturn(List.of(ProviderApiKey.builder()
+                        .provider(LlmProvider.OPEN_ROUTER)
+                        .apiKey(EncryptionUtils.encrypt(UUID.randomUUID().toString()))
+                        .baseUrl(baseUrl)
+                        .build()));
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var strictGuard = RELAXED_GUARD.toBuilder().mode(DestinationGuard.Mode.STRICT).build();
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService,
+                strictGuard);
+
+        assertThatThrownBy(() -> llmProviderFactory.getClientApiConfig(workspaceId,
+                OpenRouterDecisionModel.TYPESAFE_JEV_LATEST.toString()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("the provider base_url was refused: it must be a valid URL with an allowed scheme that"
+                        + " resolves to a public address (self-hosted deployments with providers on internal networks"
+                        + " can set LLM_PROVIDER_DESTINATION_GUARD=relaxed)");
+    }
+
     private static Stream<Arguments> testCustomLlmProviderMatching_shouldMatch() {
         return Stream.of(
                 // Legacy format tests (provider_name = null)

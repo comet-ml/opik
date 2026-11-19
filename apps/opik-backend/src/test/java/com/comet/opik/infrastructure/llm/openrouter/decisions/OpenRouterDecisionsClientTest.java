@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
@@ -292,14 +293,31 @@ class OpenRouterDecisionsClientTest {
     }
 
     @Test
-    void redirectCarriesStatus() {
-        wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(aResponse().withStatus(308).withHeader("Location", "https://example.com")));
+    void redirectIsNotFollowedAndCarriesStatus() {
+        var otherPath = "/other/alpha/decisions";
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(307)
+                .withHeader("Location", wireMock.runtimeInfo().getHttpBaseUrl() + otherPath)));
+        wireMock.server().stubFor(post(urlEqualTo(otherPath))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
                 .isInstanceOfSatisfying(WebApplicationException.class,
-                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(308))
-                .hasMessageContaining("status '308'");
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(307))
+                .hasMessage("OpenRouter Decisions API request failed, status '307', message '%s'"
+                        .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+        assertThat(wireMock.server().getAllServeEvents()).hasSize(1);
+    }
+
+    @Test
+    void errorWithoutBodyCarriesTheGenericMessage() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(400)));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOfSatisfying(ClientErrorException.class,
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(400))
+                .hasMessage("OpenRouter Decisions API request failed, status '400', message '%s'"
+                        .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
     }
 
     @ParameterizedTest
@@ -346,6 +364,20 @@ class OpenRouterDecisionsClientTest {
 
         wireMock.server().verify(1, postRequestedFor(urlEqualTo(proxyPath)));
         wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = "  ")
+    void blankBaseUrlFallsBackToTheConfiguredUrl(String baseUrl) {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        var config = LlmProviderClientApiConfig.builder().apiKey(apiKey).baseUrl(baseUrl).build();
+
+        decisionsClient.decide(request(), config).block();
+
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
     }
 
     @Test
