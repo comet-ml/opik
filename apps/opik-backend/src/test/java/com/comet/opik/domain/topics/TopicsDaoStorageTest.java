@@ -33,12 +33,12 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +51,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * The topics DAOs against real ClickHouse and MySQL: the {@code topic_vectors} window count and reads, the
@@ -89,11 +90,7 @@ class TopicsDaoStorageTest {
     {
         Startables.deepStart(redis, mysql, zookeeper, clickHouse).join();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
@@ -197,15 +194,15 @@ class TopicsDaoStorageTest {
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, BUILT);
         var deleted = TRACES.traceIds().subList(0, 10);
-        // deleteByKeys runs deleteByTraceIds, the trace-delete cascade's delete, as the system user.
-        vectorsDAO.deleteByKeys(workspaceId, deleted.stream()
-                .map(traceId -> TopicTraceKey.builder().projectId(projectId).traceId(traceId).build())
-                .toList()).block();
+        vectorsDAO.deleteByTraceIds(Set.copyOf(deleted), projectId)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .block();
 
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
                 .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - deleted.size()));
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
-                .extracting(TopicWindowRow::traceId)
+                .extracting(TopicWindowDAO.WindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(deleted.size(), BUILT));
     }
 
@@ -225,7 +222,7 @@ class TopicsDaoStorageTest {
         assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList().block())
                 .containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT - tombstoned.size()));
         assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
-                .extracting(TopicWindowRow::traceId)
+                .extracting(TopicWindowDAO.WindowRow::traceId)
                 .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(tombstoned.size(), BUILT));
     }
 
@@ -243,7 +240,7 @@ class TopicsDaoStorageTest {
             assertThat(windowDAO.countByProject(workspaceId, Set.of(projectId), from(), to(), 60).collectList()
                     .block()).containsExactly(new TopicWindowDAO.ProjectCount(projectId, BUILT));
             assertThat(windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block())
-                    .extracting(TopicWindowRow::traceId).containsAll(tied).hasSize(BUILT);
+                    .extracting(TopicWindowDAO.WindowRow::traceId).containsAll(tied).hasSize(BUILT);
             assertThat(windowDAO.readUnlabelled(workspaceId, projectId, UUID.randomUUID(), from(), to(), "", BUILT,
                     60).collectList().block())
                     .extracting(TopicWindowDAO.WindowVector::traceId).containsAll(tied).hasSize(BUILT);
@@ -336,6 +333,28 @@ class TopicsDaoStorageTest {
     }
 
     @Test
+    @DisplayName("the window read returns each vector at unit length, within BFloat16 of the vector written")
+    void vectorsReadBackAtUnitLength() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        int dimensions = TopicEmbedding.DIMENSIONS;
+
+        var rows = windowDAO.readWindow(workspaceId, projectId, from(), to(), BUILT, 60).collectList().block();
+
+        assertThat(rows).hasSize(BUILT).allSatisfy(row -> {
+            int i = TRACES.traceIds().indexOf(row.traceId());
+            var written = Arrays.copyOfRange(TRACES.vectors(), i * dimensions, (i + 1) * dimensions);
+            double norm = 0;
+            for (int t = 0; t < dimensions; t++) {
+                norm += (double) row.vector()[t] * row.vector()[t];
+                assertThat(row.vector()[t]).isCloseTo(written[t], within(1e-2f));
+            }
+            assertThat(norm).isCloseTo(1, within(1e-5));
+        });
+    }
+
+    @Test
     @DisplayName("the topic counts take each inserted trace's latest row, per topic and Other, among the traces Logs "
             + "lists: an experiment trace, a hidden trace and a tombstoned row are left out")
     void insertedRowsAreCountedByTopic() {
@@ -361,6 +380,29 @@ class TopicsDaoStorageTest {
 
         assertThat(counts).extracting(TraceTopicsDAO.TopicCount::topicId, TraceTopicsDAO.TopicCount::traces)
                 .containsExactlyInAnyOrder(tuple(topicId, 2L), tuple(TraceTopic.OTHER, 1L));
+    }
+
+    @Test
+    @DisplayName("the topic counts take a trace's run row over its arrival row stamped at the same time")
+    void runRowWinsATie() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var runTopic = UUID.randomUUID();
+        var arrivalTopic = UUID.randomUUID();
+        var traceId = TRACES.traceIds().getFirst();
+        var createdAt = TRACES.createdAt().getFirst();
+        var stamped = Instant.now();
+        data.insertTraceTopic(workspaceId, projectId, traceId, createdAt, arrivalTopic, TraceTopic.Source.ARRIVAL,
+                stamped, 0);
+        data.insertTraceTopic(workspaceId, projectId, traceId, createdAt, runTopic, TraceTopic.Source.RUN, stamped,
+                0);
+        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD,
+                List.of(TopicsTraces.TraceRow.shown(workspaceId, projectId, traceId, createdAt)));
+
+        var counts = traceTopicsDAO.countByTopic(workspaceId, projectId, from(), to(), 60).collectList().block();
+
+        assertThat(counts).extracting(TraceTopicsDAO.TopicCount::topicId, TraceTopicsDAO.TopicCount::traces)
+                .containsExactly(tuple(runTopic, 1L));
     }
 
     @Test
@@ -430,24 +472,25 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("the labels are marked complete only for the run the state names: an older run's pass marks nothing")
+    @DisplayName("the labels are marked complete only for the run the project's row names: an older run's pass marks "
+            + "nothing")
     void labelsCompleteOnlyForTheLastRun() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
         data.savedList(workspaceId, projectId, NIGHT, BUILT);
-        var lastRunId = data.state(projectId).lastRunId();
+        var lastRunId = data.topicProject(projectId).listRunId();
 
         int older = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                 .markLabelsComplete(workspaceId, projectId, UUID.randomUUID()));
 
         assertThat(older).isZero();
-        assertThat(data.state(projectId).labelsComplete()).isFalse();
+        assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         int last = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                 .markLabelsComplete(workspaceId, projectId, lastRunId));
 
         assertThat(last).isEqualTo(1);
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
     }
 
     @Test
@@ -463,7 +506,7 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, oldest, NIGHT.minus(Duration.ofDays(3)), BUILT);
         data.savedList(workspaceId, middle, NIGHT.minus(Duration.ofDays(1)), BUILT);
         data.savedList(workspaceId, complete, NIGHT.minus(Duration.ofDays(4)), BUILT);
-        var completeRunId = data.state(complete).lastRunId();
+        var completeRunId = data.topicProject(complete).listRunId();
         template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
                 .markLabelsComplete(workspaceId, complete, completeRunId));
         data.savedList(UUID.randomUUID().toString(), UUID.randomUUID(), NIGHT.minus(Duration.ofDays(5)), BUILT);
@@ -474,9 +517,93 @@ class TopicsDaoStorageTest {
         assertThat(unfinished).extracting(TopicDAO.ProjectKey::projectId).containsExactly(oldest, middle, newest);
     }
 
+    @Test
+    @DisplayName("a save is a compare-and-set on the saved run: a second first build of a saved project saves nothing, "
+            + "a run that read the saved list replaces it")
+    void saveComparesTheSavedRun() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT);
+        var first = data.topicProject(projectId);
+        var savedAt = NIGHT.plus(Duration.ofDays(1));
+        var other = new PrototypeVectors(List.of(TopicsTestData.unit(2)));
+
+        int secondFirstBuild = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .saveList(workspaceId, projectId, null, UUID.randomUUID(), savedAt, savedAt, other,
+                        TopicEmbedding.MODEL));
+
+        assertThat(secondFirstBuild).isZero();
+        assertThat(data.topicProject(projectId)).isEqualTo(first);
+
+        var nextRunId = UUID.randomUUID();
+        int next = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                .saveList(workspaceId, projectId, first.listRunId(), nextRunId, savedAt, savedAt, other,
+                        TopicEmbedding.MODEL));
+
+        assertThat(next).isEqualTo(1);
+        assertThat(data.topicProject(projectId)).usingRecursiveComparison()
+                .comparingOnlyFields("savedRuns", "firstBuiltAt", "lastSuccessAt", "listRunId", "windowUntil",
+                        "labelsComplete", "otherVectors", "embedModel")
+                .isEqualTo(first.toBuilder().savedRuns(2).lastSuccessAt(savedAt).listRunId(nextRunId)
+                        .windowUntil(savedAt).labelsComplete(false).otherVectors(other).build());
+    }
+
+    @Test
+    @DisplayName("failed attempts count from the first one's start until a save; an attempt left running counts as "
+            + "abandoned only once it is older than the lease")
+    void failedAttemptsCountUntilASave() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var firstStart = NIGHT;
+        var firstRun = UUID.randomUUID();
+        var leftRun = UUID.randomUUID();
+        var leftStart = NIGHT.plus(Duration.ofHours(1));
+        var savedRun = UUID.randomUUID();
+        template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
+            runDAO.start(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
+            assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
+                    TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
+            assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
+                    TopicProject.RunError.TIMEOUT)).isZero();
+            runDAO.start(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
+            assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart, leftStart)).isZero();
+            return null;
+        });
+
+        assertThat(data.topicProject(projectId)).extracting(TopicProject::runId, TopicProject::runStatus,
+                TopicProject::failedRuns, TopicProject::firstFailedAt)
+                .containsExactly(leftRun, TopicProject.RunStatus.RUNNING, 1, firstStart);
+
+        var abandonedAt = leftStart.plus(Duration.ofHours(1));
+        template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
+            assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart.plusSeconds(1), abandonedAt))
+                    .isEqualTo(1);
+            return null;
+        });
+
+        assertThat(data.topicProject(projectId)).extracting(TopicProject::runStatus, TopicProject::runErrorCode,
+                TopicProject::runFinishedAt, TopicProject::failedRuns, TopicProject::firstFailedAt)
+                .containsExactly(TopicProject.RunStatus.FAILED, TopicProject.RunError.ABANDONED, abandonedAt, 2,
+                        firstStart);
+
+        template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
+            runDAO.start(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
+            assertThat(runDAO.markSaved(workspaceId, projectId, savedRun, abandonedAt.plusSeconds(60)))
+                    .isEqualTo(1);
+            return null;
+        });
+
+        assertThat(data.topicProject(projectId)).extracting(TopicProject::runStatus, TopicProject::runErrorCode,
+                TopicProject::failedRuns, TopicProject::firstFailedAt)
+                .containsExactly(TopicProject.RunStatus.SAVED, null, 0, null);
+    }
+
     private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {
         return windowDAO.readWindow(workspaceId, projectId, from, to, limit, 120)
-                .map(TopicWindowRow::traceId)
+                .map(TopicWindowDAO.WindowRow::traceId)
                 .collectList()
                 .block();
     }
@@ -492,7 +619,7 @@ class TopicsDaoStorageTest {
                         .traceCreatedAt(TRACES.createdAt().get(TRACES.traceIds().indexOf(traceIds.get(i))))
                         .topicId(topicIds.get(i))
                         .source(TraceTopic.Source.RUN)
-                        .runId(runId.toString())
+                        .runId(runId)
                         .build())
                 .toList()).block();
     }
@@ -507,7 +634,7 @@ class TopicsDaoStorageTest {
                         .traceCreatedAt(Instant.ofEpochMilli(traceId.getMostSignificantBits() >>> 16))
                         .topicId(topicId)
                         .source(TraceTopic.Source.RUN)
-                        .runId(UUID.randomUUID().toString())
+                        .runId(UUID.randomUUID())
                         .build())
                 .toList()).block();
     }

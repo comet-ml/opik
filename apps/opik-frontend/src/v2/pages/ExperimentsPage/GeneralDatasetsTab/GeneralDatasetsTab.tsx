@@ -74,7 +74,6 @@ import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -283,7 +282,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             activeVersionId: get(data, "id", null),
           }),
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
       },
       {
         id: "trace_count",
@@ -324,7 +322,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         cell: withRunningSkeleton(PassRateCell) as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
-          aggregationKey: "pass_rate",
+          aggregationKey: "pass_rate_avg",
         },
       },
       {
@@ -339,7 +337,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           areAggregatedScores: true,
           aggregationKey: "feedback_scores",
         },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
