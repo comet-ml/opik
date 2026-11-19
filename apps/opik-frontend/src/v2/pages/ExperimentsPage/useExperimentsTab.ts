@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import {
   JsonParam,
@@ -31,13 +31,15 @@ const TEST_SUITE_FILTERS = [
  */
 const useExperimentsTab = (projectId?: string) => {
   // The tabs share the table's URL params, and the URL wins over each tab's
-  // saved state, so switching tabs clears them to let the new tab load its own.
+  // saved state (including ?size= over the saved page size), so switching tabs
+  // clears them to let the new tab load its own.
   const [{ tab: tabParam }, setQuery] = useQueryParams(
     {
       tab: StringParam,
       search: StringParam,
       filters: JsonParam,
       page: NumberParam,
+      size: NumberParam,
       groups: JsonParam,
       limits: JsonParam,
     },
@@ -61,12 +63,9 @@ const useExperimentsTab = (projectId?: string) => {
     { enabled: !!projectId && needsDefault },
   );
 
-  const activeTab: ExperimentsTab = useMemo(() => {
-    if (urlTab) return urlTab;
-    if (savedTab) return savedTab;
-    if (isError) return TEST_SUITES_TAB;
-    return (testSuiteData?.total ?? 0) > 0 ? TEST_SUITES_TAB : DATASETS_TAB;
-  }, [urlTab, savedTab, isError, testSuiteData?.total]);
+  const defaultTab =
+    isError || (testSuiteData?.total ?? 0) > 0 ? TEST_SUITES_TAB : DATASETS_TAB;
+  const activeTab: ExperimentsTab = urlTab ?? savedTab ?? defaultTab;
 
   // A tab opened from a link (e.g. "Back to experiments") is the last one seen.
   useEffect(() => {
@@ -80,6 +79,7 @@ const useExperimentsTab = (projectId?: string) => {
         search: undefined,
         filters: undefined,
         page: undefined,
+        size: undefined,
         groups: undefined,
         limits: undefined,
       });

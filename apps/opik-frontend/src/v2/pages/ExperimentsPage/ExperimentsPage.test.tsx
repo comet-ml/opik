@@ -98,7 +98,7 @@ describe("ExperimentsPage tabs", () => {
     window.history.replaceState(
       null,
       "",
-      `/?search=foo&page=3&groups=${encodeURIComponent("[]")}`,
+      `/?search=foo&page=3&size=25&groups=${encodeURIComponent("[]")}`,
     );
     const { rerender } = renderPage();
 
@@ -109,6 +109,7 @@ describe("ExperimentsPage tabs", () => {
     expect(getParam("tab")).toBe("datasets");
     expect(getParam("search")).toBeNull();
     expect(getParam("page")).toBeNull();
+    expect(getParam("size")).toBeNull();
     expect(getParam("groups")).toBeNull();
     expect(screen.getByTestId("experiments-tab")).toHaveTextContent("dataset");
     expect(localStorage.getItem("experiments-tab-project-id")).toBe(

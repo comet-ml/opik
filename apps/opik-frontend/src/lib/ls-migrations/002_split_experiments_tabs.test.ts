@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { migration002 } from "./002_split_experiments_tabs";
+import {
+  migration002,
+  reconcileSplitExperimentsTabs,
+} from "./002_split_experiments_tabs";
 
 const SUITES = "experiments-test-suites";
 const DATASETS = "experiments-datasets";
@@ -110,7 +113,66 @@ describe("002_split_experiments_tabs", () => {
 
     expect(localStorage.getItem(`${SUITES}-selected-columns-v2`)).toBeNull();
     expect(localStorage.getItem(`${SUITES}-columns-order`)).toBeNull();
-    expect(read(SUITES, "columns-sort")).toEqual([]);
+    expect(localStorage.getItem(`${SUITES}-columns-sort`)).toBeNull();
     expect(read(SUITES, "columns-width")).toEqual({ name: 300 });
+  });
+
+  it("skips a list with any invalid member instead of keeping only the valid ones", () => {
+    setLegacy("selected-columns-v2", ["name", null]);
+    setLegacy("columns-order", [1]);
+    setLegacy("columns-sort", [{}]);
+
+    migration002.run();
+
+    expect(localStorage.getItem(`${SUITES}-selected-columns-v2`)).toBeNull();
+    expect(localStorage.getItem(`${SUITES}-columns-order`)).toBeNull();
+    expect(localStorage.getItem(`${SUITES}-columns-sort`)).toBeNull();
+  });
+
+  it("puts the version column at the end when Name is not in the saved order", () => {
+    setLegacy("columns-order", ["created_at", "trace_count"]);
+
+    migration002.run();
+
+    expect(read(SUITES, "columns-order")).toEqual([
+      "created_at",
+      "trace_count",
+      "dataset_version",
+    ]);
+  });
+
+  describe("reconcile after a rollback", () => {
+    it("re-copies a legacy setting the old page changed after the migration", () => {
+      setLegacy("columns-width", { name: 300 });
+      migration002.run();
+      localStorage.setItem(`${SUITES}-columns-width`, JSON.stringify({ a: 1 }));
+
+      // The rolled-back version writes the legacy key.
+      setLegacy("columns-width", { name: 500 });
+      setLegacy("pinned-experiments-project-2", ["exp-9"]);
+      reconcileSplitExperimentsTabs();
+
+      expect(read(SUITES, "columns-width")).toEqual({ name: 500 });
+      expect(read(DATASETS, "columns-width")).toEqual({ name: 500 });
+      expect(read(SUITES, "pinned-experiments-project-2")).toEqual(["exp-9"]);
+    });
+
+    it("leaves tab choices alone when the legacy settings did not change", () => {
+      setLegacy("columns-width", { name: 300 });
+      migration002.run();
+      localStorage.setItem(`${SUITES}-columns-width`, JSON.stringify({ a: 1 }));
+
+      reconcileSplitExperimentsTabs();
+
+      expect(read(SUITES, "columns-width")).toEqual({ a: 1 });
+    });
+
+    it("does nothing before the migration has run", () => {
+      setLegacy("columns-width", { name: 300 });
+
+      reconcileSplitExperimentsTabs();
+
+      expect(localStorage.getItem(`${SUITES}-columns-width`)).toBeNull();
+    });
   });
 });
