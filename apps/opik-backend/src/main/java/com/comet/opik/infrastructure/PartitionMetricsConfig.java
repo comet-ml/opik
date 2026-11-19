@@ -59,7 +59,7 @@ public class PartitionMetricsConfig {
     @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration tieredStorageLogFlushLag = Duration.seconds(15);
+    private Duration tieredStorageLogFlushLag;
 
     /** Derived: the parsed, stripped, blank-free list of LWD tables, deduplicated so no table is scanned twice. */
     public List<String> getLwdTables() {
