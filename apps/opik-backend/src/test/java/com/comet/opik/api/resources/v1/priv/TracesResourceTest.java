@@ -14,6 +14,7 @@ import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
@@ -67,6 +68,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.ThreadDAOTestQueries;
 import com.comet.opik.domain.cost.CostService;
@@ -2448,6 +2450,74 @@ class TracesResourceTest {
                         assertThat(score.name()).isEqualTo("accuracy");
                         assertThat(score.value()).isEqualByComparingTo(new BigDecimal(isA ? "0.3" : "0.7"));
                     });
+        }
+
+        @Test
+        @DisplayName("when a trace id exists in two projects and a comment and guardrail id repeat across them, then the returned trace keeps its own project's rows")
+        void getTrace__whenCommentAndGuardrailIdsRepeatAcrossProjects__thenReturnedProjectKeepsItsRows(
+                TransactionTemplateAsync templateAsync) {
+            var sharedId = generator.generate();
+            var projectNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            traceResourceClient.batchCreateTraces(
+                    List.of(createTrace().toBuilder().id(sharedId).projectName(projectNameA).build()),
+                    API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(
+                    List.of(createTrace().toBuilder().id(sharedId).projectName(projectNameB).build()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var projectIdA = getProjectId(projectNameA, TEST_WORKSPACE, API_KEY);
+            var projectIdB = getProjectId(projectNameB, TEST_WORKSPACE, API_KEY);
+
+            // Comment and guardrail ids are generated server side, so the API cannot write the same id into two
+            // projects. Write the rows directly to pin that dedup keeps each project's own row.
+            var commentId = generator.generate();
+            var guardrailId = generator.generate();
+            var spanIdA = generator.generate();
+            var spanIdB = generator.generate();
+            runClickHouse(templateAsync, """
+                    INSERT INTO comments (id, entity_id, entity_type, project_id, workspace_id, text, created_by,
+                        last_updated_by) VALUES
+                    ('%1$s', '%2$s', 'trace', '%3$s', '%5$s', 'comment-a', 'user', 'user'),
+                    ('%1$s', '%2$s', 'trace', '%4$s', '%5$s', 'comment-b', 'user', 'user')
+                    """.formatted(commentId, sharedId, projectIdA, projectIdB, WORKSPACE_ID));
+            runClickHouse(templateAsync, """
+                    INSERT INTO guardrails (id, entity_type, entity_id, secondary_entity_id, project_id, workspace_id,
+                        name, result, config, details, created_by, last_updated_by) VALUES
+                    ('%1$s', 'trace', '%2$s', '%3$s', '%5$s', '%7$s', 'TOPIC', 'passed', '{}', '{}', 'user', 'user'),
+                    ('%1$s', 'trace', '%2$s', '%4$s', '%6$s', '%7$s', 'PII', 'failed', '{}', '{}', 'user', 'user')
+                    """.formatted(guardrailId, sharedId, spanIdA, spanIdB, projectIdA, projectIdB, WORKSPACE_ID));
+
+            var actualTrace = traceResourceClient.getById(sharedId, TEST_WORKSPACE, API_KEY);
+
+            assertThat(actualTrace.projectId()).isIn(projectIdA, projectIdB);
+            boolean isA = actualTrace.projectId().equals(projectIdA);
+
+            assertThat(actualTrace.comments())
+                    .singleElement()
+                    .satisfies(comment -> {
+                        assertThat(comment.id()).isEqualTo(commentId);
+                        assertThat(comment.text()).isEqualTo(isA ? "comment-a" : "comment-b");
+                    });
+            assertThat(actualTrace.guardrailsValidations())
+                    .singleElement()
+                    .satisfies(validation -> {
+                        assertThat(validation.spanId()).isEqualTo(isA ? spanIdA : spanIdB);
+                        assertThat(validation.checks())
+                                .singleElement()
+                                .satisfies(check -> {
+                                    assertThat(check.name()).isEqualTo(isA ? GuardrailType.TOPIC : GuardrailType.PII);
+                                    assertThat(check.result())
+                                            .isEqualTo(isA ? GuardrailResult.PASSED : GuardrailResult.FAILED);
+                                });
+                    });
+        }
+
+        private void runClickHouse(TransactionTemplateAsync templateAsync, String sql) {
+            templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement(sql).execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .defaultIfEmpty(0L)).block();
         }
 
         private Span collisionSpan(String projectName, UUID traceId, SpanType type, String provider, String cost,

@@ -884,7 +884,7 @@ class TraceDAOImpl implements TraceDAO {
                         <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND entity_id IN :ids
                         ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        LIMIT 1 BY project_id, id
                     )
                     GROUP BY project_id, entity_id
                 )
@@ -951,7 +951,7 @@ class TraceDAOImpl implements TraceDAO {
                     AND workspace_id = :workspace_id
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, id
+                    LIMIT 1 BY project_id, entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             ) AS gr ON t.id = gr.entity_id AND t.project_id = gr.project_id
