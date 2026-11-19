@@ -65,6 +65,16 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.usage.cost").source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.COST).spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.usage.cost.amount").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.COST).spanType(SpanType.llm).build(),
+            // String `gen_ai.usage.cost.*` attributes must match before the `gen_ai.usage.` prefix, which rejects the request on non-numeric strings.
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.usage.cost.currency").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.usage.cost.source").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()

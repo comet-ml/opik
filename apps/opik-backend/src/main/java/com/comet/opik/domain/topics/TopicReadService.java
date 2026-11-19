@@ -34,13 +34,13 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * <ul>
  * <li>{@code disabled}: the workspace is not eligible for topics (not opted in to topics or to ai-labels); no topics
  * are read and ClickHouse is not called, also when the project still has topics from before an opt-out.</li>
- * <li>{@code collecting}: eligible, no live topic; the body says how many traces with a vector the window has and how
- * many the first build needs, and, as {@code attempt}, whether the project's newest run is running or failed.</li>
- * <li>{@code ready}: eligible with live topics; {@link TopicsCounts} folds the counts of
+ * <li>{@code collecting}: eligible, no saved list; the body says how many traces with a vector the window has and
+ * how many the first build needs, and, as {@code attempt}, whether the project's current or last attempt is running or
+ * failed.</li>
+ * <li>{@code ready}: eligible with a saved list; {@link TopicsCounts} folds the counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}, cached by {@link #dayCounts}.</li>
  * </ul>
- * MySQL is read first: the project's state and its live topics, from MySQL, then, when collecting, the project's
- * newest run. Then ClickHouse. There is no lock: a run that saves in between makes some of the request's rows count
+ * MySQL is read first, in one transaction: the project's {@code topic_projects} row and its topics. Then ClickHouse. There is no lock: a run that saves in between makes some of the request's rows count
  * as Other.
  */
 @Slf4j
@@ -98,13 +98,13 @@ public class TopicReadService {
     }
 
     /**
-     * The rows of a ready read, cached for {@code cacheManager.caches.topics_day_counts}. The key holds the state's
-     * {@code last_run_id}, so a saved run starts a new entry, and the window's first instant, so the entry changes at
+     * The rows of a ready read, cached for {@code cacheManager.caches.topics_day_counts}. The key holds the project's
+     * {@code list_run_id}, so a saved run starts a new entry, and the window's first instant, so the entry changes at
      * UTC midnight. The client timeout is inside: a cache that hangs is a late miss, and the ClickHouse read still gets
      * its whole time. An error is not cached. Not private: Guice intercepts the call from {@link #get}.
      */
-    @Cacheable(name = DAY_COUNTS_CACHE, key = "$workspaceId + '-' + $projectId + '-' + $lastRunId + '-' + $from", returnType = TopicDayCount.class, wrapperType = List.class)
-    public Mono<List<TopicDayCount>> dayCounts(@NonNull String workspaceId, @NonNull UUID projectId, UUID lastRunId,
+    @Cacheable(name = DAY_COUNTS_CACHE, key = "$workspaceId + '-' + $projectId + '-' + $listRunId + '-' + $from", returnType = TopicDayCount.class, wrapperType = List.class)
+    public Mono<List<TopicDayCount>> dayCounts(@NonNull String workspaceId, @NonNull UUID projectId, UUID listRunId,
             @NonNull Instant from, @NonNull Instant to) {
         return traceTopicsDAO.countByTopicAndDay(workspaceId, projectId, from, to, MAX_EXECUTION_SECONDS)
                 .collectList()
@@ -121,12 +121,10 @@ public class TopicReadService {
         }
 
         var live = scope.get().live();
-        var state = scope.get().state();
+        var project = scope.get().project();
         var from = startOf(TopicsCounts.windowFrom(today, windowDays));
         var to = startOf(today.plusDays(1));
         if (live.isEmpty()) {
-            var newest = template.inTransaction(READ_ONLY,
-                    handle -> handle.attach(TopicRunDAO.class).findNewest(workspaceId, projectId));
             long vectors = blockWithLimits(workspaceId, projectId, windowDAO
                     .countByProject(workspaceId, Set.of(projectId), from, to, MAX_EXECUTION_SECONDS)
                     .next()
@@ -134,27 +132,29 @@ public class TopicReadService {
                     .defaultIfEmpty(0L)
                     .timeout(CLIENT_TIMEOUT));
             return TopicsCounts.window(today, windowDays).status(ProjectTopics.Status.COLLECTING)
-                    .lastRunAt(TopicsCounts.lastRunAt(state))
-                    .attempt(TopicsCounts.attempt(newest.orElse(null)))
+                    .lastRunAt(TopicsCounts.lastRunAt(project))
+                    .attempt(TopicsCounts.attempt(project))
                     .vectorsInWindow(vectors)
                     .minVectors((long) config.getBuild().getMinVectors())
                     .build();
         }
         var rows = blockWithLimits(workspaceId, projectId,
-                dayCounts(workspaceId, projectId, state.lastRunId(), from, to));
-        return TopicsCounts.ready(today, windowDays, live, state, rows);
+                dayCounts(workspaceId, projectId, project.listRunId(), from, to));
+        return TopicsCounts.ready(today, windowDays, live, project, rows);
     }
 
     /** Empty when the workspace is not eligible for topics. */
     private Optional<TopicReadScope> readScope(String workspaceId, UUID projectId) {
-        if (!workspaces.isEligible(workspaceId)) {
+        if (!workspaces.isEnabled(workspaceId)) {
             return Optional.empty();
         }
         return Optional.of(template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(TopicDAO.class);
-            var state = dao.findStates(workspaceId, List.of(projectId)).stream().findFirst().orElse(null);
-            var live = state == null ? List.<Topic>of() : dao.findLive(workspaceId, projectId);
-            return TopicReadScope.builder().live(live).state(state).build();
+            var project = dao.findProjects(workspaceId, List.of(projectId)).stream().findFirst().orElse(null);
+            var live = project == null || project.listRunId() == null
+                    ? List.<Topic>of()
+                    : dao.findByProject(workspaceId, projectId);
+            return TopicReadScope.builder().live(live).project(project).build();
         }));
     }
 

@@ -27,10 +27,13 @@ class TopicsCountsTest {
     private static final String WORKSPACE_ID = "ws-1";
     private static final UUID PROJECT_ID = UUID.randomUUID();
     private static final Instant LAST_RUN = TODAY.atTime(2, 40).toInstant(ZoneOffset.UTC);
-    private static final TopicProjectState STATE = TopicProjectState.builder()
+    /** Not read by the fold; a topic only needs some. */
+    private static final PrototypeVectors VECTORS = new PrototypeVectors(
+            List.of(new float[TopicEmbedding.DIMENSIONS]));
+    private static final TopicProject STATE = TopicProject.builder()
             .projectId(PROJECT_ID)
             .workspaceId(WORKSPACE_ID)
-            .rebuilds(3)
+            .savedRuns(3)
             .firstBuiltAt(FIRST_BUILD.atTime(2, 0).toInstant(ZoneOffset.UTC))
             .lastSuccessAt(LAST_RUN)
             .windowUntil(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC))
@@ -192,13 +195,14 @@ class TopicsCountsTest {
     @Test
     @DisplayName("attempt: running and failed runs show; a saved run or no run shows none")
     void attempt() {
-        var running = run(TopicRun.Status.RUNNING);
+        var running = run(TopicProject.RunStatus.RUNNING);
 
         assertThat(TopicsCounts.attempt(running)).isEqualTo(
                 ProjectTopics.Attempt.builder().status(ProjectTopics.Attempt.Status.RUNNING).build());
-        assertThat(TopicsCounts.attempt(run(TopicRun.Status.FAILED))).isEqualTo(
+        assertThat(TopicsCounts.attempt(run(TopicProject.RunStatus.FAILED))).isEqualTo(
                 ProjectTopics.Attempt.builder().status(ProjectTopics.Attempt.Status.FAILED).build());
-        assertThat(TopicsCounts.attempt(run(TopicRun.Status.SAVED))).isNull();
+        assertThat(TopicsCounts.attempt(run(TopicProject.RunStatus.SAVED))).isNull();
+        assertThat(TopicsCounts.attempt(STATE)).isNull();
         assertThat(TopicsCounts.attempt(null)).isNull();
     }
 
@@ -206,14 +210,12 @@ class TopicsCountsTest {
         return TopicsCounts.ready(TODAY, WINDOW_DAYS, live, STATE, rows);
     }
 
-    private static TopicRun run(TopicRun.Status status) {
-        return TopicRun.builder()
+    private static TopicProject run(TopicProject.RunStatus status) {
+        return STATE.toBuilder()
                 .runId(UUID.randomUUID())
-                .workspaceId(WORKSPACE_ID)
-                .projectId(PROJECT_ID)
-                .mode(TopicRun.Mode.FIRST_BUILD)
-                .status(status)
-                .startedAt(LAST_RUN)
+                .runMode(TopicProject.RunMode.NIGHTLY_UPDATE)
+                .runStatus(status)
+                .runStartedAt(LAST_RUN)
                 .build();
     }
 
@@ -241,6 +243,7 @@ class TopicsCountsTest {
                 .name("Topic " + id)
                 .definition("Definition of " + id)
                 .born(born)
+                .vectors(VECTORS)
                 .build();
     }
 }

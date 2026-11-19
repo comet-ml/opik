@@ -14,6 +14,10 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelStatus;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
+import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
+import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Progress;
+import com.comet.opik.domain.topics.TopicVectorsDAO.BackfillProject;
+import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -34,16 +38,17 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -52,11 +57,12 @@ import static com.comet.opik.domain.topics.TopicVectorsFixtures.assertVectors;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.doneStatus;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.expectedVectors;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.outputLabel;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.summaryOf;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.traceCreatedAt;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.vector;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The topic vectors storage against real ClickHouse and MySQL: {@link TopicVectorsDAO}'s window read, discovery,
@@ -86,11 +92,7 @@ class TopicVectorsStorageTest {
         Startables.deepStart(redis, mysql, zookeeper, clickHouse).join();
         wireMock = WireMockUtils.startWireMock();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
@@ -135,7 +137,8 @@ class TopicVectorsStorageTest {
     }
 
     @Test
-    @DisplayName("the window read finds a done status without a vector, and nothing once the vector is written")
+    @DisplayName("the window read finds a done status without a vector, with its summary, and nothing once the "
+            + "vector of its task is written")
     void windowReadAndAntiJoin() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var projectId = ID_GENERATOR.generateId();
@@ -153,6 +156,11 @@ class TopicVectorsStorageTest {
         var found = findUnvectored(workspaceId, lower);
 
         assertCandidates(found, candidate(workspaceId, projectId, traceId, 3));
+
+        // The same key of another task is another vector.
+        vectorsDAO.insert(List.of(vector(workspaceId, projectId, traceId, 3).toBuilder().task("other_task").build()))
+                .block();
+        assertCandidates(findUnvectored(workspaceId, lower), candidate(workspaceId, projectId, traceId, 3));
 
         vectorsDAO.insert(List.of(vector(workspaceId, projectId, traceId, 3))).block();
 
@@ -401,8 +409,8 @@ class TopicVectorsStorageTest {
                 .containsExactlyInAnyOrderElementsOf(expectedKeys);
         assertThat(unsliced).allSatisfy(candidate -> assertThat(candidate.traceCreatedAt())
                 .isEqualTo(created.get(candidate.traceId())));
-        var byKey = Comparator.comparing(TopicVectorCandidate::projectId)
-                .thenComparing(TopicVectorCandidate::traceId);
+        var byKey = Comparator.comparing(Candidate::projectId)
+                .thenComparing(Candidate::traceId);
         var expected = unsliced.stream().sorted(byKey).toList();
 
         var slicedAll = sliced(workspaceId, null, List.of(), lower, upper, now, createdAfter, slice);
@@ -455,80 +463,170 @@ class TopicVectorsStorageTest {
 
         var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
                 .collectList().block();
-        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, lower, 10).block();
+        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
+                List.of(first, second), 10).block();
 
-        assertThat(found).extracting(TopicBackfillProject::projectId, TopicBackfillProject::traces)
-                .containsExactlyInAnyOrder(tuple(first, 3L), tuple(second, 1L));
+        assertThat(tracesByProject(found)).isEqualTo(Map.of(first, 3L, second, 1L));
         assertThat(found).allSatisfy(project -> assertThat(project.lastDoneAt()).isBetween(before,
                 Instant.now().plusSeconds(1)));
-        assertThat(tracesWithVectors.get(first)).isEqualTo(2);
         // The key's latest row is the tombstone, so the row it replaces does not count before the merge either.
-        assertThat(tracesWithVectors).doesNotContainKey(second);
+        assertThat(tracesWithVectors).isEqualTo(Map.of(first, 2L));
         // A window that starts after the traces were created counts none of them, but still finds the projects.
-        assertThat(vectorsDAO.findBackfillProjects(workspaceId, TASK, before, lower.minus(8, ChronoUnit.DAYS), 10)
-                .collectList().block())
-                .extracting(TopicBackfillProject::projectId, TopicBackfillProject::traces)
-                .containsExactlyInAnyOrder(tuple(first, 0L), tuple(second, 0L));
+        assertThat(tracesByProject(vectorsDAO.findBackfillProjects(workspaceId, TASK, before,
+                lower.minus(8, ChronoUnit.DAYS), 10).collectList().block()))
+                .isEqualTo(Map.of(first, 0L, second, 0L));
     }
 
     @Test
-    @DisplayName("the backfill table: a started row is not started again, a discovery keeps a row's start and drained "
-            + "mark, progress never passes the total, and rows not checked for long start again")
-    void backfillTable() {
+    @DisplayName("the discovery and the vector count read slice by slice of trace creation time and add up: traces "
+            + "created days apart are each counted once, and only the asked projects are counted")
+    void discoveryInSlices() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var notAsked = ID_GENERATOR.generateId();
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        // A week apart or more: the discovery slice is a week, so each trace is in its own slice.
+        var createdAts = List.of(now.minus(3, ChronoUnit.DAYS), now.minus(10, ChronoUnit.DAYS),
+                now.minus(20, ChronoUnit.DAYS));
+        var statuses = new ArrayList<AiLabelStatus>();
+        var vectors = new ArrayList<TopicVector>();
+        for (var owner : List.of(projectId, notAsked)) {
+            for (var createdAt : createdAts) {
+                var traceId = ID_GENERATOR.generateId();
+                statuses.add(doneStatus(workspaceId, owner, traceId, 1).toBuilder().traceCreatedAt(createdAt).build());
+                vectors.add(vector(workspaceId, owner, traceId, 1).toBuilder().traceCreatedAt(createdAt).build());
+            }
+        }
+        statusDAO.insert(statuses).block();
+        vectorsDAO.insert(vectors).block();
+        var lower = now.minus(25, ChronoUnit.DAYS);
+
+        var found = vectorsDAO.findBackfillProjects(workspaceId, TASK, lower, lower.minus(8, ChronoUnit.DAYS), 10)
+                .collectList().block();
+        var tracesWithVectors = vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower,
+                List.of(projectId), 10).block();
+
+        assertThat(tracesByProject(found)).isEqualTo(Map.of(projectId, 3L, notAsked, 3L));
+        assertThat(tracesWithVectors).isEqualTo(Map.of(projectId, 3L));
+        assertThat(vectorsDAO.countTracesWithVectorsByProject(workspaceId, TASK, lower, List.of(), 10).block())
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("bounds with nanoseconds are cut to the microsecond: a status and a trace exactly at the bounds' "
+            + "microsecond are in the window")
+    void nanosecondBounds() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var traceId = ID_GENERATOR.generateId();
+        var updatedAt = Instant.now().minus(10, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MICROS);
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
+        tables.insertStatusAt(workspaceId, projectId, traceId, 1, updatedAt);
+        var nanos = Duration.ofNanos(999);
+
+        var found = vectorsDAO.findUnvectored(windowRead(workspaceId, updatedAt.plus(nanos), updatedAt.plus(nanos),
+                traceCreatedAt(traceId).plus(nanos)).build()).collectList().block();
+
+        assertThat(found).containsExactly(candidate(workspaceId, projectId, traceId, 1).toBuilder()
+                .statusUpdatedAt(updatedAt).build());
+    }
+
+    @Test
+    @DisplayName("NON_BLANK in ClickHouse calls blank exactly what Python's str.strip() removes, which opik-inference "
+            + "rejects")
+    void nonBlankMatchesPythonStrip() {
+        // Every character for which Python's str.isspace() is true.
+        var pythonWhitespace = codePoints(0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x85, 0xA0,
+                0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028,
+                0x2029, 0x202F, 0x205F, 0x3000);
+        // Not whitespace in Python: zero width space, byte order mark, a letter.
+        var notWhitespace = codePoints(0x200B, 0xFEFF, 'a');
+
+        assertThat(matchNonBlank(pythonWhitespace)).containsOnly(0);
+        assertThat(matchNonBlank(notWhitespace)).containsOnly(1);
+    }
+
+    @Test
+    @DisplayName("the backfill state: a started backfill is not started again, a discovery keeps its start and drained "
+            + "mark, progress never passes the total, and a workspace not discovered for long starts again")
+    void backfillState() {
         var workspaceId = ID_GENERATOR.generateId().toString();
         var first = ID_GENERATOR.generateId();
         var second = ID_GENERATOR.generateId();
         var third = ID_GENERATOR.generateId();
         var t0 = Instant.parse("2026-11-01T10:00:00.123456Z");
         List.of(first, second, third).forEach(projectId -> tables.project(workspaceId, projectId));
-        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         backfillService.start(List.of(row.projectId(first).build(), row.projectId(second).build()));
-        backfillService.start(List.of(row.projectId(first).startedAt(t0.plusSeconds(60)).build()));
+        backfillService.start(List.of(row.projectId(first).backfillStartedAt(t0.plusSeconds(60)).build()));
         var t1 = t0.plusSeconds(100);
-        backfillService.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId)
-                .projectId(first).drainedAt(t1).written(5).build()));
+        backfillService.record(List.of(Progress.builder().workspaceId(workspaceId).projectId(first).drainedAt(t1)
+                .written(5).build()));
 
         var started = backfillService.findByKeys(workspaceId, List.of(first, second, third));
         // Never discovered, so its total is 0 and nothing written counts yet.
         assertThat(started).isEqualTo(Map.of(
-                first, row.projectId(first).startedAt(t0).drainedAt(t1).build(),
-                second, row.projectId(second).startedAt(t0).drainedAt(null).build()));
+                first, row.projectId(first).backfillStartedAt(t0).backfillDrainedAt(t1).build(),
+                second, row.projectId(second).backfillStartedAt(t0).backfillDrainedAt(null).build()));
         assertThat(backfillService.findUndrained(List.of(workspaceId)))
                 .isEqualTo(Map.of(workspaceId, List.of(started.get(second))));
 
         var t2 = t0.plusSeconds(200);
         var t3 = t0.plusSeconds(300);
-        var found = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t3).checkedAt(t3);
+        var found = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t3).backfillLastDoneAt(t2);
         backfillService.discovered(workspaceId, List.of(
-                found.projectId(first).lastDoneAt(t2).tracesTotal(10).tracesDone(4).build(),
-                found.projectId(third).lastDoneAt(t2).tracesTotal(7).tracesDone(0).build()), t3, t0.minusSeconds(1));
-        var progress = TopicVectorBackfill.Progress.builder().workspaceId(workspaceId).projectId(third).written(5)
-                .build();
+                found.projectId(first).backfillTracesTotal(10).backfillTracesDone(4).build(),
+                found.projectId(third).backfillTracesTotal(7).backfillTracesDone(0).build()), t3, t0.minusSeconds(1));
+        var progress = Progress.builder().workspaceId(workspaceId).projectId(third).written(5).build();
         backfillService.record(List.of(progress, progress));
 
         assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
                 // Its start and drained mark are kept; the counts and the latest status are the discovery's.
-                first, found.projectId(first).startedAt(t0).drainedAt(t1).lastDoneAt(t2).tracesTotal(10)
-                        .tracesDone(4).build(),
-                // Not found by the discovery, but checked with its workspace.
-                second, row.projectId(second).startedAt(t0).checkedAt(t3).drainedAt(null).build(),
+                first, found.projectId(first).backfillStartedAt(t0).backfillDrainedAt(t1).backfillTracesTotal(10)
+                        .backfillTracesDone(4).build(),
+                // Not found by the discovery: left as it was.
+                second, row.projectId(second).backfillStartedAt(t0).backfillDrainedAt(null).build(),
                 // New: starts a backfill. 5 + 5 written of 7.
-                third, found.projectId(third).startedAt(t3).drainedAt(null).lastDoneAt(t2).tracesTotal(7)
-                        .tracesDone(7).build()));
+                third, found.projectId(third).backfillStartedAt(t3).backfillDrainedAt(null).backfillTracesTotal(7)
+                        .backfillTracesDone(7).build()));
+        assertThat(vectorsCheckedAt(workspaceId)).isEqualTo(t3);
 
-        // The tick comes back long after t3: every row starts again.
+        // The tick comes back long after t3: every backfill starts again.
         var t4 = t3.plus(3, ChronoUnit.DAYS);
         backfillService.discovered(workspaceId, List.of(), t4, t4.minus(2, ChronoUnit.DAYS));
 
-        var all = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicVectorBackfillDAO.class).findByWorkspaceIds(List.of(workspaceId)));
-        assertThat(all).hasSize(3).allSatisfy(reset -> {
-            assertThat(reset.startedAt()).isEqualTo(t4);
-            assertThat(reset.checkedAt()).isEqualTo(t4);
-            assertThat(reset.drainedAt()).isNull();
-            assertThat(reset.tracesTotal()).isZero();
-            assertThat(reset.tracesDone()).isZero();
-        });
+        var reset = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t4);
+        assertThat(backfillService.findByKeys(workspaceId, List.of(first, second, third))).isEqualTo(Map.of(
+                first, reset.projectId(first).backfillLastDoneAt(t2).build(),
+                second, reset.projectId(second).backfillLastDoneAt(t0).build(),
+                third, reset.projectId(third).backfillLastDoneAt(t2).build()));
+        assertThat(vectorsCheckedAt(workspaceId)).isEqualTo(t4);
+    }
+
+    @Test
+    @DisplayName("a project row another writer created has no backfill until one starts, and the backfill writes "
+            + "leave that writer's columns as they are")
+    void backfillOnARowOfAnotherWriter() {
+        var workspaceId = ID_GENERATOR.generateId().toString();
+        var projectId = ID_GENERATOR.generateId();
+        tables.project(workspaceId, projectId);
+        // A first build created the row: only its own columns are set.
+        template.inTransaction(WRITE, handle -> handle.createUpdate("""
+                INSERT INTO topic_projects (workspace_id, project_id, saved_runs) VALUES (:workspaceId, :projectId, 2)
+                """).bind("workspaceId", workspaceId).bind("projectId", projectId.toString()).execute());
+        assertThat(backfillService.findByKeys(workspaceId, List.of(projectId))).isEmpty();
+        var t0 = Instant.parse("2026-11-01T10:00:00Z");
+
+        var backfill = Backfill.builder().workspaceId(workspaceId).projectId(projectId).backfillStartedAt(t0)
+                .backfillLastDoneAt(t0).backfillTracesTotal(3).build();
+        backfillService.start(List.of(backfill));
+
+        assertThat(backfillService.findByKeys(workspaceId, List.of(projectId))).isEqualTo(Map.of(projectId, backfill));
+        int savedRuns = template.inTransaction(READ_ONLY, handle -> handle.createQuery("""
+                SELECT saved_runs FROM topic_projects WHERE workspace_id = :workspaceId AND project_id = :projectId
+                """).bind("workspaceId", workspaceId).bind("projectId", projectId.toString()).mapTo(Integer.class)
+                .one());
+        assertThat(savedRuns).isEqualTo(2);
     }
 
     @Test
@@ -539,22 +637,50 @@ class TopicVectorsStorageTest {
         var deleted = ID_GENERATOR.generateId();
         tables.project(workspaceId, kept);
         var t0 = Instant.parse("2026-11-01T10:00:00Z");
-        var row = TopicVectorBackfill.builder().workspaceId(workspaceId).startedAt(t0).checkedAt(t0).lastDoneAt(t0);
+        var row = Backfill.builder().workspaceId(workspaceId).backfillStartedAt(t0).backfillLastDoneAt(t0);
         // Left behind by a failed delete on ProjectsDeleted.
         backfillService.start(List.of(row.projectId(kept).build(), row.projectId(deleted).build()));
 
         // The deleted project's statuses are still there, so the discovery finds it again.
-        int removed = backfillService.discovered(workspaceId, List.of(row.projectId(kept).tracesTotal(3).build(),
-                row.projectId(deleted).tracesTotal(3).build()), t0.plusSeconds(60), t0);
+        int removed = backfillService.discovered(workspaceId, List.of(row.projectId(kept).backfillTracesTotal(3)
+                .build(), row.projectId(deleted).backfillTracesTotal(3).build()), t0.plusSeconds(60), t0);
 
         assertThat(removed).isOne();
         assertThat(backfillService.findByKeys(workspaceId, List.of(kept, deleted))).containsOnlyKeys(kept);
     }
 
+    private Instant vectorsCheckedAt(String workspaceId) {
+        return template.inTransaction(READ_ONLY, handle -> handle.createQuery(
+                "SELECT vectors_checked_at FROM topic_workspaces WHERE workspace_id = :workspaceId")
+                .bind("workspaceId", workspaceId).mapTo(Instant.class).one());
+    }
+
+    private static List<String> codePoints(int... codePoints) {
+        return Arrays.stream(codePoints).mapToObj(Character::toString).toList();
+    }
+
+    /** {@code match(c, NON_BLANK)} in ClickHouse for each string. */
+    private List<Integer> matchNonBlank(List<String> values) {
+        return templateAsync.nonTransaction(connection -> Flux
+                .from(connection.createStatement("""
+                        SELECT match(value, :non_blank) AS matched FROM (SELECT arrayJoin(:values) AS value)
+                        """)
+                        .bind("non_blank", TopicVectorsDAO.NON_BLANK)
+                        .bind("values", values.toArray(String[]::new))
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> row.get("matched", Integer.class)))
+                .collectList())
+                .block();
+    }
+
+    private static Map<UUID, Long> tracesByProject(List<BackfillProject> found) {
+        return found.stream().collect(Collectors.toMap(BackfillProject::projectId, BackfillProject::traces));
+    }
+
     /** The window read as the tick walks it: slices counted back from {@code start}, the newest open-ended. */
-    private List<TopicVectorCandidate> sliced(String workspaceId, UUID projectId, List<UUID> excluded,
+    private List<Candidate> sliced(String workspaceId, UUID projectId, List<UUID> excluded,
             Instant lower, Instant upper, Instant start, Instant createdAfter, Duration slice) {
-        var candidates = new ArrayList<TopicVectorCandidate>();
+        var candidates = new ArrayList<Candidate>();
         Instant createdBefore = null;
         while (true) {
             var sliceStart = (createdBefore == null ? start : createdBefore).minus(slice);
@@ -569,28 +695,29 @@ class TopicVectorsStorageTest {
         }
     }
 
-    private void assertCandidates(List<TopicVectorCandidate> actual, TopicVectorCandidate... expected) {
+    private void assertCandidates(List<Candidate> actual, Candidate... expected) {
         assertThat(actual).usingRecursiveFieldByFieldElementComparatorIgnoringFields("statusUpdatedAt")
                 .containsExactlyInAnyOrder(expected);
     }
 
     /** The candidate of a status {@link #doneStatus} built; {@code statusUpdatedAt} is not known. */
-    private TopicVectorCandidate candidate(String workspaceId, UUID projectId, UUID traceId, int taskVersion) {
-        return TopicVectorCandidate.builder()
+    private Candidate candidate(String workspaceId, UUID projectId, UUID traceId, int taskVersion) {
+        return Candidate.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
                 .traceId(traceId)
                 .traceCreatedAt(traceCreatedAt(traceId))
                 .taskVersion(taskVersion)
                 .statusUpdatedAt(Instant.EPOCH)
+                .summary(summaryOf(traceId, taskVersion))
                 .build();
     }
 
-    private List<TopicVectorCandidate> findUnvectored(String workspaceId, Instant lower) {
+    private List<Candidate> findUnvectored(String workspaceId, Instant lower) {
         return findUnvectored(workspaceId, lower, Instant.EPOCH);
     }
 
-    private List<TopicVectorCandidate> findUnvectored(String workspaceId, Instant lower, Instant createdAfter) {
+    private List<Candidate> findUnvectored(String workspaceId, Instant lower, Instant createdAfter) {
         return vectorsDAO.findUnvectored(windowRead(workspaceId, lower, Instant.now(), createdAfter).build())
                 .collectList().block();
     }
@@ -621,9 +748,9 @@ class TopicVectorsStorageTest {
     /** A copy of the key's row with {@code is_deleted = 1}; ClickHouse stamps a later {@code last_updated_at}. */
     private void insertTombstone(String workspaceId, UUID traceId, int taskVersion) {
         tables.execute("""
-                INSERT INTO topic_vectors (workspace_id, project_id, trace_id, trace_created_at, task_version,
+                INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
                     embed_model, embed_dimensions, text, vector, is_deleted)
-                SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, embed_model,
+                SELECT workspace_id, project_id, task, trace_id, trace_created_at, task_version, embed_model,
                     embed_dimensions, text, vector, 1
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id AND task_version = :task_version

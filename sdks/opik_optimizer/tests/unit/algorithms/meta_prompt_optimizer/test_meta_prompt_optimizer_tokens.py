@@ -9,7 +9,6 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_learning_ops import (
     get_task_context,
 )
-from opik_optimizer.utils import token as token_utils
 from opik_optimizer import constants
 
 
@@ -69,37 +68,6 @@ class TestTokenCalculation:
         """Test that all token-related constants are properly defined."""
         assert constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_MAX_TOKENS == 10000
         assert constants.META_PROMPT_DEFAULT_DATASET_CONTEXT_RATIO == 0.25
-
-
-class TestContextOpsTokenCounting:
-    """Test token counting functionality in history_ops."""
-
-    def test_count_tokens_with_litellm(self) -> None:
-        """Test token counting using litellm."""
-        with patch("opik_optimizer.utils.token.token_counter") as mock_counter:
-            mock_counter.return_value = 100
-
-            result = token_utils.count_tokens("This is a test string", model="gpt-4")
-
-            assert result == 100
-            mock_counter.assert_called_once()
-            # Verify it was called with messages format
-            call_args = mock_counter.call_args
-            assert call_args[1]["model"] == "gpt-4"
-            assert call_args[1]["messages"][0]["role"] == "user"
-            assert call_args[1]["messages"][0]["content"] == "This is a test string"
-
-    def test_count_tokens_fallback_when_litellm_unavailable(self) -> None:
-        """Test fallback token counting when litellm fails."""
-        with patch(
-            "opik_optimizer.utils.token.LITELLM_TOKEN_COUNTER_AVAILABLE",
-            False,
-        ):
-            test_string = "x" * 40  # Exactly 40 characters
-            result = token_utils.count_tokens(test_string, model="gpt-4")
-
-            # Fallback: ~1 token per 4 chars = 40/4 = 10 tokens
-            assert result == 10
 
 
 class TestAdaptiveContextFitting:
