@@ -5,13 +5,13 @@
 -- trace_topics holds one row per trace and assignment: every saved run gives each trace of its window a row (the
 -- run's own insert, then the labelling pass for the traces outside the run's sample), and the latest row per trace
 -- wins. topic_id is a topics.id from MySQL, or the all-zeros id for Other. source says who
--- wrote the row: 'run' (a run, run_id is its topic_runs.run_id) or 'arrival' (a trace labelled as it arrives).
+-- wrote the row: 'run' (a run, run_id is its id) or 'arrival' (a trace labelled as it arrives, run_id is null).
 -- The engine follows traces_local_v2 (000101) and span_weeks (000132):
 --   * last_updated_at is the ReplacingMergeTree version, set by ClickHouse at insert.
 --   * is_deleted is the ReplacingMergeTree soft-delete marker. Nothing sets it today: deletes are lightweight DELETEs.
 --     It is in the engine now because engine parameters cannot be added by ALTER.
---   * Readers dedupe explicitly (argMax per trace by last_updated_at, then run_id) and then drop a trace whose
---     latest row has is_deleted = 1.
+--   * Readers dedupe explicitly, argMax per trace by (last_updated_at, source = 'run'), so a run row wins a tie over
+--     an arrival row, and then drop a trace whose latest row has is_deleted = 1.
 --   * source is in the sort key, after trace_id: a merge collapses run rows only with run rows and arrival rows only
 --     with arrival rows. An arrival row written after a run (a relabel) so cannot merge away the run row a read by
 --     run_id looks for. A trace keeps at most two rows after merges; the "latest per trace" readers dedupe by
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.trace_topics ON CLUSTER
     id_at            DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(trace_id)) CODEC(Delta, ZSTD(1)),
     topic_id         FixedString(36)                                 CODEC(ZSTD(1)),
     source           Enum8('run' = 1, 'arrival' = 2)                 CODEC(ZSTD(1)),
-    run_id           String                                          CODEC(ZSTD(1)),
+    run_id           Nullable(FixedString(36))                       CODEC(ZSTD(1)),
     last_updated_at  DateTime64(6, 'UTC')   DEFAULT now64(6)         CODEC(Delta, ZSTD(1)),
     is_deleted       UInt8                  DEFAULT 0,
     INDEX idx_trace_created_at trace_created_at TYPE minmax GRANULARITY 1

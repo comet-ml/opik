@@ -2686,7 +2686,7 @@ topics:
     #  Default: 1
     #  Description: Embed calls in flight at a time, within one workspace's or project's read. Set it to the embed
     #  pool's replica count: the pool computes one call at a time per replica, so more only makes each call wait
-    #  longer, toward embedTimeout. Never above 4: the service's queue holds 4 full calls and answers a fifth with 429
+    #  longer, toward embedTimeout, and a call over the service's queue is answered with quota_exceeded (429)
     embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
     #  Default: 10s
     #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
@@ -2702,6 +2702,10 @@ topics:
       #  Default: 30s
       #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
+      #  Default: 2
+      #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1
+      #  to 16
+      maxThreads: ${TOPICS_VECTORS_FIND_MAX_THREADS:-2}
       #  Default: 1d
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
       #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d

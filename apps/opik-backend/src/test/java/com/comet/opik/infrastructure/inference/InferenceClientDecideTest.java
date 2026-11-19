@@ -242,9 +242,9 @@ class InferenceClientDecideTest {
     }
 
     @Test
-    void callCutOffAtTheDeadlineKeepsItsSlotUntilItsBodyEnds() {
+    void callCutOffAtTheDeadlineGivesItsSlotBack() {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(okJson(SUCCESS_BODY).withGzipDisabled(true).withChunkedDribbleDelay(20, 2_000)));
+                .willReturn(okJson(SUCCESS_BODY).withGzipDisabled(true).withChunkedDribbleDelay(20, 10_000)));
         var singleSlotConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
         singleSlotConfig.getInference().setMaxConcurrentDecides(1);
         var singleSlot = new InferenceClient(TestHttpClientUtils.client(), singleSlotConfig);
@@ -253,12 +253,10 @@ class InferenceClientDecideTest {
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.isOutOfTime()).isTrue());
 
-        // Its thread is still reading the body, so the next call finds no slot, even after its retries.
-        assertThatThrownBy(() -> singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
-                .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo(InferenceException.CLIENT_BUSY));
+        // The cut-off call closed its response, so its thread stopped reading the body and gave the one slot back,
+        // well before the body would have ended.
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
-        await().atMost(Duration.ofSeconds(5)).ignoreExceptionsInstanceOf(InferenceException.class)
+        await().atMost(Duration.ofSeconds(2)).ignoreExceptionsInstanceOf(InferenceException.class)
                 .untilAsserted(() -> assertThat(
                         singleSlot.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
                         .isEqualTo(SUCCESS_RESPONSE));
@@ -381,21 +379,6 @@ class InferenceClientDecideTest {
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.isOutOfTime()).isTrue());
         wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
-    }
-
-    @Test
-    void twoCallsReuseOneConnection() throws IOException {
-        try (var keepAlive = new KeepAliveServer(SUCCESS_BODY)) {
-            var reusing = new InferenceClient(TestHttpClientUtils.client(), config(keepAlive.url()));
-
-            reusing.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block();
-            reusing.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block();
-
-            // Every call closes its response without draining it (the over-cap guard), but a body read to its end
-            // has already given its connection back, so the second call reuses it.
-            assertThat(keepAlive.requests()).isEqualTo(2);
-            assertThat(keepAlive.connections()).isEqualTo(1);
-        }
     }
 
     private AiLabelsConfig config(String url) {

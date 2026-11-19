@@ -1,4 +1,4 @@
-package com.comet.opik.domain.ailabels;
+package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.utils.WeeklyPartitions;
 import com.google.common.base.Preconditions;
@@ -25,15 +25,15 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * The deletes {@code ai_labels} and {@code ai_label_status} share. Both are keyed by {@code trace_id} and partitioned
- * by the trace's week exactly as {@code traces_local_v2} is, so their rows are deleted with their traces: by
- * retention, with the trace sweep's own workspaces, id range, week predicate and experiment exclusion, and by the
- * trace-delete cascade.
+ * The deletes of the tables keyed by {@code trace_id} and partitioned by the trace's week exactly as
+ * {@code traces_local_v2} is ({@code ai_labels}, {@code ai_label_status}, {@code topic_vectors}), so their rows are
+ * deleted with their traces: by retention, with the trace sweep's own workspaces, id range, week predicate and
+ * experiment exclusion, and by the trace-delete cascade. {@code queryPrefix} starts each statement's log comment name.
  */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class AiLabelTableDeletes {
+public class TraceKeyedTableDeletes {
 
     /**
      * Mirrors {@code TraceDAO.DELETE_FOR_RETENTION}, on {@code trace_id} instead of {@code id}. The week bounds are
@@ -103,14 +103,15 @@ class AiLabelTableDeletes {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    Mono<Long> deleteForRetention(String table, @NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
+    public Mono<Long> deleteForRetention(@NonNull String table, @NonNull String queryPrefix,
+            @NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(workspaceIds),
                 "Argument 'workspaceIds' must not be empty");
-        log.info("Retention delete ai-labels table, table '{}', workspaces '{}', cutoffId '{}', lowerBound '{}'",
+        log.info("Retention delete, table '{}', workspaces '{}', cutoffId '{}', lowerBound '{}'",
                 table, workspaceIds.size(), cutoffId, lowerBound);
 
-        var template = getSTWithLogComment(DELETE_FOR_RETENTION, "ai-labels:retention_delete_" + table, null, "",
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION, queryPrefix + ":retention_delete_" + table, null, "",
                 "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
                         lowerBound))
                 .add("table", table);
@@ -124,14 +125,15 @@ class AiLabelTableDeletes {
                 .flatMap(result -> Mono.from(result.getRowsUpdated()));
     }
 
-    Mono<Long> deleteForRetentionBounded(String table, @NonNull Map<String, UUID> workspaceMinIds,
-            @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
+    public Mono<Long> deleteForRetentionBounded(@NonNull String table, @NonNull String queryPrefix,
+            @NonNull Map<String, UUID> workspaceMinIds, @NonNull UUID cutoffId, @NonNull UUID lowerBound) {
         Preconditions.checkArgument(!workspaceMinIds.isEmpty(), "Argument 'workspaceMinIds' must not be empty");
-        log.info("Retention delete ai-labels table (bounded), table '{}', workspaces '{}', cutoffId '{}'",
+        log.info("Retention delete (bounded), table '{}', workspaces '{}', cutoffId '{}'",
                 table, workspaceMinIds.size(), cutoffId);
 
         var entries = List.copyOf(workspaceMinIds.entrySet());
-        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "ai-labels:retention_delete_bounded_" + table,
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED,
+                queryPrefix + ":retention_delete_bounded_" + table,
                 null, "", "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(),
                         cutoffId, lowerBound))
                 .add("table", table)
@@ -156,7 +158,8 @@ class AiLabelTableDeletes {
      * One statement per batch and weekly partition, or a single unscoped statement per batch when a trace id's
      * partition cannot be derived exactly (see {@link WeeklyPartitions#groupByPartition}).
      */
-    Mono<Void> deleteByTraceIds(String table, @NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
+    public Mono<Void> deleteByTraceIds(@NonNull String table, @NonNull String queryPrefix,
+            @NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
         }
@@ -164,17 +167,17 @@ class AiLabelTableDeletes {
                 .fromIterable(Lists.partition(List.copyOf(traceIds), ANALYTICS_DELETE_BATCH_SIZE))
                 .concatMap(batch -> WeeklyPartitions.groupByPartition(batch)
                         .map(grouped -> Flux.fromIterable(grouped.entrySet())
-                                .concatMap(entry -> deleteByTraceIds(table, entry.getValue(), entry.getKey(),
-                                        projectId, workspaceId, userName)))
-                        .orElseGet(() -> Flux.from(deleteByTraceIds(table, batch, null, projectId, workspaceId,
-                                userName))))
+                                .concatMap(entry -> deleteByTraceIds(table, queryPrefix, entry.getValue(),
+                                        entry.getKey(), projectId, workspaceId, userName)))
+                        .orElseGet(() -> Flux.from(deleteByTraceIds(table, queryPrefix, batch, null, projectId,
+                                workspaceId, userName))))
                 .then());
     }
 
-    private Mono<Void> deleteByTraceIds(String table, Collection<UUID> traceIds, Long partition, UUID projectId,
-            String workspaceId, String userName) {
+    private Mono<Void> deleteByTraceIds(String table, String queryPrefix, Collection<UUID> traceIds, Long partition,
+            UUID projectId, String workspaceId, String userName) {
         var ids = traceIds.stream().map(UUID::toString).toArray(String[]::new);
-        var template = getSTWithLogComment(DELETE_BY_TRACE_IDS, "ai-labels:delete_by_trace_ids_" + table,
+        var template = getSTWithLogComment(DELETE_BY_TRACE_IDS, queryPrefix + ":delete_by_trace_ids_" + table,
                 workspaceId, userName, "trace_ids=%s, partition=%s".formatted(ids.length, partition))
                 .add("table", table);
         if (partition != null) {
