@@ -20,7 +20,7 @@ type FiltersButtonProps<TColumnData> = {
   config?: FilterButtonConfig;
   filters: Filters;
   onChange: (filters: Filters) => void;
-  layout?: "standard" | "icon" | "add";
+  layout?: "standard" | "icon";
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
   align?: "start" | "end";
@@ -102,16 +102,10 @@ const FiltersButton = <TColumnData,>({
             )}
             disabled={disabled}
           >
-            {layout === "add" && !validFilters.length ? (
-              <Plus className="size-3.5 shrink-0" />
-            ) : (
-              <FilterIcon
-                className={cn("shrink-0", !isIconLayout && "size-3.5")}
-              />
-            )}
-            {layout === "add" && !validFilters.length ? (
-              <span className="ml-1.5">Add filter</span>
-            ) : isIconLayout ? (
+            <FilterIcon
+              className={cn("shrink-0", !isIconLayout && "size-3.5")}
+            />
+            {isIconLayout ? (
               validFilters.length ? (
                 <span className="ml-1.5">{validFilters.length}</span>
               ) : null
