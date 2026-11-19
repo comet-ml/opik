@@ -69,7 +69,7 @@ Push the configuration profile to every target Mac, at device level. It does thr
 
 - It pre-approves the system extension, so activation is **silent**.
 - It installs the proxy configuration, so the user is not asked to allow it.
-- It forces the app's settings, so users can't turn capture off.
+- It forces the app's settings, so users can't change them in the app.
 
 The example below is one file with all three payloads. Some MDMs take it as it is and others have you enter the payloads in separate forms; the per-MDM table in [Advanced](#advanced) says which. Either way, all three stay at device level.
 
@@ -227,7 +227,7 @@ capture_content = false
 
 The token is the same on every Mac and the email is different on every Mac. If your MDM can substitute a per-user variable into a profile, you can deliver the email in a second, user-level profile and leave `user_email` out of the file. See *Setting each Mac's email* in [Advanced](#advanced).
 
-The file lands in a user home, so an MDM script running as root must resolve the console user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
+The file lands in a user home, so an MDM script running as root must find the logged-in user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
 
 <Warning>
   Write the file before the app's first launch. The capture engine reads it
@@ -239,17 +239,17 @@ The file lands in a user home, so an MDM script running as root must resolve the
 
 ### Launch the app once
 
-Trigger a first launch in the console user's context, for example at the end of the script that installed the app:
+The app has to run once in the logged-in user's session. Any way of opening it works, including the user opening it themselves. To do it without involving the user, have the script that installed the app open it for them:
 
 ```bash wordWrap
-launchctl asuser "$(id -u "$CONSOLE_USER")" open "/Applications/Opik CIPX.app"
+launchctl asuser "$(id -u <username>)" open "/Applications/Opik CIPX.app"
 ```
 
 From there the app handles everything itself: it activates the extension, starts capture, enrolls the Mac, and registers a login item so capture survives reboots. With the profile in place, the extension and the proxy configuration activate without a prompt. The user may be asked once to trust the app's certificate; see *Certificate trust* in [Advanced](#advanced).
 
 ### Lock capture on
 
-Push a second, separate profile that manages the app's login items. It greys out the app's switch in *System Settings → General → Login Items & Extensions*, so a user can't stop the capture engine there.
+The configuration profile fixes the capture setting inside the app, but a user can still switch the app's background item off in *System Settings → General → Login Items & Extensions*, which stops the capture engine. Push a second, separate profile that manages the app's login items. It greys out that switch and closes the remaining way to stop capture.
 
 Push this one **after** the app is installed. If the profile reaches a Mac first, the switch is not locked.
 
@@ -305,17 +305,26 @@ Push this one **after** the app is installed. If the profile reaches a Mac first
 
 ### Verify
 
-Check a target device:
+In Opik, open **Devices** in your AI Spend workspace. It lists every Mac that enrolled, with its user, its status, and when it last sent data:
+
+- A Mac that is listed has enrolled.
+- A recent time under **Last ingested** means that Mac's usage is arriving. A Mac nobody has used since it enrolled has nothing to send yet, so have its user run a prompt first.
+
+This is the check that matters. The app is deliberately fail-open, so a Mac that is missing its token or its email looks completely healthy to its user and captures nothing.
+
+<Accordion title="If a Mac is missing from the list">
+
+On that Mac, check each step in turn:
 
 ```bash wordWrap
 ls "/Library/Managed Preferences/com.comet.opik-cipx-app.plist"   # profile arrived
 systemextensionsctl list | grep opik-cipx                         # extension activated
-ls -l ~/.opik-cipx-mac/config.toml                                # the step that silently fails
+ls -l ~/.opik-cipx-mac/config.toml                                # token and email were delivered
 ```
 
-Then, in Opik, open **Devices** in your AI Spend workspace: every Mac that enrolled is listed there. A Mac that is missing has not enrolled; its app shows the enrollment state under *Settings → Account → This Device*.
+The app also shows its enrollment state under *Settings → Account → This Device*.
 
-Finally, confirm traces are arriving in your Opik workspace. That last check is the one that matters: the app is deliberately fail-open, so a device missing its token or its email looks completely healthy and captures nothing.
+</Accordion>
 
 </Steps>
 
@@ -496,7 +505,7 @@ Activation is fail-safe: any error in the chain turns capture back off rather th
 
 Ways to trigger the first launch, in order of preference:
 
-1. A package postinstall script that opens the app in the console user's context.
+1. A package postinstall script that opens the app in the logged-in user's session.
 2. A LaunchAgent shipped alongside the app. This also covers users who weren't logged in at install time.
 3. An MDM "run as current user" script.
 
