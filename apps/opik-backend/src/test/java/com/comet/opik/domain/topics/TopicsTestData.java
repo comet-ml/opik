@@ -22,9 +22,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -42,8 +42,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 final class TopicsTestData {
 
     static final String GENERATE_PATH = "/v1/generate";
-    /** The embed model every seeded vector names. */
-    static final String EMBED_MODEL = "bge-small-en-v1.5";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull TransactionTemplateAsync clickHouseTemplate;
@@ -124,17 +122,15 @@ final class TopicsTestData {
         int dimensions = TopicAlgorithm.DIMENSIONS;
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
-            var vector = new ArrayList<Float>(dimensions);
-            for (int t = 0; t < dimensions; t++) {
-                vector.add(traces.vectors()[i * dimensions + t]);
-            }
+            var vector = Arrays.copyOfRange(traces.vectors(), i * dimensions, (i + 1) * dimensions);
             rows.add(TopicVector.builder()
                     .workspaceId(workspaceId)
                     .projectId(projectId)
+                    .task(TopicEmbedding.SUMMARY_TASK)
                     .traceId(traces.traceIds().get(i))
                     .traceCreatedAt(traces.createdAt().get(i).plus(shift))
                     .taskVersion(1)
-                    .embedModel(EMBED_MODEL)
+                    .embedModel(TopicEmbedding.MODEL)
                     .embedDimensions(dimensions)
                     .text(traces.texts()[i])
                     .vector(vector)
@@ -151,90 +147,55 @@ final class TopicsTestData {
     }
 
     /**
-     * What a saved run leaves in MySQL for a project: a topic of {@code size} traces, its prototype and an Other one,
-     * the state, and the run, saved two hours after {@code night}.
+     * What a saved first build leaves in MySQL for a project: its row with the run saved two hours after
+     * {@code night}, and a topic of {@code size} traces. The labels are not complete yet.
      */
     void savedList(String workspaceId, UUID projectId, Instant night, int size) {
         var runId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
         var savedAt = night.plus(Duration.ofHours(2));
-        var vector = TopicPrototype.encode(new float[TopicAlgorithm.DIMENSIONS]);
+        var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            topicDAO.insertState(TopicProjectState.builder()
-                    .projectId(projectId)
-                    .workspaceId(workspaceId)
-                    .rebuilds(1)
-                    .firstBuiltAt(savedAt)
-                    .lastRunId(runId)
-                    .lastSuccessAt(savedAt)
-                    .windowUntil(night)
-                    .build());
+            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+                    savedAt.minus(Duration.ofMinutes(1)));
+            topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
+                    new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
-                    .id(topicId)
+                    .id(UUID.randomUUID())
                     .workspaceId(workspaceId)
                     .projectId(projectId)
                     .name("Billing")
                     .definition("Requests about invoices")
                     .born(LocalDate.ofInstant(night, ZoneOffset.UTC))
                     .size(size)
+                    .vectors(vectors)
                     .build()));
-            topicDAO.insertPrototypes(List.of(
-                    TopicPrototype.builder().workspaceId(workspaceId).projectId(projectId).position(0)
-                            .topicId(topicId).vector(vector).build(),
-                    TopicPrototype.builder().workspaceId(workspaceId).projectId(projectId).position(1)
-                            .vector(vector).build()));
-            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
-                    .runId(runId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .mode(TopicRun.Mode.FIRST_BUILD)
-                    .status(TopicRun.Status.SAVED)
-                    .startedAt(savedAt.minus(Duration.ofMinutes(1)))
-                    .finishedAt(savedAt)
-                    .stats("{\"topics\": 1}")
-                    .build());
+            runDAO.markSaved(workspaceId, projectId, runId, savedAt);
             return null;
         });
     }
 
-    List<TopicRun> runs(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_runs", projectId).stream()
-                .flatMap(workspaceId -> handle.attach(TopicRunDAO.class).findByProject(workspaceId, projectId).stream())
-                .toList());
+    /** A unit vector along {@code axis}. */
+    static float[] unit(int axis) {
+        var vector = new float[TopicEmbedding.DIMENSIONS];
+        vector[axis] = 1;
+        return vector;
     }
 
     List<Topic> topics(UUID projectId) {
         return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topics", projectId).stream()
-                .flatMap(workspaceId -> handle.attach(TopicDAO.class).findLive(workspaceId, projectId).stream())
+                .flatMap(workspaceId -> handle.attach(TopicDAO.class).findByProject(workspaceId, projectId).stream())
                 .toList());
     }
 
-    List<TopicPrototype> prototypes(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> workspacesOf(handle, "topic_prototypes", projectId).stream()
-                .flatMap(workspaceId -> handle.attach(TopicDAO.class).findPrototypes(workspaceId, projectId).stream())
-                .toList());
-    }
-
-    /** The run's {@code stats.topic_counts}, traces per topic id; empty when the run has none. */
-    Map<UUID, Long> runCounts(String workspaceId, UUID runId) {
-        var run = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicRunDAO.class).findById(workspaceId, runId));
-        var counts = new HashMap<UUID, Long>();
-        if (run != null && run.stats() != null) {
-            json(run.stats()).path("topic_counts").properties()
-                    .forEach(entry -> counts.put(UUID.fromString(entry.getKey()), entry.getValue().asLong()));
-        }
-        return counts;
-    }
-
-    TopicProjectState state(UUID projectId) {
-        var states = template.inTransaction(READ_ONLY,
-                handle -> workspacesOf(handle, "topic_project_states", projectId).stream()
+    TopicProject topicProject(UUID projectId) {
+        var rows = template.inTransaction(READ_ONLY,
+                handle -> workspacesOf(handle, "topic_projects", projectId).stream()
                         .flatMap(workspaceId -> handle.attach(TopicDAO.class)
-                                .findStates(workspaceId, Set.of(projectId)).stream())
+                                .findProjects(workspaceId, Set.of(projectId)).stream())
                         .toList());
-        return states.isEmpty() ? null : states.getFirst();
+        return rows.isEmpty() ? null : rows.getFirst();
     }
 
     /**
@@ -250,7 +211,7 @@ final class TopicsTestData {
 
     /**
      * The latest row of every trace of the project, unless that row is a tombstone: the read shape every
-     * {@code trace_topics} reader uses. run_id is a UUID v7 string, so on a last_updated_at tie the later run wins.
+     * {@code trace_topics} reader uses, a run row winning a tie with an arrival row.
      */
     List<TraceTopic> traceTopics(String workspaceId, UUID projectId) {
         return clickHouseTemplate.nonTransaction(connection -> Flux.from(connection.createStatement("""
@@ -259,7 +220,7 @@ final class TopicsTestData {
                     SELECT workspace_id, project_id, trace_id, trace_created_at, topic_id, source, run_id, is_deleted
                     FROM trace_topics
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
-                    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, run_id DESC
+                    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
                     LIMIT 1 BY workspace_id, project_id, trace_id
                 )
                 WHERE is_deleted = 0
@@ -274,27 +235,40 @@ final class TopicsTestData {
                         .traceCreatedAt(row.get("trace_created_at", Instant.class))
                         .topicId(UUID.fromString(row.get("topic_id", String.class)))
                         .source(TraceTopic.Source.valueOf(row.get("source", String.class).toUpperCase()))
-                        .runId(row.get("run_id", String.class))
+                        .runId(Optional.ofNullable(row.get("run_id", String.class)).map(UUID::fromString)
+                                .orElse(null))
                         .build()))
                 .collectList())
                 .block();
     }
 
-    /** One raw {@code trace_topics} row with its version and soft-delete marker, as no production write sets them. */
+    /**
+     * One raw run row of {@code trace_topics} with its version and soft-delete marker, as no production write sets
+     * them.
+     */
     void insertTraceTopic(String workspaceId, UUID projectId, UUID traceId, Instant traceCreatedAt, UUID topicId,
             Instant lastUpdatedAt, int isDeleted) {
+        insertTraceTopic(workspaceId, projectId, traceId, traceCreatedAt, topicId, TraceTopic.Source.RUN,
+                lastUpdatedAt, isDeleted);
+    }
+
+    /** As {@link #insertTraceTopic(String, UUID, UUID, Instant, UUID, Instant, int)}, from {@code source}. */
+    void insertTraceTopic(String workspaceId, UUID projectId, UUID traceId, Instant traceCreatedAt, UUID topicId,
+            TraceTopic.Source source, Instant lastUpdatedAt, int isDeleted) {
         clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
                 INSERT INTO trace_topics (workspace_id, project_id, trace_id, trace_created_at, topic_id, source,
                     run_id, last_updated_at, is_deleted)
                 VALUES (:workspace_id, :project_id, :trace_id, parseDateTime64BestEffort(:trace_created_at, 6),
-                    :topic_id, 'run', :run_id, parseDateTime64BestEffort(:last_updated_at, 6), :is_deleted)
+                    :topic_id, :source, nullIf(:run_id, ''), parseDateTime64BestEffort(:last_updated_at, 6),
+                    :is_deleted)
                 """)
                 .bind("workspace_id", workspaceId)
                 .bind("project_id", projectId.toString())
                 .bind("trace_id", traceId.toString())
                 .bind("trace_created_at", traceCreatedAt.toString())
                 .bind("topic_id", topicId.toString())
-                .bind("run_id", UUID.randomUUID().toString())
+                .bind("source", source.getValue())
+                .bind("run_id", source == TraceTopic.Source.RUN ? UUID.randomUUID().toString() : "")
                 .bind("last_updated_at", lastUpdatedAt.toString())
                 .bind("is_deleted", isDeleted)
                 .execute())
@@ -347,9 +321,9 @@ final class TopicsTestData {
     private void insertVectorRows(String workspaceId, UUID projectId, List<UUID> traceIds, String taskVersion,
             String lastUpdatedAt, int isDeleted, String filter) {
         clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
-                INSERT INTO topic_vectors (workspace_id, project_id, trace_id, trace_created_at, task_version,
+                INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
                     embed_model, embed_dimensions, text, vector, last_updated_at, is_deleted)
-                SELECT workspace_id, project_id, trace_id, trace_created_at, %s, embed_model,
+                SELECT workspace_id, project_id, task, trace_id, trace_created_at, %s, embed_model,
                     embed_dimensions, text, vector, %s, %d
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id IN :trace_ids %s

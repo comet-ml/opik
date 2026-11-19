@@ -1,0 +1,9 @@
+target
+src/test
+**/.DS_Store
+.idea
+docs
+data-migrations
+dependency-reduced-pom.xml
+test_*.sh
+*.md

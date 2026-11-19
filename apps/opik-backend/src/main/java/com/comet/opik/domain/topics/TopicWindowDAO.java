@@ -6,6 +6,7 @@ import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
@@ -20,9 +21,9 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 
 /**
- * A topic build's reads of {@code topic_vectors}: how many traces some projects have in a window, one project's
- * window, and the part of it the labelling pass has not labelled yet. A trace counts once: a relabel with a higher
- * task version adds a row, and the window keeps the highest.
+ * A topic build's reads of {@code topic_vectors}, the {@link TopicEmbedding#SUMMARY_TASK} rows: how many traces some
+ * projects have in a window, one project's window, and the part of it the labelling pass has not labelled yet. A trace
+ * counts once: a relabel with a higher task version adds a row, and the window keeps the highest.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -50,6 +51,7 @@ public class TopicWindowDAO {
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                AND task = :task
                 AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                 AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
                 GROUP BY project_id, trace_id
@@ -84,6 +86,7 @@ public class TopicWindowDAO {
                 FROM topic_vectors
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                AND task = :task
                 AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                 AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
                 AND is_deleted = 0
@@ -95,6 +98,7 @@ public class TopicWindowDAO {
                     FROM topic_vectors
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND task = :task
                     AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                     AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
                     AND bitShiftRight(cityHash64(trace_id), 32) \\< (SELECT share FROM share) * 4294967296
@@ -105,10 +109,11 @@ public class TopicWindowDAO {
                 ORDER BY cityHash64(trace_id), trace_id
                 LIMIT :limit
             )
-            SELECT trace_id, trace_created_at, task_version, text, vector
+            SELECT trace_id, trace_created_at, task_version, text, CAST(vector AS Array(Float32)) AS vector
             FROM topic_vectors
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
+            AND task = :task
             AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
             AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
             AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM keys)
@@ -135,6 +140,7 @@ public class TopicWindowDAO {
                     FROM topic_vectors
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND task = :task
                     AND trace_id > :after
                     AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
                     AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
@@ -156,10 +162,11 @@ public class TopicWindowDAO {
                 ORDER BY trace_id
                 LIMIT :limit
             )
-            SELECT trace_id, trace_created_at, vector
+            SELECT trace_id, trace_created_at, CAST(vector AS Array(Float32)) AS vector
             FROM topic_vectors
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
+            AND task = :task
             AND trace_id > :after
             AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
             AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
@@ -190,6 +197,7 @@ public class TopicWindowDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_ids", projectIds.stream().map(UUID::toString).toArray(String[]::new))
                         .bind("from_micros", toEpochMicros(from))
                         .bind("to_micros", toEpochMicros(to))
@@ -203,7 +211,7 @@ public class TopicWindowDAO {
      * The project's traces created in {@code [from, to)}, or an even, stable sample of {@code limit} of them when there
      * are more, in no particular order.
      */
-    public Flux<TopicWindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
+    public Flux<WindowRow> readWindow(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull Instant from, @NonNull Instant to, int limit, long maxExecutionSeconds) {
         // The guards of the vectors job's window read: validated config numbers, never input.
         var find = config.getVectors().getFind();
@@ -215,6 +223,7 @@ public class TopicWindowDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_id", projectId.toString())
                         .bind("from_micros", toEpochMicros(from))
                         .bind("to_micros", toEpochMicros(to))
@@ -238,6 +247,7 @@ public class TopicWindowDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_id", projectId.toString())
                         .bind("run_id", runId.toString())
                         .bind("from_micros", toEpochMicros(from))
@@ -251,22 +261,34 @@ public class TopicWindowDAO {
                         toVector(row))));
     }
 
-    private static TopicWindowRow toRow(Row row) {
-        return TopicWindowRow.builder()
+    private static WindowRow toRow(Row row) {
+        return WindowRow.builder()
                 .traceId(UUID.fromString(row.get("trace_id", String.class)))
                 .traceCreatedAt(row.get("trace_created_at", Instant.class))
-                .taskVersion(((Number) row.get("task_version", Object.class)).longValue())
+                .taskVersion(((Number) row.get("task_version", Object.class)).intValue())
                 .text(row.get("text", String.class))
                 .vector(toVector(row))
                 .build();
     }
 
+    /**
+     * The stored vector at unit length again: ClickHouse truncates it to BFloat16 on insert, which leaves it slightly
+     * shorter. The read casts it to Float32, as the driver returns a BFloat16 array's raw bits.
+     */
     private static float[] toVector(Row row) {
         // As TopicVectorsDAO: the driver's Java array type for Array(Float32) isn't part of its contract.
         var array = row.get("vector", Object.class);
         var vector = new float[Array.getLength(array)];
+        double norm = 0;
         for (int i = 0; i < vector.length; i++) {
             vector[i] = ((Number) Array.get(array, i)).floatValue();
+            norm += (double) vector[i] * vector[i];
+        }
+        if (norm > 0) {
+            float scale = (float) (1 / Math.sqrt(norm));
+            for (int i = 0; i < vector.length; i++) {
+                vector[i] *= scale;
+            }
         }
         return vector;
     }
@@ -278,7 +300,13 @@ public class TopicWindowDAO {
     public record ProjectCount(@NonNull UUID projectId, long traces) {
     }
 
+    /** One trace of a run's window: its highest live task version, with that version's text and vector. */
+    @Builder(toBuilder = true)
+    public record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
+            @NonNull String text, float @NonNull [] vector) {
+    }
+
     /** One trace of a labelling page: its id, creation time and the vector of its highest live task version. */
-    public record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, @NonNull float[] vector) {
+    public record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
     }
 }

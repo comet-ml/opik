@@ -133,7 +133,7 @@ tests:
     asserts:
       - equal:
           path: spec.configuration.profiles["monitor/readonly"]
-          value: 1
+          value: 2
       - equal:
           path: spec.configuration.profiles["default/distributed_background_insert_batch"]
           value: 1
