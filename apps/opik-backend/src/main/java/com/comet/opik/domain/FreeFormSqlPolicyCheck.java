@@ -51,7 +51,16 @@ class FreeFormSqlPolicyCheck {
     private static final Set<String> UNCHECKED_READS = Set.of("ReadFromSystemOne", "ReadFromSystemNumbers",
             "ReadFromSystemZeros", "ReadFromRemote", "ReadFromRemoteParallelReplicas");
 
-    /** @return the first read that cannot be shown to have run under its row policy; empty when there is none. */
+    /**
+     * The reason for an initiator read that only a scalar subquery explains. Audit lets such queries run; they are
+     * unprovable by design rather than evidence a policy was skipped, so they are told apart from other violations.
+     */
+    static final String SCALAR_SUBQUERY_REASON = "read in a scalar subquery";
+
+    /**
+     * @return the first read that cannot be shown to have run under its row policy, preferring any other violation
+     *     over a read only a scalar subquery explains; empty when there is none.
+     */
     static Optional<FreeFormSqlPolicyViolation> violation(@NonNull String database, @NonNull String user,
             @NonNull List<FreeFormSqlQueryLogEntry> entries,
             @NonNull String planJson, @NonNull FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
@@ -87,6 +96,7 @@ class FreeFormSqlPolicyCheck {
         Set<String> policyCoveredAnywhere = entries.stream()
                 .flatMap(entry -> entry.policyCoveredTables().stream())
                 .collect(Collectors.toSet());
+        FreeFormSqlPolicyViolation scalarRead = null;
         for (var entry : entries) {
             Set<String> policed = Set.copyOf(entry.policyCoveredTables());
             for (String table : entry.tables()) {
@@ -108,13 +118,22 @@ class FreeFormSqlPolicyCheck {
                         || subqueryReads.scalar().contains(distributedTable);
                 boolean shownElsewhere = entry.initial() && (filteredReads.contains(table)
                         || (!plannedReads.contains(table) && underFilter && !underScalar));
-                if (!shownElsewhere) {
-                    return Optional.of(FreeFormSqlPolicyViolation.builder().table(table).reason(
-                            entry.initial() ? "read without a row policy" : "read without a row policy on a shard")
-                            .build());
+                if (shownElsewhere) {
+                    continue;
                 }
+                if (entry.initial() && underScalar) {
+                    // Kept looking: a read nothing explains outranks it.
+                    if (scalarRead == null) {
+                        scalarRead = FreeFormSqlPolicyViolation.builder().table(table).reason(SCALAR_SUBQUERY_REASON)
+                                .build();
+                    }
+                    continue;
+                }
+                return Optional.of(FreeFormSqlPolicyViolation.builder().table(table).reason(
+                        entry.initial() ? "read without a row policy" : "read without a row policy on a shard")
+                        .build());
             }
         }
-        return Optional.empty();
+        return Optional.ofNullable(scalarRead);
     }
 }
