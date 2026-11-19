@@ -25,6 +25,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
@@ -39,6 +40,7 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -64,6 +66,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -107,6 +110,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
+    private org.slf4j.Logger userFacingLogger;
     private OnlineScoringSpanLlmAsJudgeScorer scorer;
     private AgenticScoringService agenticScoringService;
 
@@ -156,9 +160,10 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
     @BeforeEach
     void setUp() {
+        userFacingLogger = mock(org.slf4j.Logger.class);
         mockedFactory = mockStatic(UserFacingLoggingFactory.class);
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                .thenReturn(mock(org.slf4j.Logger.class));
+                .thenReturn(userFacingLogger);
 
         OnlineScoringConfig.StreamConfiguration streamConfig = new OnlineScoringConfig.StreamConfiguration();
         streamConfig.setScorer("span_llm_as_judge");
@@ -516,6 +521,26 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         assertThat(score.value()).isEqualByComparingTo("1");
         assertThat(score.reason()).isEqualTo("Probability: 0.97");
         verifyNoInteractions(aiProxyService);
+    }
+
+    @Test
+    void decisionModelRefusedRequestIsShownInTheRuleLog() {
+        var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, SpanLlmAsJudgeCode.class);
+        var span = createSpan();
+        var clientConfig = LlmProviderClientApiConfig.builder().apiKey("key").build();
+        var refused = new ProviderRequestRefusedException(
+                ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL);
+
+        when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
+        when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
+        when(decisionsClient.decide(any(), eq(clientConfig))).thenReturn(Mono.error(refused));
+
+        assertThatThrownBy(() -> scorer.score(buildMessage(span, code)).block())
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(refused.getMessage());
+
+        verify(userFacingLogger).error("Error while scoring spanId '{}' with rule '{}': {}",
+                span.id(), "rule", refused.getMessage());
     }
 
     @Test

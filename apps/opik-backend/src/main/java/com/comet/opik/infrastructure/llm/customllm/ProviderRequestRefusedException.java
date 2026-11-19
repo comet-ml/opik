@@ -3,6 +3,9 @@ package com.comet.opik.infrastructure.llm.customllm;
 import dev.langchain4j.exception.NonRetriableException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+
+import java.util.Optional;
 
 /**
  * An outbound provider request refused before it left Opik, or answered in a way that shows its destination can't
@@ -31,6 +34,9 @@ public class ProviderRequestRefusedException extends NonRetriableException {
         BEDROCK_CONVERSE_URL("""
                 the provider URL doesn't serve the Bedrock Converse API: use the bedrock-runtime endpoint with no \
                 path, such as https://bedrock-runtime.us-east-1.amazonaws.com"""),
+        OPENROUTER_DECISIONS_URL("""
+                decision models need an OpenRouter base URL whose path ends with /v1, such as \
+                https://openrouter.ai/api/v1"""),
         ;
 
         private final String message;
@@ -38,5 +44,10 @@ public class ProviderRequestRefusedException extends NonRetriableException {
 
     public ProviderRequestRefusedException(@NonNull Reason reason) {
         super(reason.message);
+    }
+
+    /** The refused request in the cause chain of {@code error}, if any. */
+    public static Optional<ProviderRequestRefusedException> from(@NonNull Throwable error) {
+        return Optional.ofNullable(ExceptionUtils.throwableOfType(error, ProviderRequestRefusedException.class));
     }
 }
