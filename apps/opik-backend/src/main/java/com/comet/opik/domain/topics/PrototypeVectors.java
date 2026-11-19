@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -11,21 +12,25 @@ import java.util.List;
  * {@code topic_project_states.other_vectors}. The order is part of the value: assignment breaks a tie between two
  * prototypes by it.
  */
-public record PrototypeVectors(@NonNull List<float[]> vectors) {
+public record PrototypeVectors(@NonNull List<float @NonNull []> vectors) {
 
     public PrototypeVectors {
         if (vectors.isEmpty()) {
             throw new IllegalArgumentException("prototype vectors must not be empty");
         }
-        vectors = vectors.stream()
-                .map(vector -> {
-                    if (vector.length != TopicEmbedding.DIMENSIONS) {
-                        throw new IllegalArgumentException("a prototype vector has %d values, expected %d"
-                                .formatted(vector.length, TopicEmbedding.DIMENSIONS));
-                    }
-                    return vector.clone();
-                })
-                .toList();
+        var copies = new ArrayList<float[]>(vectors.size());
+        for (int i = 0; i < vectors.size(); i++) {
+            float[] vector = vectors.get(i);
+            if (vector == null) {
+                throw new IllegalArgumentException("prototype vector %d is null".formatted(i));
+            }
+            if (vector.length != TopicEmbedding.DIMENSIONS) {
+                throw new IllegalArgumentException("prototype vector %d has %d values, expected %d"
+                        .formatted(i, vector.length, TopicEmbedding.DIMENSIONS));
+            }
+            copies.add(vector.clone());
+        }
+        vectors = List.copyOf(copies);
     }
 
     public int size() {

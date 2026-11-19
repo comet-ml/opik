@@ -5,14 +5,19 @@ import com.comet.opik.domain.topics.TopicEmbedding;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class PrototypeVectorsCodecTest {
 
@@ -54,12 +59,19 @@ class PrototypeVectorsCodecTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test
-    @DisplayName("prototype vectors must be non-empty and of the embedding's dimensions")
-    void invalidVectors() {
-        assertThatThrownBy(() -> new PrototypeVectors(List.of()))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new PrototypeVectors(List.of(new float[TopicEmbedding.DIMENSIONS - 1])))
+    static Stream<Arguments> invalidVectors() {
+        return Stream.of(
+                arguments("empty", List.of()),
+                arguments("too short", List.of(new float[TopicEmbedding.DIMENSIONS - 1])),
+                arguments("too long", List.of(vector(0f), new float[TopicEmbedding.DIMENSIONS + 1])),
+                arguments("null vector", Arrays.asList(vector(0f), null)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("prototype vectors must be non-empty, non-null and of the embedding's dimensions")
+    void invalidVectors(String name, List<float[]> vectors) {
+        assertThatThrownBy(() -> new PrototypeVectors(vectors))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

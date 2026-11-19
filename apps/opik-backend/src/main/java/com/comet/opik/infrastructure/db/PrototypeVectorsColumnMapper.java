@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.domain.topics.PrototypeVectors;
+import jakarta.annotation.Nullable;
 import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 
@@ -11,7 +12,7 @@ import java.sql.SQLException;
 public class PrototypeVectorsColumnMapper implements ColumnMapper<PrototypeVectors> {
 
     @Override
-    public PrototypeVectors map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
+    public @Nullable PrototypeVectors map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
         byte[] bytes = r.getBytes(columnNumber);
         if (bytes == null) {
             return null;
