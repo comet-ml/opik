@@ -83,12 +83,10 @@ class WorkspaceNameServiceTest {
         var service = service(server.baseUrl());
 
         assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
-        // The failure is cached in the background. Once it is, a call no longer asks the React service.
-        await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
-            var before = requests();
-            assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
-            assertThat(requests()).isEqualTo(before);
-        });
+        var before = requests();
+        // The failure is cached before the first call returns, so the next call doesn't ask the React service.
+        assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
+        assertThat(requests()).isEqualTo(before);
 
         // Once the failure expires, the next call asks again.
         var asked = requests();

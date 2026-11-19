@@ -271,10 +271,14 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE): decide calls share that pool with the other calls to opik-inference")
+    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) + aiLabels.loadConcurrency (AI_LABELS_LOAD_CONCURRENCY) + topics.vectors.embedConcurrency (TOPICS_VECTORS_EMBED_CONCURRENCY) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE) when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: guardrail decide calls share that pool with the other calls to opik-inference")
     public boolean isInferenceDecidesWithinConnectionPool() {
-        return inference == null || jerseyClient == null
-                || inference.getMaxConcurrentDecides() < jerseyClient.getMaxConnectionsPerRoute();
+        if (!serviceToggles.isGuardrailsValidationsEnabled() || inference == null || jerseyClient == null) {
+            return true;
+        }
+        var embedConcurrency = topics.getVectors() == null ? 0 : topics.getVectors().getEmbedConcurrency();
+        return inference.getMaxConcurrentDecides() + aiLabels.getLoadConcurrency()
+                + embedConcurrency < jerseyClient.getMaxConnectionsPerRoute();
     }
 
     @JsonIgnore

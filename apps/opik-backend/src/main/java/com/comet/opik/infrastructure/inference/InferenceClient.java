@@ -62,8 +62,9 @@ import java.util.function.Function;
  * {@link #decide}, which a request waits on, goes through the shared client like every other call, but as a synchronous
  * call on threads of its own, so it never queues behind batch calls for one of the client's threads. There are
  * {@code maxConcurrentDecides} of them, the most decide calls in flight; a call over it fails with {@code client_busy}
- * after the usual retries. That cap is kept below the shared pool's connections per route, so decide calls alone can't
- * take every connection to opik-inference.
+ * after the usual retries. When guardrail validations are on, that cap plus the ai-labels load and Topics embed
+ * concurrency is kept below the shared pool's connections per route, so these calls together can't take every
+ * connection to opik-inference.
  * <p>
  * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body
  * longer than {@code inference.maxResponseBytes} fails the call the same way: at once when its

@@ -99,10 +99,8 @@ public class WorkspaceNameService {
         var ttl = cacheConfiguration.getCaches().getOrDefault(LOOKUP_FAILURES_CACHE,
                 cacheConfiguration.getDefaultDuration());
         try {
-            cacheManager.putAsync(lookupFailureKey(workspaceId), true, ttl).exceptionally(exception -> {
-                log.warn("Caching a workspace name lookup failure failed, workspace '{}'", workspaceId, exception);
-                return null;
-            });
+            // Written before nameOrId returns, so the next call already skips the React service.
+            cacheManager.putIfAbsentSync(lookupFailureKey(workspaceId), true, ttl);
         } catch (RuntimeException exception) {
             log.warn("Caching a workspace name lookup failure failed, workspace '{}'", workspaceId, exception);
         }
