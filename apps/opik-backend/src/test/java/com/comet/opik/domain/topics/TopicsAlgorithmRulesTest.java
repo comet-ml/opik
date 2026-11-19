@@ -4,6 +4,7 @@ import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
 import com.comet.opik.domain.topics.TopicsRunException.Code;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.node.TextNode;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -221,19 +222,25 @@ class TopicsAlgorithmRulesTest {
                     .containsExactly("y", "w", "v", "x");
         }
 
-        @Test
-        @DisplayName("examples: centres that are not whole rows and labels outside the groups are rejected")
-        void examplesRejectMalformedInput() {
-            String[] texts = {"a", "b"};
-            float[] vectors = {1, 0, 0, 1};
-            var merged = IntentMerger.merge(texts, vectors, 2);
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("malformedInputs")
+        @DisplayName("examples: malformed input is rejected with an IllegalArgumentException")
+        void examplesRejectMalformedInput(String label, ThrowingCallable call) {
+            assertThatThrownBy(call).isInstanceOf(IllegalArgumentException.class);
+        }
 
-            assertThatThrownBy(() -> GroupSummaries.authorExamples(merged, new int[]{0, 0}, new float[]{1, 0, 0}, 2, 2))
-                    .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> GroupSummaries.authorExamples(merged, new int[]{0, 1}, new float[]{1, 0}, 2, 2))
-                    .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> IntentMerger.merge(new String[]{"a", null}, vectors, 2))
-                    .isInstanceOf(IllegalArgumentException.class);
+        static Stream<Arguments> malformedInputs() {
+            float[] vectors = {1, 0, 0, 1};
+            var merged = IntentMerger.merge(new String[]{"a", "b"}, vectors, 2);
+            return Stream.of(
+                    Arguments.of("centres that are not whole rows",
+                            (ThrowingCallable) () -> GroupSummaries.authorExamples(merged, new int[]{0, 0},
+                                    new float[]{1, 0, 0}, 2, 2)),
+                    Arguments.of("a label outside the groups",
+                            (ThrowingCallable) () -> GroupSummaries.authorExamples(merged, new int[]{0, 1},
+                                    new float[]{1, 0}, 2, 2)),
+                    Arguments.of("a null text",
+                            (ThrowingCallable) () -> IntentMerger.merge(new String[]{"a", null}, vectors, 2)));
         }
 
         @Test
