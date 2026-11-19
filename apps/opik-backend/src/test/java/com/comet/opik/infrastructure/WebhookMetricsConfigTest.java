@@ -34,6 +34,7 @@ class WebhookMetricsConfigTest {
         var substitutor = new StringSubstitutor(StringLookupFactory.INSTANCE.mapStringLookup(environment));
         substitutor.setValueDelimiter(":-");
         substitutor.setEnableUndefinedVariableException(false);
+        substitutor.setEnableSubstitutionInVariables(true);
 
         ObjectMapper mapper = Jackson.newObjectMapper();
         // No validator: this asserts what the YAML binds to, not whether every unrelated section is valid
