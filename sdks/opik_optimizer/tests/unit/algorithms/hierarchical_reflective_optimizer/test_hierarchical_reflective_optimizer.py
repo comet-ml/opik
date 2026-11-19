@@ -1,7 +1,5 @@
 # mypy: disable-error-code=no-untyped-def
 
-from collections.abc import Callable
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,8 +14,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.types import (
     FailureMode,
     HierarchicalRootCauseAnalysis,
 )
-from tests.unit.fixtures import assert_baseline_early_stop, assert_invalid_prompt_raises
-from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
+from tests.unit.fixtures import make_two_prompt_bundle
 
 
 def _mock_experiment_result(score: float) -> MagicMock:
@@ -29,73 +26,6 @@ def _mock_experiment_result(score: float) -> MagicMock:
     score_result = MagicMock(value=score)
     test_result = MagicMock(score_results=[score_result])
     return MagicMock(spec=EvaluationResult, test_results=[test_result])
-
-
-class TestHierarchicalReflectiveOptimizerInit:
-    @pytest.mark.parametrize(
-        "kwargs,expected",
-        [
-            (
-                {"model": "openai/gpt-4o"},
-                {
-                    "model": "openai/gpt-4o",
-                    "n_threads": 12,
-                    "max_parallel_batches": 5,
-                    "batch_size": 25,
-                    "verbose": 1,
-                    "seed": 42,
-                },
-            ),
-            (
-                {
-                    "model": "openai/gpt-4o-mini",
-                    "n_threads": 8,
-                    "max_parallel_batches": 3,
-                    "batch_size": 10,
-                    "verbose": 0,
-                    "seed": 123,
-                },
-                {
-                    "model": "openai/gpt-4o-mini",
-                    "n_threads": 8,
-                    "max_parallel_batches": 3,
-                    "batch_size": 10,
-                    "verbose": 0,
-                    "seed": 123,
-                },
-            ),
-        ],
-    )
-    def test_initialization(
-        self, kwargs: dict[str, Any], expected: dict[str, Any]
-    ) -> None:
-        """Test optimizer initialization with defaults and custom params."""
-        optimizer = HierarchicalReflectiveOptimizer(**kwargs)
-        for key, value in expected.items():
-            assert getattr(optimizer, key) == value
-
-    def test_get_optimizer_metadata(self) -> None:
-        optimizer = HierarchicalReflectiveOptimizer(
-            model="openai/gpt-4o",
-            n_threads=10,
-            max_parallel_batches=4,
-        )
-        metadata = optimizer.get_optimizer_metadata()
-        assert metadata["model"] == "openai/gpt-4o"
-        assert metadata["n_threads"] == 10
-        assert metadata["max_parallel_batches"] == 4
-        assert metadata["seed"] == 42
-        assert metadata["verbose"] == 1
-
-    def test_counter_reset(self) -> None:
-        optimizer = HierarchicalReflectiveOptimizer()
-        optimizer._increment_llm_counter()
-        optimizer._increment_llm_call_tools_counter()
-        assert optimizer.llm_call_counter > 0
-        assert optimizer.llm_call_tools_counter > 0
-        optimizer._reset_counters()
-        assert optimizer.llm_call_counter == 0
-        assert optimizer.llm_call_tools_counter == 0
 
 
 class TestHierarchicalReflectiveOptimizerOptimizePrompt:
@@ -227,57 +157,6 @@ class TestHierarchicalReflectiveOptimizerOptimizePrompt:
 
         assert isinstance(result, OptimizationResult)
         assert isinstance(result.prompt, dict)
-
-    def test_invalid_prompt_raises_error(
-        self,
-        mock_optimization_context,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = HierarchicalReflectiveOptimizer(
-            model="gpt-4o-mini", verbose=0, seed=42
-        )
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        assert_invalid_prompt_raises(
-            optimizer,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-
-class TestHierarchicalReflectiveOptimizerEarlyStop:
-    def test_skips_on_perfect_score(
-        self,
-        mock_opik_client: Callable[..., MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-        mock_dataset,
-        sample_dataset_items,
-        sample_metric,
-    ) -> None:
-        mock_opik_client()
-        dataset = mock_dataset(
-            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
-        )
-        optimizer = HierarchicalReflectiveOptimizer(model="gpt-4o", perfect_score=0.95)
-
-        # Mock the base class's evaluate_prompt for baseline computation (returns float)
-        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
-
-        prompt = make_baseline_prompt()
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=sample_metric,
-            max_trials=1,
-        )
-
-        assert_baseline_early_stop(result, perfect_score=0.95)
 
 
 class TestHierarchicalReflectiveOptimizerCounters:

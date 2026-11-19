@@ -146,6 +146,7 @@ export type ResourceLinkProps = {
   /** Optional leading icon rendered inside the tag (asTag, non-small only). */
   icon?: LucideIcon;
   className?: string;
+  variant?: "link" | "text";
 };
 
 function ResourceLink({
@@ -163,6 +164,7 @@ function ResourceLink({
   suffix,
   icon: Icon,
   className,
+  variant = "link",
 }: ResourceLinkProps): React.ReactElement {
   const bodyClass = textSize === "xs" ? "comet-body-xs" : "comet-body-s";
   const bodyAccentedClass =
@@ -240,6 +242,10 @@ function ResourceLink({
             <ArrowUpRight className="size-3 shrink-0 text-foreground" />
           </Tag>
         </TooltipWrapper>
+      ) : variant === "text" ? (
+        <span className={cn("block truncate", deleted && "text-muted-gray")}>
+          {text}
+        </span>
       ) : (
         <Button
           variant="tableLink"

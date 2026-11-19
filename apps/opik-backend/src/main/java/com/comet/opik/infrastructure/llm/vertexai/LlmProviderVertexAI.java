@@ -9,6 +9,8 @@ import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.utils.ClientDisconnectedException;
+import com.comet.opik.utils.HttpStatusRetryability;
+import com.google.api.client.http.HttpResponseException;
 import com.google.genai.errors.ApiException;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -44,6 +46,9 @@ import java.util.function.Consumer;
 @Slf4j
 public class LlmProviderVertexAI implements LlmProviderService {
 
+    static final String KEY_REJECTED = "Vertex AI rejected the service account key: check that the key and its"
+            + " service account exist and are enabled";
+
     private static final String CUT_OFF_BEFORE_ANSWERING = "Vertex AI used up the max output tokens limit%s before "
             + "writing any answer. Thinking tokens count toward this limit, so raise Max output tokens and run again";
 
@@ -52,13 +57,12 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        try (var client = llmProviderClientGenerator.newVertexAIClient(config, request)) {
-            ChatResponse response = client.chat(getChatMessages(request));
-            if (isCutOffBeforeAnswering(response)) {
-                throw cutOffBeforeAnswering(request);
-            }
-            return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
+        var client = llmProviderClientGenerator.newVertexAIClient(config, request);
+        ChatResponse response = client.chat(getChatMessages(request));
+        if (isCutOffBeforeAnswering(response)) {
+            throw cutOffBeforeAnswering(request);
         }
+        return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
     @Override
@@ -68,7 +72,7 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
         Schedulers.boundedElastic()
                 .schedule(() -> {
-                    CloseableVertexAiStreamingChatModel client;
+                    VertexAiStreamingChatModel client;
                     try {
                         client = llmProviderClientGenerator.newVertexAIStreamingClient(config, request);
                     } catch (Exception e) {
@@ -77,34 +81,22 @@ public class LlmProviderVertexAI implements LlmProviderService {
                         return;
                     }
 
-                    // Release the client's GAX threads exactly once, once the stream terminates
-                    // (onComplete/onError) — never when this task returns, which is before the first token.
-                    var closed = new AtomicBoolean(false);
-                    Runnable closeOnce = () -> {
-                        if (closed.compareAndSet(false, true)) {
-                            client.close();
-                        }
-                    };
                     // The consumer gets exactly one terminal; a handler that throws is logged, not propagated.
                     var terminalReached = new AtomicBoolean(false);
-                    Runnable handleCloseAndRelease = () -> {
+                    Runnable handleCloseLogged = () -> {
                         terminalReached.set(true);
                         try {
                             handleClose.run();
                         } catch (Exception e) {
                             log.warn("Vertex AI stream close handler failed", e);
-                        } finally {
-                            closeOnce.run();
                         }
                     };
-                    Consumer<Throwable> handleErrorAndRelease = throwable -> {
+                    Consumer<Throwable> handleErrorLogged = throwable -> {
                         terminalReached.set(true);
                         try {
                             handleError.accept(throwable);
                         } catch (Exception e) {
                             log.warn("Vertex AI stream error handler failed", e);
-                        } finally {
-                            closeOnce.run();
                         }
                     };
 
@@ -120,8 +112,8 @@ public class LlmProviderVertexAI implements LlmProviderService {
                             }
                         };
                         client.chat(chatMessages, failingWhenCutOffBeforeAnswering(request,
-                                new ChunkedResponseHandler(handleMessageOrCancel, handleCloseAndRelease,
-                                        handleErrorAndRelease, request.model())));
+                                new ChunkedResponseHandler(handleMessageOrCancel, handleCloseLogged,
+                                        handleErrorLogged, request.model())));
                     } catch (Exception e) {
                         if (terminalReached.compareAndSet(false, true)) {
                             // Synchronous failure before any terminal — deliver the error and close the stream.
@@ -140,7 +132,6 @@ public class LlmProviderVertexAI implements LlmProviderService {
                                     "Vertex AI stream failed after a terminal callback had already run, error type '{}'",
                                     ProviderFailures.rootType(e), ProviderFailures.redacted(e));
                         }
-                        closeOnce.run();
                     }
                 });
     }
@@ -253,7 +244,21 @@ public class LlmProviderVertexAI implements LlmProviderService {
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, ApiException.class))
                 .map(LlmProviderVertexAI::toErrorMessage)
+                .or(() -> keyRejection(throwable))
                 .or(() -> LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log));
+    }
+
+    /**
+     * Google's token endpoint refused the service-account key with a permanent status, such as an {@code invalid_grant}
+     * for a deleted or disabled key. Another attempt can't change that: even a skewed server clock, which Google also
+     * answers with {@code invalid_grant}, fails every call alike until it is fixed. The SDK raises it as an I/O
+     * failure, so it is named here rather than reported as an unexpected error; Google's own text stays out, like any
+     * undocumented provider text.
+     */
+    private static Optional<ErrorMessage> keyRejection(Throwable throwable) {
+        return Optional.ofNullable(ExceptionUtils.throwableOfType(throwable, HttpResponseException.class))
+                .filter(rejection -> HttpStatusRetryability.isPermanent(rejection.getStatusCode()))
+                .map(rejection -> new ErrorMessage(rejection.getStatusCode(), KEY_REJECTED));
     }
 
     private static ErrorMessage toErrorMessage(ApiException exception) {

@@ -39,7 +39,10 @@ class _DummyOptimizer(BaseOptimizer):
         self.calls: list[tuple[Any, str]] = []
 
     def _finalize_optimization(
-        self, context: Any, status: str = "completed", error_info: dict | None = None
+        self,
+        context: Any,
+        status: str = "completed",
+        error_info: dict | None = None,
     ) -> None:
         self.calls.append((context, status))
 
