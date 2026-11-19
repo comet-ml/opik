@@ -331,7 +331,7 @@ class PromptServiceImpl implements PromptService {
      * A request without a project keeps versioning the project-less prompt of that name, as before. When there is
      * none, the prompt is looked up and created in the Default Project, so no new prompt is stored without a project.
      */
-    private Prompt getOrCreatePromptWithoutProject(String workspaceId, String name, String userName,
+    private Prompt getOrCreatePromptForUnspecifiedProject(String workspaceId, String name, String userName,
             TemplateStructure templateStructure) {
         return Optional.ofNullable(findByNameScoped(workspaceId, name, null))
                 .orElseGet(() -> getOrCreatePrompt(workspaceId, name, userName, templateStructure,
@@ -382,7 +382,7 @@ class PromptServiceImpl implements PromptService {
                 createPromptVersion.projectName(), workspaceId, userName);
 
         Prompt prompt = requestedProjectId == null
-                ? getOrCreatePromptWithoutProject(workspaceId, createPromptVersion.name(), userName,
+                ? getOrCreatePromptForUnspecifiedProject(workspaceId, createPromptVersion.name(), userName,
                         templateStructure)
                 : getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure,
                         requestedProjectId);

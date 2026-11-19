@@ -1942,7 +1942,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
             assertThat(actualEntity).usingRecursiveComparison()
                     .ignoringFields(DATASET_IGNORED_FIELDS)
-                    .isEqualTo(dataset);
+                    .isEqualTo(withDefaultProject(List.of(dataset), TEST_WORKSPACE, API_KEY).getFirst());
         }
 
         @Test
