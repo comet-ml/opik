@@ -10,6 +10,7 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ResourceLink, {
   RESOURCE_TYPE,
+  ResourceLinkProps,
 } from "@/shared/ResourceLink/ResourceLink";
 
 type CustomMeta = {
@@ -19,6 +20,7 @@ type CustomMeta = {
   getSearch?: (cellData: unknown) => Record<string, string | number>;
   getParams?: (cellData: unknown) => Record<string, string | number>;
   getIsDeleted?: (cellData: unknown) => boolean;
+  variant?: ResourceLinkProps["variant"];
 };
 
 const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -31,6 +33,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     getSearch,
     getParams,
     getIsDeleted,
+    variant,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -55,6 +58,7 @@ const ResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           search={search}
           params={params}
           isDeleted={isDeleted}
+          variant={variant}
         />
       ) : (
         "-"
