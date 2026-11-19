@@ -27,14 +27,5 @@ def float_param(
     )
 
 
-def categorical_param(name: str, *, choices: list[str], **kwargs: Any) -> ParameterSpec:
-    return ParameterSpec(
-        name=name,
-        distribution=ParameterType.CATEGORICAL,
-        choices=choices,
-        **kwargs,
-    )
-
-
 def space(*parameters: ParameterSpec) -> ParameterSearchSpace:
     return ParameterSearchSpace(parameters=list(parameters))
