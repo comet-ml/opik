@@ -30,7 +30,6 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,14 +42,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The reads behind the topics read API against real ClickHouse and MySQL: the per topic and day counts of
- * {@code trace_topics}, and the workspace-filtered reads of a project's topics and state. Each test uses
- * its own workspace and project.
+ * The reads behind the topics read API against real ClickHouse: the per topic and day counts of
+ * {@code trace_topics}. Each test uses its own workspace and project.
  */
 @DisplayName("topics read API reads")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -88,13 +84,11 @@ class TopicsReadDAOTest {
     }
 
     private TraceTopicsDAO traceTopicsDAO;
-    private TransactionTemplate template;
     private ConnectionFactory connectionFactory;
 
     @BeforeAll
     void setUpAll(Injector injector) {
         traceTopicsDAO = injector.getInstance(TraceTopicsDAO.class);
-        template = injector.getInstance(TransactionTemplate.class);
         connectionFactory = injector.getInstance(ConnectionFactory.class);
     }
 
@@ -136,7 +130,7 @@ class TopicsReadDAOTest {
     }
 
     @Test
-    @DisplayName("every run's row counts, with no topic_runs row (its retention deleted it): a later run's row "
+    @DisplayName("every run's row counts: a later run's row "
             + "wins over an earlier one's, and a trace only an earlier run labelled keeps its topic")
     void everyRunRowCounts() {
         var workspaceId = workspaceId();
@@ -256,40 +250,6 @@ class TopicsReadDAOTest {
                 .containsExactly(TopicDayCount.builder().topicId(topicId).day(TODAY).traces(1).build());
     }
 
-    @Test
-    @DisplayName("live topics and the project state: filtered by workspace too; retired topics are left out")
-    void liveTopicsAndState() {
-        var workspaceId = workspaceId();
-        var projectId = UUID.randomUUID();
-        var live = topic(workspaceId, projectId, null);
-        var retired = topic(workspaceId, projectId, TODAY.minusDays(1));
-        var state = TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(workspaceId)
-                .rebuilds(1)
-                .firstBuiltAt(TODAY.minusDays(10).atStartOfDay().toInstant(ZoneOffset.UTC))
-                .lastRunId(UUID.randomUUID())
-                .lastSuccessAt(NOON)
-                .windowUntil(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC))
-                .build();
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(List.of(live, retired));
-            dao.insertState(state);
-            return null;
-        });
-
-        template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            assertThat(dao.findLive(workspaceId, projectId)).extracting(Topic::id).containsExactly(live.id());
-            assertThat(dao.findLive(workspaceId(), projectId)).isEmpty();
-            assertThat(dao.findStates(workspaceId, List.of(projectId)))
-                    .singleElement().isEqualTo(state);
-            assertThat(dao.findStates(workspaceId(), List.of(projectId))).isEmpty();
-            return null;
-        });
-    }
-
     private List<TopicDayCount> count(String workspaceId, UUID projectId) {
         return traceTopicsDAO.countByTopicAndDay(workspaceId, projectId, FROM, TO, MAX_EXECUTION_SECONDS)
                 .collectList().block();
@@ -309,16 +269,16 @@ class TopicsReadDAOTest {
 
     private static TraceTopic arrival(String workspaceId, UUID projectId, UUID traceId, Instant createdAt,
             UUID topicId) {
-        return row(workspaceId, projectId, traceId, createdAt, topicId, TraceTopic.Source.ARRIVAL, "");
+        return row(workspaceId, projectId, traceId, createdAt, topicId, TraceTopic.Source.ARRIVAL, null);
     }
 
     private static TraceTopic run(String workspaceId, UUID projectId, UUID traceId, Instant createdAt,
             UUID topicId, UUID runId) {
-        return row(workspaceId, projectId, traceId, createdAt, topicId, TraceTopic.Source.RUN, runId.toString());
+        return row(workspaceId, projectId, traceId, createdAt, topicId, TraceTopic.Source.RUN, runId);
     }
 
     private static TraceTopic row(String workspaceId, UUID projectId, UUID traceId, Instant createdAt, UUID topicId,
-            TraceTopic.Source source, String runId) {
+            TraceTopic.Source source, UUID runId) {
         return TraceTopic.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
@@ -327,19 +287,6 @@ class TopicsReadDAOTest {
                 .topicId(topicId)
                 .source(source)
                 .runId(runId)
-                .build();
-    }
-
-    private static Topic topic(String workspaceId, UUID projectId, LocalDate retiredAt) {
-        return Topic.builder()
-                .id(UUID.randomUUID())
-                .workspaceId(workspaceId)
-                .projectId(projectId)
-                .name("Refund requests")
-                .definition("Users ask to get their money back.")
-                .born(TODAY.minusDays(10))
-                .retiredAt(retiredAt)
-                .retiredReason(retiredAt == null ? null : "merged")
                 .build();
     }
 

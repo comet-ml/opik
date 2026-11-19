@@ -72,7 +72,6 @@ class TopicReadServiceTest {
     private TopicsTestMeter meter;
     private TopicWorkspaceService workspaces;
     private TopicDAO topicDAO;
-    private TopicRunDAO runDAO;
     private ProjectService projectService;
     private TopicWindowDAO windowDAO;
     private TraceTopicsDAO traceTopicsDAO;
@@ -84,18 +83,16 @@ class TopicReadServiceTest {
         meter = new TopicsTestMeter();
         workspaces = mock(TopicWorkspaceService.class);
         topicDAO = mock(TopicDAO.class);
-        runDAO = mock(TopicRunDAO.class);
         projectService = mock(ProjectService.class);
         windowDAO = mock(TopicWindowDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
         var handle = mock(Handle.class);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
-        when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
-        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(true);
-        when(topicDAO.findStates(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
+        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
+        when(topicDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of());
         service = service(NOW);
     }
 
@@ -106,7 +103,7 @@ class TopicReadServiceTest {
             "2026-11-02T23:59:59.999Z, 2026-11-02"})
     @DisplayName("today is the UTC date of the request, from its first to its last millisecond")
     void today(Instant now, LocalDate today) {
-        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
 
         var body = service(now).get(WORKSPACE_ID, projectId);
 
@@ -129,9 +126,7 @@ class TopicReadServiceTest {
         assertThat(body.status()).isEqualTo(ProjectTopics.Status.READY);
         assertThat(body.totalTraces()).isEqualTo(7L);
         assertThat(body.lastRunAt()).isEqualTo(NOW);
-        // The newest run is read only when collecting.
         assertThat(body.attempt()).isNull();
-        verify(runDAO, never()).findNewest(any(), any());
         assertThat(meter.points(DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("ready"));
         verify(projectService).get(projectId, WORKSPACE_ID);
@@ -140,7 +135,7 @@ class TopicReadServiceTest {
     @Test
     @DisplayName("disabled: a workspace not eligible reads no topics and calls no ClickHouse")
     void disabled() {
-        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
 
         var body = service.get(WORKSPACE_ID, projectId);
 
@@ -148,7 +143,7 @@ class TopicReadServiceTest {
         assertThat(body.today()).isEqualTo(TODAY);
         assertThat(body.topics()).isEmpty();
         assertThat(body.attempt()).isNull();
-        verifyNoInteractions(topicDAO, runDAO, windowDAO, traceTopicsDAO);
+        verifyNoInteractions(topicDAO, windowDAO, traceTopicsDAO);
         assertThat(meter.points(DURATION)).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("disabled"));
     }
@@ -226,40 +221,34 @@ class TopicReadServiceTest {
     }
 
     @Test
-    @DisplayName("filter scope: no topic filter reads nothing; topics off, a workspace not eligible or no live topic "
-            + "is empty; else the live ids and the guards of topics.filter")
+    @DisplayName("filter scope: no topic filter reads nothing; a workspace not enabled or no live topic is empty; "
+            + "else the live ids and the guards of topics.filter")
     void filterScope() {
         var topicFilter = List.of(TraceFilter.builder()
                 .field(TraceField.TOPIC_ID).operator(Operator.EQUAL).value(UUID.randomUUID().toString()).build());
         var nameFilter = List.of(TraceFilter.builder()
                 .field(TraceField.NAME).operator(Operator.EQUAL).value("name").build());
         var topic = topic();
-        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
+        when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
 
-        config.setEnabled(true);
         assertThat(filterScope(null)).isEmpty();
         assertThat(filterScope(nameFilter)).isEmpty();
         verifyNoInteractions(workspaces, topicDAO);
 
-        config.setEnabled(false);
-        assertThat(filterScope(topicFilter)).isEmpty();
-        verifyNoInteractions(workspaces, topicDAO);
-
-        config.setEnabled(true);
-        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(false);
+        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(false);
         assertThat(filterScope(topicFilter)).isEmpty();
         verifyNoInteractions(topicDAO);
 
-        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(true);
+        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
         assertThat(filterScope(topicFilter)).hasValueSatisfying(scope -> {
             assertThat(scope.liveIds()).containsExactly(topic.id().toString());
             assertThat(scope.maxExecutionSeconds()).isEqualTo(30L);
             assertThat(scope.maxMemoryUsage()).isEqualTo(4L * 1024 * 1024 * 1024);
         });
-        // No state read: the filter needs only the live topics.
-        verify(topicDAO, never()).findStates(any(), any());
+        // No project row read: the filter needs only the live topics.
+        verify(topicDAO, never()).findProjects(any(), any());
 
-        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of());
+        when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(List.of());
         assertThat(filterScope(topicFilter)).isEmpty();
     }
 
@@ -274,18 +263,18 @@ class TopicReadServiceTest {
                 new TopicsMetrics(meter.meter), Clock.fixed(now, ZoneOffset.UTC));
     }
 
-    /** The project's state, last saved by {@code lastRunId}, and its live topics. */
+    /** The project's row, its list saved by {@code lastRunId}, and its live topics. */
     private void saved(List<Topic> live) {
-        when(topicDAO.findStates(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProjectState.builder()
+        when(topicDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProject.builder()
                 .projectId(projectId)
                 .workspaceId(WORKSPACE_ID)
-                .rebuilds(1)
+                .savedRuns(1)
                 .firstBuiltAt(TODAY.minusDays(10).atStartOfDay().toInstant(ZoneOffset.UTC))
-                .lastRunId(lastRunId)
+                .listRunId(lastRunId)
                 .lastSuccessAt(NOW)
                 .windowUntil(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC))
                 .build()));
-        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(live);
+        when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(live);
     }
 
     private void readyWithCounts(Flux<TopicDayCount> counts) {
@@ -303,6 +292,7 @@ class TopicReadServiceTest {
                 .name("Topic " + id)
                 .definition("Definition of " + id)
                 .born(TODAY.minusDays(10))
+                .vectors(new PrototypeVectors(List.of(new float[TopicEmbedding.DIMENSIONS])))
                 .build();
     }
 }

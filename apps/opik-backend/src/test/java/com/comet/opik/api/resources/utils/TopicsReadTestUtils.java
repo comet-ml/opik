@@ -2,11 +2,13 @@ package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.api.ProjectTopics;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
-import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
+import com.comet.opik.domain.topics.PrototypeVectors;
 import com.comet.opik.domain.topics.Topic;
-import com.comet.opik.domain.topics.TopicProjectState;
+import com.comet.opik.domain.topics.TopicDAO;
+import com.comet.opik.domain.topics.TopicEmbedding;
+import com.comet.opik.domain.topics.TopicProject;
+import com.comet.opik.domain.topics.TopicRunDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -15,13 +17,15 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.jdbi.v3.core.Handle;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -35,7 +39,6 @@ public class TopicsReadTestUtils {
     public static final String RESOURCE_PATH = "%s/v1/private/topics";
 
     private static final String USER = "user-" + UUID.randomUUID();
-    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private final @NonNull WireMockServer wireMock;
     private final @NonNull ClientSupport client;
@@ -86,21 +89,26 @@ public class TopicsReadTestUtils {
         }
     }
 
-    /** The state of a project a run saved. */
-    public static TopicProjectState savedState(String workspaceId, UUID projectId) {
-        var today = LocalDate.now(ZoneOffset.UTC);
-        return TopicProjectState.builder()
-                .projectId(projectId)
-                .workspaceId(workspaceId)
-                .rebuilds(1)
-                .firstBuiltAt(today.minusDays(20).atTime(2, 0).toInstant(ZoneOffset.UTC))
-                .lastRunId(ID_GENERATOR.generateId())
-                .lastSuccessAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                .windowUntil(today.atStartOfDay().toInstant(ZoneOffset.UTC))
-                .build();
+    /**
+     * What run {@code runId} leaves in {@code topic_projects} when it saves the project's first list at
+     * {@code savedAt}, with a window up to the start of today.
+     */
+    public static void saveRun(Handle handle, String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
+        var runDAO = handle.attach(TopicRunDAO.class);
+        runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+                savedAt.minus(Duration.ofMinutes(5)));
+        handle.attach(TopicDAO.class).saveList(workspaceId, projectId, null, runId, savedAt,
+                LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
+        runDAO.markSaved(workspaceId, projectId, runId, savedAt);
     }
 
-    public static Topic topic(String workspaceId, UUID projectId, LocalDate born, LocalDate retiredAt) {
+    private static float[] unit() {
+        var vector = new float[TopicEmbedding.DIMENSIONS];
+        vector[0] = 1;
+        return vector;
+    }
+
+    public static Topic topic(String workspaceId, UUID projectId, LocalDate born) {
         var id = UUID.randomUUID();
         return Topic.builder()
                 .id(id)
@@ -109,8 +117,7 @@ public class TopicsReadTestUtils {
                 .name("Topic " + id)
                 .definition("Definition of " + id)
                 .born(born)
-                .retiredAt(retiredAt)
-                .retiredReason(retiredAt == null ? null : "merged")
+                .vectors(new PrototypeVectors(List.of(unit())))
                 .build();
     }
 }
