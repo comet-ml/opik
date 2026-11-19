@@ -5,7 +5,10 @@ import isNumber from "lodash/isNumber";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { cn } from "@/lib/utils";
+import { Tag } from "@/ui/tag";
+import CustomSquare from "@/icons/custom-square.svg?react";
+import StatusDotPill from "@/shared/StatusDotPill/StatusDotPill";
+import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 
 export const formatPassRate = (
   passRate: number,
@@ -15,55 +18,12 @@ export const formatPassRate = (
   return `${(passRate * 100).toFixed(1)}% (${passedCount}/${totalCount})`;
 };
 
-type PassRatePillProps = React.HTMLAttributes<HTMLDivElement> & {
-  passRate: number;
-  bold?: boolean;
+const formatPercent = (passRate: number) => `${Math.round(passRate * 100)}%`;
+
+const PASS_RATE_DOT_COLOR = {
+  passed: "var(--color-green-bright)",
+  failed: "var(--color-red)",
 };
-
-// Group rows use the filled ("bold") pill so a group's total stands out from
-// the neutral pills of the experiments inside it. The ref and props are
-// forwarded because TooltipWrapper's trigger attaches through its child.
-const PassRatePill = React.forwardRef<HTMLDivElement, PassRatePillProps>(
-  ({ passRate, bold = false, className, ...props }, ref) => {
-    const passed = passRate === 1;
-
-    return (
-      <div
-        ref={ref}
-        {...props}
-        className={cn(
-          "inline-flex h-5 items-center gap-1 rounded-md border px-1.5",
-          !bold &&
-            "border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)]",
-          bold &&
-            passed &&
-            "border-transparent bg-[var(--tag-green-bg)] text-[var(--tag-green-text)]",
-          bold &&
-            !passed &&
-            "border-transparent bg-[var(--tag-red-bg)] text-[var(--tag-red-text)]",
-          className,
-        )}
-      >
-        <span className="flex size-3 shrink-0 items-center justify-center">
-          <span
-            className={cn(
-              "size-1.5 rounded-full",
-              passed
-                ? "bg-[var(--color-green-bright)]"
-                : "bg-[var(--color-red)]",
-            )}
-          />
-        </span>
-        <span
-          className={cn("comet-body-xs-accented", !bold && "text-foreground")}
-        >
-          {`${Math.round(passRate * 100)}%`}
-        </span>
-      </div>
-    );
-  },
-);
-PassRatePill.displayName = "PassRatePill";
 
 const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
   const row = context.row.original as Record<string, unknown>;
@@ -84,7 +44,15 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
     >
       {hasData ? (
         <TooltipWrapper content={tooltip}>
-          <PassRatePill passRate={passRate} />
+          <StatusDotPill
+            dotColor={
+              passRate === 1
+                ? PASS_RATE_DOT_COLOR.passed
+                : PASS_RATE_DOT_COLOR.failed
+            }
+          >
+            {formatPercent(passRate)}
+          </StatusDotPill>
         </TooltipWrapper>
       ) : (
         <span className="truncate">-</span>
@@ -105,6 +73,8 @@ const PassRateAggregationCell = <TData,>(
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
+
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const data = aggregationMap?.[rowId] ?? {};
   const passRate = get(data, aggregationKey ?? "", undefined) as
@@ -134,8 +104,15 @@ const PassRateAggregationCell = <TData,>(
       tableMetadata={context.table.options.meta}
     >
       {isNumber(passRate) && (
+        // Same filled status tag as the Alerts and Online evaluation status
+        // columns, so the group total stands out from the experiment pills.
         <TooltipWrapper content={tooltip}>
-          <PassRatePill passRate={passRate} bold />
+          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
+            <div className="flex items-center gap-1">
+              <CustomSquare className="size-3 shrink-0" />
+              <span className="truncate">{formatPercent(passRate)}</span>
+            </div>
+          </Tag>
         </TooltipWrapper>
       )}
     </CellWrapper>

@@ -161,32 +161,26 @@ describe("group row pass rate", () => {
       />,
     );
 
-  it("shows a pass rate below 100% as a filled red pill", () => {
-    const { getByText, container } = renderPassRate({
+  it("shows a pass rate below 100% as the red status tag", () => {
+    const { getByText } = renderPassRate({
       pass_rate_avg: 0.8,
       passed_count_sum: 12,
       total_count_sum: 15,
     });
 
-    expect(getByText("80%").parentElement?.className).toContain("--tag-red-bg");
-    expect(container.querySelector(".rounded-full")?.className).toContain(
-      "--color-red",
-    );
+    expect(getByText("80%").closest("[class*='--tag-red-bg']")).not.toBeNull();
   });
 
-  it("shows a 100% pass rate as a filled green pill", () => {
-    const { getByText, container } = renderPassRate({
+  it("shows a 100% pass rate as the green status tag", () => {
+    const { getByText } = renderPassRate({
       pass_rate_avg: 1,
       passed_count_sum: 15,
       total_count_sum: 15,
     });
 
-    expect(getByText("100%").parentElement?.className).toContain(
-      "--tag-green-bg",
-    );
-    expect(container.querySelector(".rounded-full")?.className).toContain(
-      "--color-green-bright",
-    );
+    expect(
+      getByText("100%").closest("[class*='--tag-green-bg']"),
+    ).not.toBeNull();
   });
 
   it("explains the average and the pooled item counts in the tooltip", () => {
