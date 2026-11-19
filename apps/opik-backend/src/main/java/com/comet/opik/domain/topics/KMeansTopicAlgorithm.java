@@ -34,6 +34,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     static final int AUTHOR_MAX = 10;
     static final int AUTHOR_MAX_TOKENS = 2500;
     static final String AUTHOR_TAG = "author";
+    /** The k-means fit's limits: Lloyd iterations per restart, and k-means++ restarts. */
+    static final int KMEANS_MAX_ITERATIONS = 150;
+    static final int KMEANS_RESTARTS = 3;
 
     static int groups(int unique) {
         return Math.min(Math.min(MAX_GROUPS, Math.max(MIN_GROUPS, unique / TEXTS_PER_GROUP)), unique);
@@ -58,10 +61,11 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         for (int u = 0; u < unique; u++) {
             weights[u] = merged.weights()[u];
         }
-        var fit = context.timed("kmeans", () -> KMeans.fit(merged.vectors(), weights, DIMENSIONS, k, seed));
+        var fit = context.timed("kmeans", () -> KMeans.fit(merged.vectors(), weights, DIMENSIONS, k, seed,
+                KMEANS_MAX_ITERATIONS, KMEANS_RESTARTS));
         var groupOf = new int[n];
         for (int i = 0; i < n; i++) {
-            groupOf[i] = fit.labels()[merged.inverse()[i]];
+            groupOf[i] = fit.labels()[merged.textOfTrace()[i]];
         }
         stats.put("unique_texts", unique);
         stats.put("k", k);
