@@ -1,12 +1,15 @@
 --liquibase formatted sql
 --changeset yaroslavb:000149_create_topic_vectors
---comment: Create topic_vectors, the bge-small vector of each labeled trace's intent: one row per (trace, task_version) (OPIK-8981)
+--comment: Create topic_vectors, the bge-small vector of each labeled trace's intent: one row per (trace, task, task_version) (OPIK-8981)
 
 -- topic_vectors holds, for every trace with a done trace_summary in ai_label_status, the vector of its summary text as
 -- opik-inference /v1/embed returns it, scaled to unit length, next to the text itself. The Topics nightly job reads
 -- text and vector together, so the row is self-contained. Created on every install and left empty while
 -- topics.enabled is off.
---   * One row per (trace, task_version): a relabel with a higher task version adds a row and keeps the old one.
+--   * One row per (trace, task, task_version): a relabel with a higher task version adds a row and keeps the old one.
+--     task is the ai_labels task whose text was embedded, as in ai_label_status. Topics embeds one task at a time,
+--     and every reader filters on task = TopicEmbedding.SUMMARY_TASK, so a second embedded task gets its own rows
+--     without changing the readers.
 --     embed_model and embed_dimensions say which model made the vector, so a model change can be re-made from ai_labels.
 --   * The model is traces_local_v2 (000114): the engine's version (last_updated_at) and soft-delete marker
 --     (is_deleted), id_at, the partition key and the codecs are its.
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTE
 (
     workspace_id     String                                          CODEC(ZSTD(3)),
     project_id       FixedString(36)                                 CODEC(ZSTD(1)),
+    task             LowCardinality(String)                          CODEC(ZSTD(1)),
     trace_id         FixedString(36)                                 CODEC(ZSTD(1)),
     trace_created_at DateTime64(6, 'UTC')                            CODEC(Delta, ZSTD(1)),
     id_at            DateTime64(0, 'UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(trace_id)) CODEC(Delta, ZSTD(1)),
@@ -48,7 +52,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTE
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/topic_vectors',
     '{replica}', last_updated_at, is_deleted)
 PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-ORDER BY (workspace_id, project_id, trace_id, task_version)
+ORDER BY (workspace_id, project_id, task, trace_id, task_version)
 SETTINGS index_granularity = 8192;
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTER '{cluster}' SYNC;

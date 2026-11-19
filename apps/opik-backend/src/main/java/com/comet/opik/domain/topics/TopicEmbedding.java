@@ -10,6 +10,9 @@ import lombok.experimental.UtilityClass;
 @UtilityClass
 public class TopicEmbedding {
 
+    /** The ai_labels task whose text is embedded: every {@code topic_vectors} row has it as its {@code task}. */
+    public static final String SUMMARY_TASK = "trace_summary";
+
     public static final String MODEL = "bge-small-en-v1.5";
 
     public static final int DIMENSIONS = 384;
