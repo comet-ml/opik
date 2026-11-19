@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.node.TextNode;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -130,27 +130,27 @@ class TopicsAlgorithmRulesTest {
                 "{\"topics\": [{\"name\": \"A\", \"definition\": \"d\"}], \"assignment\": [{\"cluster\": 1}]}",
                 "{\"topics\": [{\"name\": 3, \"definition\": \"d\"}], \"assignment\": []}",
                 "[1, 2]"})
-        @DisplayName("an answer off the schema is qwen_bad_answer")
+        @DisplayName("an answer off the schema is llm_bad_answer")
         void bad(String json) throws IOException {
             var node = InferenceJson.MAPPER.readTree(json);
             assertThatThrownBy(() -> AuthorAnswer.parse(node))
                     .isInstanceOfSatisfying(TopicsRunException.class,
-                            exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
+                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER));
         }
 
         @Test
-        @DisplayName("a textual output is qwen_bad_answer, even one holding a valid answer; the error keeps no text")
+        @DisplayName("a textual output is llm_bad_answer, even one holding a valid answer; the error keeps no text")
         void textIsBad() {
             var text = "{\"topics\": [{\"name\": \"user-secret-text\", \"definition\": \"d\"}], \"assignment\": []}";
             assertThatThrownBy(() -> AuthorAnswer.parse(TextNode.valueOf(text)))
                     .isInstanceOfSatisfying(TopicsRunException.class, exception -> {
-                        assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER);
+                        assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER);
                         assertThat(exception.getCause()).isNull();
                         assertThat(exception.getMessage()).doesNotContain("user-secret-text");
                     });
             assertThatThrownBy(() -> AuthorAnswer.parse(null))
                     .isInstanceOfSatisfying(TopicsRunException.class,
-                            exception -> assertThat(exception.getCode()).isEqualTo(Code.QWEN_BAD_ANSWER));
+                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER));
         }
     }
 

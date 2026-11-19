@@ -69,7 +69,7 @@ public interface TopicAlgorithm {
     @Getter
     @RequiredArgsConstructor
     enum Call {
-        /** Names the topics over the groups. Deadline {@code topics.build.qwenDeadline}. */
+        /** Names the topics over the groups. */
         AUTHOR("author");
 
         private final String value;
@@ -80,7 +80,7 @@ public interface TopicAlgorithm {
 
         /**
          * One LLM call. {@code read} turns the answer into what the algorithm needs; when it cannot, it throws a
-         * {@code qwen_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A failed call
+         * {@code llm_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A failed call
          * throws and fails the run.
          *
              * @param tag  names the call in its request id ({@code <runId>:<tag>}) and the logs

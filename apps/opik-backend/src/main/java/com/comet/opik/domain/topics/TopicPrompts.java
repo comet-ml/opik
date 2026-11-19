@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * The Qwen prompts: the templates under {@code topics/prompts/} with their placeholders filled in. Numbers use the
+ * The LLM prompts: the templates under {@code topics/prompts/} with their placeholders filled in. Numbers use the
  * fixed formats of {@link TopicText}, so the same groups always give the same prompt text.
  */
 @UtilityClass

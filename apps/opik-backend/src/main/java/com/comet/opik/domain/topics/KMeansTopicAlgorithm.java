@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The topic algorithm in use. A first build merges identical texts, k-means them into fine groups, has Qwen name topics
+ * The topic algorithm in use. A first build merges identical texts, k-means them into fine groups, has the LLM name topics
  * over the groups, and assigns every trace to its nearest prototype with {@link PrototypeAssigner}: the topic
  * prototypes are the centres of each topic's groups, the known-Other ones the centres of the Other groups. The
  * labeller applies the same assigner to a saved list.
