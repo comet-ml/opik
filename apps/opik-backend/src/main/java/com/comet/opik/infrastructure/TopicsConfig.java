@@ -153,6 +153,10 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
+        /** ClickHouse threads per read, so the tick stays a small share of the server. */
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
         /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)

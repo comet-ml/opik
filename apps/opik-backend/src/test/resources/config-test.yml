@@ -1023,6 +1023,7 @@ topics:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824
       maxExecutionTime: 30s
+      maxThreads: 2
       createdAtSlack: 1d
       sliceSize: 1d
 

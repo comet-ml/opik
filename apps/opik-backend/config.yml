@@ -2702,6 +2702,10 @@ topics:
       #  Default: 30s
       #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
+      #  Default: 2
+      #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1
+      #  to 16
+      maxThreads: ${TOPICS_VECTORS_FIND_MAX_THREADS:-2}
       #  Default: 1d
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
       #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
