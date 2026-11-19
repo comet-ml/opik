@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * A non-empty list of prototype vectors, each {@link TopicEmbedding#DIMENSIONS} long, in the order the run gave them.
  * Stored as one BLOB: a topic's vectors in {@code topics.vectors}, the known-Other ones in
- * {@code topic_project_states.other_vectors}. The order is part of the value: assignment breaks a tie between two
+ * {@code topic_projects.other_vectors}. The order is part of the value: assignment breaks a tie between two
  * prototypes by it.
  */
 public record PrototypeVectors(@NonNull List<float @NonNull []> vectors) {

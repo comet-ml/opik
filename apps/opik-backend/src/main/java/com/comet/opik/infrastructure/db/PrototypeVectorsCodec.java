@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The vector BLOB format of {@code topics.vectors} and {@code topic_project_states.other_vectors}: the vectors one
+ * The vector BLOB format of {@code topics.vectors} and {@code topic_projects.other_vectors}: the vectors one
  * after another, each {@link TopicEmbedding#DIMENSIONS} little-endian float32 values ({@link TopicEmbedding#BYTES}
  * bytes). The tables' CHECK constraints hold the same length rule.
  */

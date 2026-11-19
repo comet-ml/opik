@@ -12,7 +12,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * One row of {@code topic_project_states}: a project's current topics state, never its history. Each run and night
+ * One row of {@code topic_projects}: a project's current topics state, never its history. Each run and night
  * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a first
  * build when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
  * writer updates its own group: the vectors tick the backfill fields, a run the attempt fields ({@code run*},
@@ -49,7 +49,7 @@ import java.util.UUID;
  * @param notReachedNights the nights in a row whose budget ended before the project
  */
 @Builder(toBuilder = true)
-public record TopicProjectState(
+public record TopicProject(
         @NonNull String workspaceId,
         @NonNull UUID projectId,
         @Nullable Instant backfillStartedAt,

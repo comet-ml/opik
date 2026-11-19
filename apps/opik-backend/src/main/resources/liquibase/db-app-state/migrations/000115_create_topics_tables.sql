@@ -1,6 +1,6 @@
 --liquibase formatted sql
 --changeset yaroslavb:000115_create_topics_tables
---comment: Create topics, topic_project_states and topic_workspaces: a project's topic list and its current state (OPIK-9034)
+--comment: Create topics, topic_projects and topic_workspaces: a project's topic list and its current state (OPIK-9034)
 
 -- One row per live topic of a project. An id is never reused: a renamed or merged topic keeps its id, and a retired
 -- topic's row is deleted (the retire step logs it). born is the UTC date of the night that made the topic, not the
@@ -11,7 +11,7 @@
 -- little-endian float32 values (1,536 bytes) of unit length, in the order the run gave them. A run replaces a project's
 -- whole set in its save transaction, so readers always see one run's set. Assignment breaks a tie between two
 -- prototypes by their order: the topics in (born, id) order, then each topic's vectors in their stored order. The
--- model of the set is on the project's topic_project_states row. MEDIUMBLOB, as a topic can hold
+-- model of the set is on the project's topic_projects row. MEDIUMBLOB, as a topic can hold
 -- more vectors than a BLOB fits; the topics API reads the other columns only.
 CREATE TABLE IF NOT EXISTS topics
 (
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS topics
 --   * backfill_drained_at: the start of the tick that drained the project since backfill_started_at; null until one
 --     does. The first build waits for it.
 --   * backfill_last_done_at: the project's latest done trace_summary status, as last discovered.
---   * backfill_traces_total, backfill_traces_done: approximate progress, see TopicProjectState.
+--   * backfill_traces_total, backfill_traces_done: approximate progress, see TopicProject.
 --   List (the save of a run):
 --   * rebuilds counts the saved runs; first_built_at is the first save; last_success_at the latest one.
 --   * list_run_id: the run whose list is saved. window_until: the end of that run's window.
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS topics
 --   Night (the nightly update):
 --   * last_night: the last night that looked at the project. not_reached_nights: the nights in a row whose budget
 --     ended before the project. The state gauges read both.
-CREATE TABLE IF NOT EXISTS topic_project_states
+CREATE TABLE IF NOT EXISTS topic_projects
 (
     workspace_id          VARCHAR(150) NOT NULL,
     project_id            CHAR(36)     NOT NULL,
@@ -102,10 +102,10 @@ CREATE TABLE IF NOT EXISTS topic_project_states
 
     PRIMARY KEY (workspace_id, project_id),
     -- The tick's read of the projects not drained yet.
-    INDEX topic_project_states_workspace_drained_idx (workspace_id, backfill_drained_at),
-    CONSTRAINT topic_project_states_other_vectors_chk
+    INDEX topic_projects_workspace_drained_idx (workspace_id, backfill_drained_at),
+    CONSTRAINT topic_projects_other_vectors_chk
         CHECK (other_vectors IS NULL OR (LENGTH(other_vectors) > 0 AND MOD(LENGTH(other_vectors), 1536) = 0)),
-    CONSTRAINT topic_project_states_list_model_chk
+    CONSTRAINT topic_projects_list_model_chk
         CHECK (list_run_id IS NULL OR embed_model IS NOT NULL)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
@@ -127,5 +127,5 @@ CREATE TABLE IF NOT EXISTS topic_workspaces
   COLLATE = utf8mb4_unicode_ci;
 
 --rollback DROP TABLE IF EXISTS topic_workspaces;
---rollback DROP TABLE IF EXISTS topic_project_states;
+--rollback DROP TABLE IF EXISTS topic_projects;
 --rollback DROP TABLE IF EXISTS topics;
