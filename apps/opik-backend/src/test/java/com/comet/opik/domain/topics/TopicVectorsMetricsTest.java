@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -40,6 +41,35 @@ class TopicVectorsMetricsTest {
         clock.advance(Duration.ofMinutes(2));
 
         assertThat(meter.observeGauge(TopicVectorsMetrics.OLDEST_UNVECTORED)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the backfill gauges report each workspace's undrained projects and the age of its oldest backfill, 0 "
+            + "with none")
+    void undrained() {
+        var vectors = new TopicsConfig.VectorsConfig();
+        vectors.setTickInterval(io.dropwizard.util.Duration.minutes(1));
+        var config = new TopicsConfig();
+        config.setVectors(vectors);
+        var meter = new TopicsTestMeter();
+        var clock = new TopicsTestClock(now);
+        var metrics = new TopicVectorsMetrics(config, TopicsTestMeter.names(), meter.meter, clock);
+
+        var behind = UUID.randomUUID().toString();
+        var drained = UUID.randomUUID().toString();
+        metrics.undrained(Map.of(behind, List.of(backfill(behind, now.minusSeconds(300)),
+                backfill(behind, now.minusSeconds(60))), drained, List.of()));
+        clock.advance(Duration.ofSeconds(30));
+
+        assertThat(meter.observeGauge(TopicVectorsMetrics.UNDRAINED_PROJECTS))
+                .isEqualTo(Map.of(behind, 2.0, drained, 0.0));
+        assertThat(meter.observeGauge(TopicVectorsMetrics.OLDEST_BACKFILL))
+                .isEqualTo(Map.of(behind, 330.0, drained, 0.0));
+    }
+
+    private static TopicVectorBackfillDAO.Backfill backfill(String workspaceId, Instant startedAt) {
+        return TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(UUID.randomUUID())
+                .backfillStartedAt(startedAt).backfillLastDoneAt(startedAt).build();
     }
 
     @Test

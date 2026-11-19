@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
+import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
@@ -24,23 +25,31 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries and store the unit-length
- * vectors in {@code topic_vectors}. Runs on the leader only.
+ * vectors in {@code topic_vectors}. Runs on the leader only. A tick has two phases, each visiting the workspaces up to
+ * {@code embedConcurrency} at a time, each workspace with one embed call in flight:
+ * <ul>
+ * <li>The fresh phase: per workspace, one read of the done statuses written in {@code window}, all its drained projects
+ * together, up to {@code maxTracesPerTick}, oldest first, then their embed calls and writes. It keeps new traces
+ * served. Once per {@code longWindowInterval} ({@link LongWindowPass}) it reads the long window instead, in slices,
+ * for rows it missed.</li>
+ * <li>The backfill phase, with the budget the fresh phase left: per workspace, its projects not drained yet
+ * ({@link TopicVectorBackfiller}).</li>
+ * </ul>
+ * The fresh phase leaves out the projects not drained yet, and the backfill reads only those, so a trace is embedded
+ * by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
  *
- * <p>One workspace at a time: one read of the done statuses written in {@code window}, up to {@code maxTracesPerTick},
- * oldest first, with their summaries; then {@link TopicEmbedder} embeds them chunk by chunk and each chunk's vectors are
- * written as it arrives. A workspace is read only with time left for the read and one embed call, so the tick never
- * spends its budget reading what it cannot embed.
- *
- * <p>ClickHouse alone says which traces have no vector: every read is the done statuses less the keys already in
- * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader change loses nothing.
- * Work per tick is bounded per workspace by {@code maxTracesPerTick} and in total by the tick budget; what is left is
- * found again by the next tick. Workspaces are visited in a new random order every tick, so when the budget does not
- * reach them all, the ones left out differ from tick to tick.
+ * <p>A workspace is read only with time left for the read and one embed call, so the tick never spends its budget
+ * reading what it cannot embed. ClickHouse alone says which traces have no vector: every read is the done statuses less
+ * the keys already in {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader
+ * change loses nothing. Work per tick is bounded per read by {@code maxTracesPerTick} and in total by the tick budget;
+ * what is left is found again by the next tick. Workspaces are visited in a new random order every tick, so when the
+ * budget does not reach them all, the ones left out differ from tick to tick.
  */
 @Slf4j
 @Singleton
@@ -52,7 +61,9 @@ public class TopicVectorsTickService {
     private final @NonNull TopicWorkspaceService workspaces;
     private final @NonNull TopicVectorsDAO dao;
     private final @NonNull AiLabelTaskRegistry registry;
-    private final @NonNull TopicEmbedder embedder;
+    private final @NonNull TopicVectorWriter writer;
+    private final @NonNull TopicVectorBackfiller backfiller;
+    private final @NonNull LongWindowPass longWindowPass;
     private final @NonNull TopicVectorsMetrics metrics;
 
     /**
@@ -61,89 +72,131 @@ public class TopicVectorsTickService {
      */
     public Mono<TickResult> tick(@NonNull Instant start) {
         return Mono.defer(() -> {
-            var vectors = config.getVectors();
             var task = registry.find(TopicEmbedding.SUMMARY_TASK).orElseThrow(() -> new IllegalStateException(
                     "ai-labels has no task '%s'".formatted(TopicEmbedding.SUMMARY_TASK)));
-            var lowerBound = lowerBound(earliestAppliesFrom(task), start, vectors.getWindow().toJavaDuration());
-            if (lowerBound.isAfter(start)) {
-                return Mono.just(TickResult.EMPTY);
-            }
-            var find = TopicVectorsFind.builder()
-                    .task(TopicEmbedding.SUMMARY_TASK)
-                    .lowerBound(lowerBound)
-                    .upperBound(start)
-                    .createdAfter(createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
-                            vectors.getFind().getCreatedAtSlack().toJavaDuration()))
-                    .limit(vectors.getMaxTracesPerTick());
-            var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
-            return Mono.fromCallable(workspaces::enabledWorkspaceIds)
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .flatMapMany(workspaceIds -> Flux.fromIterable(shuffled(workspaceIds)))
-                    .concatMap(workspaceId -> visit(workspaceId, find, budget))
-                    .collectList()
-                    .map(this::finish);
+            var appliesFrom = earliestAppliesFrom(task);
+            return longWindowPass.startIfDue().flatMap(pass -> tick(start, appliesFrom, pass));
         });
     }
 
-    /** One workspace's turn: its window read, then its embed calls and writes. */
-    private Mono<Visit> visit(String workspaceId, TopicVectorsFind.TopicVectorsFindBuilder find, TickBudget budget) {
+    private Mono<TickResult> tick(Instant start, Instant appliesFrom, boolean pass) {
+        var vectors = config.getVectors();
+        var lowerBound = lowerBound(appliesFrom, start,
+                (pass ? longWindow(vectors) : vectors.getWindow()).toJavaDuration());
+        var passResult = TickResult.EMPTY.toBuilder().longWindowPass(pass).build();
+        if (lowerBound.isAfter(start)) {
+            return (pass ? longWindowPass.finish(start, true) : Mono.<Void>empty()).thenReturn(passResult);
+        }
+        var backfillLowerBound = lowerBound(appliesFrom, start, longWindow(vectors).toJavaDuration());
+        var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
+        // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
+        var missedBefore = pass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
+        return Mono.fromCallable(workspaces::enabledWorkspaceIds)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(TopicVectorsTickService::shuffled)
+                .flatMap(workspaceIds -> backfiller.discover(workspaceIds, backfillLowerBound,
+                        createdAfter(backfillLowerBound), budget)
+                        .then(backfiller.undrained(workspaceIds))
+                        .flatMap(undrained -> Flux.fromIterable(workspaceIds)
+                                .flatMap(workspaceId -> visit(workspaceId,
+                                        undrained.getOrDefault(workspaceId, List.of()),
+                                        find(workspaceId, lowerBound, start), pass, missedBefore, budget),
+                                        vectors.getEmbedConcurrency())
+                                .collectList()
+                                .flatMap(visits -> {
+                                    var fresh = finish(visits);
+                                    var drained = visits.stream().allMatch(Visit::complete) && !fresh.cut();
+                                    return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
+                                            .then(backfill(visits, undrained, backfillLowerBound, budget))
+                                            .map(backfilled -> fresh.plus(backfilled).plus(passResult));
+                                })));
+    }
+
+    /** One workspace's read of the statuses written from {@code lowerBound} to the tick's start. */
+    private TopicVectorsFind find(String workspaceId, Instant lowerBound, Instant start) {
+        return TopicVectorsFind.builder()
+                .workspaceId(workspaceId)
+                .task(TopicEmbedding.SUMMARY_TASK)
+                .lowerBound(lowerBound)
+                .upperBound(start)
+                .createdAfter(createdAfter(lowerBound))
+                .limit(config.getVectors().getMaxTracesPerTick())
+                .build();
+    }
+
+    private Instant createdAfter(Instant lowerBound) {
+        return createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
+                config.getVectors().getFind().getCreatedAtSlack().toJavaDuration());
+    }
+
+    /** One workspace's turn in the fresh phase: its workspace read, then its embed calls and writes. */
+    private Mono<Visit> visit(String workspaceId, List<Backfill> undrained, TopicVectorsFind find, boolean pass,
+            @Nullable Instant missedBefore, TickBudget budget) {
         return Mono.defer(() -> {
-            var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
+            var vectors = config.getVectors();
+            var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
             if (!budget.hasTimeForRead(embedTimeout)) {
-                return Mono.just(Visit.notRead(workspaceId));
+                return Mono.just(Visit.notRead(workspaceId, false));
             }
-            var maxExecutionTime = config.getVectors().getFind().getMaxExecutionTime().toJavaDuration();
+            var excluded = backfiller.excluded(workspaceId, undrained);
+            if (excluded.isEmpty()) {
+                // Its traces are the backfill's for now; it does not hold the long-window pass.
+                return Mono.just(Visit.notRead(workspaceId, true));
+            }
             long readStarted = System.nanoTime();
-            return dao.findUnvectored(find.workspaceId(workspaceId)
-                    .maxExecutionSeconds(budget.readSeconds(maxExecutionTime, embedTimeout))
-                    .build())
-                    .collectList()
-                    .map(Optional::of)
+            return WindowRead.read(dao,
+                    find.toBuilder().excludedProjectIds(excluded.get()).build(),
+                    pass ? vectors.getFind().getSliceSize().toJavaDuration() : null, budget,
+                    vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
+                    .flatMap(read -> backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start())
+                            .flatMap(served -> {
+                                var readTime = since(readStarted);
+                                long embedStarted = System.nanoTime();
+                                return writer.embedAndWrite(workspaceId, served.candidates(), budget, missedBefore)
+                                        .map(result -> new Visit(workspaceId, true, read.complete(),
+                                                oldest(served.candidates()), result, served.started(), readTime,
+                                                since(embedStarted)));
+                            }))
                     .onErrorResume(exception -> {
                         metrics.readFailure("find", workspaceId, exception);
                         log.warn("Topic vectors window read failed, workspace '{}'; reading it again next tick",
                                 workspaceId, exception);
-                        return Mono.just(Optional.empty());
-                    })
-                    .flatMap(found -> {
-                        var read = since(readStarted);
-                        if (found.isEmpty()) {
-                            return Mono.just(new Visit(workspaceId, true, null, TickResult.EMPTY, read, Duration.ZERO));
-                        }
-                        long embedStarted = System.nanoTime();
-                        return embedAndWrite(workspaceId, found.get(), budget)
-                                .map(result -> new Visit(workspaceId, true, oldest(found.get()), result, read,
-                                        since(embedStarted)));
+                        return Mono.just(new Visit(workspaceId, true, false, null, TickResult.EMPTY, List.of(),
+                                since(readStarted), Duration.ZERO));
                     });
         });
     }
 
-    private Mono<TickResult> embedAndWrite(String workspaceId, List<Candidate> found, TickBudget budget) {
-        return embedder.embed(workspaceId, found, budget)
-                .concatMap(outcome -> write(workspaceId, outcome))
-                .reduce(TickResult.EMPTY, TickResult::plus);
+    /**
+     * The backfill phase: each workspace's projects not drained yet, the ones its workspace read started included,
+     * except in a workspace an embed call failed for in the fresh phase. Publishes what is left undrained.
+     */
+    private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<Backfill>> undrained,
+            Instant lowerBound, TickBudget budget) {
+        long started = System.nanoTime();
+        return Flux.fromIterable(visits)
+                .flatMap(visit -> {
+                    var projects = new ArrayList<>(undrained.getOrDefault(visit.workspaceId(), List.of()));
+                    projects.addAll(visit.started());
+                    var backfill = visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
+                            ? Mono.just(TopicVectorBackfiller.Done.NONE)
+                            : backfiller.backfill(projects, find(visit.workspaceId(), lowerBound, budget.start()),
+                                    budget);
+                    return backfill.map(done -> Map.entry(visit.workspaceId(), new Backfilled(done.result(),
+                            projects.stream().filter(project -> !done.drained().contains(project.projectId()))
+                                    .toList())));
+                }, config.getVectors().getEmbedConcurrency())
+                .collectList()
+                .map(backfilled -> {
+                    metrics.phase("backfill", since(started));
+                    metrics.undrained(backfilled.stream().collect(Collectors.toMap(Map.Entry::getKey,
+                            entry -> entry.getValue().undrained())));
+                    return backfilled.stream().map(entry -> entry.getValue().result())
+                            .reduce(TickResult.EMPTY, TickResult::plus);
+                });
     }
 
-    private Mono<TickResult> write(String workspaceId, ChunkOutcome outcome) {
-        return Mono.defer(() -> {
-            outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspaceId, reason, traces));
-            var skipped = new TickResult(0, outcome.skipped());
-            var vectors = outcome.vectors();
-            if (vectors.isEmpty()) {
-                return Mono.just(skipped);
-            }
-            return dao.insert(vectors)
-                    .then(Mono.fromCallable(() -> {
-                        metrics.written(workspaceId, vectors.size());
-                        return skipped.plus(TickResult.written(vectors.size()));
-                    }))
-                    .onErrorResume(exception -> {
-                        log.warn("Topic vectors insert failed, workspace '{}', rows '{}'; embedding them again next "
-                                + "tick", workspaceId, vectors.size(), exception);
-                        metrics.skipped(workspaceId, SkipReason.INSERT_FAILED, vectors.size());
-                        return Mono.just(skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED, vectors.size())));
-                    });
-        });
+    private record Backfilled(TickResult result, List<Backfill> undrained) {
     }
 
     private TickResult finish(List<Visit> visits) {
@@ -165,7 +218,7 @@ public class TopicVectorsTickService {
         }
         if (!notRead.isEmpty()) {
             metrics.workspacesNotRead(notRead);
-            log.warn("Topic vectors tick ran out of budget, workspaces not read '{}' of '{}'", notRead.size(),
+            log.warn("Topic vectors workspace reads did not read workspaces '{}' of '{}'", notRead.size(),
                     visits.size());
         }
         metrics.oldest(oldest);
@@ -175,16 +228,24 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * One workspace's part of a tick. {@code reached} is false when the budget left no time to read it; {@code oldest}
-     * is its oldest done status without a vector, {@link Instant#MAX} with none, null when not reached or its read
-     * failed.
+     * One workspace's part of the fresh phase. {@code reached} is false when the budget left no time to read it, or it
+     * has too many projects in backfill; {@code complete} when its read saw its whole window or it was left to the
+     * backfill; {@code oldest} is its oldest done status without a vector, {@link Instant#MAX} with none, null when not
+     * reached or its read failed; {@code started} the projects its read saw for the first time.
      */
-    private record Visit(@NonNull String workspaceId, boolean reached, @Nullable Instant oldest,
-            @NonNull TickResult result, @NonNull Duration readTime, @NonNull Duration embedTime) {
+    private record Visit(@NonNull String workspaceId, boolean reached, boolean complete, @Nullable Instant oldest,
+            @NonNull TickResult result, @NonNull List<Backfill> started, @NonNull Duration readTime,
+            @NonNull Duration embedTime) {
 
-        static Visit notRead(String workspaceId) {
-            return new Visit(workspaceId, false, null, TickResult.EMPTY, Duration.ZERO, Duration.ZERO);
+        static Visit notRead(String workspaceId, boolean complete) {
+            return new Visit(workspaceId, false, complete, null, TickResult.EMPTY, List.of(), Duration.ZERO,
+                    Duration.ZERO);
         }
+    }
+
+    /** The long-window pass's and the backfill's window: {@code backfillWindow} when set, else {@code longWindow}. */
+    static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
+        return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 
     private static Instant oldest(List<Candidate> found) {

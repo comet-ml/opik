@@ -20,6 +20,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -30,11 +31,13 @@ import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPA
 import static io.opentelemetry.api.common.AttributeKey.longKey;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
-/** The topic vectors tick's metrics, and the last oldest-unvectored snapshot its gauge publishes. */
+/** The topic vectors tick's metrics, and the last snapshots its gauges publish. */
 @Singleton
 class TopicVectorsMetrics {
 
     static final String OLDEST_UNVECTORED = "topics.vectors.oldest_unvectored_seconds";
+    static final String UNDRAINED_PROJECTS = "topics.vectors.backfill.undrained_projects";
+    static final String OLDEST_BACKFILL = "topics.vectors.backfill.oldest_started_seconds";
 
     private final TopicsConfig config;
     private final WorkspaceNameService names;
@@ -53,11 +56,21 @@ class TopicVectorsMetrics {
     private record Oldest(String workspaceName, Instant statusAt) {
     }
 
+    /** Per workspace, the projects not drained after this pod's latest tick; published like {@link #lastOldest}. */
+    private volatile UndrainedSnapshot lastUndrained;
+
+    private record UndrainedSnapshot(Instant at, Map<String, Undrained> undrained) {
+    }
+
+    private record Undrained(String workspaceName, int projects, @Nullable Instant oldestStartedAt) {
+    }
+
     private final LongCounter written;
     private final LongCounter skipped;
     private final LongCounter embedFailures;
     private final LongCounter readFailures;
     private final LongCounter workspacesNotRead;
+    private final LongCounter longWindowMissed;
     private final DoubleHistogram embedDuration;
     private final DoubleHistogram phaseDuration;
 
@@ -72,10 +85,11 @@ class TopicVectorsMetrics {
         this.names = names;
         this.clock = clock;
         meter.gaugeBuilder(OLDEST_UNVECTORED).setUnit("s")
-                .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, as "
-                        + "the latest tick's workspace read found it; 0 with none. Published only by the pod that "
-                        + "ticked within two tick intervals; a workspace whose read failed or was not reached has no "
-                        + "value")
+                .setDescription("Age of the oldest done trace_summary without a vector, per enabled workspace, among "
+                        + "the projects whose backfill has drained, as the latest tick's workspace read found it; 0 "
+                        + "with none. Projects still in backfill are not in it: see topics.vectors.backfill.*. "
+                        + "Published only by the pod that ticked within two tick intervals; a workspace whose read "
+                        + "failed or was not reached has no value")
                 .buildWithCallback(measurement -> {
                     var snapshot = lastOldest;
                     if (snapshot == null || !fresh(snapshot.at())) {
@@ -85,6 +99,30 @@ class TopicVectorsMetrics {
                     snapshot.oldest().forEach((workspaceId, oldest) -> measurement.record(
                             oldest.statusAt().equals(Instant.MAX) ? 0 : seconds(oldest.statusAt(), now),
                             workspace(workspaceId, oldest.workspaceName()).build()));
+                });
+        meter.gaugeBuilder(UNDRAINED_PROJECTS)
+                .setDescription("Projects whose backfill has not drained, per enabled workspace, after the latest "
+                        + "tick. Published only by the pod that ticked within two tick intervals")
+                .buildWithCallback(measurement -> {
+                    var snapshot = lastUndrained;
+                    if (snapshot == null || !fresh(snapshot.at())) {
+                        return;
+                    }
+                    snapshot.undrained().forEach((workspaceId, undrained) -> measurement.record(undrained.projects(),
+                            workspace(workspaceId, undrained.workspaceName()).build()));
+                });
+        meter.gaugeBuilder(OLDEST_BACKFILL).setUnit("s")
+                .setDescription("Age of the oldest backfill not drained yet, per enabled workspace, from its start; 0 "
+                        + "with none. Published only by the pod that ticked within two tick intervals")
+                .buildWithCallback(measurement -> {
+                    var snapshot = lastUndrained;
+                    if (snapshot == null || !fresh(snapshot.at())) {
+                        return;
+                    }
+                    var now = clock.instant();
+                    snapshot.undrained().forEach((workspaceId, undrained) -> measurement.record(
+                            undrained.oldestStartedAt() == null ? 0 : seconds(undrained.oldestStartedAt(), now),
+                            workspace(workspaceId, undrained.workspaceName()).build()));
                 });
         this.written = meter.counterBuilder("topics.vectors.written")
                 .setDescription("Vectors written to topic_vectors, by workspace")
@@ -98,18 +136,27 @@ class TopicVectorsMetrics {
                         + "workspace")
                 .build();
         this.readFailures = meter.counterBuilder("topics.vectors.read.failures")
-                .setDescription("Window reads that failed, by phase, workspace and error type")
+                .setDescription("Reads that failed, by phase: find (one workspace's window read), discover (one "
+                        + "workspace's project discovery) or backfill (one project's window read), workspace and error "
+                        + "type")
                 .build();
         this.workspacesNotRead = meter.counterBuilder("topics.vectors.workspaces_not_read")
-                .setDescription("Enabled workspaces a tick did not read because its budget ran out, by workspace. "
-                        + "Such a workspace has no value in " + OLDEST_UNVECTORED + " for that tick")
+                .setDescription("Enabled workspaces a tick's workspace read did not read, by workspace: its budget "
+                        + "ran out, or the workspace has more projects in backfill than the read can leave out (see "
+                        + UNDRAINED_PROJECTS + "). Such a workspace has no value in " + OLDEST_UNVECTORED
+                        + " for that tick")
+                .build();
+        this.longWindowMissed = meter.counterBuilder("topics.vectors.long_window.missed")
+                .setDescription("Vectors the long-window pass wrote for statuses older than the short window, that is, "
+                        + "rows the short window missed, by workspace; should stay near zero")
                 .build();
         this.embedDuration = meter.histogramBuilder("topics.vectors.embed.duration_seconds").setUnit("s")
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
-                .setDescription("Time one tick spent in each phase, summed over its workspaces: find (window reads), "
-                        + "embed (embed calls and writes)")
+                .setDescription("Time one tick spent in each phase: discover (project discovery), find (workspace "
+                        + "reads, summed over workspaces), embed (their embed calls and writes, summed over "
+                        + "workspaces), backfill (project reads, embed calls and writes)")
                 .build();
     }
 
@@ -140,6 +187,12 @@ class TopicVectorsMetrics {
         }
     }
 
+    void longWindowMissed(@NonNull String workspaceId, int vectors) {
+        if (vectors > 0) {
+            longWindowMissed.add(vectors, workspace(workspaceId).build());
+        }
+    }
+
     void readFailure(@NonNull String phase, @NonNull String workspaceId, @NonNull Throwable error) {
         readFailures.add(1, workspace(workspaceId).put(stringKey("phase"), phase)
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
@@ -160,6 +213,19 @@ class TopicVectorsMetrics {
                         Map.Entry::getKey, entry -> new Oldest(names.nameOrId(entry.getKey()), entry.getValue()))));
     }
 
+    /**
+     * Replaces the snapshot the backfill gauges publish.
+     *
+     * @param undrained per enabled workspace, its projects not drained after the tick, none included
+     */
+    void undrained(@NonNull Map<String, List<TopicVectorBackfillDAO.Backfill>> undrained) {
+        lastUndrained = new UndrainedSnapshot(clock.instant(),
+                undrained.entrySet().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey,
+                        entry -> new Undrained(names.nameOrId(entry.getKey()), entry.getValue().size(),
+                                entry.getValue().stream().map(TopicVectorBackfillDAO.Backfill::backfillStartedAt)
+                                        .min(Comparator.naturalOrder()).orElse(null)))));
+    }
+
     private AttributesBuilder workspace(String workspaceId) {
         return workspace(workspaceId, names.nameOrId(workspaceId));
     }
@@ -168,7 +234,7 @@ class TopicVectorsMetrics {
         return Attributes.builder().put(WORKSPACE_ID_KEY, workspaceId).put(WORKSPACE_NAME_KEY, workspaceName);
     }
 
-    /** A tick's total time in one phase: {@code find} for its window reads, {@code embed} for the embed calls and writes. */
+    /** A tick's time in one phase. */
     void phase(@NonNull String phase, @NonNull Duration duration) {
         phaseDuration.record(duration.toNanos() / 1e9, Attributes.of(stringKey("phase"), phase));
     }
