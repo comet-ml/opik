@@ -7,7 +7,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.http.BodyDeadline;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
-import com.comet.opik.infrastructure.llm.ProviderHeadersHttpClient;
+import com.comet.opik.infrastructure.llm.ProviderHeaders;
 import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsClient;
@@ -112,7 +112,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
                             .property(DestinationGuardDnsResolver.PROPERTY, providerBaseUrlGuard.destinationGuard());
                     builder.headers(requestHeaders(config));
                 })
-                .retryPolicy(RetryUtils.handleHttpErrors(
+                .retryPolicy(RetryUtils.handleProviderHttpErrors(
                         Optional.ofNullable(llmProviderClientConfig.getMaxAttempts()).orElse(DEFAULT_MAX_ATTEMPTS),
                         Duration.ofMillis(llmProviderClientConfig.getDelayMillis()),
                         MAX_BACKOFF))
@@ -133,7 +133,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
      * capped too.
      */
     private static MultivaluedMap<String, Object> requestHeaders(LlmProviderClientApiConfig config) {
-        var stored = ProviderHeadersHttpClient.normalizedProviderHeaders(config.headers());
+        var stored = ProviderHeaders.normalized(config.headers());
         var headers = new MultivaluedHashMap<String, Object>();
         if (!stored.containsKey(HttpHeaders.ACCEPT_ENCODING)) {
             headers.putSingle(HttpHeaders.ACCEPT_ENCODING, "identity");

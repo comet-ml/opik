@@ -10,14 +10,10 @@ import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.lang3.StringUtils;
 
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
 
@@ -40,7 +36,7 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
     /** {@code delegate}, whose every client adds {@code headers} to its requests; as it is when there are none. */
     public static HttpClientBuilder builder(@NonNull HttpClientBuilder delegate,
             @Nullable Map<String, String> headers) {
-        var normalizedProviderHeaders = normalizedProviderHeaders(headers);
+        var normalizedProviderHeaders = ProviderHeaders.normalized(headers);
         if (normalizedProviderHeaders.isEmpty()) {
             return delegate;
         }
@@ -50,31 +46,6 @@ public class ProviderHeadersHttpClient extends DelegatingHttpClient {
                 return new ProviderHeadersHttpClient(client, normalizedProviderHeaders);
             }
         };
-    }
-
-    /**
-     * The headers that can be sent, by name in any case. Saving refuses the others, but a row stored before that may
-     * still hold them: a blank name or a missing value is left out, and of names differing only in case, the one
-     * sorting last wins.
-     */
-    public static Map<String, String> normalizedProviderHeaders(Map<String, String> headers) {
-        if (MapUtils.isEmpty(headers)) {
-            return Map.of();
-        }
-        var normalized = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
-        headers.entrySet().stream()
-                .filter(header -> {
-                    if (StringUtils.isBlank(header.getKey()) || header.getValue() == null) {
-                        // the name only: a value can carry a credential
-                        log.warn("Leaving out a provider header without a name or a value, header '{}'",
-                                header.getKey());
-                        return false;
-                    }
-                    return true;
-                })
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(header -> normalized.put(header.getKey(), header.getValue()));
-        return Collections.unmodifiableMap(normalized);
     }
 
     /** Sends the request with the provider's headers. */

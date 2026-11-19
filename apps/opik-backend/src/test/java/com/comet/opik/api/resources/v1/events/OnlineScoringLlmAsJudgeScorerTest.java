@@ -1016,11 +1016,14 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var message = buildJevMessage("question", "answer");
             var refused = new ProviderRequestRefusedException(
                     ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL);
-            when(decisionsClient.decide(any(), eq(clientConfig))).thenReturn(Mono.error(refused));
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig))).thenReturn(Mono.error(refused));
 
             assertThatThrownBy(() -> scorer.score(message).block())
                     .isInstanceOf(BadRequestException.class)
                     .hasMessage(refused.getMessage());
+
+            assertThat(requestCaptor.getValue().model()).isEqualTo(JEV_MODEL);
 
             verify(userFacingLogger).error("Error while scoring traceId '{}' with rule '{}': {}",
                     message.trace().id(), message.ruleName(), refused.getMessage());

@@ -533,11 +533,14 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
         when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         when(llmProviderFactory.getClientApiConfig("ws-1", JEV_MODEL)).thenReturn(clientConfig);
-        when(decisionsClient.decide(any(), eq(clientConfig))).thenReturn(Mono.error(refused));
+        var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+        when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig))).thenReturn(Mono.error(refused));
 
         assertThatThrownBy(() -> scorer.score(buildMessage(span, code)).block())
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage(refused.getMessage());
+
+        assertThat(requestCaptor.getValue().model()).isEqualTo(JEV_MODEL);
 
         verify(userFacingLogger).error("Error while scoring spanId '{}' with rule '{}': {}",
                 span.id(), "rule", refused.getMessage());
