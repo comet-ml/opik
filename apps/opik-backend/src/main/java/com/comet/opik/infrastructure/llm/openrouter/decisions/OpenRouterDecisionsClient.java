@@ -49,15 +49,18 @@ import static com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefused
  * such as TypeSafe Jev. Those models aren't reachable through chat completions, so there is no LangChain4j
  * client for them.
  *
- * <p>Error messages keep only a documented OpenRouter error, checked by {@link ProviderErrorMessageValidator} as on
- * the chat path; any other upstream text is dropped, also from the 503/504 that {@link RetriableHttpClient} retries. Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException}
- * and anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the
- * online-scoring consumer drops permanent failures (bad request, missing credits) and redelivers transient ones.
- * Rate limits and gateway errors are also retried in-process first.
+ * <p>Requests go to the workspace's OpenRouter {@code base_url}, or else to {@code openRouterDecisionsUrl} as is, or
+ * else to {@code openRouterUrl}; a base URL has its trailing {@code /v1} replaced by {@code /alpha/decisions}, and one
+ * without it is refused with a 400. The caller validates the workspace's base URL with {@link ProviderBaseUrlGuard},
+ * and this client checks each address it connects to, as for a custom provider.
  *
- * <p>Provided by {@link com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule} rather than injected
- * directly: the {@code @Config} qualifier has to sit on a hand-written parameter, since the Docker build compiles
- * without {@code lombok.config} and Lombok then drops it from generated constructors.
+ * <p>Error messages keep only a documented OpenRouter error, checked by {@link ProviderErrorMessageValidator} as on
+ * the chat path; any other upstream text is dropped, also from the 503/504 that {@link RetriableHttpClient} retries.
+ *
+ * <p>Errors carry the upstream status: 4xx as {@link ClientErrorException}, 5xx as {@link ServerErrorException} and
+ * anything else (e.g. a redirect from a misconfigured URL) as {@link WebApplicationException}, so the online-scoring
+ * consumer drops permanent failures (bad request, missing credits) and redelivers transient ones. Rate limits and
+ * gateway errors are also retried in-process first.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -67,6 +70,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
     private static final Duration MAX_BACKOFF = Duration.ofSeconds(10);
     private static final String CHAT_API_SUFFIX = "/v1";
     private static final String DECISIONS_API_SUFFIX = "/alpha/decisions";
+    private static final Set<String> URL_SCHEMES = Set.of("http", "https");
     private static final int SUCCESS_BODY_MAX_BYTES = 1024 * 1024;
     private static final Duration DEFAULT_BODY_DEADLINE = Duration.ofSeconds(60);
 
@@ -151,7 +155,7 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
         return decisionsUrl(StringUtils.defaultString(llmProviderClientConfig.getOpenRouterUrl()));
     }
 
-    static String decisionsUrl(@NonNull String openRouterUrl) {
+    private String decisionsUrl(String openRouterUrl) {
         URI uri;
         try {
             uri = new URI(openRouterUrl.trim());
@@ -159,12 +163,15 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
             throw new ProviderRequestRefusedException(OPENROUTER_DECISIONS_URL);
         }
         var path = StringUtils.stripEnd(uri.getRawPath(), "/");
-        if (uri.getRawAuthority() == null || !StringUtils.endsWith(path, CHAT_API_SUFFIX)) {
+        // the scheme compared exactly, as for media URLs; Set.of refuses a null lookup
+        if (uri.getScheme() == null || !URL_SCHEMES.contains(uri.getScheme()) || uri.getHost() == null
+                || !StringUtils.endsWith(path, CHAT_API_SUFFIX)) {
             throw new ProviderRequestRefusedException(OPENROUTER_DECISIONS_URL);
         }
-        return uri.getScheme() + "://" + uri.getRawAuthority()
-                + StringUtils.removeEnd(path, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX
-                + (uri.getRawQuery() != null ? "?" + uri.getRawQuery() : "");
+        // the host and port only: the HTTP client refuses userinfo, which the chat client doesn't send either
+        return "%s://%s%s%s%s".formatted(uri.getScheme(), uri.getHost(), uri.getPort() == -1 ? "" : ":" + uri.getPort(),
+                StringUtils.removeEnd(path, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX,
+                uri.getRawQuery() != null ? "?" + uri.getRawQuery() : "");
     }
 
     private DecisionsResponse processResponse(Response response) {
