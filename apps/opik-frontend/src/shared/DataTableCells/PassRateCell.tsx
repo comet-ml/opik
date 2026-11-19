@@ -20,7 +20,7 @@ export const formatPassRate = (
 };
 
 // The backend sends exactly 1 only when every item passed; anything below
-// rounds no higher than 99% so the label never reads "100%" on a red pill.
+// rounds no higher than 99% so the label never reads "100%" in red.
 const formatPercent = (passRate: number) =>
   formatAsPercentage(passRate < 1 ? Math.min(passRate, 0.99) : passRate);
 
@@ -34,6 +34,7 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
   const passRate = get(row, "pass_rate") as number | undefined;
   const passedCount = get(row, "passed_count") as number | undefined;
   const totalCount = get(row, "total_count") as number | undefined;
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const hasData =
     isNumber(passRate) && isNumber(passedCount) && isNumber(totalCount);
@@ -47,16 +48,15 @@ const PassRateCell = <TData,>(context: CellContext<TData, unknown>) => {
       tableMetadata={context.table.options.meta}
     >
       {hasData ? (
+        // Same filled status tag as the Alerts and Online evaluation status
+        // columns.
         <TooltipWrapper content={tooltip}>
-          <StatusDotPill
-            dotColor={
-              passRate === 1
-                ? PASS_RATE_DOT_COLOR.passed
-                : PASS_RATE_DOT_COLOR.failed
-            }
-          >
-            {formatPercent(passRate)}
-          </StatusDotPill>
+          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
+            <div className="flex items-center gap-1">
+              <CustomSquare className="size-3 shrink-0" />
+              <span className="truncate">{formatPercent(passRate)}</span>
+            </div>
+          </Tag>
         </TooltipWrapper>
       ) : (
         <span className="truncate">-</span>
@@ -77,8 +77,6 @@ const PassRateAggregationCell = <TData,>(
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
-
-  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   const data = aggregationMap?.[rowId] ?? {};
   const passRate = get(data, aggregationKey ?? "", undefined) as
@@ -108,15 +106,18 @@ const PassRateAggregationCell = <TData,>(
       tableMetadata={context.table.options.meta}
     >
       {isNumber(passRate) && (
-        // Same filled status tag as the Alerts and Online evaluation status
-        // columns, so the group total stands out from the experiment pills.
+        // Group rows use the lighter status-dot pill, so the filled tags on the
+        // experiment rows inside the group stay the primary signal.
         <TooltipWrapper content={tooltip}>
-          <Tag variant={passRate === 1 ? "green" : "red"} size={tagSize}>
-            <div className="flex items-center gap-1">
-              <CustomSquare className="size-3 shrink-0" />
-              <span className="truncate">{formatPercent(passRate)}</span>
-            </div>
-          </Tag>
+          <StatusDotPill
+            dotColor={
+              passRate === 1
+                ? PASS_RATE_DOT_COLOR.passed
+                : PASS_RATE_DOT_COLOR.failed
+            }
+          >
+            {formatPercent(passRate)}
+          </StatusDotPill>
         </TooltipWrapper>
       )}
     </CellWrapper>

@@ -47,10 +47,10 @@ describe("PassRateCell tooltip trigger", () => {
   });
 });
 
-// The pill is green only at exactly 100%, so a failing rate must never read
+// Pass rate is green only at exactly 100%, so a failing rate must never read
 // "100%" (e.g. 999 of 1000 items, or a group average of 0.9997).
 describe("PassRateCell label below 100%", () => {
-  it("caps an experiment row just under 100% at 99%", () => {
+  it("caps an experiment row just under 100% at 99% on the red tag", () => {
     const { getByText, queryByText } = render(
       <TooltipProvider>
         <PassRateCell
@@ -63,11 +63,11 @@ describe("PassRateCell label below 100%", () => {
       </TooltipProvider>,
     );
 
-    expect(getByText("99%")).toBeTruthy();
+    expect(getByText("99%").closest("[class*='--tag-red-bg']")).not.toBeNull();
     expect(queryByText("100%")).toBeNull();
   });
 
-  it("caps a group row just under 100% at 99% on the red tag", () => {
+  it("caps a group row just under 100% at 99% with a red dot", () => {
     const { getByText } = render(
       <TooltipProvider>
         <PassRateCell.Aggregation
@@ -83,17 +83,17 @@ describe("PassRateCell label below 100%", () => {
       </TooltipProvider>,
     );
 
-    expect(getByText("99%").closest("[class*='--tag-red-bg']")).not.toBeNull();
+    const pill = getByText("99%").closest("[class*='--pill-neutral-bg']");
+    expect(
+      pill?.querySelector(".rounded-full")?.getAttribute("style"),
+    ).toContain("--color-red");
   });
 
   it("shows 100% only when every item passed", () => {
     const { getByText } = render(
       <TooltipProvider>
-        <PassRateCell.Aggregation
-          {...context(
-            {},
-            { pass_rate_avg: 1, passed_count_sum: 15, total_count_sum: 15 },
-          )}
+        <PassRateCell
+          {...context({ pass_rate: 1, passed_count: 15, total_count: 15 })}
         />
       </TooltipProvider>,
     );
