@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  migration002,
-  reconcileSplitExperimentsTabs,
-} from "./002_split_experiments_tabs";
+import { migration002 } from "./002_split_experiments_tabs";
 
 const SUITES = "experiments-test-suites";
 const DATASETS = "experiments-datasets";
@@ -139,40 +136,5 @@ describe("002_split_experiments_tabs", () => {
       "trace_count",
       "dataset_version",
     ]);
-  });
-
-  describe("reconcile after a rollback", () => {
-    it("re-copies a legacy setting the old page changed after the migration", () => {
-      setLegacy("columns-width", { name: 300 });
-      migration002.run();
-      localStorage.setItem(`${SUITES}-columns-width`, JSON.stringify({ a: 1 }));
-
-      // The rolled-back version writes the legacy key.
-      setLegacy("columns-width", { name: 500 });
-      setLegacy("pinned-experiments-project-2", ["exp-9"]);
-      reconcileSplitExperimentsTabs();
-
-      expect(read(SUITES, "columns-width")).toEqual({ name: 500 });
-      expect(read(DATASETS, "columns-width")).toEqual({ name: 500 });
-      expect(read(SUITES, "pinned-experiments-project-2")).toEqual(["exp-9"]);
-    });
-
-    it("leaves tab choices alone when the legacy settings did not change", () => {
-      setLegacy("columns-width", { name: 300 });
-      migration002.run();
-      localStorage.setItem(`${SUITES}-columns-width`, JSON.stringify({ a: 1 }));
-
-      reconcileSplitExperimentsTabs();
-
-      expect(read(SUITES, "columns-width")).toEqual({ a: 1 });
-    });
-
-    it("does nothing before the migration has run", () => {
-      setLegacy("columns-width", { name: 300 });
-
-      reconcileSplitExperimentsTabs();
-
-      expect(localStorage.getItem(`${SUITES}-columns-width`)).toBeNull();
-    });
   });
 });

@@ -5,40 +5,46 @@
  * each tab saves its choices under its own prefix. Before the split, the page
  * saved one set under "experiments-*". Each tab starts from that set, minus the
  * columns it does not show. A tab key that already has a value is not
- * overwritten.
+ * overwritten. Legacy keys are left in place so a rollback still finds them.
  *
- * Legacy keys are left in place so a rollback still finds them. A snapshot of
- * what was copied is kept, and `reconcileSplitExperimentsTabs` runs on every
- * load: when an older version changed a legacy setting during a rollback, that
- * setting is copied again, so the change is not lost on the next upgrade.
+ * The prefixes and column ids are hard-coded on purpose: a later change to the
+ * tab config must not change what this migration does.
  */
 
 import isArray from "lodash/isArray";
 import isPlainObject from "lodash/isPlainObject";
 import isString from "lodash/isString";
 
-import {
-  COLUMN_DATASET_VERSION_ID,
-  EXPERIMENTS_TAB_STORAGE,
-  ExperimentsTabStorage,
-  isExcludedTabColumn,
-} from "@/constants/experiments";
-import { COLUMN_NAME_ID } from "@/types/shared";
-
 import type { Migration } from "./engine";
 
 const LEGACY_PREFIX = "experiments";
 const LEGACY_PINNED_PREFIX = `${LEGACY_PREFIX}-pinned-experiments-`;
-const SNAPSHOT_KEY = "opik-ls-migrations-002-snapshot";
+const NAME_COLUMN_ID = "name";
 
 // Columns the tabs show that the pre-split page did not have.
-const ADDED_COLUMN_IDS = [COLUMN_DATASET_VERSION_ID];
+const ADDED_COLUMN_IDS = ["dataset_version"];
+
+type TabStorage = {
+  storageKeyPrefix: string;
+  // Columns the tab does not show. An id also covers its per-score columns,
+  // so "feedback_scores" covers "feedback_scores.accuracy" too.
+  excludedColumnIds: string[];
+};
+
+const TABS: TabStorage[] = [
+  {
+    storageKeyPrefix: "experiments-test-suites",
+    excludedColumnIds: ["feedback_scores", "experiment_scores"],
+  },
+  {
+    storageKeyPrefix: "experiments-datasets",
+    excludedColumnIds: ["pass_rate"],
+  },
+];
 
 type ColumnSortLike = { id: string };
 
 type Setting = {
-  // Legacy keys the value is built from; a change in any of them re-copies it.
-  sources: string[];
   target: string;
   // Returns the value to store, or null to leave the tab on its default.
   build: () => string | null;
@@ -69,12 +75,14 @@ const readList = <T>(
 const getTabSettings = ({
   storageKeyPrefix,
   excludedColumnIds,
-}: ExperimentsTabStorage): Setting[] => {
+}: TabStorage): Setting[] => {
   const newKey = (suffix: string) => `${storageKeyPrefix}-${suffix}`;
-  const isKept = (id: string) => !isExcludedTabColumn(id, excludedColumnIds);
+  const isKept = (id: string) =>
+    !excludedColumnIds.some(
+      (excludedId) => id === excludedId || id.startsWith(`${excludedId}.`),
+    );
 
   const selectedColumns: Setting = {
-    sources: [legacyKey("selected-columns-v2"), legacyKey("selected-columns")],
     target: newKey("selected-columns-v2"),
     build: () => {
       // Users who never changed columns after the v2 key was introduced only
@@ -88,7 +96,7 @@ const getTabSettings = ({
       if (columns === null) return null;
       return JSON.stringify([
         ...new Set([
-          ...(hasV2 ? [] : [COLUMN_NAME_ID]),
+          ...(hasV2 ? [] : [NAME_COLUMN_ID]),
           ...columns.filter(isKept),
           ...ADDED_COLUMN_IDS,
         ]),
@@ -100,7 +108,6 @@ const getTabSettings = ({
   // the far right; put them after Name, where the design has them. When Name
   // is not in the saved order, they go at the end.
   const columnsOrder: Setting = {
-    sources: [legacyKey("columns-order")],
     target: newKey("columns-order"),
     build: () => {
       const order = readList(legacyKey("columns-order"), isString);
@@ -108,7 +115,7 @@ const getTabSettings = ({
       const kept = order.filter(
         (id) => isKept(id) && !ADDED_COLUMN_IDS.includes(id),
       );
-      const nameIndex = kept.indexOf(COLUMN_NAME_ID);
+      const nameIndex = kept.indexOf(NAME_COLUMN_ID);
       kept.splice(
         nameIndex === -1 ? kept.length : nameIndex + 1,
         0,
@@ -121,7 +128,6 @@ const getTabSettings = ({
   // A sort on a column the tab does not show would keep the list sorted with
   // no header to clear it.
   const columnsSort: Setting = {
-    sources: [legacyKey("columns-sort")],
     target: newKey("columns-sort"),
     build: () => {
       const sort = readList(legacyKey("columns-sort"), isSort);
@@ -132,7 +138,6 @@ const getTabSettings = ({
   };
 
   const copy = (source: string, target: string): Setting => ({
-    sources: [source],
     target,
     build: () => localStorage.getItem(source),
   });
@@ -159,53 +164,16 @@ const getTabSettings = ({
   return [selectedColumns, columnsOrder, columnsSort, ...plainCopies, ...pins];
 };
 
-const readSnapshot = (): Record<string, string> | null => {
-  try {
-    const value: unknown = JSON.parse(
-      localStorage.getItem(SNAPSHOT_KEY) ?? "null",
-    );
-    return isPlainObject(value) ? (value as Record<string, string>) : null;
-  } catch {
-    return null;
-  }
-};
-
-const sync = (snapshot: Record<string, string> | null) => {
-  const nextSnapshot: Record<string, string> = {};
-
-  Object.values(EXPERIMENTS_TAB_STORAGE)
-    .flatMap(getTabSettings)
-    .forEach(({ sources, target, build }) => {
-      const values = sources.map((key) => localStorage.getItem(key));
-      const fingerprint = JSON.stringify(values);
-      nextSnapshot[target] = fingerprint;
-
-      const shouldWrite = snapshot
-        ? // Reconcile: an older version changed the legacy setting since the
-          // last copy, so its value is the newest choice.
-          fingerprint !== snapshot[target] &&
-          values.some((value) => value !== null)
-        : // First run: never overwrite a choice already saved for the tab.
-          localStorage.getItem(target) === null;
-      if (!shouldWrite) return;
-
-      const value = build();
-      if (value !== null) localStorage.setItem(target, value);
-    });
-
-  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(nextSnapshot));
-};
-
 export const migration002: Migration = {
   id: "002_split_experiments_tabs",
   description:
     "Copy the pre-split Experiments page settings into the Test suites and Datasets tabs",
-  run: () => sync(null),
-};
-
-// Runs on every load, after the migrations. A no-op until migration 002 has
-// run, and for every setting the legacy page has not changed since.
-export const reconcileSplitExperimentsTabs = () => {
-  const snapshot = readSnapshot();
-  if (snapshot) sync(snapshot);
+  run: () => {
+    TABS.flatMap(getTabSettings).forEach(({ target, build }) => {
+      // Never overwrite a choice already saved for the tab.
+      if (localStorage.getItem(target) !== null) return;
+      const value = build();
+      if (value !== null) localStorage.setItem(target, value);
+    });
+  },
 };

@@ -52,8 +52,6 @@ export type ExperimentsTabStorage = {
   excludedColumnIds: string[];
 };
 
-// Shared by the Experiments page tabs and the ls-migration that carries the
-// pre-split "experiments-*" settings into them.
 export const EXPERIMENTS_TAB_STORAGE: Record<
   EVALUATION_METHOD,
   ExperimentsTabStorage
