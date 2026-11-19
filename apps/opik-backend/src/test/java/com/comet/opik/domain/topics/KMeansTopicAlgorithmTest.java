@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,41 +38,43 @@ class KMeansTopicAlgorithmTest {
     }
 
     /**
-     * Rows in position order: topic B, topic A, topic B again, then a known-Other one. Each vector near a row takes that
-     * row's topic; one near the known-Other row, or far from all, is Other.
+     * Topic B with two vectors, then topic A, then a known-Other vector. Each vector near a prototype takes its topic;
+     * one near the known-Other prototype, or far from all, is Other.
      */
     @Test
-    @DisplayName("the labeller follows the saved order: a topic per row with a topic id, Other for the known-Other "
-            + "rows and for vectors far from every row")
-    void labellerFromSavedOrder() {
-        var topicA = UUID.randomUUID();
-        var topicB = UUID.randomUUID();
-        var labeller = algorithm.labeller(List.of(
-                prototype(0, topicB, axis(0)),
-                prototype(1, topicA, axis(1)),
-                prototype(2, topicB, axis(2)),
-                prototype(3, null, axis(3)))).orElseThrow();
+    @DisplayName("the labeller follows the saved list: each topic's vectors, Other for the known-Other vectors and "
+            + "for vectors far from every prototype")
+    void labellerFromSavedList() {
+        var topicA = topic(axis(1));
+        var topicB = topic(axis(0), axis(2));
+        var labeller = algorithm.labeller(List.of(topicB, topicA), vectors(axis(3))).orElseThrow();
 
         var labels = labeller.label(concat(axis(0), axis(1), axis(2), axis(3), axis(4)));
 
-        assertThat(labels).containsExactly(topicB, topicA, topicB, TraceTopic.OTHER, TraceTopic.OTHER);
+        assertThat(labels).containsExactly(topicB.id(), topicA.id(), topicB.id(), TraceTopic.OTHER, TraceTopic.OTHER);
     }
 
     @Test
-    @DisplayName("a saved list with no topic prototype has no labeller")
-    void noTopicPrototype() {
-        assertThat(algorithm.labeller(List.of(prototype(0, null, axis(0))))).isEmpty();
-        assertThat(algorithm.labeller(List.of())).isEmpty();
+    @DisplayName("a saved list with no topic has no labeller")
+    void noTopic() {
+        assertThat(algorithm.labeller(List.of(), vectors(axis(0)))).isEmpty();
+        assertThat(algorithm.labeller(List.of(), null)).isEmpty();
     }
 
-    private TopicPrototype prototype(int position, UUID topicId, float[] vector) {
-        return TopicPrototype.builder()
+    private Topic topic(float[]... vectors) {
+        return Topic.builder()
+                .id(UUID.randomUUID())
                 .workspaceId(WORKSPACE_ID)
                 .projectId(projectId)
-                .position(position)
-                .topicId(topicId)
-                .vector(TopicPrototype.encode(vector))
+                .name("t")
+                .definition("d")
+                .born(LocalDate.of(2026, 11, 19))
+                .vectors(vectors(vectors))
                 .build();
+    }
+
+    private static PrototypeVectors vectors(float[]... vectors) {
+        return new PrototypeVectors(List.of(vectors));
     }
 
     private static float[] axis(int index) {

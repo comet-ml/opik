@@ -117,6 +117,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
     typeLabel,
     submitHandler,
     handleFileSelect,
+    hideUpload,
   } = useDatasetForm({
     open,
     setOpen,
@@ -167,7 +168,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
   const hasValidUpload = uploadFile !== undefined && !uploadError;
 
   const canSubmit =
-    activeMode === "upload"
+    activeMode === "upload" && !hideUpload
       ? hasValidUpload && name.trim().length > 0
       : name.trim().length > 0;
 
@@ -239,6 +240,15 @@ const CreateDatasetSidebar: React.FunctionComponent<
       defaultRunsPerItem={1}
       defaultPassThreshold={1}
     />
+  );
+
+  // Without edit rights items can't be added, so upload mode is just a plain
+  // name + description form.
+  const renderPlainCreateMode = () => (
+    <div className="flex flex-col gap-3">
+      {renderNameField()}
+      {renderDescriptionField()}
+    </div>
   );
 
   const renderUploadMode = () => (
@@ -374,7 +384,11 @@ const CreateDatasetSidebar: React.FunctionComponent<
     >
       <div className="flex size-full flex-col">
         <div className="flex-1 overflow-y-auto pb-6 pl-9 pr-4 pt-4">
-          {activeMode === "upload" ? renderUploadMode() : renderSdkMode()}
+          {activeMode === "sdk"
+            ? renderSdkMode()
+            : hideUpload
+              ? renderPlainCreateMode()
+              : renderUploadMode()}
         </div>
         <div className="border-t py-4 pl-9 pr-4">{renderFooter()}</div>
       </div>

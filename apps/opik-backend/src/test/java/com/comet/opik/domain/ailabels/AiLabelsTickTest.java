@@ -170,11 +170,7 @@ class AiLabelsTickTest {
         Startables.deepStart(redis, mysql, zookeeper, clickHouse).join();
         wireMock = WireMockUtils.startWireMock();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
