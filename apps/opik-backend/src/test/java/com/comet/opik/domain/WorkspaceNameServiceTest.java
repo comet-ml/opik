@@ -1,10 +1,14 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.CacheConfiguration;
+import com.comet.opik.infrastructure.cache.CacheManager;
+import com.comet.opik.infrastructure.redis.RedisModule;
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.google.common.base.Ticker;
+import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,40 +16,49 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @DisplayName("workspace name or id")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class WorkspaceNameServiceTest {
 
     private static final String NAME_PATH = "/workspaces/workspace-name";
+    private static final Duration LOOKUP_FAILURE_TTL = Duration.ofSeconds(2);
+
+    private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
 
     private WireMockServer server;
-    private final AtomicLong nanos = new AtomicLong();
-    private final Ticker ticker = new Ticker() {
-        @Override
-        public long read() {
-            return nanos.get();
-        }
-    };
+    private RedissonClient redisson;
+    private CacheManager cacheManager;
 
     @BeforeAll
-    void startServer() {
+    void setUpAll() {
+        redis.start();
+        var redissonConfig = new Config();
+        redissonConfig.useSingleServer().setAddress(redis.getRedisURI());
+        redisson = Redisson.create(redissonConfig);
+        cacheManager = new RedisModule().cacheManager(redisson.reactive(), redisson);
         server = WireMockUtils.startWireMock().server();
     }
 
     @AfterAll
-    void stopServer() {
+    void tearDownAll() {
         server.stop();
+        redisson.shutdown();
+        redis.stop();
     }
 
     @BeforeEach
@@ -70,13 +83,19 @@ class WorkspaceNameServiceTest {
         var service = service(server.baseUrl());
 
         assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
-        nanos.addAndGet(WorkspaceNameService.LOOKUP_FAILURE_TTL.minusMillis(1).toNanos());
-        assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
-        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(NAME_PATH)))).hasSize(1);
+        // The failure is cached in the background. Once it is, a call no longer asks the React service.
+        await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
+            var before = requests();
+            assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
+            assertThat(requests()).isEqualTo(before);
+        });
 
-        nanos.addAndGet(Duration.ofMillis(1).toNanos());
-        assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
-        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(NAME_PATH)))).hasSize(2);
+        // Once the failure expires, the next call asks again.
+        var asked = requests();
+        await().atMost(LOOKUP_FAILURE_TTL.multipliedBy(2)).untilAsserted(() -> {
+            assertThat(service.nameOrId(workspaceId)).isEqualTo(workspaceId);
+            assertThat(requests()).isGreaterThan(asked);
+        });
     }
 
     @Test
@@ -85,13 +104,22 @@ class WorkspaceNameServiceTest {
         var workspaceId = UUID.randomUUID().toString();
 
         assertThat(service(null).nameOrId(workspaceId)).isEqualTo(workspaceId);
-        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(NAME_PATH)))).isEmpty();
+        assertThat(requests()).isZero();
+    }
+
+    private int requests() {
+        return server.findAll(getRequestedFor(urlPathEqualTo(NAME_PATH))).size();
     }
 
     private WorkspaceNameService service(String reactServiceUrl) {
         var authentication = new AuthenticationConfig();
         authentication
                 .setReactService(reactServiceUrl == null ? null : new AuthenticationConfig.UrlConfig(reactServiceUrl));
-        return new WorkspaceNameService(TestHttpClientUtils.client(), authentication, ticker);
+        var cacheConfiguration = new CacheConfiguration();
+        cacheConfiguration.setEnabled(true);
+        cacheConfiguration.setDefaultDuration(Duration.ofSeconds(1));
+        cacheConfiguration.setCaches(Map.of(WorkspaceNameService.LOOKUP_FAILURES_CACHE, LOOKUP_FAILURE_TTL));
+        return new WorkspaceNameService(TestHttpClientUtils.client(), authentication, cacheManager,
+                cacheConfiguration);
     }
 }

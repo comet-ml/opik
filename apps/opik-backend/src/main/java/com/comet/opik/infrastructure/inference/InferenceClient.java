@@ -1,17 +1,12 @@
 package com.comet.opik.infrastructure.inference;
 
-import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.InferenceConfig;
-import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
-import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.net.DestinationGuardDnsResolver;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.dropwizard.client.JerseyClientConfiguration;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.HttpMethod;
@@ -30,6 +25,8 @@ import org.apache.commons.io.input.BoundedInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.IOException;
@@ -38,12 +35,8 @@ import java.io.OutputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -66,10 +59,11 @@ import java.util.function.Function;
  * A call cut off at its deadline, or cancelled by its caller, closes its response: the read stops, and the connection
  * is dropped instead of read to its end.
  * <p>
- * {@link #decide}, which a request waits on, runs on a client of its own, built like the shared one: on the shared
- * client it would queue behind batch calls for a pooled connection. Its connections and threads are sized to
- * {@code maxConcurrentDecides}, the most decide calls in flight; a call over it fails with {@code client_busy} after the
- * usual retries.
+ * {@link #decide}, which a request waits on, goes through the shared client like every other call, but as a synchronous
+ * call on threads of its own, so it never queues behind batch calls for one of the client's threads. There are
+ * {@code maxConcurrentDecides} of them, the most decide calls in flight; a call over it fails with {@code client_busy}
+ * after the usual retries. That cap is kept below the shared pool's connections per route, so decide calls alone can't
+ * take every connection to opik-inference.
  * <p>
  * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body
  * longer than {@code inference.maxResponseBytes} fails the call the same way: at once when its
@@ -101,8 +95,8 @@ public class InferenceClient {
     private final @NonNull Client client;
     private final @NonNull InferenceConfig config;
     private final @NonNull AiLabelsConfig aiLabels;
-    private final @NonNull Client decideClient;
     private final @NonNull Semaphore decidePermits;
+    private final @NonNull Scheduler decideScheduler;
 
     @Inject
     public InferenceClient(@NonNull Client client, @NonNull @Config("inference") InferenceConfig config,
@@ -110,29 +104,10 @@ public class InferenceClient {
         this.client = client;
         this.config = config;
         this.aiLabels = aiLabels;
-        this.decideClient = newDecideClient(config);
         this.decidePermits = new Semaphore(config.getMaxConcurrentDecides());
-    }
-
-    private static Client newDecideClient(InferenceConfig inference) {
-        var maxConcurrentDecides = inference.getMaxConcurrentDecides();
-        var clientConfig = new JerseyClientConfiguration();
-        clientConfig.setMaxConnections(maxConcurrentDecides);
-        clientConfig.setMaxConnectionsPerRoute(maxConcurrentDecides);
-        // The rest as the shared client sends to opik-inference.
-        clientConfig.setGzipEnabledForRequests(false);
-        clientConfig.setChunkedEncodingEnabled(false);
-        clientConfig.setValidateAfterInactivityPeriod(io.dropwizard.util.Duration.seconds(5));
-        clientConfig.setTimeToLive(inference.getDecideTimeToLive());
-        // Dropwizard's default of 0 closes every connection after one call: each check would pay a new TCP and TLS
-        // handshake.
-        clientConfig.setKeepAlive(inference.getDecideKeepAlive());
-        clientConfig.setUserAgent(Optional.of("opik-inference-decide"));
-        // A thread per call in flight, started when needed: the permits keep calls within the cap, so none queues.
-        var executor = new ThreadPoolExecutor(0, maxConcurrentDecides, 60, TimeUnit.SECONDS, new SynchronousQueue<>(),
-                new ThreadFactoryBuilder().setNameFormat("opik-inference-decide-%d").setDaemon(true).build());
-        return HttpModule.buildClient(
-                new DestinationGuardJerseyClientBuilder(new MetricRegistry()).using(executor), clientConfig);
+        // The permits keep calls within the threads, so none waits in the queue.
+        this.decideScheduler = Schedulers.newBoundedElastic(config.getMaxConcurrentDecides(),
+                config.getMaxConcurrentDecides(), "opik-inference-decide");
     }
 
     public Mono<BatchSubmitResponse> submitDecide(@NonNull BatchDecideRequest request, @NonNull Instant deadline) {
@@ -328,7 +303,6 @@ public class InferenceClient {
         // A decide call keeps its slot until its thread is done: a cancel closes the response, which ends the read.
         Runnable release = call.realtime() ? decidePermits::release : () -> {
         };
-        var httpClient = call.realtime() ? decideClient : client;
         return Mono.<T>create(sink -> {
             var cancelled = new AtomicBoolean();
             var arrived = new AtomicReference<Response>();
@@ -337,7 +311,7 @@ public class InferenceClient {
                 cancelled.set(true);
                 closeQuietly(arrived.get());
             });
-            var builder = call.target().apply(httpClient.target(config.getUrl()))
+            var builder = call.target().apply(client.target(config.getUrl()))
                     .request(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.getCredential())
                     // opik-inference never redirects, and following one would send the credential where it points.
@@ -375,7 +349,25 @@ public class InferenceClient {
                 }
             };
             try {
-                if (call.body() != null) {
+                if (call.realtime()) {
+                    decideScheduler.schedule(() -> {
+                        if (cancelled.get()) {
+                            release.run();
+                            return;
+                        }
+                        Response response;
+                        try {
+                            response = call.body() != null
+                                    ? builder.method(call.method(),
+                                            Entity.entity(call.body(), MediaType.APPLICATION_JSON_TYPE))
+                                    : builder.method(call.method());
+                        } catch (RuntimeException exception) {
+                            callback.failed(exception);
+                            return;
+                        }
+                        callback.completed(response);
+                    });
+                } else if (call.body() != null) {
                     builder.async().method(call.method(),
                             Entity.entity(call.body(), MediaType.APPLICATION_JSON_TYPE), callback);
                 } else {

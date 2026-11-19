@@ -1,9 +1,13 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.codahale.metrics.MetricRegistry;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ShippedConfig;
+import com.comet.opik.infrastructure.http.DestinationGuardJerseyClientBuilder;
+import com.comet.opik.infrastructure.http.HttpModule;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -11,7 +15,6 @@ import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import com.sun.net.httpserver.HttpServer;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -264,17 +268,6 @@ class InferenceClientDecideTest {
     }
 
     @Test
-    void decideDoesNotUseTheSharedClient() {
-        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY)));
-        var closedSharedClient = ClientBuilder.newClient();
-        closedSharedClient.close();
-        var isolated = newClient(closedSharedClient, config);
-
-        assertThat(isolated.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())
-                .isEqualTo(SUCCESS_RESPONSE);
-    }
-
-    @Test
     void callOverTheCapRetriesThenFailsWithoutReachingTheService() {
         wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(okJson(SUCCESS_BODY).withFixedDelay(1_000)));
         var cappedConfig = config(wireMock.runtimeInfo().getHttpBaseUrl());
@@ -296,20 +289,24 @@ class InferenceClientDecideTest {
     }
 
     @Test
-    void consecutiveCallsShareOneConnection() throws IOException {
-        var clientPorts = clientPortsOfThreeCalls(null);
+    void consecutiveCallsShareOneConnectionOnTheShippedClient() throws Exception {
+        var executor = Executors.newCachedThreadPool();
+        var sharedClient = HttpModule.buildClient(
+                new DestinationGuardJerseyClientBuilder(new MetricRegistry()).using(executor),
+                ShippedConfig.load(Map.of()).getJerseyClient());
+        try {
+            var clientPorts = clientPortsOfThreeCalls(sharedClient);
 
-        // One client port: the three calls went over one connection, with no new handshake.
-        assertThat(clientPorts).hasSize(3).containsOnly(clientPorts.getFirst());
+            // One client port: the three calls went over one connection, with no new handshake.
+            assertThat(clientPorts).hasSize(3).containsOnly(clientPorts.getFirst());
+        } finally {
+            sharedClient.close();
+            executor.shutdownNow();
+        }
     }
 
-    @Test
-    void zeroKeepAliveOpensAConnectionPerCall() throws IOException {
-        assertThat(clientPortsOfThreeCalls(io.dropwizard.util.Duration.milliseconds(0))).doesNotHaveDuplicates();
-    }
-
-    /** The client port of each of three decide calls to a local server, with the given keep-alive or the default. */
-    private List<Integer> clientPortsOfThreeCalls(io.dropwizard.util.Duration decideKeepAlive) throws IOException {
+    /** The client port of each of three decide calls to a local server. */
+    private List<Integer> clientPortsOfThreeCalls(Client sharedClient) throws IOException {
         var clientPorts = new CopyOnWriteArrayList<Integer>();
         var server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(PATH, exchange -> {
@@ -326,10 +323,7 @@ class InferenceClientDecideTest {
         try {
             var serverConfig = config("http://%s:%d".formatted(server.getAddress().getHostString(),
                     server.getAddress().getPort()));
-            if (decideKeepAlive != null) {
-                serverConfig.getInference().setDecideKeepAlive(decideKeepAlive);
-            }
-            var serverClient = newClient(TestHttpClientUtils.client(), serverConfig);
+            var serverClient = newClient(sharedClient, serverConfig);
 
             for (var call = 0; call < 3; call++) {
                 assertThat(serverClient.decide(request(noulQuestion()), Instant.now().plusSeconds(5)).block())

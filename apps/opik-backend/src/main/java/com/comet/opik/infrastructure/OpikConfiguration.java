@@ -271,6 +271,13 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
+    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE): decide calls share that pool with the other calls to opik-inference")
+    public boolean isInferenceDecidesWithinConnectionPool() {
+        return inference == null || jerseyClient == null
+                || inference.getMaxConcurrentDecides() < jerseyClient.getMaxConnectionsPerRoute();
+    }
+
+    @JsonIgnore
     @AssertTrue(message = "topics.vectors.embedBatchSize must not be above inference.limits.maxEmbedInputs") public boolean isTopicsEmbedBatchWithinLimits() {
         return topics.getVectors() == null || inference.getLimits() == null
                 || topics.getVectors().getEmbedBatchSize() <= inference.getLimits().getMaxEmbedInputs();

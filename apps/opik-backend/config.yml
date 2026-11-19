@@ -1783,6 +1783,10 @@ cacheManager:
     # Description: Cache TTL for workspace names read from the React service. A renamed workspace keeps its old name
     # for up to this long.
     workspace_name_by_id: ${CACHE_MANAGER_WORKSPACE_NAME_BY_ID_DURATION:-PT10M}
+    # Default: PT10M
+    # Description: How long a failed workspace name lookup is remembered: the id stands in for the name, and the React
+    # service isn't asked again for that workspace until it expires.
+    workspace_name_lookup_failures: ${CACHE_MANAGER_WORKSPACE_NAME_LOOKUP_FAILURES_DURATION:-PT10M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1915,6 +1919,10 @@ jerseyClient:
   # Default: 5m
   # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
   timeToLive: ${JERSEY_CLIENT_TIME_TO_LIVE:-5m}
+  # Default: 30s
+  # Description: How long an idle connection is kept for reuse, so a call doesn't pay a new TCP and TLS handshake.
+  # Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+  keepAlive: ${JERSEY_CLIENT_KEEP_ALIVE:-30s}
   # Default: 256
   # Description: The maximum number of concurrent open connections.
   maxConnections: ${JERSEY_CLIENT_MAX_CONNECTIONS:-256}
@@ -2511,18 +2519,11 @@ inference:
   #  Description: Per call to opik-inference, cut to the time left before the call's deadline. Also the time an ai-labels
   #  tick's sends get past aiLabels.tickBudget, so it lengthens the leader lease
   readTimeout: ${OPIK_INFERENCE_READ_TIMEOUT:-${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}}
-  #  Default: 256
-  #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
-  #  retries after a short backoff, then fails
-  maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}}
-  #  Default: 30s
-  #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
-  #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
-  decideKeepAlive: ${OPIK_INFERENCE_DECIDE_KEEP_ALIVE:-${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}}
-  #  Default: 5m
-  #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
-  #  upstream instances after a rollout
-  decideTimeToLive: ${OPIK_INFERENCE_DECIDE_TIME_TO_LIVE:-${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}}
+  #  Default: 48
+  #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance, each on a thread
+  #  of its own. A call over it retries after a short backoff, then fails. Decide calls share the jerseyClient connection
+  #  pool with the other calls to opik-inference, so this must be below jerseyClient.maxConnectionsPerRoute
+  maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
   #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
   #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
   #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in

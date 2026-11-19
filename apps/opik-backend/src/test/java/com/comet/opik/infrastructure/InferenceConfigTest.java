@@ -41,28 +41,23 @@ class InferenceConfigTest {
         assertThat(ShippedConfig.load(environment).getInference().getUrl()).isEqualTo(expected);
     }
 
-    static Stream<Arguments> decideConnectionSettings() {
+    static Stream<Arguments> decidesAndConnections() {
         return Stream.of(
-                arguments("the defaults", Duration.seconds(30), Duration.minutes(5), List.of()),
-                arguments("no keep-alive", Duration.milliseconds(0), Duration.minutes(5), List.of()),
-                arguments("no keep-alive set", null, Duration.minutes(5), List.of("decideKeepAlive")),
-                arguments("a time to live under a second", Duration.seconds(30), Duration.milliseconds(999),
-                        List.of("decideTimeToLive")));
+                arguments("the defaults", 48, 64, true),
+                arguments("one below the pool", 63, 64, true),
+                arguments("as many as the pool", 64, 64, false));
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("decideConnectionSettings")
-    void decideConnectionSettingsAreValidated(String description, Duration decideKeepAlive,
-            Duration decideTimeToLive, List<String> expectedViolations) {
-        var config = TestConfigUtils.loadConfigTest().getInference();
-        config.setDecideKeepAlive(decideKeepAlive);
-        config.setDecideTimeToLive(decideTimeToLive);
+    @MethodSource("decidesAndConnections")
+    @DisplayName("decide calls leave connections in the shared pool for the other calls")
+    void decidesStayBelowTheConnectionsPerRoute(String description, int maxConcurrentDecides,
+            int maxConnectionsPerRoute, boolean valid) {
+        var config = TestConfigUtils.loadConfigTest();
+        config.getInference().setMaxConcurrentDecides(maxConcurrentDecides);
+        config.getJerseyClient().setMaxConnectionsPerRoute(maxConnectionsPerRoute);
 
-        var violations = VALIDATOR.validate(config).stream()
-                .map(violation -> violation.getPropertyPath().toString())
-                .toList();
-
-        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+        assertThat(VALIDATOR.validateProperty(config, "inferenceDecidesWithinConnectionPool")).hasSize(valid ? 0 : 1);
     }
 
     static Stream<Arguments> topicsEmbedSettings() {
