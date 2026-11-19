@@ -1,23 +1,23 @@
 package com.comet.opik.domain.topics;
 
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * Turns the author answer into topics: topics with the same name merged first (see {@link #mergeSameNames}); topics ordered by the total size of their valid group ids (largest first, ties
- * in answer order); names that are a catch-all as a whole dropped ({@link #isCatchAllName}); the first
- * {@code maxTopics} kept; each takes the groups no earlier topic claimed, and one left with none creates nothing; every
- * unclaimed group is Other. The per-cluster answer lists each group once, so the order matters only for the same-name
- * merge and the cap.
+ * Turns the author answer into topics: topics with the same name merged first (see {@link #mergeSameNames}); topics
+ * ordered by the total size of their valid group ids (largest first, ties in answer order); names that are a catch-all
+ * as a whole, or blank, dropped ({@link #isCatchAllName}); each topic takes the groups no earlier topic claimed, one
+ * left with none creates nothing, and creation stops at {@code maxTopics} topics; every unclaimed group is Other. The
+ * answer lists each group once, so the order matters only for the same-name merge and the cap.
  */
 @UtilityClass
 public class AuthorApplier {
@@ -25,49 +25,45 @@ public class AuthorApplier {
     /**
      * A whole name that is a catch-all: a catch-all word, with at most a generic noun after it. The name must match
      * as a whole: a catch-all word inside a name is a real word there ("Mixed Martial Arts", "General Job Search").
+     * English only: the author names topics after English summaries, and its prompt forbids such names; this catches
+     * the answers that ignore it.
      */
-    static final Pattern CATCH_ALL_NAME = Pattern.compile(
+    private static final Pattern CATCH_ALL_NAME = Pattern.compile(
             "(other|others|misc|miscellaneous|general|various|mixed)( (requests|queries|questions|inquiries|tasks|topics|items|things|stuff))?",
             Pattern.UNICODE_CHARACTER_CLASS);
 
-    public static Applied apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups, int maxTopics) {
+    private static final Comparator<Sized> LARGEST_FIRST = Comparator.comparingLong(Sized::size).reversed();
+
+    public static AppliedAnswer apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups,
+            int maxTopics) {
         int k = groups.size();
-        var ordered = new ArrayList<>(mergeSameNames(answer.topics(), groups));
-        ordered.sort(Comparator.comparingLong(topic -> -validSize(topic, groups)));
+        // A blank name is no name: its groups go to Other, as a catch-all's do.
+        var candidates = mergeSameNames(answer.topics(), groups).stream()
+                .map(topic -> new Sized(topic, validSize(topic, groups)))
+                .sorted(LARGEST_FIRST)
+                .map(Sized::topic)
+                .filter(topic -> !isCatchAllName(topic.name()) && !TopicText.pythonStrip(topic.name()).isEmpty())
+                .toList();
+        // A plain loop: an earlier topic's groups are gone for the later ones.
         var claimed = new boolean[k];
-        var topics = new ArrayList<NewTopic>();
-        int taken = 0;
-        for (var topic : ordered) {
-            // A blank name is no name: its groups go to Other, as a catch-all's do.
-            if (isCatchAllName(topic.name()) || TopicText.pythonStrip(topic.name()).isEmpty()) {
-                continue;
-            }
-            if (taken++ >= maxTopics) {
+        var topics = new ArrayList<AppliedTopic>();
+        for (var topic : candidates) {
+            if (topics.size() >= maxTopics) {
                 break;
             }
-            var mine = new LinkedHashSet<Integer>();
-            for (int j : topic.clusters()) {
-                if (j >= 0 && j < k && !claimed[j]) {
-                    mine.add(j);
-                }
-            }
+            var mine = topic.clusters().stream().filter(j -> j >= 0 && j < k && !claimed[j]).distinct().toList();
             if (mine.isEmpty()) {
                 continue;
             }
             mine.forEach(j -> claimed[j] = true);
-            topics.add(NewTopic.builder()
+            topics.add(AppliedTopic.builder()
                     .name(TopicText.name(topic.name()))
                     .definition(TopicText.pythonStrip(topic.definition()))
-                    .groups(List.copyOf(mine))
+                    .groups(mine)
                     .build());
         }
-        var other = new ArrayList<Integer>();
-        for (int j = 0; j < k; j++) {
-            if (!claimed[j]) {
-                other.add(j);
-            }
-        }
-        return Applied.builder().topics(List.copyOf(topics)).other(List.copyOf(other)).build();
+        var other = IntStream.range(0, k).filter(j -> !claimed[j]).boxed().toList();
+        return AppliedAnswer.builder().topics(List.copyOf(topics)).other(other).build();
     }
 
     /**
@@ -75,29 +71,27 @@ public class AuthorApplier {
      * It keeps the name and definition of its largest member (by {@link #validSize}, ties in answer order) and lists
      * the members' group ids, largest member first, each id once.
      */
-    static List<AuthorAnswer.Topic> mergeSameNames(List<AuthorAnswer.Topic> topics, List<GroupSummary> groups) {
-        var byName = new LinkedHashMap<String, List<AuthorAnswer.Topic>>();
-        for (var topic : topics) {
-            byName.computeIfAbsent(nameKey(topic.name()), key -> new ArrayList<>()).add(topic);
-        }
-        var out = new ArrayList<AuthorAnswer.Topic>(byName.size());
-        for (var members : byName.values()) {
-            if (members.size() == 1) {
-                out.add(members.getFirst());
-                continue;
-            }
-            var bySize = new ArrayList<>(members);
-            bySize.sort(Comparator.comparingLong(topic -> -validSize(topic, groups)));
-            var clusters = new LinkedHashSet<Integer>();
-            bySize.forEach(topic -> clusters.addAll(topic.clusters()));
-            var head = bySize.getFirst();
-            out.add(head.toBuilder().clusters(List.copyOf(clusters)).build());
-        }
-        return out;
+    private static List<AuthorTopic> mergeSameNames(List<AuthorTopic> topics, List<GroupSummary> groups) {
+        return topics.stream()
+                .collect(Collectors.groupingBy(topic -> nameKey(topic.name()), LinkedHashMap::new,
+                        Collectors.toList()))
+                .values().stream()
+                .map(members -> members.size() == 1 ? members.getFirst() : merge(members, groups))
+                .toList();
+    }
+
+    private static AuthorTopic merge(List<AuthorTopic> members, List<GroupSummary> groups) {
+        var bySize = members.stream()
+                .map(topic -> new Sized(topic, validSize(topic, groups)))
+                .sorted(LARGEST_FIRST)
+                .map(Sized::topic)
+                .toList();
+        var clusters = bySize.stream().flatMap(topic -> topic.clusters().stream()).distinct().toList();
+        return bySize.getFirst().toBuilder().clusters(clusters).build();
     }
 
     /** Python's {@code " ".join(name.split()).lower()}: no outer whitespace, inner runs as one space, lower case. */
-    static String nameKey(@NonNull String name) {
+    private static String nameKey(String name) {
         var out = new StringBuilder(name.length());
         boolean space = false;
         for (int i = 0; i < name.length();) {
@@ -117,28 +111,19 @@ public class AuthorApplier {
     }
 
     /** {@link #CATCH_ALL_NAME} on the name normalised by {@link #nameKey}. */
-    public static boolean isCatchAllName(@NonNull String name) {
+    private static boolean isCatchAllName(String name) {
         return CATCH_ALL_NAME.matcher(nameKey(name)).matches();
     }
 
     /** Every listed valid id counts, a repeated one each time. */
-    private static long validSize(AuthorAnswer.Topic topic, List<GroupSummary> groups) {
-        long size = 0;
-        for (int j : topic.clusters()) {
-            if (j >= 0 && j < groups.size()) {
-                size += groups.get(j).size();
-            }
-        }
-        return size;
+    private static long validSize(AuthorTopic topic, List<GroupSummary> groups) {
+        return topic.clusters().stream()
+                .filter(j -> j >= 0 && j < groups.size())
+                .mapToLong(j -> groups.get(j).size())
+                .sum();
     }
 
-    /** A topic to create, with its groups in the order the answer listed them. */
-    @Builder(toBuilder = true)
-    public record NewTopic(@NonNull String name, @NonNull String definition, @NonNull List<Integer> groups) {
-    }
-
-    /** The new topics in creation order, and the groups that went to Other, ascending. */
-    @Builder(toBuilder = true)
-    public record Applied(@NonNull List<NewTopic> topics, @NonNull List<Integer> other) {
+    /** A topic with its {@link #validSize}, computed once for the sort. */
+    private record Sized(AuthorTopic topic, long size) {
     }
 }
