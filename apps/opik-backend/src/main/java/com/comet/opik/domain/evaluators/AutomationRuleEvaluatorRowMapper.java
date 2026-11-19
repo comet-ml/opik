@@ -205,7 +205,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         if (isLlmAsJudge(storedType) == codeNode.has("model")) {
             return storedType;
         }
-        AutomationRuleEvaluatorType resolvedType = sibling(storedType);
+        AutomationRuleEvaluatorType resolvedType = siblingEvaluatorType(storedType);
         log.warn("Evaluator code doesn't match its stored type, reading it as the code's type, id '{}', "
                 + "stored type '{}', resolved type '{}'", id, storedType.getType(), resolvedType.getType());
         return resolvedType;
@@ -220,7 +220,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         };
     }
 
-    private static AutomationRuleEvaluatorType sibling(AutomationRuleEvaluatorType type) {
+    private static AutomationRuleEvaluatorType siblingEvaluatorType(AutomationRuleEvaluatorType type) {
         return switch (type) {
             case LLM_AS_JUDGE -> AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
             case USER_DEFINED_METRIC_PYTHON -> AutomationRuleEvaluatorType.LLM_AS_JUDGE;
