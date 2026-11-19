@@ -300,7 +300,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         cell: PassRateCell as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
-          aggregationKey: "pass_rate",
+          aggregationKey: "pass_rate_avg",
         },
       },
       {

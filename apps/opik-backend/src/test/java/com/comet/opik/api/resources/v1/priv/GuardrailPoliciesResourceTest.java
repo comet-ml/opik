@@ -97,9 +97,9 @@ class GuardrailPoliciesResourceTest {
                         new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.guardrailsValidationsEnabled",
                                 "true"),
                         // Required with the toggle on; the policy endpoints never call opik-inference.
-                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.url",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("inference.url",
                                 wireMock.runtimeInfo().getHttpBaseUrl()),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("aiLabels.inference.credential",
+                        new TestDropwizardAppExtensionUtils.CustomConfig("inference.credential",
                                 randomUUID().toString())))
                 .build());
     }

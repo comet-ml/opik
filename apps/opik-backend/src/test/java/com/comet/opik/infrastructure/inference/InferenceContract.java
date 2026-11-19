@@ -21,6 +21,7 @@ public class InferenceContract {
     public static final String GET_JOB = "GET /v1/batch/jobs/{job_id}";
     public static final String JOBS_STATUS = "POST /v1/batch/jobs/status";
     public static final String CANCEL_JOB = "DELETE /v1/batch/jobs/{job_id}";
+    public static final String EMBED = "POST /v1/embed";
 
     private static final String DIRECTORY = "ai-labels/inference/";
     private static final JsonSchemaFactory SCHEMA_FACTORY = JsonSchemaFactory
