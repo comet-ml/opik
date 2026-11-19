@@ -9,7 +9,7 @@ on:
   # never on the PR's file contents. See the dangerous-triggers audit rationale:
   # https://docs.zizmor.sh/audits/#dangerous-triggers
   pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize]
 
 
 concurrency:
