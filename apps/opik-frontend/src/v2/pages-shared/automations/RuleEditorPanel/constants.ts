@@ -6,7 +6,11 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EVALUATORS_RULE_SCOPE, PythonCodeObject } from "@/types/automations";
+import {
+  EVALUATORS_RULE_SCOPE,
+  PythonCodeObject,
+  UI_EVALUATORS_RULE_TYPE,
+} from "@/types/automations";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -60,12 +64,26 @@ const EMPTY_JUDGE_DATA = {
   maxCostUsd: null,
 };
 
+export const createRulePrompt = (content = ""): LLMMessage[] => [
+  { id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content },
+];
+
+export const DECISION_MODEL_DEFAULT_PROMPT =
+  "INPUT:\n{{input}}\n\nOUTPUT:\n{{output}}";
+
+export const createInitialRulePrompt = (uiType: UI_EVALUATORS_RULE_TYPE) =>
+  createRulePrompt(
+    uiType === UI_EVALUATORS_RULE_TYPE.decision_model
+      ? DECISION_MODEL_DEFAULT_PROMPT
+      : "",
+  );
+
 const getTaskCompletionData = (
   content: string,
   variables: Record<string, string>,
 ) => ({
   ...EMPTY_JUDGE_DATA,
-  messages: [{ id: "rule-prompt", role: LLM_MESSAGE_ROLE.user, content }],
+  messages: createRulePrompt(content),
   variables,
 });
 

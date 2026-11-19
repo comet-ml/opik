@@ -16,10 +16,13 @@ import {
 import PromptVariableHint from "@/v2/pages-shared/automations/RuleEditorPanel/PromptVariableHint";
 import RuleEditorNotice from "@/v2/pages-shared/automations/RuleEditorPanel/RuleEditorNotice";
 import TemplateEmptyState from "@/v2/pages-shared/automations/RuleEditorPanel/TemplateEmptyState";
-import { getJudgeTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/judgeTemplates";
+import { getRuleTemplateOptions } from "@/v2/pages-shared/automations/RuleEditorPanel/ruleTemplates";
 import useTemplateStart from "@/v2/pages-shared/automations/RuleEditorPanel/useTemplateStart";
 import { LLMPromptTemplate } from "@/types/llm";
-import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import {
+  EVALUATORS_RULE_SCOPE,
+  UI_EVALUATORS_RULE_TYPE,
+} from "@/types/automations";
 
 type JudgePromptFieldProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -56,8 +59,8 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
   const scope = form.watch("scope");
   const { showStartCards, startBlank, startWithTemplate } = useTemplateStart(
     form,
-    editorRef,
     onSelectTemplate,
+    editorRef,
   );
   const judgeErrors = getJudgeErrors(form);
   const sampleData = useRuleSampleData(
@@ -79,7 +82,10 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
       <div className="flex flex-1 flex-col gap-1">
         <TemplateEmptyState
           label="Prompt"
-          options={getJudgeTemplateOptions(scope)}
+          options={getRuleTemplateOptions(
+            UI_EVALUATORS_RULE_TYPE.llm_judge,
+            scope,
+          )}
           blankLabel="Type your prompt"
           blankDescription="Write your own judge prompt from scratch."
           onStartBlank={startBlank}
@@ -107,13 +113,7 @@ const JudgePromptField: React.FC<JudgePromptFieldProps> = ({
           )}
           <RuleEditorCard
             hasError={Boolean(fieldState.error) || judgeErrors.length > 0}
-            header={
-              <JudgePromptToolbar
-                form={form}
-                onSelectTemplate={onSelectTemplate}
-                onAfterSelectTemplate={() => editorRef.current?.focusAtEnd()}
-              />
-            }
+            header={<JudgePromptToolbar form={form} />}
           >
             <JudgePromptInput
               value={field.value}
