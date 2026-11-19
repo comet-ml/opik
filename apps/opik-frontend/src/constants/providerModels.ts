@@ -514,6 +514,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-4-hydrogen",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_4_NEON,
+      label: "google/gemini-4-neon",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_NANO_BANANA_2_1,
       label: "google/gemini-nano-banana-2.1",
     },
@@ -1706,6 +1710,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 4 Hydrogen",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_4_NEON,
+      label: "Gemini 4 Neon",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
       label: "Gemini 3.8 Flash",
     },
@@ -1795,10 +1803,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
       label: "Gemini 3.7 Flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
-      label: "Gemini 3.6 Flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
