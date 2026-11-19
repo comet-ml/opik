@@ -65,11 +65,13 @@ One token serves the whole fleet. Each Mac spends it once to enroll and receives
 
 ### Push the configuration profile
 
-Push one configuration profile to every target Mac, on the device channel. It does three jobs:
+Push the configuration profile to every target Mac, at device level. It does three jobs:
 
 - It pre-approves the system extension, so activation is **silent**.
 - It installs the proxy configuration, so the user is not asked to allow it.
 - It forces the app's settings, so users can't turn capture off.
+
+The example below is one file with all three payloads. Some MDMs take it as it is and others have you enter the payloads in separate forms; the per-MDM table in [Advanced](#advanced) says which. Either way, all three stay at device level.
 
 Push it before the app is installed. An app that starts without the profile shows both approval prompts to the user.
 
@@ -223,7 +225,7 @@ user_email       = "<this user's work email>"
 capture_content = false
 ```
 
-The token is the same on every Mac and the email is different on every Mac. If your MDM can substitute a per-user variable into a profile, you can deliver the email there and leave `user_email` out of the file. See *Setting each Mac's email* in [Advanced](#advanced).
+The token is the same on every Mac and the email is different on every Mac. If your MDM can substitute a per-user variable into a profile, you can deliver the email in a second, user-level profile and leave `user_email` out of the file. See *Setting each Mac's email* in [Advanced](#advanced).
 
 The file lands in a user home, so an MDM script running as root must resolve the console user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
 
@@ -323,7 +325,7 @@ Finally, confirm traces are arriving in your Opik workspace. That last check is 
 
 <Accordion title="The configuration profile in detail">
 
-The profile carries three payloads that do different jobs.
+The profile carries three payloads that do different jobs. All three are device-level. The system-extension and proxy payloads have no per-user form, so they must not be moved into a user-level profile.
 
 **Pre-approving the system extension.** A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates silently: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate. This payload is accepted **only when the profile is pushed by an MDM the device is enrolled in**. Installing the profile by hand fails for the whole profile, so the forced settings don't land either. On a test machine without MDM, remove this payload and the proxy payload, install the rest, and approve the extension manually.
 
@@ -357,7 +359,7 @@ Where it goes in each MDM:
 
 | MDM | Path |
 | --- | --- |
-| **Jamf Pro** | Configuration Profile → Application & Custom Settings → External Applications; domain `com.comet.opik-cipx-app`. Push the system-extension and proxy payloads as a separate device-level profile. |
+| **Jamf Pro** | Two computer-level profiles. Settings: Configuration Profile → Application & Custom Settings → External Applications; domain `com.comet.opik-cipx-app`. System-extension and proxy payloads: a second computer-level profile. |
 | **Kandji** | Library → Custom Profile → upload the `.mobileconfig` |
 | **Intune** | Devices → macOS → Configuration profile → Preference file; domain `com.comet.opik-cipx-app` |
 | **JumpCloud** | Custom macOS MDM Profile (Policy) → paste the `.mobileconfig`. Bind the policy to a device group. |
@@ -387,7 +389,7 @@ The Opik address works the same way: `base_url` in the file, or `OPIK_CIPX_BASE_
 
 Enrollment needs the email of the person using the Mac. It is the one value in this setup that differs from Mac to Mac, and a configuration profile is a static file: macOS substitutes nothing into it at install time. Pick the route your MDM supports:
 
-- **Your MDM substitutes per-user variables** (Jamf Pro `$EMAIL`, Kandji `$EMAIL`, Intune `{{mail}}`). Put the variable in the profile, as `OPIK_CIPX_USER_EMAIL` in `Settings.engineEnvironment`. In Jamf Pro, set that profile's level to User:
+- **Your MDM substitutes per-user variables** (Jamf Pro `$EMAIL`, Kandji `$EMAIL`, Intune `{{mail}}`). Leave the main profile as it is and deliver the email in a second, small profile. Its managed-preferences payload for `com.comet.opik-cipx-app` forces this one key:
 
   ```xml wordWrap
   <key>Settings.engineEnvironment</key>
@@ -396,6 +398,12 @@ Enrollment needs the email of the person using the Mac. It is the one value in t
     <string>$EMAIL</string>
   </dict>
   ```
+
+  Assign this profile so that the variable resolves to the Mac's user. In Jamf Pro that means setting the profile's level to User. Give it its own `PayloadIdentifier` and `PayloadUUID`.
+
+  macOS combines the two profiles key by key, and `Settings.engineEnvironment` is one key. If you set other engine values in a profile, such as `OPIK_CIPX_BASE_URL`, put them in this same dictionary and not in the main profile.
+
+  Check one Mac before rolling out: the app's *Settings → Account* shows the address it received. If the variable was not substituted, the Mac receives the variable's name as text, the app rejects it as an address, and the Mac does not enroll.
 
 - **Your MDM delivers device-level profiles only** (JumpCloud). Write `user_email` into each Mac's `config.toml` from the provisioning script. The script needs a way to know whose Mac it is running on, for example a lookup table from the MDM's device ID to the user's email.
 
@@ -407,16 +415,25 @@ The app checks the address before enrolling. With a missing or malformed one the
 
 <Accordion title="Example install script">
 
-A first-install script for MDMs that run scripts as root. It waits for the configuration profile, downloads and verifies the release, installs the app, writes the per-user file, and launches the app for the logged-in user. Supply the token from your MDM's secret store, and the email from wherever your MDM knows the device's user.
+A first-install script for MDMs that run scripts as root. It waits for the configuration profile, downloads and verifies the release, installs the app, writes the per-user file, and launches the app for the logged-in user. Keep the enrollment token out of the saved script. Store the script with the two placeholders below and have your MDM fill them in when it runs, for example with JumpCloud command variables or Jamf script parameters, and do not print the values in the script's output. Anyone who has the token can enroll a device into your workspace, so a filled-in copy in a repository or a ticket is a leaked credential.
 
 ```bash title="install-opik-cipx.sh" wordWrap
 #!/bin/bash
 # Run as root. Installs Opik CIPX for the user logged in at the console.
 set -u
+export LC_ALL=C
 VERSION="<release version, for example 0.0.91>"
-TOKEN="<enrollment token>"
-EMAIL="<this user's work email>"
+# Filled in by your MDM when the script runs. Never save real values here.
+TOKEN="<enrollment token variable>"
+EMAIL="<user email variable>"
 APP="/Applications/Opik CIPX.app"
+
+# Accept only a plain token and a plain address. This stops a placeholder the MDM
+# did not fill in, and any value that would break out of the TOML strings below.
+case "$TOKEN" in opik_cipx_et_?*) ;; *) echo "enrollment token missing or not substituted"; exit 1;; esac
+case "$TOKEN" in *[!A-Za-z0-9_-]*) echo "unexpected character in the enrollment token"; exit 1;; esac
+case "$EMAIL" in *[!A-Za-z0-9._%+@-]*|*@*@*) echo "unexpected character in the email"; exit 1;; esac
+case "$EMAIL" in ?*@?*.?*) ;; *) echo "email missing or not substituted"; exit 1;; esac
 
 CONSOLE_USER="$(/usr/bin/stat -f%Su /dev/console)"
 case "$CONSOLE_USER" in root|_mbsetupuser|"") echo "no user logged in"; exit 0;; esac
