@@ -13,10 +13,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Spec 08: the shipped v1 task builds a byte-exact, contract-valid item. */
+/** Spec 08: the shipped task builds a byte-exact, contract-valid item. */
 class TraceSummaryTaskTest {
 
     private static final UUID TRACE_ID = UUID.fromString("0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d");
@@ -51,6 +52,19 @@ class TraceSummaryTaskTest {
                 .valueToTree(builder.generateRequest("workspace-1", false, items));
         assertThat(InferenceContract.validateEndpoint(InferenceContract.BATCH_GENERATE, "request", request))
                 .isEmpty();
+    }
+
+    /**
+     * opik-inference validates the answer with jsonschema, whose {@code pattern} is a search anywhere in the value: a
+     * blank summary fails it, any other passes. The decoder's whole-string reading is stricter and not checked here.
+     */
+    @ParameterizedTest
+    @CsvSource({"a, true", "' checking a refund', true", "'checking a refund ', true", "' ', false", "'', false",
+            "'\t', false"})
+    void summaryPatternRejectsOnlyBlankSummariesInTheValidator(String summary, boolean valid) {
+        var pattern = registry.get("trace_summary").schema().at("/properties/summary/pattern").textValue();
+
+        assertThat(Pattern.compile(pattern).matcher(summary).find()).isEqualTo(valid);
     }
 
     private static String resource(String name) {

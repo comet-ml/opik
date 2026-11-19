@@ -11,7 +11,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.lang.reflect.Array;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -28,19 +27,22 @@ class TopicVectorsTables {
     private final @NonNull TransactionTemplate template;
     private final @NonNull TransactionTemplateAsync templateAsync;
 
-    /** The workspace's vectors of {@code traceIds}: the latest row of each (project, trace, task version), unless deleted. */
+    /**
+     * The workspace's vectors of {@code traceIds}: the latest row of each (project, task, trace, task version), unless
+     * deleted. The driver returns BFloat16 as raw 16-bit values, so the vector is read as Float32.
+     */
     List<TopicVector> vectors(String workspaceId, Collection<UUID> traceIds) {
         return templateAsync.nonTransaction(connection -> Flux
                 .from(connection.createStatement("""
-                        SELECT workspace_id, project_id, trace_id, trace_created_at, task_version, embed_model,
-                            embed_dimensions, text, vector
+                        SELECT workspace_id, project_id, task, trace_id, trace_created_at, task_version, embed_model,
+                            embed_dimensions, text, CAST(vector AS Array(Float32)) AS vector
                         FROM (
                             SELECT *
                             FROM topic_vectors
                             WHERE workspace_id = :workspace_id
                             AND trace_id IN :trace_ids
-                            ORDER BY workspace_id, project_id, trace_id, task_version, last_updated_at DESC
-                            LIMIT 1 BY workspace_id, project_id, trace_id, task_version
+                            ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
+                            LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
                         )
                         WHERE is_deleted = 0
                         """)
@@ -55,13 +57,14 @@ class TopicVectorsTables {
     private static TopicVector toVector(Row row) {
         // The driver's Java array type for Array(Float32) isn't part of its contract, so read the elements as numbers.
         var array = row.get("vector", Object.class);
-        var vector = new ArrayList<Float>(Array.getLength(array));
-        for (int i = 0; i < Array.getLength(array); i++) {
-            vector.add(((Number) Array.get(array, i)).floatValue());
+        var vector = new float[Array.getLength(array)];
+        for (int i = 0; i < vector.length; i++) {
+            vector[i] = ((Number) Array.get(array, i)).floatValue();
         }
         return TopicVector.builder()
                 .workspaceId(row.get("workspace_id", String.class))
                 .projectId(UUID.fromString(row.get("project_id", String.class)))
+                .task(row.get("task", String.class))
                 .traceId(UUID.fromString(row.get("trace_id", String.class)))
                 .traceCreatedAt(row.get("trace_created_at", Instant.class))
                 .taskVersion(row.get("task_version", Long.class).intValue())
