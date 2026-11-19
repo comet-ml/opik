@@ -198,7 +198,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
-| clickhouse.monitoring.grants | list | `["GRANT SELECT ON system.*","GRANT REMOTE ON *.*"]` | GRANT statements for the monitoring user. Emptying both this and `additionalGrants` gives the user every privilege on every database. REMOTE is what `cluster()` and `clusterAllReplicas()` need. |
+| clickhouse.monitoring.grants | list | `["GRANT SELECT ON system.*","GRANT REMOTE ON *.*"]` | GRANT statements for the monitoring user. This and `additionalGrants` can't both be empty: a user without grants holds every privilege on every database. REMOTE is what `cluster()` and `clusterAllReplicas()` need. |
 | clickhouse.monitoring.limits | object | `{"max_bytes_to_read":250000000000,"max_concurrent_queries_for_user":20,"max_execution_time":60,"max_memory_usage":10000000000,"max_rows_to_read":1500000000}` | Read caps in the monitoring user's profile. Each is pinned with a constraint (min 1, max the value), so a query can lower a cap but not raise it or set it to 0, which means unlimited. |
 | clickhouse.monitoring.networks | list | `["0.0.0.0/0"]` | Networks the monitoring user may log in from. Narrow it to the clients that use it, e.g. Grafana's. |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |

@@ -1331,8 +1331,8 @@ clickhouse:
       max_bytes_to_read: 250000000000
       max_rows_to_read: 1500000000
       max_concurrent_queries_for_user: 20
-    # -- (list) GRANT statements for the monitoring user. Emptying both this and `additionalGrants` gives the user
-    # every privilege on every database. REMOTE is what `cluster()` and `clusterAllReplicas()` need.
+    # -- (list) GRANT statements for the monitoring user. This and `additionalGrants` can't both be empty: a user
+    # without grants holds every privilege on every database. REMOTE is what `cluster()` and `clusterAllReplicas()` need.
     grants:
       - GRANT SELECT ON system.*
       - GRANT REMOTE ON *.*

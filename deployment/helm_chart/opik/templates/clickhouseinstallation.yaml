@@ -32,13 +32,17 @@ spec:
       {{ $mon.username }}/password: {{ $mon.password }}
       {{- end }}
       {{ $mon.username }}/profile: {{ $mon.username }}
-      {{ $mon.username }}/networks/ip:
-        {{- toYaml ($mon.networks | default (list "0.0.0.0/0")) | nindent 8 }}
-      {{- /* A users.xml user without <grants> holds every privilege, so the list is what makes the user least-privilege. */}}
-      {{- with concat ($mon.grants | default list) ($mon.additionalGrants | default list) }}
-      {{ $mon.username }}/grants/query:
-        {{- toYaml . | nindent 8 }}
+      {{- if not $mon.networks }}
+      {{- fail "clickhouse.monitoring.networks is empty; list the networks the monitoring user may log in from" }}
       {{- end }}
+      {{ $mon.username }}/networks/ip:
+        {{- toYaml $mon.networks | nindent 8 }}
+      {{- $grants := concat ($mon.grants | default list) ($mon.additionalGrants | default list) }}
+      {{- if not $grants }}
+      {{- fail "clickhouse.monitoring.grants and additionalGrants are both empty; a users.xml user without grants holds every privilege" }}
+      {{- end }}
+      {{ $mon.username }}/grants/query:
+        {{- toYaml $grants | nindent 8 }}
       {{- end }}
       {{- range .Values.clickhouse.additionalUsers }}
       {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}

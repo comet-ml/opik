@@ -67,6 +67,23 @@ tests:
             - GRANT REMOTE ON *.*
             - GRANT SELECT(workspace_id, created_at) ON opik.traces
 
+  # Both would fail open: no grants means every privilege, no networks would mean nothing to restrict to.
+  - it: refuses empty grants
+    set:
+      clickhouse.monitoring.enabled: true
+      clickhouse.monitoring.grants: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "grants and additionalGrants are both empty"
+
+  - it: refuses empty networks
+    set:
+      clickhouse.monitoring.enabled: true
+      clickhouse.monitoring.networks: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "clickhouse.monitoring.networks is empty"
+
   - it: refuses a setting given both as a setting and as a cap
     set:
       clickhouse.monitoring.enabled: true
