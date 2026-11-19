@@ -72,6 +72,11 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             return encode(obj.value, seen)
         if isinstance(obj, PurePath):
             return str(obj)
+        if np is not None:
+            if isinstance(obj, np.ndarray):
+                return encode(obj.tolist(), seen)
+            if isinstance(obj, np.generic):
+                return encode(obj.item(), seen)
         if isinstance(obj, (str, int, float, type(None))):
             return obj
         if isinstance(obj, dt.datetime):
@@ -98,9 +103,6 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             for item in obj:
                 encoded_list.append(encode(item, seen))
             return encoded_list
-
-        if np is not None and isinstance(obj, np.ndarray):
-            return encode(obj.tolist(), seen)
 
         if _is_pydantic_iterator_validator(obj):
             return "<Pydantic ValidatorIterator serialization is not supported>"
