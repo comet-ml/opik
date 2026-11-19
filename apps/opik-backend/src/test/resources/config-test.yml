@@ -998,13 +998,23 @@ workspaceFeatures:
   # Off in tests, like the auth cache: a test that needs it turns it on.
   cacheTtl: 0s
 
-aiLabels:
-  inference:
-    # The synchronous decide calls guardrail checks make, on a client of their own.
-    maxConcurrentDecides: 256
-    decideKeepAlive: 30s
-    decideTimeToLive: 5m
-    maxResponseBytes: 33554432
+inference:
+  # Same values as config.yml's inference block; see it for what each key means.
+  connectTimeout: 5s
+  readTimeout: 30s
+  maxConcurrentDecides: 256
+  decideKeepAlive: 30s
+  decideTimeToLive: 5m
+  maxResponseBytes: 33554432
+  limits:
+    maxEmbedInputs: 256
+    maxEmbedDeadline: 60s
+    maxBatchItems: 10000
+    maxStatusJobIds: 1000
+  retry:
+    maxRetries: 2
+    baseBackoff: 100ms
+    submitBytesPerSecond: 1048576
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.

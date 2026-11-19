@@ -2496,6 +2496,67 @@ redaction:
   # anchored rule is still the difference between exact masking and a value withheld whole.
   rules: '${OPIK_REDACTION_RULES:-[]}'
 
+# opik-inference: the client that ai-labels, guardrail checks and Topics call it with. Each variable that existed
+# before under the AI_LABELS_INFERENCE_* name still falls back to it, so deployments that set the old name keep working.
+inference:
+  #  Description: opik-inference base URL. Required when ai-labels, guardrail checks or Topics are on. Whenever set: https,
+  #  or http only to localhost or a loopback address; the backend refuses to start with any other URL
+  url: ${OPIK_INFERENCE_URL:-${AI_LABELS_INFERENCE_URL:-}}
+  #  Description: opik-inference deployment credential, from a secret. Required with url. Never logged.
+  credential: ${OPIK_INFERENCE_CREDENTIAL:-${AI_LABELS_INFERENCE_CREDENTIAL:-}}
+  #  Default: 5s
+  #  Description: Per call to opik-inference, cut to the time left before the call's deadline
+  connectTimeout: ${OPIK_INFERENCE_CONNECT_TIMEOUT:-${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}}
+  #  Default: 30s
+  #  Description: Per call to opik-inference, cut to the time left before the call's deadline. Also the time an ai-labels
+  #  tick's sends get past aiLabels.tickBudget, so it lengthens the leader lease
+  readTimeout: ${OPIK_INFERENCE_READ_TIMEOUT:-${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}}
+  #  Default: 256
+  #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
+  #  retries after a short backoff, then fails
+  maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}}
+  #  Default: 30s
+  #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
+  #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+  decideKeepAlive: ${OPIK_INFERENCE_DECIDE_KEEP_ALIVE:-${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}}
+  #  Default: 5m
+  #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
+  #  upstream instances after a rollout
+  decideTimeToLive: ${OPIK_INFERENCE_DECIDE_TIME_TO_LIVE:-${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}}
+  #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+  #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+  #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+  #  flight can hold this much heap
+  maxResponseBytes: ${OPIK_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
+  # What the service accepts in one call. The defaults are the opik-inference contract's limits; set them to match a
+  # service configured otherwise, since a call over its limit is rejected
+  limits:
+    #  Default: 256
+    #  Description: Inputs in one /v1/embed call. topics.vectors.embedBatchSize must not be above it
+    maxEmbedInputs: ${OPIK_INFERENCE_MAX_EMBED_INPUTS:-256}
+    #  Default: 60s
+    #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
+    #  topics.vectors.embedTimeout must not be above it
+    maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 10000
+    #  Description: Items in one batch submit
+    maxBatchItems: ${OPIK_INFERENCE_MAX_BATCH_ITEMS:-10000}
+    #  Default: 1000
+    #  Description: Job ids in one batch status call
+    maxStatusJobIds: ${OPIK_INFERENCE_MAX_STATUS_JOB_IDS:-1000}
+  retry:
+    #  Default: 2
+    #  Description: Retries after the first attempt, for a retryable failure. A submit or embed answered with
+    #  quota_exceeded is never retried
+    maxRetries: ${OPIK_INFERENCE_RETRY_MAX_RETRIES:-2}
+    #  Default: 100ms
+    #  Description: The wait before the first retry, doubled for each one after, unless the service sends Retry-After
+    baseBackoff: ${OPIK_INFERENCE_RETRY_BASE_BACKOFF:-100ms}
+    #  Default: 1048576 (1 MiB)
+    #  Description: The service reads a submit's whole body before it answers, so its read timeout grows by a second
+    #  per this many bytes sent
+    submitBytesPerSecond: ${OPIK_INFERENCE_RETRY_SUBMIT_BYTES_PER_SECOND:-1048576}
+
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
 # opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
 # Requires databaseAnalyticsDataModel.traceColumnsNonNullable (the cut-over traces table).
@@ -2506,36 +2567,6 @@ aiLabels:
   #  Default: unset (the tasks bundled under ai-labels/tasks/)
   #  Description: Directory of task YAML to load instead of the bundled tasks
   tasksDir: ${AI_LABELS_TASKS_DIR:-}
-  inference:
-    #  Description: opik-inference base URL. Required when enabled. Whenever set, even with ai-labels off (guardrails use
-    #  it too): https, or http only to localhost or a loopback address; the backend refuses to start with any other URL
-    url: ${AI_LABELS_INFERENCE_URL:-}
-    #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
-    credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
-    #  Default: 5s
-    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline
-    connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
-    #  Default: 30s
-    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
-    #  sends get past tickBudget, so it lengthens the leader lease
-    readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
-    #  Default: 256
-    #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
-    #  retries after a short backoff, then fails
-    maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
-    #  Default: 30s
-    #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
-    #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
-    decideKeepAlive: ${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}
-    #  Default: 5m
-    #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
-    #  upstream instances after a rollout
-    decideTimeToLive: ${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}
-    #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
-    #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
-    #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
-    #  flight can hold this much heap
-    maxResponseBytes: ${AI_LABELS_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
@@ -2642,10 +2673,10 @@ aiLabels:
 
 # Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
 # trace_summary in ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for.
-# Calls aiLabels.inference's deployment with its credential (/v1/embed).
+# Calls opik-inference's /v1/embed through the inference block.
 topics:
   #  Default: false
-  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and aiLabels.inference.url. Server-side only,
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
   #  never exposed to the UI
   enabled: ${TOPICS_ENABLED:-false}
   #  Default: empty (no workspace)
@@ -2684,8 +2715,8 @@ topics:
     #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read, and
     #  summaries are read 1000 at a time
     maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
-    #  Default: 256 (the most /v1/embed takes)
-    #  Description: Texts per embed call
+    #  Default: 256 (inference.limits.maxEmbedInputs)
+    #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs
     embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
     #  Default: 1
     #  Description: Embed calls in flight at a time, within one workspace's or project's read. Set it to the embed
@@ -2694,7 +2725,7 @@ topics:
     embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
     #  Default: 10s
     #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
-    #  tickBudget, at most 60s
+    #  tickBudget, at most inference.limits.maxEmbedDeadline
     embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
     find:
       #  Default: 30000000
@@ -2715,7 +2746,7 @@ topics:
       #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
       sliceSize: ${TOPICS_VECTORS_FIND_SLICE_SIZE:-1d}
 
-# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
+# Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
 guardrails:
   # Default: 0.5
