@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
 from opik_optimizer import ParameterOptimizer
+from tests.unit.algorithms.parameter_optimizer._test_builders import float_param, space
+from tests.unit.fixtures import assert_baseline_early_stop, make_baseline_prompt
+from tests.unit.test_helpers import (
+    make_mock_dataset,
+    make_simple_metric,
+    STANDARD_DATASET_ITEMS,
+)
 
 
 class TestParameterOptimizerInit:
@@ -26,3 +35,39 @@ class TestParameterOptimizerInit:
         optimizer = ParameterOptimizer(**kwargs)
         for key, value in expected.items():
             assert getattr(optimizer, key) == value
+
+
+class TestParameterOptimizerEarlyStop:
+    def test_skips_on_perfect_score(
+        self,
+        mock_opik_client: Callable[..., MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        mock_opik_client()
+        dataset = make_mock_dataset(
+            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
+        )
+        optimizer = ParameterOptimizer(model="gpt-4o", perfect_score=0.95)
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
+        monkeypatch.setattr(
+            "optuna.create_study",
+            lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
+        )
+
+        prompt = make_baseline_prompt()
+        parameter_space = space(float_param("temperature"))
+        result = optimizer.optimize_parameter(
+            prompt=prompt,
+            dataset=dataset,
+            metric=make_simple_metric(),
+            parameter_space=parameter_space,
+            max_trials=1,
+        )
+
+        assert_baseline_early_stop(result, perfect_score=0.95)
+        assert result.details["n_trials"] == 0
+        # ParameterOptimizer bypasses runtime.build_final_result, so it must surface
+        # scoring_health in its own result details (present, not dropped) — here the
+        # float-mode baseline leaves it unset, so it falls back to the all-clear shape.
+        assert result.details["scoring_health"] == {"failed_count": 0, "total_count": 0}

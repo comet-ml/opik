@@ -57,8 +57,41 @@ class TestSearchWikipediaColBERT:
         mock_api.assert_called_once_with("test", k=1)
 
 
+def _mock_api_response(mock_get: Mock) -> None:
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "query": {"search": [{"title": "Test", "snippet": "A test page"}]}
+    }
+    mock_get.return_value = mock_response
+
+
 class TestSearchWikipediaUnified:
     """Tests for unified search_wikipedia function."""
+
+    @patch("opik_optimizer.utils.tools.wikipedia.requests.get")
+    def test_default_search_queries_wikipedia_api(self, mock_get: Mock) -> None:
+        _mock_api_response(mock_get)
+
+        results = search_wikipedia("test")
+
+        assert mock_get.call_args.args[0] == "https://en.wikipedia.org/w/api.php"
+        assert len(results) == 1
+        assert "Test" in results[0]
+        assert "A test page" in results[0]
+
+    @patch("opik_optimizer.utils.tools.wikipedia.requests.get")
+    def test_use_api_true_queries_wikipedia_api_with_warning(
+        self, mock_get: Mock
+    ) -> None:
+        _mock_api_response(mock_get)
+
+        with pytest.warns(DeprecationWarning, match="use_api parameter is deprecated"):
+            results = search_wikipedia("test", use_api=True)
+
+        assert mock_get.call_args.args[0] == "https://en.wikipedia.org/w/api.php"
+        assert len(results) == 1
+        assert "A test page" in results[0]
 
     def test_invalid_search_type(self) -> None:
         """Test invalid search type raises error."""

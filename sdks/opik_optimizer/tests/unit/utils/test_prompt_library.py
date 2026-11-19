@@ -2,6 +2,7 @@
 
 import pytest
 
+from opik_optimizer import MetaPromptOptimizer
 from opik_optimizer.utils.prompt_library import PromptLibrary
 
 
@@ -36,3 +37,16 @@ class TestPromptLibrary:
 
         with pytest.raises(ValueError, match="Unknown prompt keys: \\['unknown'\\]"):
             PromptLibrary(defaults, overrides={"unknown": "value"})
+
+
+def test_optimizer_prompt_overrides_keep_defaults() -> None:
+    optimizer = MetaPromptOptimizer(
+        model="gpt-4o-mini", prompt_overrides={"synthesis": "custom"}
+    )
+
+    assert "synthesis" in optimizer.list_prompts()
+    assert optimizer.get_prompt("synthesis") == "custom"
+    assert (
+        optimizer.get_default_prompt("synthesis")
+        == MetaPromptOptimizer.DEFAULT_PROMPTS["synthesis"]
+    )
