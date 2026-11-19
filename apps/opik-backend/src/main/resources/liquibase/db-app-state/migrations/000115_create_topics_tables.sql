@@ -11,7 +11,7 @@
 -- little-endian float32 values (1,536 bytes) of unit length, in the order the run gave them. A run replaces a project's
 -- whole set in its save transaction, so readers always see one run's set. Assignment breaks a tie between two
 -- prototypes by their order: the topics in (born, id) order, then each topic's vectors in their stored order. The
--- model and dimensions of the set are on the project's topic_project_states row. MEDIUMBLOB, as a topic can hold
+-- model of the set is on the project's topic_project_states row. MEDIUMBLOB, as a topic can hold
 -- more vectors than a BLOB fits; the topics API reads the other columns only.
 CREATE TABLE IF NOT EXISTS topics
 (
@@ -52,10 +52,13 @@ CREATE TABLE IF NOT EXISTS topics
 --   * labels_complete is false from the save until the labelling pass has given every trace of that window a
 --     trace_topics row of the run; the first-build job resumes the pass while it is false.
 --   * other_vectors: the known-Other prototype vectors, in the topics' format; null when the run kept none.
---   * embed_model, embed_dimensions: the model and dimensions of the saved set, topics' vectors and other_vectors.
+--   * embed_model: the model of the saved set, topics' vectors and other_vectors. Its size is fixed by the BLOB
+--     CHECKs and TopicEmbedding.DIMENSIONS, so a set of another size fails on write or read.
 --   Run (the current or last attempt, first build or nightly update):
 --   * run_id, run_mode, run_status, run_started_at, run_finished_at, run_error_code (null unless failed).
---     A 'running' attempt whose pod died stays 'running' until the housekeeping fails it as 'abandoned'.
+--     A pod that dies mid-attempt leaves it 'running'. The next attempt, under the project's lock, records a 'running'
+--     attempt older than the project's lock lease as failed with 'abandoned' and counts it in failed_runs; until then,
+--     readers treat that condition as an abandoned attempt.
 --   * failed_runs: the failed attempts since the last saved one; first_failed_at: the start of the first of them.
 --     The first-build retries and the pause read them.
 --   Night (the nightly update):
@@ -80,7 +83,6 @@ CREATE TABLE IF NOT EXISTS topic_project_states
     labels_complete       BOOLEAN      NOT NULL DEFAULT FALSE,
     other_vectors         MEDIUMBLOB   NULL,
     embed_model           VARCHAR(64)  NULL,
-    embed_dimensions      INT          NULL,
 
     run_id                CHAR(36)     NULL,
     run_mode              ENUM ('first_build', 'nightly_update') NULL,
@@ -101,12 +103,10 @@ CREATE TABLE IF NOT EXISTS topic_project_states
     PRIMARY KEY (workspace_id, project_id),
     -- The tick's read of the projects not drained yet.
     INDEX topic_project_states_workspace_drained_idx (workspace_id, backfill_drained_at),
-    -- The housekeeping's abandoned attempts across all workspaces.
-    INDEX topic_project_states_run_status_idx (run_status, run_started_at),
     CONSTRAINT topic_project_states_other_vectors_chk
         CHECK (other_vectors IS NULL OR (LENGTH(other_vectors) > 0 AND MOD(LENGTH(other_vectors), 1536) = 0)),
     CONSTRAINT topic_project_states_list_model_chk
-        CHECK (list_run_id IS NULL OR (embed_model IS NOT NULL AND embed_dimensions IS NOT NULL))
+        CHECK (list_run_id IS NULL OR embed_model IS NOT NULL)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

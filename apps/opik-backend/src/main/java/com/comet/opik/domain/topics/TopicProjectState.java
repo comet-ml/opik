@@ -16,7 +16,7 @@ import java.util.UUID;
  * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a first
  * build when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
  * writer updates its own group: the vectors tick the backfill fields, a run the attempt fields ({@code run*},
- * {@code failedRuns}, {@code firstFailedAt}), the save the list fields ({@code rebuilds} to {@code embedDimensions}),
+ * {@code failedRuns}, {@code firstFailedAt}), the save the list fields ({@code rebuilds} to {@code embedModel}),
  * the night {@code lastNight} and {@code notReachedNights}. For the backfill, ClickHouse stays the only source of
  * which traces have no vector.
  *
@@ -40,8 +40,8 @@ import java.util.UUID;
  * @param labelsComplete false from the save until the labelling pass has given every trace of that window a
  *        {@code trace_topics} row of the run
  * @param otherVectors the known-Other prototype vectors, null when the run kept none
- * @param embedModel the model of the saved vectors, the topics' and {@code otherVectors}
- * @param embedDimensions their dimensions
+ * @param embedModel the model of the saved vectors, the topics' and {@code otherVectors}; their size is
+ *        {@link TopicEmbedding#DIMENSIONS}
  * @param runErrorCode why the attempt failed, null unless it did
  * @param failedRuns the failed attempts since the last saved one
  * @param firstFailedAt the start of the first of them
@@ -65,7 +65,6 @@ public record TopicProjectState(
         boolean labelsComplete,
         @Nullable PrototypeVectors otherVectors,
         @Nullable String embedModel,
-        @Nullable Integer embedDimensions,
         @Nullable UUID runId,
         @Nullable RunMode runMode,
         @Nullable RunStatus runStatus,
@@ -96,7 +95,9 @@ public record TopicProjectState(
         private final String value;
     }
 
-    /** Why an attempt failed. {@link #ABANDONED}: its pod died while it ran, and the housekeeping failed it. */
+    /**
+     * Why an attempt failed. {@link #ABANDONED}: its pod died while it ran; the project's next attempt records it.
+     */
     @Getter
     @RequiredArgsConstructor
     public enum RunError implements HasValue {

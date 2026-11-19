@@ -9,7 +9,7 @@
 --   * One row per (trace, task_version): a relabel with a higher task version adds a row and keeps the old one.
 --     embed_model and embed_dimensions say which model made the vector, so a model change can be re-made from ai_labels.
 --   * The model is traces_local_v2 (000114): the engine's version (last_updated_at) and soft-delete marker
---     (is_deleted), id_at, the partition key, the codecs and index_granularity_bytes are its.
+--     (is_deleted), id_at, the partition key and the codecs are its.
 --   * last_updated_at is set by ClickHouse at insert. A rewrite of the same key is the same vector, so which row a
 --     merge keeps does not matter; readers still dedupe explicitly (LIMIT 1 BY the sort key, latest first).
 --   * is_deleted: deletes are lightweight DELETEs today, as on traces_local_v2. Tombstone rows (is_deleted = 1) are the
@@ -22,8 +22,8 @@
 --   * The trade-off of id_at partitions: retention and the cascade stay partition-scoped, but a read by
 --     trace_created_at window cannot prune partitions. It opens every weekly partition for index analysis and reads
 --     only the granules idx_trace_created_at keeps.
---   * index_granularity_bytes is traces_local_v2's 40 MiB: a row carries 384 values and the text (about 1.3 KiB), so
---     the 10 MiB default would cut granules short; at 40 MiB they fill toward the 8192-row target.
+--   * index_granularity_bytes stays at the 10 MiB default: with BFloat16 a row is about 1 KiB (768 bytes of vector
+--     and a short text), so 8192 rows fit. A longer text only makes adaptive granules a little smaller.
 --   * The vector is BFloat16, half the bytes of Float32, with ZSTD(1): repeated intents give repeated vectors, and the
 --     sign and exponent byte repeats, so ZSTD(1) is clearly smaller than LZ4 at a small decode cost.
 --     ClickHouse truncates Float32 to BFloat16 on insert, so a stored vector is slightly shorter than unit length.
@@ -49,6 +49,6 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
     '{replica}', last_updated_at, is_deleted)
 PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
 ORDER BY (workspace_id, project_id, trace_id, task_version)
-SETTINGS index_granularity = 8192, index_granularity_bytes = 41943040;
+SETTINGS index_granularity = 8192;
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTER '{cluster}' SYNC;
