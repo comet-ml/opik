@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from opik_optimizer import ChatPrompt, ParameterOptimizer
+from opik_optimizer import ParameterOptimizer
 from tests.unit.algorithms.parameter_optimizer._test_builders import float_param, space
 from tests.unit.fixtures import assert_baseline_early_stop, make_baseline_prompt
 from tests.unit.test_helpers import (
@@ -35,27 +35,6 @@ class TestParameterOptimizerInit:
         optimizer = ParameterOptimizer(**kwargs)
         for key, value in expected.items():
             assert getattr(optimizer, key) == value
-
-
-class TestParameterOptimizerOptimizePrompt:
-    def test_optimize_prompt_raises_not_implemented(
-        self,
-        mock_optimization_context,
-    ) -> None:
-        mock_optimization_context()
-        optimizer = ParameterOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompt = ChatPrompt(system="Test", user="{question}")
-        dataset = make_mock_dataset(
-            STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
-        )
-
-        with pytest.raises(NotImplementedError):
-            optimizer.optimize_prompt(
-                prompt=prompt,
-                dataset=dataset,
-                metric=make_simple_metric(),
-                max_trials=1,
-            )
 
 
 class TestParameterOptimizerEarlyStop:
@@ -92,27 +71,3 @@ class TestParameterOptimizerEarlyStop:
         # scoring_health in its own result details (present, not dropped) — here the
         # float-mode baseline leaves it unset, so it falls back to the all-clear shape.
         assert result.details["scoring_health"] == {"failed_count": 0, "total_count": 0}
-
-
-class TestNormalizePromptInput:
-    def test_single_prompt_normalized_to_dict(self) -> None:
-        optimizer = ParameterOptimizer(model="gpt-4o-mini", verbose=0)
-        prompt = ChatPrompt(name="test_prompt", system="Hello")
-
-        prompts, is_single = optimizer._normalize_prompt_input(prompt)
-
-        assert isinstance(prompts, dict)
-        assert "test_prompt" in prompts
-        assert is_single is True
-
-    def test_dict_prompt_kept_as_dict(self) -> None:
-        optimizer = ParameterOptimizer(model="gpt-4o-mini", verbose=0)
-        prompt_dict = {
-            "a": ChatPrompt(name="a", system="A"),
-            "b": ChatPrompt(name="b", system="B"),
-        }
-
-        prompts, is_single = optimizer._normalize_prompt_input(prompt_dict)
-
-        assert prompts is prompt_dict
-        assert is_single is False

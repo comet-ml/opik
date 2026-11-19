@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 import { Span, Trace } from "@/types/traces";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -26,9 +26,6 @@ import useMappingSampleEntities from "./useMappingSampleEntities";
 
 const fieldCountLabel = (count: number) =>
   `${count} ${count === 1 ? "field" : "fields"}`;
-
-const itemCountLabel = (count: number) =>
-  `${count} ${count === 1 ? "item" : "items"}`;
 
 const entityCountLabel = (count: number, hasOnlySpans: boolean) => {
   const entity = hasOnlySpans ? "span" : "trace";
@@ -94,9 +91,14 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     enabled: advanced && Boolean(selectedDataset),
   });
 
+  const pathRows = useMemo(
+    () => [...mappings.existingRows, ...mappings.customRows],
+    [mappings.existingRows, mappings.customRows],
+  );
+
   const coverage = useFieldCoverage({
     fixedRows: mappings.fixedRows,
-    customRows: mappings.customRows,
+    customRows: pathRows,
     managedRows: mappings.managedRows,
     selectedEntities: hasOnlySpans ? validSpans : validTraces,
     sampleEntities: entities,
@@ -104,7 +106,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const { columns, rows } = useMappingPreview({
     fixedRows: mappings.fixedRows,
-    customRows: mappings.customRows,
+    customRows: pathRows,
     managedRows: mappings.managedRows,
     rowErrors: mappings.rowErrors,
     entities,
@@ -149,12 +151,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       defaultValue="metadata"
       className="mb-4"
     >
-      <AccordionItem value="metadata" className="border-t">
-        <AccordionTrigger>
-          {type === "trace"
-            ? "Trace metadata configuration"
-            : "Span metadata configuration"}
-        </AccordionTrigger>
+      <AccordionItem value="metadata" className="border-none">
+        <AccordionTrigger>Additional fields</AccordionTrigger>
         <AccordionContent className="px-3">
           <div className="grid grid-cols-2 gap-3">
             {includeNestedSpans &&
@@ -240,7 +238,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
           }
         >
           {itemCount > 0
-            ? `Add ${itemCountLabel(itemCount)}`
+            ? `Add ${entityCountLabel(itemCount, hasOnlySpans)}`
             : "Add to dataset"}
         </Button>
       </div>
