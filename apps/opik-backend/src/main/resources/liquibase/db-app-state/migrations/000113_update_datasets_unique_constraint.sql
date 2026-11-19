@@ -5,5 +5,5 @@
 ALTER TABLE datasets ADD CONSTRAINT `datasets_workspace_id_name_project_id_uk` UNIQUE (workspace_id, name, project_id);
 ALTER TABLE datasets DROP INDEX `datasets_workspace_id_name_uk`;
 
---rollback ALTER TABLE datasets ADD CONSTRAINT `datasets_workspace_id_name_uk` UNIQUE (workspace_id, name);
---rollback ALTER TABLE datasets DROP INDEX `datasets_workspace_id_name_project_id_uk`;
+--rollback -- Rollback is intentionally a no-op. Reinstating the workspace-wide unique key fails once a workspace
+--rollback -- has the same dataset name in two projects. Rename or remove those duplicates manually first.
