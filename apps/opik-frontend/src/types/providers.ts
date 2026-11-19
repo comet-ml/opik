@@ -84,6 +84,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_6_SOL = "gpt-6-sol",
   GPT_6_1_SOL = "gpt-6.1-sol",
   GPT_6_1_TERRA = "gpt-6.1-terra",
+  GPT_6_2_ASTRA = "gpt-6.2-astra",
+  GPT_6_2_SOL = "gpt-6.2-sol",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
@@ -106,8 +108,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
-  GPT_6_2_ASTRA = "gpt-6.2-astra",
-  GPT_6_2_SOL = "gpt-6.2-sol",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -334,6 +334,8 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_4_CARBON_BATCH = "google/gemini-4-carbon:batch",
   GOOGLE_GEMINI_4_HYDROGEN = "google/gemini-4-hydrogen",
   GOOGLE_GEMINI_4_HYDROGEN_BATCH = "google/gemini-4-hydrogen:batch",
+  GOOGLE_GEMINI_4_NEON = "google/gemini-4-neon",
+  GOOGLE_GEMINI_4_NEON_BATCH = "google/gemini-4-neon:batch",
   GOOGLE_GEMINI_NANO_BANANA_2_1 = "google/gemini-nano-banana-2.1",
   GOOGLE_GEMINI_OMNI_1_1_FLASH = "google/gemini-omni-1.1-flash",
   GOOGLE_GEMINI_OMNI_1_2_FLASH = "google/gemini-omni-1.2-flash",
@@ -1018,6 +1020,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_4_NEON = "gemini-4-neon",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
