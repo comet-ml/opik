@@ -563,7 +563,7 @@ class TopicsDaoStorageTest {
             var runDAO = handle.attach(TopicRunDAO.class);
             runDAO.start(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
-                    TopicProject.RunError.QWEN_TIMEOUT)).isEqualTo(1);
+                    TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
                     TopicProject.RunError.TIMEOUT)).isZero();
             runDAO.start(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);

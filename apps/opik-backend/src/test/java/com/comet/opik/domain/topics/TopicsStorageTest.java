@@ -140,7 +140,7 @@ class TopicsStorageTest {
         spreadData.seed(workspaceId, projectId, 0, 20, NIGHT.plus(Duration.ofDays(WINDOW_DAYS + 1)));
         var runId = UUID.randomUUID();
         var topicId = UUID.randomUUID();
-        int dimensions = TopicAlgorithm.DIMENSIONS;
+        int dimensions = TopicEmbedding.DIMENSIONS;
         var vectors = saveList(workspaceId, projectId, runId, topicId);
         // The run's own insert, or an earlier cut pass, labelled 30 traces.
         var labelledBefore = UUID.randomUUID();
@@ -161,13 +161,14 @@ class TopicsStorageTest {
                 .containsOnlyKeys(TRACES.traceIds())
                 .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
         var assigner = new PrototypeAssigner(List.of(vectors.get(0), vectors.get(2)), List.of(0, 0),
-                List.of(vectors.get(1)), dimensions);
+                List.of(vectors.get(1)), dimensions, TopicsTestAlgorithm.config().getAssignMinCosine(),
+                TopicsTestAlgorithm.config().getOtherGate());
         var labels = assigner.assign(TRACES.vectors());
         var expected = new HashMap<UUID, UUID>();
         for (int i = 0; i < BUILT; i++) {
             expected.put(TRACES.traceIds().get(i), i >= 3 && i < 33
                     ? labelledBefore
-                    : labels[i] == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topicId);
+                    : labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topicId);
         }
         assertThat(expected.get(TRACES.traceIds().get(0))).isEqualTo(topicId);
         assertThat(expected.get(TRACES.traceIds().get(1))).isEqualTo(TraceTopic.OTHER);
@@ -240,7 +241,7 @@ class TopicsStorageTest {
      * known-Other one. Returns the three vectors.
      */
     private List<float[]> saveList(String workspaceId, UUID projectId, UUID runId, UUID topicId) {
-        int dimensions = TopicAlgorithm.DIMENSIONS;
+        int dimensions = TopicEmbedding.DIMENSIONS;
         var vectors = new ArrayList<float[]>();
         for (int i = 0; i < 3; i++) {
             vectors.add(Arrays.copyOfRange(TRACES.vectors(), i * dimensions, (i + 1) * dimensions));
