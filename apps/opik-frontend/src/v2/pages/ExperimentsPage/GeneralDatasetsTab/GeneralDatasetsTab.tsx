@@ -89,6 +89,7 @@ import { Filter } from "@/types/filters";
 import DatasetVersionCell from "@/v2/pages-shared/experiments/DatasetVersionCell";
 import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Skeleton } from "@/ui/skeleton";
+import { getEvaluationMethodFilter } from "../experimentsTabs";
 import {
   COLUMN_DATASET_VERSION_ID,
   COLUMN_PASS_RATE_ID,
@@ -125,9 +126,6 @@ type TabConfig = {
   itemSourceLabel: string;
   versionLabel: string;
   defaultSelectedColumns: string[];
-  // Legacy experiments store evaluation_method 'unknown', so the Datasets tab
-  // matches everything that is not a test suite rather than = 'dataset'.
-  evaluationMethodOperator: Filter["operator"];
 };
 
 const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
@@ -145,7 +143,6 @@ const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
       "created_at",
       "prompt",
     ],
-    evaluationMethodOperator: "=",
   },
   [EVALUATION_METHOD.DATASET]: {
     datasetType: DATASET_TYPE.DATASET,
@@ -160,19 +157,8 @@ const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
       "created_at",
       "prompt",
     ],
-    evaluationMethodOperator: "!=",
   },
 };
-
-export const getEvaluationMethodFilter = (
-  evaluationMethod: EVALUATION_METHOD,
-): Filter => ({
-  id: "evaluation_method",
-  field: "evaluation_method",
-  type: COLUMN_TYPE.string,
-  operator: TAB_CONFIG[evaluationMethod].evaluationMethodOperator,
-  value: EVALUATION_METHOD.TEST_SUITE,
-});
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,

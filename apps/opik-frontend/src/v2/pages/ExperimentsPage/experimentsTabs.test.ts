@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EVALUATION_METHOD } from "@/types/datasets";
-import { getEvaluationMethodFilter } from "./GeneralDatasetsTab";
+import { getEvaluationMethodFilter } from "./experimentsTabs";
 
 describe("getEvaluationMethodFilter", () => {
   it("scopes the Test suites tab to test suite experiments", () => {

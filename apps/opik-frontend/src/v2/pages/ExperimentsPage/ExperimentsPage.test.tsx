@@ -12,8 +12,16 @@ vi.mock("./GeneralDatasetsTab/GeneralDatasetsTab", () => ({
   ),
 }));
 
+let testSuiteTotal = 1;
+
+// The page asks once for any experiment (empty state) and once for test-suite
+// experiments only (default tab); the second call is the one with filters.
 vi.mock("@/api/datasets/useExperimentsList", () => ({
-  default: () => ({ data: { total: 1 }, isPending: false }),
+  default: (params: { filters?: unknown[] }) => ({
+    data: { total: params.filters ? testSuiteTotal : 1 },
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -43,9 +51,11 @@ const getParam = (key: string) =>
 describe("ExperimentsPage tabs", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
+    localStorage.clear();
+    testSuiteTotal = 1;
   });
 
-  it("opens the Test suites tab by default", () => {
+  it("opens the Test suites tab by default when the project has test suite experiments", () => {
     renderPage();
 
     expect(screen.getByRole("tab", { name: "Test suites" })).toHaveAttribute(
@@ -57,11 +67,31 @@ describe("ExperimentsPage tabs", () => {
     );
   });
 
-  it("restores the tab from the URL", () => {
+  it("opens the Datasets tab by default when the project has no test suite experiments", () => {
+    testSuiteTotal = 0;
+    renderPage();
+
+    expect(screen.getByTestId("experiments-tab")).toHaveTextContent("dataset");
+  });
+
+  it("reopens the last tab used in the project when the URL has none", () => {
+    localStorage.setItem(
+      "experiments-tab-project-id",
+      JSON.stringify("datasets"),
+    );
+    renderPage();
+
+    expect(screen.getByTestId("experiments-tab")).toHaveTextContent("dataset");
+  });
+
+  it("restores the tab from the URL and remembers it for the project", () => {
     window.history.replaceState(null, "", "/?tab=datasets");
     renderPage();
 
     expect(screen.getByTestId("experiments-tab")).toHaveTextContent("dataset");
+    expect(localStorage.getItem("experiments-tab-project-id")).toBe(
+      JSON.stringify("datasets"),
+    );
   });
 
   it("keeps the selected tab in the URL and drops the other tab's table params", () => {
@@ -81,5 +111,8 @@ describe("ExperimentsPage tabs", () => {
     expect(getParam("page")).toBeNull();
     expect(getParam("groups")).toBeNull();
     expect(screen.getByTestId("experiments-tab")).toHaveTextContent("dataset");
+    expect(localStorage.getItem("experiments-tab-project-id")).toBe(
+      JSON.stringify("datasets"),
+    );
   });
 });

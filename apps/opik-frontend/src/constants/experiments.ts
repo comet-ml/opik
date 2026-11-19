@@ -36,6 +36,12 @@ export const STATUS_TO_VARIANT_MAP: Record<
   [OPTIMIZATION_STATUS.ERROR]: "red",
 };
 
+// Experiments page tabs, kept in the URL as ?tab=.
+export const EXPERIMENTS_PAGE_TAB = {
+  TEST_SUITES: "test_suites",
+  DATASETS: "datasets",
+} as const;
+
 export const COLUMN_DATASET_VERSION_ID = "dataset_version";
 export const COLUMN_PASS_RATE_ID = "pass_rate";
 
