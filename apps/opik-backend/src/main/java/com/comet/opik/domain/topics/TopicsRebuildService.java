@@ -1,7 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.GenerateRequest;
 import com.comet.opik.infrastructure.inference.InferenceClient;
@@ -50,7 +50,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 /**
  * One project's first build: read the window of vectors (all of it, or an even sample of {@code topics.build.maxVectors}
  * traces when it is larger), have the {@link TopicAlgorithm} build the list and label every read trace, check the
- * prototypes and save. The service makes the LLM calls the algorithm asks for ({@link TopicAlgorithm.Context}).
+ * prototypes and save. The service makes the LLM calls the algorithm asks for ({@link TopicRunContext}).
  * Synchronous: the caller runs it on its own thread, one project at a time.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
@@ -64,7 +64,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsRebuildService {
 
-    static final int DIMENSIONS = TopicAlgorithm.DIMENSIONS;
+    static final int DIMENSIONS = TopicEmbedding.DIMENSIONS;
     static final int MAX_TOPICS = 10;
     /** A first build over fewer traces is marked provisional in its stats. */
     static final int PROVISIONAL_BELOW = 1_000;
@@ -86,8 +86,9 @@ public class TopicsRebuildService {
      * Failure codes whose exceptions can carry trace-derived text: of Qwen's answer, or the topic names and definitions
      * a failed save statement quotes in its bound arguments.
      */
-    private static final Set<Code> TEXT_CODES = EnumSet.of(Code.QWEN_TIMEOUT, Code.QWEN_ERROR, Code.QWEN_BAD_ANSWER,
-            Code.SAVE);
+    private static final Set<RunError> TEXT_CODES = EnumSet.of(RunError.LLM_TIMEOUT, RunError.LLM_ERROR,
+            RunError.LLM_BAD_ANSWER,
+            RunError.SAVE);
     /** The longest the insert after the commit takes: every attempt to its stop, plus the backoffs and some slack. */
     static final Duration INSERT_BOUND = Duration.ofSeconds(READ_SECONDS * (INSERT_RETRIES + 1) + 30);
 
@@ -153,17 +154,13 @@ public class TopicsRebuildService {
      * it as {@code abandoned}, so every run is counted once.
      */
     public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull Code code) {
+            @NonNull RunError code) {
         int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class)
-                .markFailed(workspaceId, projectId, runId, Instant.now(), runError(code)));
+                .markFailed(workspaceId, projectId, runId, Instant.now(), code));
         if (updated == 1) {
             metrics.run(workspaceId, TopicProject.RunStatus.FAILED, code.getValue());
         }
         return updated == 1;
-    }
-
-    static TopicProject.RunError runError(@NonNull Code code) {
-        return TopicProject.RunError.valueOf(code.name());
     }
 
     /**
@@ -178,15 +175,15 @@ public class TopicsRebuildService {
         } catch (TopicsRunException exception) {
             return run.failed(exception.getCode(), exception);
         } catch (CancellationException exception) {
-            return run.failed(Code.TIMEOUT, exception);
+            return run.failed(RunError.TIMEOUT, exception);
         } catch (RuntimeException exception) {
-            return run.failed(Thread.currentThread().isInterrupted() ? Code.TIMEOUT : Code.INTERNAL, exception);
+            return run.failed(Thread.currentThread().isInterrupted() ? RunError.TIMEOUT : RunError.INTERNAL, exception);
         }
         return Outcome.builder().runId(runId).status(TopicProject.RunStatus.SAVED).stats(run.stats()).build();
     }
 
     /** One run's state while it builds: the stats it records and the phase timings. */
-    private final class Run implements TopicAlgorithm.Context {
+    private final class Run implements TopicRunContext {
 
         private final UUID runId;
         private final String workspaceId;
@@ -223,7 +220,7 @@ public class TopicsRebuildService {
             stats.put("provisional", n < PROVISIONAL_BELOW);
 
             var built = algorithm.firstBuild(
-                    TopicAlgorithm.Window.builder().texts(window.texts()).vectors(window.vectors()).build(), MAX_TOPICS,
+                    TopicWindow.builder().texts(window.texts()).vectors(window.vectors()).build(), MAX_TOPICS,
                     this);
             checkPrototypes(built);
             var topics = topics(built);
@@ -284,7 +281,7 @@ public class TopicsRebuildService {
                 rows = windowDAO.readWindow(workspaceId, projectId, from, to, config.getBuild().getMaxVectors(),
                         readSeconds(config.getBuild())).collectList().block();
             } catch (RuntimeException exception) {
-                throw new TopicsRunException(Code.WINDOW_READ, "the window read failed", exception);
+                throw new TopicsRunException(RunError.WINDOW_READ, "the window read failed", exception);
             }
             stats.put("window_traces", windowTraces);
             stats.put("sample_traces", rows.size());
@@ -304,13 +301,13 @@ public class TopicsRebuildService {
             stats.put("window_rows", rows.size());
             stats.put("skipped_rows", skipped);
             if (kept.isEmpty()) {
-                throw new TopicsRunException(Code.WINDOW_READ, "the window has no usable vector");
+                throw new TopicsRunException(RunError.WINDOW_READ, "the window has no usable vector");
             }
             return kept;
         }
 
         @Override
-        public <T> T generate(@NonNull TopicAlgorithm.Call call, @NonNull String tag, @NonNull String prompt,
+        public <T> T generate(@NonNull LlmCall call, @NonNull String tag, @NonNull String prompt,
                 @NonNull JsonNode schema, int maxTokens, @NonNull Function<JsonNode, T> read) {
             // The prompt holds users' trace text: the log gets its size and hash only, never the text.
             log.info("Topics run '{}' prompt, call '{}', project '{}', chars '{}', sha256 '{}'", runId, tag, projectId,
@@ -318,7 +315,7 @@ public class TopicsRebuildService {
             return timed("qwen", () -> call(call, tag, prompt, schema, maxTokens, read));
         }
 
-        private <T> T call(TopicAlgorithm.Call call, String tag, String prompt, JsonNode schema, int maxTokens,
+        private <T> T call(LlmCall call, String tag, String prompt, JsonNode schema, int maxTokens,
                 Function<JsonNode, T> read) {
             var request = GenerateRequest.builder()
                     .orgId(workspaceId)
@@ -339,13 +336,13 @@ public class TopicsRebuildService {
                 if (exception.isSchemaViolation()) {
                     // The service checks the answer against the schema: a cut or off-schema answer comes back so.
                     metrics.qwen(workspaceId, call, "bad_answer");
-                    throw new TopicsRunException(Code.QWEN_BAD_ANSWER,
+                    throw new TopicsRunException(RunError.LLM_BAD_ANSWER,
                             "the Qwen answer breaks the schema, status '%s'".formatted(exception.getHttpStatus()),
                             exception);
                 }
                 boolean timeout = isTimeout(exception);
                 metrics.qwen(workspaceId, call, timeout ? "timeout" : "error");
-                throw new TopicsRunException(timeout ? Code.QWEN_TIMEOUT : Code.QWEN_ERROR,
+                throw new TopicsRunException(timeout ? RunError.LLM_TIMEOUT : RunError.LLM_ERROR,
                         "the Qwen call failed, code '%s', status '%s'".formatted(exception.getCode(),
                                 exception.getHttpStatus()),
                         exception);
@@ -374,7 +371,7 @@ public class TopicsRebuildService {
             }
         }
 
-        private Duration deadline(TopicAlgorithm.Call call) {
+        private Duration deadline(LlmCall call) {
             return switch (call) {
                 case AUTHOR -> config.getBuild().getQwenDeadline().toJavaDuration();
             };
@@ -390,7 +387,7 @@ public class TopicsRebuildService {
         }
 
         /** Each topic with its size and the prototype vectors it owns, in the run's order. */
-        private List<Topic> topics(TopicAlgorithm.FirstBuild built) {
+        private List<Topic> topics(FirstBuild built) {
             var sizes = new int[built.topics().size()];
             for (int label : built.labels()) {
                 if (label != TopicAlgorithm.OTHER) {
@@ -425,7 +422,7 @@ public class TopicsRebuildService {
         }
 
         /** Before anything is written: every prototype has {@value #DIMENSIONS} values and unit length. */
-        private void checkPrototypes(TopicAlgorithm.FirstBuild built) {
+        private void checkPrototypes(FirstBuild built) {
             var all = new ArrayList<float[]>(built.topicPrototypes());
             all.addAll(built.otherPrototypes());
             for (int p = 0; p < all.size(); p++) {
@@ -471,11 +468,11 @@ public class TopicsRebuildService {
          */
         private void saveList(TopicDAO topicDAO, Instant savedAt, PrototypeVectors otherVectors) {
             if (topicDAO.lockProject(workspaceId, projectId) == 0) {
-                throw new TopicsRunException(Code.SAVE, "the project was deleted during the run");
+                throw new TopicsRunException(RunError.SAVE, "the project was deleted during the run");
             }
             if (topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, to, otherVectors,
                     TopicEmbedding.MODEL) != 1) {
-                throw new TopicsRunException(Code.SAVE, "another run saved this project meanwhile");
+                throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
             }
         }
 
@@ -504,14 +501,14 @@ public class TopicsRebuildService {
                     }
                     if (handle.attach(TopicRunDAO.class).markSaved(workspaceId, projectId, runId, now) != 1) {
                         // Failed meanwhile, by its timeout: roll the save back.
-                        throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
+                        throw new TopicsRunException(RunError.TIMEOUT, "the run ended before its save committed");
                     }
                     return null;
                 });
             } catch (TopicsRunException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
-                throw new TopicsRunException(Code.SAVE, "the save failed", exception);
+                throw new TopicsRunException(RunError.SAVE, "the save failed", exception);
             }
             metrics.run(workspaceId, TopicProject.RunStatus.SAVED, null);
             metrics.saved(workspaceId, "topics", topics.size());
@@ -521,7 +518,7 @@ public class TopicsRebuildService {
                     projectId, inserted, topics.size(), stats);
         }
 
-        Outcome failed(Code code, Exception exception) {
+        Outcome failed(RunError code, Exception exception) {
             stats.set("seconds", seconds);
             if (TEXT_CODES.contains(code)) {
                 // The answer's length and SHA-256 are logged when it arrives.
@@ -557,7 +554,7 @@ public class TopicsRebuildService {
         }
 
         private TopicsRunException invariant(String message) {
-            return new TopicsRunException(Code.INVARIANT, message);
+            return new TopicsRunException(RunError.INVARIANT, message);
         }
     }
 

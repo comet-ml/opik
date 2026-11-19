@@ -1046,6 +1046,18 @@ topics:
     windowDays: 30
     maxVectors: 100000
     qwenDeadline: 120s
+  algorithm:
+    minGroups: 30
+    maxGroups: 50
+    textsPerGroup: 30
+    kmeansMaxIterations: 150
+    kmeansRestarts: 3
+    authorFrequent: 5
+    authorBudget: 250
+    authorMinExamples: 5
+    authorMaxExamples: 10
+    assignMinCosine: 0.75
+    otherGate: 0.95
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1520,3 +1532,4 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
+
