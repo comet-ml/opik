@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
@@ -19,7 +18,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -115,12 +113,8 @@ public class TopicVectorsDAO {
                     <if(project)>AND project_id = :project_id<endif>
                     AND task = :task
                     AND key = 'output'
-                    AND id_at >= tupleElement((SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
-                        max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done), 1)
-                    <if(created_before)>
-                    AND id_at \\<= tupleElement((SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
-                        max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done), 2)
-                    <endif>
+                    AND id_at >= tupleElement(<id_at_bounds>, 1)
+                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
                     ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key
@@ -140,12 +134,8 @@ public class TopicVectorsDAO {
                     AND task = :task
                     AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
                     <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
-                    AND id_at >= tupleElement((SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
-                        max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done), 1)
-                    <if(created_before)>
-                    AND id_at \\<= tupleElement((SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
-                        max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done), 2)
-                    <endif>
+                    AND id_at >= tupleElement(<id_at_bounds>, 1)
+                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
                 )
@@ -157,6 +147,14 @@ public class TopicVectorsDAO {
                 max_memory_usage = <max_memory_usage>, max_execution_time = <max_execution_time>,
                 log_comment = '<log_comment>'
             """;
+
+    /**
+     * {@code done}'s oldest and newest trace id times, the {@code id_at} bounds of the output and vector sides of
+     * {@link #FIND_UNVECTORED}. One scalar in one text: ClickHouse computes an identical scalar once per query.
+     */
+    private static final String ID_AT_BOUNDS = """
+            (SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
+                max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)""";
 
     /**
      * RE2 for "not blank" by opik-inference's rule, Python's {@code str.strip()}: a character outside the ASCII controls
@@ -219,22 +217,6 @@ public class TopicVectorsDAO {
                 log_comment = '<log_comment>'
             """;
 
-    /**
-     * The check after a workspace's inserts: the pairs that still have a status row of the task; see
-     * {@code TopicVectorsTickService.deleteVectorsOfDeletedTraces}. The guards are the window read's.
-     */
-    private static final String FIND_STATUS_KEYS = """
-            SELECT DISTINCT project_id, trace_id
-            FROM ai_label_status
-            WHERE workspace_id = :workspace_id
-            AND task = :task
-            AND id_at >= parseDateTimeBestEffort(:min_id_at, 'UTC')
-            AND (project_id, trace_id) IN arrayZip(:project_ids, :trace_ids)
-            SETTINGS max_threads = <max_threads>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, max_execution_time = <max_execution_time>,
-                log_comment = '<log_comment>'
-            """;
-
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull TraceKeyedTableDeletes deletes;
@@ -262,11 +244,6 @@ public class TopicVectorsDAO {
      */
     @Builder(toBuilder = true)
     public record BackfillProject(@NonNull UUID projectId, long traces, @NonNull Instant lastDoneAt) {
-    }
-
-    /** A trace by its project: a trace id reused in another project is another trace. */
-    @Builder(toBuilder = true)
-    public record ProjectTraceKey(@NonNull UUID projectId, @NonNull UUID traceId) {
     }
 
     /** A half-open slice of trace creation time; {@code before} is null on the newest, open-ended slice. */
@@ -311,6 +288,7 @@ public class TopicVectorsDAO {
                         find.lowerBound(), find.createdAfter(), createdBefore, projectId, excludedProjectIds.size(),
                         find.limit()),
                 find.maxExecutionSeconds())
+                .add("id_at_bounds", ID_AT_BOUNDS)
                 .add("project", projectId != null)
                 .add("excluded", !excludedProjectIds.isEmpty())
                 .add("created_before", createdBefore != null);
@@ -455,35 +433,6 @@ public class TopicVectorsDAO {
                 .add("max_execution_time", maxExecutionSeconds);
     }
 
-    public Flux<ProjectTraceKey> findStatusKeys(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Collection<ProjectTraceKey> keys, long maxExecutionSeconds) {
-        if (keys.isEmpty()) {
-            return Flux.empty();
-        }
-        // id_at is derived from the UUIDv7 trace id, so the oldest id bounds the partitions read.
-        // A non-v7 id has no time in it; UUIDv7ToDateTime gives it 1970, so its bound is the epoch as well.
-        var minIdAt = Instant.ofEpochMilli(keys.stream()
-                .mapToLong(key -> key.traceId().version() == 7 ? key.traceId().getMostSignificantBits() >>> 16 : 0)
-                .min()
-                .orElseThrow()).truncatedTo(ChronoUnit.SECONDS);
-        var template = guarded(FIND_STATUS_KEYS, "topics:find_status_keys", workspaceId,
-                "keys=%d".formatted(keys.size()), maxExecutionSeconds);
-        var projectIds = keys.stream().map(key -> key.projectId().toString()).toArray(String[]::new);
-        var traceIds = keys.stream().map(key -> key.traceId().toString()).toArray(String[]::new);
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("task", task)
-                        .bind("min_id_at", minIdAt.toString())
-                        .bind("project_ids", projectIds)
-                        .bind("trace_ids", traceIds)
-                        .execute())
-                .flatMap(result -> result.map((row, metadata) -> ProjectTraceKey.builder()
-                        .projectId(UUID.fromString(row.get("project_id", String.class)))
-                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
-                        .build()));
-    }
-
     /** Traces linked to experiments survive retention, so their vectors do too. */
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
@@ -500,14 +449,4 @@ public class TopicVectorsDAO {
         return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
     }
 
-    /** The vectors of {@code keys}, as the system user: the tick's own deletes, outside any request. */
-    public Mono<Void> deleteByKeys(@NonNull String workspaceId, @NonNull Collection<ProjectTraceKey> keys) {
-        var byProject = keys.stream().collect(Collectors.groupingBy(ProjectTraceKey::projectId,
-                Collectors.mapping(ProjectTraceKey::traceId, Collectors.toSet())));
-        return Flux.fromIterable(byProject.entrySet())
-                .concatMap(entry -> deleteByTraceIds(entry.getValue(), entry.getKey()))
-                .then()
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
-    }
 }
