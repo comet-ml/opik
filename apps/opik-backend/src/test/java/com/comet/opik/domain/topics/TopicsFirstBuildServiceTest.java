@@ -110,7 +110,7 @@ class TopicsFirstBuildServiceTest {
                 .filter(row -> invocation.<Collection<String>>getArgument(0).contains(row.workspaceId())).toList());
         when(backfillDAO.findWorkspaces(any())).thenAnswer(invocation -> checkedWorkspaces.stream()
                 .filter(invocation.<Collection<String>>getArgument(0)::contains)
-                .map(workspaceId -> TopicWorkspace.builder().workspaceId(workspaceId)
+                .map(workspaceId -> TopicVectorBackfillDAO.Workspace.builder().workspaceId(workspaceId)
                         .vectorsCheckedAt(Instant.now()).build())
                 .toList());
         var template = mock(TransactionTemplate.class);

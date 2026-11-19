@@ -1,8 +1,10 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.WorkspaceNameService;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -10,12 +12,12 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -32,6 +34,8 @@ public class TopicsMetrics {
     /** The run could not start: its attempt's write on {@code topic_projects}, or the read before it, failed. */
     static final String ERROR_START_FAILED = "start_failed";
 
+    private static final AttributeKey<String> WORKSPACE_ID = stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME = stringKey("workspace_name");
     private static final AttributeKey<String> STATUS = stringKey("status");
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
     private static final AttributeKey<String> PHASE = stringKey("phase");
@@ -40,7 +44,7 @@ public class TopicsMetrics {
     private static final AttributeKey<String> TABLE = stringKey("table");
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
 
-    private final TopicsWorkspaceNames names;
+    private final Function<String, String> names;
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
     private final LongCounter qwenCalls;
@@ -59,16 +63,16 @@ public class TopicsMetrics {
     }
 
     @Inject
-    public TopicsMetrics(@NonNull TopicsWorkspaceNames names) {
-        this(GlobalOpenTelemetry.get().getMeter("opik.topics"), names);
+    public TopicsMetrics(@NonNull WorkspaceNameService names) {
+        this(GlobalOpenTelemetry.get().getMeter("opik.topics"), names::nameOrId);
     }
 
     /** Workspace names fall back to the id. */
     TopicsMetrics(@NonNull Meter meter) {
-        this(meter, new TopicsWorkspaceNames(workspaceId -> null, Clock.systemUTC()));
+        this(meter, workspaceId -> workspaceId);
     }
 
-    TopicsMetrics(@NonNull Meter meter, @NonNull TopicsWorkspaceNames names) {
+    TopicsMetrics(@NonNull Meter meter, @NonNull Function<String, String> names) {
         this.names = names;
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
@@ -116,7 +120,7 @@ public class TopicsMetrics {
     }
 
     void run(@NonNull String workspaceId, @NonNull TopicProject.RunStatus status, String errorCode) {
-        var attributes = names.builder(workspaceId).put(STATUS, status.getValue());
+        var attributes = workspace(workspaceId).put(STATUS, status.getValue());
         if (errorCode != null) {
             attributes.put(ERROR_CODE, errorCode);
         }
@@ -124,28 +128,32 @@ public class TopicsMetrics {
     }
 
     void phase(@NonNull String workspaceId, @NonNull String phase, @NonNull Duration duration) {
-        runDuration.record(duration.toNanos() / 1e9, names.builder(workspaceId).put(PHASE, phase).build());
+        runDuration.record(duration.toNanos() / 1e9, workspace(workspaceId).put(PHASE, phase).build());
     }
 
     void qwen(@NonNull String workspaceId, @NonNull LlmCall call, @NonNull String outcome) {
-        qwenCalls.add(1, names.builder(workspaceId).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
+        qwenCalls.add(1, workspace(workspaceId).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
     }
 
     void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
-        saveRows.add(rows, names.builder(workspaceId).put(TABLE, table).build());
+        saveRows.add(rows, workspace(workspaceId).put(TABLE, table).build());
     }
 
     void labelPass(@NonNull String workspaceId, @NonNull TopicWindowLabelService.Trigger trigger, boolean complete) {
-        labelPasses.add(1, names.builder(workspaceId).put(TRIGGER, trigger.getValue())
+        labelPasses.add(1, workspace(workspaceId).put(TRIGGER, trigger.getValue())
                 .put(OUTCOME, complete ? "complete" : "incomplete").build());
     }
 
     void otherShare(@NonNull String workspaceId, double share) {
-        otherShare.record(share, names.of(workspaceId));
+        otherShare.record(share, workspace(workspaceId).build());
+    }
+
+    private AttributesBuilder workspace(String workspaceId) {
+        return Attributes.builder().put(WORKSPACE_ID, workspaceId).put(WORKSPACE_NAME, names.apply(workspaceId));
     }
 
     void firstBuildGate(@NonNull String workspaceId, @NonNull TopicsBackfillGate.State state) {
-        firstBuildGate.add(1, names.builder(workspaceId).put(OUTCOME, state.getValue()).build());
+        firstBuildGate.add(1, workspace(workspaceId).put(OUTCOME, state.getValue()).build());
     }
 
     /**
@@ -155,9 +163,9 @@ public class TopicsMetrics {
     void firstBuildState(@NonNull Map<String, Duration> longestWaits, @NonNull Map<String, Long> waitingProjects,
             @NonNull Duration kept) {
         var seconds = new LinkedHashMap<Attributes, Long>();
-        longestWaits.forEach((workspaceId, wait) -> seconds.put(names.of(workspaceId), wait.toSeconds()));
+        longestWaits.forEach((workspaceId, wait) -> seconds.put(workspace(workspaceId).build(), wait.toSeconds()));
         var waiting = new LinkedHashMap<Attributes, Long>();
-        waitingProjects.forEach((workspaceId, projects) -> waiting.put(names.of(workspaceId), projects));
+        waitingProjects.forEach((workspaceId, projects) -> waiting.put(workspace(workspaceId).build(), projects));
         firstBuildState = new FirstBuildState(Instant.now().plus(kept), seconds, waiting);
     }
 

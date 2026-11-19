@@ -1012,13 +1012,21 @@ workspaceFeatures:
   # Off in tests, like the auth cache: a test that needs it turns it on.
   cacheTtl: 0s
 
-aiLabels:
-  inference:
-    # The synchronous decide calls guardrail checks make, on a client of their own.
-    maxConcurrentDecides: 256
-    decideKeepAlive: 30s
-    decideTimeToLive: 5m
-    maxResponseBytes: 33554432
+inference:
+  # Same values as config.yml's inference block; see it for what each key means.
+  connectTimeout: 5s
+  readTimeout: 30s
+  maxConcurrentDecides: 48
+  maxResponseBytes: 33554432
+  limits:
+    maxEmbedInputs: 256
+    maxEmbedDeadline: 60s
+    maxBatchItems: 10000
+    maxStatusJobIds: 1000
+  retry:
+    maxRetries: 2
+    baseBackoff: 100ms
+    submitBytesPerSecond: 1048576
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
@@ -1040,6 +1048,7 @@ topics:
       maxThreads: 2
       createdAtSlack: 1d
       sliceSize: 1d
+      discoverySliceSize: 7d
   build:
     projectTimeout: 15m
     minVectors: 100
@@ -1090,6 +1099,9 @@ jerseyClient:
   # Default: 5m
   # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
   timeToLive: 5m
+  # Default: 30s
+  # Description: How long an idle connection is kept for reuse.
+  keepAlive: 30s
   # Default: 256
   # Description: The maximum number of concurrent open connections.
   maxConnections: 256

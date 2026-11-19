@@ -20,16 +20,44 @@ import java.util.UUID;
 
 /**
  * The topic vectors backfill's state: the {@code backfill_*} columns of {@code topic_projects} and
- * {@code topic_workspaces.vectors_checked_at}; {@link TopicProject} and {@link TopicWorkspace} describe them. The
- * other columns of a project's row belong to other writers and are never set here. A project row without
- * {@code backfill_started_at} has no backfill yet.
+ * {@code topic_workspaces.vectors_checked_at}. A project's row holds its current topics state, never its history, and
+ * each writer sets only its own columns: the other columns belong to other writers and are never set here. A project
+ * row without {@code backfill_started_at} has no backfill yet. ClickHouse stays the only source of which traces have
+ * no vector.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(TopicVectorBackfillDAO.Backfill.class)
-@RegisterConstructorMapper(TopicWorkspace.class)
+@RegisterConstructorMapper(TopicVectorBackfillDAO.Workspace.class)
 public interface TopicVectorBackfillDAO {
 
-    /** A project's backfill columns. */
+    /**
+     * A workspace's {@code topic_workspaces} row.
+     *
+     * @param vectorsCheckedAt the last time the topic vectors tick discovered the workspace's projects, about once per
+     *        {@code topics.vectors.longWindowInterval}. Older than twice that: the tick has stopped for the workspace,
+     *        and the projects' {@code backfillDrainedAt} says nothing about the traces since
+     */
+    @Builder(toBuilder = true)
+    record Workspace(@NonNull String workspaceId, @NonNull Instant vectorsCheckedAt) {
+    }
+
+    /**
+     * A project's backfill columns.
+     *
+     * @param backfillStartedAt when this backfill began: the tick first saw the project, or reset the backfill because
+     *        it did not run for the workspace for 2 x {@code topics.vectors.longWindowInterval}
+     * @param backfillDrainedAt the start of the tick that drained the project since {@code backfillStartedAt}, null
+     *        until one does. Drained: the tick read the project's whole backfill window, found fewer than
+     *        {@code maxTracesPerTick} traces, and left none of them for want of time, a read, a back-off or an insert.
+     *        So every trace with a done status in the window up to that instant, and a usable summary, had a vector
+     *        when the tick ended, but for those the embed service refuses or answers with an invalid vector
+     * @param backfillLastDoneAt the project's latest done status, as last discovered
+     * @param backfillTracesTotal about how many traces of the project can get a vector: its traces created in the
+     *        backfill window with a done status, as last discovered. Too high by the traces whose summary is blank or
+     *        missing and by those the embed service refuses
+     * @param backfillTracesDone about how many of them have a vector, as last discovered, plus the vectors the
+     *        backfill wrote since. Never above {@code backfillTracesTotal}. Not kept up once the project is drained
+     */
     @Builder(toBuilder = true)
     record Backfill(
             @NonNull String workspaceId,
@@ -77,7 +105,7 @@ public interface TopicVectorBackfillDAO {
     List<Backfill> findByWorkspaceIds(@BindList("workspaceIds") Collection<String> workspaceIds);
 
     @SqlQuery("SELECT workspace_id, vectors_checked_at FROM topic_workspaces WHERE workspace_id IN (<workspaceIds>)")
-    List<TopicWorkspace> findWorkspaces(@BindList("workspaceIds") Collection<String> workspaceIds);
+    List<Workspace> findWorkspaces(@BindList("workspaceIds") Collection<String> workspaceIds);
 
     /**
      * Starts a backfill for each project that has none; a started one is left as it is. MySQL applies the assignments
@@ -111,6 +139,11 @@ public interface TopicVectorBackfillDAO {
     int resetStale(@Bind("workspaceId") String workspaceId, @Bind("staleBefore") Instant staleBefore,
             @Bind("now") Instant now);
 
+    /**
+     * Marks the workspace's projects discovered at {@code now}, about once per {@code topics.vectors.longWindowInterval}.
+     * Older than twice that: the tick has stopped for the workspace, and the projects' drained marks say nothing about
+     * the traces since.
+     */
     @SqlUpdate("""
             INSERT INTO topic_workspaces (workspace_id, vectors_checked_at) VALUES (:workspaceId, :now)
             ON DUPLICATE KEY UPDATE vectors_checked_at = :now
