@@ -16,12 +16,12 @@ import java.util.concurrent.CancellationException;
  * the fit. A cluster left empty by an update takes the point farthest from its centre, so none stays empty.
  *
  * <p>Lloyd keeps Elkan's bounds, so a point is measured again only against the centres those bounds do not rule out;
- * the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product a plain loop in
- * double over the dimensions in order, so the sums run in the same order on every machine. Only an empty cluster's new
- * point is picked with the direct sum of {@code (x - c)²}, as plain Lloyd does. The bounds take {@code n * k} doubles.
- *
- * <p>The dot product can move to the Java Vector API once that API is final (out of incubator): at 100,000 points of
- * 384 dimensions, k = 50, a Vector API dot product made this fit 2.9 times faster than the scalar loop.
+ * the labels are the ones plain Lloyd gives. A squared distance is |x|² + |c|² - 2 x·c, the dot product summed in
+ * double as eight partial sums over interleaved dimensions, added together in a fixed order. Java never reorders
+ * double additions, so the sums run in the same order on every machine. Only an empty cluster's new point is picked
+ * with the direct sum of {@code (x - c)²}, as plain Lloyd does. The bounds take {@code n * k} doubles and are
+ * allocated once per fit, as are the other per-point buffers; only the labels are new per restart, since the best
+ * restart keeps its own.
  *
  * <p>This is not scikit-learn's k-means (whose ++ step tries several candidates greedily); a measurement showed that the two
  * differ by about as much as scikit-learn differs from itself with another seed. Deterministic for a given input and
@@ -32,10 +32,10 @@ public class KMeans {
 
     /**
      * Measured at 100,000 points of 384 dimensions, k = 50, on an M3 Pro laptop, one thread: real windows converge in at
-     * most 101 iterations, and a window of real bge-small embeddings fits in 27 s. Points with no structure (uniform on
-     * the sphere) need more iterations than this in every restart, so their fit stops at this ceiling, in 122 s. With no
-     * bound ruling anything out (plain Lloyd on those points) the fit takes 640 s to the ceiling, under the default
-     * 15 minute project timeout.
+     * most 101 iterations. Points with no structure (uniform on the sphere) need more iterations than this in every
+     * restart, so their fit stops at this ceiling, in 52 s. With no bound ruling anything out (plain Lloyd on those
+     * points) the fit took 640 s to the ceiling with a single-sum dot product, under the default 15 minute project
+     * timeout.
      */
     static final int MAX_ITERATIONS = 150;
     static final int RESTARTS = 3;
@@ -56,9 +56,10 @@ public class KMeans {
         }
         var space = new Space(points, n, dimensions, k);
         var random = new SplittableRandom(seed);
+        var buffers = new Buffers(n, k, dimensions);
         Fit best = null;
         for (int restart = 0; restart < RESTARTS; restart++) {
-            var fit = lloyd(space, weights, plusPlus(space, weights, random));
+            var fit = lloyd(space, weights, plusPlus(space, weights, random), buffers);
             if (best == null || fit.inertia() < best.inertia()) {
                 best = fit;
             }
@@ -111,13 +112,13 @@ public class KMeans {
         return p.length - 1;
     }
 
-    private static Fit lloyd(Space space, double[] w, double[] centres) {
+    private static Fit lloyd(Space space, double[] w, double[] centres, Buffers buffers) {
         int n = space.n;
         space.prepareAll(centres);
         var labels = new int[n];
-        var distance = new double[n];
-        var bounds = new Bounds(n, space.k);
-        var previous = new double[centres.length];
+        var distance = buffers.distance;
+        var bounds = buffers.bounds;
+        var previous = buffers.previous;
         int iterations = 0;
         for (; iterations < MAX_ITERATIONS; iterations++) {
             checkInterrupted();
@@ -128,7 +129,7 @@ public class KMeans {
                 break;
             }
             System.arraycopy(centres, 0, previous, 0, centres.length);
-            update(space, w, labels, distance, centres);
+            update(space, w, labels, distance, centres, buffers);
             space.prepareAll(centres);
             bounds.moved(previous, centres, labels, space.d);
         }
@@ -243,13 +244,16 @@ public class KMeans {
      * the direct form: a point on its centre is then exactly 0, as in plain Lloyd, not the dot form's rounding noise,
      * which would pick another point among duplicate ones.
      */
-    private static void update(Space space, double[] w, int[] labels, double[] distance, double[] centres) {
+    private static void update(Space space, double[] w, int[] labels, double[] distance, double[] centres,
+            Buffers buffers) {
         int n = space.n;
         int d = space.d;
         int k = space.k;
         var x = space.x;
-        var sum = new double[k * d];
-        var weightSum = new double[k];
+        var sum = buffers.sum;
+        var weightSum = buffers.weightSum;
+        Arrays.fill(sum, 0);
+        Arrays.fill(weightSum, 0);
         for (int i = 0; i < n; i++) {
             int j = labels[i];
             weightSum[j] += w[i];
@@ -266,7 +270,10 @@ public class KMeans {
                 distance[i] = space.directSquaredDistance(i, centres, labels[i]);
             }
         }
-        var taken = new boolean[n];
+        // Points already copied into an empty group this update; cleared again below, so the buffer stays all false.
+        var taken = buffers.taken;
+        var picked = buffers.picked;
+        int pickedCount = 0;
         for (int j = 0; j < k; j++) {
             if (weightSum[j] > 0) {
                 for (int t = 0; t < d; t++) {
@@ -281,7 +288,11 @@ public class KMeans {
                 }
             }
             taken[far] = true;
+            picked[pickedCount++] = far;
             copyPoint(x, far, centres, j, d);
+        }
+        for (int p = 0; p < pickedCount; p++) {
+            taken[picked[p]] = false;
         }
     }
 
@@ -370,14 +381,33 @@ public class KMeans {
             return s;
         }
 
+        /** Eight partial sums over interleaved dimensions, so the additions do not wait on each other; fixed order. */
         private double dot(int i, double[] c, int j) {
             int xi = i * d;
             int cj = j * d;
-            double s = 0;
-            for (int t = 0; t < d; t++) {
-                s += x[xi + t] * c[cj + t];
+            double s0 = 0;
+            double s1 = 0;
+            double s2 = 0;
+            double s3 = 0;
+            double s4 = 0;
+            double s5 = 0;
+            double s6 = 0;
+            double s7 = 0;
+            int t = 0;
+            for (; t + 7 < d; t += 8) {
+                s0 += x[xi + t] * c[cj + t];
+                s1 += x[xi + t + 1] * c[cj + t + 1];
+                s2 += x[xi + t + 2] * c[cj + t + 2];
+                s3 += x[xi + t + 3] * c[cj + t + 3];
+                s4 += x[xi + t + 4] * c[cj + t + 4];
+                s5 += x[xi + t + 5] * c[cj + t + 5];
+                s6 += x[xi + t + 6] * c[cj + t + 6];
+                s7 += x[xi + t + 7] * c[cj + t + 7];
             }
-            return s;
+            for (; t < d; t++) {
+                s0 += x[xi + t] * c[cj + t];
+            }
+            return ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
         }
     }
 
@@ -437,6 +467,31 @@ public class KMeans {
                     lower[row + j] = Math.max(0, lower[row + j] - shift[j]);
                 }
             }
+        }
+    }
+
+    /**
+     * The large per-fit buffers, shared by the restarts: each restart overwrites them before it reads them (the first
+     * assignment sets every bound, an update clears the sums).
+     */
+    private static final class Buffers {
+
+        private final Bounds bounds;
+        private final double[] distance;
+        private final double[] previous;
+        private final double[] sum;
+        private final double[] weightSum;
+        private final boolean[] taken;
+        private final int[] picked;
+
+        Buffers(int n, int k, int d) {
+            this.bounds = new Bounds(n, k);
+            this.distance = new double[n];
+            this.previous = new double[k * d];
+            this.sum = new double[k * d];
+            this.weightSum = new double[k];
+            this.taken = new boolean[n];
+            this.picked = new int[k];
         }
     }
 

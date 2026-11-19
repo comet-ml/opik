@@ -34,6 +34,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
+import com.google.rpc.Status;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
@@ -43,6 +44,7 @@ import io.opentelemetry.proto.resource.v1.Resource;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
+import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -52,6 +54,10 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.ClientProperties;
+import org.glassfish.jersey.client.RequestEntityProcessing;
+import org.glassfish.jersey.grizzly.connector.GrizzlyConnectorProvider;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -81,6 +87,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -90,6 +97,7 @@ import static com.comet.opik.api.resources.utils.QuotaLimitTestUtils.ERR_USAGE_L
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.resources.OpenTelemetryResourceClient.parseStatus;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
@@ -273,11 +281,67 @@ class OpenTelemetryResourceTest {
             String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             // A zero byte where a field tag is expected: the parse failure seen from exporters in production.
             var payload = Entity.entity(new byte[]{0}, "application/x-protobuf");
-            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
-                    "Invalid Protobuf message, error: 'Protocol message contained an invalid tag (zero).'");
+            var expectedError = Status.newBuilder()
+                    .setMessage("Invalid Protobuf message, error: 'Protocol message contained an invalid tag (zero).'")
+                    .build();
 
-            otelResourceClient.exportTraces(payload, "application/x-protobuf", projectName, workspaceName,
-                    okApikey, expectedError);
+            otelResourceClient.exportProtobufTraces(payload, projectName, workspaceName, okApikey,
+                    HttpStatus.SC_BAD_REQUEST, expectedError);
+        }
+
+        Stream<Arguments> invalidJsonBodies() {
+            return Stream.of(
+                    arguments("not valid JSON", "{",
+                            "Unexpected end-of-input: expected close marker for Object (start marker at [Source: "
+                                    + "REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, "
+                                    + "column: 1])"),
+                    arguments("valid JSON that does not fit the OTLP message", "{\"unknownField\":1}",
+                            "Cannot find field: unknownField in message "
+                                    + "opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("invalidJsonBodies")
+        @DisplayName("answer 400, not 500, when the JSON body cannot be parsed")
+        void testOtelRequestWithInvalidJson(String description, String body, String parserError) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "Invalid JSON message, error: '%s'".formatted(parserError));
+
+            otelResourceClient.exportJsonTraces(Entity.json(body), projectName, workspaceName, okApikey,
+                    HttpStatus.SC_BAD_REQUEST, expectedError);
+        }
+
+        @Test
+        @DisplayName("answer an oversized protobuf body, rejected before the resource, with a protobuf 413")
+        void testOtelRequestOverSizeLimit() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var oversizedPayload = new byte[51 * 1024 * 1024]; // over the 50MB test cap
+            var expectedError = Status.newBuilder()
+                    .setMessage("Request body exceeds the maximum allowed size of 52428800 bytes")
+                    .build();
+
+            // The default client streams chunked, with no Content-Length, which bypasses RequestSizeLimitFilter. A
+            // buffered client sends Content-Length, and Expect: 100-continue lets the server reject before the body.
+            var config = new ClientConfig();
+            config.connectorProvider(new GrizzlyConnectorProvider());
+            config.property(ClientProperties.REQUEST_ENTITY_PROCESSING, RequestEntityProcessing.BUFFERED);
+            config.property(ClientProperties.EXPECT_100_CONTINUE, true);
+
+            try (var bufferedClient = ClientBuilder.newClient(config);
+                    var actualResponse = bufferedClient.target(URL_TEMPLATE.formatted(baseURI))
+                            .request("application/x-protobuf")
+                            .header(HttpHeaders.AUTHORIZATION, okApikey)
+                            .header(WORKSPACE_HEADER, workspaceName)
+                            .post(Entity.entity(oversizedPayload, "application/x-protobuf"))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_REQUEST_TOO_LONG);
+                assertThat(actualResponse.getMediaType().toString()).isEqualTo("application/x-protobuf");
+                assertThat(parseStatus(actualResponse)).isEqualTo(expectedError);
+            }
         }
     }
 
@@ -331,8 +395,14 @@ class OpenTelemetryResourceTest {
 
                 if (isLimitReached) {
                     assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_PAYMENT_REQUIRED);
-                    assertThat(response.readEntity(ErrorMessage.class))
-                            .isEqualTo(new ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED, ERR_USAGE_LIMIT_EXCEEDED));
+                    if (MediaType.APPLICATION_JSON.equals(mediaType)) {
+                        assertThat(response.readEntity(ErrorMessage.class))
+                                .isEqualTo(new ErrorMessage(HttpStatus.SC_PAYMENT_REQUIRED, ERR_USAGE_LIMIT_EXCEEDED));
+                    } else {
+                        assertThat(response.getMediaType().toString()).isEqualTo("application/x-protobuf");
+                        assertThat(parseStatus(response))
+                                .isEqualTo(Status.newBuilder().setMessage(ERR_USAGE_LIMIT_EXCEEDED).build());
+                    }
                     return;
                 }
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
@@ -431,10 +501,14 @@ class OpenTelemetryResourceTest {
             var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
             var expectedOpikParentSpanId = OpenTelemetryMapper.convertOtelIdToUUIDv7(parentSpanId, minTimestampMs);
 
+            var expectedError = errorMessage == null
+                    ? null
+                    : Status.newBuilder().setMessage(errorMessage.getMessage()).build();
+
             // send batch with the half the spans
-            sendProtobufTraces(otelSpansBatch1, projectName, workspaceName, apiKey, expected, errorMessage);
+            sendProtobufTraces(otelSpansBatch1, projectName, workspaceName, apiKey, expected, expectedError);
             // send another
-            sendProtobufTraces(otelSpansBatch2, projectName, workspaceName, apiKey, expected, errorMessage);
+            sendProtobufTraces(otelSpansBatch2, projectName, workspaceName, apiKey, expected, expectedError);
 
             if (expected) {
                 // the otel span batch should have created a trace with this expect traceId. Check it.
@@ -517,13 +591,13 @@ class OpenTelemetryResourceTest {
         }
 
         void sendProtobufTraces(List<Span> otelSpans, String projectName, String workspaceName, String apiKey,
-                boolean expected, ErrorMessage errorMessage) {
+                boolean expected, Status expectedError) {
             sendProtobufTraces(otelSpans, projectName, workspaceName, apiKey,
-                    expected ? HttpStatus.SC_OK : HttpStatus.SC_UNAUTHORIZED, errorMessage);
+                    expected ? HttpStatus.SC_OK : HttpStatus.SC_UNAUTHORIZED, expectedError);
         }
 
         void sendProtobufTraces(List<Span> otelSpans, String projectName, String workspaceName, String apiKey,
-                int expectedStatus, ErrorMessage expectedError) {
+                int expectedStatus, Status expectedError) {
 
             var protoBuilder = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
@@ -534,7 +608,7 @@ class OpenTelemetryResourceTest {
             byte[] requestProtobufBytes = protoBuilder.toByteArray();
             var payload = Entity.entity(requestProtobufBytes, "application/x-protobuf");
 
-            sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expectedStatus,
+            otelResourceClient.exportProtobufTraces(payload, projectName, workspaceName, apiKey, expectedStatus,
                     expectedError);
         }
 
@@ -701,6 +775,70 @@ class OpenTelemetryResourceTest {
                     .as("cost stored for model %s under provider %s", model, expectedProvider)
                     .isNotNull()
                     .isGreaterThan(BigDecimal.ZERO);
+        }
+
+        static Stream<Arguments> testReportedCostWithCurrencyIsAcceptedAndStored() {
+            return Stream.of(
+                    arguments("cost + currency", "gen_ai.usage.cost", false),
+                    arguments("amount + currency + source", "gen_ai.usage.cost.amount", true));
+        }
+
+        @ParameterizedTest(name = "reported cost via {0} is accepted, stored and not replaced")
+        @MethodSource
+        @DisplayName("test reported OTel cost with currency is accepted, stored in metadata and not replaced")
+        void testReportedCostWithCurrencyIsAcceptedAndStored(String testName, String costAttribute,
+                boolean withSource) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var currency = RandomStringUtils.secure().nextAlphabetic(3).toUpperCase();
+            var source = RandomStringUtils.secure().nextAlphabetic(10);
+            var inputTokens = RandomUtils.secure().randomInt(100, 10_000);
+            var outputTokens = RandomUtils.secure().randomInt(100, 10_000);
+            // Far above the computed price of any of these token counts, so a replaced cost cannot match.
+            var reportedCost = BigDecimal.valueOf(RandomUtils.secure().randomLong(1_000_000, 10_000_000), 6);
+
+            var otelSpanBuilder = Span.newBuilder()
+                    .setName("llm call")
+                    .setTraceId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(stringAttribute("gen_ai.system", "openai"))
+                    .addAttributes(stringAttribute("gen_ai.request.model", "gpt-4o"))
+                    .addAttributes(intAttribute("gen_ai.usage.input_tokens", inputTokens))
+                    .addAttributes(intAttribute("gen_ai.usage.output_tokens", outputTokens))
+                    .addAttributes(KeyValue.newBuilder().setKey(costAttribute)
+                            .setValue(AnyValue.newBuilder().setDoubleValue(reportedCost.doubleValue())).build())
+                    .addAttributes(stringAttribute("gen_ai.usage.cost.currency", currency));
+            var expectedMetadata = new java.util.LinkedHashMap<String, String>();
+            expectedMetadata.put("provider", "openai");
+            expectedMetadata.put("gen_ai.usage.cost.currency", currency);
+            if (withSource) {
+                otelSpanBuilder.addAttributes(stringAttribute("gen_ai.usage.cost.source", source));
+                expectedMetadata.put("gen_ai.usage.cost.source", source);
+            }
+            var otelSpan = otelSpanBuilder.build();
+
+            sendProtobufTraces(List.of(otelSpan), "Test Project", workspaceName, okApikey, true, null);
+
+            var opikTraceId = opikTraceIdOf(otelSpan);
+            var expectedSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, null).toBuilder()
+                    .usage(Map.of("prompt_tokens", inputTokens, "completion_tokens", outputTokens,
+                            "total_tokens", inputTokens + outputTokens))
+                    .metadata(JsonUtils.getMapper().valueToTree(expectedMetadata))
+                    .environment("")
+                    .build();
+
+            var spans = spanResourceClient.getByTraceIdAndProject(opikTraceId, "Test Project", workspaceName,
+                    okApikey);
+            assertThat(spans.content()).hasSize(1);
+            var persistedSpan = spans.content().getFirst();
+            assertThat(persistedSpan)
+                    .usingRecursiveComparison()
+                    .ignoringFields(SpanAssertions.IGNORED_FIELDS)
+                    .isEqualTo(expectedSpan);
+            assertThat(persistedSpan.totalEstimatedCost()).isEqualByComparingTo(reportedCost);
         }
 
         private KeyValue stringAttribute(String key, String value) {
@@ -1637,6 +1775,57 @@ class OpenTelemetryResourceTest {
             topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
         }
 
+        private static final String PROJECT_MISMATCH_ERROR = "Project name and workspace name do not match the existing trace";
+
+        @ParameterizedTest(name = "an error answering a protobuf request accepting {0} is a protobuf google.rpc.Status")
+        @ValueSource(strings = {"application/x-protobuf", MediaType.WILDCARD})
+        void errorAnsweringProtobufRequestIsProtobufStatus(String accept) throws InvalidProtocolBufferException {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var otelSpans = rootAndChild();
+            var expectedStatus = Status.newBuilder()
+                    .setMessage(PROJECT_MISMATCH_ERROR)
+                    .build();
+
+            try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, accept,
+                    Entity.entity(exportRequest(otelSpans).toByteArray(), "application/x-protobuf"))) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.getMediaType().toString()).isEqualTo("application/x-protobuf");
+                assertThat(Status.parseFrom(actualResponse.readEntity(byte[].class))).isEqualTo(expectedStatus);
+            }
+        }
+
+        @Test
+        @DisplayName("an error answering a JSON request accepting any type keeps its JSON body")
+        void errorAnsweringJsonRequestKeepsJsonBody() throws InvalidProtocolBufferException {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            var otelSpans = rootAndChild();
+            var expectedError = JsonUtils.valueToTree(
+                    Map.of("errors", List.of(PROJECT_MISMATCH_ERROR)));
+
+            try (var actualResponse = sendTraceToTwoProjects(otelSpans, workspaceName, MediaType.WILDCARD,
+                    Entity.json(JsonFormat.printer().print(exportRequest(otelSpans))))) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(actualResponse.getMediaType().toString()).isNotEqualTo("application/x-protobuf");
+                assertThat(JsonUtils.getJsonNodeFromString(actualResponse.readEntity(String.class)))
+                        .isEqualTo(expectedError);
+            }
+        }
+
+        private Response sendTraceToTwoProjects(List<Span> otelSpans, String workspaceName, String accept,
+                Entity<?> secondPayload) {
+            sendProtobufTraces(otelSpans, "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32)),
+                    workspaceName, okApikey, HttpStatus.SC_OK, null);
+            return client.target(URL_TEMPLATE.formatted(baseURI))
+                    .request(accept)
+                    .header(HttpHeaders.AUTHORIZATION, okApikey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .header(RequestContext.PROJECT_NAME,
+                            "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32)))
+                    .post(secondPayload);
+        }
+
         @ParameterizedTest(name = "a later batch with {0} top-level spans of an existing trace stores its spans")
         @ValueSource(ints = {1, 2})
         void laterBatchWithTopLevelSpansOfExistingTraceStoresSpans(int laterTopLevelSpans) {
@@ -1690,7 +1879,9 @@ class OpenTelemetryResourceTest {
                     .build();
             var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'"
                     .formatted(Instant.ofEpochMilli(instant.toEpochMilli()), Duration.ofHours(24), reason.getValue());
-            var expectedEntity = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var expectedEntity = Status.newBuilder()
+                    .setMessage("Invalid UUID for id: %s".formatted(expectedDetails))
+                    .build();
 
             sendProtobufTraces(
                     List.of(otelSpan), projectName, TEST_WORKSPACE, API_KEY, HttpStatus.SC_BAD_REQUEST, expectedEntity);

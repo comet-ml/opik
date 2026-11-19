@@ -27,6 +27,7 @@ public class IntentMerger {
         var first = new HashMap<String, Integer>();
         var counts = new HashMap<String, Integer>();
         for (int i = 0; i < texts.length; i++) {
+            Preconditions.checkArgument(texts[i] != null, "texts must not hold null, index '%s'", i);
             first.putIfAbsent(texts[i], i);
             counts.merge(texts[i], 1, Integer::sum);
         }
