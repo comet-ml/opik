@@ -10,12 +10,11 @@ import java.util.Map;
  * Body of the synchronous {@code POST /v1/decide}: the text the model reads ({@code state}) and at most
  * {@value #MAX_QUESTIONS} questions about it, keyed by ids the response echoes back. {@code orgId} is the Opik
  * workspace id, the service's tenant key; the service's optional {@code workspace_id} is left out, so the two can't
- * disagree. Callers leave {@code request_id} null: the client sets one per call.
+ * disagree. {@link InferenceClient#decide} adds a {@code request_id} per call to the body it sends.
  */
 @Builder(toBuilder = true)
 public record DecideRequest(
         @NonNull String orgId,
-        String requestId,
         @NonNull JsonNode state,
         @NonNull Map<String, Question> questions,
         @NonNull String lane,

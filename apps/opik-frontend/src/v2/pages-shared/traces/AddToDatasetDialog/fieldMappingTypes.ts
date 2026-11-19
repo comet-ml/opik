@@ -1,6 +1,6 @@
 import { EnrichmentOptions } from "./useAddToDatasetForm";
 
-export type MappingRowKind = "fixed" | "custom" | "managed";
+export type MappingRowKind = "fixed" | "existing" | "custom" | "managed";
 
 export type MappingRow = {
   id: string;
@@ -17,8 +17,6 @@ export type QuickAddChip = {
   label: string;
   tracesOnly?: boolean;
 };
-
-export const MAX_FIELD_NAME_LENGTH = 150;
 
 export const FIXED_MAPPING_FIELDS: Array<{ key: string; defaultPath: string }> =
   [

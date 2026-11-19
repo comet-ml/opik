@@ -48,7 +48,7 @@ import {
   injectColumnCallback,
   migrateSelectedColumns,
 } from "@/lib/table";
-import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DatasetItemsEmptyContent from "@/v2/pages-shared/datasets/DatasetItemsTab/DatasetItemsEmptyContent";
 import {
   buildDatasetFilterColumns,
   mapDynamicColumnTypesToColumnType,
@@ -59,6 +59,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import { useColumnsWithDraftKeys } from "./hooks/useColumnsWithDraftKeys";
 import { useRowSelectionChange } from "./hooks/useRowSelectionChange";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
@@ -71,6 +72,8 @@ import { COLUMN_ID_ID } from "@/types/shared";
 import { DynamicColumn } from "@/types/shared";
 
 const getRowId = (d: DatasetItem) => d.id;
+
+const EMPTY_COLUMNS: DatasetItemColumn[] = [];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
@@ -102,13 +105,7 @@ export interface AddPanelRenderProps {
   open: boolean;
   onClose: () => void;
   columns: DatasetItemColumn[];
-}
-
-export interface AddDialogRenderProps {
-  key: number;
-  datasetId: string;
-  open: boolean;
-  setOpen: (open: boolean) => void;
+  isColumnsLoading?: boolean;
 }
 
 export interface ExpansionDialogRenderProps {
@@ -240,10 +237,15 @@ function DatasetItemsTab({
 
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
 
+  const columnsWithDraftKeys = useColumnsWithDraftKeys(
+    data?.columns ?? EMPTY_COLUMNS,
+  );
   const datasetColumns = useMemo(
     () =>
-      (data?.columns ?? []).sort((c1, c2) => c1.name.localeCompare(c2.name)),
-    [data?.columns],
+      [...columnsWithDraftKeys].sort((c1, c2) =>
+        c1.name.localeCompare(c2.name),
+      ),
+    [columnsWithDraftKeys],
   );
 
   const { refetch: refetchExportData } = useDatasetItemsList(
@@ -640,24 +642,12 @@ function DatasetItemsTab({
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          <DataTableEmptyContent
+          <DatasetItemsEmptyContent
             title={noDataText}
-            description={
-              isDraftMode && deletedIds.size > 0
-                ? ""
-                : `Add ${itemName}s to run evaluations and measure performance.`
-            }
-          >
-            {!(isDraftMode && deletedIds.size > 0) && (
-              <button
-                onClick={onAddItem}
-                className="comet-body-s underline underline-offset-4 hover:text-primary"
-                data-testid="dataset-items-empty-add-button"
-              >
-                Add new {itemName}
-              </button>
-            )}
-          </DataTableEmptyContent>
+            itemName={itemName}
+            hasDeletedItemsInDraft={isDraftMode && deletedIds.size > 0}
+            onAddItem={onAddItem}
+          />
         }
       />
       <div className="flex justify-end py-4">

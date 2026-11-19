@@ -2,6 +2,7 @@ package com.comet.opik.domain.ailabels;
 
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.JsonRowValues;
+import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
@@ -53,7 +54,7 @@ public class AiLabelsDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
-    private final @NonNull AiLabelTableDeletes deletes;
+    private final @NonNull TraceKeyedTableDeletes deletes;
 
     public Mono<Long> insert(List<AiLabel> rows) {
         if (CollectionUtils.isEmpty(rows)) {
@@ -99,16 +100,16 @@ public class AiLabelsDAO {
     }
 
     public Mono<Long> deleteForRetention(List<String> workspaceIds, UUID cutoffId, UUID lowerBound) {
-        return deletes.deleteForRetention(TABLE, workspaceIds, cutoffId, lowerBound);
+        return deletes.deleteForRetention(TABLE, "ai-labels", workspaceIds, cutoffId, lowerBound);
     }
 
     public Mono<Long> deleteForRetentionBounded(Map<String, UUID> workspaceMinIds, UUID cutoffId, UUID lowerBound) {
-        return deletes.deleteForRetentionBounded(TABLE, workspaceMinIds, cutoffId, lowerBound);
+        return deletes.deleteForRetentionBounded(TABLE, "ai-labels", workspaceMinIds, cutoffId, lowerBound);
     }
 
     /** The trace-delete cascade; workspace from the reactive context. */
     public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
-        return deletes.deleteByTraceIds(TABLE, traceIds, projectId);
+        return deletes.deleteByTraceIds(TABLE, "ai-labels", traceIds, projectId);
     }
 
     @SuppressWarnings("unchecked")

@@ -63,17 +63,3 @@ def force_random(
         sample_value=sample_value,
         choice_value=choice_value,
     )
-
-
-def patch_get_synonym(monkeypatch: pytest.MonkeyPatch, *, return_value: str) -> None:
-    def fake_get_synonym(**_kwargs: Any) -> str:
-        return return_value
-
-    monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}._get_synonym", fake_get_synonym)
-
-
-def patch_modify_phrase(monkeypatch: pytest.MonkeyPatch, *, return_value: str) -> None:
-    def fake_modify_phrase(**_kwargs: Any) -> str:
-        return return_value
-
-    monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}._modify_phrase", fake_modify_phrase)

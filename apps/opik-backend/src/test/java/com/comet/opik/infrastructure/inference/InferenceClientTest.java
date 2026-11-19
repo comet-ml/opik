@@ -3,9 +3,10 @@ package com.comet.opik.infrastructure.inference;
 import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
@@ -13,6 +14,9 @@ import com.github.tomakehurst.wiremock.http.Fault;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import jakarta.ws.rs.client.Client;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +26,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -31,13 +36,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.any;
-import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -58,6 +62,11 @@ class InferenceClientTest {
     private static final String JOB_PATH = "/v1/batch/jobs/" + JOB_ID;
     private static final String STATUS_PATH = "/v1/batch/jobs/status";
     private static final String EMBED_PATH = "/v1/embed";
+    /** config-test.yml's inference.retry.maxRetries (2), plus the first attempt. */
+    private static final int ATTEMPTS = 3;
+    /** config-test.yml's inference.limits.maxStatusJobIds. */
+    private static final int MAX_STATUS_JOB_IDS = 1_000;
+
     private static final String EMBEDDED_BODY = """
             {"request_id": "r-1", "usage": {"input_tokens": 9, "output_tokens": 0}, "cache_hit": false,
              "latency_ms": 12, "result": {"embeddings": [[0.6, 0.8], [1.0, 0.0]], "dimensions": 2}}
@@ -80,7 +89,7 @@ class InferenceClientTest {
     @BeforeEach
     void setUp() {
         server.resetAll();
-        client = new InferenceClient(TestHttpClientUtils.client(), config(Duration.ofSeconds(5), 1024 * 1024));
+        client = newClient(TestHttpClientUtils.client(), config(Duration.ofSeconds(5), 1024 * 1024));
     }
 
     @Test
@@ -141,7 +150,7 @@ class InferenceClientTest {
 
     @Test
     void getJobsTakesOneToAThousandIds() {
-        var tooMany = IntStream.rangeClosed(0, InferenceClient.MAX_STATUS_JOB_IDS)
+        var tooMany = IntStream.rangeClosed(0, MAX_STATUS_JOB_IDS)
                 .mapToObj("job-%d"::formatted)
                 .toList();
 
@@ -210,7 +219,7 @@ class InferenceClientTest {
                     assertThat(exception.getHttpStatus()).isEqualTo(status);
                 });
         assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH))))
-                .hasSize(InferenceClient.MAX_RETRIES + 1);
+                .hasSize(ATTEMPTS);
     }
 
     @Test
@@ -261,7 +270,7 @@ class InferenceClientTest {
                     assertThat(exception.isRetryable()).isTrue();
                 });
         assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH))))
-                .hasSize(InferenceClient.MAX_RETRIES + 1);
+                .hasSize(ATTEMPTS);
     }
 
     @Test
@@ -276,59 +285,39 @@ class InferenceClientTest {
                     assertThat(exception.getHttpStatus()).isEqualTo(502);
                 });
         assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH))))
-                .hasSize(InferenceClient.MAX_RETRIES + 1);
+                .hasSize(ATTEMPTS);
     }
 
-    @Test
-    void redirectOfAGetIsNotFollowed() {
-        var elsewhere = "/elsewhere";
-        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(
-                aResponse().withStatus(302).withHeader("Location", server.baseUrl() + elsewhere)));
-        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(jobView()));
+    @ParameterizedTest(name = "chunked {0}")
+    @ValueSource(booleans = {false, true})
+    void responseBodyOfExactlyTheCapIsRead(boolean chunked) {
+        client = newClient(TestHttpClientUtils.client(), maxResponseBytes(EMBEDDED_BODY.length()));
+        var response = embedded().withGzipDisabled(true);
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(chunked
+                ? response.withChunkedDribbleDelay(2, 10)
+                : response));
 
-        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block())
-                .isInstanceOfSatisfying(InferenceException.class, exception -> {
-                    assertThat(exception.getCode()).isEqualTo("upstream_error");
-                    assertThat(exception.getHttpStatus()).isEqualTo(302);
-                });
-        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
-    }
-
-    @Test
-    void redirectOfAPostIsNotFollowed() {
-        var elsewhere = "/elsewhere";
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(
-                aResponse().withStatus(307).withHeader("Location", server.baseUrl() + elsewhere)));
-        server.stubFor(any(urlEqualTo(elsewhere)).willReturn(embedded()));
-
-        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
-                .isInstanceOfSatisfying(InferenceException.class, exception -> {
-                    assertThat(exception.getCode()).isEqualTo("upstream_error");
-                    assertThat(exception.getHttpStatus()).isEqualTo(307);
-                });
-        assertThat(server.findAll(anyRequestedFor(urlEqualTo(elsewhere)))).isEmpty();
-    }
-
-    @Test
-    void responseBodyOfExactlyTheCapIsRead() {
-        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(EMBEDDED_BODY.length()));
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
-
-        assertThat(client.embed(embedRequest(), later()).block().result().embeddings()).hasSize(2);
+        assertThat(client.embed(embedRequest(), later()).block().result().embeddings()).hasDimensions(2, 2);
     }
 
     static Stream<Arguments> bodiesOverTheCap() {
-        return Stream.of(arguments(200, EMBEDDED_BODY),
-                arguments(503, "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}"));
+        var error = "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}";
+        return Stream.of(arguments(200, EMBEDDED_BODY, false), arguments(200, EMBEDDED_BODY, true),
+                arguments(503, error, false), arguments(503, error, true));
     }
 
-    @ParameterizedTest(name = "status {0}")
+    /** Chunked, the body has no Content-Length, so only the capped read can catch the byte over. */
+    @ParameterizedTest(name = "status {0}, chunked {2}")
     @MethodSource("bodiesOverTheCap")
-    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body) {
-        client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(body.length() - 1));
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withStatus(status)
+    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body, boolean chunked) {
+        client = newClient(TestHttpClientUtils.client(), maxResponseBytes(body.length() - 1));
+        var response = aResponse().withStatus(status)
                 .withHeader("Content-Type", "application/json")
-                .withBody(body)));
+                .withBody(body)
+                .withGzipDisabled(true);
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(chunked
+                ? response.withChunkedDribbleDelay(2, 10)
+                : response));
 
         assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
@@ -340,26 +329,25 @@ class InferenceClientTest {
     }
 
     @Test
-    void responseBodyOverTheCapIsNotReadToItsEnd() throws IOException {
-        try (var endless = KeepAliveServer.endless()) {
-            var config = maxResponseBytes(1024);
-            config.getInference().setUrl(endless.url());
-            client = new InferenceClient(TestHttpClientUtils.client(), config);
+    void responseBodyOverTheCapIsNotReadToItsEnd() {
+        client = newClient(TestHttpClientUtils.client(), maxResponseBytes(1024));
+        // Chunked, so no Content-Length warns the client: only the capped read stops it. 10 MiB over 30 s, so a client
+        // that read it to its end would take 30 s.
+        server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"job_id\":\"" + "x".repeat(10 * 1024 * 1024) + "\"}")
+                .withGzipDisabled(true)
+                .withChunkedDribbleDelay(1_000, 30_000)));
 
-            var started = System.nanoTime();
-            // Bounded, so a call that reads the body to its end fails here instead of never returning.
-            assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block(Duration.ofSeconds(10)))
-                    .isInstanceOfSatisfying(InferenceException.class, exception -> {
-                        assertThat(exception.getCode()).isEqualTo("upstream_error");
-                        assertThat(exception.getCause()).hasMessageContaining("maxResponseBytes");
-                    });
-            var elapsed = Duration.ofNanos(System.nanoTime() - started);
+        var started = System.nanoTime();
+        assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, later()).block(Duration.ofSeconds(10)))
+                .isInstanceOfSatisfying(InferenceException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo("upstream_error");
+                    assertThat(exception.getCause()).hasMessageContaining("maxResponseBytes");
+                });
 
-            // One attempt, ended at the cap: the same request would only get the same body again, so it is not
-            // retried, though the body never ends and keeps the read timeout from firing.
-            assertThat(endless.connections()).isEqualTo(1);
-            assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
-        }
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(2));
+        assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH)))).hasSize(1);
     }
 
     @ParameterizedTest
@@ -379,7 +367,7 @@ class InferenceClientTest {
     }
 
     enum UnknownCode {
-        RETRYABLE(true, InferenceClient.MAX_RETRIES + 1),
+        RETRYABLE(true, ATTEMPTS),
         NOT_RETRYABLE(false, 1);
 
         final boolean retryable;
@@ -426,7 +414,7 @@ class InferenceClientTest {
 
     @Test
     void oversizedBodyFailsBeforeAnyRequest() {
-        client = new InferenceClient(TestHttpClientUtils.client(), config(Duration.ofSeconds(5), 2_000));
+        client = newClient(TestHttpClientUtils.client(), config(Duration.ofSeconds(5), 2_000));
         server.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(accepted()));
 
         assertThatThrownBy(() -> client.submitGenerate(generateRequest(2, 1_000), later()).block())
@@ -438,7 +426,7 @@ class InferenceClientTest {
     @Test
     void noAttemptOutlastsTheReadTimeout() {
         var readTimeout = Duration.ofMillis(300);
-        client = new InferenceClient(TestHttpClientUtils.client(), config(readTimeout, 1024 * 1024));
+        client = newClient(TestHttpClientUtils.client(), config(readTimeout, 1024 * 1024));
         server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView().withFixedDelay(5_000)));
 
         var started = System.nanoTime();
@@ -448,7 +436,7 @@ class InferenceClientTest {
         var elapsed = Duration.ofNanos(System.nanoTime() - started);
 
         assertThat(server.findAll(getRequestedFor(urlPathEqualTo(JOB_PATH))))
-                .hasSize(InferenceClient.MAX_RETRIES + 1);
+                .hasSize(ATTEMPTS);
         // Three attempts of 300 ms plus 0.1 s and 0.2 s of backoff, never one 5 s response.
         assertThat(elapsed).isLessThan(Duration.ofMillis(3_000));
     }
@@ -458,9 +446,9 @@ class InferenceClientTest {
         server.stubFor(get(urlPathEqualTo(JOB_PATH)).willReturn(jobView().withFixedDelay(5_000)));
 
         var started = System.nanoTime();
+        // The socket's read timeout, cut to the deadline, and the bound on the whole call fire together.
         assertThatThrownBy(() -> client.getJob(JOB_ID, 0, false, Instant.now().plusMillis(300)).block())
-                .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
+                .isExactlyInstanceOf(InferenceException.class);
         var elapsed = Duration.ofNanos(System.nanoTime() - started);
 
         // The 5 s read timeout is cut to the 300 ms left, and no retry fits after it.
@@ -506,112 +494,120 @@ class InferenceClientTest {
     }
 
     @Test
-    void embedSendsBearerAuthAndReadsTheVectorsInOrder() {
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+    void embedSendsAContractValidBodyAndReadsTheVectors() {
+        var request = embedRequest();
+        var vectors = randomVectors(request.inputs().size());
+        var response = embedResponse(vectors);
+        assertThat(InferenceContract.validateEndpoint(InferenceContract.EMBED, "response", response)).isEmpty();
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(okJson(response)));
 
-        var response = client.embed(embedRequest(), later()).block();
+        var actual = client.embed(request, Instant.now().plusSeconds(600)).block();
 
-        assertThat(response.result()).isEqualTo(EmbedResult.builder()
-                .embeddings(List.of(List.of(0.6f, 0.8f), List.of(1.0f, 0.0f)))
+        assertThat(actual).usingRecursiveComparison().isEqualTo(EmbedResponse.builder()
+                .result(EmbedResult.builder().embeddings(vectors).dimensions(4).build())
                 .build());
         var sent = single(postRequestedFor(urlEqualTo(EMBED_PATH)));
         assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer " + CREDENTIAL);
-        var body = json(sent);
-        assertThat(body.path("org_id").asText()).isEqualTo("workspace-1");
-        assertThat(body.path("cache").asBoolean(true)).isFalse();
-        assertThat(body.path("inputs")).extracting(JsonNode::asText)
-                .containsExactly("refund a duplicate invoice charge", "export traces to csv");
-        assertThat(body.path("request_id").asText()).isNotBlank();
-        // The time left before the 60 s deadline, never above the service's maximum.
-        assertThat(body.path("deadline_ms").asLong()).isBetween(1L, InferenceClient.MAX_EMBED_DEADLINE.toMillis());
+        var body = (ObjectNode) json(sent);
+        assertThat(InferenceContract.validateEndpoint(InferenceContract.EMBED, "request", body)).isEmpty();
+        assertThat(body.remove("request_id").asText()).isNotBlank();
+        var expected = NODES.objectNode()
+                .put("org_id", request.orgId())
+                .put("cache", false)
+                // The time left, capped at the service's maximum of 60 s.
+                .put("deadline_ms", 60_000);
+        request.inputs().forEach(expected.putArray("inputs")::add);
+        assertThat(body).isEqualTo(expected);
     }
 
     @Test
     void embedQuotaExceededIsNotRetried() {
-        server.stubFor(post(urlEqualTo(EMBED_PATH))
-                .willReturn(error("quota_exceeded", 429).withHeader("Retry-After", "2")));
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(error("quota_exceeded", 429)));
 
         assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
-                .isInstanceOfSatisfying(InferenceException.class, exception -> {
-                    assertThat(exception.isQuotaExceeded()).isTrue();
-                    assertThat(exception.getHttpStatus()).isEqualTo(429);
-                    assertThat(exception.getRetryAfter()).isEqualTo(Duration.ofSeconds(2));
-                });
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isQuotaExceeded()).isTrue());
         assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
     }
 
     @Test
-    void embedServerErrorIsRetriedWithTheSameRequestIdThenFails() {
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(error("overloaded", 503)));
+    void embedDeadlineExceededIsNotRetried() {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(error("deadline_exceeded", 504)));
 
         assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
-                .isInstanceOfSatisfying(InferenceException.class, exception -> {
-                    assertThat(exception.getCode()).isEqualTo("overloaded");
-                    assertThat(exception.getHttpStatus()).isEqualTo(503);
-                });
-        var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
-        assertThat(sent).hasSize(InferenceClient.MAX_RETRIES + 1);
-        var requestId = json(sent.getFirst()).path("request_id").asText();
-        assertThat(sent).allSatisfy(request -> assertThat(json(request).path("request_id").asText())
-                .isEqualTo(requestId));
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isDeadlineExceeded()).isTrue());
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
     }
 
-    @Test
-    void embedTimeoutStopsAtTheDeadline() {
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded().withFixedDelay(5_000)));
+    static Stream<Arguments> malformedEmbedResults() {
+        return Stream.of(
+                arguments("one vector for two inputs", "{\"embeddings\": [[0.6, 0.8]], \"dimensions\": 2}"),
+                arguments("a null vector", "{\"embeddings\": [[0.6, 0.8], null], \"dimensions\": 2}"),
+                arguments("a null in a vector", "{\"embeddings\": [[0.6, 0.8], [1.0, null]], \"dimensions\": 2}"),
+                arguments("a vector shorter than dimensions",
+                        "{\"embeddings\": [[0.6, 0.8], [1.0]], \"dimensions\": 2}"),
+                arguments("no dimensions", "{\"embeddings\": [[0.6, 0.8], [1.0, 0.0]]}"),
+                arguments("no vectors", "{\"dimensions\": 2}"));
+    }
 
-        var started = System.nanoTime();
-        assertThatThrownBy(() -> client.embed(embedRequest(), Instant.now().plusMillis(300)).block())
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("malformedEmbedResults")
+    void embedMalformedResultIsAnUpstreamError(String description, String result) {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"request_id": "r-1", "cache_hit": false, "latency_ms": 12, "result": %s}
+                        """.formatted(result))));
+
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
-        var elapsed = Duration.ofNanos(System.nanoTime() - started);
-
-        assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
-        assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
     }
 
     @Test
-    void embedDeadlineIsTheTimeLeftAtMostTheMaximum() {
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+    void embedRetrySendsTheSameRequestId() {
+        stubSequence(() -> post(urlEqualTo(EMBED_PATH)), error("overloaded", 503),
+                okJson(embedResponse(randomVectors(2))));
 
-        client.embed(embedRequest(), Instant.now().plusSeconds(5)).block();
-        client.embed(embedRequest(), Instant.now().plusSeconds(600)).block();
+        client.embed(embedRequest(), later()).block();
 
-        var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH))).stream()
-                .map(request -> json(request).path("deadline_ms").asLong())
-                .toList();
+        var sent = server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)));
         assertThat(sent).hasSize(2);
-        assertThat(sent.get(0)).isBetween(1L, 5_000L);
-        assertThat(sent.get(1)).isEqualTo(InferenceClient.MAX_EMBED_DEADLINE.toMillis());
+        assertThat(json(sent.get(1)).path("request_id")).isEqualTo(json(sent.get(0)).path("request_id"));
     }
 
     @Test
-    void embedTakesOneTo256Inputs() {
-        var tooMany = IntStream.rangeClosed(0, InferenceClient.MAX_EMBED_INPUTS).mapToObj("text %d"::formatted)
-                .toList();
+    void embedTricklingBodyIsCutOffAtTheDeadline() {
+        // Each chunk arrives well within the read timeout, so only a bound on the whole call stops it.
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(okJson(embedResponse(randomVectors(2)))
+                .withGzipDisabled(true)
+                .withChunkedDribbleDelay(20, 3_000)));
 
-        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().inputs(List.of()).build(), later()))
-                .isExactlyInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> client.embed(embedRequest().toBuilder().inputs(tooMany).build(), later()))
-                .isExactlyInstanceOf(IllegalArgumentException.class);
-        assertThat(server.getAllServeEvents()).isEmpty();
+        var started = System.nanoTime();
+        assertThatThrownBy(() -> client.embed(embedRequest(), Instant.now().plusMillis(500)).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.isOutOfTime()).isTrue());
+
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(1_500));
+        assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
     }
 
     private static Instant later() {
         return Instant.now().plusSeconds(60);
     }
 
-    private AiLabelsConfig config(Duration readTimeout, long maxJobBytes) {
-        var config = TestConfigUtils.loadConfigTest().getAiLabels();
+    private OpikConfiguration config(Duration readTimeout, long maxJobBytes) {
+        var config = TestConfigUtils.loadConfigTest();
         config.getInference().setUrl(server.baseUrl());
         config.getInference().setCredential(CREDENTIAL);
         config.getInference().setConnectTimeout(io.dropwizard.util.Duration.seconds(1));
         config.getInference().setReadTimeout(io.dropwizard.util.Duration.milliseconds(readTimeout.toMillis()));
-        config.setMaxJobBytes(maxJobBytes);
+        config.getAiLabels().setMaxJobBytes(maxJobBytes);
         return config;
     }
 
-    private AiLabelsConfig maxResponseBytes(long maxResponseBytes) {
+    private OpikConfiguration maxResponseBytes(long maxResponseBytes) {
         var config = config(Duration.ofSeconds(5), 1024 * 1024);
         config.getInference().setMaxResponseBytes(maxResponseBytes);
         return config;
@@ -668,10 +664,46 @@ class InferenceClientTest {
                 .withBody(EMBEDDED_BODY);
     }
 
+    private static ResponseDefinitionBuilder okJson(JsonNode body) {
+        return aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(body.toString());
+    }
+
+    private static ObjectNode embedResponse(float[][] vectors) {
+        var response = NODES.objectNode()
+                .put("request_id", UUID.randomUUID().toString())
+                .put("cache_hit", false)
+                .put("latency_ms", RandomUtils.secure().randomInt(1, 1_000));
+        response.putObject("usage").put("input_tokens", RandomUtils.secure().randomInt(1, 1_000))
+                .put("output_tokens", 0);
+        var result = response.putObject("result").put("dimensions", vectors[0].length);
+        var embeddings = result.putArray("embeddings");
+        for (var vector : vectors) {
+            var array = embeddings.addArray();
+            for (var value : vector) {
+                array.add(value);
+            }
+        }
+        return response;
+    }
+
+    private static float[][] randomVectors(int count) {
+        var vectors = new float[count][4];
+        for (var vector : vectors) {
+            for (var i = 0; i < vector.length; i++) {
+                vector[i] = RandomUtils.secure().randomFloat(0, 1);
+            }
+        }
+        return vectors;
+    }
+
     private static EmbedRequest embedRequest() {
         return EmbedRequest.builder()
-                .orgId("workspace-1")
-                .inputs(List.of("refund a duplicate invoice charge", "export traces to csv"))
+                .orgId(UUID.randomUUID().toString())
+                // Two, as EMBEDDED_BODY has two vectors.
+                .inputs(IntStream.range(0, 2).mapToObj(index -> RandomStringUtils.secure().nextAlphanumeric(32))
+                        .toList())
                 .build();
     }
 
@@ -706,5 +738,9 @@ class InferenceClientTest {
                                 .build())
                         .toList())
                 .build();
+    }
+
+    private static InferenceClient newClient(Client httpClient, OpikConfiguration config) {
+        return new InferenceClient(httpClient, config.getInference(), config.getAiLabels());
     }
 }

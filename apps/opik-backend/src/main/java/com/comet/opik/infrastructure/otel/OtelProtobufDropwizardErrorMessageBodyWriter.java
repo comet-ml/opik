@@ -24,11 +24,13 @@ import java.lang.reflect.Type;
 @Produces("application/x-protobuf")
 public class OtelProtobufDropwizardErrorMessageBodyWriter implements MessageBodyWriter<ErrorMessage> {
 
+    static final Class<ErrorMessage> ENTITY_CLASS = ErrorMessage.class;
+
     private final Provider<HttpHeaders> requestHeaders;
 
     @Override
     public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        return ErrorMessage.class.isAssignableFrom(type)
+        return ENTITY_CLASS.isAssignableFrom(type)
                 && OtelProtobufErrorMessageBodyWriter.isProtobufRequest(requestHeaders.get());
     }
 
