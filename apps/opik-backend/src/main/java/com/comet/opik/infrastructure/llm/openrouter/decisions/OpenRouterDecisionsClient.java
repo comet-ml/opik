@@ -163,13 +163,14 @@ public class OpenRouterDecisionsClient implements DecisionsClient {
             throw new ProviderRequestRefusedException(OPENROUTER_DECISIONS_URL);
         }
         var path = StringUtils.stripEnd(uri.getRawPath(), "/");
-        // the scheme compared exactly, as for media URLs; Set.of refuses a null lookup
-        if (uri.getScheme() == null || !URL_SCHEMES.contains(uri.getScheme()) || uri.getHost() == null
+        // in any case, as the destination guard compares it; Set.of refuses a null lookup
+        var scheme = StringUtils.toRootLowerCase(uri.getScheme());
+        if (scheme == null || !URL_SCHEMES.contains(scheme) || uri.getHost() == null
                 || !StringUtils.endsWith(path, CHAT_API_SUFFIX)) {
             throw new ProviderRequestRefusedException(OPENROUTER_DECISIONS_URL);
         }
         // the host and port only: the HTTP client refuses userinfo, which the chat client doesn't send either
-        return "%s://%s%s%s%s".formatted(uri.getScheme(), uri.getHost(), uri.getPort() == -1 ? "" : ":" + uri.getPort(),
+        return "%s://%s%s%s%s".formatted(scheme, uri.getHost(), uri.getPort() == -1 ? "" : ":" + uri.getPort(),
                 StringUtils.removeEnd(path, CHAT_API_SUFFIX) + DECISIONS_API_SUFFIX,
                 uri.getRawQuery() != null ? "?" + uri.getRawQuery() : "");
     }

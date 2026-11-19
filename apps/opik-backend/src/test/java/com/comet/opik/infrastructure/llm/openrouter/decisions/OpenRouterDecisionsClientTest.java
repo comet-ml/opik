@@ -323,6 +323,7 @@ class OpenRouterDecisionsClientTest {
                 arguments(host + "/proxy/v1?x=/v1", "/proxy/alpha/decisions?x=/v1"),
                 arguments(host + "/proxy/v1#fragment", "/proxy/alpha/decisions"),
                 arguments(host.replace("://", "://user:secret@") + "/proxy/v1", "/proxy/alpha/decisions"),
+                arguments(host.replace("http://", "HTTP://") + "/proxy/v1", "/proxy/alpha/decisions"),
                 // no base URL: the configured openRouterUrl
                 arguments(null, PATH),
                 arguments("", PATH),
