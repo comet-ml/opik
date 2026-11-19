@@ -58,7 +58,7 @@ public class CandidateGrouper {
         }
         int n = window.size();
         int recentDenominator = Math.max(1, recentTotal);
-        var groups = GroupSummaries.summarize(texts, vectors, labels, result.centres(), d).stream()
+        var groups = GroupSummaries.summarize(merged, result.labels(), result.centres()).stream()
                 .map(group -> group.toBuilder()
                         .share((double) group.size() / n)
                         .recentShare((double) recentPerGroup[group.group()] / recentDenominator)

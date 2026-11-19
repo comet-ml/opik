@@ -9,8 +9,12 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
-import com.google.api.gax.rpc.ApiException;
-import com.google.api.gax.rpc.StatusCode;
+import com.google.api.client.http.HttpHeaders;
+import com.google.api.client.http.HttpResponseException;
+import com.google.genai.errors.ApiException;
+import com.google.genai.errors.ClientException;
+import com.google.genai.errors.GenAiIOException;
+import com.google.genai.errors.ServerException;
 import com.openai.errors.OpenAIServiceException;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -25,6 +29,7 @@ import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.exception.TimeoutException;
 import dev.langchain4j.exception.UnsupportedFeatureException;
+import dev.langchain4j.internal.ExceptionMapper;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -1087,90 +1092,71 @@ class ChatCompletionServiceTest {
         }
 
         /**
-         * VertexAI is one of two providers whose client raises no {@code HttpException} — the OpenAI Responses
-         * SDK is the other, covered below. The Google Cloud SDK throws GAX {@code ApiException}, which
-         * langchain4j also does not model as {@code NonRetriableException}, so a permanent Vertex failure was
-         * retried in-process AND redelivered by the subscriber. The status now comes from GAX's own
-         * transport-neutral translation, so it classifies like any other provider.
+         * The Vertex AI SDK raises its own {@code ApiException} carrying the status it was sent, which langchain4j
+         * wraps in the typed exception for that status. The wrapper alone would collapse every 5xx into a flat 500,
+         * so the status is read from the SDK's exception, as from an {@code HttpException}.
          */
-        @ParameterizedTest(name = "GAX {0} -> HTTP {1}, non-retryable")
-        @CsvSource({
-                "INVALID_ARGUMENT, 400",
-                "FAILED_PRECONDITION, 400",
-                "OUT_OF_RANGE, 400",
-                "UNAUTHENTICATED, 401",
-                "PERMISSION_DENIED, 403",
-                "NOT_FOUND, 404",
-        })
-        @DisplayName("A permanent VertexAI GAX failure is retired on the first delivery")
-        void scoreTrace__whenPermanentGaxStatus__thenNonRetryable(StatusCode.Code code, int expectedStatus) {
-            // Wrapped in RuntimeException because that is the shape VertexAiGeminiChatModel actually throws.
-            var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, false)), Optional.empty());
+        @ParameterizedTest(name = "Vertex AI {0} -> non-retryable")
+        @CsvSource({"400", "401", "403", "404", "422"})
+        @DisplayName("A permanent Vertex AI failure is retired on the first delivery")
+        void scoreTrace__whenPermanentVertexAiStatus__thenNonRetryable(int status) {
+            var thrown = whenScoreTraceFails(vertexAiFailure(status), Optional.empty());
 
-            assertNonRetryable(thrown, expectedStatus);
+            assertNonRetryable(thrown, status);
         }
 
-        @ParameterizedTest(name = "GAX {0} stays retryable as HTTP {1}")
-        @CsvSource({
-                "RESOURCE_EXHAUSTED, 429",
-                "DEADLINE_EXCEEDED, 504",
-                "UNAVAILABLE, 503",
-                "INTERNAL, 500",
-                "UNKNOWN, 500",
-        })
-        @DisplayName("A transient VertexAI GAX failure still honours maxRetries")
-        void scoreTrace__whenTransientGaxStatus__thenRetryable(StatusCode.Code code, int expectedStatus) {
-            var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, false)), Optional.empty());
+        @ParameterizedTest(name = "Vertex AI {0} -> retryable, status preserved")
+        @CsvSource({"408", "429", "500", "503", "504"})
+        @DisplayName("A transient Vertex AI failure keeps its status and stays retryable")
+        void scoreTrace__whenTransientVertexAiStatus__thenRetryable(int status) {
+            var thrown = whenScoreTraceFails(vertexAiFailure(status), Optional.empty());
 
-            assertRetryable(thrown, expectedStatus);
-        }
-
-        /**
-         * The safety valve. GAX's own {@code isRetryable()} can only ever prevent a drop, never cause one, so a code
-         * that would otherwise map to a permanent status stays retryable when GAX says it is worth retrying. Guards
-         * the cases where the gRPC-to-HTTP translation disagrees with retry semantics (ABORTED, CANCELLED).
-         */
-        @ParameterizedTest(name = "GAX {0} marked retryable stays retryable despite a permanent status")
-        @CsvSource({"INVALID_ARGUMENT", "PERMISSION_DENIED", "ABORTED", "CANCELLED"})
-        @DisplayName("GAX's own retryable verdict is never overridden into a drop")
-        void scoreTrace__whenGaxSaysRetryable__thenRetryable(StatusCode.Code code) {
-            var thrown = whenScoreTraceFails(new RuntimeException(gaxException(code, true)), Optional.empty());
-
-            assertRetryable(thrown);
-        }
-
-        /**
-         * Precedence is unchanged by the GAX addition: a real {@code HttpException} anywhere in the chain still wins
-         * over anything a typed exception implies. A 503 on the wire must not be collapsed into GAX's permanent 400.
-         */
-        @Test
-        @DisplayName("A wire HttpException still outranks a GAX status in the same chain")
-        void scoreTrace__whenHttpExceptionAndGaxInSameChain__thenHttpExceptionWins() {
-            var chain = new RuntimeException(
-                    gaxException(StatusCode.Code.INVALID_ARGUMENT, false, new HttpException(503, "upstream 503")));
-
-            var thrown = whenScoreTraceFails(chain, Optional.empty());
-
-            assertRetryable(thrown);
+            assertRetryable(thrown, status);
         }
 
         @Test
-        @DisplayName("A permanent GAX failure does not consume the in-process retry budget")
-        void scoreTrace__whenPermanentGaxStatus__thenNotRetriedInProcess() {
-            var thrown = scoreTraceWithBudget(2,
-                    new RuntimeException(gaxException(StatusCode.Code.INVALID_ARGUMENT, false)));
+        @DisplayName("A permanent Vertex AI failure does not consume the in-process retry budget")
+        void scoreTrace__whenPermanentVertexAiStatus__thenNotRetriedInProcess() {
+            var thrown = scoreTraceWithBudget(2, vertexAiFailure(400));
 
-            // GAX ApiException is not a NonRetriableException, so without the permanent-status check
-            // the retry loop would replay a call that can never succeed.
             assertNonRetryable(thrown, 400);
             verify(chatModel, times(1)).chat(any(ChatRequest.class));
         }
 
+        /**
+         * Google's token endpoint refusing the service-account key surfaces from the Vertex AI SDK as an I/O failure
+         * wrapping google-auth's {@code GoogleAuthException}, whose constructors are package-private, around the
+         * endpoint's {@code HttpResponseException}. Its status is what classifies it, not the I/O failure around it.
+         */
         @Test
-        @DisplayName("A transient GAX failure is still retried in-process")
-        void scoreTrace__whenTransientGaxStatus__thenStillRetriedInProcess() {
-            var thrown = scoreTraceWithBudget(2,
-                    new RuntimeException(gaxException(StatusCode.Code.UNAVAILABLE, false)));
+        @DisplayName("A Vertex AI key the token endpoint rejects is neither retried in-process nor redelivered")
+        void scoreTrace__whenVertexAiKeyRejected__thenNonRetryable() {
+            var rejection = new HttpResponseException.Builder(400, "Bad Request", new HttpHeaders())
+                    .setContent("{\"error\": \"invalid_grant\"}")
+                    .build();
+
+            var thrown = scoreTraceWithBudget(2, new GenAiIOException("Failed to refresh the credentials", rejection));
+
+            assertNonRetryable(thrown, 400);
+            verify(chatModel, times(1)).chat(any(ChatRequest.class));
+        }
+
+        @ParameterizedTest(name = "token endpoint {0} -> retryable, retried in-process")
+        @CsvSource({"408", "429", "500", "503", "504"})
+        @DisplayName("A transient Vertex AI token-endpoint failure keeps its status and is retried")
+        void scoreTrace__whenVertexAiTokenEndpointTransient__thenRetried(int status) {
+            var failure = new HttpResponseException.Builder(status, "STATUS", new HttpHeaders()).build();
+
+            var thrown = scoreTraceWithBudget(2, new GenAiIOException("Failed to refresh the credentials", failure));
+
+            assertRetryable(thrown, status);
+            verify(chatModel, times(3)).chat(any(ChatRequest.class));
+        }
+
+        @Test
+        @DisplayName("A transient Vertex AI failure is still retried in-process")
+        void scoreTrace__whenTransientVertexAiStatus__thenStillRetriedInProcess() {
+            var thrown = scoreTraceWithBudget(2, vertexAiFailure(503));
 
             assertRetryable(thrown);
             verify(chatModel, times(3)).chat(any(ChatRequest.class));
@@ -1207,28 +1193,10 @@ class ChatCompletionServiceTest {
         /**
          * Review finding. {@code findProviderHttpStatus} filtered to error statuses only once, on the winner,
          * so a non-error {@code HttpException} anywhere in the chain satisfied {@code findFirst}, suppressed
-         * the typed fallback, and was then discarded — leaving no status at all. For VertexAI and the OpenAI
-         * Responses SDK that fallback is the only source of status, so a permanent 400 silently became a
-         * retryable 500 and was replayed to exhaustion. The filter now runs at each stage.
+         * the typed fallback, and was then discarded — leaving no status at all. For the OpenAI Responses SDK
+         * that fallback is the only source of status, so a permanent 400 silently became a retryable 500 and
+         * was replayed to exhaustion. The filter now runs at each stage.
          */
-        @ParameterizedTest(name = "GAX {0} survives a non-error HttpException at {1} in the chain")
-        @CsvSource({
-                "INVALID_ARGUMENT, 302, 400",
-                "PERMISSION_DENIED, 302, 403",
-                "INVALID_ARGUMENT, 0, 400",
-        })
-        @DisplayName("A non-error status in the chain must not mask the real provider status")
-        void scoreTrace__whenNonErrorHttpExceptionPrecedesGaxStatus__thenRealStatusWins(
-                StatusCode.Code code, int noiseStatus, int expectedStatus) {
-            // The GAX exception carries the stray HttpException as its cause, so the chain is
-            // [ApiException, HttpException(noise)] -- the noise is found first by the HttpException pass.
-            var providerFailure = gaxException(code, false, new HttpException(noiseStatus, "not an error"));
-
-            var thrown = whenScoreTraceFails(new RuntimeException(providerFailure), Optional.empty());
-
-            assertNonRetryable(thrown, expectedStatus);
-        }
-
         @Test
         @DisplayName("A non-error status in the chain must not mask an OpenAI Responses status")
         void scoreTrace__whenNonErrorHttpExceptionPrecedesResponsesStatus__thenRealStatusWins() {
@@ -1278,23 +1246,21 @@ class ChatCompletionServiceTest {
             };
         }
 
-        private static ApiException gaxException(StatusCode.Code code, boolean retryable) {
-            return gaxException(code, retryable, new RuntimeException("vertex transport failure"));
+        /** What the Vertex AI chat model throws for {@code status}: the SDK's exception, mapped by langchain4j. */
+        private static RuntimeException vertexAiFailure(int status) {
+            var apiException = status >= 500
+                    ? new ServerException(status, "STATUS", "vertex ai failed with " + status)
+                    : new ClientException(status, "STATUS", "vertex ai failed with " + status);
+            return VertexAiExceptionMapper.INSTANCE.map(apiException);
         }
 
-        /** A transport-free {@link StatusCode}: gRPC and HTTP-JSON both reduce to the same neutral {@code Code}. */
-        private static ApiException gaxException(StatusCode.Code code, boolean retryable, Throwable cause) {
-            return new ApiException(cause, new StatusCode() {
-                @Override
-                public Code getCode() {
-                    return code;
-                }
+        /** The mapping langchain4j-google-genai applies, whose own mapper is package-private. */
+        private static final class VertexAiExceptionMapper extends ExceptionMapper.DefaultExceptionMapper {
+            private static final VertexAiExceptionMapper INSTANCE = new VertexAiExceptionMapper();
 
-                @Override
-                public Object getTransportCode() {
-                    return null;
-                }
-            }, retryable);
+            RuntimeException map(ApiException apiException) {
+                return mapHttpStatusCode(apiException, apiException.code());
+            }
         }
 
         /** Drives scoreTrace to failure and returns what it threw. */

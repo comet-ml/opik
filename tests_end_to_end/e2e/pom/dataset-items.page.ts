@@ -157,7 +157,7 @@ export class DatasetItemsPage {
       await row.waitFor({ state: 'visible' });
       await row.getByRole('cell').nth(1).click();
       await this.editItemPanel.waitFor({ state: 'visible' });
-      await this.editItemPanel.getByRole('region').first().waitFor({ state: 'visible' });
+      await this.editItemPanel.getByTestId('dataset-field-row').first().waitFor({ state: 'visible' });
     });
   }
 
@@ -168,10 +168,7 @@ export class DatasetItemsPage {
    */
   async editItemField(field: string, value: string): Promise<void> {
     return test.step(`Edit field "${field}"`, async () => {
-      await this.editItemPanel
-        .getByRole('region', { name: field })
-        .getByPlaceholder('Enter text for this field…')
-        .fill(value);
+      await this.fieldValue(this.editItemPanel, field).fill(value);
       await this.draftBadge().waitFor({ state: 'visible' });
     });
   }
@@ -288,13 +285,20 @@ export class DatasetItemsPage {
     });
   }
 
+  /**
+   * Each field is a "name → value" row; the value box is labelled "<name> value".
+   * Fields the dataset doesn't have yet (always the case for an empty dataset)
+   * are added with "Add field" and named first.
+   */
   async fillAddItemPanel(fields: Record<string, string>): Promise<void> {
     return test.step('Fill add-item panel', async () => {
-      for (const [column, value] of Object.entries(fields)) {
-        await this.addItemPanel
-          .getByRole('region', { name: column })
-          .getByPlaceholder('Enter text for this field…')
-          .fill(value);
+      for (const [name, value] of Object.entries(fields)) {
+        const valueBox = this.fieldValue(this.addItemPanel, name);
+        if ((await valueBox.count()) === 0) {
+          await this.addItemPanel.getByRole('button', { name: 'Add field', exact: true }).click();
+          await this.addItemPanel.getByLabel('Field name', { exact: true }).last().fill(name);
+        }
+        await valueBox.fill(value);
       }
     });
   }
@@ -302,7 +306,7 @@ export class DatasetItemsPage {
   /** Stages the new item as a draft; commitDraft() persists it. */
   async submitAddItemPanel(): Promise<void> {
     return test.step('Submit add-item panel (stage draft)', async () => {
-      await this.addItemPanel.getByRole('button', { name: 'Save changes' }).click();
+      await this.addItemPanel.getByRole('button', { name: 'Add record', exact: true }).click();
       await this.waitForPanelTransform('translateX(100%)');
       await this.draftBadge().waitFor({ state: 'visible' });
     });
@@ -346,26 +350,22 @@ export class DatasetItemsPage {
   }
 
   /**
-   * Empty-state Add takes a different FE path: opens a JSON-editor modal that
-   * commits directly (no draft staging) instead of the sliding side-panel.
+   * An empty dataset opens the same add panel as a populated one, starting with
+   * no fields. The record is staged as a draft like any other, so this also
+   * commits it as the dataset's first version.
    */
-  async addItemViaEmptyStateModal(fields: Record<string, unknown>): Promise<void> {
-    return test.step('Add item via empty-state modal', async () => {
-      const triggers = this.page
-        .getByTestId('dataset-header-add-button')
-        .or(this.page.getByTestId('dataset-items-empty-add-button'));
-      await triggers.first().click();
-      const modal = this.page.getByRole('dialog', { name: 'Add record' });
-      await modal.waitFor({ state: 'visible' });
-      const editor = modal.getByRole('textbox');
-      await editor.click();
-      await this.page.keyboard.press('ControlOrMeta+A');
-      await this.page.keyboard.press('Delete');
-      await this.page.keyboard.type(JSON.stringify(fields));
-      await modal.getByRole('button', { name: 'Add record' }).click();
-      await modal.waitFor({ state: 'hidden' });
+  async addFirstItem(fields: Record<string, string>): Promise<void> {
+    return test.step('Add the first item to an empty dataset', async () => {
+      await this.clickAddItem();
+      await this.fillAddItemPanel(fields);
+      await this.submitAddItemPanel();
+      await this.commitDraft();
       await this.itemsTableBody.locator('tr[data-row-id]').first().waitFor({ state: 'visible' });
     });
+  }
+
+  private fieldValue(panel: Locator, field: string): Locator {
+    return panel.getByLabel(`${field} value`, { exact: true });
   }
 
   get addItemPanel(): Locator {

@@ -44,6 +44,9 @@ export class PromptDetailPage {
    * spec can pin the page size without touching localStorage or driving the
    * rows-per-page menu — and without inheriting whatever size the last spec in
    * this worker happened to leave behind.
+   *
+   * `groups=[]` opens the tab ungrouped: it groups by Item source by default
+   * (OPIK-8654), and the row locators below rely on the flat list.
    */
   async gotoExperimentsTab(
     projectId: string,
@@ -52,7 +55,7 @@ export class PromptDetailPage {
   ): Promise<void> {
     return test.step(`open prompt ${promptId} Experiments tab`, async () => {
       const env = loadEnvConfig();
-      const query = new URLSearchParams({ tab: 'experiments' });
+      const query = new URLSearchParams({ tab: 'experiments', groups: '[]' });
       if (opts.size !== undefined) query.set('size', String(opts.size));
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
