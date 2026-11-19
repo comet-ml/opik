@@ -27,7 +27,7 @@ class TopicsAlgorithmFixtureTest {
     private static final int D = TopicsFixture.DIMENSIONS;
 
     private TopicsFixture fixture;
-    private IntentMerger.Merged merged;
+    private MergedIntents merged;
 
     @BeforeAll
     void beforeAll() {
@@ -73,11 +73,13 @@ class TopicsAlgorithmFixtureTest {
         var inertias = new ArrayList<Double>();
         var aris = new ArrayList<Double>();
         for (long seed = 0; seed < 10; seed++) {
-            var result = KMeans.fit(merged.vectors(), weights, D, k, seed);
+            var result = KMeans.fit(merged.vectors(), weights, D, k, seed,
+                    KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS, KMeansTopicAlgorithm.KMEANS_RESTARTS);
             inertias.add(result.inertia());
             aris.add(adjustedRand(result.labels(), reference));
             assertThat(IntStream.of(result.labels()).distinct().count()).as("seed %s groups", seed).isEqualTo(k);
-            var again = KMeans.fit(merged.vectors(), weights, D, k, seed);
+            var again = KMeans.fit(merged.vectors(), weights, D, k, seed,
+                    KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS, KMeansTopicAlgorithm.KMEANS_RESTARTS);
             assertThat(again.labels()).containsExactly(result.labels());
             assertThat(again.centres()).containsExactly(result.centres());
             for (int j = 0; j < k; j++) {
@@ -168,7 +170,7 @@ class TopicsAlgorithmFixtureTest {
                 .containsExactly(TopicsFixture.ints(fixture.expected.get("final_labels")));
     }
 
-    private List<GroupSummaries.GroupSummary> summaries() {
+    private List<GroupSummary> summaries() {
         return GroupSummaries.summarize(fixture.sklearnTraceLabels(merged), fixture.centres.length / D);
     }
 

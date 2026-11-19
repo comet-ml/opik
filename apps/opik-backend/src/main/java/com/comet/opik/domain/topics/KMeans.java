@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.google.common.base.Preconditions;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -11,7 +10,7 @@ import java.util.concurrent.CancellationException;
 
 /**
  * Weighted k-means on unit vectors, dependency-free: k-means++ initialisation (weighted D² sampling, one candidate per
- * step), weighted Lloyd until no label changes or {@value #MAX_ITERATIONS} iterations, {@value #RESTARTS} restarts from
+ * step), weighted Lloyd until no label changes or {@code maxIterations} iterations, {@code restarts} restarts from
  * one seeded {@link SplittableRandom}, the restart with the lowest weighted inertia kept. Centres are L2-normalized after
  * the fit. A cluster left empty by an update takes the point farthest from its centre, so none stays empty.
  *
@@ -31,22 +30,18 @@ import java.util.concurrent.CancellationException;
 public class KMeans {
 
     /**
-     * Measured at 100,000 points of 384 dimensions, k = 50, on an M3 Pro laptop, one thread: real windows converge in at
-     * most 101 iterations. Points with no structure (uniform on the sphere) need more iterations than this in every
-     * restart, so their fit stops at this ceiling, in 52 s. With no bound ruling anything out (plain Lloyd on those
-     * points) the fit took 640 s to the ceiling with a single-sum dot product, under the default 15 minute project
-     * timeout.
+     * @param points        {@code n * dimensions} values
+     * @param weights       per point, positive
+     * @param maxIterations the Lloyd iterations one restart may take; a fit that reaches it stops there
+     * @param restarts      the k-means++ starts; the one with the lowest weighted inertia is kept
      */
-    static final int MAX_ITERATIONS = 150;
-    static final int RESTARTS = 3;
-
-    /**
-     * @param points  {@code n * dimensions} values
-     * @param weights per point, positive
-     */
-    public static Result fit(@NonNull float[] points, @NonNull double[] weights, int dimensions, int k, long seed) {
+    public static KMeansResult fit(@NonNull float[] points, @NonNull double[] weights, int dimensions, int k, long seed,
+            int maxIterations, int restarts) {
         int n = weights.length;
         Preconditions.checkArgument(dimensions > 0, "dimensions must be positive, dimensions '%s'", dimensions);
+        Preconditions.checkArgument(maxIterations > 0, "maxIterations must be positive, maxIterations '%s'",
+                maxIterations);
+        Preconditions.checkArgument(restarts > 0, "restarts must be positive, restarts '%s'", restarts);
         Preconditions.checkArgument(points.length == n * dimensions,
                 "points must hold one row per weight, weights '%s', values '%s'", n, points.length);
         Preconditions.checkArgument(k >= 1 && k <= n, "k must be in [1, n], k '%s', n '%s'", k, n);
@@ -58,13 +53,13 @@ public class KMeans {
         var random = new SplittableRandom(seed);
         var buffers = new Buffers(n, k, dimensions);
         Fit best = null;
-        for (int restart = 0; restart < RESTARTS; restart++) {
-            var fit = lloyd(space, weights, plusPlus(space, weights, random), buffers);
+        for (int restart = 0; restart < restarts; restart++) {
+            var fit = lloyd(space, weights, plusPlus(space, weights, random), buffers, maxIterations);
             if (best == null || fit.inertia() < best.inertia()) {
                 best = fit;
             }
         }
-        return Result.builder()
+        return KMeansResult.builder()
                 .labels(best.labels())
                 .centres(normalized(best.centres(), k, dimensions))
                 .inertia(best.inertia())
@@ -112,7 +107,7 @@ public class KMeans {
         return p.length - 1;
     }
 
-    private static Fit lloyd(Space space, double[] w, double[] centres, Buffers buffers) {
+    private static Fit lloyd(Space space, double[] w, double[] centres, Buffers buffers, int maxIterations) {
         int n = space.n;
         space.prepareAll(centres);
         var labels = new int[n];
@@ -120,7 +115,7 @@ public class KMeans {
         var bounds = buffers.bounds;
         var previous = buffers.previous;
         int iterations = 0;
-        for (; iterations < MAX_ITERATIONS; iterations++) {
+        for (; iterations < maxIterations; iterations++) {
             checkInterrupted();
             boolean changed = iterations == 0
                     ? assignFirst(space, centres, labels, bounds)
@@ -129,11 +124,11 @@ public class KMeans {
                 break;
             }
             System.arraycopy(centres, 0, previous, 0, centres.length);
-            update(space, w, labels, distance, centres, buffers);
+            update(space, w, labels, centres, buffers);
             space.prepareAll(centres);
             bounds.moved(previous, centres, labels, space.d);
         }
-        if (iterations == MAX_ITERATIONS) {
+        if (iterations == maxIterations) {
             // Stopped by the cap after an update: as scikit-learn, label and score against the centres returned.
             assign(space, centres, labels);
         }
@@ -198,39 +193,40 @@ public class KMeans {
         var half = bounds.half;
         boolean changed = false;
         for (int i = 0; i < space.n; i++) {
-            int a = labels[i];
-            double u = upper[i];
-            if (u <= bounds.nearestHalf[a]) {
+            int label = labels[i];
+            double upperBound = upper[i];
+            if (upperBound <= bounds.nearestHalf[label]) {
                 continue;
             }
             boolean tight = false;
             int row = i * k;
             for (int j = 0; j < k; j++) {
-                if (j == a) {
+                if (j == label) {
                     continue;
                 }
-                double z = Math.max(lower[row + j], half[a * k + j]);
-                if (u <= z) {
+                // Centre j can't be nearer than this: its lower bound, or half its distance to the current centre.
+                double bound = Math.max(lower[row + j], half[label * k + j]);
+                if (upperBound <= bound) {
                     continue;
                 }
                 if (!tight) {
-                    u = Math.sqrt(space.squaredDistance(i, centres, a));
-                    lower[row + a] = u;
+                    upperBound = Math.sqrt(space.squaredDistance(i, centres, label));
+                    lower[row + label] = upperBound;
                     tight = true;
-                    if (u <= z) {
+                    if (upperBound <= bound) {
                         continue;
                     }
                 }
-                double dj = Math.sqrt(space.squaredDistance(i, centres, j));
-                lower[row + j] = dj;
-                if (dj < u) {
-                    a = j;
-                    u = dj;
+                double distanceToJ = Math.sqrt(space.squaredDistance(i, centres, j));
+                lower[row + j] = distanceToJ;
+                if (distanceToJ < upperBound) {
+                    label = j;
+                    upperBound = distanceToJ;
                 }
             }
-            upper[i] = u;
-            if (a != labels[i]) {
-                labels[i] = a;
+            upper[i] = upperBound;
+            if (label != labels[i]) {
+                labels[i] = label;
                 changed = true;
             }
         }
@@ -238,14 +234,10 @@ public class KMeans {
     }
 
     /**
-     * Weighted means of the clusters. An empty cluster moves to the point with the largest weighted distance to its own
-     * centre that no other empty cluster took this round; the next assignment then gives it that point. The bounds keep
-     * no exact distance, so with an empty cluster each point's is measured first, to its centre before the update, in
-     * the direct form: a point on its centre is then exactly 0, as in plain Lloyd, not the dot form's rounding noise,
-     * which would pick another point among duplicate ones.
+     * Weighted means of the clusters. An empty cluster gets a point from {@link #reseedEmpty} first, which reads the
+     * centres before the update.
      */
-    private static void update(Space space, double[] w, int[] labels, double[] distance, double[] centres,
-            Buffers buffers) {
+    private static void update(Space space, double[] w, int[] labels, double[] centres, Buffers buffers) {
         int n = space.n;
         int d = space.d;
         int k = space.k;
@@ -266,19 +258,40 @@ public class KMeans {
             anyEmpty |= weightSum[j] <= 0;
         }
         if (anyEmpty) {
-            for (int i = 0; i < n; i++) {
-                distance[i] = space.directSquaredDistance(i, centres, labels[i]);
-            }
+            reseedEmpty(space, w, labels, centres, buffers);
         }
-        // Points already copied into an empty group this update; cleared again below, so the buffer stays all false.
-        var taken = buffers.taken;
-        var picked = buffers.picked;
-        int pickedCount = 0;
         for (int j = 0; j < k; j++) {
             if (weightSum[j] > 0) {
                 for (int t = 0; t < d; t++) {
                     centres[j * d + t] = sum[j * d + t] / weightSum[j];
                 }
+            }
+        }
+    }
+
+    /**
+     * Moves each empty cluster to the point with the largest weighted distance to its own centre that no other empty
+     * cluster took this round; the next assignment then gives it that point. The bounds keep no exact distance, so each
+     * point's is measured first, to its centre before the update, in the direct form: a point on its centre is then
+     * exactly 0, as in plain Lloyd, not the dot form's rounding noise, which would pick another point among duplicate
+     * ones. It reads only the centres of clusters with points and writes only the empty ones.
+     */
+    private static void reseedEmpty(Space space, double[] w, int[] labels, double[] centres, Buffers buffers) {
+        int n = space.n;
+        int d = space.d;
+        int k = space.k;
+        var x = space.x;
+        var weightSum = buffers.weightSum;
+        var distance = buffers.distance;
+        for (int i = 0; i < n; i++) {
+            distance[i] = space.directSquaredDistance(i, centres, labels[i]);
+        }
+        // Points already copied into an empty cluster this round; cleared again below, so the buffer stays all false.
+        var taken = buffers.taken;
+        var picked = buffers.picked;
+        int pickedCount = 0;
+        for (int j = 0; j < k; j++) {
+            if (weightSum[j] > 0) {
                 continue;
             }
             int far = -1;
@@ -493,11 +506,6 @@ public class KMeans {
             this.taken = new boolean[n];
             this.picked = new int[k];
         }
-    }
-
-    /** {@code centres} are {@code k * dimensions} unit-length float32 values; {@code inertia} is the weighted one. */
-    @Builder(toBuilder = true)
-    public record Result(@NonNull int[] labels, @NonNull float[] centres, double inertia, int iterations) {
     }
 
     private record Fit(int[] labels, double[] centres, double inertia, int iterations) {
