@@ -25,6 +25,17 @@ export class ExperimentsPage extends BasePage {
     await this.page.getByRole('heading', { name: /no experiments yet/i }).waitFor({ state: 'visible', timeout: 20000 });
   }
 
+  // Experiments are grouped by item source by default and only the first group
+  // auto-expands, so an experiment in any other group is hidden until expanded.
+  async expandCollapsedGroups(): Promise<void> {
+    const collapsed = this.page
+      .locator('tr.comet-table-row-group')
+      .locator('button:has(svg.lucide-chevron-right)');
+    for (let i = 0; i < 10 && (await collapsed.count()) > 0; i++) {
+      await collapsed.first().click();
+    }
+  }
+
   async waitForExperiment(experimentName: string): Promise<void> {
     await this.page.getByText(experimentName).first().waitFor({ state: 'visible', timeout: 15000 });
   }
