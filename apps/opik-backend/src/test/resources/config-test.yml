@@ -1046,7 +1046,6 @@ topics:
     windowDays: 30
     maxVectors: 100000
     qwenDeadline: 120s
-    runsRetention: 90d
 
 # Python evaluator configuration
 pythonEvaluator:

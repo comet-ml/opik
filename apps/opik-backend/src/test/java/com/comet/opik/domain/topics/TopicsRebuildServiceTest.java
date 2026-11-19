@@ -8,12 +8,10 @@ import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
 import com.comet.opik.infrastructure.inference.Usage;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.util.Duration;
 import org.awaitility.Awaitility;
 import org.jdbi.v3.core.Handle;
-import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,8 +23,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -47,9 +45,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -100,8 +97,8 @@ class TopicsRebuildServiceTest {
                 .thenReturn(Flux.fromIterable(window()));
         when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(Set.of(projectId)), any(), any(), anyLong()))
                 .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(projectId, TRACES)));
-        when(topicDAO.findStates(any(), any())).thenReturn(List.of());
         when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
+        when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         var idGenerator = mock(IdGenerator.class);
@@ -114,11 +111,30 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
+    @DisplayName("a start that finds an attempt left running past the lease counts it abandoned once, then starts")
+    void startCountsAnAbandonedAttempt() {
+        var abandonedBefore = Instant.now().minusSeconds(3_600);
+        when(runDAO.recordAbandoned(eq(WORKSPACE_ID), eq(projectId), eq(abandonedBefore), any())).thenReturn(1, 0);
+
+        var started = service.startRun(WORKSPACE_ID, projectId, TopicProject.RunMode.FIRST_BUILD, abandonedBefore);
+        service.startRun(WORKSPACE_ID, projectId, TopicProject.RunMode.FIRST_BUILD, abandonedBefore);
+
+        assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
+            assertThat(point.get("status")).isEqualTo("failed");
+            assertThat(point.get("error_code")).isEqualTo("abandoned");
+        });
+        var order = inOrder(runDAO);
+        order.verify(runDAO).recordAbandoned(eq(WORKSPACE_ID), eq(projectId), eq(abandonedBefore), any());
+        order.verify(runDAO).start(eq(WORKSPACE_ID), eq(projectId), eq(started),
+                eq(TopicProject.RunMode.FIRST_BUILD), any());
+    }
+
+    @Test
     @DisplayName("a run that had already ended is not counted again")
     void alreadyEndedIsNotCounted() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(0);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(0);
 
-        assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isFalse();
+        assertThat(service.fail(runId, WORKSPACE_ID, projectId, TopicsRunException.Code.TIMEOUT)).isFalse();
 
         assertThat(meter.points("topics.runs")).isEmpty();
     }
@@ -127,15 +143,15 @@ class TopicsRebuildServiceTest {
     @DisplayName("a mark that throws counts nothing, as the run's row stays running; the mark that ends the row "
             + "counts it once, with its workspace")
     void markThatThrowsCountsNothing() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any()))
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(1);
 
-        assertThatThrownBy(() -> service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.QWEN_ERROR, "m", null))
+        assertThatThrownBy(() -> service.fail(runId, WORKSPACE_ID, projectId, TopicsRunException.Code.QWEN_ERROR))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(meter.points("topics.runs")).isEmpty();
 
-        assertThat(service.fail(runId, WORKSPACE_ID, TopicsRunException.Code.TIMEOUT, "m", null)).isTrue();
+        assertThat(service.fail(runId, WORKSPACE_ID, projectId, TopicsRunException.Code.TIMEOUT)).isTrue();
         assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
             assertThat(point.get("status")).isEqualTo("failed");
             assertThat(point.get("error_code")).isEqualTo("timeout");
@@ -148,7 +164,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("an answer that cannot be read counts bad_answer, not ok, fails the run once, and the failed run "
             + "does not label")
     void unreadableAnswerIsBadAnswer() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         answer(InferenceJson.MAPPER.getNodeFactory().textNode("Sorry, I cannot name these clusters."));
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
@@ -167,16 +183,17 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a window read that trips a ClickHouse guard fails the run with window_read, before Qwen and the save")
     void windowReadGuardHit() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         when(windowDAO.readWindow(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.error(new IllegalStateException(
                         "Code: 158. DB::Exception: Limit for rows (controlled by 'max_rows_to_read' setting) exceeded")));
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.FAILED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.FAILED);
         assertThat(outcome.errorCode()).isEqualTo("window_read");
-        verify(runDAO).markFailed(eq(WORKSPACE_ID), eq(runId), any(), eq("window_read"), anyString(), any());
+        verify(runDAO).markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(),
+                eq(TopicProject.RunError.WINDOW_READ));
         verify(client, never()).generate(any(), any());
         verify(topicDAO, never()).insertTopics(any());
         verify(traceTopicsDAO, never()).insert(any());
@@ -186,7 +203,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
     void failedSaveWritesNoLabels() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(1);
         when(topicDAO.lockProject(anyString(), any())).thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
@@ -201,20 +218,19 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a second first save of the project fails as a conflict on the state's primary key and writes nothing")
+    @DisplayName("a second first save of the project fails as a conflict on the saved run and writes nothing")
     void secondSaveIsConflict() {
-        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(runId), any(), anyString(), anyString(), any())).thenReturn(1);
-        doThrow(new UnableToExecuteStatementException(new SQLIntegrityConstraintViolationException("duplicate"), null))
-                .when(topicDAO).insertState(any());
+        when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(1);
+        when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(0);
         answer(FIXTURE.answer);
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
         assertThat(outcome.errorCode()).isEqualTo("save");
-        verify(runDAO).markFailed(eq(WORKSPACE_ID), eq(runId), any(), eq("save"),
-                contains("another run saved this project meanwhile"), any());
+        verify(topicDAO).saveList(eq(WORKSPACE_ID), eq(projectId), isNull(), eq(runId), any(), any(), any(),
+                eq(TopicEmbedding.MODEL));
+        verify(runDAO).markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), eq(TopicProject.RunError.SAVE));
         verify(topicDAO, never()).insertTopics(any());
-        verify(topicDAO, never()).insertPrototypes(any());
         verify(runDAO, never()).markSaved(any(), any(), any(), any());
         verify(traceTopicsDAO, never()).insert(any());
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
@@ -231,10 +247,10 @@ class TopicsRebuildServiceTest {
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(3);
         var order = inOrder(runDAO, traceTopicsDAO);
-        order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), any());
+        order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(projectId), eq(runId), any());
         order.verify(traceTopicsDAO).insert(any());
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
     }
@@ -251,9 +267,9 @@ class TopicsRebuildServiceTest {
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
-        verify(runDAO, never()).markFailed(any(), any(), any(), any(), any(), any());
+        verify(runDAO, never()).markFailed(any(), any(), any(), any(), any());
         assertThat(meter.points("topics.runs")).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
@@ -285,7 +301,7 @@ class TopicsRebuildServiceTest {
             VirtualTimeScheduler.reset();
         }
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(attempts).hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
         assertThat(cancelled).as("every stalled attempt is cancelled")
                 .hasValue(1 + TopicsRebuildService.INSERT_RETRIES);
@@ -312,7 +328,7 @@ class TopicsRebuildServiceTest {
             interrupted = Thread.interrupted();
         }
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(interrupted).isTrue();
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isEqualTo(TRACES);
     }
@@ -324,11 +340,8 @@ class TopicsRebuildServiceTest {
                 .thenReturn(Flux.just(new TopicWindowDAO.ProjectCount(projectId, 250_000)));
         answer(FIXTURE.answer);
 
-        service.firstBuild(runId, WORKSPACE_ID, projectId, night);
+        var json = service.firstBuild(runId, WORKSPACE_ID, projectId, night).stats();
 
-        var stats = ArgumentCaptor.forClass(String.class);
-        verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
-        var json = JsonUtils.getMapper().readTree(stats.getValue());
         assertThat(json.get("window_traces").asLong()).isEqualTo(250_000);
         assertThat(json.get("sample_traces").asLong()).isEqualTo(TRACES);
     }
@@ -341,16 +354,14 @@ class TopicsRebuildServiceTest {
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
             assertThat(point.get("status")).isEqualTo("saved");
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
         });
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics", "workspace_id", WORKSPACE_ID))
                 .isEqualTo(TRACES);
-        var stats = ArgumentCaptor.forClass(String.class);
-        verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
-        double saved = JsonUtils.getMapper().readTree(stats.getValue()).get("other_share").asDouble();
+        double saved = outcome.stats().get("other_share").asDouble();
         assertThat(meter.points("topics.run.other_share")).singleElement().satisfies(point -> {
             assertThat(point.value()).isEqualTo(saved);
             assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID);
@@ -373,9 +384,9 @@ class TopicsRebuildServiceTest {
         var delta = unit(d, 3, 1, 0, 0);
         var texts = List.of("alpha request", "beta request", "gamma request", "delta request");
         var vectors = List.of(alpha, gated.get(0), gated.get(1), delta);
-        var rows = new ArrayList<TopicWindowRow>();
+        var rows = new ArrayList<TopicWindowDAO.WindowRow>();
         for (int i = 0; i < 12; i++) {
-            rows.add(TopicWindowRow.builder()
+            rows.add(TopicWindowDAO.WindowRow.builder()
                     .traceId(UUID.randomUUID())
                     .traceCreatedAt(FIXTURE.night.minusSeconds(3_600L * (i + 1)))
                     .taskVersion(1)
@@ -396,22 +407,20 @@ class TopicsRebuildServiceTest {
             return Mono.just(response(output));
         });
 
-        assertThat(service.firstBuild(runId, WORKSPACE_ID, projectId, night).status())
-                .isEqualTo(TopicRun.Status.SAVED);
+        var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        var stats = ArgumentCaptor.forClass(String.class);
-        verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
-        var json = JsonUtils.getMapper().readTree(stats.getValue());
-        assertThat(json.get("other_groups").asInt()).isEqualTo(3);
-        assertThat(json.get("gated_other").asInt()).isEqualTo(2);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(outcome.stats().get("other_groups").asInt()).isEqualTo(3);
+        assertThat(outcome.stats().get("gated_other").asInt()).isEqualTo(2);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<TopicPrototype>> saved = ArgumentCaptor.forClass(List.class);
-        verify(topicDAO).insertPrototypes(saved.capture());
-        var topicRows = saved.getValue().stream().filter(row -> row.topicId() != null).map(TopicPrototype::values)
+        ArgumentCaptor<List<Topic>> savedTopics = ArgumentCaptor.forClass(List.class);
+        verify(topicDAO).insertTopics(savedTopics.capture());
+        var savedOther = ArgumentCaptor.forClass(PrototypeVectors.class);
+        verify(topicDAO).saveList(any(), any(), any(), any(), any(), any(), savedOther.capture(), any());
+        var topicRows = savedTopics.getValue().stream().flatMap(topic -> topic.vectors().vectors().stream())
                 .toList();
-        var otherRows = saved.getValue().stream().filter(row -> row.topicId() == null).map(TopicPrototype::values)
-                .toList();
+        var otherRows = savedOther.getValue().vectors();
         assertThat(topicRows).hasSize(1);
         assertThat(otherRows).singleElement().satisfies(other -> assertThat(other).containsExactly(delta));
         for (var other : otherRows) {
@@ -468,14 +477,14 @@ class TopicsRebuildServiceTest {
             }
 
             @Override
-            public Optional<Labeller> labeller(List<TopicPrototype> prototypes) {
+            public Optional<Labeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
                 return Optional.empty();
             }
         };
 
         var outcome = serviceWith.apply(stub).firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         verify(client, never()).generate(any(), any());
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Topic>> topics = ArgumentCaptor.forClass(List.class);
@@ -484,22 +493,17 @@ class TopicsRebuildServiceTest {
                 .containsExactly(tuple("First", "one", TRACES / 3), tuple("Second", "two", TRACES / 3));
         var firstId = topics.getValue().get(0).id();
         var secondId = topics.getValue().get(1).id();
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<TopicPrototype>> prototypes = ArgumentCaptor.forClass(List.class);
-        verify(topicDAO).insertPrototypes(prototypes.capture());
-        assertThat(prototypes.getValue()).extracting(TopicPrototype::position, TopicPrototype::topicId)
-                .containsExactly(tuple(0, secondId), tuple(1, firstId), tuple(2, null));
-        assertThat(prototypes.getValue().get(0).values()).containsExactly(second);
-        assertThat(prototypes.getValue().get(2).values()).containsExactly(other);
+        assertThat(topics.getValue()).extracting(Topic::vectors)
+                .containsExactly(new PrototypeVectors(List.of(first)), new PrototypeVectors(List.of(second)));
+        verify(topicDAO).saveList(eq(WORKSPACE_ID), eq(projectId), isNull(), eq(runId), any(), any(),
+                eq(new PrototypeVectors(List.of(other))), eq(TopicEmbedding.MODEL));
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TraceTopic>> traceTopics = ArgumentCaptor.forClass(List.class);
         verify(traceTopicsDAO).insert(traceTopics.capture());
         assertThat(traceTopics.getValue().stream().collect(Collectors.groupingBy(TraceTopic::topicId,
                 Collectors.counting()))).isEqualTo(Map.of(firstId, (long) TRACES / 3, secondId, (long) TRACES / 3,
                         TraceTopic.OTHER, (long) TRACES / 3));
-        var stats = ArgumentCaptor.forClass(String.class);
-        verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(runId), any(), stats.capture());
-        var json = JsonUtils.getMapper().readTree(stats.getValue());
+        var json = outcome.stats();
         assertThat(json.get("stub_stat").asInt()).isEqualTo(TopicsRebuildService.MAX_TOPICS);
         assertThat(json.get("topics").asInt()).isEqualTo(2);
         assertThat(json.get("other_share").asDouble()).isEqualTo(1.0 / 3);
@@ -564,12 +568,12 @@ class TopicsRebuildServiceTest {
                 .result(new GenerateResult(output)).build();
     }
 
-    private static List<TopicWindowRow> window() {
-        var rows = new ArrayList<TopicWindowRow>(TRACES);
+    private static List<TopicWindowDAO.WindowRow> window() {
+        var rows = new ArrayList<TopicWindowDAO.WindowRow>(TRACES);
         for (int i = 0; i < TRACES; i++) {
             var vector = new float[TopicsFixture.DIMENSIONS];
             System.arraycopy(FIXTURE.vectors, i * TopicsFixture.DIMENSIONS, vector, 0, TopicsFixture.DIMENSIONS);
-            rows.add(TopicWindowRow.builder()
+            rows.add(TopicWindowDAO.WindowRow.builder()
                     .traceId(FIXTURE.traceIds.get(i))
                     .traceCreatedAt(FIXTURE.createdAt.get(i))
                     .taskVersion(1)

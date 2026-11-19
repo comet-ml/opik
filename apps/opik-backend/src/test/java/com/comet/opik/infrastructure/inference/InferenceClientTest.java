@@ -640,7 +640,7 @@ class InferenceClientTest {
         var started = System.nanoTime();
         assertThatThrownBy(() -> client.generate(generateRequest(), Instant.now().plusMillis(300)).block())
                 .isInstanceOfSatisfying(InferenceException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
+                        exception -> assertThat(exception.getCode()).isEqualTo(InferenceException.OUT_OF_TIME));
         var elapsed = Duration.ofNanos(System.nanoTime() - started);
 
         assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);

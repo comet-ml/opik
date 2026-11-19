@@ -2745,9 +2745,6 @@ topics:
     #  Default: 120s
     #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
     qwenDeadline: ${TOPICS_BUILD_QWEN_DEADLINE:-120s}
-    #  Default: 90d
-    #  Description: topic_runs rows are deleted after this. At most 365d
-    runsRetention: ${TOPICS_BUILD_RUNS_RETENTION:-90d}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.

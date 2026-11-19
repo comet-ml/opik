@@ -87,12 +87,6 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration qwenDeadline;
 
-        /** {@code topic_runs} rows are deleted after this. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.DAYS)
-        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
-        private Duration runsRetention;
-
         @JsonIgnore
         @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
             return qwenDeadline == null || projectTimeout == null

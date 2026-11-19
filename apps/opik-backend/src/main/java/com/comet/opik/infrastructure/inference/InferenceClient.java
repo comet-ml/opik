@@ -245,7 +245,7 @@ public class InferenceClient {
             var deadlineMs = Math.min(request.deadlineMs() == null ? Long.MAX_VALUE : request.deadlineMs(),
                     Math.min(left.toMillis(), request.lane().getMaxDeadline().toMillis()));
             var withIds = request.toBuilder()
-                    .requestId(request.requestId() == null ? newRequestId() : request.requestId())
+                    .requestId(request.requestId() == null ? UUID.randomUUID().toString() : request.requestId())
                     .deadlineMs(deadlineMs)
                     .build();
             var body = InferenceJson.writeBytes(withIds);

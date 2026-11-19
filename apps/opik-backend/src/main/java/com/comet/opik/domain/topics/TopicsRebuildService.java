@@ -20,9 +20,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.util.retry.Retry;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -30,7 +28,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -56,10 +53,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * prototypes and save. The service makes the LLM calls the algorithm asks for ({@link TopicAlgorithm.Context}).
  * Synchronous: the caller runs it on its own thread, one project at a time.
  *
- * <p>The save commits one MySQL transaction first: the project's state, the new topics, its prototypes and the run as
- * {@code saved}. Then it inserts {@code trace_topics} for the traces it read, retried up to {@value #INSERT_RETRIES}
- * times. A failure before the commit writes nothing but the failed run. The topics' sizes and the run's Other share are those of the traces it read: on a sampled
- * window, of the sample.
+ * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
+ * with their prototype vectors, and the run as {@code saved}. Then it inserts {@code trace_topics} for the traces it
+ * read, retried up to {@value #INSERT_RETRIES} times. A failure before the commit writes nothing but the failed
+ * attempt. The topics' sizes and the run's Other share are those of the traces it read: on a sampled window, of the
+ * sample. The run's stats go to its log lines, not to a table.
  */
 @Slf4j
 @Singleton
@@ -102,9 +100,10 @@ public class TopicsRebuildService {
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull TopicAlgorithm algorithm;
 
-    /** How a run ended. {@code errorCode} is null for a saved run. */
+    /** How a run ended, with the stats it logged. {@code errorCode} is null for a saved run. */
     @Builder(toBuilder = true)
-    public record Outcome(@NonNull UUID runId, @NonNull TopicRun.Status status, String errorCode) {
+    public record Outcome(@NonNull UUID runId, @NonNull TopicProject.RunStatus status, String errorCode,
+            JsonNode stats) {
     }
 
     /** A NaN or infinite value fails too. */
@@ -124,38 +123,47 @@ public class TopicsRebuildService {
         return Math.min(READ_SECONDS, build.getProjectTimeout().toSeconds());
     }
 
-    public UUID startRun(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull TopicRun.Mode mode) {
+    /**
+     * Starts a run on the project's {@code topic_projects} row, creating the row when it has none. The caller holds the
+     * project's lock. An attempt the row still shows {@code running} and that started before {@code abandonedBefore},
+     * the lock's lease ago, lost its pod: it is recorded first, as failed with {@code abandoned}, and counted.
+     */
+    public UUID startRun(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull TopicProject.RunMode mode,
+            @NonNull Instant abandonedBefore) {
         var runId = idGenerator.generateId();
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
-                    .runId(runId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .mode(mode)
-                    .status(TopicRun.Status.RUNNING)
-                    .startedAt(Instant.now())
-                    .build());
-            return null;
+        int abandoned = template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
+            var now = Instant.now();
+            int recorded = runDAO.recordAbandoned(workspaceId, projectId, abandonedBefore, now);
+            runDAO.start(workspaceId, projectId, runId, mode, now);
+            return recorded;
         });
+        if (abandoned > 0) {
+            log.warn("Topics project '{}' had an attempt left running past its lease, recorded as abandoned",
+                    projectId);
+            metrics.run(workspaceId, TopicProject.RunStatus.FAILED, TopicProject.RunError.ABANDONED.getValue());
+        }
         return runId;
     }
 
     /**
      * Fails the run unless it already ended. Returns false when it had: the run was saved, or failed by its own thread
-     * and its timeout both. Counts the run in {@code topics.runs} only when this mark ends its row. A mark that throws
-     * leaves the row {@code running} and counts nothing: the next housekeeping fails the row and counts it, as
-     * {@code abandoned}, so every run is counted once, by the write that ends it.
+     * and its timeout both. Counts the run in {@code topics.runs} only when this mark ends its attempt. A mark that
+     * throws leaves the attempt {@code running} and counts nothing: the project's next attempt records it, and counts
+     * it as {@code abandoned}, so every run is counted once.
      */
-    public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull Code code, @NonNull String message,
-            String stats) {
-        int updated = template.inTransaction(WRITE,
-                handle -> handle.attach(TopicRunDAO.class).markFailed(workspaceId, runId,
-                        Instant.now(), code.getValue(), StringUtils.truncate(message, TopicRun.MAX_ERROR_MESSAGE),
-                        stats));
+    public boolean fail(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Code code) {
+        int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class)
+                .markFailed(workspaceId, projectId, runId, Instant.now(), runError(code)));
         if (updated == 1) {
-            metrics.run(workspaceId, TopicRun.Status.FAILED, code.getValue());
+            metrics.run(workspaceId, TopicProject.RunStatus.FAILED, code.getValue());
         }
         return updated == 1;
+    }
+
+    static TopicProject.RunError runError(@NonNull Code code) {
+        return TopicProject.RunError.valueOf(code.name());
     }
 
     /**
@@ -174,7 +182,7 @@ public class TopicsRebuildService {
         } catch (RuntimeException exception) {
             return run.failed(Thread.currentThread().isInterrupted() ? Code.TIMEOUT : Code.INTERNAL, exception);
         }
-        return Outcome.builder().runId(runId).status(TopicRun.Status.SAVED).build();
+        return Outcome.builder().runId(runId).status(TopicProject.RunStatus.SAVED).stats(run.stats()).build();
     }
 
     /** One run's state while it builds: the stats it records and the phase timings. */
@@ -217,9 +225,11 @@ public class TopicsRebuildService {
             var built = algorithm.firstBuild(
                     TopicAlgorithm.Window.builder().texts(window.texts()).vectors(window.vectors()).build(), MAX_TOPICS,
                     this);
+            checkPrototypes(built);
             var topics = topics(built);
-            var prototypes = prototypes(built, topics);
-            checkPrototypes(prototypes);
+            var otherVectors = built.otherPrototypes().isEmpty()
+                    ? null
+                    : new PrototypeVectors(built.otherPrototypes());
 
             int other = 0;
             for (int label : built.labels()) {
@@ -227,13 +237,13 @@ public class TopicsRebuildService {
             }
             stats.put("topics", topics.size());
             stats.put("other_share", (double) other / n);
-            stats.put("prototypes", prototypes.size());
+            stats.put("prototypes", built.topicPrototypes().size() + built.otherPrototypes().size());
             stats.set("seconds", seconds);
             log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
                     + "share '{}', seconds '{}'", runId, projectId, from, to, n,
                     topics.stream().map(Topic::size).toList(), TopicText.fixed((double) other / n, 3), seconds);
             timed("save", () -> {
-                save(window.traces(), built.labels(), topics, prototypes);
+                save(window.traces(), built.labels(), topics, otherVectors);
                 return null;
             });
         }
@@ -242,12 +252,12 @@ public class TopicsRebuildService {
          * The window as flat arrays, in the rows' order. The rows' own vectors are not kept: once this returns, only
          * the flat copy holds them, so the build does not carry two copies of the window.
          */
-        private ReadWindow flatten(List<TopicWindowRow> rows) {
+        private ReadWindow flatten(List<TopicWindowDAO.WindowRow> rows) {
             int n = rows.size();
             var texts = new String[n];
             var vectors = new float[n * DIMENSIONS];
             var traces = new ArrayList<WindowTrace>(n);
-            var versions = new TreeMap<Long, Integer>();
+            var versions = new TreeMap<Integer, Integer>();
             for (int i = 0; i < n; i++) {
                 var row = rows.get(i);
                 texts[i] = row.text();
@@ -262,9 +272,9 @@ public class TopicsRebuildService {
          * The window, or its sample when larger than {@code maxVectors}. The stats get the size of both: the window's
          * is the exact count the first-build job takes.
          */
-        private List<TopicWindowRow> readWindow() {
+        private List<TopicWindowDAO.WindowRow> readWindow() {
             long windowTraces;
-            List<TopicWindowRow> rows;
+            List<TopicWindowDAO.WindowRow> rows;
             try {
                 windowTraces = windowDAO.countByProject(workspaceId, Set.of(projectId), from, to, COUNT_SECONDS)
                         .filter(count -> count.projectId().equals(projectId))
@@ -278,7 +288,7 @@ public class TopicsRebuildService {
             }
             stats.put("window_traces", windowTraces);
             stats.put("sample_traces", rows.size());
-            var kept = new ArrayList<TopicWindowRow>(rows.size());
+            var kept = new ArrayList<TopicWindowDAO.WindowRow>(rows.size());
             int skipped = 0;
             for (var row : rows) {
                 var text = TopicText.pythonStrip(row.text());
@@ -289,7 +299,8 @@ public class TopicsRebuildService {
                 kept.add(row.toBuilder().text(text).build());
             }
             // Time order, earliest first: the merge keeps each text's first trace.
-            kept.sort(Comparator.comparing(TopicWindowRow::traceCreatedAt).thenComparing(TopicWindowRow::traceId));
+            kept.sort(Comparator.comparing(TopicWindowDAO.WindowRow::traceCreatedAt)
+                    .thenComparing(TopicWindowDAO.WindowRow::traceId));
             stats.put("window_rows", rows.size());
             stats.put("skipped_rows", skipped);
             if (kept.isEmpty()) {
@@ -378,6 +389,7 @@ public class TopicsRebuildService {
             return stats;
         }
 
+        /** Each topic with its size and the prototype vectors it owns, in the run's order. */
         private List<Topic> topics(TopicAlgorithm.FirstBuild built) {
             var sizes = new int[built.topics().size()];
             for (int label : built.labels()) {
@@ -385,8 +397,18 @@ public class TopicsRebuildService {
                     sizes[label]++;
                 }
             }
+            var owned = new ArrayList<List<float[]>>(sizes.length);
+            for (int t = 0; t < sizes.length; t++) {
+                owned.add(new ArrayList<>());
+            }
+            for (int p = 0; p < built.topicPrototypes().size(); p++) {
+                owned.get(built.owners().get(p)).add(built.topicPrototypes().get(p));
+            }
             var topics = new ArrayList<Topic>(sizes.length);
             for (int t = 0; t < sizes.length; t++) {
+                if (owned.get(t).isEmpty()) {
+                    throw invariant("topic '%s' owns no prototype".formatted(t));
+                }
                 var topic = built.topics().get(t);
                 topics.add(Topic.builder()
                         .id(idGenerator.generateId())
@@ -396,41 +418,21 @@ public class TopicsRebuildService {
                         .definition(topic.definition())
                         .born(born)
                         .size(sizes[t])
+                        .vectors(new PrototypeVectors(owned.get(t)))
                         .build());
             }
             return topics;
         }
 
-        private List<TopicPrototype> prototypes(TopicAlgorithm.FirstBuild built, List<Topic> topics) {
-            var prototypes = new ArrayList<TopicPrototype>(
-                    built.topicPrototypes().size() + built.otherPrototypes().size());
-            for (int p = 0; p < built.topicPrototypes().size(); p++) {
-                prototypes.add(prototype(prototypes.size(), topics.get(built.owners().get(p)).id(),
-                        built.topicPrototypes().get(p)));
-            }
-            for (var vector : built.otherPrototypes()) {
-                prototypes.add(prototype(prototypes.size(), null, vector));
-            }
-            return prototypes;
-        }
-
-        private TopicPrototype prototype(int position, UUID topicId, float[] vector) {
-            return TopicPrototype.builder()
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .position(position)
-                    .topicId(topicId)
-                    .vector(TopicPrototype.encode(vector))
-                    .build();
-        }
-
         /** Before anything is written: every prototype has {@value #DIMENSIONS} values and unit length. */
-        private void checkPrototypes(List<TopicPrototype> prototypes) {
-            for (var prototype : prototypes) {
-                var values = prototype.values();
+        private void checkPrototypes(TopicAlgorithm.FirstBuild built) {
+            var all = new ArrayList<float[]>(built.topicPrototypes());
+            all.addAll(built.otherPrototypes());
+            for (int p = 0; p < all.size(); p++) {
+                var values = all.get(p);
                 if (!isUnit(values)) {
-                    throw invariant("prototype '%s' has '%s' values and norm '%s'".formatted(prototype.position(),
-                            values.length, norm(values)));
+                    throw invariant("prototype '%s' has '%s' values and norm '%s'".formatted(p, values.length,
+                            norm(values)));
                 }
             }
         }
@@ -461,32 +463,24 @@ public class TopicsRebuildService {
         }
 
         /**
-         * Inserts the project's state row. A first build saves a project that has no row: the first-build job and a run
-         * by hand both check that under the project's lock. If another run saved the project anyway (a
-         * Redis failover, or a timed-out run that outlives its lock), the primary key fails this save as a conflict.
-         * It first locks the project's row: a project deleted during the run fails the save, and a delete that comes
-         * later waits for this transaction, so its cleanup removes what the run saved.
+         * Saves the list on the project's row: a compare-and-set on an empty {@code list_run_id}, as a first build saves
+         * a project that has no list. The first-build job and a run by hand both check that under the project's lock;
+         * if another run saved the project anyway (a Redis failover, or a timed-out run that outlives its lock), the
+         * save is a conflict. It first locks the project's row: a project deleted during the run fails the save, and a
+         * delete that comes later waits for this transaction, so its cleanup removes what the run saved.
          */
-        private void writeState(TopicDAO topicDAO, TopicProjectState state) {
+        private void saveList(TopicDAO topicDAO, Instant savedAt, PrototypeVectors otherVectors) {
             if (topicDAO.lockProject(workspaceId, projectId) == 0) {
                 throw new TopicsRunException(Code.SAVE, "the project was deleted during the run");
             }
-            try {
-                topicDAO.insertState(state);
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    throw conflict(exception);
-                }
-                throw exception;
+            if (topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, to, otherVectors,
+                    TopicEmbedding.MODEL) != 1) {
+                throw new TopicsRunException(Code.SAVE, "another run saved this project meanwhile");
             }
         }
 
-        private TopicsRunException conflict(Exception cause) {
-            return new TopicsRunException(Code.SAVE, "another run saved this project meanwhile", cause);
-        }
-
         private void save(List<WindowTrace> traces, int[] labels, List<Topic> topics,
-                List<TopicPrototype> prototypes) {
+                PrototypeVectors otherVectors) {
             var traceTopics = new ArrayList<TraceTopic>(traces.size());
             for (int i = 0; i < traces.size(); i++) {
                 traceTopics.add(TraceTopic.builder()
@@ -496,32 +490,19 @@ public class TopicsRebuildService {
                         .traceCreatedAt(traces.get(i).traceCreatedAt())
                         .topicId(labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(labels[i]).id())
                         .source(TraceTopic.Source.RUN)
-                        .runId(runId.toString())
+                        .runId(runId)
                         .build());
             }
-            var statsJson = stats.toString();
             try {
                 var now = Instant.now();
                 template.inTransaction(WRITE, handle -> {
                     var topicDAO = handle.attach(TopicDAO.class);
                     // First, so a run that saved this project meanwhile fails the save before anything else.
-                    writeState(topicDAO, TopicProjectState.builder()
-                            .projectId(projectId)
-                            .workspaceId(workspaceId)
-                            .rebuilds(1)
-                            .firstBuiltAt(now)
-                            .lastRunId(runId)
-                            .lastSuccessAt(now)
-                            .windowUntil(to)
-                            .labelsComplete(false)
-                            .build());
+                    saveList(topicDAO, now, otherVectors);
                     if (!topics.isEmpty()) {
                         topicDAO.insertTopics(topics);
                     }
-                    if (!prototypes.isEmpty()) {
-                        topicDAO.insertPrototypes(prototypes);
-                    }
-                    if (handle.attach(TopicRunDAO.class).markSaved(workspaceId, runId, now, statsJson) != 1) {
+                    if (handle.attach(TopicRunDAO.class).markSaved(workspaceId, projectId, runId, now) != 1) {
                         // Failed meanwhile, by its timeout: roll the save back.
                         throw new TopicsRunException(Code.TIMEOUT, "the run ended before its save committed");
                     }
@@ -532,34 +513,34 @@ public class TopicsRebuildService {
             } catch (RuntimeException exception) {
                 throw new TopicsRunException(Code.SAVE, "the save failed", exception);
             }
-            metrics.run(workspaceId, TopicRun.Status.SAVED, null);
+            metrics.run(workspaceId, TopicProject.RunStatus.SAVED, null);
             metrics.saved(workspaceId, "topics", topics.size());
-            metrics.saved(workspaceId, "topic_prototypes", prototypes.size());
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             int inserted = insertTraceTopics(traceTopics) ? traceTopics.size() : 0;
-            log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', prototypes '{}'", runId,
-                    projectId, inserted, topics.size(), prototypes.size());
+            log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', stats '{}'", runId,
+                    projectId, inserted, topics.size(), stats);
         }
 
         Outcome failed(Code code, Exception exception) {
             stats.set("seconds", seconds);
-            var message = StringUtils.defaultIfBlank(ExceptionUtils.getMessage(exception), code.getValue());
             if (TEXT_CODES.contains(code)) {
                 // The answer's length and SHA-256 are logged when it arrives.
-                log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}'", runId, projectId,
+                log.warn("Topics run '{}' failed, project '{}', code '{}', errors '{}', stats '{}'", runId, projectId,
                         code.getValue(), ExceptionUtils.getThrowableList(exception).stream()
-                                .map(TopicsRebuildService::formatError).toList());
+                                .map(TopicsRebuildService::formatError).toList(),
+                        stats);
             } else {
-                log.warn("Topics run '{}' failed, project '{}', code '{}'", runId, projectId, code.getValue(),
-                        exception);
+                log.warn("Topics run '{}' failed, project '{}', code '{}', stats '{}'", runId, projectId,
+                        code.getValue(), stats, exception);
             }
             try {
-                fail(runId, workspaceId, code, message, stats.toString());
+                fail(runId, workspaceId, projectId, code);
             } catch (RuntimeException markException) {
                 log.error("Topics run '{}' could not be marked failed, project '{}'", runId, projectId,
                         markException);
             }
-            return Outcome.builder().runId(runId).status(TopicRun.Status.FAILED).errorCode(code.getValue()).build();
+            return Outcome.builder().runId(runId).status(TopicProject.RunStatus.FAILED).errorCode(code.getValue())
+                    .stats(stats).build();
         }
 
         /** A phase timed more than once adds up in the stats. */
@@ -592,7 +573,7 @@ public class TopicsRebuildService {
 
     /** The window as the build reads it: per trace, in time order, its text and vector. */
     private record ReadWindow(String[] texts, float[] vectors, List<WindowTrace> traces,
-            TreeMap<Long, Integer> versions) {
+            TreeMap<Integer, Integer> versions) {
     }
 
     private record WindowTrace(UUID traceId, Instant traceCreatedAt) {
