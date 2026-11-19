@@ -2647,7 +2647,7 @@ topics:
   #  Default: empty (no workspace)
   #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
   #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
-  enabledWorkspaces: ${TOGGLE_TOPICS_WORKSPACES:-""}
+  enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
   vectors:
     #  Default: 1m
     #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each

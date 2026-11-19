@@ -17,7 +17,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * Whether Topics runs for a workspace: the one place that decides it. A workspace runs Topics only when all three hold:
  * <ul>
  * <li>{@code topics.enabled} is on;</li>
- * <li>it is listed in {@code topics.enabledWorkspaces} (Helm's {@code TOGGLE_TOPICS_WORKSPACES});</li>
+ * <li>it is listed in {@code topics.enabledWorkspaces} ({@code TOPICS_ENABLED_WORKSPACES});</li>
  * <li>it is enabled in {@code ai_label_workspaces}, since Topics reads the ai-labels trace_summary.</li>
  * </ul>
  * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
@@ -35,16 +35,17 @@ public class TopicWorkspaceService {
         if (!config.isEnabled() || listed.isEmpty()) {
             return List.of();
         }
-        return aiLabelsWorkspaceIds().stream().filter(listed::contains).toList();
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds())
+                .stream()
+                .filter(listed::contains)
+                .toList();
     }
 
     public boolean isEnabled(@NonNull String workspaceId) {
         return config.isEnabled() && config.enabledWorkspaceIds().contains(workspaceId)
-                && aiLabelsWorkspaceIds().contains(workspaceId);
-    }
-
-    private List<String> aiLabelsWorkspaceIds() {
-        return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AiLabelWorkspaceDAO.class).enabledWorkspaceIds());
+                && template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(AiLabelWorkspaceDAO.class).enabled(workspaceId))
+                        .orElse(false);
     }
 }
