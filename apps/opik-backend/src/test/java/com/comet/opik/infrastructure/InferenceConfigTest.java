@@ -47,6 +47,7 @@ class InferenceConfigTest {
                 arguments("all callers one below the pool", true, 58, 4, 1, 64, true),
                 arguments("all callers as many as the pool", true, 59, 4, 1, 64, false),
                 arguments("decides alone below the pool, with loads and embeds over it", true, 48, 12, 4, 64, false),
+                arguments("a cap near Integer.MAX_VALUE", true, Integer.MAX_VALUE, 4, 1, 64, false),
                 arguments("guardrails off", false, 256, 64, 8, 64, true));
     }
 
@@ -62,7 +63,7 @@ class InferenceConfigTest {
         config.getTopics().getVectors().setEmbedConcurrency(embedConcurrency);
         config.getJerseyClient().setMaxConnectionsPerRoute(maxConnectionsPerRoute);
 
-        assertThat(VALIDATOR.validateProperty(config, "inferenceDecidesWithinConnectionPool")).hasSize(valid ? 0 : 1);
+        assertThat(VALIDATOR.validateProperty(config, "inferenceCallsWithinConnectionPool")).hasSize(valid ? 0 : 1);
     }
 
     static Stream<Arguments> topicsEmbedSettings() {
