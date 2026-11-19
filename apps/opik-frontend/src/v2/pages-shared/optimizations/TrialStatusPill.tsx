@@ -1,7 +1,7 @@
 import React from "react";
 
 import { cn } from "@/lib/utils";
-import StatusDotPill from "@/v2/pages-shared/optimizations/StatusDotPill";
+import StatusDotPill from "@/shared/StatusDotPill/StatusDotPill";
 import {
   TRIAL_BEST_COLOR,
   TRIAL_STATUS_COLORS,

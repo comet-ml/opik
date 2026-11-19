@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.google.common.base.Preconditions;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -20,7 +19,7 @@ public class IntentMerger {
      * @param texts   per trace, in time order (earliest first), stripped and non-empty
      * @param vectors per trace, {@code texts.length * dimensions} values
      */
-    public static Merged merge(@NonNull String[] texts, @NonNull float[] vectors, int dimensions) {
+    public static MergedIntents merge(@NonNull String[] texts, @NonNull float[] vectors, int dimensions) {
         Preconditions.checkArgument(vectors.length == texts.length * dimensions,
                 "vectors must hold one row per text, texts '%s', values '%s', dimensions '%s'", texts.length,
                 vectors.length, dimensions);
@@ -43,35 +42,17 @@ public class IntentMerger {
             firstIndex[u] = first.get(unique[u]);
             System.arraycopy(vectors, firstIndex[u] * dimensions, uniqueVectors, u * dimensions, dimensions);
         }
-        var inverse = new int[texts.length];
+        var textOfTrace = new int[texts.length];
         for (int i = 0; i < texts.length; i++) {
-            inverse[i] = index.get(texts[i]);
+            textOfTrace[i] = index.get(texts[i]);
         }
-        return Merged.builder()
+        return MergedIntents.builder()
                 .texts(unique)
                 .weights(weights)
                 .firstIndex(firstIndex)
-                .inverse(inverse)
+                .textOfTrace(textOfTrace)
                 .vectors(uniqueVectors)
                 .dimensions(dimensions)
                 .build();
-    }
-
-    /**
-     * The unique texts in code point order, each one's count, first trace and vector, and per trace the index of its
-     * text.
-     */
-    @Builder(toBuilder = true)
-    public record Merged(
-            @NonNull String[] texts,
-            @NonNull int[] weights,
-            @NonNull int[] firstIndex,
-            @NonNull int[] inverse,
-            @NonNull float[] vectors,
-            int dimensions) {
-
-        public int size() {
-            return texts.length;
-        }
     }
 }
