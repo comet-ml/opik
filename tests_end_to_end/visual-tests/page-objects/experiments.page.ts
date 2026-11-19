@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { BasePage } from './base.page';
 
 export class ExperimentsPage extends BasePage {
@@ -26,17 +26,20 @@ export class ExperimentsPage extends BasePage {
   }
 
   // Experiments are grouped by item source by default and only the first group
-  // auto-expands, so an experiment in any other group is hidden until expanded.
-  async expandCollapsedGroups(): Promise<void> {
-    const collapsed = this.page
+  // auto-expands, so an experiment in any other group stays hidden until its group
+  // is expanded. Group rows render after the first table row, so expand on every
+  // retry rather than once up front.
+  async waitForExperiment(experimentName: string): Promise<void> {
+    const experiment = this.page.getByText(experimentName).first();
+    const collapsedGroups = this.page
       .locator('tr.comet-table-row-group')
       .locator('button:has(svg.lucide-chevron-right)');
-    for (let i = 0; i < 10 && (await collapsed.count()) > 0; i++) {
-      await collapsed.first().click();
-    }
-  }
-
-  async waitForExperiment(experimentName: string): Promise<void> {
-    await this.page.getByText(experimentName).first().waitFor({ state: 'visible', timeout: 15000 });
+    await expect(async () => {
+      const collapsedCount = await collapsedGroups.count();
+      for (let i = 0; i < collapsedCount; i++) {
+        await collapsedGroups.first().click();
+      }
+      await expect(experiment).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
   }
 }

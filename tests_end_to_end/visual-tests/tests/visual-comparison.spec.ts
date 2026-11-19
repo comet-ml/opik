@@ -111,8 +111,6 @@ test.describe('Visual Comparison - Opik UI', () => {
   test('06: Experiments page', { tag: ['@vcap:experiments.experiments-page'] }, async ({ page }) => {
     const experimentsPage = new ExperimentsPage(page, baseUrl, workspace);
     await experimentsPage.goto(projectId);
-    await experimentsPage.waitForReady();
-    await experimentsPage.expandCollapsedGroups();
     await experimentsPage.waitForExperiment(experimentName());
     await screenshot(page, '06-experiments-page', tableMasks(page));
   });
