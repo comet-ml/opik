@@ -4,7 +4,6 @@ import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.inference.InferenceContract;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.utils.JsonUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -55,15 +54,17 @@ class TraceSummaryTaskTest {
                 .isEmpty();
     }
 
-    /** Engines match the pattern against the whole summary, so it must hold the 160 bound by itself. */
+    /**
+     * opik-inference validates the answer with jsonschema, whose {@code pattern} is a search anywhere in the value: a
+     * blank summary fails it, any other passes. The decoder's whole-string reading is stricter and not checked here.
+     */
     @ParameterizedTest
-    @CsvSource({"a, true", "'checking a refund ', true", "' checking a refund', false", "' ', false", "'', false",
-            "160, true", "161, false"})
-    void summaryPatternMatchesTheWholeValueUpTo160(String value, boolean matches) {
-        var summary = StringUtils.isNumeric(value) ? "x".repeat(Integer.parseInt(value)) : value;
+    @CsvSource({"a, true", "' checking a refund', true", "'checking a refund ', true", "' ', false", "'', false",
+            "'\t', false"})
+    void summaryPatternRejectsOnlyBlankSummariesInTheValidator(String summary, boolean valid) {
         var pattern = registry.get("trace_summary").schema().at("/properties/summary/pattern").textValue();
 
-        assertThat(Pattern.matches(pattern, summary)).isEqualTo(matches);
+        assertThat(Pattern.compile(pattern).matcher(summary).find()).isEqualTo(valid);
     }
 
     private static String resource(String name) {

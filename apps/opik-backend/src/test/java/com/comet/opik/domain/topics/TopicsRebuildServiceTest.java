@@ -23,7 +23,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -103,8 +102,7 @@ class TopicsRebuildServiceTest {
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         var idGenerator = mock(IdGenerator.class);
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
-        var names = new TopicsWorkspaceNames(workspaceId -> WORKSPACE_NAME, Clock.systemUTC());
-        var metrics = new TopicsMetrics(meter.meter, names);
+        var metrics = new TopicsMetrics(meter.meter, workspaceId -> WORKSPACE_NAME);
         serviceWith = algorithm -> new TopicsRebuildService(TestConfigUtils.loadConfigTest().getTopics(), template,
                 windowDAO, traceTopicsDAO, client, idGenerator, metrics, algorithm);
         service = serviceWith.apply(TopicsTestAlgorithm.algorithm());
