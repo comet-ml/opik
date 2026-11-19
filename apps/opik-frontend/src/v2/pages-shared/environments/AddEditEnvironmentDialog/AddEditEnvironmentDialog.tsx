@@ -44,7 +44,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
   const [name, setName] = useState<string>(
     mode === "clone" && environment
       ? `${environment.name}-copy`
-      : environment?.name ?? "",
+      : (environment?.name ?? ""),
   );
   const [description, setDescription] = useState<string>(
     environment?.description ?? "",

@@ -64,12 +64,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -4544,9 +4539,9 @@ class TraceDAOImpl implements TraceDAO {
                 sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
             }
             if (recentWeeksOnly) {
-                var previousMonday = previousMonday();
+                var previousMonday = WeeklyPartitions.previousMonday();
                 statement.bind("recent_from_id", instantToUUIDMapper.toLowerBound(previousMonday).toString());
-                statement.bind("recent_weeks", recentWeeks(previousMonday).toArray(Long[]::new));
+                statement.bind("recent_weeks", WeeklyPartitions.recentWeeks(previousMonday).toArray(Long[]::new));
             }
 
             Segment segment = startSegment("traces", "Clickhouse", threadScoped
@@ -4558,27 +4553,6 @@ class TraceDAOImpl implements TraceDAO {
         })
                 .flatMap(result -> Mono.from(result.map((row, metadata) -> true)))
                 .defaultIfEmpty(false);
-    }
-
-    /**
-     * Start of the previous UTC week, where the {@code <recent_weeks>} bound of {@link #EXISTS_BY_PROJECT_ID} begins.
-     * Computed once per probe, so its id lower bound and week set cannot straddle a week boundary.
-     */
-    private Instant previousMonday() {
-        return LocalDate.now(ZoneOffset.UTC)
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                .minusWeeks(1)
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant();
-    }
-
-    /**
-     * The week starting at {@code previousMonday} and the two after it.
-     */
-    private List<Long> recentWeeks(Instant previousMonday) {
-        return Stream.of(0, 1, 2)
-                .map(week -> WeeklyPartitions.weekOf(previousMonday.plus(7L * week, ChronoUnit.DAYS)))
-                .toList();
     }
 
     @Override

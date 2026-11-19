@@ -156,7 +156,7 @@ const FeedbackScoreAggregationCell = <TData,>(
 
   const data = aggregationMap?.[rowId] ?? {};
   const rawValue = isFunction(accessorFn) ? accessorFn(data) : undefined;
-  let value = "-";
+  let value = "";
 
   if (isNumber(rawValue)) {
     value = dataFormatter(rawValue);

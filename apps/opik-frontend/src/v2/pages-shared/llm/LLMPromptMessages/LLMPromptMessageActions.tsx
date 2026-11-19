@@ -79,10 +79,10 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
-  const selectedPromptIdRef = useRef<string | undefined>();
-  const selectedVersionIdRef = useRef<string | undefined>();
-  const tempPromptIdRef = useRef<string | undefined>();
-  const tempVersionIdRef = useRef<string | undefined>();
+  const selectedPromptIdRef = useRef<string | undefined>(undefined);
+  const selectedVersionIdRef = useRef<string | undefined>(undefined);
+  const tempPromptIdRef = useRef<string | undefined>(undefined);
+  const tempVersionIdRef = useRef<string | undefined>(undefined);
   const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
   const [showImproveWizard, setShowImproveWizard] = useState(false);
 

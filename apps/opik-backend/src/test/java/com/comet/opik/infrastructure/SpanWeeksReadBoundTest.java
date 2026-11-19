@@ -35,6 +35,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.AnnotationQueuesResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -67,6 +68,8 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
@@ -78,6 +81,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -89,13 +93,19 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -113,8 +123,11 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 /**
  * The spans reads bounded by the span_weeks index ({@code spanWeeksReadEnabled}), keyed by traces or by a project,
  * return every span of their traces or project, a far-future one included, on the weekly-partitioned spans table: each
- * read is compared as a whole against what those spans add up to. Weeks are registered by {@code span_weeks_mv} alone
- *, and each fixture waits for them to be indexed unless it says otherwise.
+ * read is compared as a whole against what those spans add up to. Weeks are registered by {@code span_weeks_mv} alone,
+ * and each fixture waits for them to be indexed unless it says otherwise.
+ * <p>
+ * The alert total cost adds up the same spans with or without its bound, so no result can show the bound applies: its
+ * test also reads, from {@code query_log}, the partitions the statement opened.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -141,6 +154,27 @@ class SpanWeeksReadBoundTest {
      * 0 without it. Short words, as a long run of base64 characters would be stripped as an attachment.
      */
     private static final String LARGE_INPUT = "opik ".repeat(1_200_000);
+
+    /** The {@code spans} partitions the latest statement of an op, mentioning the given id, read. */
+    private static final String SPANS_PARTITIONS_READ = """
+            SELECT arrayStringConcat(arrayFilter(p -> startsWith(p, :prefix), partitions), ',')
+            FROM system.query_log
+            WHERE log_comment LIKE concat(:op, ':%')
+            AND type = 'QueryFinish'
+            AND query LIKE concat('%', :mentioned_id, '%')
+            ORDER BY event_time_microseconds DESC
+            LIMIT 1
+            """;
+
+    private static final String PARTITION_PREFIX = "%s.spans.".formatted(DATABASE_NAME);
+
+    /** How many of the spans are stored, and in how many parts. */
+    private static final String SPAN_PARTS = """
+            SELECT count() AS spans, uniqExact(_part) AS parts
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            """;
 
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer(false,
@@ -195,10 +229,12 @@ class SpanWeeksReadBoundTest {
     private ExperimentAggregatesService experimentAggregatesService;
     private SpanService spanService;
     private SpanWeeksReadFixtures fixtures;
+    private TraceCostAlerts traceCostAlerts;
+    private TransactionTemplateAsync template;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport, SpanService spanService,
-            ExperimentAggregatesService experimentAggregatesService) {
+            ExperimentAggregatesService experimentAggregatesService, TransactionTemplateAsync template) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -215,6 +251,8 @@ class SpanWeeksReadBoundTest {
                 projectResourceClient, traceResourceClient,
                 spanResourceClient, datasetResourceClient, experimentResourceClient,
                 spanService);
+        this.traceCostAlerts = new TraceCostAlerts(wireMock.server(), new AlertResourceClient(clientSupport));
+        this.template = template;
     }
 
     @Test
@@ -270,6 +308,96 @@ class SpanWeeksReadBoundTest {
     private static KpiCardResponse.KpiMetric kpi(KpiCardResponse.KpiMetricType type, Double current,
             Double previous) {
         return KpiCardResponse.KpiMetric.builder().type(type).currentValue(current).previousValue(previous).build();
+    }
+
+    /**
+     * A workspace of its own each time, so a workspace-wide alert adds up only this case's spans. A project alert
+     * filters span_weeks by project, a workspace alert by the trace-id range alone.
+     */
+    @ParameterizedTest(name = "project alert: {0}")
+    @ValueSource(booleans = {true, false})
+    void alertTotalCostReadsOnlyTheSpanWeeksOfTheTracesInItsWindow(boolean projectAlert) {
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var workspaceId = UUID.randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+        var workspaceFixtures = new SpanWeeksReadFixtures(apiKey, workspaceName, workspaceId, USER, factory,
+                projectResourceClient, traceResourceClient, spanResourceClient, datasetResourceClient,
+                experimentResourceClient, spanService);
+        var trace = workspaceFixtures.createFarFutureTrace();
+        // In an earlier week, one part holding spans of traces before and after the alert window: the trace-id range
+        // cannot rule the part out, only the week bound can.
+        var fillerMonday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                .minusWeeks(RandomUtils.secure().randomInt(1, 105));
+        var fillerSpanAt = fillerMonday.atStartOfDay(ZoneOffset.UTC).toInstant()
+                .plusMillis(RandomUtils.secure().randomLong(0, Duration.ofDays(7).toMillis()));
+        var now = trace.trace().startTime();
+        var fillerSpans = Stream.of(now.minus(TraceCostAlerts.WINDOW).minus(randomDuration()),
+                now.plus(randomDuration()))
+                .map(traceAt -> factory.manufacturePojo(Span.class).toBuilder()
+                        .id(ID_GENERATOR.getTimeOrderedEpoch(fillerSpanAt.toEpochMilli()))
+                        .projectName(trace.projectName())
+                        .traceId(ID_GENERATOR.getTimeOrderedEpoch(traceAt.toEpochMilli()))
+                        .parentSpanId(null)
+                        .feedbackScores(null)
+                        .build())
+                .toList();
+        spanResourceClient.batchCreateSpans(fillerSpans, apiKey, workspaceName);
+        assertThat(partsHolding(workspaceId, fillerSpans))
+                .as("the filler spans share one part, or the trace-id range alone could exclude each")
+                .isOne();
+
+        var actual = traceCostAlerts.totalCost(projectAlert ? trace.projectId() : null, apiKey, workspaceName,
+                workspaceId);
+
+        assertThat(actual).isEqualByComparingTo(trace.totalCost());
+        assertThat(spansPartitionsRead("AlertMetrics_getTotalCost", UUID.fromString(workspaceId)))
+                .containsExactlyInAnyOrderElementsOf(trace.spans().stream()
+                        .map(span -> String.valueOf(workspaceFixtures.week(span.id())))
+                        .collect(Collectors.toSet()));
+    }
+
+    /** The parts holding the spans, once all of them are readable. */
+    private long partsHolding(String workspaceId, List<Span> spans) {
+        var ids = spans.stream().map(span -> span.id().toString()).toArray(String[]::new);
+        return Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                .until(() -> template.nonTransaction(connection -> Mono.from(connection
+                        .createStatement(SPAN_PARTS)
+                        .bind("workspace_id", workspaceId)
+                        .bind("ids", ids)
+                        .execute())
+                        .flatMap(result -> Mono.from(result.map((row, _) -> Pair.of(
+                                row.get("spans", Long.class), row.get("parts", Long.class))))))
+                        .block(), spansAndParts -> spansAndParts.getLeft() == ids.length)
+                .getRight();
+    }
+
+    /**
+     * One hour to one day: longer than the alert job takes to run after the write, so a trace this far outside the
+     * window is still outside it when the job reads.
+     */
+    private static Duration randomDuration() {
+        return Duration.ofMinutes(RandomUtils.secure().randomLong(60, 24 * 60));
+    }
+
+    /** Polled: a statement's {@code query_log} row is written asynchronously. */
+    private Set<String> spansPartitionsRead(String queryName, UUID mentionedId) {
+        var partitions = Awaitility.await()
+                .alias("query_log holds a %s statement mentioning id %s".formatted(queryName, mentionedId))
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> template.nonTransaction(connection -> Mono.from(connection
+                        .createStatement(SPANS_PARTITIONS_READ)
+                        .bind("prefix", PARTITION_PREFIX)
+                        .bind("op", queryName)
+                        .bind("mentioned_id", mentionedId.toString())
+                        .execute())
+                        .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
+                        .block(), Objects::nonNull);
+        return Arrays.stream(partitions.split(","))
+                .filter(partition -> !partition.isEmpty())
+                .map(partition -> partition.substring(PARTITION_PREFIX.length()))
+                .collect(Collectors.toSet());
     }
 
     /**

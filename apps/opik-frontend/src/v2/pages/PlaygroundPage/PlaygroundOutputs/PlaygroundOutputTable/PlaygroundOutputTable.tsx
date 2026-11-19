@@ -212,7 +212,7 @@ const PlaygroundOutputTable = ({
 
   return (
     <div
-      className="playground-table flex" // eslint-disable-line tailwindcss/no-custom-classname
+      className="playground-table flex"
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       {hasLeftColumns && (

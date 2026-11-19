@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "src/data/model_prices_and_context_window.json"
+  ],
+  "sortTailwindcss": {
+    "config": "./tailwind.config.ts",
+    "functions": [
+      "clsx",
+      "cva",
+      "classnames",
+      "ctl",
+      "tv"
+    ]
+  }
+}
