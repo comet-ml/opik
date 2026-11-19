@@ -1040,6 +1040,7 @@ topics:
       maxThreads: 2
       createdAtSlack: 1d
       sliceSize: 1d
+      discoverySliceSize: 7d
 
 # Python evaluator configuration
 pythonEvaluator:

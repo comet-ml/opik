@@ -173,5 +173,14 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration sliceSize;
+
+        /**
+         * The backfill's discovery and vector count read in slices of this much creation time. Their memory stays
+         * small, so wide slices: each slice re-reads the granules across its edges.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration discoverySliceSize;
     }
 }

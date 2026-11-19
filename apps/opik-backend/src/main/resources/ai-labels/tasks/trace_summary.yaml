@@ -25,8 +25,9 @@ prompt:
 schema:
   type: object
   properties:
-    # Inference engines match a pattern against the whole string, so it carries the length bound as well: a
-    # non-blank first, up to 160 characters in all.
+    # Not blank. The structured-output decoder reads a pattern as a whole-string match, so for it the pattern also
+    # starts the summary with a non-blank and bounds it at 160; opik-inference's jsonschema validator searches for
+    # the pattern anywhere, so for it only blank summaries fail, and maxLength bounds the length.
     summary: {type: string, minLength: 1, maxLength: 160, pattern: '\S[\s\S]{0,159}'}
   required: [summary]
   additionalProperties: false

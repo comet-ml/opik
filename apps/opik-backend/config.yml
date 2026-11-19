@@ -2727,6 +2727,10 @@ topics:
       #  Description: The daily pass, and the backfill of a large project, read their window in slices of this much
       #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
       sliceSize: ${TOPICS_VECTORS_FIND_SLICE_SIZE:-1d}
+      #  Default: 7d
+      #  Description: The backfill's discovery and vector count read in slices of this much trace creation time. Their
+      #  memory stays small, so the slices are wide: each slice re-reads the granules across its edges. From 1h to 365d
+      discoverySliceSize: ${TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE:-7d}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
