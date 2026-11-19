@@ -291,7 +291,7 @@ class InferenceClientTest {
                 ? response.withChunkedDribbleDelay(2, 10)
                 : response));
 
-        assertThat(client.embed(embedRequest(), later()).block().result().embeddings()).hasSize(2);
+        assertThat(client.embed(embedRequest(), later()).block().result().embeddings()).hasDimensions(2, 2);
     }
 
     static Stream<Arguments> bodiesOverTheCap() {
@@ -497,8 +497,8 @@ class InferenceClientTest {
 
         var actual = client.embed(request, Instant.now().plusSeconds(600)).block();
 
-        assertThat(actual).isEqualTo(EmbedResponse.builder()
-                .result(EmbedResult.builder().embeddings(vectors).build())
+        assertThat(actual).usingRecursiveComparison().isEqualTo(EmbedResponse.builder()
+                .result(EmbedResult.builder().embeddings(vectors).dimensions(4).build())
                 .build());
         var sent = single(postRequestedFor(urlEqualTo(EMBED_PATH)));
         assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer " + CREDENTIAL);
@@ -532,6 +532,31 @@ class InferenceClientTest {
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.isDeadlineExceeded()).isTrue());
         assertThat(server.findAll(postRequestedFor(urlEqualTo(EMBED_PATH)))).hasSize(1);
+    }
+
+    static Stream<Arguments> malformedEmbedResults() {
+        return Stream.of(
+                arguments("one vector for two inputs", "{\"embeddings\": [[0.6, 0.8]], \"dimensions\": 2}"),
+                arguments("a null vector", "{\"embeddings\": [[0.6, 0.8], null], \"dimensions\": 2}"),
+                arguments("a null in a vector", "{\"embeddings\": [[0.6, 0.8], [1.0, null]], \"dimensions\": 2}"),
+                arguments("a vector shorter than dimensions",
+                        "{\"embeddings\": [[0.6, 0.8], [1.0]], \"dimensions\": 2}"),
+                arguments("no dimensions", "{\"embeddings\": [[0.6, 0.8], [1.0, 0.0]]}"),
+                arguments("no vectors", "{\"dimensions\": 2}"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("malformedEmbedResults")
+    void embedMalformedResultIsAnUpstreamError(String description, String result) {
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"request_id": "r-1", "cache_hit": false, "latency_ms": 12, "result": %s}
+                        """.formatted(result))));
+
+        assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
+                .isInstanceOfSatisfying(InferenceException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("upstream_error"));
     }
 
     @Test
@@ -639,29 +664,39 @@ class InferenceClientTest {
                 .withBody(body.toString());
     }
 
-    private static ObjectNode embedResponse(List<List<Float>> vectors) {
+    private static ObjectNode embedResponse(float[][] vectors) {
         var response = NODES.objectNode()
                 .put("request_id", UUID.randomUUID().toString())
                 .put("cache_hit", false)
                 .put("latency_ms", RandomUtils.secure().randomInt(1, 1_000));
         response.putObject("usage").put("input_tokens", RandomUtils.secure().randomInt(1, 1_000))
                 .put("output_tokens", 0);
-        var result = response.putObject("result").put("dimensions", vectors.getFirst().size());
+        var result = response.putObject("result").put("dimensions", vectors[0].length);
         var embeddings = result.putArray("embeddings");
-        vectors.forEach(vector -> vector.forEach(embeddings.addArray()::add));
+        for (var vector : vectors) {
+            var array = embeddings.addArray();
+            for (var value : vector) {
+                array.add(value);
+            }
+        }
         return response;
     }
 
-    private static List<List<Float>> randomVectors(int count) {
-        return IntStream.range(0, count)
-                .mapToObj(index -> IntStream.range(0, 4).mapToObj(i -> RandomUtils.secure().randomFloat(0, 1)).toList())
-                .toList();
+    private static float[][] randomVectors(int count) {
+        var vectors = new float[count][4];
+        for (var vector : vectors) {
+            for (var i = 0; i < vector.length; i++) {
+                vector[i] = RandomUtils.secure().randomFloat(0, 1);
+            }
+        }
+        return vectors;
     }
 
     private static EmbedRequest embedRequest() {
         return EmbedRequest.builder()
                 .orgId(UUID.randomUUID().toString())
-                .inputs(IntStream.range(0, 3).mapToObj(index -> RandomStringUtils.secure().nextAlphanumeric(32))
+                // Two, as EMBEDDED_BODY has two vectors.
+                .inputs(IntStream.range(0, 2).mapToObj(index -> RandomStringUtils.secure().nextAlphanumeric(32))
                         .toList())
                 .build();
     }

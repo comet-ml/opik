@@ -46,6 +46,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -212,10 +213,26 @@ public class InferenceClient {
                     .readTimeout(config.getInference().getReadTimeout().toJavaDuration())
                     .deadline(deadline)
                     .type(EmbedResponse.class)
+                    .noNullPrimitives(true)
+                    .check(response -> checkVectors(response, request.inputs().size()))
                     .failFastOnQuotaExceeded(true)
                     .failFastOnDeadlineExceeded(true)
                     .build());
         });
+    }
+
+    /** One vector per input, each {@code dimensions} long; a null inside a vector already failed the parse. */
+    private static void checkVectors(EmbedResponse response, int inputs) {
+        var result = response.result();
+        Preconditions.checkState(result != null && result.embeddings() != null, "embed answer has no vectors");
+        Preconditions.checkState(result.dimensions() >= 1, "embed answer has dimensions '%s'", result.dimensions());
+        Preconditions.checkState(result.embeddings().length == inputs, "embed answer has '%s' vectors for '%s' inputs",
+                result.embeddings().length, inputs);
+        for (var vector : result.embeddings()) {
+            Preconditions.checkState(vector != null && vector.length == result.dimensions(),
+                    "embed vector has '%s' values, dimensions '%s'", vector == null ? null : vector.length,
+                    result.dimensions());
+        }
     }
 
     /**
@@ -431,8 +448,16 @@ public class InferenceClient {
                 throw InferenceException.upstreamError(status, null, null);
             }
             var body = capped(response, maxBytes);
-            value = InferenceJson.MAPPER.readValue(body, call.type());
+            var reader = call.noNullPrimitives() ? InferenceJson.NO_NULL_PRIMITIVES : InferenceJson.MAPPER.reader();
+            value = reader.forType(call.type()).readValue(body);
             body.transferTo(OutputStream.nullOutputStream());
+            if (value == null) {
+                throw InferenceException.upstreamError(status, null, null);
+            }
+            if (call.check() != null) {
+                // A malformed answer, as one that doesn't parse.
+                call.check().accept(value);
+            }
         } catch (OverTheCap exception) {
             throw overTheCap(status, maxBytes);
         } catch (JsonProcessingException exception) {
@@ -444,9 +469,6 @@ public class InferenceClient {
             throw exception;
         } catch (RuntimeException exception) {
             throw InferenceException.upstreamError(status, null, exception);
-        }
-        if (value == null) {
-            throw InferenceException.upstreamError(status, null, null);
         }
         return value;
     }
@@ -525,6 +547,10 @@ public class InferenceClient {
             @NonNull Duration readTimeout,
             @NonNull Instant deadline,
             @NonNull Class<T> type,
+            /** Reads the answer with {@link InferenceJson#NO_NULL_PRIMITIVES}. */
+            boolean noNullPrimitives,
+            /** Throws on an answer that parses but breaks the contract; it fails like one that doesn't parse. */
+            Consumer<T> check,
             boolean failFastOnQuotaExceeded,
             boolean failFastOnDeadlineExceeded,
             boolean realtime) {
