@@ -41,6 +41,23 @@ class InferenceConfigTest {
         assertThat(ShippedConfig.load(environment).getInference().getUrl()).isEqualTo(expected);
     }
 
+    static Stream<Arguments> decideCapEnvironments() {
+        return Stream.of(
+                arguments("neither name", Map.of(), 48),
+                arguments("only the old name", Map.of("AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES", "32"), 32),
+                arguments("only the new name", Map.of("OPIK_INFERENCE_MAX_CONCURRENT_DECIDES", "40"), 40),
+                arguments("both names", Map.of("AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES", "32",
+                        "OPIK_INFERENCE_MAX_CONCURRENT_DECIDES", "40"), 40));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("decideCapEnvironments")
+    @DisplayName("OPIK_INFERENCE_MAX_CONCURRENT_DECIDES falls back to AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES")
+    void decideCapFallsBackToTheOldName(String description, Map<String, String> environment, int expected)
+            throws Exception {
+        assertThat(ShippedConfig.load(environment).getInference().getMaxConcurrentDecides()).isEqualTo(expected);
+    }
+
     static Stream<Arguments> decidesAndConnections() {
         return Stream.of(
                 arguments("the defaults", true, 48, 4, 1, 64, true),
