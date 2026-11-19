@@ -58,7 +58,7 @@ public class GroupSummaries {
     public static List<GroupSummary> summarize(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
             @NonNull float[] centres) {
         int d = merged.dimensions();
-        int k = groups(centres, d);
+        int k = groupCount(centres, d);
         Preconditions.checkArgument(labels.length == merged.size(),
                 "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
         int n = merged.inverse().length;
@@ -107,7 +107,7 @@ public class GroupSummaries {
     public static List<List<String>> authorExamples(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
             @NonNull float[] centres, int frequent, int extra) {
         int d = merged.dimensions();
-        int k = groups(centres, d);
+        int k = groupCount(centres, d);
         Preconditions.checkArgument(labels.length == merged.size(),
                 "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
         var groups = Members.of(labels, k);
@@ -192,7 +192,7 @@ public class GroupSummaries {
     }
 
     /** The number of groups {@code centres} holds, {@code dimensions} values each. */
-    private static int groups(float[] centres, int dimensions) {
+    private static int groupCount(float[] centres, int dimensions) {
         Preconditions.checkArgument(dimensions > 0 && centres.length % dimensions == 0,
                 "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, dimensions);
         return centres.length / dimensions;
