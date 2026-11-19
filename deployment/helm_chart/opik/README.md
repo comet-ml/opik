@@ -194,13 +194,13 @@ Call opik api on http://localhost:5173/api
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.logsMaxCount | int | `3` | Rotated file logs kept (applies to both the server and error log) |
 | clickhouse.logsMaxSize | string | `"100M"` | Rotation cap for the ClickHouse file logs. No volume is mounted for them, so they land on the node's root disk |
-| clickhouse.monitoring.additionalGrants | list | `[]` | GRANT statements added to `grants`, e.g. column-level SELECT on the analytics tables a dashboard reads. Column grants on a Nested column need `optimize_functions_to_subcolumns: 0` in `settings` for `length()` on it. |
+| clickhouse.monitoring.additionalGrants | list | `[]` | Extra GRANT statements, e.g. column-level SELECT on tables a dashboard reads |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
 | clickhouse.monitoring.enabled | bool | `false` |  |
-| clickhouse.monitoring.grants | list | `["GRANT SELECT ON system.*","GRANT REMOTE ON *.*"]` | GRANT statements for the monitoring user. This and `additionalGrants` can't both be empty: a user without grants holds every privilege on every database. REMOTE is what `cluster()` and `clusterAllReplicas()` need. |
-| clickhouse.monitoring.limits | object | `{"max_bytes_to_read":250000000000,"max_concurrent_queries_for_user":20,"max_execution_time":60,"max_memory_usage":10000000000,"max_rows_to_read":1500000000}` | Read caps in the monitoring user's profile. Each is pinned with a constraint (min 1, max the value), so a query can lower a cap but not raise it or set it to 0, which means unlimited. |
-| clickhouse.monitoring.networks | list | `["0.0.0.0/0"]` | Networks the monitoring user may log in from. Narrow it to the clients that use it, e.g. Grafana's. |
+| clickhouse.monitoring.grants | list | `["GRANT SELECT ON system.*","GRANT REMOTE ON *.*"]` | GRANT statements for the monitoring user; REMOTE is for cluster() |
+| clickhouse.monitoring.limits | object | `{"max_bytes_to_read":250000000000,"max_concurrent_queries_for_user":20,"max_execution_time":60,"max_memory_usage":10000000000,"max_rows_to_read":1500000000}` | Read caps; a query may lower them but not raise them or set 0 (unlimited) |
+| clickhouse.monitoring.networks | list | `["0.0.0.0/0"]` | Networks the monitoring user may log in from |
 | clickhouse.monitoring.password | string | `"opikmon"` |  |
 | clickhouse.monitoring.port | int | `9363` |  |
 | clickhouse.monitoring.service.ports[0].name | string | `"prometheus-metrics"` |  |
@@ -218,7 +218,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.portName | string | `""` |  |
 | clickhouse.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
-| clickhouse.monitoring.settings | object | `{"constraints/read_overflow_mode/const":1,"read_overflow_mode":"throw","readonly":2}` | Settings of the monitoring user's profile, which is named after the user. readonly 2, not 1: Grafana's ClickHouse plugins set per-query settings such as log_comment, which readonly 1 rejects. |
+| clickhouse.monitoring.settings | object | `{"constraints/read_overflow_mode/const":1,"read_overflow_mode":"throw","readonly":2}` | Profile settings; readonly 2 because Grafana sends per-query settings (log_comment) |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
 | clickhouse.namespaceDomainPattern | string | `""` |  |

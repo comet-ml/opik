@@ -70,8 +70,7 @@ spec:
       {{- end }}
       {{ $mon.username }}/{{ $key }}: {{ $value }}
       {{- end }}
-      {{- /* With readonly 2 a query may change settings, so each cap is pinned: min 1 because 0 means unlimited.
-             int64 keeps large caps out of the scientific notation Helm prints for big numbers. */}}
+      {{- /* min 1 because 0 means unlimited; int64 stops Helm printing 2.5e+11 */}}
       {{- range $key, $value := $mon.limits }}
       {{ $mon.username }}/{{ $key }}: {{ $value | int64 }}
       {{ $mon.username }}/constraints/{{ $key }}/min: 1

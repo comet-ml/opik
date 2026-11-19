@@ -1,7 +1,6 @@
 suite: clickhouse monitoring user is read-only, least-privilege and capped
 
-# A users.xml user without <grants> holds every privilege, and one without <profile> runs on `default`
-# with no readonly and no read caps. These pin the three things that prevent that.
+# Without grants and a profile, a users.xml user holds every privilege with no readonly or read caps.
 
 templates:
   - templates/clickhouseinstallation.yaml
@@ -37,8 +36,7 @@ tests:
           path: spec.configuration.profiles["opikmon/constraints/read_overflow_mode/const"]
           value: 1
 
-  # 0 means unlimited, so a max constraint alone would still let a query lift the cap.
-  # The large value also checks the cap renders as an integer, not in scientific notation.
+  # The large value also checks the cap renders as an integer, not 3e+11.
   - it: pins each cap with min 1 and max the cap
     set:
       clickhouse.monitoring.enabled: true
