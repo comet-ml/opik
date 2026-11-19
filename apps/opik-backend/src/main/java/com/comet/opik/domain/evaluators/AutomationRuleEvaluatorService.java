@@ -34,6 +34,7 @@ import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
@@ -286,6 +287,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var ruleDAO = handle.attach(AutomationRuleDAO.class);
 
             try {
+                validateTypeUnchanged(dao, id, workspaceId, evaluatorUpdate.getType());
+
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
                 // Only resolve a unique name on an actual rename. A non-name edit (sampling rate, enabled,
@@ -476,6 +479,27 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             dao.deleteBaseRules(ids, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR.getAction());
             return null;
         });
+    }
+
+    /**
+     * A rule keeps its type for life: changing it means deleting the rule and creating a new one. The current type
+     * is the one reads resolve, so a rule stored with a mismatched code accepts the type it is served as, and the
+     * update then writes that type back to the row.
+     */
+    private void validateTypeUnchanged(AutomationRuleEvaluatorDAO dao, UUID id, String workspaceId,
+            AutomationRuleEvaluatorType requestedType) {
+        var criteria = AutomationRuleEvaluatorCriteria.builder().ids(Set.of(id)).build();
+        var currentType = dao.findRulesWithoutProjects(workspaceId, null, criteria.action(), null, criteria.ids(),
+                null, null, null, null, Map.of(), null, null)
+                .stream()
+                .findFirst()
+                .map(AutomationRuleEvaluatorModel::type)
+                .orElseThrow(this::newNotFoundException);
+        if (currentType != requestedType) {
+            throw new BadRequestException(
+                    "Evaluator type can't be changed, delete the rule and create a new one with the new type, current type '%s', requested type '%s'"
+                            .formatted(currentType.getType(), requestedType.getType()));
+        }
     }
 
     private NotFoundException newNotFoundException() {

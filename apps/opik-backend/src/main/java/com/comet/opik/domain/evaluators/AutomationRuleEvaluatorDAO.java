@@ -38,7 +38,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
     @SqlUpdate("""
             UPDATE automation_rule_evaluators
-            SET code = :rule.code,
+            SET `type` = :rule.type,
+                code = :rule.code,
                 last_updated_by = :rule.lastUpdatedBy
             WHERE id = :id
             """)

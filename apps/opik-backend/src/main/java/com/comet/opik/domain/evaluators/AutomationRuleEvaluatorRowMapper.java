@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.ProjectReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 
@@ -30,6 +31,7 @@ import static com.comet.opik.domain.evaluators.UserDefinedMetricPythonAutomation
  * 2. Type-specific code field parsing
  * 3. Fields that will be enriched later by Service layer (projectId, projectName, projects)
  */
+@Slf4j
 public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -68,11 +70,12 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         SortedSet<ProjectReference> projects = null;
 
         // Parse type-specific code field
-        AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
+        AutomationRuleEvaluatorType storedType = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
         String codeJson = rs.getString("code");
 
         try {
             JsonNode codeNode = OBJECT_MAPPER.readTree(codeJson);
+            AutomationRuleEvaluatorType type = resolveType(id, storedType, codeNode);
 
             // Build the appropriate model type based on evaluator type
             return switch (type) {
@@ -190,5 +193,41 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         } catch (JsonProcessingException e) {
             throw new SQLException("Failed to parse automation rule evaluator code", e);
         }
+    }
+
+    /**
+     * Updates used to accept a type change while writing only the code, leaving rows whose code belongs to the other
+     * evaluator kind of the same scope. Judge code always carries a model and Python code never does, so the code
+     * decides between the two, and the rule reads as the type its code was written for.
+     */
+    private static AutomationRuleEvaluatorType resolveType(
+            UUID id, AutomationRuleEvaluatorType storedType, JsonNode codeNode) {
+        if (isLlmAsJudge(storedType) == codeNode.has("model")) {
+            return storedType;
+        }
+        AutomationRuleEvaluatorType resolvedType = sibling(storedType);
+        log.warn("Evaluator code doesn't match its stored type, reading it as the code's type, id '{}', "
+                + "stored type '{}', resolved type '{}'", id, storedType.getType(), resolvedType.getType());
+        return resolvedType;
+    }
+
+    private static boolean isLlmAsJudge(AutomationRuleEvaluatorType type) {
+        return switch (type) {
+            case LLM_AS_JUDGE, TRACE_THREAD_LLM_AS_JUDGE, SPAN_LLM_AS_JUDGE -> true;
+            case USER_DEFINED_METRIC_PYTHON, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+                    SPAN_USER_DEFINED_METRIC_PYTHON ->
+                false;
+        };
+    }
+
+    private static AutomationRuleEvaluatorType sibling(AutomationRuleEvaluatorType type) {
+        return switch (type) {
+            case LLM_AS_JUDGE -> AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
+            case USER_DEFINED_METRIC_PYTHON -> AutomationRuleEvaluatorType.LLM_AS_JUDGE;
+            case TRACE_THREAD_LLM_AS_JUDGE -> AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
+            case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON -> AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE;
+            case SPAN_LLM_AS_JUDGE -> AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON;
+            case SPAN_USER_DEFINED_METRIC_PYTHON -> AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE;
+        };
     }
 }

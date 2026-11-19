@@ -1597,6 +1597,64 @@ class AutomationRuleEvaluatorsResourceTest {
                     Arguments.of(true, false, "enabled to disabled"),
                     Arguments.of(false, true, "disabled to enabled"));
         }
+
+        Stream<Arguments> updateEvaluator__whenTypeChanges__thenBadRequestAndRuleUnchanged() {
+            return Stream.of(
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void updateEvaluator__whenTypeChanges__thenBadRequestAndRuleUnchanged(
+                AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
+                AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluatorWithProject = automationRuleEvaluator.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluatorWithProject, WORKSPACE_NAME, API_KEY);
+            var update = automationRuleEvaluatorUpdate.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                    "Evaluator type can't be changed, delete the rule and create a new one with the new type, current type '%s', requested type '%s'"
+                            .formatted(evaluatorWithProject.getType().getType(), update.getType().getType()));
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, update, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+            }
+
+            var expectedAutomationRuleEvaluator = evaluatorWithProject.toBuilder()
+                    .id(id)
+                    .projectId(getPrimaryProjectId(evaluatorWithProject.getProjects()))
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator)
+                        .usingRecursiveComparison()
+                        .ignoringFields(AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                        .isEqualTo(expectedAutomationRuleEvaluator);
+                assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
+            }
+        }
     }
 
     @Nested
