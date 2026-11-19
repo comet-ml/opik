@@ -46,17 +46,10 @@ const useProgressSimulation = ({
   loop = false,
 }: UseProgressSimulationOptions): UseProgressSimulationReturn => {
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!isPending) {
-      setProgress(0);
-      setMessage("");
-      return;
-    }
-
     setProgress(0);
-    setMessage(messages[0] || "");
+    if (!isPending) return;
 
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -64,34 +57,31 @@ const useProgressSimulation = ({
 
         if (loop) {
           // In loop mode, reset to 0 when reaching 100
-          if (next >= 100) {
-            setMessage(messages[0] || "");
-            return 0;
-          }
-        } else {
-          // In normal mode, cap at 90
-          if (next > 90) return 90;
+          return next >= 100 ? 0 : next;
         }
 
-        // Calculate which message to show based on progress
-        const maxProgress = loop ? 100 : 90;
-        const messageIndex = Math.min(
-          Math.floor((next / maxProgress) * messages.length),
-          messages.length - 1,
-        );
-        setMessage(messages[messageIndex] || "");
-
-        return next;
+        // In normal mode, cap at 90
+        return Math.min(next, 90);
       });
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [isPending, messages, intervalMs, loop]);
+  }, [isPending, intervalMs, loop]);
 
-  const complete = useCallback(() => {
-    setProgress(100);
-    setMessage(messages[messages.length - 1] || "Completed successfully!");
-  }, [messages]);
+  const complete = useCallback(() => setProgress(100), []);
+
+  // Derived rather than set alongside progress, so the progress updater stays free of side effects.
+  let message = "";
+  if (progress >= 100) {
+    message = messages[messages.length - 1] || "Completed successfully!";
+  } else if (isPending) {
+    const maxProgress = loop ? 100 : 90;
+    const messageIndex = Math.min(
+      Math.floor((progress / maxProgress) * messages.length),
+      messages.length - 1,
+    );
+    message = messages[messageIndex] || "";
+  }
 
   return { progress, message, complete };
 };

@@ -354,7 +354,7 @@ export const convertOptimizationStudioToFormData = (
   const modelName =
     configuredModel && availableModels.includes(configuredModel)
       ? configuredModel
-      : availableModels[0] ?? "";
+      : (availableModels[0] ?? "");
 
   const model = modelName as PROVIDER_MODEL_TYPE | "";
   const defaultConfig = model
@@ -366,7 +366,7 @@ export const convertOptimizationStudioToFormData = (
   const existingConfig = toFormModelConfig(
     model,
     modelName === configuredModel
-      ? optimization?.studio_config?.llm_model?.parameters ?? {}
+      ? (optimization?.studio_config?.llm_model?.parameters ?? {})
       : {},
     Object.keys(defaultConfig),
   );

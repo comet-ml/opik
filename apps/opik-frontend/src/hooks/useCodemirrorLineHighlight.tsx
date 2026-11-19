@@ -8,7 +8,7 @@ const HIGHLIGHT_CLASS = Decoration.line({
 function highlightLine(view: EditorView, lines: number[] = []) {
   const builder = new RangeSetBuilder<Decoration>();
   for (const { from, to } of view.visibleRanges) {
-    for (let pos = from; pos <= to; ) {
+    for (let pos = from; pos <= to;) {
       const line = view.state.doc.lineAt(pos);
       if (lines.includes(line.number))
         builder.add(line.from, line.from, HIGHLIGHT_CLASS);

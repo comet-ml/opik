@@ -34,7 +34,8 @@ const submittedName = (buttonName: string) => {
   const button = screen.getByRole("button", {
     name: buttonName,
   }) as HTMLButtonElement;
-  return (button.form?.elements.namedItem("name") as HTMLInputElement).value;
+  return (button.form?.elements.namedItem("name") as HTMLInputElement | null)
+    ?.value;
 };
 
 const renderEditPanel = () => {
