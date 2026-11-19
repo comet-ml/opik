@@ -115,7 +115,7 @@ const VersionItemPanel: React.FC<VersionItemPanelProps> = ({
                 onAddTag={noop}
                 onDeleteTag={noop}
                 readOnly
-                size="sm"
+                size="md"
                 align="start"
               />
             </div>

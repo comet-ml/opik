@@ -222,7 +222,7 @@ jobs:
       # comet-ci App token: the version bump is pushed straight to protected main.
       - name: Mint GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ vars.COMET_CI_APP_CLIENT_ID }}
           private-key: ${{ secrets.COMET_CI_APP_PRIVATE_KEY }}

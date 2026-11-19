@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
-/** A run that failed for a known reason; {@link Code} is what {@code topic_runs.error_code} records. */
+/** A run that failed for a known reason; {@link Code} is what {@code topic_projects.run_error_code} records. */
 @Getter
 public class TopicsRunException extends RuntimeException {
 

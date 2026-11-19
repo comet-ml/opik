@@ -3,6 +3,7 @@ package com.comet.opik.domain.topics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -42,16 +43,13 @@ public interface TopicAlgorithm {
     FirstBuild firstBuild(Window window, int maxTopics, Context context);
 
     /**
-     * The rule that labels vectors by a project's saved list. Empty when the list has no topic prototype: then it
-     * labels nothing.
+     * The rule that labels vectors by a project's saved list. Empty when the list has no topic: then it labels nothing.
      *
-     * <p>It reads the prototype rows only, not the topics: it relies on the storage rule that a retired topic keeps no
-     * prototype rows, so every row with a {@code topic_id} belongs to a live topic.
-     *
-     * @param prototypes the project's saved prototype rows in {@code position} order: rows with a {@code topic_id}
-     *                   are the topics' prototypes, rows without are known-Other prototypes
+     * @param topics the project's live topics in saved order, {@code (born, id)}: with each topic's vectors in their
+     *               own order, this is the order that breaks a tie between two prototypes
+     * @param otherVectors the known-Other prototypes of the saved list, or null when it has none
      */
-    Optional<Labeller> labeller(List<TopicPrototype> prototypes);
+    Optional<Labeller> labeller(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
 
     /** Labels vectors by one saved list. Local and fast: no network call. */
     @FunctionalInterface
@@ -93,7 +91,7 @@ public interface TopicAlgorithm {
         /** Runs {@code action} as a phase of the run: its seconds go to the run's stats and to the phase metric. */
         <T> T timed(String phase, Supplier<T> action);
 
-        /** The run's stats, saved on its {@code topic_runs} row; an algorithm adds its own. */
+        /** The run's stats, logged when it ends; an algorithm adds its own. */
         ObjectNode stats();
     }
 
@@ -115,9 +113,9 @@ public interface TopicAlgorithm {
     }
 
     /**
-     * A first list. {@code labels[i]} is the index in {@code topics} of window trace i's topic, or {@link #OTHER}. The
-     * prototypes are saved in this order: {@code topicPrototypes}, each owned by the topic at the same index of
-     * {@code owners}, then {@code otherPrototypes}.
+     * A first list. {@code labels[i]} is the index in {@code topics} of window trace i's topic, or {@link #OTHER}. A
+     * topic's saved vectors are the {@code topicPrototypes} it owns by {@code owners}, in order; {@code otherPrototypes}
+     * are the known-Other ones.
      */
     @Builder(toBuilder = true)
     record FirstBuild(@NonNull List<NewTopic> topics, @NonNull int[] labels, @NonNull List<float[]> topicPrototypes,
