@@ -15,6 +15,7 @@ import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/Experime
 import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Filters } from "@/types/filters";
+import { DATASET_TYPE } from "@/types/datasets";
 import { SORT_DIRECTION } from "@/types/sorting";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
@@ -54,6 +55,10 @@ export type UseExperimentsGroupsAndFiltersProps = {
   filters: Filters;
   promptId?: string;
   projectId?: string | null;
+  datasetType?: DATASET_TYPE;
+  // Replaces "Item source" in the Filter by / Group by copy when the page lists
+  // a single type.
+  itemSourceLabel?: string;
 };
 
 export const useExperimentsGroupsAndFilters = ({
@@ -62,6 +67,8 @@ export const useExperimentsGroupsAndFilters = ({
   filters,
   promptId,
   projectId,
+  datasetType,
+  itemSourceLabel,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
@@ -78,6 +85,20 @@ export const useExperimentsGroupsAndFilters = ({
           keyComponentProps: {
             className: "w-full min-w-72",
             ...(projectId && { projectId }),
+            ...(itemSourceLabel && {
+              placeholder: `Select a ${itemSourceLabel.toLowerCase()}`,
+            }),
+            ...(datasetType && {
+              filters: [
+                {
+                  id: "type",
+                  field: "type",
+                  type: COLUMN_TYPE.string,
+                  operator: "=",
+                  value: datasetType,
+                },
+              ],
+            }),
           },
           defaultOperator: "=",
           operators: [{ label: "=", value: "=" }],
@@ -100,12 +121,25 @@ export const useExperimentsGroupsAndFilters = ({
         }),
       },
     }),
-    [filters, sortedColumns, promptId, projectId],
+    [filters, sortedColumns, promptId, projectId, datasetType, itemSourceLabel],
+  );
+
+  const filterAndGroupColumns = useMemo(
+    () =>
+      itemSourceLabel
+        ? FILTER_AND_GROUP_COLUMNS.map((column) =>
+            column.id === COLUMN_DATASET_ID
+              ? { ...column, label: itemSourceLabel }
+              : column,
+          )
+        : FILTER_AND_GROUP_COLUMNS,
+    [itemSourceLabel],
   );
 
   return {
     groups,
     setGroups,
     filtersAndGroupsConfig,
+    filterAndGroupColumns,
   };
 };
