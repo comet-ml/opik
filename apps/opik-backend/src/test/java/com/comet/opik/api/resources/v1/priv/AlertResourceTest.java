@@ -123,6 +123,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
+import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static com.comet.opik.utils.NumberUtils.formatDecimal;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -1738,6 +1739,8 @@ class AlertResourceTest {
                     .lastUpdatedBy(USER)
                     .build();
             promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+            var defaultProjectId = projectResourceClient.getByName(DEFAULT_PROJECT, mock.getLeft(), mock.getRight())
+                    .id();
 
             var payload = verifyWebhookCalledAndGetPayload(alert);
             Prompt prompt = JsonUtils.readValue(payload, Prompt.class);
@@ -1750,7 +1753,7 @@ class AlertResourceTest {
                                             PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
-                    .isEqualTo(expectedPrompt);
+                    .isEqualTo(expectedPrompt.toBuilder().projectId(defaultProjectId).build());
         }
 
         @ParameterizedTest
