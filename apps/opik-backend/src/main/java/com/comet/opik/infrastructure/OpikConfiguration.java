@@ -271,15 +271,19 @@ public class OpikConfiguration extends JobConfiguration {
     }
 
     @JsonIgnore
-    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) + aiLabels.loadConcurrency (AI_LABELS_LOAD_CONCURRENCY) + topics.vectors.embedConcurrency (TOPICS_VECTORS_EMBED_CONCURRENCY) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE) when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: guardrail decide calls share that pool with the other calls to opik-inference")
+    @AssertTrue(message = "inference.maxConcurrentDecides (OPIK_INFERENCE_MAX_CONCURRENT_DECIDES) + aiLabels.loadConcurrency (AI_LABELS_LOAD_CONCURRENCY, when ai-labels is on) + topics.vectors.embedConcurrency (TOPICS_VECTORS_EMBED_CONCURRENCY, when Topics is on) must be below jerseyClient.maxConnectionsPerRoute (JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE) when serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_ENABLED) is true: guardrail decide calls share that pool with the other calls to opik-inference")
     public boolean isInferenceCallsWithinConnectionPool() {
         if (!serviceToggles.isGuardrailsValidationsEnabled() || inference == null || jerseyClient == null) {
             return true;
         }
-        // Summed as long so a value near Integer.MAX_VALUE can't overflow past the check.
-        long embedConcurrency = topics.getVectors() == null ? 0 : topics.getVectors().getEmbedConcurrency();
-        return (long) inference.getMaxConcurrentDecides() + aiLabels.getLoadConcurrency()
-                + embedConcurrency < jerseyClient.getMaxConnectionsPerRoute();
+        // Only the features that are on call opik-inference. Summed as long so a value near Integer.MAX_VALUE can't
+        // overflow past the check.
+        long loadConcurrency = aiLabels.isEnabled() ? aiLabels.getLoadConcurrency() : 0;
+        long embedConcurrency = topics.isEnabled() && topics.getVectors() != null
+                ? topics.getVectors().getEmbedConcurrency()
+                : 0;
+        return inference.getMaxConcurrentDecides() + loadConcurrency + embedConcurrency < jerseyClient
+                .getMaxConnectionsPerRoute();
     }
 
     @JsonIgnore

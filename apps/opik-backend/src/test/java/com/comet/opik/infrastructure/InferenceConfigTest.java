@@ -75,10 +75,38 @@ class InferenceConfigTest {
             int loadConcurrency, int embedConcurrency, int maxConnectionsPerRoute, boolean valid) {
         var config = TestConfigUtils.loadConfigTest();
         config.getServiceToggles().setGuardrailsValidationsEnabled(guardrailsEnabled);
+        config.getAiLabels().setEnabled(true);
+        config.getTopics().setEnabled(true);
         config.getInference().setMaxConcurrentDecides(maxConcurrentDecides);
         config.getAiLabels().setLoadConcurrency(loadConcurrency);
         config.getTopics().getVectors().setEmbedConcurrency(embedConcurrency);
         config.getJerseyClient().setMaxConnectionsPerRoute(maxConnectionsPerRoute);
+
+        assertThat(VALIDATOR.validateProperty(config, "inferenceCallsWithinConnectionPool")).hasSize(valid ? 0 : 1);
+    }
+
+    static Stream<Arguments> featuresOnAndOff() {
+        return Stream.of(
+                arguments("both on", true, true, false),
+                arguments("ai-labels off", false, true, true),
+                arguments("Topics off", true, false, true),
+                arguments("both off", false, false, true));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("featuresOnAndOff")
+    @DisplayName("loads and embeds count against the pool only when their feature is on")
+    void loadsAndEmbedsCountOnlyWhenTheirFeatureIsOn(String description, boolean aiLabelsEnabled,
+            boolean topicsEnabled, boolean valid) {
+        var config = TestConfigUtils.loadConfigTest();
+        config.getServiceToggles().setGuardrailsValidationsEnabled(true);
+        config.getAiLabels().setEnabled(aiLabelsEnabled);
+        config.getTopics().setEnabled(topicsEnabled);
+        // Decides alone leave room, with loads and embeds on top they fill the pool.
+        config.getInference().setMaxConcurrentDecides(59);
+        config.getAiLabels().setLoadConcurrency(4);
+        config.getTopics().getVectors().setEmbedConcurrency(4);
+        config.getJerseyClient().setMaxConnectionsPerRoute(64);
 
         assertThat(VALIDATOR.validateProperty(config, "inferenceCallsWithinConnectionPool")).hasSize(valid ? 0 : 1);
     }

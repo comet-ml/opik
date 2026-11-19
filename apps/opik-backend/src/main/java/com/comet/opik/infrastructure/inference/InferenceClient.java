@@ -53,7 +53,7 @@ import java.util.function.Function;
  * Every call takes a deadline: each attempt's connect and read timeouts are cut to the time left, no retry starts that
  * can't finish its backoff before it, and a call made past it fails with {@code out_of_time} without sending anything.
  * A body that trickles in escapes the socket timeouts, so the whole call is also cut off at the deadline with
- * {@code out_of_time}. A call that sends the service a deadline doesn't retry {@code deadline_exceeded}: a second attempt
+ * {@code out_of_time}, and any failure at or past the deadline is {@code out_of_time} too. A call that sends the service a deadline doesn't retry {@code deadline_exceeded}: a second attempt
  * would miss it too, and would add load to a service that is already behind.
  * <p>
  * A call cut off at its deadline, or cancelled by its caller, closes its response: the read stops, and the connection
@@ -62,9 +62,9 @@ import java.util.function.Function;
  * {@link #decide}, which a request waits on, goes through the shared client like every other call, but as a synchronous
  * call on threads of its own, so it never queues behind batch calls for one of the client's threads. There are
  * {@code maxConcurrentDecides} of them, the most decide calls in flight; a call over it fails with {@code client_busy}
- * after the usual retries. When guardrail validations are on, that cap plus the ai-labels load and Topics embed
- * concurrency is kept below the shared pool's connections per route, so these calls together can't take every
- * connection to opik-inference.
+ * after the usual retries. When guardrail validations are on, that cap plus the load and embed concurrency of
+ * ai-labels and Topics, when they are on, is kept below the shared pool's connections per route, so these calls
+ * together can't take every connection to opik-inference.
  * <p>
  * A redirect is never followed: it fails the call with its 3xx status, as {@code upstream_error}. A response body
  * longer than {@code inference.maxResponseBytes} fails the call the same way: at once when its
@@ -77,6 +77,7 @@ import java.util.function.Function;
 @Singleton
 public class InferenceClient {
 
+    private static final int DECIDE_THREAD_TTL_SECONDS = 60;
     private static final String DECIDE_PATH = "v1/decide";
     private static final String BATCH_DECIDE_PATH = "v1/batch/decide";
     private static final String BATCH_GENERATE_PATH = "v1/batch/generate";
@@ -106,9 +107,10 @@ public class InferenceClient {
         this.config = config;
         this.aiLabels = aiLabels;
         this.decidePermits = new Semaphore(config.getMaxConcurrentDecides());
-        // The permits keep calls within the threads, so none waits in the queue.
+        // The permits keep calls within the threads, so none waits in the queue. Daemon threads, with Reactor's
+        // default idle TTL, so a decide call still reading never holds up shutdown.
         this.decideScheduler = Schedulers.newBoundedElastic(config.getMaxConcurrentDecides(),
-                config.getMaxConcurrentDecides(), "opik-inference-decide");
+                config.getMaxConcurrentDecides(), "opik-inference-decide", DECIDE_THREAD_TTL_SECONDS, true);
     }
 
     public Mono<BatchSubmitResponse> submitDecide(@NonNull BatchDecideRequest request, @NonNull Instant deadline) {
@@ -264,7 +266,11 @@ public class InferenceClient {
             // cancel closes the response.
             return attempt(call, 0)
                     .timeout(left.isNegative() ? Duration.ZERO : left)
-                    .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime());
+                    .onErrorMap(TimeoutException.class, exception -> InferenceException.outOfTime())
+                    // A socket timeout cut to the time left can beat the cut above by a moment: a failure at or past
+                    // the deadline is still the call running out of time, not a transport error.
+                    .onErrorMap(exception -> !isOutOfTime(exception) && !Instant.now().isBefore(call.deadline()),
+                            exception -> InferenceException.outOfTime());
         });
     }
 
@@ -493,9 +499,17 @@ public class InferenceClient {
         }
     }
 
-    /** The timeout cut to the time left, and at least 1 ms: Jersey reads 0 as no timeout at all. */
+    /**
+     * The timeout cut to the time left, and at least 1 ms: Jersey reads 0 as no timeout at all. The time left is
+     * rounded up, so a socket timeout cut to it never fires before the deadline.
+     */
     private static int timeoutMillis(Duration timeout, Duration left) {
-        return (int) Math.clamp((timeout.compareTo(left) <= 0 ? timeout : left).toMillis(), 1, Integer.MAX_VALUE);
+        var millis = timeout.compareTo(left) <= 0 ? timeout.toMillis() : left.plusNanos(999_999).toMillis();
+        return (int) Math.clamp(millis, 1, Integer.MAX_VALUE);
+    }
+
+    private static boolean isOutOfTime(Throwable exception) {
+        return exception instanceof InferenceException inferenceException && inferenceException.isOutOfTime();
     }
 
     /** The body a call sends: the caller's request, plus a new {@code request_id} for this call. */
