@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.within;
 class TopicsAlgorithmRulesTest {
 
     private static final int MAX_ITERATIONS = 150;
+    private static final double OTHER_GATE = 0.95;
     private static final int RESTARTS = 3;
 
     @Nested
@@ -89,7 +90,13 @@ class TopicsAlgorithmRulesTest {
                 "Weekly Sales Summaries, false"})
         @DisplayName("catch-all names: the author's rule drops a name only when it is a catch-all as a whole")
         void catchAllName(String name, boolean expected) {
-            assertThat(AuthorApplier.isCatchAllName(name)).isEqualTo(expected);
+            var groups = List.of(GroupSummary.builder().group(0).size(1).build());
+            var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(0))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).hasSize(expected ? 0 : 1);
+            assertThat(applied.other()).hasSize(expected ? 1 : 0);
         }
     }
 
@@ -256,14 +263,15 @@ class TopicsAlgorithmRulesTest {
                     GroupSummary.builder().group(1).size(40).share(0.4).build(),
                     GroupSummary.builder().group(2).size(0).build());
 
-            var prompt = TopicPrompts.author(groups, 10, List.of(List.of("zero"), List.of("one", "uno"), List.of()));
+            var prompt = TopicPrompts.author(new TopicTasks().author(), groups, 10,
+                    List.of(List.of("zero"), List.of("one", "uno"), List.of()));
 
             assertThat(prompt)
                     .contains("at most 10 topics")
                     .contains(
                             "  cluster 1: 40% of traffic\n    - one\n    - uno\n  cluster 0: 10% of traffic\n    - zero")
                     .contains("\"assignment\"")
-                    .doesNotContain("cluster 2:", "{clusters}");
+                    .doesNotContain("cluster 2:", TopicTasks.CLUSTERS_PLACEHOLDER, TopicTasks.MAX_TOPICS_PLACEHOLDER);
         }
     }
 
@@ -355,10 +363,28 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
-        @DisplayName("the name key strips, collapses whitespace as Python does, and lower-cases")
-        void nameKey() {
-            assertThat(AuthorApplier.nameKey("\u00A0 Email \t\u2003Drafting \n")).isEqualTo("email drafting");
-            assertThat(AuthorApplier.nameKey("   ")).isEmpty();
+        @DisplayName("same name: outer and inner whitespace as Python splits it, and case, don't matter")
+        void sameNameKey() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic("\u00A0 Email \t\u2003Drafting \n", "d", List.of(1)),
+                    new AuthorTopic("email drafting", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 10);
+
+            assertThat(applied.topics()).singleElement().satisfies(topic -> assertThat(topic.groups())
+                    .containsExactly(1, 2));
+        }
+
+        @Test
+        @DisplayName("a topic that claims no group takes no slot")
+        void emptyTopicTakesNoSlot() {
+            var answer = new AuthorAnswer(List.of(
+                    new AuthorTopic("Nothing", "d", List.of(99)),
+                    new AuthorTopic("Billing", "d", List.of(2))));
+
+            var applied = AuthorApplier.apply(answer, groups, 1);
+
+            assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("Billing");
         }
     }
 
@@ -370,9 +396,9 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("ties go to the lower prototype; below 0.75 is Other")
         void ties() {
             var a = new float[]{1, 0};
-            var assigner = new PrototypeAssigner(List.of(a, a.clone()), List.of(0, 1), List.of(), 2);
+            var assigner = assigner(List.of(a, a.clone()), List.of(0, 1), List.of());
             assertThat(assigner.assign(new float[]{1, 0, 0.7f, 0.71414284f})).containsExactly(0,
-                    PrototypeAssigner.OTHER);
+                    TopicAlgorithm.OTHER);
         }
 
         @Test
@@ -381,10 +407,10 @@ class TopicsAlgorithmRulesTest {
             var topic = new float[]{1, 0};
             var close = new float[]{0.96f, 0.28f};
             var far = new float[]{0, 1};
-            var assigner = new PrototypeAssigner(List.of(topic), List.of(0), List.of(close, far), 2);
+            var assigner = assigner(List.of(topic), List.of(0), List.of(close, far));
             assertThat(assigner.gatedOther()).isEqualTo(1);
-            assertThat(assigner.prototypeCount()).isEqualTo(2);
-            assertThat(assigner.assign(new float[]{0.96f, 0.28f, 0, 1})).containsExactly(0, PrototypeAssigner.OTHER);
+            assertThat(assigner.keptOther()).containsExactly(far);
+            assertThat(assigner.assign(new float[]{0.96f, 0.28f, 0, 1})).containsExactly(0, TopicAlgorithm.OTHER);
         }
 
         @Test
@@ -393,14 +419,14 @@ class TopicsAlgorithmRulesTest {
             var topic = new float[]{1, 0};
             var close = new float[]{0.96f, 0.28f};
             var far = new float[]{0, 1};
-            var all = new PrototypeAssigner(List.of(topic), List.of(0), List.of(close, far), 2);
+            var all = assigner(List.of(topic), List.of(0), List.of(close, far));
 
             assertThat(all.keptOther()).containsExactly(far);
             for (var other : all.keptOther()) {
                 assertThat((double) other[0] * topic[0] + (double) other[1] * topic[1])
-                        .isLessThan(PrototypeAssigner.OTHER_GATE);
+                        .isLessThan(OTHER_GATE);
             }
-            var kept = new PrototypeAssigner(List.of(topic), List.of(0), all.keptOther(), 2);
+            var kept = assigner(List.of(topic), List.of(0), all.keptOther());
             assertThat(kept.gatedOther()).isZero();
             var vectors = new float[2 * 360];
             for (int d = 0; d < 360; d++) {
@@ -408,6 +434,86 @@ class TopicsAlgorithmRulesTest {
                 vectors[2 * d + 1] = (float) Math.sin(Math.toRadians(d));
             }
             assertThat(kept.assign(vectors)).containsExactly(all.assign(vectors));
+        }
+
+        @Test
+        @DisplayName("the thresholds come from the config: a higher minimum cosine sends a near trace to Other")
+        void thresholds() {
+            var topic = new float[]{1, 0};
+            var near = new float[]{0.8f, 0.6f};
+            assertThat(new PrototypeAssigner(List.of(topic), List.of(0), List.of(), 2, 0.75, OTHER_GATE).assign(near))
+                    .containsExactly(0);
+            assertThat(new PrototypeAssigner(List.of(topic), List.of(0), List.of(), 2, 0.9, OTHER_GATE).assign(near))
+                    .containsExactly(TopicAlgorithm.OTHER);
+            var other = new float[]{0.8f, 0.6f};
+            assertThat(new PrototypeAssigner(List.of(topic), List.of(0), List.of(other), 2, 0.75, 0.7).gatedOther())
+                    .isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("the 8-sum dot labels as a plain sum does on 384 dimensions")
+        void dotOverFullVectors() {
+            var random = new SplittableRandom(7);
+            var prototypes = new ArrayList<float[]>();
+            var owners = new ArrayList<Integer>();
+            for (int p = 0; p < 20; p++) {
+                prototypes.add(unit(random, TopicEmbedding.DIMENSIONS));
+                owners.add(p);
+            }
+            int n = 500;
+            var vectors = new float[n * TopicEmbedding.DIMENSIONS];
+            for (int i = 0; i < n; i++) {
+                var base = prototypes.get(i % 20);
+                var noise = unit(random, TopicEmbedding.DIMENSIONS);
+                var mixed = new float[TopicEmbedding.DIMENSIONS];
+                for (int t = 0; t < mixed.length; t++) {
+                    mixed[t] = base[t] + 0.6f * noise[t];
+                }
+                System.arraycopy(normalized(mixed), 0, vectors, i * mixed.length, mixed.length);
+            }
+
+            var labels = new PrototypeAssigner(prototypes, owners, List.of(), TopicEmbedding.DIMENSIONS, 0.75,
+                    OTHER_GATE).assign(vectors);
+
+            for (int i = 0; i < n; i++) {
+                int best = -1;
+                double bestCosine = Double.NEGATIVE_INFINITY;
+                for (int p = 0; p < prototypes.size(); p++) {
+                    double cosine = 0;
+                    for (int t = 0; t < TopicEmbedding.DIMENSIONS; t++) {
+                        cosine += (double) vectors[i * TopicEmbedding.DIMENSIONS + t] * prototypes.get(p)[t];
+                    }
+                    if (cosine > bestCosine) {
+                        bestCosine = cosine;
+                        best = p;
+                    }
+                }
+                assertThat(labels[i]).as("trace %s", i).isEqualTo(bestCosine < 0.75 ? TopicAlgorithm.OTHER : best);
+            }
+        }
+
+        private static float[] unit(SplittableRandom random, int dimensions) {
+            var vector = new float[dimensions];
+            for (int t = 0; t < dimensions; t++) {
+                vector[t] = (float) random.nextGaussian();
+            }
+            return normalized(vector);
+        }
+
+        private static float[] normalized(float[] vector) {
+            double norm = 0;
+            for (float value : vector) {
+                norm += (double) value * value;
+            }
+            var out = new float[vector.length];
+            for (int t = 0; t < vector.length; t++) {
+                out[t] = (float) (vector[t] / Math.sqrt(norm));
+            }
+            return out;
+        }
+
+        private static PrototypeAssigner assigner(List<float[]> topics, List<Integer> owners, List<float[]> others) {
+            return new PrototypeAssigner(topics, owners, others, 2, 0.75, OTHER_GATE);
         }
     }
 

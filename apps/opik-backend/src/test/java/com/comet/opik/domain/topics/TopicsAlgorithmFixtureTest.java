@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.within;
 class TopicsAlgorithmFixtureTest {
 
     private static final int D = TopicsFixture.DIMENSIONS;
+    private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
 
     private TopicsFixture fixture;
     private MergedIntents merged;
@@ -74,12 +76,12 @@ class TopicsAlgorithmFixtureTest {
         var aris = new ArrayList<Double>();
         for (long seed = 0; seed < 10; seed++) {
             var result = KMeans.fit(merged.vectors(), weights, D, k, seed,
-                    KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS, KMeansTopicAlgorithm.KMEANS_RESTARTS);
+                    CONFIG.getKmeansMaxIterations(), CONFIG.getKmeansRestarts());
             inertias.add(result.inertia());
             aris.add(adjustedRand(result.labels(), reference));
             assertThat(IntStream.of(result.labels()).distinct().count()).as("seed %s groups", seed).isEqualTo(k);
             var again = KMeans.fit(merged.vectors(), weights, D, k, seed,
-                    KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS, KMeansTopicAlgorithm.KMEANS_RESTARTS);
+                    CONFIG.getKmeansMaxIterations(), CONFIG.getKmeansRestarts());
             assertThat(again.labels()).containsExactly(result.labels());
             assertThat(again.centres()).containsExactly(result.centres());
             for (int j = 0; j < k; j++) {
@@ -123,7 +125,7 @@ class TopicsAlgorithmFixtureTest {
             assertThat(standExamples.get(j)).containsExactlyElementsOf(TopicsFixture.strings(want.get("examples")));
         }
         var examples = GroupSummaries.authorExamples(merged, labels, fixture.centres, 5, 5);
-        var prompt = TopicPrompts.author(summaries, 10, examples);
+        var prompt = TopicPrompts.author(new TopicTasks().author(), summaries, 10, examples);
         for (var summary : summaries) {
             assertThat(prompt).contains("  cluster " + summary.group() + ": "
                     + Math.round(100 * summary.share()) + "% of traffic\n    - "
@@ -160,10 +162,11 @@ class TopicsAlgorithmFixtureTest {
         }
         var otherVectors = Arrays.stream(TopicsFixture.ints(fixture.expected.get("other"))).mapToObj(this::centre)
                 .toList();
-        var assigner = new PrototypeAssigner(topicVectors, owners, otherVectors, D);
+        var assigner = new PrototypeAssigner(topicVectors, owners, otherVectors, D, CONFIG.getAssignMinCosine(),
+                CONFIG.getOtherGate());
         var prototypes = fixture.expected.get("prototypes");
         assertThat(assigner.gatedOther()).isEqualTo(prototypes.get("gated_other").size());
-        assertThat(assigner.prototypeCount()).isEqualTo(
+        assertThat(topicVectors.size() + assigner.keptOther().size()).isEqualTo(
                 prototypes.get("topic_prototypes").size() + prototypes.get("other_prototypes").size());
 
         assertThat(assigner.assign(fixture.vectors))
