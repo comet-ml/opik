@@ -1004,6 +1004,7 @@ aiLabels:
     maxConcurrentDecides: 256
     decideKeepAlive: 30s
     decideTimeToLive: 5m
+    maxResponseBytes: 33554432
 
 topics:
   # Same values as config.yml's topics block; see it for what each key means.
@@ -1016,6 +1017,7 @@ topics:
     backfillWindow: 0s
     maxTracesPerTick: 5000
     embedBatchSize: 256
+    embedConcurrency: 1
     embedTimeout: 10s
     find:
       maxRowsToRead: 30000000

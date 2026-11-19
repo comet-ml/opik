@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
@@ -95,18 +96,18 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick;
 
-        /** Texts per embed call; the service takes at most 256. */
+        /** Texts per embed call, up to the most the service takes in one. */
         @JsonProperty
-        @Min(1) @Max(256) private int embedBatchSize;
+        @Min(1) @Max(InferenceClient.MAX_EMBED_INPUTS) private int embedBatchSize;
 
         /** Embed calls in flight at a time; set it to the embed pool's replica count. */
         @JsonProperty
-        @Min(1) @Max(4) private int embedConcurrency = 1;
+        @Min(1) private int embedConcurrency;
 
         /** Each embed call's deadline; a chunk starts only with at least this much of the tick budget left. */
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = InferenceClient.MAX_EMBED_DEADLINE_SECONDS, unit = TimeUnit.SECONDS)
         private Duration embedTimeout;
 
         @Valid @NotNull @JsonProperty
