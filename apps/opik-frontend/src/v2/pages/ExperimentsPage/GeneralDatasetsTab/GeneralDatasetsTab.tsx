@@ -68,7 +68,6 @@ import { useExperimentsFeedbackScores } from "@/v2/pages-shared/experiments/useE
 import { useExperimentsAutoExpandingLogic } from "@/v2/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/v2/pages-shared/experiments/useExpandingConfig";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
-import { migrateLegacyExperimentsStorage } from "./migrateLegacyExperimentsStorage";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
@@ -90,6 +89,12 @@ import { Filter } from "@/types/filters";
 import DatasetVersionCell from "@/v2/pages-shared/experiments/DatasetVersionCell";
 import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Skeleton } from "@/ui/skeleton";
+import {
+  COLUMN_DATASET_VERSION_ID,
+  COLUMN_PASS_RATE_ID,
+  EXPERIMENTS_TAB_STORAGE,
+  isExcludedTabColumn,
+} from "@/constants/experiments";
 
 const PASS_RATE_LABEL = "Pass rate";
 
@@ -113,15 +118,12 @@ const withRunningSkeleton = <TValue,>(
   return WrappedCell;
 };
 
-const COLUMN_DATASET_VERSION_ID = "dataset_version";
 const NO_DYNAMIC_SCORES_COLUMNS: DynamicColumn[] = [];
 
 type TabConfig = {
-  storageKeyPrefix: string;
   datasetType: DATASET_TYPE;
   itemSourceLabel: string;
   versionLabel: string;
-  excludedColumnIds: string[];
   defaultSelectedColumns: string[];
   // Legacy experiments store evaluation_method 'unknown', so the Datasets tab
   // matches everything that is not a test suite rather than = 'dataset'.
@@ -130,15 +132,13 @@ type TabConfig = {
 
 const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
   [EVALUATION_METHOD.TEST_SUITE]: {
-    storageKeyPrefix: "experiments-test-suites",
     datasetType: DATASET_TYPE.TEST_SUITE,
     itemSourceLabel: "Test suite",
     versionLabel: "Test suite version",
-    excludedColumnIds: [COLUMN_FEEDBACK_SCORES_ID],
     defaultSelectedColumns: [
       COLUMN_NAME_ID,
       COLUMN_DATASET_VERSION_ID,
-      "pass_rate",
+      COLUMN_PASS_RATE_ID,
       "total_estimated_cost_avg",
       "trace_count",
       "duration.p50",
@@ -148,11 +148,9 @@ const TAB_CONFIG: Record<EVALUATION_METHOD, TabConfig> = {
     evaluationMethodOperator: "=",
   },
   [EVALUATION_METHOD.DATASET]: {
-    storageKeyPrefix: "experiments-datasets",
     datasetType: DATASET_TYPE.DATASET,
     itemSourceLabel: "Dataset",
     versionLabel: "Dataset version",
-    excludedColumnIds: ["pass_rate"],
     defaultSelectedColumns: [
       COLUMN_NAME_ID,
       COLUMN_DATASET_VERSION_ID,
@@ -180,7 +178,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_DATASET_VERSION_ID,
-  "pass_rate",
+  COLUMN_PASS_RATE_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   "total_estimated_cost_avg",
   "trace_count",
@@ -208,23 +206,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
   evaluationMethod,
   isExistencePending = false,
 }) => {
-  const {
-    storageKeyPrefix,
-    datasetType,
-    itemSourceLabel,
-    versionLabel,
-    excludedColumnIds,
-    defaultSelectedColumns,
-  } = TAB_CONFIG[evaluationMethod];
+  const { datasetType, itemSourceLabel, versionLabel, defaultSelectedColumns } =
+    TAB_CONFIG[evaluationMethod];
+  const { storageKeyPrefix, excludedColumnIds } =
+    EXPERIMENTS_TAB_STORAGE[evaluationMethod];
   const isTestSuiteTab = evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
-  // Must run before the storage hooks below read their keys.
-  useState(() =>
-    migrateLegacyExperimentsStorage({
-      storageKeyPrefix,
-      excludedColumnIds,
-      addedColumnIds: [COLUMN_DATASET_VERSION_ID],
-    }),
-  );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
@@ -395,7 +381,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         },
       },
       {
-        id: "pass_rate",
+        id: COLUMN_PASS_RATE_ID,
         label: "Pass rate",
         type: COLUMN_TYPE.number,
         iconType: "pass_rate",
@@ -445,7 +431,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
     ];
     return allColumns.filter(
-      (column) => !excludedColumnIds.includes(column.id),
+      (column) => !isExcludedTabColumn(column.id, excludedColumnIds),
     );
   }, [versionLabel, itemSourceLabel, excludedColumnIds]);
 
