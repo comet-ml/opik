@@ -80,6 +80,8 @@ public class FreeFormSqlQueryService {
     private static final AttributeKey<String> MODE_KEY = stringKey("mode");
     private static final AttributeKey<String> OUTCOME_KEY = stringKey("outcome");
     private static final AttributeKey<String> ACCOUNT_KEY = stringKey("account");
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = stringKey("workspace_id");
+    private static final AttributeKey<String> TABLE_KEY = stringKey("table");
 
     /**
      * The terminal outcome of a query, carrying its {@code (result, reason)} metric tags. The duration histogram is
@@ -222,7 +224,7 @@ public class FreeFormSqlQueryService {
 
     /** What the post-run check or the scalar subquery gate found, as its {@code outcome} metric tag. */
     @RequiredArgsConstructor
-    private enum CheckOutcome {
+    enum CheckOutcome {
         VERIFIED("verified"),
         VIOLATION("violation"),
         LOG_MISSING("log_missing"),
@@ -233,8 +235,25 @@ public class FreeFormSqlQueryService {
     }
 
     private void count(CheckOutcome outcome, FreeFormSqlAccount account) {
-        checks.add(1, Attributes.of(MODE_KEY, mode.name().toLowerCase(), OUTCOME_KEY, outcome.tag, ACCOUNT_KEY,
-                account.name().toLowerCase()));
+        checks.add(1, checkAttributes(mode, outcome, account, null, null));
+    }
+
+    /**
+     * A violation or missing log also carries its workspace, reason and table, so an alert can name them. Only those
+     * outcomes do: they are rare, so the added series stay few, while every verified query keeps three attributes.
+     */
+    static Attributes checkAttributes(FreeFormSqlPostRunCheckConfig.Mode mode, CheckOutcome outcome,
+            FreeFormSqlAccount account, @Nullable FreeFormSqlPolicyViolation violation, @Nullable String workspaceId) {
+        var attributes = Attributes.builder()
+                .put(MODE_KEY, mode.name().toLowerCase())
+                .put(OUTCOME_KEY, outcome.tag)
+                .put(ACCOUNT_KEY, account.name().toLowerCase());
+        if (violation != null) {
+            attributes.put(WORKSPACE_ID_KEY, String.valueOf(workspaceId))
+                    .put(REASON_KEY, violation.reason())
+                    .put(TABLE_KEY, violation.table());
+        }
+        return attributes.build();
     }
 
     /**
@@ -356,7 +375,10 @@ public class FreeFormSqlQueryService {
                 });
     }
 
-    /** What the post-run check found; a check that could not run completes exceptionally instead. */
+    /**
+     * What the post-run check found, counted here; a check that could not run completes exceptionally instead, and
+     * the caller counts that.
+     */
     private CompletableFuture<CheckOutcome> check(FreeFormSqlAccount account, String workspaceId, String projectScope,
             String query, String queryId, FreeFormSqlSubqueries.SubqueryReads subqueryReads) {
         String user = users.get(account);
@@ -364,14 +386,21 @@ public class FreeFormSqlQueryService {
                 .thenCompose(plan -> queryLogReader.entries(queryId, user)
                         .thenApply(entries -> FreeFormSqlPolicyCheck.violation(database, user, entries, plan,
                                 subqueryReads)))
-                .thenApply(violation -> violation.map(found -> {
-                    // Not the query's fault: a row policy did not apply where it should. Loud on purpose. The query
-                    // text is left out: it is the caller's, and the id finds it in query_log.
-                    log.error("Free-form SQL post-run policy check found '{}' for account '{}', query '{}': {} ({})",
-                            found.missingLog() ? "log_missing" : "violation", account, queryId, found.table(),
-                            found.reason());
-                    return found.missingLog() ? CheckOutcome.LOG_MISSING : CheckOutcome.VIOLATION;
-                }).orElse(CheckOutcome.VERIFIED));
+                .thenApply(violation -> {
+                    var found = violation.orElse(null);
+                    var outcome = found == null
+                            ? CheckOutcome.VERIFIED
+                            : found.missingLog() ? CheckOutcome.LOG_MISSING : CheckOutcome.VIOLATION;
+                    if (found != null) {
+                        // Not the query's fault: a row policy did not apply where it should. Loud on purpose. The
+                        // query text is left out: it is the caller's, and the id finds it in query_log.
+                        log.error("Free-form SQL post-run policy check found '{}' for account '{}', query '{}': "
+                                + "{} ({}), workspace '{}'", outcome.tag, account, queryId, found.table(),
+                                found.reason(), workspaceId);
+                    }
+                    checks.add(1, checkAttributes(mode, outcome, account, found, workspaceId));
+                    return outcome;
+                });
     }
 
     /** Audit: runs the check and reports it; never throws, and never touches the request. */
@@ -384,8 +413,6 @@ public class FreeFormSqlQueryService {
                             log.warn("Free-form SQL post-run policy check could not run for query '{}'", queryId,
                                     error);
                             count(CheckOutcome.CHECK_FAILED, account);
-                        } else {
-                            count(outcome, account);
                         }
                     });
         } catch (RuntimeException e) {
@@ -408,7 +435,6 @@ public class FreeFormSqlQueryService {
                 throw fail(Outcome.POLICY_CHECK_FAILED, startMillis, Response.Status.SERVICE_UNAVAILABLE,
                         "Query result withheld: its scope could not be verified");
             }
-            count(outcome, account);
             if (outcome != CheckOutcome.VERIFIED) {
                 throw fail(Outcome.POLICY_UNVERIFIED, startMillis, Response.Status.INTERNAL_SERVER_ERROR,
                         "Query result withheld: its scope could not be verified; this has been reported");
