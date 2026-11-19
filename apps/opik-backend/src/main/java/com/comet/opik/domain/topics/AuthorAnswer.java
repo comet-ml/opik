@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
 import lombok.NonNull;
@@ -10,18 +10,18 @@ import java.util.HashSet;
 import java.util.List;
 
 /**
- * Qwen's author answer: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}, both keys required,
+ * The LLM's author answer: {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}, both keys required,
  * {@code topic} the topic's index or -1 for Other. Read as topics with cluster lists: each assignment's cluster goes to
  * its topic's list, the first mention of a cluster wins. A cluster assigned -1 or an index off the list claims nothing:
  * the applier sends every unclaimed group to Other. Unknown keys are ignored; anything else off the schema, text
- * included, is {@code qwen_bad_answer}.
+ * included, is {@code llm_bad_answer}.
  */
 @Builder(toBuilder = true)
-public record AuthorAnswer(@NonNull List<Topic> topics) {
+public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
 
     /**
      * The {@code output} of a generate call with {@link TopicPrompts#AUTHOR_SCHEMA}: opik-inference parses and checks
-     * it against the schema, so it is the object itself. Text or null is not parsed: it is {@code qwen_bad_answer}.
+     * it against the schema, so it is the object itself. Text or null is not parsed: it is {@code llm_bad_answer}.
      */
     public static AuthorAnswer parse(JsonNode node) {
         if (node == null || !node.isObject()) {
@@ -62,9 +62,9 @@ public record AuthorAnswer(@NonNull List<Topic> topics) {
                 clusters.get(t).add(cluster.intValue());
             }
         }
-        var topics = new ArrayList<Topic>(names.size());
+        var topics = new ArrayList<AuthorTopic>(names.size());
         for (int t = 0; t < names.size(); t++) {
-            topics.add(Topic.builder()
+            topics.add(AuthorTopic.builder()
                     .name(names.get(t))
                     .definition(definitions.get(t))
                     .clusters(List.copyOf(clusters.get(t)))
@@ -74,10 +74,6 @@ public record AuthorAnswer(@NonNull List<Topic> topics) {
     }
 
     private static TopicsRunException bad(String message, Throwable cause) {
-        return new TopicsRunException(Code.QWEN_BAD_ANSWER, message, cause);
-    }
-
-    @Builder(toBuilder = true)
-    public record Topic(@NonNull String name, @NonNull String definition, @NonNull List<Integer> clusters) {
+        return new TopicsRunException(RunError.LLM_BAD_ANSWER, message, cause);
     }
 }

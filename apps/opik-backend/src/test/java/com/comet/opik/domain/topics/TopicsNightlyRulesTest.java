@@ -127,7 +127,8 @@ class TopicsNightlyRulesTest {
             }
             var unassigned = IntStream.range(60, 100).toArray();
 
-            var grouping = CandidateGrouper.group(window(vectors, createdAt), unassigned, 1);
+            var grouping = CandidateGrouper.group(window(vectors, createdAt), unassigned, 1,
+                    TopicsTestAlgorithm.config());
 
             assertThat(grouping.candidates()).hasSize(2);
             var south = grouping.groups().get(grouping.labels()[0]);
@@ -145,7 +146,7 @@ class TopicsNightlyRulesTest {
     @DisplayName("churn")
     class Churns {
 
-        private static final int OTHER = PrototypeAssigner.OTHER;
+        private static final int OTHER = TopicAlgorithm.OTHER;
 
         @ParameterizedTest(name = "[{0}] to [{1}]")
         @CsvSource({"0 0 1 Other, 0 1 Other 0, 0.5, 0.75", "Other, 0, 0, 1"})

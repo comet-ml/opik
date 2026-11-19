@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -7,10 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +28,10 @@ import static org.assertj.core.api.Assertions.within;
 class TopicsAlgorithmFixtureTest {
 
     private static final int D = TopicsFixture.DIMENSIONS;
+    private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
+    private static final UUID PROJECT_ID = UUID.randomUUID();
+    /** The first build at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
+    private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm.algorithm(fixedGroups(15));
 
     private TopicsFixture fixture;
     private MergedIntents merged;
@@ -67,19 +74,16 @@ class TopicsAlgorithmFixtureTest {
         sklearn.get("seeds").forEach(seed -> sklearnInertias.add(seed.get("inertia").asDouble()));
         int[] reference = TopicsFixture.ints(sklearn.get("seeds").get(0).get("labels"));
         double sklearnMinAri = sklearn.get("seed_ari_vs_seed0").get("min").asDouble();
-        var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
         int k = fixture.k();
 
         var inertias = new ArrayList<Double>();
         var aris = new ArrayList<Double>();
         for (long seed = 0; seed < 10; seed++) {
-            var result = KMeans.fit(merged.vectors(), weights, D, k, seed,
-                    KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS, KMeansTopicAlgorithm.KMEANS_RESTARTS);
+            var result = fit(seed);
             inertias.add(result.inertia());
             aris.add(adjustedRand(result.labels(), reference));
             assertThat(IntStream.of(result.labels()).distinct().count()).as("seed %s groups", seed).isEqualTo(k);
-            var again = KMeans.fit(merged.vectors(), weights, D, k, seed,
-                    KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS, KMeansTopicAlgorithm.KMEANS_RESTARTS);
+            var again = fit(seed);
             assertThat(again.labels()).containsExactly(result.labels());
             assertThat(again.centres()).containsExactly(result.centres());
             for (int j = 0; j < k; j++) {
@@ -95,6 +99,12 @@ class TopicsAlgorithmFixtureTest {
         assertThat(min(inertias)).as("best inertia").isLessThanOrEqualTo(min(sklearnInertias) * 1.03);
         assertThat(mean(aris)).as("mean ARI to scikit-learn's seed 0, per Java seed %s", aris)
                 .isGreaterThanOrEqualTo(sklearnMinAri);
+    }
+
+    /** The backend's k-means of the fixture window at the fixture's k. */
+    private KMeansResult fit(long seed) {
+        return KMeans.fit(merged.vectors(), Arrays.stream(merged.weights()).asDoubleStream().toArray(), D, fixture.k(),
+                seed, CONFIG.getKmeansMaxIterations(), CONFIG.getKmeansRestarts());
     }
 
     private static double mean(List<Double> values) {
@@ -129,7 +139,7 @@ class TopicsAlgorithmFixtureTest {
             assertThat(night.examples()).containsExactlyElementsOf(TopicsFixture.strings(want.get("examples")));
         }
         var examples = GroupSummaries.authorExamples(merged, labels, fixture.centres, 5, 5);
-        var prompt = TopicPrompts.author(summaries, 10, examples);
+        var prompt = TopicPrompts.author(new TopicTasks().author(), summaries, 10, examples);
         for (var summary : summaries) {
             assertThat(prompt).contains("  cluster " + summary.group() + ": "
                     + Math.round(100 * summary.share()) + "% of traffic\n    - "
@@ -147,7 +157,7 @@ class TopicsAlgorithmFixtureTest {
         var expectedTopics = fixture.expected.get("topics");
         var names = new ArrayList<String>();
         expectedTopics.forEach(topic -> names.add(topic.get("name").asText()));
-        assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+        assertThat(applied.topics()).extracting(AppliedTopic::name)
                 .containsExactlyInAnyOrderElementsOf(names);
         for (var topic : applied.topics()) {
             var want = expectedTopics.get(names.indexOf(topic.name()));
@@ -166,14 +176,86 @@ class TopicsAlgorithmFixtureTest {
         }
         var otherVectors = Arrays.stream(TopicsFixture.ints(fixture.expected.get("other"))).mapToObj(this::centre)
                 .toList();
-        var assigner = new PrototypeAssigner(topicVectors, owners, otherVectors, D);
+        var assigner = new PrototypeAssigner(topicVectors, owners, otherVectors, D, CONFIG.getAssignMinCosine(),
+                CONFIG.getOtherGate());
         var prototypes = fixture.expected.get("prototypes");
         assertThat(assigner.gatedOther()).isEqualTo(prototypes.get("gated_other").size());
-        assertThat(assigner.prototypeCount()).isEqualTo(
+        assertThat(topicVectors.size() + assigner.keptOther().size()).isEqualTo(
                 prototypes.get("topic_prototypes").size() + prototypes.get("other_prototypes").size());
 
         assertThat(assigner.assign(fixture.vectors))
                 .containsExactly(TopicsFixture.ints(fixture.expected.get("final_labels")));
+    }
+
+    /**
+     * The whole first build, with the recorded answer moved onto the backend's grouping. The reference cannot run the
+     * backend's k-means, so it builds on the grouping in {@code java_kmeans.json}; the first check pins that grouping.
+     */
+    @Test
+    @DisplayName("firstBuild: the topics, prototypes, owners and labels equal the reference on the backend's grouping")
+    void firstBuild() {
+        var groups = fit(KMeansTopicAlgorithm.SEED).labels();
+        assertThat(groups)
+                .as("k-means changed: put %s in java_kmeans.json and run generate.py", Arrays.toString(groups))
+                .containsExactly(fixture.javaGroups);
+        var context = new TopicsTestAlgorithm.StubContext(fixture.firstBuildAnswer);
+
+        var build = FIRST_BUILD.firstBuild(window(), 10, context);
+
+        var want = fixture.expected.get("first_build");
+        var prototypes = want.get("prototypes");
+        assertThat(context.stats().get("k").asInt()).isEqualTo(fixture.k());
+        var topics = new ArrayList<NewTopic>();
+        want.get("topics").forEach(topic -> topics.add(NewTopic.builder().name(topic.get("name").asText())
+                .definition(topic.get("definition").asText()).build()));
+        assertThat(build.topics()).containsExactlyElementsOf(topics);
+        assertThat(build.owners()).containsExactly(boxed(TopicsFixture.ints(prototypes.get("owners"))));
+        assertCentres(build.topicPrototypes(), TopicsFixture.ints(prototypes.get("topic_prototypes")));
+        assertCentres(build.otherPrototypes(), TopicsFixture.ints(prototypes.get("other_prototypes")));
+        assertThat(build.labels()).containsExactly(TopicsFixture.ints(want.get("labels")));
+    }
+
+    @Test
+    @DisplayName("the labeller over a saved first build labels the window as the build did")
+    void labellerMatchesFirstBuild() {
+        var build = FIRST_BUILD.firstBuild(window(), 10,
+                new TopicsTestAlgorithm.StubContext(fixture.firstBuildAnswer));
+        var topics = IntStream.range(0, build.topics().size())
+                .mapToObj(t -> Topic.builder()
+                        .id(UUID.randomUUID())
+                        .workspaceId("ws-1")
+                        .projectId(PROJECT_ID)
+                        .name(build.topics().get(t).name())
+                        .definition(build.topics().get(t).definition())
+                        .born(LocalDate.of(2026, 11, 19))
+                        .vectors(new PrototypeVectors(IntStream.range(0, build.owners().size())
+                                .filter(p -> build.owners().get(p) == t)
+                                .mapToObj(build.topicPrototypes()::get)
+                                .toList()))
+                        .build())
+                .toList();
+        assertThat(build.otherPrototypes()).isNotEmpty();
+
+        var labels = FIRST_BUILD.labeller(topics, new PrototypeVectors(build.otherPrototypes())).orElseThrow()
+                .label(fixture.vectors);
+
+        assertThat(labels).containsExactly(Arrays.stream(build.labels())
+                .mapToObj(label -> label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(label).id())
+                .toArray(UUID[]::new));
+    }
+
+    private TopicWindow window() {
+        return TopicWindow.builder().texts(fixture.intents).vectors(fixture.vectors).build();
+    }
+
+    /** Each vector against the reference's centre of its group, float32 against float64 arithmetic. */
+    private void assertCentres(List<float[]> actual, int[] groups) {
+        assertThat(actual).hasSize(groups.length);
+        for (int i = 0; i < groups.length; i++) {
+            assertThat(actual.get(i)).as("prototype %s, group %s", i, groups[i]).containsExactly(
+                    Arrays.copyOfRange(fixture.firstBuildCentres, groups[i] * D, (groups[i] + 1) * D),
+                    within(1e-6f));
+        }
     }
 
     private List<GroupSummary> summaries() {
@@ -204,6 +286,13 @@ class TopicsAlgorithmFixtureTest {
         double expected = rowSum * colSum / choose2(a.length);
         double max = (rowSum + colSum) / 2;
         return max == expected ? 1.0 : (index - expected) / (max - expected);
+    }
+
+    private static TopicsConfig.AlgorithmConfig fixedGroups(int k) {
+        var config = TopicsTestAlgorithm.config();
+        config.setMinGroups(k);
+        config.setMaxGroups(k);
+        return config;
     }
 
     private static double choose2(long n) {

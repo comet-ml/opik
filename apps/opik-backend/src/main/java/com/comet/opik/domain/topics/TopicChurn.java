@@ -30,7 +30,7 @@ public class TopicChurn {
         for (int i = 0; i < before.length; i++) {
             boolean moved = before[i] != after[i];
             changed += moved ? 1 : 0;
-            if (before[i] != PrototypeAssigner.OTHER && after[i] != PrototypeAssigner.OTHER) {
+            if (before[i] != TopicAlgorithm.OTHER && after[i] != TopicAlgorithm.OTHER) {
                 inTopics++;
                 movedTopic += moved ? 1 : 0;
             }
