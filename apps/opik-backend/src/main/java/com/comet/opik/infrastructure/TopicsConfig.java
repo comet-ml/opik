@@ -51,6 +51,9 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private FirstBuildConfig firstBuild;
 
+    @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival;
+
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
      * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
@@ -61,6 +64,24 @@ public class TopicsConfig {
                 .map(String::strip)
                 .filter(workspaceId -> !workspaceId.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
+    @Data
+    public static class ArrivalConfig {
+
+        /** Runs only when {@code topics.enabled} is on too. Off: the tick reads no list and writes no rows. */
+        @JsonProperty
+        private boolean enabled;
+
+        /**
+         * All the arrival steps of one vectors tick (the prototypes read and the insert after each vectors insert) end
+         * within this, in total.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout;
     }
 
     @Data
