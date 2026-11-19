@@ -12,6 +12,8 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
@@ -19,13 +21,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Embeds one workspace's summaries with {@code /v1/embed}, in chunks of {@code embedBatchSize}, and turns the answers
- * into unit-length vectors. A chunk starts only with at least {@code embedTimeout} left in the tick, so a call never
- * ends on the tick's deadline. After a 429, a 5xx, a timeout or a retryable error, no further chunk of the workspace is
- * sent in the tick.
+ * Embeds one workspace's summaries with {@code /v1/embed}, in chunks of {@code embedBatchSize}, one call at a time and in
+ * order, and turns the answers into unit-length vectors. A chunk starts only with at least {@code embedTimeout} left in
+ * the tick, so a call never ends on the tick's deadline. A 429, a 5xx, a timeout, a retryable error, a 401 or a 403
+ * ends the workspace's calls for the tick: the failed chunk and every chunk after it are {@code embed_failed}.
  */
 @Slf4j
 @Singleton
@@ -36,59 +37,74 @@ class TopicEmbedder {
     private final @NonNull InferenceClient client;
     private final @NonNull TopicVectorsMetrics metrics;
 
-    /**
-     * Each chunk's outcome, in order. A chunk is embedded on the caller's thread when the caller asks for it, so the
-     * caller writes one chunk before the next call starts.
-     */
-    Iterable<ChunkOutcome> embed(@NonNull String workspaceId, @NonNull List<Candidate> candidates,
+    /** Each chunk's outcome, in order. Every candidate is in exactly one outcome. */
+    Flux<ChunkOutcome> embed(@NonNull String workspaceId, @NonNull List<Candidate> candidates,
             @NonNull TickBudget budget) {
-        var chunks = Lists.partition(candidates, config.getVectors().getEmbedBatchSize());
-        var backedOff = new AtomicBoolean();
-        return () -> chunks.stream().map(chunk -> embedChunk(workspaceId, chunk, budget, backedOff)).iterator();
+        int size = config.getVectors().getEmbedBatchSize();
+        var chunks = Lists.partition(candidates, size);
+        return Flux.range(0, chunks.size())
+                .concatMap(index -> embedChunk(workspaceId, index, chunks.get(index), budget))
+                .onErrorResume(BackedOff.class, backedOff -> Mono.just(ChunkOutcome.skipped(SkipReason.EMBED_FAILED,
+                        candidates.size() - backedOff.chunk * size)));
     }
 
-    private ChunkOutcome embedChunk(String workspaceId, List<Candidate> chunk, TickBudget budget,
-            AtomicBoolean backedOff) {
-        var timeout = config.getVectors().getEmbedTimeout().toJavaDuration();
-        if (backedOff.get()) {
-            return ChunkOutcome.skipped(SkipReason.EMBED_FAILED, chunk.size());
-        }
-        if (!budget.hasTimeFor(timeout)) {
-            return ChunkOutcome.skipped(SkipReason.OVER_BUDGET, chunk.size());
-        }
-        var request = EmbedRequest.builder()
-                .orgId(workspaceId)
-                // opik-inference's own default for embed: vectors are large and a summary is embedded once, so a cached
-                // answer would only take cache space.
-                .cache(false)
-                .inputs(chunk.stream().map(Candidate::summary).toList())
-                .build();
-        long started = System.nanoTime();
-        EmbedResponse response;
-        try {
-            response = client.embed(request, budget.clock().instant().plus(timeout)).block();
-        } catch (InferenceException exception) {
-            metrics.embedCall(workspaceId, Duration.ofNanos(System.nanoTime() - started), exception);
-            if (backsOff(exception)) {
-                backedOff.set(true);
-                log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}'; no more calls for "
-                        + "it this tick", workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(),
-                        exception);
-            } else {
-                // The service refused what was sent: the next tick sends the same chunk, so this needs a look.
-                log.error("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'",
-                        workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), exception);
+    private Mono<ChunkOutcome> embedChunk(String workspaceId, int index, List<Candidate> chunk, TickBudget budget) {
+        return Mono.defer(() -> {
+            var timeout = config.getVectors().getEmbedTimeout().toJavaDuration();
+            if (!budget.hasTimeFor(timeout)) {
+                return Mono.just(ChunkOutcome.skipped(SkipReason.OVER_BUDGET, chunk.size()));
             }
-            return ChunkOutcome.skipped(SkipReason.EMBED_FAILED, chunk.size());
-        }
-        metrics.embedCall(workspaceId, Duration.ofNanos(System.nanoTime() - started), null);
-        return vectors(workspaceId, chunk, response);
+            var request = EmbedRequest.builder()
+                    .orgId(workspaceId)
+                    // opik-inference's own default for embed: vectors are large and a summary is embedded once, so a
+                    // cached answer would only take cache space.
+                    .cache(false)
+                    .inputs(chunk.stream().map(Candidate::summary).toList())
+                    .build();
+            long started = System.nanoTime();
+            return client.embed(request, budget.clock().instant().plus(timeout))
+                    .map(response -> {
+                        metrics.embedCall(workspaceId, Duration.ofNanos(System.nanoTime() - started), null);
+                        return vectors(workspaceId, chunk, response);
+                    })
+                    .onErrorResume(InferenceException.class, exception -> {
+                        metrics.embedCall(workspaceId, Duration.ofNanos(System.nanoTime() - started), exception);
+                        if (backsOff(exception)) {
+                            log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}'; no more "
+                                    + "calls for it this tick", workspaceId, exception.getCode(),
+                                    exception.getHttpStatus(), chunk.size(), exception);
+                            return Mono.error(new BackedOff(index));
+                        }
+                        // What is left is invalid_request or input_too_long, a refusal of the inputs. The window read
+                        // sends no blank summary, trace_summary caps one at 160 characters, and /v1/embed has no
+                        // per-input length limit, so this is a service-side change that needs a look: the next tick
+                        // sends the same chunk.
+                        log.error("Topic embed rejected a chunk, workspace '{}', code '{}', status '{}', traces '{}'",
+                                workspaceId, exception.getCode(), exception.getHttpStatus(), chunk.size(), exception);
+                        return Mono.just(ChunkOutcome.skipped(SkipReason.EMBED_FAILED, chunk.size()));
+                    });
+        });
     }
 
-    /** Whether to stop calling for this workspace for the rest of the tick. */
+    /**
+     * Whether to stop calling for this workspace for the rest of the tick: the service is busy or failing, or it
+     * refuses the workspace itself, so the next chunk would get the same answer.
+     */
     static boolean backsOff(@NonNull InferenceException exception) {
         int status = exception.getHttpStatus();
-        return exception.isRetryable() || exception.isOutOfTime() || status == 429 || status >= 500;
+        return exception.isRetryable() || exception.isOutOfTime() || status == 401 || status == 403 || status == 429
+                || status >= 500;
+    }
+
+    /** Ends a workspace's chunk stream; {@code chunk} is the index of the chunk whose call backed off. */
+    private static final class BackedOff extends RuntimeException {
+
+        private final int chunk;
+
+        private BackedOff(int chunk) {
+            super(null, null, false, false);
+            this.chunk = chunk;
+        }
     }
 
     /**

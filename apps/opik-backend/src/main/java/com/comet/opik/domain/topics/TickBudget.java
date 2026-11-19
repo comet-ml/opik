@@ -23,16 +23,20 @@ record TickBudget(@NonNull Instant start, @NonNull Instant deadline, @NonNull Cl
         return Duration.between(clock.instant(), deadline);
     }
 
-    boolean hasTimeForRead() {
-        return hasTimeFor(MIN_READ_TIME);
+    /**
+     * Whether a window read can start and still leave {@code reserve} for an embed call after it, so the tick never
+     * reads what it has no time to embed.
+     */
+    boolean hasTimeForRead(@NonNull Duration reserve) {
+        return hasTimeFor(MIN_READ_TIME.plus(reserve));
     }
 
     boolean hasTimeFor(@NonNull Duration call) {
         return left().compareTo(call) >= 0;
     }
 
-    /** A read's {@code max_execution_time}: {@code max}, cut to the whole seconds left, at least 1. */
-    long readSeconds(@NonNull Duration max) {
-        return Math.max(1, Math.min(max.toSeconds(), left().toSeconds()));
+    /** A read's {@code max_execution_time}: {@code max}, cut to the whole seconds left before {@code reserve}, at least 1. */
+    long readSeconds(@NonNull Duration max, @NonNull Duration reserve) {
+        return Math.max(1, Math.min(max.toSeconds(), left().minus(reserve).toSeconds()));
     }
 }

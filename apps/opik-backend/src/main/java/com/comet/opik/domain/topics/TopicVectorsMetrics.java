@@ -22,7 +22,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
@@ -109,7 +108,8 @@ class TopicVectorsMetrics {
                 .setDescription("Wall time of one embed call, by outcome (ok or the error code) and workspace")
                 .build();
         this.phaseDuration = meter.histogramBuilder("topics.vectors.tick.phase_seconds").setUnit("s")
-                .setDescription("Duration of each tick phase: find, embed")
+                .setDescription("Time one tick spent in each phase, summed over its workspaces: find (window reads), "
+                        + "embed (embed calls and writes)")
                 .build();
     }
 
@@ -168,13 +168,9 @@ class TopicVectorsMetrics {
         return Attributes.builder().put(WORKSPACE_ID_KEY, workspaceId).put(WORKSPACE_NAME_KEY, workspaceName);
     }
 
-    <T> T timed(@NonNull String phase, @NonNull Supplier<T> action) {
-        long started = System.nanoTime();
-        try {
-            return action.get();
-        } finally {
-            phaseDuration.record((System.nanoTime() - started) / 1e9, Attributes.of(stringKey("phase"), phase));
-        }
+    /** A tick's total time in one phase: {@code find} for its window reads, {@code embed} for the embed calls and writes. */
+    void phase(@NonNull String phase, @NonNull Duration duration) {
+        phaseDuration.record(duration.toNanos() / 1e9, Attributes.of(stringKey("phase"), phase));
     }
 
     /** Whether a snapshot taken at {@code at} is still this pod's: it ticked within two tick intervals. */

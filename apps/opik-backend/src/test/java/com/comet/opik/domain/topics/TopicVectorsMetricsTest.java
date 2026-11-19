@@ -1,19 +1,21 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("topic vectors metrics")
 class TopicVectorsMetricsTest {
 
-    private static final Instant NOW = Instant.parse("2026-11-19T10:00:00Z");
+    private final Instant now = Instant.ofEpochSecond(RandomUtils.secure().randomLong(0, 4_000_000_000L));
 
     @Test
     @DisplayName("the oldest-unvectored gauge reports each workspace's age, 0 with none, and nothing once the snapshot "
@@ -24,14 +26,16 @@ class TopicVectorsMetricsTest {
         var config = new TopicsConfig();
         config.setVectors(vectors);
         var meter = new TopicsTestMeter();
-        var clock = new TopicsTestClock(NOW);
+        var clock = new TopicsTestClock(now);
         var metrics = new TopicVectorsMetrics(config, TopicsTestMeter.names(), meter.meter, clock);
 
-        metrics.oldest(Map.of("behind", NOW.minusSeconds(90), "caught-up", Instant.MAX));
+        var behind = UUID.randomUUID().toString();
+        var caughtUp = UUID.randomUUID().toString();
+        metrics.oldest(Map.of(behind, now.minusSeconds(90), caughtUp, Instant.MAX));
         clock.advance(Duration.ofSeconds(30));
 
         assertThat(meter.observeGauge(TopicVectorsMetrics.OLDEST_UNVECTORED))
-                .isEqualTo(Map.of("behind", 120.0, "caught-up", 0.0));
+                .isEqualTo(Map.of(behind, 120.0, caughtUp, 0.0));
 
         clock.advance(Duration.ofMinutes(2));
 

@@ -2,7 +2,6 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.WorkspaceNameService;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleGaugeBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.DoubleHistogramBuilder;
@@ -57,16 +56,11 @@ final class TopicsTestMeter {
         });
     }
 
-    /** Workspace names as {@link #workspace} gives them. */
+    /** Workspace names as {@code name-<id>}. */
     static WorkspaceNameService names() {
         var names = mock(WorkspaceNameService.class);
         when(names.nameOrId(anyString())).thenAnswer(invocation -> "name-" + invocation.getArgument(0));
         return names;
-    }
-
-    /** Both workspace attributes, with the name {@link #names()} gives. */
-    static AttributesBuilder workspace(String workspaceId) {
-        return TopicVectorsMetrics.workspace(workspaceId, "name-" + workspaceId);
     }
 
     LongCounter counter(String name) {

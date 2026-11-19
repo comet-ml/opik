@@ -1041,7 +1041,6 @@ topics:
     embedBatchSize: 256
     embedConcurrency: 1
     embedTimeout: 10s
-    leaseSlack: 5s
     find:
       maxRowsToRead: 30000000
       maxMemoryUsage: 1073741824

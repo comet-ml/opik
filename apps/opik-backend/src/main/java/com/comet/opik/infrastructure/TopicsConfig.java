@@ -111,12 +111,6 @@ public class TopicsConfig {
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration embedTimeout;
 
-        /** How much longer than the rest the leader lock lasts, for the insert after the last embed call. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
-        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
-        private Duration leaseSlack;
-
         @Valid @NotNull @JsonProperty
         private FindConfig find;
 
