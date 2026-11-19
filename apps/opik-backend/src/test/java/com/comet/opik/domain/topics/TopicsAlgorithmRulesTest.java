@@ -222,6 +222,21 @@ class TopicsAlgorithmRulesTest {
         }
 
         @Test
+        @DisplayName("examples: centres that are not whole rows and labels outside the groups are rejected")
+        void examplesRejectMalformedInput() {
+            String[] texts = {"a", "b"};
+            float[] vectors = {1, 0, 0, 1};
+            var merged = IntentMerger.merge(texts, vectors, 2);
+
+            assertThatThrownBy(() -> GroupSummaries.authorExamples(merged, new int[]{0, 0}, new float[]{1, 0, 0}, 2, 2))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> GroupSummaries.authorExamples(merged, new int[]{0, 1}, new float[]{1, 0}, 2, 2))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> IntentMerger.merge(new String[]{"a", null}, vectors, 2))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
         @DisplayName("the prompt lists the groups largest first with a whole-percent share and the given examples")
         void prompt() {
             var groups = List.of(
