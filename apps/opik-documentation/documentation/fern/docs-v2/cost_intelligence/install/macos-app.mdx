@@ -415,7 +415,12 @@ The app checks the address before enrolling. With a missing or malformed one the
 
 <Accordion title="Example install script">
 
-A first-install script for MDMs that run scripts as root. It waits for the configuration profile, downloads and verifies the release, installs the app, writes the per-user file, and launches the app for the logged-in user. Keep the enrollment token out of the saved script. Store the script with the two placeholders below and have your MDM fill them in when it runs, for example with JumpCloud command variables or Jamf script parameters, and do not print the values in the script's output. Anyone who has the token can enroll a device into your workspace, so a filled-in copy in a repository or a ticket is a leaked credential.
+A first-install script for MDMs that run scripts as root. It waits for the configuration profile, downloads and verifies the release, installs the app, writes the per-user file, and launches the app for the logged-in user. Keep the enrollment token out of the saved script. Store the script without real values, have your MDM supply them when it runs, and do not print them in the script's output. Anyone who has the token can enroll a device into your workspace, so a filled-in copy in a repository or a ticket is a leaked credential.
+
+How the values arrive depends on the MDM:
+
+- **The MDM substitutes variables into the script text** (JumpCloud command variables). Put the variable where the placeholder is.
+- **The MDM passes parameters as arguments** (Jamf Pro, where the first free parameter is `$4`). Nothing is substituted into the script text, so replace the placeholder line with `TOKEN="${4:-}"`. A script parameter is the same for every Mac the policy covers, so set `EMAIL=""` and deliver the email with the user-level profile from *Setting each Mac's email*.
 
 ```bash title="install-opik-cipx.sh" wordWrap
 #!/bin/bash
@@ -423,8 +428,9 @@ A first-install script for MDMs that run scripts as root. It waits for the confi
 set -u
 export LC_ALL=C
 VERSION="<release version, for example 0.0.91>"
-# Filled in by your MDM when the script runs. Never save real values here.
+# Supplied by your MDM when the script runs. Never save real values here.
 TOKEN="<enrollment token variable>"
+# This Mac's user. Leave empty when a profile delivers the email instead.
 EMAIL="<user email variable>"
 APP="/Applications/Opik CIPX.app"
 
@@ -432,8 +438,10 @@ APP="/Applications/Opik CIPX.app"
 # did not fill in, and any value that would break out of the TOML strings below.
 case "$TOKEN" in opik_cipx_et_?*) ;; *) echo "enrollment token missing or not substituted"; exit 1;; esac
 case "$TOKEN" in *[!A-Za-z0-9_-]*) echo "unexpected character in the enrollment token"; exit 1;; esac
-case "$EMAIL" in *[!A-Za-z0-9._%+@-]*|*@*@*) echo "unexpected character in the email"; exit 1;; esac
-case "$EMAIL" in ?*@?*.?*) ;; *) echo "email missing or not substituted"; exit 1;; esac
+if [ -n "$EMAIL" ]; then
+  case "$EMAIL" in *[!A-Za-z0-9._%+@-]*|*@*@*) echo "unexpected character in the email"; exit 1;; esac
+  case "$EMAIL" in ?*@?*.?*) ;; *) echo "email not substituted, or not an address"; exit 1;; esac
+fi
 
 CONSOLE_USER="$(/usr/bin/stat -f%Su /dev/console)"
 case "$CONSOLE_USER" in root|_mbsetupuser|"") echo "no user logged in"; exit 0;; esac
@@ -457,15 +465,15 @@ WORK="$(/usr/bin/mktemp -d)"; trap '/bin/rm -rf "$WORK"' EXIT
 CONFIG_DIR="$USER_HOME/.opik-cipx-mac"
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
   /bin/mkdir -p "$CONFIG_DIR"
-  /bin/cat > "$CONFIG_DIR/config.toml" <<TOML
-[opik]
-base_url         = "https://www.comet.com/opik/api"
-enrollment_token = "$TOKEN"
-user_email       = "$EMAIL"
-
-[capture]
-capture_content = false
-TOML
+  {
+    echo '[opik]'
+    echo 'base_url         = "https://www.comet.com/opik/api"'
+    echo "enrollment_token = \"$TOKEN\""
+    [ -n "$EMAIL" ] && echo "user_email       = \"$EMAIL\""
+    echo
+    echo '[capture]'
+    echo 'capture_content = false'
+  } > "$CONFIG_DIR/config.toml"
   /usr/sbin/chown -R "$CONSOLE_USER" "$CONFIG_DIR"
   /bin/chmod 700 "$CONFIG_DIR"
   /bin/chmod 600 "$CONFIG_DIR/config.toml"
