@@ -1,4 +1,4 @@
-FROM maven:3.10.0-amazoncorretto-25-al2023@sha256:cd70d2558213140e9352b3ef0badc40a09140e7e48f72e78a3760da5fe614665 AS build
+FROM maven:3.10.0-amazoncorretto-25-al2023@sha256:2899182a821e1761e372858e86ed2c0315adae3831f665f0a0d75d51d4233e07 AS build
 
 WORKDIR /opt/opik-backend
 
@@ -9,7 +9,7 @@ COPY pom.xml spotless.xml lombok.config ./
 RUN mvn dependency:go-offline
 
 # Copy source code
-COPY src ./src
+COPY src/main ./src/main
 
 # Build artifact
 ARG OPIK_VERSION
@@ -25,7 +25,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
 # Plain AL2023 pinned to a dated release, not the amazoncorretto image: AL2023 locks yum to the base image's
 # release, so OS fixes only arrive with a newer one. Renovate moves the date forward weekly, and each date has
 # a fixed package set.
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261112.0@sha256:5c6ed3b38335b2aa424a045f1e564c8c508409ead0ff3f8bf5e62c31b94082cb
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023.12.20261118.0@sha256:ec2bcf1212690ec004a23c1d29a4080acb1c96ba746a9b4bba5b4cd64b3db4b1
 
 # Same as the amazoncorretto:25-al2023 image, whose four Corretto packages are installed below.
 ENV LANG=C.UTF-8 \

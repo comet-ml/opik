@@ -7,8 +7,6 @@ optimizer + display spies across multiple test modules when we split files.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
 from typing import Any, TYPE_CHECKING, Protocol
 from unittest.mock import MagicMock
 
@@ -103,51 +101,3 @@ class _ToolFlagAgent(MagicMock):
 
 class _BaselineReporter(Protocol):
     def set_score(self, score: float) -> None: ...
-
-
-class _DisplaySpy:
-    def __init__(self) -> None:
-        self.header_calls: list[tuple[str, str | None]] = []
-
-    def show_header(
-        self,
-        *,
-        algorithm: str,
-        optimization_id: str | None,
-        dataset_id: str | None = None,
-    ) -> None:
-        _ = dataset_id
-        self.header_calls.append((algorithm, optimization_id))
-
-    def show_configuration(self, *, prompt: Any, optimizer_config: Any) -> None:
-        _ = prompt, optimizer_config
-
-    def baseline_evaluation(
-        self, context: Any
-    ) -> AbstractContextManager[_BaselineReporter]:
-        _ = context
-
-        @contextmanager
-        def _cm() -> Iterator[_BaselineReporter]:
-            class Reporter:
-                def set_score(self, score: float) -> None:
-                    _ = score
-
-            yield Reporter()
-
-        return _cm()
-
-    def evaluation_progress(
-        self,
-        *,
-        context: Any,
-        prompts: Any,
-        score: float,
-        display_info: Any | None = None,
-    ) -> None:
-        _ = context, prompts, score, display_info
-
-    def show_final_result(
-        self, *, initial_score: float, best_score: float, prompt: Any
-    ) -> None:
-        _ = initial_score, best_score, prompt
