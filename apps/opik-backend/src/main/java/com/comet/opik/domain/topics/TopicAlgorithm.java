@@ -91,7 +91,7 @@ public interface TopicAlgorithm {
         /** Runs {@code action} as a phase of the run: its seconds go to the run's stats and to the phase metric. */
         <T> T timed(String phase, Supplier<T> action);
 
-        /** The run's stats, saved on its {@code topic_runs} row; an algorithm adds its own. */
+        /** The run's stats, logged when it ends; an algorithm adds its own. */
         ObjectNode stats();
     }
 
