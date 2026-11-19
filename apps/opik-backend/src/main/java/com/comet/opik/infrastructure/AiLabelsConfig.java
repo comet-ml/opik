@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.api.validation.SecureHttpUrl;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
@@ -12,8 +11,6 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import lombok.ToString;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.concurrent.TimeUnit;
 
@@ -30,9 +27,6 @@ public class AiLabelsConfig {
     /** Optional directory of task YAML, loaded instead of the classpath tasks, so prompts can live outside the repo. */
     @JsonProperty
     private String tasksDir;
-
-    @Valid @NotNull @JsonProperty
-    private InferenceConfig inference = new InferenceConfig();
 
     /**
      * Global in-flight work: the cost of every submitted, not yet loaded, item (see {@link #perCallBytes} and
@@ -173,13 +167,6 @@ public class AiLabelsConfig {
     private SweepConfig sweep = new SweepConfig();
 
     @JsonIgnore
-    @AssertTrue(message = "aiLabels.inference.url (AI_LABELS_INFERENCE_URL) and aiLabels.inference.credential (AI_LABELS_INFERENCE_CREDENTIAL) must be set when aiLabels.enabled (AI_LABELS_ENABLED) is true")
-    public boolean isInferenceConfigured() {
-        return !enabled || (inference != null && StringUtils.isNotBlank(inference.getUrl())
-                && StringUtils.isNotBlank(inference.getCredential()));
-    }
-
-    @JsonIgnore
     @AssertTrue(message = "aiLabels.tickBudget must be shorter than aiLabels.tickInterval") public boolean isTickBudgetValid() {
         return tickBudget == null || tickInterval == null
                 || tickBudget.toMilliseconds() < tickInterval.toMilliseconds();
@@ -200,52 +187,6 @@ public class AiLabelsConfig {
     @AssertTrue(message = "aiLabels.renderMaxExecutionTime must not be longer than aiLabels.tickBudget") public boolean isRenderMaxExecutionTimeValid() {
         return renderMaxExecutionTime == null || tickBudget == null
                 || renderMaxExecutionTime.toMilliseconds() <= tickBudget.toMilliseconds();
-    }
-
-    @Data
-    public static class InferenceConfig {
-
-        /**
-         * The credential and the traces go with every call, so checked whenever it is set, whether ai-labels is on or
-         * not: the guardrails decide calls send the same credential to it under their own toggle.
-         */
-        @SecureHttpUrl
-        @JsonProperty
-        private String url;
-
-        @ToString.Exclude
-        @JsonProperty
-        private String credential;
-
-        @NotNull @JsonProperty
-        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        private Duration connectTimeout = Duration.seconds(5);
-
-        @NotNull @JsonProperty
-        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        private Duration readTimeout = Duration.seconds(30);
-
-        /** Synchronous decide calls in flight from this instance, on a client of their own. */
-        @JsonProperty
-        @Min(1) private int maxConcurrentDecides = 256;
-
-        /** How long an idle connection for decide calls is kept for reuse; 0 closes each one after a single call. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 0, unit = TimeUnit.MILLISECONDS)
-        private Duration decideKeepAlive = Duration.seconds(30);
-
-        /** Longest a connection for decide calls is reused, so calls move to new upstream instances after a rollout. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        private Duration decideTimeToLive = Duration.minutes(5);
-
-        /**
-         * The most of a response body, success or error, that a call reads; a longer one fails the call unread. The
-         * largest expected bodies, a full embed call and a page of job results, are a few MiB. Every call in flight
-         * can hold up to this much heap, so it is capped at 64 MiB, twice the default.
-         */
-        @JsonProperty
-        @Min(1) @Max(64L * 1024 * 1024) private long maxResponseBytes;
     }
 
     @Data

@@ -1,11 +1,13 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceErrorCode;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
@@ -24,6 +26,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.ERROR_TYPE_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_ID_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_NAME_KEY;
 import static io.opentelemetry.api.common.AttributeKey.longKey;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -34,7 +38,7 @@ class TopicVectorsMetrics {
     static final String OLDEST_UNVECTORED = "topics.vectors.oldest_unvectored_seconds";
 
     private final TopicsConfig config;
-    private final TopicsWorkspaceNames names;
+    private final WorkspaceNameService names;
     private final Clock clock;
 
     /**
@@ -59,11 +63,11 @@ class TopicVectorsMetrics {
     private final DoubleHistogram phaseDuration;
 
     @Inject
-    TopicVectorsMetrics(@NonNull @Config("topics") TopicsConfig config, @NonNull TopicsWorkspaceNames names) {
+    TopicVectorsMetrics(@NonNull @Config("topics") TopicsConfig config, @NonNull WorkspaceNameService names) {
         this(config, names, GlobalOpenTelemetry.get().getMeter("opik.topics"), Clock.systemUTC());
     }
 
-    TopicVectorsMetrics(@NonNull TopicsConfig config, @NonNull TopicsWorkspaceNames names, @NonNull Meter meter,
+    TopicVectorsMetrics(@NonNull TopicsConfig config, @NonNull WorkspaceNameService names, @NonNull Meter meter,
             @NonNull Clock clock) {
         this.config = config;
         this.names = names;
@@ -81,7 +85,7 @@ class TopicVectorsMetrics {
                     var now = clock.instant();
                     snapshot.oldest().forEach((workspaceId, oldest) -> measurement.record(
                             oldest.statusAt().equals(Instant.MAX) ? 0 : seconds(oldest.statusAt(), now),
-                            TopicsWorkspaceNames.builder(workspaceId, oldest.workspaceName()).build()));
+                            workspace(workspaceId, oldest.workspaceName()).build()));
                 });
         this.written = meter.counterBuilder("topics.vectors.written")
                 .setDescription("Vectors written to topic_vectors, by workspace")
@@ -111,19 +115,19 @@ class TopicVectorsMetrics {
 
     void written(@NonNull String workspaceId, int rows) {
         if (rows > 0) {
-            written.add(rows, names.of(workspaceId));
+            written.add(rows, workspace(workspaceId).build());
         }
     }
 
     void skipped(@NonNull String workspaceId, @NonNull SkipReason reason, int traces) {
         if (traces > 0) {
-            skipped.add(traces, names.builder(workspaceId).put(stringKey("reason"), reason.getValue()).build());
+            skipped.add(traces, workspace(workspaceId).put(stringKey("reason"), reason.getValue()).build());
         }
     }
 
     /** One embed call: its duration, and its failure when it failed. */
     void embedCall(@NonNull String workspaceId, @NonNull Duration duration, @Nullable InferenceException failure) {
-        var workspace = names.of(workspaceId);
+        var workspace = workspace(workspaceId).build();
         var outcome = failure == null ? "ok" : metricCode(failure.getCode());
         embedDuration.record(duration.toNanos() / 1e9,
                 workspace.toBuilder().put(stringKey("outcome"), outcome).build());
@@ -137,12 +141,12 @@ class TopicVectorsMetrics {
     }
 
     void readFailure(@NonNull String phase, @NonNull String workspaceId, @NonNull Throwable error) {
-        readFailures.add(1, names.builder(workspaceId).put(stringKey("phase"), phase)
+        readFailures.add(1, workspace(workspaceId).put(stringKey("phase"), phase)
                 .put(ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(error)).build());
     }
 
     void workspacesNotRead(@NonNull List<String> workspaceIds) {
-        workspaceIds.forEach(workspaceId -> workspacesNotRead.add(1, names.of(workspaceId)));
+        workspaceIds.forEach(workspaceId -> workspacesNotRead.add(1, workspace(workspaceId).build()));
     }
 
     /**
@@ -153,7 +157,15 @@ class TopicVectorsMetrics {
     void oldest(@NonNull Map<String, Instant> oldest) {
         lastOldest = new OldestSnapshot(clock.instant(),
                 oldest.entrySet().stream().collect(Collectors.toUnmodifiableMap(
-                        Map.Entry::getKey, entry -> new Oldest(names.name(entry.getKey()), entry.getValue()))));
+                        Map.Entry::getKey, entry -> new Oldest(names.nameOrId(entry.getKey()), entry.getValue()))));
+    }
+
+    private AttributesBuilder workspace(String workspaceId) {
+        return workspace(workspaceId, names.nameOrId(workspaceId));
+    }
+
+    static AttributesBuilder workspace(@NonNull String workspaceId, @NonNull String workspaceName) {
+        return Attributes.builder().put(WORKSPACE_ID_KEY, workspaceId).put(WORKSPACE_NAME_KEY, workspaceName);
     }
 
     <T> T timed(@NonNull String phase, @NonNull Supplier<T> action) {

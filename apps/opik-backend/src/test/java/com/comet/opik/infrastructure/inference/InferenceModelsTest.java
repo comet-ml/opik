@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.inference;
 
+import com.comet.opik.infrastructure.ShippedConfig;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -163,15 +164,16 @@ class InferenceModelsTest {
     }
 
     @Test
-    void clientLimitsMatchTheContract() {
+    void shippedLimitsMatchTheContract() throws Exception {
+        var limits = ShippedConfig.load(Map.of()).getInference().getLimits();
         var endpoints = CONTRACT.path("endpoints");
 
-        assertThat(InferenceClient.MAX_EMBED_INPUTS).isEqualTo(maxItems(endpoints.path(EMBED), "inputs"));
-        assertThat(InferenceClient.MAX_EMBED_DEADLINE.toMillis())
+        assertThat(limits.getMaxEmbedInputs()).isEqualTo(maxItems(endpoints.path(EMBED), "inputs"));
+        assertThat(limits.getMaxEmbedDeadline().toMilliseconds())
                 .isEqualTo(CONTRACT.path("limits").path("embed_max_deadline_ms").path("value").asLong());
-        assertThat(InferenceClient.MAX_BATCH_ITEMS).isEqualTo(maxItems(endpoints.path(BATCH_DECIDE), "items"))
+        assertThat(limits.getMaxBatchItems()).isEqualTo(maxItems(endpoints.path(BATCH_DECIDE), "items"))
                 .isEqualTo(maxItems(endpoints.path(BATCH_GENERATE), "items"));
-        assertThat(InferenceClient.MAX_STATUS_JOB_IDS).isEqualTo(maxItems(endpoints.path(JOBS_STATUS), "job_ids"));
+        assertThat(limits.getMaxStatusJobIds()).isEqualTo(maxItems(endpoints.path(JOBS_STATUS), "job_ids"));
     }
 
     private static int maxItems(JsonNode endpoint, String property) {

@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.domain.WorkspaceNameService;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleGaugeBuilder;
@@ -10,7 +11,6 @@ import io.opentelemetry.api.metrics.LongCounterBuilder;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableDoubleMeasurement;
 
-import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,13 +58,15 @@ final class TopicsTestMeter {
     }
 
     /** Workspace names as {@link #workspace} gives them. */
-    static TopicsWorkspaceNames names() {
-        return new TopicsWorkspaceNames(workspaceId -> "name-" + workspaceId, Clock.systemUTC());
+    static WorkspaceNameService names() {
+        var names = mock(WorkspaceNameService.class);
+        when(names.nameOrId(anyString())).thenAnswer(invocation -> "name-" + invocation.getArgument(0));
+        return names;
     }
 
     /** Both workspace attributes, with the name {@link #names()} gives. */
     static AttributesBuilder workspace(String workspaceId) {
-        return TopicsWorkspaceNames.builder(workspaceId, "name-" + workspaceId);
+        return TopicVectorsMetrics.workspace(workspaceId, "name-" + workspaceId);
     }
 
     LongCounter counter(String name) {

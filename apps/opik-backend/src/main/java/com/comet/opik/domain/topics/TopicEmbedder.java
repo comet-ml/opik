@@ -4,7 +4,6 @@ import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.EmbedRequest;
 import com.comet.opik.infrastructure.inference.EmbedResponse;
-import com.comet.opik.infrastructure.inference.EmbedResult;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceException;
 import com.google.common.collect.Lists;
@@ -19,7 +18,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -93,19 +91,21 @@ class TopicEmbedder {
         return exception.isRetryable() || exception.isOutOfTime() || status == 429 || status >= 500;
     }
 
-    /** A malformed answer costs only its own traces, never an exception out of the tick. */
+    /**
+     * The client has checked one vector per input, each {@code dimensions} long; a model of another size or a zero or
+     * non-finite vector costs only its own traces, never an exception out of the tick.
+     */
     private static ChunkOutcome vectors(String workspaceId, List<Candidate> chunk, EmbedResponse response) {
-        var embeddings = Optional.ofNullable(response).map(EmbedResponse::result).map(EmbedResult::embeddings)
-                .orElse(null);
-        if (embeddings == null || embeddings.size() != chunk.size()) {
-            log.error("Topic vectors embed answered '{}' vectors for '{}' inputs, workspace '{}'",
-                    embeddings == null ? 0 : embeddings.size(), chunk.size(), workspaceId);
+        var result = response.result();
+        if (result.dimensions() != TopicEmbedding.DIMENSIONS) {
+            log.error("Topic vectors embed answered dimensions '{}', expected '{}', workspace '{}'",
+                    result.dimensions(), TopicEmbedding.DIMENSIONS, workspaceId);
             return ChunkOutcome.skipped(SkipReason.INVALID_VECTOR, chunk.size());
         }
         var vectors = new ArrayList<TopicVector>(chunk.size());
         for (int i = 0; i < chunk.size(); i++) {
             var candidate = chunk.get(i);
-            toArray(embeddings.get(i)).flatMap(TopicEmbedder::normalize).ifPresent(vector -> vectors.add(
+            normalize(result.embeddings()[i]).ifPresent(vector -> vectors.add(
                     TopicVector.builder()
                             .workspaceId(candidate.workspaceId())
                             .projectId(candidate.projectId())
@@ -121,22 +121,10 @@ class TopicEmbedder {
         }
         int invalid = chunk.size() - vectors.size();
         if (invalid > 0) {
-            log.error("Topic vectors embed answered '{}' vectors that are not '{}' finite non-zero numbers, "
-                    + "workspace '{}'", invalid, TopicEmbedding.DIMENSIONS, workspaceId);
+            log.error("Topic vectors embed answered '{}' zero or non-finite vectors, workspace '{}'", invalid,
+                    workspaceId);
         }
         return new ChunkOutcome(vectors, invalid > 0 ? Map.of(SkipReason.INVALID_VECTOR, invalid) : Map.of());
-    }
-
-    private static Optional<float[]> toArray(List<Float> embedding) {
-        if (embedding == null || embedding.size() != TopicEmbedding.DIMENSIONS
-                || !embedding.stream().allMatch(Objects::nonNull)) {
-            return Optional.empty();
-        }
-        var array = new float[embedding.size()];
-        for (int i = 0; i < array.length; i++) {
-            array[i] = embedding.get(i);
-        }
-        return Optional.of(array);
     }
 
     /** Scaled to length 1, so the nightly job's dot product is the cosine; empty for a zero or non-finite vector. */
