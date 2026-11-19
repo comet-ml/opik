@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.google.common.base.Preconditions;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -51,12 +50,16 @@ public class GroupSummaries {
      * @param labels  per unique text, the group in {@code [0, k)}
      * @param centres {@code k * dimensions}, unit length
      */
-    public static List<List<String>> authorExamples(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
+    public static List<List<String>> authorExamples(@NonNull MergedIntents merged, @NonNull int[] labels,
             @NonNull float[] centres, int frequent, int extra) {
         int d = merged.dimensions();
-        int k = groupCount(centres, d);
         Preconditions.checkArgument(labels.length == merged.size(),
                 "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
+        Preconditions.checkArgument(d > 0 && centres.length % d == 0,
+                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, d);
+        Preconditions.checkArgument(frequent >= 0 && extra >= 0,
+                "frequent and extra must not be negative, frequent '%s', extra '%s'", frequent, extra);
+        int k = centres.length / d;
         var groups = Members.of(labels, k);
         var out = new ArrayList<List<String>>(k);
         // One array for all groups: a group's pick reads only its own members' scores, which it writes first.
@@ -80,7 +83,7 @@ public class GroupSummaries {
      * @param counts  per unique text, its traces in the group; read for the members only
      * @param sims    per unique text, its nearness to the group; read for the members only
      */
-    static List<String> pick(IntentMerger.Merged merged, int[] members, int from, int to, int[] counts,
+    static List<String> pick(MergedIntents merged, int[] members, int from, int to, int[] counts,
             double[] sims, int frequent, int total) {
         var chosen = new int[Math.max(0, Math.min(total, to - from))];
         if (chosen.length == 0) {
@@ -138,13 +141,6 @@ public class GroupSummaries {
         return false;
     }
 
-    /** The number of groups {@code centres} holds, {@code dimensions} values each. */
-    private static int groupCount(float[] centres, int dimensions) {
-        Preconditions.checkArgument(dimensions > 0 && centres.length % dimensions == 0,
-                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, dimensions);
-        return centres.length / dimensions;
-    }
-
     /** Per group, its unique texts: group {@code j}'s are {@code order[start[j]..start[j + 1])}, ascending. */
     private record Members(int[] order, int[] start) {
 
@@ -174,9 +170,5 @@ public class GroupSummaries {
             s += (double) a[ai + t] * b[bj + t];
         }
         return s;
-    }
-
-    @Builder(toBuilder = true)
-    public record GroupSummary(int group, int size, double share) {
     }
 }
