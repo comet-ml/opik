@@ -20,10 +20,8 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 @Singleton
 public class TopicsMetrics {
 
-    /** The run could not start: its {@code topic_runs} insert, or the read before it, failed. */
+    /** The run could not start: its attempt's write on {@code topic_projects}, or the read before it, failed. */
     static final String ERROR_START_FAILED = "start_failed";
-    /** Housekeeping failed a run its pod left {@code running}: the code {@code TopicRunDAO.failAbandoned} writes. */
-    static final String ERROR_ABANDONED = "abandoned";
 
     private static final AttributeKey<String> STATUS = stringKey("status");
     private static final AttributeKey<String> ERROR_CODE = stringKey("error_code");
@@ -55,7 +53,7 @@ public class TopicsMetrics {
         this.names = names;
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
-                        + "could not start, abandoned when housekeeping failed a run its pod left running")
+                        + "could not start, abandoned when the project's next run found one its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
                 .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save, label")
@@ -74,11 +72,11 @@ public class TopicsMetrics {
         // No unit: "1" would add a _ratio suffix to the Prometheus name.
         this.otherShare = meter.histogramBuilder("topics.run.other_share")
                 .setDescription("Share of a saved run's traces labelled Other, among the traces it read (the window, "
-                        + "or its sample): the stats.other_share of its topic_runs row")
+                        + "or its sample): the other_share of its logged stats")
                 .build();
     }
 
-    void run(@NonNull String workspaceId, @NonNull TopicRun.Status status, String errorCode) {
+    void run(@NonNull String workspaceId, @NonNull TopicProject.RunStatus status, String errorCode) {
         var attributes = names.builder(workspaceId).put(STATUS, status.getValue());
         if (errorCode != null) {
             attributes.put(ERROR_CODE, errorCode);
