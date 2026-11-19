@@ -7,16 +7,14 @@ import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
-import java.util.TreeMap;
 
 /**
  * Per k-means group, what a prompt shows. For the author prompt (the first build), its size and share of the window
  * ({@link #summarize(int[], int)}); the examples come from {@link #authorExamples}. For the nightly naming and verify
  * prompts, also its tightness (mean cosine of the members to the centre) and up to {@value #EXAMPLES} examples: up to
- * {@value #FREQUENT} repeated texts, then the most typical ones ({@link #summarize(String[], float[], int[], float[],
- * int)}). The recent share stays 0: {@link CandidateGrouper} sets both shares itself, over the whole window.
+ * {@value #FREQUENT} repeated texts, then the most typical ones ({@link #summarize(IntentMerger.Merged, int[],
+ * float[])}). The recent share stays 0: {@link CandidateGrouper} sets both shares itself, over the whole window.
  */
 @UtilityClass
 public class GroupSummaries {
@@ -49,38 +47,47 @@ public class GroupSummaries {
     }
 
     /**
-     * @param texts   per trace
-     * @param vectors per trace, unit length, {@code texts.length * dimensions}
-     * @param labels  per trace, the group in {@code [0, k)}
+     * Per group its size and share in traces, its tightness (the members' mean cosine to the centre, a text counted
+     * once per trace) and its examples by the rule on {@link #authorExamples}. It reads the points k-means grouped, as
+     * {@link #authorExamples} does.
+     *
+     * @param merged  the traces' texts, merged as for the fit
+     * @param labels  per unique text, the group in {@code [0, k)}
      * @param centres {@code k * dimensions}, unit length
      */
-    public static List<GroupSummary> summarize(@NonNull String[] texts, @NonNull float[] vectors,
-            @NonNull int[] labels, @NonNull float[] centres, int dimensions) {
-        int n = texts.length;
-        int k = centres.length / dimensions;
-        Preconditions.checkArgument(labels.length == n && vectors.length == n * dimensions,
-                "per-trace arrays must have one entry per text, texts '%s'", n);
-        var members = members(labels, k);
+    public static List<GroupSummary> summarize(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
+            @NonNull float[] centres) {
+        int d = merged.dimensions();
+        int k = centres.length / d;
+        Preconditions.checkArgument(labels.length == merged.size(),
+                "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
+        int n = merged.inverse().length;
+        var weights = merged.weights();
+        var groups = Members.of(labels, k);
         var out = new ArrayList<GroupSummary>(k);
-        // One array for all groups: a group's sort reads only its own members' scores, which it writes first.
-        var sims = new double[n];
+        // One array for all groups: a group's pick reads only its own members' scores, which it writes first.
+        var sims = new double[merged.size()];
         for (int j = 0; j < k; j++) {
-            var idx = members.get(j);
-            if (idx.isEmpty()) {
+            int from = groups.start()[j];
+            int to = groups.start()[j + 1];
+            if (from == to) {
                 out.add(GroupSummary.builder().group(j).examples(List.of()).build());
                 continue;
             }
+            int size = 0;
             double simSum = 0;
-            for (int i : idx) {
-                sims[i] = dot(vectors, i, centres, j, dimensions);
-                simSum += sims[i];
+            for (int m = from; m < to; m++) {
+                int u = groups.order()[m];
+                sims[u] = dot(merged.vectors(), u, centres, j, d);
+                size += weights[u];
+                simSum += weights[u] * sims[u];
             }
             out.add(GroupSummary.builder()
                     .group(j)
-                    .size(idx.size())
-                    .share((double) idx.size() / n)
-                    .tightness(simSum / idx.size())
-                    .examples(pick(texts, idx, sims, FREQUENT, EXAMPLES))
+                    .size(size)
+                    .share((double) size / n)
+                    .tightness(simSum / size)
+                    .examples(pick(merged, groups.order(), from, to, weights, sims, FREQUENT, EXAMPLES))
                     .build());
         }
         return out;
@@ -116,52 +123,6 @@ public class GroupSummaries {
                     frequent, frequent + extra));
         }
         return out;
-    }
-
-    /** Per group in {@code [0, k)}, its traces in trace order. */
-    private static List<List<Integer>> members(int[] labels, int k) {
-        var members = new ArrayList<List<Integer>>(k);
-        for (int j = 0; j < k; j++) {
-            members.add(new ArrayList<>());
-        }
-        for (int i = 0; i < labels.length; i++) {
-            members.get(labels[i]).add(i);
-        }
-        return members;
-    }
-
-    /**
-     * One group's examples, by the rule on {@link #authorExamples}, with {@code sims} as nearness.
-     *
-     * @param members the group's traces, in trace order
-     * @param sims    per trace, its similarity to the group: for a k-means group, its dot product with the centre;
-     *                read for the members only
-     */
-    static List<String> pick(String[] texts, List<Integer> members, double[] sims, int frequent, int total) {
-        var counts = new TreeMap<String, Integer>(TopicText.CODE_POINT_ORDER);
-        for (int i : members) {
-            counts.merge(texts[i], 1, Integer::sum);
-        }
-        var byCount = new ArrayList<>(counts.entrySet());
-        byCount.sort(Comparator.comparingInt(entry -> -entry.getValue()));
-        var examples = new ArrayList<String>(total);
-        for (int e = 0; e < Math.min(frequent, byCount.size()); e++) {
-            if (byCount.get(e).getValue() < MIN_REPEATS) {
-                break;
-            }
-            examples.add(byCount.get(e).getKey());
-        }
-        var bySim = new ArrayList<>(members);
-        bySim.sort((a, b) -> sims[a] > sims[b] ? -1 : sims[a] < sims[b] ? 1 : 0);
-        for (int i : bySim) {
-            if (examples.size() >= total) {
-                break;
-            }
-            if (!examples.contains(texts[i])) {
-                examples.add(texts[i]);
-            }
-        }
-        return List.copyOf(examples);
     }
 
     /**

@@ -270,8 +270,9 @@ public class NightlyUpdate {
     /**
      * The live topics as the naming and verify prompts show them, from the step a labels: prompt id = position in the
      * live list, share of the window, share of the last 7 days and {@value #PROMPT_EXAMPLES} member texts, picked as a
-     * group's ({@link GroupSummaries#pick}): texts that repeat first, most frequent first (ties by code point order),
-     * then the most typical ones, nearest to any of the topic's prototypes (ties by trace order).
+     * group's ({@link GroupSummaries#pick}) on the window's merged texts: texts that repeat first, most frequent first
+     * (ties by code point order), then the most typical ones, nearest to any of the topic's prototypes (ties by first
+     * trace). A text's count is its traces in the topic; its nearness is that of its vector, the first trace's.
      */
     static List<TopicPrompts.PromptTopic> promptTopics(NightState state, NightWindow window, int[] before,
             boolean[] recent) {
@@ -281,25 +282,40 @@ public class NightlyUpdate {
             recentTotal += r ? 1 : 0;
         }
         int d = window.dimensions();
+        var merged = IntentMerger.merge(window.texts(), window.vectors(), d);
         var out = new ArrayList<TopicPrompts.PromptTopic>();
-        // One array for all topics: a topic's pick reads only its own members' scores, which it writes first.
-        var sims = new double[n];
+        // One set of arrays for all topics: a topic's pick reads only its own members' counts and scores, which it
+        // writes first, and its counts go back to 0 after it.
+        var counts = new int[merged.size()];
+        var sims = new double[merged.size()];
+        var members = new int[merged.size()];
         int id = 0;
         for (int t : state.live()) {
             var topic = state.topic(t);
+            int count = 0;
             int recentCount = 0;
-            var members = new ArrayList<Integer>();
+            int unique = 0;
             for (int i = 0; i < n; i++) {
-                if (before[i] == t) {
-                    members.add(i);
-                    recentCount += recent[i] ? 1 : 0;
-                    sims[i] = Double.NEGATIVE_INFINITY;
+                if (before[i] != t) {
+                    continue;
+                }
+                count++;
+                recentCount += recent[i] ? 1 : 0;
+                int u = merged.inverse()[i];
+                if (counts[u]++ == 0) {
+                    members[unique++] = u;
+                    sims[u] = Double.NEGATIVE_INFINITY;
                     for (var prototype : topic.getPrototypes()) {
-                        sims[i] = Math.max(sims[i], GroupSummaries.dot(window.vectors(), i, prototype, 0, d));
+                        sims[u] = Math.max(sims[u], GroupSummaries.dot(merged.vectors(), u, prototype, 0, d));
                     }
                 }
             }
-            int count = members.size();
+            Arrays.sort(members, 0, unique);
+            var examples = GroupSummaries.pick(merged, members, 0, unique, counts, sims, PROMPT_EXAMPLES,
+                    PROMPT_EXAMPLES);
+            for (int m = 0; m < unique; m++) {
+                counts[members[m]] = 0;
+            }
             out.add(TopicPrompts.PromptTopic.builder()
                     .id(++id)
                     .topic(t)
@@ -307,7 +323,7 @@ public class NightlyUpdate {
                     .definition(topic.getDefinition())
                     .share((double) count / n)
                     .recentShare((double) recentCount / Math.max(1, recentTotal))
-                    .examples(GroupSummaries.pick(window.texts(), members, sims, PROMPT_EXAMPLES, PROMPT_EXAMPLES))
+                    .examples(examples)
                     .build());
         }
         return out;
