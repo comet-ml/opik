@@ -18,6 +18,9 @@ public class TopicText {
     /** Code point order, as {@code np.unique} sorts a text array. */
     public static final Comparator<String> CODE_POINT_ORDER = TopicText::compareCodePoints;
 
+    /** The most characters a topic name keeps: {@code topics.name} is {@code VARCHAR(255)}. */
+    public static final int MAX_NAME_LENGTH = 255;
+
     public static int compareCodePoints(@NonNull String a, @NonNull String b) {
         int i = 0;
         int j = 0;
@@ -56,9 +59,6 @@ public class TopicText {
         }
         return text.substring(start, end);
     }
-
-    /** The most characters a topic name keeps: {@code topics.name} is {@code VARCHAR(255)}. */
-    public static final int MAX_NAME_LENGTH = 255;
 
     /**
      * A topic name as stored: {@link #pythonStrip(String)}, then cut to {@value #MAX_NAME_LENGTH} code points so an

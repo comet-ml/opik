@@ -85,11 +85,11 @@ final class TopicsFixture {
     }
 
     /** The scikit-learn seed-0 label of every trace, through its text. */
-    int[] sklearnTraceLabels(IntentMerger.Merged merged) {
+    int[] sklearnTraceLabels(MergedIntents merged) {
         var unique = ints(expected.get("sklearn").get("labels"));
         var out = new int[size()];
         for (int i = 0; i < out.length; i++) {
-            out[i] = unique[merged.inverse()[i]];
+            out[i] = unique[merged.textOfTrace()[i]];
         }
         return out;
     }

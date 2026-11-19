@@ -10,19 +10,18 @@ import java.util.concurrent.CancellationException;
 /**
  * {@link KMeans} as it was before Elkan's bounds and the Vector API: plain Lloyd with the squared distance summed point
  * by point, in scalar double. The reference: {@code KMeans.fit} must give the same labels as this for the same input and
- * seed. Kept as it was apart from the name, and it takes its iteration cap and restarts from {@link KMeans}.
+ * seed. Kept as it was apart from the name, and it takes the iteration cap and restarts as parameters, as
+ * {@code KMeans.fit} does.
  */
 @UtilityClass
 class PlainKMeans {
-
-    static final int MAX_ITERATIONS = KMeans.MAX_ITERATIONS;
-    static final int RESTARTS = KMeans.RESTARTS;
 
     /**
      * @param points  {@code n * dimensions} values
      * @param weights per point, positive
      */
-    static KMeans.Result fit(@NonNull float[] points, @NonNull double[] weights, int dimensions, int k, long seed) {
+    static KMeansResult fit(@NonNull float[] points, @NonNull double[] weights, int dimensions, int k, long seed,
+            int maxIterations, int restarts) {
         int n = weights.length;
         Preconditions.checkArgument(dimensions > 0, "dimensions must be positive, dimensions '%s'", dimensions);
         Preconditions.checkArgument(points.length == n * dimensions,
@@ -34,13 +33,14 @@ class PlainKMeans {
         }
         var random = new SplittableRandom(seed);
         Fit best = null;
-        for (int restart = 0; restart < RESTARTS; restart++) {
-            var fit = lloyd(points, weights, n, dimensions, k, plusPlus(points, weights, n, dimensions, k, random));
+        for (int restart = 0; restart < restarts; restart++) {
+            var fit = lloyd(points, weights, n, dimensions, k, plusPlus(points, weights, n, dimensions, k, random),
+                    maxIterations);
             if (best == null || fit.inertia() < best.inertia()) {
                 best = fit;
             }
         }
-        return KMeans.Result.builder()
+        return KMeansResult.builder()
                 .labels(best.labels())
                 .centres(normalized(best.centres(), k, dimensions))
                 .inertia(best.inertia())
@@ -84,11 +84,11 @@ class PlainKMeans {
         return p.length - 1;
     }
 
-    private static Fit lloyd(float[] x, double[] w, int n, int d, int k, double[] centres) {
+    private static Fit lloyd(float[] x, double[] w, int n, int d, int k, double[] centres, int maxIterations) {
         var labels = new int[n];
         var distance = new double[n];
         int iterations = 0;
-        for (; iterations < MAX_ITERATIONS; iterations++) {
+        for (; iterations < maxIterations; iterations++) {
             checkInterrupted();
             boolean changed = assign(x, centres, n, d, k, labels, distance);
             if (!changed && iterations > 0) {
@@ -96,7 +96,7 @@ class PlainKMeans {
             }
             update(x, w, n, d, k, labels, distance, centres);
         }
-        if (iterations == MAX_ITERATIONS) {
+        if (iterations == maxIterations) {
             // Stopped by the cap after an update: as scikit-learn, label and score against the centres returned.
             assign(x, centres, n, d, k, labels, distance);
         }
