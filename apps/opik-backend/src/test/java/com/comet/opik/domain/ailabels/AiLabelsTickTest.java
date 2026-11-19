@@ -374,7 +374,7 @@ class AiLabelsTickTest {
         assertThat(inFlight(workspaceId)).hasSize(6).allSatisfy(item -> {
             assertThat(item.jobId()).isEqualTo(jobIdByTask.get(item.task()));
             assertThat(item.attempt()).isOne();
-            assertThat(item.taskVersion()).isOne();
+            assertThat(item.taskVersion()).isEqualTo(registry.get(item.task()).version());
             assertThat(item.rendererVersion()).isEqualTo(AiLabelRenderer.RENDERER_VERSION);
         });
 
