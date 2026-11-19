@@ -46,3 +46,60 @@ describe("PassRateCell tooltip trigger", () => {
     expect(getByText("80%").closest("[data-state]")).not.toBeNull();
   });
 });
+
+// The pill is green only at exactly 100%, so a failing rate must never read
+// "100%" (e.g. 999 of 1000 items, or a group average of 0.9997).
+describe("PassRateCell label below 100%", () => {
+  it("caps an experiment row just under 100% at 99%", () => {
+    const { getByText, queryByText } = render(
+      <TooltipProvider>
+        <PassRateCell
+          {...context({
+            pass_rate: 0.999,
+            passed_count: 999,
+            total_count: 1000,
+          })}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(getByText("99%")).toBeTruthy();
+    expect(queryByText("100%")).toBeNull();
+  });
+
+  it("caps a group row just under 100% at 99% on the red tag", () => {
+    const { getByText } = render(
+      <TooltipProvider>
+        <PassRateCell.Aggregation
+          {...context(
+            {},
+            {
+              pass_rate_avg: 0.9997,
+              passed_count_sum: 2999,
+              total_count_sum: 3000,
+            },
+          )}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(getByText("99%").closest("[class*='--tag-red-bg']")).not.toBeNull();
+  });
+
+  it("shows 100% only when every item passed", () => {
+    const { getByText } = render(
+      <TooltipProvider>
+        <PassRateCell.Aggregation
+          {...context(
+            {},
+            { pass_rate_avg: 1, passed_count_sum: 15, total_count_sum: 15 },
+          )}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(
+      getByText("100%").closest("[class*='--tag-green-bg']"),
+    ).not.toBeNull();
+  });
+});

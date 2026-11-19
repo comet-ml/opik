@@ -6,6 +6,7 @@ import isNumber from "lodash/isNumber";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Tag } from "@/ui/tag";
+import { formatAsPercentage } from "@/lib/optimization-formatters";
 import CustomSquare from "@/icons/custom-square.svg?react";
 import StatusDotPill from "@/shared/StatusDotPill/StatusDotPill";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
@@ -18,7 +19,10 @@ export const formatPassRate = (
   return `${(passRate * 100).toFixed(1)}% (${passedCount}/${totalCount})`;
 };
 
-const formatPercent = (passRate: number) => `${Math.round(passRate * 100)}%`;
+// The backend sends exactly 1 only when every item passed; anything below
+// rounds no higher than 99% so the label never reads "100%" on a red pill.
+const formatPercent = (passRate: number) =>
+  formatAsPercentage(passRate < 1 ? Math.min(passRate, 0.99) : passRate);
 
 const PASS_RATE_DOT_COLOR = {
   passed: "var(--color-green-bright)",
