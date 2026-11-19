@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -30,12 +29,12 @@ public class AuthorApplier {
             "(other|others|misc|miscellaneous|general|various|mixed)( (requests|queries|questions|inquiries|tasks|topics|items|things|stuff))?",
             Pattern.UNICODE_CHARACTER_CLASS);
 
-    public static Applied apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups, int maxTopics) {
+    public static AppliedAnswer apply(@NonNull AuthorAnswer answer, @NonNull List<GroupSummary> groups, int maxTopics) {
         int k = groups.size();
         var ordered = new ArrayList<>(mergeSameNames(answer.topics(), groups));
         ordered.sort(Comparator.comparingLong(topic -> -validSize(topic, groups)));
         var claimed = new boolean[k];
-        var topics = new ArrayList<NewTopic>();
+        var topics = new ArrayList<AppliedTopic>();
         int taken = 0;
         for (var topic : ordered) {
             // A blank name is no name: its groups go to Other, as a catch-all's do.
@@ -55,7 +54,7 @@ public class AuthorApplier {
                 continue;
             }
             mine.forEach(j -> claimed[j] = true);
-            topics.add(NewTopic.builder()
+            topics.add(AppliedTopic.builder()
                     .name(TopicText.name(topic.name()))
                     .definition(TopicText.pythonStrip(topic.definition()))
                     .groups(List.copyOf(mine))
@@ -67,7 +66,7 @@ public class AuthorApplier {
                 other.add(j);
             }
         }
-        return Applied.builder().topics(List.copyOf(topics)).other(List.copyOf(other)).build();
+        return AppliedAnswer.builder().topics(List.copyOf(topics)).other(List.copyOf(other)).build();
     }
 
     /**
@@ -75,12 +74,12 @@ public class AuthorApplier {
      * It keeps the name and definition of its largest member (by {@link #validSize}, ties in answer order) and lists
      * the members' group ids, largest member first, each id once.
      */
-    static List<AuthorAnswer.Topic> mergeSameNames(List<AuthorAnswer.Topic> topics, List<GroupSummary> groups) {
-        var byName = new LinkedHashMap<String, List<AuthorAnswer.Topic>>();
+    static List<AuthorTopic> mergeSameNames(List<AuthorTopic> topics, List<GroupSummary> groups) {
+        var byName = new LinkedHashMap<String, List<AuthorTopic>>();
         for (var topic : topics) {
             byName.computeIfAbsent(nameKey(topic.name()), key -> new ArrayList<>()).add(topic);
         }
-        var out = new ArrayList<AuthorAnswer.Topic>(byName.size());
+        var out = new ArrayList<AuthorTopic>(byName.size());
         for (var members : byName.values()) {
             if (members.size() == 1) {
                 out.add(members.getFirst());
@@ -122,7 +121,7 @@ public class AuthorApplier {
     }
 
     /** Every listed valid id counts, a repeated one each time. */
-    private static long validSize(AuthorAnswer.Topic topic, List<GroupSummary> groups) {
+    private static long validSize(AuthorTopic topic, List<GroupSummary> groups) {
         long size = 0;
         for (int j : topic.clusters()) {
             if (j >= 0 && j < groups.size()) {
@@ -130,15 +129,5 @@ public class AuthorApplier {
             }
         }
         return size;
-    }
-
-    /** A topic to create, with its groups in the order the answer listed them. */
-    @Builder(toBuilder = true)
-    public record NewTopic(@NonNull String name, @NonNull String definition, @NonNull List<Integer> groups) {
-    }
-
-    /** The new topics in creation order, and the groups that went to Other, ascending. */
-    @Builder(toBuilder = true)
-    public record Applied(@NonNull List<NewTopic> topics, @NonNull List<Integer> other) {
     }
 }

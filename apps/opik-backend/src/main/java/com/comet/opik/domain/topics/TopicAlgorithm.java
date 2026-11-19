@@ -1,19 +1,10 @@
 package com.comet.opik.domain.topics;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * The topic algorithm: how a project's window of vectors becomes its topic list, and the rule that labels a trace by a
@@ -29,6 +20,9 @@ import java.util.function.Supplier;
  *
  * <p>The labels a build returns should be the ones its {@link #labeller} gives with the prototypes it returns:
  * otherwise a trace the build read and a trace the labelling pass labels get their topic by two different rules.
+ *
+ * <p>Values every algorithm shares live here; the vector size is {@link TopicEmbedding#DIMENSIONS}. Values one
+ * algorithm needs stay with it.
  */
 @ImplementedBy(KMeansTopicAlgorithm.class)
 public interface TopicAlgorithm {
@@ -36,11 +30,8 @@ public interface TopicAlgorithm {
     /** The label of a trace in no topic. */
     int OTHER = -1;
 
-    /** The values per vector: the embedding model's output size. */
-    int DIMENSIONS = 384;
-
     /** Builds the first list of a project that has none. */
-    FirstBuild firstBuild(Window window, int maxTopics, Context context);
+    FirstBuild firstBuild(TopicWindow window, int maxTopics, TopicRunContext context);
 
     /**
      * The rule that labels vectors by a project's saved list. Empty when the list has no topic: then it labels nothing.
@@ -49,76 +40,5 @@ public interface TopicAlgorithm {
      *               own order, this is the order that breaks a tie between two prototypes
      * @param otherVectors the known-Other prototypes of the saved list, or null when it has none
      */
-    Optional<Labeller> labeller(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
-
-    /** Labels vectors by one saved list. Local and fast: no network call. */
-    @FunctionalInterface
-    interface Labeller {
-
-        /**
-         * The topic of each vector: a topic's id, or {@link TraceTopic#OTHER}.
-         *
-         * @param vectors {@value #DIMENSIONS} values per vector, one after another
-         */
-        UUID[] label(float[] vectors);
-    }
-
-    /**
-     * The kinds of LLM call a run makes. The service picks the call's deadline and its metric label from the kind.
-     */
-    @Getter
-    @RequiredArgsConstructor
-    enum Call {
-        /** Names the topics over the groups. */
-        AUTHOR("author");
-
-        private final String value;
-    }
-
-    /** What a run gives its algorithm: the LLM, the phase timer and the run's stats. */
-    interface Context {
-
-        /**
-         * One LLM call. {@code read} turns the answer into what the algorithm needs; when it cannot, it throws a
-         * {@code llm_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A failed call
-         * throws and fails the run.
-         *
-             * @param tag  names the call in its request id ({@code <runId>:<tag>}) and the logs
-         */
-        <T> T generate(Call call, String tag, String prompt, JsonNode schema, int maxTokens,
-                Function<JsonNode, T> read);
-
-        /** Runs {@code action} as a phase of the run: its seconds go to the run's stats and to the phase metric. */
-        <T> T timed(String phase, Supplier<T> action);
-
-        /** The run's stats, saved on its {@code topic_runs} row; an algorithm adds its own. */
-        ObjectNode stats();
-    }
-
-    /**
-     * The window a build reads: per trace, in time order, its intent text and its vector of
-     * {@value #DIMENSIONS} values ({@code vectors} holds them one after another).
-     */
-    @Builder(toBuilder = true)
-    record Window(@NonNull String[] texts, @NonNull float[] vectors) {
-
-        public int size() {
-            return texts.length;
-        }
-    }
-
-    /** A new topic, before it has an id. */
-    @Builder(toBuilder = true)
-    record NewTopic(@NonNull String name, @NonNull String definition) {
-    }
-
-    /**
-     * A first list. {@code labels[i]} is the index in {@code topics} of window trace i's topic, or {@link #OTHER}. A
-     * topic's saved vectors are the {@code topicPrototypes} it owns by {@code owners}, in order; {@code otherPrototypes}
-     * are the known-Other ones.
-     */
-    @Builder(toBuilder = true)
-    record FirstBuild(@NonNull List<NewTopic> topics, @NonNull int[] labels, @NonNull List<float[]> topicPrototypes,
-            @NonNull List<Integer> owners, @NonNull List<float[]> otherPrototypes) {
-    }
+    Optional<TopicLabeller> labeller(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
 }

@@ -17,7 +17,7 @@ import java.util.List;
  * included, is {@code llm_bad_answer}.
  */
 @Builder(toBuilder = true)
-public record AuthorAnswer(@NonNull List<Topic> topics) {
+public record AuthorAnswer(@NonNull List<AuthorTopic> topics) {
 
     /**
      * The {@code output} of a generate call with {@link TopicPrompts#AUTHOR_SCHEMA}: opik-inference parses and checks
@@ -62,9 +62,9 @@ public record AuthorAnswer(@NonNull List<Topic> topics) {
                 clusters.get(t).add(cluster.intValue());
             }
         }
-        var topics = new ArrayList<Topic>(names.size());
+        var topics = new ArrayList<AuthorTopic>(names.size());
         for (int t = 0; t < names.size(); t++) {
-            topics.add(Topic.builder()
+            topics.add(AuthorTopic.builder()
                     .name(names.get(t))
                     .definition(definitions.get(t))
                     .clusters(List.copyOf(clusters.get(t)))
@@ -75,9 +75,5 @@ public record AuthorAnswer(@NonNull List<Topic> topics) {
 
     private static TopicsRunException bad(String message, Throwable cause) {
         return new TopicsRunException(RunError.LLM_BAD_ANSWER, message, cause);
-    }
-
-    @Builder(toBuilder = true)
-    public record Topic(@NonNull String name, @NonNull String definition, @NonNull List<Integer> clusters) {
     }
 }

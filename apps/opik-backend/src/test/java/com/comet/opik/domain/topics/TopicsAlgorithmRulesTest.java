@@ -113,7 +113,7 @@ class TopicsAlgorithmRulesTest {
                     + "{\"cluster\": 0, \"topic\": 1}, {\"cluster\": 1, \"topic\": 0}, {\"cluster\": 0, \"topic\": 0}, "
                     + "{\"cluster\": 2, \"topic\": -1}, {\"cluster\": 3, \"topic\": 7}]}"));
 
-            assertThat(answer.topics()).extracting(AuthorAnswer.Topic::name).containsExactly("A", "B");
+            assertThat(answer.topics()).extracting(AuthorTopic::name).containsExactly("A", "B");
             assertThat(answer.topics().get(0).clusters()).containsExactly(1);
             assertThat(answer.topics().get(1).clusters()).containsExactly(0);
             var groups = IntStream.range(0, 4).mapToObj(j -> GroupSummary.builder().group(j).size(10).build())
@@ -278,13 +278,13 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("11 topics keep the 10 largest; catch-alls are dropped before the cut")
         void cap() {
-            var topics = new ArrayList<AuthorAnswer.Topic>();
-            topics.add(new AuthorAnswer.Topic("Other Stuff", "d", List.of(0)));
+            var topics = new ArrayList<AuthorTopic>();
+            topics.add(new AuthorTopic("Other Stuff", "d", List.of(0)));
             for (int j = 1; j <= 11; j++) {
-                topics.add(new AuthorAnswer.Topic("Topic " + j, "d", List.of(j)));
+                topics.add(new AuthorTopic("Topic " + j, "d", List.of(j)));
             }
             var applied = AuthorApplier.apply(new AuthorAnswer(topics), groups, 10);
-            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+            assertThat(applied.topics()).extracting(AppliedTopic::name)
                     .containsExactly("Topic 1", "Topic 2", "Topic 3", "Topic 4", "Topic 5", "Topic 6", "Topic 7",
                             "Topic 8", "Topic 9", "Topic 10");
             assertThat(applied.other()).containsExactly(0, 11, 12, 13);
@@ -294,9 +294,9 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("a group goes to the largest topic that lists it; invalid and repeated ids are ignored")
         void claims() {
             var answer = new AuthorAnswer(List.of(
-                    new AuthorAnswer.Topic(" Small ", " d ", List.of(5, 99, -1)),
-                    new AuthorAnswer.Topic("Big", "d", List.of(1, 2, 2, 5)),
-                    new AuthorAnswer.Topic("Empty", "d", List.of(1))));
+                    new AuthorTopic(" Small ", " d ", List.of(5, 99, -1)),
+                    new AuthorTopic("Big", "d", List.of(1, 2, 2, 5)),
+                    new AuthorTopic("Empty", "d", List.of(1))));
             var applied = AuthorApplier.apply(answer, groups, 10);
             assertThat(applied.topics()).hasSize(1);
             assertThat(applied.topics().getFirst().name()).isEqualTo("Big");
@@ -308,12 +308,12 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("names and definitions are stripped as Python strips them; ties keep the answer's order")
         void strip() {
             var answer = new AuthorAnswer(List.of(
-                    new AuthorAnswer.Topic(" B ", " b ", List.of(3)),
-                    new AuthorAnswer.Topic("A", "a", List.of(4, -5))));
+                    new AuthorTopic(" B ", " b ", List.of(3)),
+                    new AuthorTopic("A", "a", List.of(4, -5))));
             var flat = IntStream.range(0, 6)
                     .mapToObj(j -> GroupSummary.builder().group(j).size(10).build()).toList();
             var applied = AuthorApplier.apply(answer, flat, 10);
-            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsExactly("B", "A");
+            assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("B", "A");
             assertThat(applied.topics().getFirst().definition()).isEqualTo("b");
         }
 
@@ -321,12 +321,12 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("topics with the same name merge into the largest one, at the first one's place")
         void sameNames() {
             var answer = new AuthorAnswer(List.of(
-                    new AuthorAnswer.Topic("Email Drafting", "small", List.of(9, 4)),
-                    new AuthorAnswer.Topic("Billing", "d", List.of(2)),
-                    new AuthorAnswer.Topic(" email\u00A0 drafting", "large", List.of(3, 4)),
-                    new AuthorAnswer.Topic("Email Drafts", "d", List.of(10))));
+                    new AuthorTopic("Email Drafting", "small", List.of(9, 4)),
+                    new AuthorTopic("Billing", "d", List.of(2)),
+                    new AuthorTopic(" email\u00A0 drafting", "large", List.of(3, 4)),
+                    new AuthorTopic("Email Drafts", "d", List.of(10))));
             var applied = AuthorApplier.apply(answer, groups, 10);
-            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+            assertThat(applied.topics()).extracting(AppliedTopic::name)
                     .containsExactly("email\u00A0 drafting", "Billing", "Email Drafts");
             var email = applied.topics().getFirst();
             assertThat(email.definition()).isEqualTo("large");
@@ -337,10 +337,10 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("a blank name is no name: its groups go to Other and it takes no slot")
         void blankName() {
             var answer = new AuthorAnswer(List.of(
-                    new AuthorAnswer.Topic(" \u00A0 ", "d", List.of(1)),
-                    new AuthorAnswer.Topic("Billing", "d", List.of(2))));
+                    new AuthorTopic(" \u00A0 ", "d", List.of(1)),
+                    new AuthorTopic("Billing", "d", List.of(2))));
             var applied = AuthorApplier.apply(answer, groups, 1);
-            assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name).containsExactly("Billing");
+            assertThat(applied.topics()).extracting(AppliedTopic::name).containsExactly("Billing");
             assertThat(applied.other()).contains(1).doesNotContain(2);
         }
 
@@ -348,7 +348,7 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("a name over 255 code points is cut to 255, so the save can't fail on it")
         void longName() {
             var name = "\uD83D\uDE00".repeat(300);
-            var answer = new AuthorAnswer(List.of(new AuthorAnswer.Topic(name, "d", List.of(1))));
+            var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(1))));
             var stored = AuthorApplier.apply(answer, groups, 10).topics().getFirst().name();
             assertThat(stored.codePointCount(0, stored.length())).isEqualTo(TopicText.MAX_NAME_LENGTH);
             assertThat(TopicText.name(" Billing ")).isEqualTo("Billing");

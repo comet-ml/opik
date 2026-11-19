@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 final class TopicsFixture {
 
-    static final int DIMENSIONS = 384;
+    static final int DIMENSIONS = TopicEmbedding.DIMENSIONS;
     private static final String DIR = "/topics/fixture/";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 

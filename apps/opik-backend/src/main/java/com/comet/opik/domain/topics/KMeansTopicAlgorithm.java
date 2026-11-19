@@ -33,7 +33,6 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     static final int AUTHOR_MIN = 5;
     static final int AUTHOR_MAX = 10;
     static final int AUTHOR_MAX_TOKENS = 2500;
-    static final String AUTHOR_TAG = "author";
     /** The k-means fit's limits: Lloyd iterations per restart, and k-means++ restarts. */
     static final int KMEANS_MAX_ITERATIONS = 150;
     static final int KMEANS_RESTARTS = 3;
@@ -47,13 +46,13 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     }
 
     @Override
-    public FirstBuild firstBuild(@NonNull Window window, int maxTopics, @NonNull Context context) {
+    public FirstBuild firstBuild(@NonNull TopicWindow window, int maxTopics, @NonNull TopicRunContext context) {
         int n = window.size();
         var texts = window.texts();
         var vectors = window.vectors();
         var stats = context.stats();
 
-        var merged = IntentMerger.merge(texts, vectors, DIMENSIONS);
+        var merged = IntentMerger.merge(texts, vectors, TopicEmbedding.DIMENSIONS);
         int unique = merged.size();
         int k = groups(unique);
         long seed = 0;
@@ -61,8 +60,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         for (int u = 0; u < unique; u++) {
             weights[u] = merged.weights()[u];
         }
-        var fit = context.timed("kmeans", () -> KMeans.fit(merged.vectors(), weights, DIMENSIONS, k, seed,
-                KMEANS_MAX_ITERATIONS, KMEANS_RESTARTS));
+        var fit = context.timed("kmeans",
+                () -> KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, seed,
+                        KMEANS_MAX_ITERATIONS, KMEANS_RESTARTS));
         var groupOf = new int[n];
         for (int i = 0; i < n; i++) {
             groupOf[i] = fit.labels()[merged.textOfTrace()[i]];
@@ -79,7 +79,8 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(),
                 Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
         var prompt = TopicPrompts.author(groups, maxTopics, examples);
-        var answer = context.generate(Call.AUTHOR, AUTHOR_TAG, prompt, TopicPrompts.AUTHOR_SCHEMA, AUTHOR_MAX_TOKENS,
+        var answer = context.generate(LlmCall.AUTHOR, LlmCall.AUTHOR.getValue(), prompt, TopicPrompts.AUTHOR_SCHEMA,
+                AUTHOR_MAX_TOKENS,
                 AuthorAnswer::parse);
         var applied = AuthorApplier.apply(answer, groups, maxTopics);
 
@@ -93,7 +94,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 }
             }
             var otherPrototypes = applied.other().stream().map(group -> centre(fit.centres(), group)).toList();
-            var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, DIMENSIONS);
+            var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, TopicEmbedding.DIMENSIONS);
             var labels = assigner.assign(vectors);
             stats.put("other_groups", applied.other().size());
             stats.put("gated_other", assigner.gatedOther());
@@ -117,7 +118,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
      * owned by the topic's index, then the known-Other ones.
      */
     @Override
-    public Optional<Labeller> labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
+    public Optional<TopicLabeller> labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
         if (topics.isEmpty()) {
             return Optional.empty();
         }
@@ -130,19 +131,19 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             }
         }
         var otherPrototypes = otherVectors == null ? List.<float[]>of() : otherVectors.vectors();
-        var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, DIMENSIONS);
+        var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, TopicEmbedding.DIMENSIONS);
         var ids = topics.stream().map(Topic::id).toList();
         return Optional.of(vectors -> {
             var labels = assigner.assign(vectors);
             var out = new UUID[labels.length];
-            Arrays.setAll(out, i -> labels[i] == OTHER ? TraceTopic.OTHER : ids.get(labels[i]));
+            Arrays.setAll(out, i -> labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : ids.get(labels[i]));
             return out;
         });
     }
 
     private static float[] centre(float[] centres, int group) {
-        var centre = new float[DIMENSIONS];
-        System.arraycopy(centres, group * DIMENSIONS, centre, 0, DIMENSIONS);
+        var centre = new float[TopicEmbedding.DIMENSIONS];
+        System.arraycopy(centres, group * TopicEmbedding.DIMENSIONS, centre, 0, TopicEmbedding.DIMENSIONS);
         return centre;
     }
 }

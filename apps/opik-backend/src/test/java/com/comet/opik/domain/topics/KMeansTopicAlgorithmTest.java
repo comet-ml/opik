@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("k-means topic algorithm")
 class KMeansTopicAlgorithmTest {
 
-    private static final int D = TopicAlgorithm.DIMENSIONS;
+    private static final int D = TopicEmbedding.DIMENSIONS;
     private static final String WORKSPACE_ID = "ws-1";
 
     private final KMeansTopicAlgorithm algorithm = new KMeansTopicAlgorithm();

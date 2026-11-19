@@ -141,7 +141,7 @@ class TopicsAlgorithmFixtureTest {
         var expectedTopics = fixture.expected.get("topics");
         var names = new ArrayList<String>();
         expectedTopics.forEach(topic -> names.add(topic.get("name").asText()));
-        assertThat(applied.topics()).extracting(AuthorApplier.NewTopic::name)
+        assertThat(applied.topics()).extracting(AppliedTopic::name)
                 .containsExactlyInAnyOrderElementsOf(names);
         for (var topic : applied.topics()) {
             var want = expectedTopics.get(names.indexOf(topic.name()));
