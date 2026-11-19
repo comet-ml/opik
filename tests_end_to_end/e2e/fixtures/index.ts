@@ -1,4 +1,4 @@
-export { test, expect } from './environment-split-thread.fixture';
+export { test, expect } from './grouped-pass-rate-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -640,3 +640,9 @@ export type {
   EnvironmentSplitThreadRef,
   EnvironmentSplitThreadFixtures,
 } from './environment-split-thread.fixture';
+export type {
+  PassRateExperimentRef,
+  PassRateGroupRef,
+  GroupedPassRateExperimentsRef,
+  GroupedPassRateExperimentsFixtures,
+} from './grouped-pass-rate-experiments.fixture';
