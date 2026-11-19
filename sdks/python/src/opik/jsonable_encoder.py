@@ -91,8 +91,11 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             for key, value in obj.items():
                 if key in allowed_keys:
                     encoded_key = encode(key, seen)
-                    if isinstance(encoded_key, dict):
-                        # Hashable dataclass keys encode to a dict, which cannot be a key.
+                    try:
+                        hash(encoded_key)
+                    except TypeError:
+                        # Composite keys (dataclasses, tuples, frozensets) encode to
+                        # unhashable containers (dicts, lists), which cannot be dict keys.
                         encoded_key = str(key)
                     encoded_value = encode(value, seen)
                     encoded_dict[encoded_key] = encoded_value

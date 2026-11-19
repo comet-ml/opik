@@ -195,6 +195,23 @@ def test_jsonable_encoder__numpy_non_finite_floats__encoded_as_float():
     assert math.isinf(ninf_val) and ninf_val < 0
 
 
+def test_jsonable_encoder__tuple_dict_key__key_stringified_and_dict_preserved():
+    payload = {(1, 2): {"data": [10, 20]}, "regular": 42}
+    encoded = jsonable_encoder.encode(payload)
+
+    assert isinstance(encoded, dict)
+    assert encoded == {"(1, 2)": {"data": [10, 20]}, "regular": 42}
+
+
+def test_jsonable_encoder__frozenset_dict_key__key_stringified_and_dict_preserved():
+    key = frozenset(["x", "y"])
+    payload = {key: True, "other": "test"}
+    encoded = jsonable_encoder.encode(payload)
+
+    assert isinstance(encoded, dict)
+    assert encoded == {str(key): True, "other": "test"}
+
+
 @pytest.mark.parametrize(
     "obj,expected",
     [
