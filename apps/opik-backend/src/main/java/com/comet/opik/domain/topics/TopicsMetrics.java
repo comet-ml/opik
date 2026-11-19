@@ -127,7 +127,7 @@ public class TopicsMetrics {
         runDuration.record(duration.toNanos() / 1e9, names.builder(workspaceId).put(PHASE, phase).build());
     }
 
-    void qwen(@NonNull String workspaceId, @NonNull TopicAlgorithm.Call call, @NonNull String outcome) {
+    void qwen(@NonNull String workspaceId, @NonNull LlmCall call, @NonNull String outcome) {
         qwenCalls.add(1, names.builder(workspaceId).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
     }
 

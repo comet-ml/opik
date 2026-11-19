@@ -464,7 +464,7 @@ class TopicsFirstBuildServiceTest {
 
         service.run(START);
 
-        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicsRunException.Code.INTERNAL);
+        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicProject.RunError.INTERNAL);
     }
 
     @Test
@@ -492,7 +492,7 @@ class TopicsFirstBuildServiceTest {
 
         service.run(Instant.now());
 
-        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicsRunException.Code.TIMEOUT);
+        verify(rebuildService).fail(runId, WORKSPACE_ID, started, TopicProject.RunError.TIMEOUT);
         assertThat(events).containsExactly("insert done", "unlock");
     }
 

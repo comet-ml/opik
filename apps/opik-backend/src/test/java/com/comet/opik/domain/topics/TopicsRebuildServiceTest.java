@@ -111,7 +111,7 @@ class TopicsRebuildServiceTest {
         var metrics = new TopicsMetrics(meter.meter, names);
         serviceWith = algorithm -> new TopicsRebuildService(TestConfigUtils.loadConfigTest().getTopics(), template,
                 windowDAO, traceTopicsDAO, client, idGenerator, metrics, labelService, algorithm);
-        service = serviceWith.apply(new KMeansTopicAlgorithm());
+        service = serviceWith.apply(TopicsTestAlgorithm.algorithm());
     }
 
     @Test
@@ -138,7 +138,7 @@ class TopicsRebuildServiceTest {
     void alreadyEndedIsNotCounted() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(0);
 
-        assertThat(service.fail(runId, WORKSPACE_ID, projectId, TopicsRunException.Code.TIMEOUT)).isFalse();
+        assertThat(service.fail(runId, WORKSPACE_ID, projectId, TopicProject.RunError.TIMEOUT)).isFalse();
 
         assertThat(meter.points("topics.runs")).isEmpty();
     }
@@ -151,11 +151,11 @@ class TopicsRebuildServiceTest {
                 .thenThrow(new IllegalStateException("MySQL down"))
                 .thenReturn(1);
 
-        assertThatThrownBy(() -> service.fail(runId, WORKSPACE_ID, projectId, TopicsRunException.Code.QWEN_ERROR))
+        assertThatThrownBy(() -> service.fail(runId, WORKSPACE_ID, projectId, TopicProject.RunError.LLM_ERROR))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(meter.points("topics.runs")).isEmpty();
 
-        assertThat(service.fail(runId, WORKSPACE_ID, projectId, TopicsRunException.Code.TIMEOUT)).isTrue();
+        assertThat(service.fail(runId, WORKSPACE_ID, projectId, TopicProject.RunError.TIMEOUT)).isTrue();
         assertThat(meter.points("topics.runs")).singleElement().satisfies(point -> {
             assertThat(point.get("status")).isEqualTo("failed");
             assertThat(point.get("error_code")).isEqualTo("timeout");
@@ -173,13 +173,13 @@ class TopicsRebuildServiceTest {
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night);
 
-        assertThat(outcome.errorCode()).isEqualTo("qwen_bad_answer");
+        assertThat(outcome.errorCode()).isEqualTo("llm_bad_answer");
         assertThat(meter.points("topics.qwen.calls")).singleElement().satisfies(point -> {
             assertThat(point.get("call")).isEqualTo("author");
             assertThat(point.get("outcome")).isEqualTo("bad_answer");
             assertThat(point.get("workspace_name")).isEqualTo(WORKSPACE_NAME);
         });
-        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "qwen_bad_answer")).isEqualTo(1);
+        assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "llm_bad_answer")).isEqualTo(1);
         assertThat(meter.points("topics.run.duration_seconds"))
                 .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(WORKSPACE_ID));
         verify(labelService, never()).labelWindow(any(), any(), any(), any());
@@ -452,7 +452,7 @@ class TopicsRebuildServiceTest {
         assertThat(otherRows).singleElement().satisfies(other -> assertThat(other).containsExactly(delta));
         for (var other : otherRows) {
             for (var topic : topicRows) {
-                assertThat(dot(other, topic)).isLessThan(PrototypeAssigner.OTHER_GATE);
+                assertThat(dot(other, topic)).isLessThan(TopicsTestAlgorithm.config().getOtherGate());
             }
         }
 
@@ -467,15 +467,18 @@ class TopicsRebuildServiceTest {
             System.arraycopy(row.vector(), 0, flat, i * d, d);
             var traceTopic = traceTopics.getValue().stream()
                     .filter(topicRow -> topicRow.traceId().equals(row.traceId())).findFirst().orElseThrow();
-            savedLabels[i] = TraceTopic.OTHER.equals(traceTopic.topicId()) ? PrototypeAssigner.OTHER : 0;
+            savedLabels[i] = TraceTopic.OTHER.equals(traceTopic.topicId()) ? TopicAlgorithm.OTHER : 0;
         }
-        var withoutGated = new PrototypeAssigner(topicRows, List.of(0), otherRows, d);
+        var config = TopicsTestAlgorithm.config();
+        var withoutGated = new PrototypeAssigner(topicRows, List.of(0), otherRows, d, config.getAssignMinCosine(),
+                config.getOtherGate());
         var withGated = new PrototypeAssigner(topicRows, List.of(0),
-                java.util.stream.Stream.concat(otherRows.stream(), gated.stream()).toList(), d);
+                java.util.stream.Stream.concat(otherRows.stream(), gated.stream()).toList(), d,
+                config.getAssignMinCosine(), config.getOtherGate());
         assertThat(withoutGated.assign(flat)).containsExactly(savedLabels);
         assertThat(withGated.assign(flat)).containsExactly(savedLabels);
-        assertThat(savedLabels).containsExactly(0, 0, 0, PrototypeAssigner.OTHER, 0, 0, 0, PrototypeAssigner.OTHER, 0,
-                0, 0, PrototypeAssigner.OTHER);
+        assertThat(savedLabels).containsExactly(0, 0, 0, TopicAlgorithm.OTHER, 0, 0, 0, TopicAlgorithm.OTHER, 0,
+                0, 0, TopicAlgorithm.OTHER);
     }
 
     @Test
@@ -487,7 +490,7 @@ class TopicsRebuildServiceTest {
         var other = unit(d, 2, 1, 0, 0);
         var stub = new TopicAlgorithm() {
             @Override
-            public FirstBuild firstBuild(Window window, int maxTopics, Context context) {
+            public FirstBuild firstBuild(TopicWindow window, int maxTopics, TopicRunContext context) {
                 context.stats().put("stub_stat", maxTopics);
                 var labels = new int[window.size()];
                 for (int i = 0; i < labels.length; i++) {
@@ -504,7 +507,7 @@ class TopicsRebuildServiceTest {
             }
 
             @Override
-            public Optional<Labeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
+            public Optional<TopicLabeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
                 return Optional.empty();
             }
         };

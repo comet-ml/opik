@@ -94,7 +94,7 @@ class TopicWindowLabelServiceTest {
         var config = TestConfigUtils.loadConfigTest().getTopics();
         config.getBuild().setWindowDays(WINDOW_DAYS);
         service = new TopicWindowLabelService(config, template, windowDAO, traceTopicsDAO,
-                new TopicsMetrics(new TopicsTestMeter().meter, names), new KMeansTopicAlgorithm());
+                new TopicsMetrics(new TopicsTestMeter().meter, names), TopicsTestAlgorithm.algorithm());
 
         billingPrototype = unit(random);
         refundsPrototype = unit(random);
