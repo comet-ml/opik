@@ -1314,6 +1314,31 @@ clickhouse:
     password: opikmon
     useSecret:
       enabled: false
+    # -- (list) Networks the monitoring user may log in from. Narrow it to the clients that use it, e.g. Grafana's.
+    networks:
+      - '0.0.0.0/0'
+    # -- (object) Settings of the monitoring user's profile, which is named after the user. readonly 2, not 1:
+    # Grafana's ClickHouse plugins set per-query settings such as log_comment, which readonly 1 rejects.
+    settings:
+      readonly: 2
+      read_overflow_mode: throw
+      constraints/read_overflow_mode/const: 1
+    # -- (object) Read caps in the monitoring user's profile. Each is pinned with a constraint (min 1, max the value),
+    # so a query can lower a cap but not raise it or set it to 0, which means unlimited.
+    limits:
+      max_execution_time: 60
+      max_memory_usage: 10000000000
+      max_bytes_to_read: 250000000000
+      max_rows_to_read: 1500000000
+      max_concurrent_queries_for_user: 20
+    # -- (list) GRANT statements for the monitoring user. Emptying both this and `additionalGrants` gives the user
+    # every privilege on every database. REMOTE is what `cluster()` and `clusterAllReplicas()` need.
+    grants:
+      - GRANT SELECT ON system.*
+      - GRANT REMOTE ON *.*
+    # -- (list) GRANT statements added to `grants`, e.g. column-level SELECT on the analytics tables a dashboard reads.
+    # Column grants on a Nested column need `optimize_functions_to_subcolumns: 0` in `settings` for `length()` on it.
+    additionalGrants: []
     # resources:
     #   requests:
     #     cpu: 300m

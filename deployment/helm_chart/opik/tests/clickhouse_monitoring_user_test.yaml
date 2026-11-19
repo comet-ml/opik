@@ -1,0 +1,76 @@
+suite: clickhouse monitoring user is read-only, least-privilege and capped
+
+# A users.xml user without <grants> holds every privilege, and one without <profile> runs on `default`
+# with no readonly and no read caps. These pin the three things that prevent that.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders no monitoring user when disabled
+    asserts:
+      - notExists:
+          path: spec.configuration.users["opikmon/profile"]
+      - notExists:
+          path: spec.configuration.profiles["opikmon/readonly"]
+
+  - it: assigns the user its readonly profile, the default grants and networks
+    set:
+      clickhouse.monitoring.enabled: true
+    asserts:
+      - equal:
+          path: spec.configuration.users["opikmon/profile"]
+          value: opikmon
+      - equal:
+          path: spec.configuration.users["opikmon/grants/query"]
+          value:
+            - GRANT SELECT ON system.*
+            - GRANT REMOTE ON *.*
+      - equal:
+          path: spec.configuration.users["opikmon/networks/ip"]
+          value:
+            - 0.0.0.0/0
+      - equal:
+          path: spec.configuration.profiles["opikmon/readonly"]
+          value: 2
+      - equal:
+          path: spec.configuration.profiles["opikmon/constraints/read_overflow_mode/const"]
+          value: 1
+
+  # 0 means unlimited, so a max constraint alone would still let a query lift the cap.
+  # The large value also checks the cap renders as an integer, not in scientific notation.
+  - it: pins each cap with min 1 and max the cap
+    set:
+      clickhouse.monitoring.enabled: true
+      clickhouse.monitoring.limits.max_bytes_to_read: 300000000000
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["opikmon/max_bytes_to_read"]
+          value: 300000000000
+      - equal:
+          path: spec.configuration.profiles["opikmon/constraints/max_bytes_to_read/min"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles["opikmon/constraints/max_bytes_to_read/max"]
+          value: 300000000000
+
+  - it: appends additionalGrants to grants
+    set:
+      clickhouse.monitoring.enabled: true
+      clickhouse.monitoring.additionalGrants:
+        - GRANT SELECT(workspace_id, created_at) ON opik.traces
+    asserts:
+      - equal:
+          path: spec.configuration.users["opikmon/grants/query"]
+          value:
+            - GRANT SELECT ON system.*
+            - GRANT REMOTE ON *.*
+            - GRANT SELECT(workspace_id, created_at) ON opik.traces
+
+  - it: refuses a setting given both as a setting and as a cap
+    set:
+      clickhouse.monitoring.enabled: true
+      clickhouse.monitoring.settings.max_execution_time: 600
+    asserts:
+      - failedTemplate:
+          errorPattern: "max_execution_time is set in both settings and limits"
