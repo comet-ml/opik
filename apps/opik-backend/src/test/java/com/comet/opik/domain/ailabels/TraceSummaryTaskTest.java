@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.inference.InferenceContract;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.utils.JsonUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -13,10 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Spec 08: the shipped v1 task builds a byte-exact, contract-valid item. */
+/** Spec 08: the shipped task builds a byte-exact, contract-valid item. */
 class TraceSummaryTaskTest {
 
     private static final UUID TRACE_ID = UUID.fromString("0192f0c4-4d1e-7a6b-9c3d-2e1f0a9b8c7d");
@@ -51,6 +53,17 @@ class TraceSummaryTaskTest {
                 .valueToTree(builder.generateRequest("workspace-1", false, items));
         assertThat(InferenceContract.validateEndpoint(InferenceContract.BATCH_GENERATE, "request", request))
                 .isEmpty();
+    }
+
+    /** Engines match the pattern against the whole summary, so it must hold the 160 bound by itself. */
+    @ParameterizedTest
+    @CsvSource({"a, true", "'checking a refund ', true", "' checking a refund', false", "' ', false", "'', false",
+            "160, true", "161, false"})
+    void summaryPatternMatchesTheWholeValueUpTo160(String value, boolean matches) {
+        var summary = StringUtils.isNumeric(value) ? "x".repeat(Integer.parseInt(value)) : value;
+        var pattern = registry.get("trace_summary").schema().at("/properties/summary/pattern").textValue();
+
+        assertThat(Pattern.matches(pattern, summary)).isEqualTo(matches);
     }
 
     private static String resource(String name) {

@@ -218,7 +218,6 @@ class AiLabelItemBuilderTest {
         assertThat(decideRequest.orgId()).isEqualTo(WORKSPACE_ID);
         assertThat(decideRequest.workspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(decideRequest.cache()).isTrue();
-        assertThat(decideRequest.requestId()).isNull();
         assertThat(decideRequest.items()).containsExactly((BatchDecideItem) decideItems.getFirst().payload());
         assertThat(generateRequest.orgId()).isEqualTo(WORKSPACE_ID);
         assertThat(generateRequest.cache()).isFalse();

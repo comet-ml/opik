@@ -1,0 +1,45 @@
+## Open Any LLM Span in the Playground
+
+Spans in the trace details panel now have an **Open in Playground** button. Click it on any LLM span to load its messages, model and parameters into the Playground, where you can edit the prompt, swap models and rerun it. Debugging a bad response no longer means copying prompts by hand.
+
+[Learn more in the Playground docs](/development/prompt-playground).
+
+## Search Within a Thread
+
+The thread side panel has a search box that finds text across all the messages in a thread and steps through the matches. Long conversations are easier to navigate when you are looking for one phrase.
+
+## Bug Fixes & Improvements
+
+- **Filter by comments** — Traces and threads can be filtered by whether they have comments, in the UI and with `comments is_empty` / `comments is_not_empty` in `filter_string`.
+- **Filter experiments by evaluation method** — The experiments filter API accepts the evaluation method as a field.
+- **Experiment items across experiments** — A new dataset endpoint returns experiment items across all the experiments of a dataset.
+- **Span cost breakdowns** — Project metrics widgets can break cost down by span fields.
+- **Service account auth for custom providers** — Custom LLM providers can authenticate with a service account token, and token endpoints that reply in plain text are supported. See the [AI providers guide](/administration/workspace-settings/ai_providers).
+- **Bedrock providers** — Bedrock providers can call Claude (Anthropic Messages) and Nova (Converse) models.
+- **Model settings panel** — Gemini and Vertex AI models use the catalog-driven settings panel, and model parameters and output token limits follow what each model supports.
+- **Online evaluation** — Rules can pick the OpenAI and OpenRouter reasoning effort, and judges run in tool mode on newer OpenAI, Claude and Gemini models.
+- **Playground** — Duplicate any prompt variant, add a blank variant, load and save Text or Chat prompts, hide columns in the results table, and run with Cmd/Ctrl+Enter.
+- **Threads** — Long thread messages wrap, attachments scroll with their messages, and thread search returns matching threads with all of their traces.
+- **Dashboards** — The Ollie widget mode is available on dashboards.
+- **Pricing** — Prompt-size tiers and one-hour cache writes are priced for every provider, and upper-case model names are priced like lower-case ones.
+- **Project deletion** — Deleting a project also deletes its traces and spans.
+- **Project name limit** — Project names are limited to 150 characters.
+- **Free plan quota** — The span quota is applied to OpenTelemetry trace ingestion.
+- **Annotators** — Annotator counts are by person rather than by score key.
+- **SDK evaluation** — `evaluate_threads` can evaluate more than 1000 threads, `scoring_key_mapping` reads unmodified inputs, jury consensus rejects failed judge scores, and judge verdicts that drift from the expected format are normalized.
+- **SDK tracing** — Streamed tool calls are kept in LiteLLM traces, the root ADK agent stays the trace on google-adk 2.13, and `run_simulation` logs to the given `project_name`.
+- **SDK reliability** — Traces dropped at shutdown, on rate limits or on queue overflow are reported, and a blank `OPIK_API_KEY` is treated as unconfigured.
+- **SDK prompts** — `Prompt()` and `ChatPrompt()` use the default project, and prompt templates render in a sandboxed environment.
+- **Integrations** — New [Pixeltable integration](/integrations/pixeltable) page.
+- **Documentation** — Custom annotator views and the annotation queues page are documented.
+
+## Performance Improvements
+
+- **Faster experiment comparison** — Default-sorted experiment item compare pages load faster.
+- **Faster thread and trace reads** — Thread reads and trace reads are bounded to the weeks they cover, and thread message pages read only their first and last traces.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.119...2.2.143)
+
+_Releases_: `2.2.120`, `2.2.121`, `2.2.122`, `2.2.123`, `2.2.124`, `2.2.125`, `2.2.126`, `2.2.127`, `2.2.128`, `2.2.129`, `2.2.130`, `2.2.131`, `2.2.132`, `2.2.133`, `2.2.134`, `2.2.135`, `2.2.136`, `2.2.137`, `2.2.138`, `2.2.139`, `2.2.140`, `2.2.141`, `2.2.142`, `2.2.143`
