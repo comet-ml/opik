@@ -83,7 +83,14 @@ async function readExportedSpans(
     .poll(
       async () =>
         (await backendClient.listSpanCosts({ projectId, traceId: seed.traceId })).length,
-      { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+      {
+        message:
+          `the ${seed.spans.length} exported spans on trace ${seed.traceId} to become ` +
+          'queryable — a timeout here means the OTLP export never landed, not that a span ' +
+          'carried the wrong cost',
+        timeout: 60_000,
+        intervals: [500, 1_000, 2_000],
+      },
     )
     .toBe(seed.spans.length);
 
@@ -339,7 +346,15 @@ test.describe(
                   (s) => s.totalEstimatedCost !== null && s.totalEstimatedCost > 0,
                 ).length;
               },
-              { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+              {
+                message:
+                  `the server to carry a cost for all ${otelReportedCostSpans.spans.length} ` +
+                  `spans on trace ${otelReportedCostSpans.traceId} — a timeout here means the ` +
+                  'reported cost never reached storage, not that the panel rendered the wrong ' +
+                  'amount',
+                timeout: 60_000,
+                intervals: [500, 1_000, 2_000],
+              },
             )
             .toBe(otelReportedCostSpans.spans.length);
 
