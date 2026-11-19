@@ -76,7 +76,7 @@ final class TopicsTestData {
         /** Trace {@code i} at {@code first + i * step}; its id, then its vector, are drawn in trace order. */
         private static Traces of(int count, Instant night, Instant first, Duration step, Random random,
                 TimeBasedEpochGenerator ids) {
-            int dimensions = TopicAlgorithm.DIMENSIONS;
+            int dimensions = TopicEmbedding.DIMENSIONS;
             var traceIds = new ArrayList<UUID>(count);
             var createdAt = new ArrayList<Instant>(count);
             var texts = new String[count];
@@ -119,7 +119,7 @@ final class TopicsTestData {
                 INSERT INTO projects (id, name, workspace_id, last_updated_trace_at) VALUES (?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE last_updated_trace_at = GREATEST(IFNULL(last_updated_trace_at, ?), ?)
                 """, projectId.toString(), "topics-" + projectId, workspaceId, lastTrace, lastTrace, lastTrace));
-        int dimensions = TopicAlgorithm.DIMENSIONS;
+        int dimensions = TopicEmbedding.DIMENSIONS;
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
             var vector = Arrays.copyOfRange(traces.vectors(), i * dimensions, (i + 1) * dimensions);
