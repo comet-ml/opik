@@ -61,6 +61,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.ProtectedEndpoint;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -192,8 +193,15 @@ import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.
 import static com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest.OPTIMIZATION_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_CREATE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_DELETE;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_EDIT;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.DATASET_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.EXPERIMENT_VIEW;
+import static com.comet.opik.infrastructure.auth.WorkspaceUserPermission.PROJECT_DATA_VIEW;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -513,6 +521,79 @@ class DatasetsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        static Stream<ProtectedEndpoint> protectedEndpoints() {
+            var base = "/v1/private/datasets";
+            var datasetId = UUID.randomUUID();
+            var itemId = UUID.randomUUID();
+            var jobId = UUID.randomUUID();
+            return Stream.of(
+                    ProtectedEndpoint.get(base, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/" + datasetId, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base, DATASET_CREATE),
+                    ProtectedEndpoint.put(base + "/" + datasetId, DATASET_EDIT),
+                    ProtectedEndpoint.delete(base + "/" + datasetId, DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/delete", DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/delete-batch", DATASET_DELETE),
+                    ProtectedEndpoint.post(base + "/items/delete", DATASET_DELETE),
+                    ProtectedEndpoint.put(base + "/items", DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/items/" + itemId, DATASET_EDIT),
+                    ProtectedEndpoint.patch(base + "/items/batch", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/changes", DATASET_EDIT),
+                    ProtectedEndpoint.postMultipart(base + "/items/from-csv", DATASET_EDIT),
+                    ProtectedEndpoint.postMultipart(base + "/items/from-json", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/expansions", DATASET_EDIT),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/from-traces", DATASET_EDIT,
+                            PROJECT_DATA_VIEW),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/items/from-spans", DATASET_EDIT,
+                            PROJECT_DATA_VIEW),
+                    ProtectedEndpoint.post(base + "/retrieve", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base + "/items/stream", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/items/" + itemId, DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items", DATASET_VIEW).withPublicFallback(),
+                    ProtectedEndpoint.post(base + "/" + datasetId + "/export", DATASET_VIEW),
+                    ProtectedEndpoint.put(base + "/export-jobs/" + jobId + "/mark-viewed", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs/" + jobId, DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/export-jobs/" + jobId + "/download", DATASET_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items", DATASET_VIEW,
+                            EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/stats",
+                            DATASET_VIEW, EXPERIMENT_VIEW),
+                    ProtectedEndpoint.get(base + "/" + datasetId + "/items/experiments/items/output/columns",
+                            DATASET_VIEW, EXPERIMENT_VIEW));
+        }
+
+        @ParameterizedTest
+        @MethodSource("protectedEndpoints")
+        @DisplayName("Dataset item and export endpoints pass exactly their required permissions to auth endpoint")
+        void annotatedEndpointPassesExactlyItsRequiredPermissionsToAuthEndpoint(ProtectedEndpoint endpoint) {
+            endpoint.assertSendsRequiredPermissions(wireMock.server(), client, baseURI);
+        }
+
+        @ParameterizedTest
+        @MethodSource("permissionDenials")
+        @DisplayName("Dataset item and export endpoints return 403 when a required permission is denied")
+        void annotatedEndpointReturnsForbiddenWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertForbiddenWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> permissionDenials() {
+            return ProtectedEndpoint.permissionDenials(protectedEndpoints());
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicFallbackDenials")
+        @DisplayName("Public dataset reads fall back to the public-visitor lookup when a required permission is denied")
+        void publicFallbackEndpointRetriesAsPublicVisitorWhenRequiredPermissionDenied(ProtectedEndpoint endpoint,
+                WorkspaceUserPermission deniedPermission) {
+            endpoint.assertPublicFallbackRejectedWhenDenied(wireMock.server(), client, baseURI, deniedPermission);
+        }
+
+        static Stream<Arguments> publicFallbackDenials() {
+            return ProtectedEndpoint.publicFallbackDenials(protectedEndpoints());
+        }
     }
 
     @Nested
@@ -522,6 +603,8 @@ class DatasetsResourceTest {
 
         private final String fakeApikey = UUID.randomUUID().toString();
         private final String okApikey = UUID.randomUUID().toString();
+        // A workspace member whose role lacks dataset view; the auth service answers it with 401, as in production.
+        private final String datasetViewDeniedApikey = UUID.randomUUID().toString();
 
         Stream<Arguments> credentials() {
             return Stream.of(
@@ -544,7 +627,9 @@ class DatasetsResourceTest {
                     arguments("", PRIVATE, 404),
                     arguments("", PUBLIC, 200),
                     arguments(fakeApikey, PRIVATE, 404),
-                    arguments(fakeApikey, PUBLIC, 200));
+                    arguments(fakeApikey, PUBLIC, 200),
+                    arguments(datasetViewDeniedApikey, PRIVATE, 404),
+                    arguments(datasetViewDeniedApikey, PUBLIC, 200));
         }
 
         @BeforeEach
@@ -558,6 +643,17 @@ class DatasetsResourceTest {
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
+
+            wireMock.server().stubFor(
+                    post(urlPathEqualTo("/opik/auth"))
+                            .withHeader(HttpHeaders.AUTHORIZATION, equalTo(datasetViewDeniedApikey))
+                            .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(TEST_WORKSPACE)))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions",
+                                    equalToJson(JsonUtils.valueToTree(List.of(DATASET_VIEW.getValue())).toString())))
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                                    .withJsonBody(JsonUtils.readTree(
+                                            new ReactServiceErrorResponse(
+                                                    RandomStringUtils.secure().nextAlphanumeric(32), 401)))));
         }
 
         @ParameterizedTest
