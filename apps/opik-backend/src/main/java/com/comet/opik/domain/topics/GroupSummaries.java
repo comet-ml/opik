@@ -54,7 +54,7 @@ public class GroupSummaries {
     public static List<List<String>> authorExamples(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
             @NonNull float[] centres, int frequent, int extra) {
         int d = merged.dimensions();
-        int k = centres.length / d;
+        int k = groups(centres, d);
         Preconditions.checkArgument(labels.length == merged.size(),
                 "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
         var groups = Members.of(labels, k);
@@ -138,12 +138,20 @@ public class GroupSummaries {
         return false;
     }
 
+    /** The number of groups {@code centres} holds, {@code dimensions} values each. */
+    private static int groups(float[] centres, int dimensions) {
+        Preconditions.checkArgument(dimensions > 0 && centres.length % dimensions == 0,
+                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, dimensions);
+        return centres.length / dimensions;
+    }
+
     /** Per group, its unique texts: group {@code j}'s are {@code order[start[j]..start[j + 1])}, ascending. */
     private record Members(int[] order, int[] start) {
 
         static Members of(int[] labels, int k) {
             var start = new int[k + 1];
             for (int label : labels) {
+                Preconditions.checkArgument(label >= 0 && label < k, "label '%s' is not a group in [0, %s)", label, k);
                 start[label + 1]++;
             }
             for (int j = 0; j < k; j++) {

@@ -270,7 +270,10 @@ public class KMeans {
                 distance[i] = space.directSquaredDistance(i, centres, labels[i]);
             }
         }
-        boolean[] taken = anyEmpty ? new boolean[n] : null;
+        // Points already copied into an empty group this update; cleared again below, so the buffer stays all false.
+        var taken = buffers.taken;
+        var picked = buffers.picked;
+        int pickedCount = 0;
         for (int j = 0; j < k; j++) {
             if (weightSum[j] > 0) {
                 for (int t = 0; t < d; t++) {
@@ -285,7 +288,11 @@ public class KMeans {
                 }
             }
             taken[far] = true;
+            picked[pickedCount++] = far;
             copyPoint(x, far, centres, j, d);
+        }
+        for (int p = 0; p < pickedCount; p++) {
+            taken[picked[p]] = false;
         }
     }
 
@@ -474,6 +481,8 @@ public class KMeans {
         private final double[] previous;
         private final double[] sum;
         private final double[] weightSum;
+        private final boolean[] taken;
+        private final int[] picked;
 
         Buffers(int n, int k, int d) {
             this.bounds = new Bounds(n, k);
@@ -481,6 +490,8 @@ public class KMeans {
             this.previous = new double[k * d];
             this.sum = new double[k * d];
             this.weightSum = new double[k];
+            this.taken = new boolean[n];
+            this.picked = new int[k];
         }
     }
 
