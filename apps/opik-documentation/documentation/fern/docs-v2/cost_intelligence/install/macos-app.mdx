@@ -40,13 +40,38 @@ The data landing in Opik is the same as the plugin produces. What differs is how
 
 ## Deploy via MDM
 
-Three steps, delivered with the MDM you already run (Jamf, Kandji, Intune, JumpCloud):
+Seven steps, delivered with the MDM you already run (Jamf, Kandji, Intune, JumpCloud). The order matters: the configuration profile goes out before the app, and the login-items profile after it.
+
+Before you start, check that you have:
+
+- **macOS 15 or later** on every target Mac. The app does not run on earlier versions.
+- **Macs enrolled in your MDM**, with a current Apple push certificate. The profiles below are accepted only when an MDM pushes them, and with an expired push certificate they queue without ever reaching a Mac.
+- **Access to your organization's AI Spend workspace** in Opik, to create the enrollment token.
+- **The work email of each Mac's user.** A Mac enrolls under one person's email, and that is the name its spend is reported under.
 
 <Steps>
 
-### Push the app and its configuration profile
+### Create an enrollment token
 
-Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an MDM configuration profile. The profile does two jobs: it pre-approves the system extension so activation is **silent** (the developer never sees an approval prompt), and it forces the app's settings so users can't turn capture off. The app bundle embeds the extension and the capture engine, so there is nothing else to install.
+In Opik, open your AI Spend workspace and go to **Enrollment tokens**, then select **Create token**. Copy the token right away: it starts with `opik_cipx_et_`, and that dialog is the only time it is shown in full.
+
+One token serves the whole fleet. Each Mac spends it once to enroll and receives a credential of its own, which it keeps in the Keychain and renews by itself.
+
+<Note>
+  Create the token in the Opik deployment the Macs will send data to, and from
+  the AI Spend workspace. A token from another deployment is not recognized,
+  and the Macs it enrolls report into the workspace it was created in.
+</Note>
+
+### Push the configuration profile
+
+Push one configuration profile to every target Mac, on the device channel. It does three jobs:
+
+- It pre-approves the system extension, so activation is **silent**.
+- It installs the proxy configuration, so the user is not asked to allow it.
+- It forces the app's settings, so users can't turn capture off.
+
+Push it before the app is installed. An app that starts without the profile shows both approval prompts to the user.
 
 <Accordion title="View an example configuration profile">
 
@@ -61,6 +86,8 @@ Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an
   <string>com.comet.opik-cipx-app.managed</string>
   <key>PayloadType</key>
   <string>Configuration</string>
+  <key>PayloadScope</key>
+  <string>System</string>
   <key>PayloadUUID</key>
   <string>8A7B0C64-1D2E-4F35-9B86-3C5A7D9E0F12</string>
   <key>PayloadVersion</key>
@@ -82,33 +109,189 @@ Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an
         <!-- Comet's Apple developer team ID -->
         <key>XXXXXXXXXX</key>
         <array>
-          <string>com.comet.opik-cipx-app.extension</string>
+          <string>com.comet.opik-cipx-app.neprovider</string>
         </array>
       </dict>
     </dict>
-    <!-- Job 2: force the app's settings -->
+    <!-- Job 2: install the proxy configuration (no "Add Proxy Configurations" prompt) -->
     <dict>
       <key>PayloadType</key>
+      <string>com.apple.vpn.managed</string>
+      <key>PayloadIdentifier</key>
+      <string>com.comet.opik-cipx-app.managed.proxyconfig</string>
+      <key>PayloadUUID</key>
+      <string>EEAE409B-D3E5-4EA9-BD31-C187E64558AE</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>UserDefinedName</key>
+      <string>opik-cipx cost interceptor</string>
+      <key>VPNType</key>
+      <string>TransparentProxy</string>
+      <key>VPNSubType</key>
       <string>com.comet.opik-cipx-app</string>
+      <key>TransparentProxy</key>
+      <dict>
+        <key>AuthenticationMethod</key>
+        <string>Password</string>
+        <key>ProviderType</key>
+        <string>app-proxy</string>
+        <key>ProviderBundleIdentifier</key>
+        <string>com.comet.opik-cipx-app.neprovider</string>
+        <!-- The extension's designated requirement; XXXXXXXXXX is the same team ID -->
+        <key>ProviderDesignatedRequirement</key>
+        <string>anchor apple generic and identifier "com.comet.opik-cipx-app.neprovider" and (certificate leaf[field.1.2.840.113635.100.6.1.9] /* exists */ or certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = XXXXXXXXXX)</string>
+        <key>RemoteAddress</key>
+        <string>opik-cipx</string>
+      </dict>
+    </dict>
+    <!-- Job 3: force the app's settings -->
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.ManagedClient.preferences</string>
       <key>PayloadIdentifier</key>
       <string>com.comet.opik-cipx-app.managed.settings</string>
       <key>PayloadUUID</key>
       <string>5D1C8B72-0A94-4E6F-B3D8-7E29C4A61F05</string>
       <key>PayloadVersion</key>
       <integer>1</integer>
-      <key>Cipx.isEnabled</key>
-      <true/>
-      <key>Settings.startAtLogin</key>
-      <true/>
-      <key>Settings.allowExtensionUninstall</key>
-      <false/>
-      <key>Settings.enableViewer</key>
-      <false/>
-      <key>Settings.enableAdmin</key>
-      <false/>
-      <key>Settings.enabledHarnesses</key>
+      <key>PayloadContent</key>
+      <dict>
+        <key>com.comet.opik-cipx-app</key>
+        <dict>
+          <key>Forced</key>
+          <array>
+            <dict>
+              <key>mcx_preference_settings</key>
+              <dict>
+                <key>Cipx.isEnabled</key>
+                <true/>
+                <key>Settings.startAtLogin</key>
+                <true/>
+                <key>Settings.allowExtensionUninstall</key>
+                <false/>
+                <key>Settings.enableViewer</key>
+                <false/>
+                <key>Settings.enableAdmin</key>
+                <false/>
+                <key>Settings.enabledHarnesses</key>
+                <array>
+                  <string>com.anthropic.claude-code</string>
+                </array>
+              </dict>
+            </dict>
+          </array>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>
+```
+
+The team ID, the extension identifier and the designated requirement must match the shipped app. You can read them from the app you download in the next step:
+
+```bash wordWrap
+codesign -dv "Opik CIPX.app" 2>&1 | grep TeamIdentifier
+codesign -dr - "Opik CIPX.app/Contents/Library/SystemExtensions/com.comet.opik-cipx-app.neprovider.systemextension"
+```
+
+Or email [sales@comet.com](mailto:sales@comet.com) for a filled-in, ready-to-push profile.
+
+</Accordion>
+
+Every payload, profile validation, and the per-MDM upload paths are in [Advanced](#advanced) below.
+
+### Install the app
+
+Download `opik-cipx-v<version>.zip` from the [releases page](https://github.com/comet-ml/cost-intelligence-proxy/releases). It contains the notarized `Opik CIPX.app`, which embeds the extension and the capture engine, so there is nothing else to install.
+
+Deliver the app to `/Applications` with your MDM's app deployment, or with a script that runs as root. The release is a zip archive and not an installer package, so if your MDM only accepts packages, wrap the app in one first. An example script is in [Advanced](#advanced) below.
+
+The app does not update itself. To move the fleet to a newer release, deliver the new bundle the same way.
+
+### Provision each Mac
+
+Ship a file per user at `~/.opik-cipx-mac/config.toml`. It carries the two values a Mac needs to enroll, the token and the user's email:
+
+```toml wordWrap
+[opik]
+base_url         = "https://www.comet.com/opik/api"
+enrollment_token = "<enrollment token>"
+user_email       = "<this user's work email>"
+
+[capture]
+capture_content = false
+```
+
+The token is the same on every Mac and the email is different on every Mac. If your MDM can substitute a per-user variable into a profile, you can deliver the email there and leave `user_email` out of the file. See *Setting each Mac's email* in [Advanced](#advanced).
+
+The file lands in a user home, so an MDM script running as root must resolve the console user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
+
+<Warning>
+  Write the file before the app's first launch. The capture engine reads it
+  only when it starts, so a file that arrives or changes later takes effect at
+  the engine's next start. To apply a change right away, restart the engine:
+  `sudo launchctl kickstart -k gui/<uid>/com.comet.opik-cipx.engine`, where
+  `<uid>` is the user's numeric ID.
+</Warning>
+
+### Launch the app once
+
+Trigger a first launch in the console user's context, for example at the end of the script that installed the app:
+
+```bash wordWrap
+launchctl asuser "$(id -u "$CONSOLE_USER")" open "/Applications/Opik CIPX.app"
+```
+
+From there the app handles everything itself: it activates the extension, starts capture, enrolls the Mac, and registers a login item so capture survives reboots. With the profile in place, the extension and the proxy configuration activate without a prompt. The user may be asked once to trust the app's certificate; see *Certificate trust* in [Advanced](#advanced).
+
+### Lock capture on
+
+Push a second, separate profile that manages the app's login items. It greys out the app's switch in *System Settings → General → Login Items & Extensions*, so a user can't stop the capture engine there.
+
+Push this one **after** the app is installed. If the profile reaches a Mac first, the switch is not locked.
+
+<Accordion title="View an example login-items profile">
+
+```xml title="opik-cipx-login-items.mobileconfig" wordWrap
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadDisplayName</key>
+  <string>Opik Cost Intelligence - Login Items</string>
+  <key>PayloadIdentifier</key>
+  <string>com.comet.opik-cipx-app.loginitems</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadScope</key>
+  <string>System</string>
+  <key>PayloadUUID</key>
+  <string>3F2A1B0C-9D8E-4756-8493-2C1D0E9F8A7B</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.servicemanagement</string>
+      <key>PayloadIdentifier</key>
+      <string>com.comet.opik-cipx-app.loginitems.servicemanagement</string>
+      <key>PayloadUUID</key>
+      <string>7C6B5A49-3827-4160-9E5D-4A3B2C1D0E9F</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>Rules</key>
       <array>
-        <string>com.anthropic.claude-code</string>
+        <dict>
+          <key>RuleType</key>
+          <string>TeamIdentifier</string>
+          <!-- Comet's Apple developer team ID, as in the first profile -->
+          <key>RuleValue</key>
+          <string>XXXXXXXXXX</string>
+          <key>Comment</key>
+          <string>Lock Opik Cost Intelligence background items on</string>
+        </dict>
       </array>
     </dict>
   </array>
@@ -116,43 +299,21 @@ Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an
 </plist>
 ```
 
-The team ID and the extension bundle identifier must match the shipped app.
-Email [sales@comet.com](mailto:sales@comet.com) for a filled-in,
-ready-to-push profile.
-
 </Accordion>
 
-Every payload key, profile validation, and the per-MDM upload paths are in [Advanced](#advanced) below.
+### Verify
 
-### Drop the workspace credentials
-
-Ship a file per user at `~/.opik-cipx/config.toml`:
-
-```toml wordWrap
-[opik]
-base_url  = "https://www.comet.com/opik/api"
-api_key   = "<workspace-scoped service-account key>"
-workspace = "your-org-cc-workspace"
-project   = "claude-code"
-
-[capture]
-capture_content = false
-```
-
-It lands in a user home, so an MDM script running as root must resolve the console user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
-
-### Launch once and verify
-
-Trigger a first launch — a package postinstall script that opens the app in the console user's context works best. From there the app handles everything itself: it activates the extension, starts capture, and registers a login item so capture survives reboots. With the profile in place, none of this prompts the user.
-
-Then check a target device:
+Check a target device:
 
 ```bash wordWrap
-systemextensionsctl list | grep opik-cipx        # extension activated
-ls -l ~/.opik-cipx/config.toml                   # the step that silently fails
+ls "/Library/Managed Preferences/com.comet.opik-cipx-app.plist"   # profile arrived
+systemextensionsctl list | grep opik-cipx                         # extension activated
+ls -l ~/.opik-cipx-mac/config.toml                                # the step that silently fails
 ```
 
-Finally, confirm traces are arriving in your Opik workspace. That last check is the one that matters: the app is deliberately fail-open, so a device missing its credentials file looks completely healthy and captures nothing.
+Then, in Opik, open **Devices** in your AI Spend workspace: every Mac that enrolled is listed there. A Mac that is missing has not enrolled; its app shows the enrollment state under *Settings → Account → This Device*.
+
+Finally, confirm traces are arriving in your Opik workspace. That last check is the one that matters: the app is deliberately fail-open, so a device missing its token or its email looks completely healthy and captures nothing.
 
 </Steps>
 
@@ -162,9 +323,11 @@ Finally, confirm traces are arriving in your Opik workspace. That last check is 
 
 <Accordion title="The configuration profile in detail">
 
-The profile carries two payloads that do different jobs.
+The profile carries three payloads that do different jobs.
 
-**Pre-approving the system extension.** A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates silently: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate. This is honored **only when the profile is pushed by an MDM the device is enrolled in** — a locally installed profile is ignored for this payload type, so a test machine with a hand-installed profile will still show the manual approval prompt. That's expected, and it isn't a broken profile.
+**Pre-approving the system extension.** A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates silently: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate. This payload is accepted **only when the profile is pushed by an MDM the device is enrolled in**. Installing the profile by hand fails for the whole profile, so the forced settings don't land either. On a test machine without MDM, remove this payload and the proxy payload, install the rest, and approve the extension manually.
+
+**Installing the proxy configuration.** Approving the extension is one consent gate, and saving the proxy configuration is a second: without help, every user sees *"Opik CIPX" Would Like to Add Proxy Configurations* the first time capture is enabled. A `com.apple.vpn.managed` payload of type `TransparentProxy` has the MDM install that configuration instead, and the app adopts it. `AuthenticationMethod` must be present: without it macOS rejects the whole profile.
 
 **Forcing the app's settings.** A managed-preferences payload writes into the app's preference domain `com.comet.opik-cipx-app`. Forced values take precedence over anything the user sets, and the corresponding controls are disabled in the app's Settings window with a "Managed by your organization" note.
 
@@ -176,6 +339,7 @@ The profile carries two payloads that do different jobs.
 | `Settings.startAtLogin` | Boolean | `true` | Capture survives logout and reboot |
 | `Settings.allowExtensionUninstall` | Boolean | `false` | Hides the uninstall action from users |
 | `Settings.enabledHarnesses` | Array | `["com.anthropic.claude-code"]` | Which clients to capture, by code-signing ID |
+| `Settings.engineEnvironment` | Dictionary | optional | Extra settings for the capture engine, as string values. See *Setting each Mac's email* and *Enrollment and credentials* below |
 
 Validate the profile before pushing, because a malformed payload is silently ignored by some MDMs:
 
@@ -183,22 +347,119 @@ Validate the profile before pushing, because a malformed payload is silently ign
 plutil -lint opik-cipx-app.mobileconfig    # must print "OK"
 ```
 
+On a Mac, read the forced values from the managed layer. Reading the app's own domain shows the user's values and makes a working profile look ignored:
+
+```bash wordWrap
+defaults read "/Library/Managed Preferences/com.comet.opik-cipx-app"
+```
+
 Where it goes in each MDM:
 
 | MDM | Path |
 | --- | --- |
-| **Jamf Pro** | Configuration Profile → Application & Custom Settings → External Applications; domain `com.comet.opik-cipx-app`. The system-extension allow-list is a separate *System Extensions* payload. |
+| **Jamf Pro** | Configuration Profile → Application & Custom Settings → External Applications; domain `com.comet.opik-cipx-app`. Push the system-extension and proxy payloads as a separate device-level profile. |
 | **Kandji** | Library → Custom Profile → upload the `.mobileconfig` |
 | **Intune** | Devices → macOS → Configuration profile → Preference file; domain `com.comet.opik-cipx-app` |
-| **JumpCloud** | Custom macOS MDM Profile (Policy) → paste the `.mobileconfig` |
+| **JumpCloud** | Custom macOS MDM Profile (Policy) → paste the `.mobileconfig`. Bind the policy to a device group. |
 
 </Accordion>
 
-<Accordion title="Why credentials ship as a file">
+<Accordion title="Enrollment and credentials">
 
-The Opik destination is **not** a preference key, so no configuration profile can carry it. The capture engine is launched by a login-item app, and GUI apps don't inherit shell environment, so nothing you export in a shell profile or push as an MDM environment variable reaches it. The per-user file at `~/.opik-cipx/config.toml` is the only path that works.
+The app does not use a shared API key. You distribute one **enrollment token**, and each Mac exchanges it, together with its user's email, for a credential of its own. That credential lives in the Mac's Keychain, is renewed by the app, and can read only what that Mac recorded.
 
-The file contains the ingest API key, so use a workspace-scoped service-account key and rotate it by re-deploying the file.
+A few consequences for running a fleet:
+
+- **Rotation is a new token.** Creating a token does not invalidate the earlier ones, so Macs that are still waiting for the new value keep enrolling. Retire the old token on the **Enrollment tokens** page once the new one is everywhere.
+- **Enrolled Macs are unaffected by rotation.** A Mac reads the enrollment token once. After that it uses and renews its own credential.
+- **Removing a Mac.** The **Devices** page lists every enrolled Mac and lets you revoke one.
+
+The token reaches the engine in one of two ways:
+
+- **The per-user file** `~/.opik-cipx-mac/config.toml`, as in the steps above. The file is readable only by its user, which is why it is the recommended route.
+- **The configuration profile**, as `OPIK_CIPX_ENROLLMENT_TOKEN` in `Settings.engineEnvironment`. This needs no script, but a profile is not a secret store: it lands in `/Library/Managed Preferences/`, which every local user can read. A value in the profile takes precedence over the file.
+
+The Opik address works the same way: `base_url` in the file, or `OPIK_CIPX_BASE_URL` in `Settings.engineEnvironment`.
+
+</Accordion>
+
+<Accordion title="Setting each Mac's email">
+
+Enrollment needs the email of the person using the Mac. It is the one value in this setup that differs from Mac to Mac, and a configuration profile is a static file: macOS substitutes nothing into it at install time. Pick the route your MDM supports:
+
+- **Your MDM substitutes per-user variables** (Jamf Pro `$EMAIL`, Kandji `$EMAIL`, Intune `{{mail}}`). Put the variable in the profile, as `OPIK_CIPX_USER_EMAIL` in `Settings.engineEnvironment`. In Jamf Pro, set that profile's level to User:
+
+  ```xml wordWrap
+  <key>Settings.engineEnvironment</key>
+  <dict>
+    <key>OPIK_CIPX_USER_EMAIL</key>
+    <string>$EMAIL</string>
+  </dict>
+  ```
+
+- **Your MDM delivers device-level profiles only** (JumpCloud). Write `user_email` into each Mac's `config.toml` from the provisioning script. The script needs a way to know whose Mac it is running on, for example a lookup table from the MDM's device ID to the user's email.
+
+Do not put one literal address in a profile that goes to many Macs. Every Mac would then enroll as that one person.
+
+The app checks the address before enrolling. With a missing or malformed one the Mac does not enroll, and *Settings → Account → This Device* reports it as not configured.
+
+</Accordion>
+
+<Accordion title="Example install script">
+
+A first-install script for MDMs that run scripts as root. It waits for the configuration profile, downloads and verifies the release, installs the app, writes the per-user file, and launches the app for the logged-in user. Supply the token from your MDM's secret store, and the email from wherever your MDM knows the device's user.
+
+```bash title="install-opik-cipx.sh" wordWrap
+#!/bin/bash
+# Run as root. Installs Opik CIPX for the user logged in at the console.
+set -u
+VERSION="<release version, for example 0.0.91>"
+TOKEN="<enrollment token>"
+EMAIL="<this user's work email>"
+APP="/Applications/Opik CIPX.app"
+
+CONSOLE_USER="$(/usr/bin/stat -f%Su /dev/console)"
+case "$CONSOLE_USER" in root|_mbsetupuser|"") echo "no user logged in"; exit 0;; esac
+USER_ID="$(/usr/bin/id -u "$CONSOLE_USER")"
+USER_HOME="$(/usr/bin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | /usr/bin/awk '{print $2}')"
+
+# Without the profile, the first launch would prompt the user.
+[ -f "/Library/Managed Preferences/com.comet.opik-cipx-app.plist" ] || { echo "profile not installed yet"; exit 0; }
+[ -d "$APP" ] && { echo "already installed"; exit 0; }
+
+WORK="$(/usr/bin/mktemp -d)"; trap '/bin/rm -rf "$WORK"' EXIT
+/usr/bin/curl -fsSL --retry 3 -o "$WORK/app.zip" \
+  "https://github.com/comet-ml/cost-intelligence-proxy/releases/download/v${VERSION}/opik-cipx-v${VERSION}.zip" || exit 1
+/usr/bin/ditto -x -k "$WORK/app.zip" "$WORK/app"
+/usr/sbin/spctl -a -t exec "$WORK/app/Opik CIPX.app" || { echo "notarization check failed"; exit 1; }
+
+/usr/bin/ditto "$WORK/app/Opik CIPX.app" "$APP"
+/usr/sbin/chown -R root:wheel "$APP"
+/usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+CONFIG_DIR="$USER_HOME/.opik-cipx-mac"
+if [ ! -f "$CONFIG_DIR/config.toml" ]; then
+  /bin/mkdir -p "$CONFIG_DIR"
+  /bin/cat > "$CONFIG_DIR/config.toml" <<TOML
+[opik]
+base_url         = "https://www.comet.com/opik/api"
+enrollment_token = "$TOKEN"
+user_email       = "$EMAIL"
+
+[capture]
+capture_content = false
+TOML
+  /usr/sbin/chown -R "$CONSOLE_USER" "$CONFIG_DIR"
+  /bin/chmod 700 "$CONFIG_DIR"
+  /bin/chmod 600 "$CONFIG_DIR/config.toml"
+fi
+
+/bin/launchctl asuser "$USER_ID" /usr/bin/open "$APP"
+```
+
+Run it on a schedule or at check-in instead of once: a Mac that was offline, had nobody logged in, or had not received the profile yet is picked up on a later run.
+
+To update an installed Mac, quit the app, replace the bundle the same way, restart the engine and open the app again.
 
 </Accordion>
 
@@ -231,16 +492,18 @@ The four numbered steps in the diagram, in full:
 
 To categorize traffic rather than just count bytes, the extension terminates TLS locally, which means the client must trust the interception certificate.
 
-The certificate authority is minted **per device**, with a private key that is hardware-backed and non-extractable. This is deliberate: there is no shared fleet-wide interception key, so compromising one device does not compromise the fleet. The consequence is that **there is no single certificate to embed in a centrally authored MDM certificate payload**; trust is established on the device that generated it.
+By default the certificate authority is minted **per device**, with a private key that is hardware-backed and non-extractable. This is deliberate: there is no shared fleet-wide interception key, so compromising one device does not compromise the fleet. Trust is established on the device that generated it, and the user confirms it once with their login password or Touch ID.
 
-For Claude Code this is handled for you: the app points Claude Code at the device's own certificate. The certificate authority also carries constraints limiting it to the specific model-provider hostnames, so even a fully trusted authority cannot vouch for any other domain. That is worth raising early in a security review, because it's the property that makes local termination defensible.
+For a rollout with no prompt at all, the app can instead sign under a certificate chain your organization owns: a root certificate that you generate once and push to every Mac with your MDM's certificate payload, and a signing certificate issued from it that is delivered alongside the app. A Mac that has both uses your chain. A Mac that doesn't falls back to its own per-device authority, so nothing is blocked while this is being set up. Email [sales@comet.com](mailto:sales@comet.com) to set this up.
+
+In both cases the certificate authority carries constraints limiting it to the specific model-provider hostnames, so even a fully trusted authority cannot vouch for any other domain. That is worth raising early in a security review, because it's the property that makes local termination defensible.
 
 </Accordion>
 
 <Accordion title="Uninstall">
 
 ```bash wordWrap
-# Remove the profile via your MDM, or:
+# Remove both profiles (settings and login items) via your MDM, or:
 sudo profiles remove -identifier com.comet.opik-cipx-app.managed
 
 # Tear down cleanly, then remove the app
@@ -248,10 +511,12 @@ open -a "/Applications/Opik CIPX.app" --args disable
 sudo rm -rf "/Applications/Opik CIPX.app"
 
 # Local state, including the per-device certificate
-rm -rf ~/.opik-cipx "~/Library/Application Support/opik-cipx"
+rm -rf ~/.opik-cipx-mac ~/Library/Application\ Support/opik-cipx
 ```
 
 Removing the app without disabling first leaves an orphaned system-extension registration, so prefer the `disable` step.
+
+Then revoke the Mac on the **Devices** page of your AI Spend workspace, so its credential can no longer be used.
 
 </Accordion>
 
