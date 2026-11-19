@@ -22,9 +22,13 @@
 --   * The trade-off of id_at partitions: retention and the cascade stay partition-scoped, but a read by
 --     trace_created_at window cannot prune partitions. It opens every weekly partition for index analysis and reads
 --     only the granules idx_trace_created_at keeps.
---   * index_granularity_bytes is traces_local_v2's 40 MiB: a row carries 384 floats and the text (about 2 KiB), so the
---     10 MiB default would cut granules to about 5,000 rows; at 40 MiB they fill toward the 8192-row target.
---   * The vector is plain ZSTD(1), as float noise compresses little either way.
+--   * index_granularity_bytes is traces_local_v2's 40 MiB: a row carries 384 values and the text (about 1.3 KiB), so
+--     the 10 MiB default would cut granules short; at 40 MiB they fill toward the 8192-row target.
+--   * The vector is BFloat16, half the bytes of Float32, with ZSTD(1): repeated intents give repeated vectors, and the
+--     sign and exponent byte repeats, so ZSTD(1) is clearly smaller than LZ4 at a small decode cost.
+--     ClickHouse truncates Float32 to BFloat16 on insert, so a stored vector is slightly shorter than unit length.
+--     Readers select CAST(vector AS Array(Float32)), as the r2dbc driver returns BFloat16 as raw 16-bit values, and
+--     scale each vector back to unit length.
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTER '{cluster}'
 (
     workspace_id     String                                          CODEC(ZSTD(3)),
@@ -36,7 +40,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.topic_vectors ON CLUSTE
     embed_model      LowCardinality(String)                          CODEC(ZSTD(1)),
     embed_dimensions UInt16                                          CODEC(T64, ZSTD(1)),
     text             String                                          CODEC(ZSTD(3)),
-    vector           Array(Float32)                                  CODEC(ZSTD(1)),
+    vector           Array(BFloat16)                                 CODEC(ZSTD(1)),
     last_updated_at  DateTime64(6, 'UTC')   DEFAULT now64(6)         CODEC(Delta, ZSTD(1)),
     is_deleted       UInt8                  DEFAULT 0,
     INDEX idx_trace_created_at trace_created_at TYPE minmax GRANULARITY 1
