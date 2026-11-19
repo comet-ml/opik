@@ -102,7 +102,7 @@ public class TopicsMetrics {
     }
 
     void labelPass(@NonNull String workspaceId, @NonNull TopicWindowLabelService.Trigger trigger, boolean complete) {
-        labelPasses.add(1, names.builder(workspaceId).put(TRIGGER, trigger.getValue())
+        labelPasses.add(1, workspace(workspaceId).put(TRIGGER, trigger.getValue())
                 .put(OUTCOME, complete ? "complete" : "incomplete").build());
     }
 
