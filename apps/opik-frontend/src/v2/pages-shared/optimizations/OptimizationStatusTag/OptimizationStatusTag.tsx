@@ -1,7 +1,7 @@
 import React from "react";
 
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
-import StatusDotPill from "@/v2/pages-shared/optimizations/StatusDotPill";
+import StatusDotPill from "@/shared/StatusDotPill/StatusDotPill";
 
 // A run status is a neutral pill with a colored status dot: running = green,
 // completed/initialized = slate, cancelled/error = red. Uses the shared brand

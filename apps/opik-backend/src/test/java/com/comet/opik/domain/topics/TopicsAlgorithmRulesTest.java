@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
 import com.comet.opik.domain.topics.TopicsRunException.Code;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -27,6 +26,9 @@ import static org.assertj.core.api.Assertions.within;
 /** The small rules of the first build: number formats, text order and strip, the answer, apply and assignment. */
 @DisplayName("topics first build: rules")
 class TopicsAlgorithmRulesTest {
+
+    private static final int MAX_ITERATIONS = 150;
+    private static final int RESTARTS = 3;
 
     @Nested
     @DisplayName("text rules")
@@ -239,6 +241,9 @@ class TopicsAlgorithmRulesTest {
                     Arguments.of("a label outside the groups",
                             (ThrowingCallable) () -> GroupSummaries.authorExamples(merged, new int[]{0, 1},
                                     new float[]{1, 0}, 2, 2)),
+                    Arguments.of("a negative example count",
+                            (ThrowingCallable) () -> GroupSummaries.authorExamples(merged, new int[]{0, 0},
+                                    new float[]{1, 0}, -1, 2)),
                     Arguments.of("a null text",
                             (ThrowingCallable) () -> IntentMerger.merge(new String[]{"a", null}, vectors, 2)));
         }
@@ -415,7 +420,8 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("rejects a non-positive dimension count and a weight that is not finite and positive")
         void invalidInputs(int dimensions, double weight, String message) {
             var points = new float[]{1, 0, 0, 1};
-            assertThatThrownBy(() -> KMeans.fit(points, new double[]{1, weight}, dimensions, 1, 0))
+            assertThatThrownBy(() -> KMeans.fit(points, new double[]{1, weight}, dimensions, 1, 0, MAX_ITERATIONS,
+                    RESTARTS))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining(message);
         }
@@ -431,11 +437,21 @@ class TopicsAlgorithmRulesTest {
                     Arguments.of(2, Double.NEGATIVE_INFINITY, "weights must be finite and positive"));
         }
 
+        @ParameterizedTest
+        @CsvSource({"0, 3, maxIterations must be positive", MAX_ITERATIONS + ", 0, restarts must be positive"})
+        @DisplayName("rejects a non-positive iteration cap and restart count")
+        void invalidLimits(int maxIterations, int restarts, String message) {
+            assertThatThrownBy(() -> KMeans.fit(new float[]{1, 0, 0, 1}, new double[]{1, 1}, 2, 1, 0, maxIterations,
+                    restarts))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining(message);
+        }
+
         @Test
         @DisplayName("k equal to the number of points: duplicate points share a group, every other point has its own")
         void kEqualsN() {
             var points = new float[]{1, 0, 0, 1, 1, 0, 0.6f, 0.8f};
-            var result = KMeans.fit(points, new double[]{1, 1, 1, 1}, 2, 4, 0);
+            var result = KMeans.fit(points, new double[]{1, 1, 1, 1}, 2, 4, 0, MAX_ITERATIONS, RESTARTS);
             var labels = result.labels();
             assertThat(labels).hasSize(4);
             assertThat(labels[0]).isEqualTo(labels[2]);
@@ -447,7 +463,9 @@ class TopicsAlgorithmRulesTest {
         void interrupted() {
             Thread.currentThread().interrupt();
             try {
-                assertThatThrownBy(() -> KMeans.fit(new float[]{1, 0, 0, 1}, new double[]{1, 1}, 2, 2, 0))
+                assertThatThrownBy(
+                        () -> KMeans.fit(new float[]{1, 0, 0, 1}, new double[]{1, 1}, 2, 2, 0, MAX_ITERATIONS,
+                                RESTARTS))
                         .isInstanceOf(java.util.concurrent.CancellationException.class);
             } finally {
                 Thread.interrupted();
@@ -459,17 +477,18 @@ class TopicsAlgorithmRulesTest {
     @DisplayName("k-means with Elkan's bounds gives plain Lloyd's labels")
     class KMeansSameLabels {
 
-        @ParameterizedTest(name = "n {0}, {1} dims, {2} clusters, noise {3}, k {4}, seed {5}, capped {6}")
+        @ParameterizedTest(name = "n {0}, {1} dims, {2} clusters, noise {3}, k {4}, seed {5}, cap {6}, capped {7}")
         @CsvSource({
-                "1500, 384, 40, 0.15, 50, 0, false",
-                "1500, 384, 40, 0.15, 50, 1, false",
-                "2000, 13, 10, 0.5, 30, 0, false",
+                "1500, 384, 40, 0.15, 50, 0, " + MAX_ITERATIONS + ", false",
+                "1500, 384, 40, 0.15, 50, 1, " + MAX_ITERATIONS + ", false",
+                "2000, 13, 10, 0.5, 30, 0, " + MAX_ITERATIONS + ", false",
                 // 20 distinct points, each repeated: k above that leaves clusters empty, reseeded on a duplicate.
-                "300, 16, 20, 0, 30, 0, false",
-                // Random directions: the fit stops at MAX_ITERATIONS.
-                "30000, 8, 30000, 10, 30, 0, true"})
+                "300, 16, 20, 0, 30, 0, " + MAX_ITERATIONS + ", false",
+                // Random directions: the fit stops at the cap.
+                "300, 8, 300, 10, 20, 0, 3, true"})
         @DisplayName("same labels, iterations and centres as the plain fit on a fixed synthetic set")
-        void samePlainFit(int n, int dimensions, int clusters, double noise, int k, long seed, boolean capped) {
+        void samePlainFit(int n, int dimensions, int clusters, double noise, int k, long seed, int maxIterations,
+                boolean capped) {
             var points = syntheticPoints(n, dimensions, clusters, noise);
             var random = new SplittableRandom(13);
             var weights = new double[n];
@@ -477,11 +496,11 @@ class TopicsAlgorithmRulesTest {
                 weights[i] = 1 + random.nextInt(4);
             }
 
-            var plain = PlainKMeans.fit(points, weights, dimensions, k, seed);
-            var fast = KMeans.fit(points, weights, dimensions, k, seed);
+            var plain = PlainKMeans.fit(points, weights, dimensions, k, seed, maxIterations, RESTARTS);
+            var fast = KMeans.fit(points, weights, dimensions, k, seed, maxIterations, RESTARTS);
 
-            // The capped row covers the stop at MAX_ITERATIONS, the others a converged fit.
-            assertThat(plain.iterations() == KMeans.MAX_ITERATIONS).as("stops at MAX_ITERATIONS").isEqualTo(capped);
+            // The capped row covers the stop at the cap, the others a converged fit.
+            assertThat(plain.iterations() == maxIterations).as("stops at the cap").isEqualTo(capped);
             assertThat(fast.labels()).containsExactly(plain.labels());
             assertThat(fast.iterations()).isEqualTo(plain.iterations());
             assertThat(fast.centres()).containsExactly(plain.centres(), within(1e-6f));

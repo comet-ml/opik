@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.google.common.base.Preconditions;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
@@ -13,8 +12,8 @@ import java.util.List;
  * Per k-means group, what a prompt shows. For the author prompt (the first build), its size and share of the window
  * ({@link #summarize(int[], int)}); the examples come from {@link #authorExamples}. For the nightly naming and verify
  * prompts, also its tightness (mean cosine of its traces to the centre) and up to {@value #EXAMPLES} examples: up to
- * {@value #FREQUENT} repeated texts, then the most typical ones ({@link #summarize(IntentMerger.Merged, int[],
- * float[])}). The recent share stays 0: {@link CandidateGrouper} sets both shares itself, over the whole window.
+ * {@value #FREQUENT} repeated texts, then the most typical ones ({@link #summarize(MergedIntents, int[], float[])}).
+ * The recent share stays 0: {@link CandidateGrouper} sets both shares itself, over the whole window.
  */
 @UtilityClass
 public class GroupSummaries {
@@ -54,12 +53,14 @@ public class GroupSummaries {
      * @param labels  per unique text, the group in {@code [0, k)}
      * @param centres {@code k * dimensions}, unit length
      */
-    public static List<GroupSummary> summarize(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
+    public static List<GroupSummary> summarize(@NonNull MergedIntents merged, @NonNull int[] labels,
             @NonNull float[] centres) {
         int d = merged.dimensions();
-        int k = groupCount(centres, d);
         Preconditions.checkArgument(labels.length == merged.size(),
                 "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
+        Preconditions.checkArgument(d > 0 && centres.length % d == 0,
+                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, d);
+        int k = centres.length / d;
         var groups = Members.of(labels, k);
         var counts = merged.weights();
         int n = Arrays.stream(counts).sum();
@@ -102,12 +103,16 @@ public class GroupSummaries {
      * @param labels  per unique text, the group in {@code [0, k)}
      * @param centres {@code k * dimensions}, unit length
      */
-    public static List<List<String>> authorExamples(@NonNull IntentMerger.Merged merged, @NonNull int[] labels,
+    public static List<List<String>> authorExamples(@NonNull MergedIntents merged, @NonNull int[] labels,
             @NonNull float[] centres, int frequent, int extra) {
         int d = merged.dimensions();
-        int k = groupCount(centres, d);
         Preconditions.checkArgument(labels.length == merged.size(),
                 "labels must hold one group per unique text, texts '%s', labels '%s'", merged.size(), labels.length);
+        Preconditions.checkArgument(d > 0 && centres.length % d == 0,
+                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, d);
+        Preconditions.checkArgument(frequent >= 0 && extra >= 0,
+                "frequent and extra must not be negative, frequent '%s', extra '%s'", frequent, extra);
+        int k = centres.length / d;
         var groups = Members.of(labels, k);
         var out = new ArrayList<List<String>>(k);
         // One array for all groups: a group's pick reads only its own members' scores, which it writes first.
@@ -128,50 +133,42 @@ public class GroupSummaries {
      * it reads the group, so it never sorts the group.
      *
      * @param members the group's unique texts are {@code members[from..to)}, ascending, so in code point order
-     * @param counts  per unique text, its traces in the group; read for the members only
+     * @param counts  per unique text, its traces in the group; read for the members only. Not always the merge weight:
+     *                a caller that splits one text's traces across groups passes each group's own count
      * @param sims    per unique text, its nearness to the group; read for the members only
      */
-    static List<String> pick(IntentMerger.Merged merged, int[] members, int from, int to, int[] counts,
+    static List<String> pick(MergedIntents merged, int[] members, int from, int to, int[] counts,
             double[] sims, int frequent, int total) {
-        var chosen = new int[Math.max(0, Math.min(total, to - from))];
-        if (chosen.length == 0) {
+        int capacity = Math.max(0, Math.min(total, to - from));
+        if (capacity == 0) {
             return List.of();
         }
         var first = merged.firstIndex();
-        int size = 0;
-        int slots = Math.min(frequent, chosen.length);
+        Order byCount = (a, b) -> counts[a] > counts[b];
+        Order byNearness = (a, b) -> nearer(a, b, sims, first);
+        var best = new Best(capacity);
         // The repeated texts. Members come in code point order, so one replaces an earlier one only on a higher count.
+        int slots = Math.min(frequent, capacity);
+        best.open(0, slots);
         for (int m = from; m < to && slots > 0; m++) {
             int u = members[m];
-            if (counts[u] < MIN_REPEATS || (size == slots && counts[u] <= counts[chosen[size - 1]])) {
-                continue;
+            if (counts[u] >= MIN_REPEATS) {
+                best.offer(u, byCount);
             }
-            int at = size < slots ? size++ : size - 1;
-            while (at > 0 && counts[chosen[at - 1]] < counts[u]) {
-                chosen[at] = chosen[at - 1];
-                at--;
-            }
-            chosen[at] = u;
         }
         // The nearest of the rest.
-        int repeated = size;
-        for (int m = from; m < to && repeated < chosen.length; m++) {
+        int repeated = best.size;
+        best.open(repeated, capacity);
+        for (int m = from; m < to && repeated < capacity; m++) {
             int u = members[m];
-            if (contains(chosen, repeated, u)
-                    || (size == chosen.length && !nearer(u, chosen[size - 1], sims, first))) {
-                continue;
+            if (!best.holds(u, repeated)) {
+                best.offer(u, byNearness);
             }
-            int at = size < chosen.length ? size++ : size - 1;
-            while (at > repeated && nearer(u, chosen[at - 1], sims, first)) {
-                chosen[at] = chosen[at - 1];
-                at--;
-            }
-            chosen[at] = u;
         }
         var texts = merged.texts();
-        var out = new String[size];
-        for (int e = 0; e < size; e++) {
-            out[e] = texts[chosen[e]];
+        var out = new String[best.size];
+        for (int e = 0; e < best.size; e++) {
+            out[e] = texts[best.items[e]];
         }
         return List.of(out);
     }
@@ -180,23 +177,52 @@ public class GroupSummaries {
         return sims[a] > sims[b] || (sims[a] == sims[b] && first[a] < first[b]);
     }
 
-    private static boolean contains(int[] values, int size, int value) {
-        for (int e = 0; e < size; e++) {
-            if (values[e] == value) {
-                return true;
-            }
+    @FunctionalInterface
+    private interface Order {
+        boolean better(int a, int b);
+    }
+
+    /** The best items offered, best first, in slots {@code [floor, limit)}; an earlier offer wins a tie. */
+    private static final class Best {
+
+        private final int[] items;
+        private int size;
+        private int floor;
+        private int limit;
+
+        Best(int capacity) {
+            items = new int[capacity];
         }
-        return false;
+
+        /** Later offers fill slots {@code [floor, limit)}; the slots before {@code floor} stay as they are. */
+        void open(int floor, int limit) {
+            this.floor = floor;
+            this.limit = limit;
+        }
+
+        void offer(int u, Order order) {
+            if (size == limit && (limit == floor || !order.better(u, items[size - 1]))) {
+                return;
+            }
+            int at = size < limit ? size++ : size - 1;
+            while (at > floor && order.better(u, items[at - 1])) {
+                items[at] = items[at - 1];
+                at--;
+            }
+            items[at] = u;
+        }
+
+        /** Whether {@code u} is among the first {@code count} items. */
+        boolean holds(int u, int count) {
+            for (int e = 0; e < count; e++) {
+                if (items[e] == u) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
-    /** The number of groups {@code centres} holds, {@code dimensions} values each. */
-    private static int groupCount(float[] centres, int dimensions) {
-        Preconditions.checkArgument(dimensions > 0 && centres.length % dimensions == 0,
-                "centres must hold whole rows, values '%s', dimensions '%s'", centres.length, dimensions);
-        return centres.length / dimensions;
-    }
-
-    /** Per group, its unique texts: group {@code j}'s are {@code order[start[j]..start[j + 1])}, ascending. */
     private record Members(int[] order, int[] start) {
 
         static Members of(int[] labels, int k) {
@@ -217,6 +243,10 @@ public class GroupSummaries {
         }
     }
 
+    /**
+     * Row {@code i} of {@code a} dotted with row {@code j} of {@code b}. One sum on purpose: it runs once per text, off
+     * the fit's hot loop, and reads float rows, not the fit's double centres as {@code KMeans}' eight-sum dot does.
+     */
     static double dot(float[] a, int i, float[] b, int j, int dimensions) {
         double s = 0;
         int ai = i * dimensions;
@@ -225,10 +255,5 @@ public class GroupSummaries {
             s += (double) a[ai + t] * b[bj + t];
         }
         return s;
-    }
-
-    @Builder(toBuilder = true)
-    public record GroupSummary(int group, int size, double share, double recentShare, double tightness,
-            @NonNull List<String> examples) {
     }
 }

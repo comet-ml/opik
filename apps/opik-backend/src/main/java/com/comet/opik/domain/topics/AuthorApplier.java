@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;

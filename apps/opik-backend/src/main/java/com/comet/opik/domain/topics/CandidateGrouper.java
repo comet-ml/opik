@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -36,10 +35,11 @@ public class CandidateGrouper {
         var merged = IntentMerger.merge(texts, vectors, d);
         int k = Math.min(Math.min(MAX_GROUPS, Math.max(2, unassigned.length / TRACES_PER_GROUP)), merged.size());
         var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
-        var result = KMeans.fit(merged.vectors(), weights, d, k, seed);
+        var result = KMeans.fit(merged.vectors(), weights, d, k, seed, KMeansTopicAlgorithm.KMEANS_MAX_ITERATIONS,
+                KMeansTopicAlgorithm.KMEANS_RESTARTS);
         var labels = new int[unassigned.length];
         for (int r = 0; r < labels.length; r++) {
-            labels[r] = result.labels()[merged.inverse()[r]];
+            labels[r] = result.labels()[merged.textOfTrace()[r]];
         }
         var windowRecent = window.recent();
         var recent = new boolean[unassigned.length];

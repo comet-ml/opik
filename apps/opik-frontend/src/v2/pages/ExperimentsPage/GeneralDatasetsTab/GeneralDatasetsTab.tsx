@@ -322,7 +322,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         cell: withRunningSkeleton(PassRateCell) as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
-          aggregationKey: "pass_rate",
+          aggregationKey: "pass_rate_avg",
         },
       },
       {
