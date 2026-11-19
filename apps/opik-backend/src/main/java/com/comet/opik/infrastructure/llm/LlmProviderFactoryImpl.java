@@ -253,7 +253,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                 .filter(providerApiKey -> !llmProvider.supportsProviderName()
                         || isModelConfiguredForProvider(model, providerApiKey))
                 .findFirst()
-                .orElseThrow(() -> new BadRequestException(
+                .orElseThrow(() -> new LlmProviderKeyNotConfiguredException(
                         "API key not configured for LLM. provider='%s', model='%s'".formatted(
                                 llmProvider.getValue(), model)));
     }

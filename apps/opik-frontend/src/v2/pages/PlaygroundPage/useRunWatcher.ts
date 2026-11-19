@@ -15,6 +15,7 @@ import { LogExperiment } from "@/types/playground";
 import { isExperimentTerminal } from "@/lib/experiments";
 import { extractErrorMessage } from "@/lib/errors";
 import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
+import { fetchSuiteAssertionCount } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/suiteAssertions";
 import usePlaygroundStore, {
   getRunningPromptIds,
   useSetProgress,
@@ -258,13 +259,23 @@ export default function useRunWatcher({
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
+          // The rows only carry the items' own assertions; the suite's apply to every item.
+          const suiteAssertionCount = await fetchSuiteAssertionCount(
+            queryClient,
+            curDatasetId,
+            experimentResults[0]?.dataset_version_summary?.version_hash,
+          );
+          // An unreadable version is assumed to have assertions, so items aren't counted as scored too early.
+          const suiteHasAssertions =
+            suiteAssertionCount === undefined || suiteAssertionCount > 0;
 
           let scoredItems = 0;
           let totalExperimentItems = 0;
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
-            const noEvaluators = (row.evaluators?.length ?? 0) === 0;
+            const noEvaluators =
+              (row.evaluators?.length ?? 0) === 0 && !suiteHasAssertions;
 
             for (const ei of experimentItems) {
               totalExperimentItems++;

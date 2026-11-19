@@ -28,6 +28,11 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     private final AtomicInteger failedMessageCount = new AtomicInteger(0);
     @Getter
     private final List<String> retiredMessages = new CopyOnWriteArrayList<>();
+    @Getter
+    private final List<RetryingDelivery> retryingDeliveries = new CopyOnWriteArrayList<>();
+
+    public record RetryingDelivery(String message, long deliveryCount, int maxDeliveries) {
+    }
 
     private final Function<String, Mono<Void>> processor;
 
@@ -49,6 +54,12 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     @Override
     protected Mono<Void> onRetired(String message, Throwable error) {
         return Mono.fromRunnable(() -> retiredMessages.add(message));
+    }
+
+    @Override
+    protected Mono<Void> onRetrying(String message, Throwable error, long deliveryCount, int maxDeliveries) {
+        return Mono.fromRunnable(() -> retryingDeliveries.add(new RetryingDelivery(message, deliveryCount,
+                maxDeliveries)));
     }
 
     /**

@@ -57,6 +57,25 @@ describe("getStatusFromExperimentItems", () => {
     });
   });
 
+  describe("items under suite-level assertions", () => {
+    it("returns evaluating while the suite's assertions are scored, though the row carries none", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1" })],
+      });
+      const result = getStatusFromExperimentItems(row, false, true);
+      expect(result.evaluating).toBe(true);
+      expect(result.status).toBeUndefined();
+    });
+
+    it("returns a scoring error once the experiment finished without their results", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1" })],
+      });
+      const result = getStatusFromExperimentItems(row, true, true);
+      expect(result.isError).toBe(true);
+    });
+  });
+
   describe("status from run_summaries_by_experiment", () => {
     it("returns PASSED when all summaries are PASSED", () => {
       const row = makeRow({

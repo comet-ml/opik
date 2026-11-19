@@ -118,6 +118,36 @@ export interface EvaluatorRuleLogItem {
   markers?: Record<string, string>;
 }
 
+export enum ONLINE_SCORING_STATE {
+  RETRYING = "retrying",
+  FAILED = "failed",
+  SKIPPED = "skipped",
+}
+
+export enum ONLINE_SCORING_REASON {
+  NOT_CONFIGURED = "not_configured",
+  AUTHENTICATION = "authentication",
+  NOT_FOUND = "not_found",
+  REJECTED = "rejected",
+  RATE_LIMITED = "rate_limited",
+  TIMEOUT = "timeout",
+  UNREACHABLE = "unreachable",
+  SERVER_ERROR = "server_error",
+  NO_SCORE = "no_score",
+  UNRESOLVED_ARGUMENTS = "unresolved_arguments",
+  OTHER = "other",
+}
+
+export interface OnlineScoringStatus {
+  rule_id: string;
+  suite_assertion: boolean;
+  state: ONLINE_SCORING_STATE;
+  reason: ONLINE_SCORING_REASON;
+  attempt?: number;
+  max_attempts?: number;
+  updated_at: string;
+}
+
 export interface EvaluatorRuleLogItemWithId extends EvaluatorRuleLogItem {
   id: string;
 }

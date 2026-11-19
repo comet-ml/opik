@@ -1,20 +1,65 @@
-import React, { useRef, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useRef, useMemo, useState } from "react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 
 import { getExperimentById } from "@/api/datasets/useExperimentById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
+import {
+  getOnlineScoringStatuses,
+  onlineScoringStatusesKey,
+  UseOnlineScoringStatusesResponse,
+} from "@/api/automations/useOnlineScoringStatuses";
+import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
+import { OnlineScoringStatus } from "@/types/automations";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
 import { isExperimentTerminal } from "@/lib/experiments";
 import {
+  ERROR_RESULT,
   StatusTag,
   getStatusFromExperimentItems,
 } from "@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell";
+import {
+  REFETCH_INTERVAL,
+  isFinalStatus,
+  isRetrying,
+  isRetryingRecently,
+  lateWaitEndOf,
+  scoringPollInterval,
+  scoringStatusMessage,
+  useWaitOver,
+  waitEndOf,
+} from "./scoringStatus";
+import { useSuiteAssertionCount } from "../suiteAssertions";
 
 type StatusInfo = ReturnType<typeof getStatusFromExperimentItems>;
 
-const REFETCH_INTERVAL = 5000;
-const MAX_REFETCH_TIME = 300000;
+// One experiment item per run of the dataset item.
+const runsOf = (
+  rows: ExperimentsCompare[] | undefined,
+  datasetItemId: string,
+) =>
+  (rows ?? [])
+    .flatMap((row) => row.experiment_items ?? [])
+    .filter((item) => item.dataset_item_id === datasetItemId);
+
+// With several runs per item, the run written last is the one whose judges started last, so the wait counts from it.
+const lastWrittenAtOf = (runs: ExperimentItem[]) =>
+  runs
+    .map((run) => run.created_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+// Project rules can score the same trace, so only the suite's judges speak for the item. A trace has one judge
+// per suite-level and per item-level set of assertions.
+const judgeStatusesOf = (
+  statuses: UseOnlineScoringStatusesResponse | undefined,
+) => (statuses?.content ?? []).filter((status) => status.suite_assertion);
+
+const anyRetryingRecently = (statuses: OnlineScoringStatus[]) =>
+  statuses.some(isRetryingRecently);
 
 interface PlaygroundOutputAssertionStatusProps {
   experimentId: string | undefined;
@@ -26,17 +71,9 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   PlaygroundOutputAssertionStatusProps
 > = ({ experimentId, datasetItemId, datasetId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const pollingStartTimeRef = useRef<number | null>(null);
+  const queryClient = useQueryClient();
+  const [openedAt] = useState(Date.now);
   const lastStatusRef = useRef<StatusInfo | undefined>(undefined);
-  const [pollingTimedOut, setPollingTimedOut] = useState(false);
-
-  useEffect(() => {
-    if (experimentId) {
-      pollingStartTimeRef.current = Date.now();
-      lastStatusRef.current = undefined;
-      setPollingTimedOut(false);
-    }
-  }, [experimentId]);
 
   const { data: experimentData } = useQuery({
     queryKey: ["experiment", { experimentId }],
@@ -53,15 +90,10 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   });
 
   const experimentFinished = isExperimentTerminal(experimentData?.status);
-
-  useEffect(() => {
-    if (!experimentId || experimentFinished) {
-      setPollingTimedOut(false);
-      return;
-    }
-    const timer = setTimeout(() => setPollingTimedOut(true), MAX_REFETCH_TIME);
-    return () => clearTimeout(timer);
-  }, [experimentId, experimentFinished]);
+  const suiteAssertionCount = useSuiteAssertionCount(datasetId, experimentData);
+  // Until the version is known, assume it has assertions rather than call the row skipped.
+  const suiteHasAssertions =
+    suiteAssertionCount === undefined || suiteAssertionCount > 0;
 
   const { data } = useCompareExperimentsList(
     {
@@ -75,19 +107,94 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     },
     {
       enabled: !!experimentId && !!datasetId,
-      refetchInterval: () => {
+      refetchInterval: (query) => {
         if (!experimentId || experimentFinished) return false;
-
-        const elapsed =
-          Date.now() - (pollingStartTimeRef.current || Date.now());
-        if (elapsed > MAX_REFETCH_TIME) return false;
-
-        return REFETCH_INTERVAL;
+        const runs = runsOf(query.state.data?.content, datasetItemId);
+        return scoringPollInterval({
+          // The item is written once its run has finished, so the wait counts from then.
+          waitEnd: waitEndOf(lastWrittenAtOf(runs), openedAt),
+          lateWaitEnd: lateWaitEndOf(lastWrittenAtOf(runs), openedAt),
+          // A retrying judge ends in a result once the stream gives up, so keep looking for it. The
+          // statuses are queried below, as they need these rows, so read them from the cache.
+          retrying: runs.some(
+            (run) =>
+              !!run.trace_id &&
+              anyRetryingRecently(
+                judgeStatusesOf(
+                  queryClient.getQueryData<UseOnlineScoringStatusesResponse>(
+                    onlineScoringStatusesKey(run.trace_id),
+                  ),
+                ),
+              ),
+          ),
+          // The experiment is still running, so its results are still owed.
+          owed: true,
+        });
       },
     },
   );
 
-  const effectiveExperimentFinished = experimentFinished || pollingTimedOut;
+  const runs = useMemo(
+    () => runsOf(data?.content, datasetItemId),
+    [data?.content, datasetItemId],
+  );
+  const waitEnd = waitEndOf(lastWrittenAtOf(runs), openedAt);
+  const lateWaitEnd = lateWaitEndOf(lastWrittenAtOf(runs), openedAt);
+  const traceIds = runs.flatMap((run) => (run.trace_id ? [run.trace_id] : []));
+
+  const judgeStatusesByTraceId = useQueries({
+    queries: traceIds.map((traceId) => ({
+      queryKey: onlineScoringStatusesKey(traceId),
+      queryFn: (context: Parameters<typeof getOnlineScoringStatuses>[0]) =>
+        getOnlineScoringStatuses(context, { traceId }),
+      enabled: !experimentFinished,
+      refetchInterval: (query: {
+        state: { data?: UseOnlineScoringStatusesResponse };
+      }) => {
+        if (experimentFinished) return false;
+        return scoringPollInterval({
+          waitEnd,
+          lateWaitEnd,
+          retrying: anyRetryingRecently(judgeStatusesOf(query.state.data)),
+          owed: true,
+        });
+      },
+    })),
+    combine: (results) =>
+      Object.fromEntries(
+        results.map((result, index) => [
+          traceIds[index],
+          judgeStatusesOf(result.data),
+        ]),
+      ) as Record<string, OnlineScoringStatus[]>,
+  });
+
+  // A run that has its assertion results needs nothing more from its judges.
+  const unscoredRunStatuses = runs
+    .filter((run) => !run.assertion_results?.length)
+    .map((run) =>
+      run.trace_id ? (judgeStatusesByTraceId[run.trace_id] ?? []) : [],
+    );
+  // Any judge still retrying may yet produce a result, so it speaks for the item first. A judge that scored clears
+  // its status, so this holds for runs that already have some results too.
+  const retryingJudgeStatus = traceIds
+    .flatMap((traceId) => judgeStatusesByTraceId[traceId] ?? [])
+    .find((status) => isRetrying(status));
+  // The item has no result coming only once every run still without one has judges, and all of them gave up.
+  const finalJudgeStatus =
+    !retryingJudgeStatus &&
+    unscoredRunStatuses.length > 0 &&
+    unscoredRunStatuses.every(
+      (statuses) => statuses.length > 0 && statuses.every(isFinalStatus),
+    )
+      ? unscoredRunStatuses[0][0]
+      : undefined;
+
+  const waitOver = useWaitOver(waitEnd);
+
+  // A retrying judge has said why there is no result yet, so the wait for one does not apply to it.
+  const effectiveExperimentFinished =
+    experimentFinished || (waitOver && !retryingJudgeStatus);
 
   const statusInfo = useMemo(() => {
     const items = data?.content ?? [];
@@ -100,12 +207,36 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     const result = getStatusFromExperimentItems(
       matchingRow,
       effectiveExperimentFinished,
+      suiteHasAssertions,
     );
     lastStatusRef.current = result;
     return result;
-  }, [data?.content, datasetItemId, effectiveExperimentFinished]);
+  }, [
+    data?.content,
+    datasetItemId,
+    effectiveExperimentFinished,
+    suiteHasAssertions,
+  ]);
 
   if (!experimentId) return null;
+
+  if (statusInfo?.evaluating && finalJudgeStatus) {
+    return (
+      <StatusTag {...ERROR_RESULT(scoringStatusMessage(finalJudgeStatus))} />
+    );
+  }
+
+  if (statusInfo?.evaluating && retryingJudgeStatus) {
+    return (
+      <TooltipWrapper content={scoringStatusMessage(retryingJudgeStatus)}>
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-slate">
+          <RefreshCw className="size-3 text-yellow-500" />
+          Scoring failed, retrying
+        </span>
+      </TooltipWrapper>
+    );
+  }
+
   if (!statusInfo?.status && !statusInfo?.evaluating) return null;
 
   return <StatusTag {...statusInfo} />;

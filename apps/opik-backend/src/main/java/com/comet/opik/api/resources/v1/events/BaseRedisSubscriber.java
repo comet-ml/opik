@@ -737,9 +737,16 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .flatMap(failure -> getDeliveryCount(failure.messageId())
                         .map(deliveryCount -> failure.toBuilder()
                                 .deliveryCount(deliveryCount)
-                                .build()),
+                                .build())
+                        // Left pending to be redelivered, but not reported as retrying: an entry no longer pending was
+                        // already retired by an overlapping delivery, and reporting it would overwrite that outcome.
+                        .switchIfEmpty(Mono.fromRunnable(() -> log.warn(
+                                "No pending entry for failed messageId '{}', not reporting it as retrying",
+                                failure.messageId(), failure.error()))),
                         CONSUMER_SCHEDULER_THREAD_CAP_SIZE) // Parallelism for delivery count Redis queries
-                .filter(this::maxRetriesReached)
+                .flatMap(failure -> maxRetriesReached(failure)
+                        ? Mono.just(failure)
+                        : notifyRetrying(failure).then(Mono.<ProcessingResult>empty()))
                 .map(this::handleMaxRetriesReached)
                 .collectList() // Emits an empty list if the sequence is empty
                 .flatMap(maxRetries -> {
@@ -763,6 +770,26 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                             return Mono.empty();
                         }))
                 .then();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Mono<Void> notifyRetrying(ProcessingResult failure) {
+        if (failure.message() == null) {
+            return Mono.empty();
+        }
+        return Mono.defer(() -> onRetrying((M) failure.message(), failure.error(), failure.deliveryCount(),
+                config.getMaxRetries()))
+                .subscribeOn(workersScheduler)
+                .onErrorResume(throwable -> {
+                    log.error("Failed to handle retrying messageId '{}'", failure.messageId(), throwable);
+                    return Mono.empty();
+                });
+    }
+
+    // Runs after each failed delivery the stream will retry, so a subclass can show the failure before the retries run
+    // out. Best effort: an error here is logged and the message is retried anyway.
+    protected Mono<Void> onRetrying(M message, Throwable error, long deliveryCount, int maxDeliveries) {
+        return Mono.empty();
     }
 
     // Runs once, just before a message the stream gives up on is acked and removed, so a subclass can record
@@ -897,12 +924,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Uses {@link PendingEntry#getDeliveryCount()} which returns number of times that a given message was delivered.
      *
      * @param messageId the message ID to query
-     * @return Mono with the delivery count (0 if not found or on error)
+     * @return Mono with the delivery count, empty if the entry is not pending or the lookup failed
      */
     private Mono<Long> getDeliveryCount(StreamMessageId messageId) {
         return listPending(messageId)
-                .map(PendingEntry::getDeliveryCount)
-                .defaultIfEmpty(0L);
+                .map(PendingEntry::getDeliveryCount);
     }
 
     /**

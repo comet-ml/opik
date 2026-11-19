@@ -197,6 +197,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
                 <PlaygroundOutputError message={error} hint={errorHint} />
               ) : isTestSuite ? (
                 <PlaygroundOutputAssertionStatus
+                  key={experimentId}
                   experimentId={experimentId}
                   datasetItemId={originalRow.dataItemId}
                   datasetId={plainDatasetId || ""}

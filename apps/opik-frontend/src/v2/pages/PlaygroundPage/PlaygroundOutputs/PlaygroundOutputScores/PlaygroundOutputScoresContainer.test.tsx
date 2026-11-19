@@ -4,6 +4,9 @@ import {
   EVAL_TRIGGER_SCOPE,
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
+  ONLINE_SCORING_REASON,
+  ONLINE_SCORING_STATE,
+  OnlineScoringStatus,
 } from "@/types/automations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import PlaygroundOutputScoresContainer from "./PlaygroundOutputScoresContainer";
@@ -27,6 +30,13 @@ type TraceData = {
 let rulesState: RulesState;
 let traceData: TraceData | undefined;
 let pickerRuleIds: string[] | null;
+let statuses: OnlineScoringStatus[];
+let statusesQueryOptions: {
+  enabled: boolean;
+  refetchInterval: (query: {
+    state: { data?: { content: OnlineScoringStatus[] } };
+  }) => number | false;
+};
 let traceQueryOptions: {
   enabled: boolean;
   refetchInterval: (query: { state: { data?: TraceData } }) => number | false;
@@ -49,6 +59,21 @@ vi.mock("@/api/automations/useRulesList", () => ({
   }),
 }));
 
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({
+    getQueryData: () => ({ content: statuses }),
+  }),
+}));
+
+vi.mock("@/api/automations/useOnlineScoringStatuses", () => ({
+  default: (_params: unknown, options: typeof statusesQueryOptions) => {
+    statusesQueryOptions = options;
+    return { data: { content: statuses } };
+  },
+  onlineScoringStatusesKey: (traceId: string) => ["statuses", { traceId }],
+}));
+
 vi.mock("@/api/traces/useTraceById", () => ({
   default: (_params: unknown, options: typeof traceQueryOptions) => {
     traceQueryOptions = options;
@@ -60,15 +85,27 @@ vi.mock("./PlaygroundOutputScores", () => ({
   default: ({
     metricNames,
     metricRuleIds,
+    metricStatuses,
     waitOver,
   }: {
     metricNames: string[];
     metricRuleIds: Record<string, string>;
+    metricStatuses: Record<string, OnlineScoringStatus>;
     waitOver: boolean;
   }) => (
     <>
       <div data-testid="metric-names">{metricNames.join(",")}</div>
       <div data-testid="metric-rule-ids">{JSON.stringify(metricRuleIds)}</div>
+      <div data-testid="metric-states">
+        {JSON.stringify(
+          Object.fromEntries(
+            Object.entries(metricStatuses).map(([name, status]) => [
+              name,
+              status.state,
+            ]),
+          ),
+        )}
+      </div>
       <div data-testid="wait-over">{String(waitOver)}</div>
     </>
   ),
@@ -127,6 +164,19 @@ beforeEach(() => {
   rulesState = { content: [], total: 0, isSuccess: true, isError: false };
   traceData = undefined;
   pickerRuleIds = null;
+  statuses = [];
+});
+
+const makeStatus = (
+  ruleId: string,
+  state: ONLINE_SCORING_STATE,
+  updatedAt = new Date().toISOString(),
+): OnlineScoringStatus => ({
+  rule_id: ruleId,
+  suite_assertion: false,
+  state,
+  reason: ONLINE_SCORING_REASON.AUTHENTICATION,
+  updated_at: updatedAt,
 });
 
 describe("PlaygroundOutputScoresContainer", () => {
@@ -488,8 +538,37 @@ describe("PlaygroundOutputScoresContainer", () => {
 
       renderContainer();
 
-      expect(pollWith(traceData)).toBe(false);
       expect(screen.getByTestId("wait-over")).toHaveTextContent("true");
+    });
+
+    it("should keep looking once a minute for a rule that has not reported, as a hanging judge reports late", () => {
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(10) };
+
+      renderContainer();
+
+      expect(pollWith(traceData)).toBe(60000);
+      expect(
+        statusesQueryOptions.refetchInterval({
+          state: { data: { content: [] } },
+        }),
+      ).toBe(60000);
+    });
+
+    it("should not keep looking for a Python rule with no status, as it may have scored under unpredictable names", () => {
+      rulesState.content = [makeRule("r1", [])];
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(10) };
+
+      renderContainer();
+
+      expect(pollWith(traceData)).toBe(false);
+    });
+
+    it("should stop looking 45 minutes after the run", () => {
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(46) };
+
+      renderContainer();
+
+      expect(pollWith(traceData)).toBe(false);
     });
 
     it("should keep waiting for a trace the run produced moments ago", () => {
@@ -525,18 +604,98 @@ describe("PlaygroundOutputScoresContainer", () => {
       expect(screen.getByTestId("wait-over")).toHaveTextContent("false");
     });
 
-    it("should tell each metric which rule to open the execution logs of", () => {
+    it("should tell each metric which of the trace's rules to open the execution logs of", () => {
       rulesState.content = [
         makeRule("r1", ["Relevance"]),
         makeRule("r2", ["Accuracy", "Tone"]),
+        makeRule("r3", ["Relevance"]),
       ];
-      rulesState.total = 2;
+      rulesState.total = 3;
+      traceData = makeTrace(["r1", "r2"]);
 
       renderContainer();
 
       expect(
         JSON.parse(screen.getByTestId("metric-rule-ids").textContent!),
       ).toEqual({ Relevance: "r1", Accuracy: "r2", Tone: "r2" });
+    });
+  });
+  describe("when a rule reports why it has no score", () => {
+    beforeEach(() => {
+      rulesState.content = [makeRule("r1", ["Relevance"])];
+      rulesState.total = 1;
+    });
+
+    it.each([ONLINE_SCORING_STATE.FAILED, ONLINE_SCORING_STATE.SKIPPED])(
+      "should stop polling once the rule says it %s",
+      (state) => {
+        statuses = [makeStatus("r1", state)];
+        traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(1) };
+
+        renderContainer();
+
+        expect(pollWith(traceData)).toBe(false);
+        expect(
+          statusesQueryOptions.refetchInterval({
+            state: { data: { content: statuses } },
+          }),
+        ).toBe(false);
+        expect(
+          JSON.parse(screen.getByTestId("metric-states").textContent!),
+        ).toEqual({ Relevance: state });
+      },
+    );
+
+    it("should follow a retry that keeps reporting, however long after the run", () => {
+      statuses = [
+        makeStatus("r1", ONLINE_SCORING_STATE.RETRYING, minutesAgo(2)),
+      ];
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(50) };
+
+      renderContainer();
+
+      expect(pollWith(traceData)).toBe(30000);
+    });
+
+    it("should stop polling once a retrying rule has not been heard from for too long, still showing it", () => {
+      statuses = [
+        makeStatus("r1", ONLINE_SCORING_STATE.RETRYING, minutesAgo(25)),
+      ];
+      traceData = { ...makeTrace(["r1"]), end_time: minutesAgo(46) };
+
+      renderContainer();
+
+      expect(
+        JSON.parse(screen.getByTestId("metric-states").textContent!),
+      ).toEqual({ Relevance: ONLINE_SCORING_STATE.RETRYING });
+      expect(
+        statusesQueryOptions.refetchInterval({
+          state: { data: { content: statuses } },
+        }),
+      ).toBe(false);
+    });
+
+    it("should only ask for statuses once the trace shows a rule scores it", () => {
+      renderContainer();
+      expect(statusesQueryOptions.enabled).toBe(false);
+
+      traceData = makeTrace(["r1"]);
+      renderContainer();
+      expect(statusesQueryOptions.enabled).toBe(true);
+    });
+
+    it("should show the status of a rule whose score names can't be predicted under its own name", () => {
+      rulesState.content = [makeRule("r1", [])];
+      statuses = [makeStatus("r1", ONLINE_SCORING_STATE.FAILED)];
+      traceData = makeTrace(["r1"]);
+
+      renderContainer();
+
+      expect(screen.getByTestId("metric-names")).toHaveTextContent("rule-r1");
+      expect(
+        JSON.parse(screen.getByTestId("metric-states").textContent!),
+      ).toEqual({ "rule-r1": ONLINE_SCORING_STATE.FAILED });
+      expect(pollWith(traceData)).toBe(false);
     });
   });
 });

@@ -13,6 +13,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.DecisionModelRuleValidator;
+import com.comet.opik.domain.evaluators.OnlineScoringStatusService;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
@@ -58,6 +59,7 @@ import java.util.UUID;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.View;
+import static com.comet.opik.api.evaluators.OnlineScoringStatus.OnlineScoringStatusList;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/automations/evaluators/")
@@ -75,6 +77,7 @@ public class AutomationRuleEvaluatorsResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull OnlineScoringStatusService scoringStatusService;
 
     @GET
     @Operation(operationId = "findEvaluators", summary = "Find project Evaluators", description = "Find project Evaluators", responses = {
@@ -258,4 +261,14 @@ public class AutomationRuleEvaluatorsResource {
         return Response.ok(logs).build();
     }
 
+    @GET
+    @Path("/scoring-statuses")
+    @Operation(operationId = "getOnlineScoringStatuses", summary = "Get why rules have not scored a trace", description = "Get, per rule, why an experiment trace has no score from it yet: retrying, failed or skipped. A rule with no entry has scored the trace or not reported on it", responses = {
+            @ApiResponse(responseCode = "200", description = "Online scoring statuses", content = @Content(schema = @Schema(implementation = OnlineScoringStatusList.class)))
+    })
+    public Response getScoringStatuses(@QueryParam("trace_id") @NotNull UUID traceId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        var statuses = scoringStatusService.find(workspaceId, traceId).block();
+        return Response.ok(new OnlineScoringStatusList(statuses)).build();
+    }
 }

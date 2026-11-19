@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.evaluators.OnlineScoringStatus;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -15,6 +16,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
@@ -202,6 +204,20 @@ public class AutomationRuleEvaluatorResourceClient {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
         return actualResponse;
+    }
+
+    public List<OnlineScoringStatus> getScoringStatuses(UUID traceId, String workspaceName, String apiKey) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("scoring-statuses")
+                .queryParam("trace_id", traceId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(OnlineScoringStatus.OnlineScoringStatusList.class).content();
+        }
     }
 
     // Session token authentication methods
