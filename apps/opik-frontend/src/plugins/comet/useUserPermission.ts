@@ -89,6 +89,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canViewProjectData = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DATA_VIEW),
+    [checkNullablePermission],
+  );
+
   const canDeleteDatasets = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DATASET_DELETE),
     [checkNullablePermission],
@@ -288,6 +293,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canViewDatasets,
     canCreateDatasets,
     canEditDatasets,
+    canViewProjectData,
     canDeleteDatasets,
     canCreateProjects,
     canDeleteProjects,

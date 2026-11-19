@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import jakarta.annotation.Nullable;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
@@ -71,7 +72,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var groups = GroupSummaries.summarize(groupOf, k);
         int perGroup = authorExampleCount(k);
         stats.put("author_examples", perGroup);
-        var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
+        var examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(),
                 Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
         var prompt = TopicPrompts.author(groups, maxTopics, examples);
         var answer = context.generate(Call.AUTHOR, AUTHOR_TAG, prompt, TopicPrompts.AUTHOR_SCHEMA, AUTHOR_MAX_TOKENS,
@@ -108,33 +109,25 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     }
 
     /**
-     * The {@link PrototypeAssigner} over the saved rows, as the build made it: the topic prototypes in position order,
-     * each topic's index the order of its first row, then the known-Other ones.
+     * The {@link PrototypeAssigner} over the saved list, as the build made it: each topic's vectors in topic order,
+     * owned by the topic's index, then the known-Other ones.
      */
     @Override
-    public Optional<Labeller> labeller(@NonNull List<TopicPrototype> prototypes) {
-        var topicIds = new ArrayList<UUID>();
-        var topicPrototypes = new ArrayList<float[]>();
-        var owners = new ArrayList<Integer>();
-        var otherPrototypes = new ArrayList<float[]>();
-        for (var prototype : prototypes) {
-            if (prototype.topicId() == null) {
-                otherPrototypes.add(prototype.values());
-                continue;
-            }
-            int owner = topicIds.indexOf(prototype.topicId());
-            if (owner < 0) {
-                topicIds.add(prototype.topicId());
-                owner = topicIds.size() - 1;
-            }
-            topicPrototypes.add(prototype.values());
-            owners.add(owner);
-        }
-        if (topicPrototypes.isEmpty()) {
+    public Optional<Labeller> labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
+        if (topics.isEmpty()) {
             return Optional.empty();
         }
+        var topicPrototypes = new ArrayList<float[]>();
+        var owners = new ArrayList<Integer>();
+        for (int t = 0; t < topics.size(); t++) {
+            for (float[] vector : topics.get(t).vectors().vectors()) {
+                topicPrototypes.add(vector);
+                owners.add(t);
+            }
+        }
+        var otherPrototypes = otherVectors == null ? List.<float[]>of() : otherVectors.vectors();
         var assigner = new PrototypeAssigner(topicPrototypes, owners, otherPrototypes, DIMENSIONS);
-        var ids = List.copyOf(topicIds);
+        var ids = topics.stream().map(Topic::id).toList();
         return Optional.of(vectors -> {
             var labels = assigner.assign(vectors);
             var out = new UUID[labels.length];
