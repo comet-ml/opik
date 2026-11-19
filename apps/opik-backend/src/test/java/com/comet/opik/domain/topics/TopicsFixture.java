@@ -15,11 +15,12 @@ import java.util.UUID;
 
 /**
  * The fixture under {@code src/test/resources/topics/fixture/}: one small window of synthetic trace summaries and,
- * for it, the expected output of each step of the first build.
+ * for it, the expected output of each step of the first build. {@code generate.py} there regenerates the expected
+ * outputs; its docstring lists the inputs.
  */
 final class TopicsFixture {
 
-    static final int DIMENSIONS = 384;
+    static final int DIMENSIONS = TopicEmbedding.DIMENSIONS;
     private static final String DIR = "/topics/fixture/";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -29,9 +30,15 @@ final class TopicsFixture {
     final String[] intents;
     final float[] vectors;
     final float[] centres;
+    /** The unit centres of the backend's grouping ({@code java_kmeans.json}). */
+    final float[] firstBuildCentres;
     final JsonNode expected;
-    /** The expected author answer, in the per-cluster form the service reads ({@link #assignment}). */
+    /** The recorded author answer on scikit-learn's grouping, in the per-cluster form the service reads. */
     final JsonNode answer;
+    /** The same answer on the backend's grouping, in the per-cluster form. */
+    final JsonNode firstBuildAnswer;
+    /** The backend's k-means grouping of the window, per unique text, that {@code expected.json} was built on. */
+    final int[] javaGroups;
 
     private TopicsFixture() {
         var window = json("window.json");
@@ -45,8 +52,11 @@ final class TopicsFixture {
         }
         vectors = floats("window.f32");
         centres = floats("centres.f32");
+        firstBuildCentres = floats("first_build_centres.f32");
         expected = json("expected.json");
-        answer = assignment(json("answer.json"));
+        answer = assignment(expected.get("answer"));
+        firstBuildAnswer = assignment(expected.get("first_build").get("answer"));
+        javaGroups = ints(json("java_kmeans.json").get("groups"));
     }
 
     static TopicsFixture load() {
