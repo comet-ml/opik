@@ -9,7 +9,7 @@ COPY pom.xml spotless.xml lombok.config ./
 RUN mvn dependency:go-offline
 
 # Copy source code
-COPY src ./src
+COPY src/main ./src/main
 
 # Build artifact
 ARG OPIK_VERSION
