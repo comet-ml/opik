@@ -2,29 +2,48 @@ package com.comet.opik.infrastructure.llm.openrouter.decisions;
 
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.domain.llm.ProviderErrorMessageValidator;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderBaseUrlGuard;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
+import com.comet.opik.infrastructure.net.DestinationGuard;
+import com.comet.opik.infrastructure.net.DestinationGuardDns;
 import com.comet.opik.utils.RetryUtils;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
+import io.dropwizard.util.DataSize;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.client.Client;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+import java.util.zip.GZIPOutputStream;
 
+import static com.comet.opik.domain.llm.ChatCompletionService.UNEXPECTED_ERROR_CALLING_LLM_PROVIDER;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
@@ -33,12 +52,16 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OpenRouterDecisionsClientTest {
 
     private static final String PATH = "/api/alpha/decisions";
     private static final int MAX_ATTEMPTS = 2;
+    private static final int ERROR_BODY_MAX_SIZE = 1024;
+    private static final String URL_REFUSED = new ProviderRequestRefusedException(
+            ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL).getMessage();
 
     // Real response and error bodies captured from the OpenRouter Decisions API.
     private static final String SUCCESS_BODY = """
@@ -50,21 +73,28 @@ class OpenRouterDecisionsClientTest {
             {"error":{"message":"At least one question is required","code":400},"user_id":"org_1"}
             """;
 
+    private static final ProviderBaseUrlGuard RELAXED_GUARD = ProviderBaseUrlGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+            .build();
+
     private WireMockUtils.WireMockRuntime wireMock;
+    private LlmProviderClientConfig clientConfig;
     private OpenRouterDecisionsClient decisionsClient;
     private String apiKey;
 
     @BeforeAll
     void setUpAll() {
         wireMock = WireMockUtils.startWireMock();
-        var config = new LlmProviderClientConfig();
-        config.setOpenRouterDecisionsUrl(wireMock.runtimeInfo().getHttpBaseUrl() + PATH);
-        config.setMaxAttempts(MAX_ATTEMPTS);
-        config.setDelayMillis(1);
-        config.setConnectTimeout(Duration.seconds(5));
-        config.setReadTimeout(Duration.seconds(5));
-        decisionsClient = new OpenRouterDecisionsClient(new RetriableHttpClient(TestHttpClientUtils.client()),
-                config);
+        clientConfig = new LlmProviderClientConfig();
+        clientConfig.setOpenRouterUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1");
+        clientConfig.setMaxAttempts(MAX_ATTEMPTS);
+        clientConfig.setDelayMillis(1);
+        clientConfig.setProviderErrorMessageMaxLength(500);
+        clientConfig.setConnectTimeout(Duration.seconds(5));
+        clientConfig.setReadTimeout(Duration.seconds(5));
+        clientConfig.setProviderErrorBodyMaxSize(DataSize.bytes(ERROR_BODY_MAX_SIZE));
+        decisionsClient = newDecisionsClient(RELAXED_GUARD);
     }
 
     @AfterAll
@@ -97,6 +127,7 @@ class OpenRouterDecisionsClientTest {
         wireMock.server().verify(postRequestedFor(urlEqualTo(PATH))
                 .withHeader("Authorization", equalTo("Bearer " + apiKey))
                 .withHeader("X-Custom", equalTo("value"))
+                .withHeader("Accept-Encoding", equalTo("identity"))
                 .withRequestBody(equalToJson("""
                         {"model":"~typesafe/jev-latest",
                          "state":"Question: What is the capital of France?\\nAnswer: Paris",
@@ -112,52 +143,146 @@ class OpenRouterDecisionsClientTest {
         assertThat(response.usage().cost()).isEqualByComparingTo("0.00001428");
     }
 
+    @Test
+    void sendsTheApiKeyAndAsksForNoCompression() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+
+        decisionsClient.decide(request(), apiConfig(Map.of())).block();
+
+        var sent = wireMock.server().getAllServeEvents().getFirst().getRequest().getHeaders();
+        assertThat(sent.getHeader("Authorization").values()).containsExactly("Bearer " + apiKey);
+        assertThat(sent.getHeader("Accept-Encoding").values()).containsExactly("identity");
+        assertThat(sent.getHeader("Content-Type").values()).containsExactly("application/json");
+    }
+
+    @Test
+    void storedHeadersAreNormalizedAndReplaceTheOnesOpikSets() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        var authorization = "Bearer " + RandomStringUtils.secure().nextAlphanumeric(16);
+        var custom = RandomStringUtils.secure().nextAlphanumeric(16);
+        var headers = new HashMap<String, String>();
+        headers.put("authorization", authorization);
+        headers.put("accept-encoding", "br");
+        headers.put("content-type", "text/plain");
+        headers.put("X-Custom", custom);
+        headers.put(" ", "no name");
+        headers.put("X-Empty", null);
+
+        decisionsClient.decide(request(), apiConfig(headers)).block();
+
+        var sent = wireMock.server().getAllServeEvents().getFirst().getRequest().getHeaders();
+        assertThat(sent.getHeader("Authorization").values()).containsExactly(authorization);
+        assertThat(sent.getHeader("Accept-Encoding").values()).containsExactly("br");
+        // the body is always JSON, so its type is the one sent
+        assertThat(sent.getHeader("Content-Type").values()).containsExactly("application/json");
+        assertThat(sent.getHeader("X-Custom").values()).containsExactly(custom);
+        assertThat(sent.keys()).doesNotContain(" ", "X-Empty");
+    }
+
+    Stream<Arguments> errorCarriesStatusAndOnlyADocumentedMessage() {
+        var documented = "At least one question is required";
+        var padding = " ".repeat(ERROR_BODY_MAX_SIZE);
+        var tooLong = "x".repeat(501);
+        return Stream.of(
+                arguments(400, ERROR_BODY, ClientErrorException.class, documented),
+                arguments(401, ERROR_BODY, ClientErrorException.class, documented),
+                arguments(402, ERROR_BODY, ClientErrorException.class, documented),
+                arguments(400, null, ClientErrorException.class, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                arguments(400, "<html>internal detail</html>", ClientErrorException.class,
+                        UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                arguments(400, "{\"error\":{\"message\":\"internal detail\",\"code\":499}}",
+                        ClientErrorException.class, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                arguments(400, ERROR_BODY.replaceFirst("\\{", "{" + padding), ClientErrorException.class,
+                        UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                arguments(400, ERROR_BODY.replace(documented, tooLong), ClientErrorException.class,
+                        UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                arguments(500, "internal detail", ServerErrorException.class, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
+                // OpenRouter's timeout: the call may have been billed, so it is left to the consumer's redelivery
+                arguments(524, "internal detail", ServerErrorException.class, UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {400, 401, 402})
-    void clientErrorCarriesStatusAndUpstreamMessageWithoutRetry(int status) {
+    @MethodSource
+    void errorCarriesStatusAndOnlyADocumentedMessage(int status, String body,
+            Class<? extends WebApplicationException> expected, String message) {
+        var reply = aResponse().withStatus(status).withHeader("Content-Type", "application/json");
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(body == null ? reply : reply.withBody(body)));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOfSatisfying(expected,
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(status))
+                .hasMessage("OpenRouter Decisions API request failed, status '%s', message '%s'"
+                        .formatted(status, message));
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void unreadableSuccessBodyDropsUpstreamText() {
+        wireMock.server().stubFor(post(urlEqualTo(PATH))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"answers\": upstream-secret}")));
+
+        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOf(InternalServerErrorException.class)
+                .satisfies(error -> assertThat(ExceptionUtils.getStackTrace(error))
+                        .doesNotContain("upstream-secret"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void successBodyOverTheSizeLimitFails(boolean gzip) throws IOException {
+        var body = SUCCESS_BODY.replaceFirst("\\{", "{" + " ".repeat(1024 * 1024)).getBytes(StandardCharsets.UTF_8);
+        var reply = aResponse().withStatus(200).withHeader("Content-Type", "application/json");
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(gzip
+                ? reply.withHeader("Content-Encoding", "gzip").withBody(gzip(body))
+                : reply.withBody(body)));
+        // the gzip client inflates as the production client does
+        var client = gzip ? newDecisionsClient(RELAXED_GUARD, TestHttpClientUtils.gzipClient()) : decisionsClient;
+
+        assertThatThrownBy(() -> client.decide(request(), apiConfig(Map.of())).block())
+                .isInstanceOf(InternalServerErrorException.class)
+                .hasMessage("OpenRouter Decisions API returned an unreadable response, status '200'");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {200, 400})
+    void bodyThatArrivesSlowlyStopsAtTheDeadline(int status) {
         wireMock.server().stubFor(post(urlEqualTo(PATH))
                 .willReturn(aResponse().withStatus(status).withHeader("Content-Type", "application/json")
-                        .withBody(ERROR_BODY)));
+                        .withBody(status == 200 ? SUCCESS_BODY : ERROR_BODY)
+                        .withChunkedDribbleDelay(10, 6_000)));
+        // each chunk comes within the read timeout, but the whole body does not
+        clientConfig.setReadTimeout(Duration.seconds(1));
+        long start = System.nanoTime();
+        try {
+            assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
+                    .isInstanceOf(status == 200 ? InternalServerErrorException.class : ClientErrorException.class);
+        } finally {
+            clientConfig.setReadTimeout(Duration.seconds(5));
+        }
 
-        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
-                .isInstanceOfSatisfying(ClientErrorException.class,
-                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(status))
-                .hasMessageContaining("At least one question is required");
-        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(4_000);
     }
 
     @Test
-    void serverErrorCarriesStatus() {
-        wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(aResponse().withStatus(500).withBody("boom")));
-
-        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
-                .isInstanceOfSatisfying(ServerErrorException.class,
-                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(500))
-                .hasMessageContaining("boom");
-    }
-
-    @Test
-    void timeoutIsNotRetriedInProcess() {
-        wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(aResponse().withStatus(524).withBody("timeout")));
-
-        // The timed-out call may have been billed: fail once and leave any retry to the consumer's redelivery.
-        assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
-                .isInstanceOfSatisfying(ServerErrorException.class,
-                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(524));
-        wireMock.server().verify(1, postRequestedFor(urlEqualTo(PATH)));
-    }
-
-    @Test
-    void redirectCarriesStatus() {
-        wireMock.server().stubFor(post(urlEqualTo(PATH))
-                .willReturn(aResponse().withStatus(308).withHeader("Location", "https://example.com")));
+    void redirectIsNotFollowedAndCarriesStatus() {
+        var otherPath = "/other/alpha/decisions";
+        wireMock.server().stubFor(post(urlEqualTo(PATH)).willReturn(aResponse().withStatus(307)
+                .withHeader("Location", wireMock.runtimeInfo().getHttpBaseUrl() + otherPath)));
+        wireMock.server().stubFor(post(urlEqualTo(otherPath))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
                 .isInstanceOfSatisfying(WebApplicationException.class,
-                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(308))
-                .hasMessageContaining("status '308'");
+                        error -> assertThat(error.getResponse().getStatus()).isEqualTo(307))
+                .hasMessage("OpenRouter Decisions API request failed, status '307', message '%s'"
+                        .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
+        assertThat(wireMock.server().getAllServeEvents()).hasSize(1);
     }
 
     @ParameterizedTest
@@ -167,7 +292,9 @@ class OpenRouterDecisionsClientTest {
                 .willReturn(aResponse().withStatus(status).withBody("busy")));
 
         assertThatThrownBy(() -> decisionsClient.decide(request(), apiConfig(Map.of())).block())
-                .isInstanceOf(RetryUtils.RetryableHttpException.class);
+                .isInstanceOf(RetryUtils.RetryableHttpException.class)
+                .hasMessageContaining(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)
+                .hasMessageNotContaining("busy");
         wireMock.server().verify(MAX_ATTEMPTS + 1, postRequestedFor(urlEqualTo(PATH)));
     }
 
@@ -185,6 +312,103 @@ class OpenRouterDecisionsClientTest {
         var response = decisionsClient.decide(request(), apiConfig(Map.of())).block();
 
         assertThat(response.answers()).containsKeys("answer_relevant", "answer_correct");
+    }
+
+    Stream<Arguments> baseUrlHasItsTrailingV1ReplacedByTheDecisionsPath() {
+        var host = wireMock.runtimeInfo().getHttpBaseUrl();
+        return Stream.of(
+                arguments(host + "/proxy/v1", "/proxy/alpha/decisions"),
+                arguments(host + "/proxy/v1/", "/proxy/alpha/decisions"),
+                arguments(host + "/proxy/v1//", "/proxy/alpha/decisions"),
+                arguments(host + "/proxy/v1?x=/v1", "/proxy/alpha/decisions?x=/v1"),
+                arguments(host + "/proxy/v1#fragment", "/proxy/alpha/decisions"),
+                arguments(host.replace("://", "://user:secret@") + "/proxy/v1", "/proxy/alpha/decisions"),
+                arguments(host.replace("http://", "HTTP://") + "/proxy/v1", "/proxy/alpha/decisions"),
+                // no base URL: the configured openRouterUrl
+                arguments(null, PATH),
+                arguments("", PATH),
+                arguments("  ", PATH));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void baseUrlHasItsTrailingV1ReplacedByTheDecisionsPath(String baseUrl, String expectedPath) {
+        wireMock.server().stubFor(post(urlEqualTo(expectedPath))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        var config = LlmProviderClientApiConfig.builder().apiKey(apiKey).baseUrl(baseUrl).build();
+
+        decisionsClient.decide(request(), config).block();
+
+        assertThat(wireMock.server().getAllServeEvents()).singleElement()
+                .satisfies(event -> assertThat(event.getRequest().getUrl()).isEqualTo(expectedPath));
+    }
+
+    @Test
+    void configuredDecisionsUrlIsUsedWhenTheProviderHasNoBaseUrl() {
+        var overridePath = "/override/decisions";
+        wireMock.server().stubFor(post(urlEqualTo(overridePath))
+                .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody(SUCCESS_BODY)));
+        clientConfig.setOpenRouterDecisionsUrl(wireMock.runtimeInfo().getHttpBaseUrl() + overridePath);
+        try {
+            decisionsClient.decide(request(), apiConfig(Map.of())).block();
+        } finally {
+            clientConfig.setOpenRouterDecisionsUrl(null);
+        }
+
+        wireMock.server().verify(1, postRequestedFor(urlEqualTo(overridePath)));
+        wireMock.server().verify(0, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    Stream<String> baseUrlWithoutADecisionsUrlIsRefusedWithoutCallingAnyHost() {
+        var host = wireMock.runtimeInfo().getHttpBaseUrl();
+        return Stream.of(host + "/proxy", host + "/proxy/v1/chat", host + "/proxy/V1",
+                host.replace("http://", "ftp://") + "/proxy/v1", "https://v1", "not a url");
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void baseUrlWithoutADecisionsUrlIsRefusedWithoutCallingAnyHost(String baseUrl) {
+        var config = LlmProviderClientApiConfig.builder().apiKey(apiKey).baseUrl(baseUrl).build();
+
+        // the error is in the Mono, so it reaches the caller's error mapping
+        var decided = decisionsClient.decide(request(), config);
+
+        assertThatThrownBy(decided::block)
+                .isInstanceOf(ProviderRequestRefusedException.class)
+                .hasMessage(URL_REFUSED);
+        assertThat(wireMock.server().getAllServeEvents()).isEmpty();
+    }
+
+    @Test
+    void strictGuardRefusesAPrivateAddressAtConnectTime() {
+        var strictClient = newDecisionsClient(RELAXED_GUARD.toBuilder().mode(DestinationGuard.Mode.STRICT).build());
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey(apiKey)
+                .baseUrl(wireMock.runtimeInfo().getHttpBaseUrl() + "/api/v1")
+                .build();
+
+        assertThatThrownBy(() -> strictClient.decide(request(), config).block())
+                .matches(DestinationGuardDns::isRefused);
+        assertThat(wireMock.server().getAllServeEvents()).isEmpty();
+    }
+
+    private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard) {
+        return newDecisionsClient(guard, TestHttpClientUtils.client());
+    }
+
+    private OpenRouterDecisionsClient newDecisionsClient(ProviderBaseUrlGuard guard, Client httpClient) {
+        return new OpenRouterDecisionsClient(new RetriableHttpClient(httpClient), clientConfig, guard,
+                new ProviderErrorMessageValidator(clientConfig));
+    }
+
+    private static byte[] gzip(byte[] bytes) throws IOException {
+        var compressed = new ByteArrayOutputStream();
+        try (var gzip = new GZIPOutputStream(compressed)) {
+            gzip.write(bytes);
+        }
+        return compressed.toByteArray();
     }
 
     private DecisionsRequest request() {

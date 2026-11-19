@@ -16,7 +16,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
@@ -58,7 +57,7 @@ public class LlmProviderClientConfig {
 
     private String openRouterUrl;
 
-    @NotBlank private String openRouterDecisionsUrl;
+    private String openRouterDecisionsUrl;
 
     /**
      * Destination policy for user-configured provider base URLs: {@code strict} refuses private and
@@ -105,8 +104,8 @@ public class LlmProviderClientConfig {
     private DataSize mediaDownloadMaxSize;
 
     /**
-     * Most bytes read from a custom provider's non-2xx response body; the rest is discarded. Only a short message
-     * parsed from it reaches callers, so a larger body is never needed.
+     * Most bytes read from the non-2xx response body of a custom provider or of the OpenRouter Decisions API; the
+     * rest is discarded. Only a short message parsed from it reaches callers, so a larger body is never needed.
      */
     @NotNull @MinDataSize(1)
     @MaxDataSize(value = 1, unit = DataSizeUnit.MEBIBYTES)

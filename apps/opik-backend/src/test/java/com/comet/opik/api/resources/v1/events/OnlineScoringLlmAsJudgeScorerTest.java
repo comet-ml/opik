@@ -32,6 +32,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryTestUtils;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
+import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.decisions.DecisionModels;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsQuestion;
 import com.comet.opik.infrastructure.llm.decisions.DecisionsRequest;
@@ -51,6 +52,7 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -133,13 +135,15 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private OpenAiDecisionsClient openAiDecisionsClient;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
+    private Logger userFacingLogger;
     private OnlineScoringLlmAsJudgeScorer scorer;
 
     @BeforeEach
     void setUp() {
         mockedFactory = mockStatic(UserFacingLoggingFactory.class);
+        userFacingLogger = mock(Logger.class);
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                .thenReturn(mock(org.slf4j.Logger.class));
+                .thenReturn(userFacingLogger);
 
         OnlineScoringConfig.StreamConfiguration streamConfig = new OnlineScoringConfig.StreamConfiguration();
         streamConfig.setScorer("llm_as_judge");
@@ -1005,6 +1009,24 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
             assertThat(captureStoredScores()).allSatisfy(score -> assertThat(score.value())
                     .isEqualByComparingTo(String.valueOf(expectedScore)));
+        }
+
+        @Test
+        void refusedRequestIsShownInTheRuleLog() {
+            var message = buildJevMessage("question", "answer");
+            var refused = new ProviderRequestRefusedException(
+                    ProviderRequestRefusedException.Reason.OPENROUTER_DECISIONS_URL);
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(decisionsClient.decide(requestCaptor.capture(), eq(clientConfig))).thenReturn(Mono.error(refused));
+
+            assertThatThrownBy(() -> scorer.score(message).block())
+                    .isInstanceOf(BadRequestException.class)
+                    .hasMessage(refused.getMessage());
+
+            assertThat(requestCaptor.getValue().model()).isEqualTo(JEV_MODEL);
+
+            verify(userFacingLogger).error("Error while scoring traceId '{}' with rule '{}': {}",
+                    message.trace().id(), message.ruleName(), refused.getMessage());
         }
 
         @Test
