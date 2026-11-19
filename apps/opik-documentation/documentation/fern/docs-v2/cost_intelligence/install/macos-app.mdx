@@ -227,7 +227,7 @@ capture_content = false
 
 The token is the same on every Mac and the email is different on every Mac. If your MDM can substitute a per-user variable into a profile, you can deliver the email in a second, user-level profile and leave `user_email` out of the file. See *Setting each Mac's email* in [Advanced](#advanced).
 
-The file lands in a user home, so an MDM script running as root must find the logged-in user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
+The file lands in a user home. An MDM script running as root must find the logged-in user and write the file as that user, with the file at mode `0600` and the directory `0700`. Do not write it as root and change the owner afterwards: a root write into a directory the user controls follows a symlink placed there.
 
 <Warning>
   Write the file before the app's first launch. The capture engine reads it
@@ -424,7 +424,7 @@ The app checks the address before enrolling. With a missing or malformed one the
 
 <Accordion title="Example install script">
 
-A first-install script for MDMs that run scripts as root. It waits for the configuration profile, downloads and verifies the release, installs the app, writes the per-user file, and launches the app for the logged-in user. Keep the enrollment token out of the saved script. Store the script without real values, have your MDM supply them when it runs, and do not print them in the script's output. Anyone who has the token can enroll a device into your workspace, so a filled-in copy in a repository or a ticket is a leaked credential.
+A script for MDMs that run scripts as root. It waits for the configuration profile, installs the app if it is missing, writes the per-user file if it is missing, and opens the app for the logged-in user. It is safe to run repeatedly. Keep the enrollment token out of the saved script. Store the script without real values, have your MDM supply them when it runs, and do not print them in the script's output. Anyone who has the token can enroll a device into your workspace, so a filled-in copy in a repository or a ticket is a leaked credential.
 
 How the values arrive depends on the MDM:
 
@@ -459,21 +459,28 @@ USER_HOME="$(/usr/bin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | /us
 
 # Without the profile, the first launch would prompt the user.
 [ -f "/Library/Managed Preferences/com.comet.opik-cipx-app.plist" ] || { echo "profile not installed yet"; exit 0; }
-[ -d "$APP" ] && { echo "already installed"; exit 0; }
 
-WORK="$(/usr/bin/mktemp -d)"; trap '/bin/rm -rf "$WORK"' EXIT
-/usr/bin/curl -fsSL --retry 3 -o "$WORK/app.zip" \
-  "https://github.com/comet-ml/cost-intelligence-proxy/releases/download/v${VERSION}/opik-cipx-v${VERSION}.zip" || exit 1
-/usr/bin/ditto -x -k "$WORK/app.zip" "$WORK/app"
-/usr/sbin/spctl -a -t exec "$WORK/app/Opik CIPX.app" || { echo "notarization check failed"; exit 1; }
+CHANGED=no
 
-/usr/bin/ditto "$WORK/app/Opik CIPX.app" "$APP"
-/usr/sbin/chown -R root:wheel "$APP"
-/usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+# Install the app, unless something else already delivered it.
+if [ ! -d "$APP" ]; then
+  WORK="$(/usr/bin/mktemp -d)"; trap '/bin/rm -rf "$WORK"' EXIT
+  /usr/bin/curl -fsSL --retry 3 -o "$WORK/app.zip" \
+    "https://github.com/comet-ml/cost-intelligence-proxy/releases/download/v${VERSION}/opik-cipx-v${VERSION}.zip" || exit 1
+  /usr/bin/ditto -x -k "$WORK/app.zip" "$WORK/app"
+  /usr/sbin/spctl -a -t exec "$WORK/app/Opik CIPX.app" || { echo "notarization check failed"; exit 1; }
 
+  /usr/bin/ditto "$WORK/app/Opik CIPX.app" "$APP"
+  /usr/sbin/chown -R root:wheel "$APP"
+  /usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+  CHANGED=yes
+fi
+
+# Provision this user, also when the app was already there. The file is written
+# as the user and never as root: a root write into a directory the user controls
+# would follow a symlink placed there.
 CONFIG_DIR="$USER_HOME/.opik-cipx-mac"
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
-  /bin/mkdir -p "$CONFIG_DIR"
   {
     echo '[opik]'
     echo 'base_url         = "https://www.comet.com/opik/api"'
@@ -482,16 +489,20 @@ if [ ! -f "$CONFIG_DIR/config.toml" ]; then
     echo
     echo '[capture]'
     echo 'capture_content = false'
-  } > "$CONFIG_DIR/config.toml"
-  /usr/sbin/chown -R "$CONSOLE_USER" "$CONFIG_DIR"
-  /bin/chmod 700 "$CONFIG_DIR"
-  /bin/chmod 600 "$CONFIG_DIR/config.toml"
+  } | /usr/bin/sudo -u "$CONSOLE_USER" /bin/sh -c \
+      'umask 077; /bin/mkdir -p "$1" && /bin/cat > "$1/config.toml"' sh "$CONFIG_DIR" \
+    || { echo "could not write config.toml"; exit 1; }
+  CHANGED=yes
 fi
 
+[ "$CHANGED" = yes ] || { echo "nothing to do"; exit 0; }
+
+# The engine reads the file only when it starts, so restart it if it is running.
+/bin/launchctl kickstart -k "gui/$USER_ID/com.comet.opik-cipx.engine" 2>/dev/null || true
 /bin/launchctl asuser "$USER_ID" /usr/bin/open "$APP"
 ```
 
-Run it on a schedule or at check-in instead of once: a Mac that was offline, had nobody logged in, or had not received the profile yet is picked up on a later run.
+Run it on a schedule or at check-in instead of once: a Mac that was offline, had nobody logged in, or had not received the profile yet is picked up on a later run. So is a second person who logs in to a Mac that already has the app, and a Mac where your MDM installed the app by other means.
 
 To update an installed Mac, quit the app, replace the bundle the same way, restart the engine and open the app again.
 
