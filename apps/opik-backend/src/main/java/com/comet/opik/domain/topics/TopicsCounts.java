@@ -22,7 +22,7 @@ import java.util.function.ToLongFunction;
 import java.util.stream.IntStream;
 
 /**
- * The topics read API's {@code ready} body from a project's live topics, its state and the per topic and day counts of
+ * The topics read API's {@code ready} body from a project's live topics, its {@code topic_projects} row and the per topic and day counts of
  * {@link TraceTopicsDAO#countByTopicAndDay}. The window is the {@code windowDays} UTC days that end with today
  * ({@code topics.build.windowDays}), the window of the next build.
  * <ul>
@@ -49,15 +49,16 @@ public class TopicsCounts {
                 .topics(List.of());
     }
 
-    public static Instant lastRunAt(@Nullable TopicProjectState state) {
-        return state == null ? null : state.lastSuccessAt();
+    public static Instant lastRunAt(@Nullable TopicProject project) {
+        return project == null ? null : project.lastSuccessAt();
     }
 
-    public static ProjectTopics.Attempt attempt(@Nullable TopicRun newest) {
-        if (newest == null) {
+    /** The project's current or last attempt, when it is running or failed. */
+    public static ProjectTopics.Attempt attempt(@Nullable TopicProject project) {
+        if (project == null || project.runStatus() == null) {
             return null;
         }
-        var status = switch (newest.status()) {
+        var status = switch (project.runStatus()) {
             case RUNNING -> ProjectTopics.Attempt.Status.RUNNING;
             case FAILED -> ProjectTopics.Attempt.Status.FAILED;
             case SAVED -> null;
@@ -67,7 +68,7 @@ public class TopicsCounts {
 
     /** {@code rows} come from a read of the window, so every row's day is in it. */
     public static ProjectTopics ready(@NonNull LocalDate today, int windowDays, @NonNull List<Topic> live,
-            @NonNull TopicProjectState state, @NonNull List<TopicDayCount> rows) {
+            @NonNull TopicProject project, @NonNull List<TopicDayCount> rows) {
         var from = windowFrom(today, windowDays);
         var days = new HashMap<UUID, long[]>();
         live.forEach(topic -> days.put(topic.id(), new long[windowDays]));
@@ -83,9 +84,9 @@ public class TopicsCounts {
         }
 
         long total = sum(other) + days.values().stream().mapToLong(TopicsCounts::sum).sum();
-        var firstBuild = state.firstBuiltAt() == null
+        var firstBuild = project.firstBuiltAt() == null
                 ? null
-                : LocalDate.ofInstant(state.firstBuiltAt(), ZoneOffset.UTC);
+                : LocalDate.ofInstant(project.firstBuiltAt(), ZoneOffset.UTC);
         var ranked = new ArrayList<>(live);
         ranked.sort(rankOrder(topic -> sum(days.get(topic.id()))));
         var topics = IntStream.range(0, ranked.size())
@@ -109,7 +110,7 @@ public class TopicsCounts {
 
         return window(today, windowDays)
                 .status(ProjectTopics.Status.READY)
-                .lastRunAt(lastRunAt(state))
+                .lastRunAt(lastRunAt(project))
                 .totalTraces(total)
                 .labelledFrom(labelledFrom(from, other, days.values()))
                 .topics(topics)
