@@ -316,7 +316,7 @@ export {
   REGISTRY_PROVIDERS,
   PROVIDER_GROUP,
   REGISTRY_MODEL,
-  EFFORT_REFUSED_OPENAI_MODELS,
+  EFFORT_CORRECTED_OPENAI_MODELS,
 } from './model-registry-providers.fixture';
 export type {
   ExperimentMessagePanelRef,

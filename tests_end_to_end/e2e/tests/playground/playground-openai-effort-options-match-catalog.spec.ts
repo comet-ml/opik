@@ -1,4 +1,4 @@
-import { test, expect, REGISTRY_MODEL, EFFORT_REFUSED_OPENAI_MODELS } from '@e2e/fixtures';
+import { test, expect, REGISTRY_MODEL, EFFORT_CORRECTED_OPENAI_MODELS } from '@e2e/fixtures';
 import type { LlmCatalogModelRef } from '@e2e/core/backend';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { expectPinApplied, pinOpenAiPipelineMode } from '@e2e/core/openai-pipeline-mode';
@@ -18,23 +18,27 @@ import { expectPinApplied, pinOpenAiPipelineMode } from '@e2e/core/openai-pipeli
  * catalog can disagree is the frontend failing to read what it was served —
  * which is exactly the drift this spec exists to catch.
  *
- * ## Why this release
+ * ## Why this release, and what changed in 2.2.151
  *
- * opik#9608's provider-model sync appended `gpt-6.2-astra` and `gpt-6.2-sol` to
- * `llm-models-default.yaml` as bare `id` + `label`, with no `reasoning: true`
- * and no `params:` block, while every sibling `gpt-6.x` / `gpt-5.6.x` OpenAI row
- * carries both. The served catalog reflects it — both rows answer
- * `effort: {accepted: false}` — and both model-settings panels agree with it by
- * mounting no effort control at all. **That agreement is what this spec pins.**
+ * opik#9608's provider-model sync (2.2.148) appended `gpt-6.2-astra` and
+ * `gpt-6.2-sol` to `llm-models-default.yaml` as bare `id` + `label`, with no
+ * `reasoning: true` and no `params:` block, while every sibling `gpt-6.x` /
+ * `gpt-5.6.x` OpenAI row carried both. The served catalog reflected it — both
+ * rows answered `effort: {accepted: false}` — and both model-settings panels
+ * agreed by mounting no effort control at all.
  *
- * Whether the two rows SHOULD accept effort is a question for whoever owns the
- * catalog, and is deliberately not asserted here: the release's exploration
- * found the same two ids routed through OpenRouter DO carry five levels, which
- * makes the native rows look like an omission rather than a vendor fact — but
- * "look like" is not a product rule, and a spec that pinned one would fail the
- * day the catalog is corrected AND the day it is confirmed as intended. The
- * invariant below survives either answer: correct the yaml and the panel must
- * grow the control, leave it and the panel must not.
+ * Whether the two rows SHOULD accept effort was left to whoever owns the
+ * catalog, and the invariant this spec pins was written to survive either
+ * answer: **correct the yaml and the panel must grow the control, leave it and
+ * the panel must not.** opik#9648's sync, in 2.2.151, corrected it — both rows
+ * now carry their siblings' block, `effort: {accepted: true, levels: [low,
+ * medium, high, xhigh], default: medium}`. So the claim on these two ids has
+ * flipped, and the second test below now asserts the other branch: the catalog
+ * accepts, so the panel must mount a control offering exactly those levels.
+ *
+ * The long-standing refused row (`gpt-4o-mini`) is unchanged and still carries
+ * the negative half, which is what keeps the two readings apart — "the panel
+ * reads the catalog" rather than "the panel always mounts a control now".
  *
  * ## Why this is not already covered
  *
@@ -78,7 +82,7 @@ import { expectPinApplied, pinOpenAiPipelineMode } from '@e2e/core/openai-pipeli
  * completion is submitted, so the only OpenAI traffic a Run would cause never
  * happens. The two `gpt-6.2` ids are on `llm-model-policy`'s forbidden list and
  * are registered unbilled by `modelRegistryProviders` on that basis — see
- * `EFFORT_REFUSED_OPENAI_MODELS`.
+ * `EFFORT_CORRECTED_OPENAI_MODELS`.
  */
 
 /** The catalog's lowercase levels as `OPENAI_EFFORT_LABELS` in `modelUtils.ts` renders them. */
@@ -117,15 +121,17 @@ const EFFORT_ACCEPTED_MODELS = [
 ] as const;
 
 /**
- * A row that refused effort long before this release, beside the two that
- * started doing so in it.
+ * A row that refuses effort, and has since long before either release.
  *
- * The control for a reading of the negative test that would otherwise be
- * available: that the two new rows are special somehow — too new for the
- * frontend to place, or unlisted, or mis-parsed. `gpt-4o-mini` is an ordinary
- * non-reasoning OpenAI model the suite drives everywhere, and it renders
- * exactly the same way, which is what makes "no control" the correct rendering
- * of a refused row rather than a symptom.
+ * The negative half of the second test, and the reason that test still
+ * discriminates now that the two `gpt-6.2` rows accept the parameter: without
+ * a row the panel must mount NO control for, "the panel mounts a control
+ * offering the catalog's levels" is equally satisfied by a build that mounts
+ * one for every OpenAI model and reads the catalog for none of them.
+ *
+ * `gpt-4o-mini` is an ordinary non-reasoning OpenAI model the suite drives
+ * everywhere, which is what makes "no control" the correct rendering of a
+ * refused row rather than something peculiar to it.
  *
  * On `ALLOWED_MODEL_DISPLAY_NAMES` outright, unlike the two `gpt-6.2` ids.
  */
@@ -265,7 +271,7 @@ test.describe(
     );
 
     test(
-      'a row whose curated effort is refused mounts no control at all, including both rows 2.2.148 added',
+      'a row whose curated effort is refused mounts no control at all, while the two rows 2.2.151 corrected now mount one',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ modelRegistryProviders, project, page, backendClient }) => {
         test.setTimeout(240_000);
@@ -279,60 +285,56 @@ test.describe(
           return rows;
         });
 
-        // The two rows opik#9608 shipped, plus the long-standing control that
-        // makes their rendering ordinary rather than peculiar to them.
-        const refused = [...EFFORT_REFUSED_OPENAI_MODELS, EFFORT_REFUSED_CONTROL];
-
         const playground = new PlaygroundPage(page, project.id);
         await test.step('Open the playground', async () => {
           await playground.goto();
           await playground.waitForReady();
         });
 
-        for (const { displayName, catalogId } of refused) {
+        for (const { displayName, catalogId } of EFFORT_CORRECTED_OPENAI_MODELS) {
           const row = rowFor(catalog, catalogId);
           expectLabelPinned(row, displayName);
 
-          await test.step(`${displayName}: the catalog refuses the parameter`, async () => {
-            // The premise, and here it is half the test: if one of these rows
-            // ever starts accepting effort, "the panel shows no control" stops
-            // being correct behaviour and becomes the bug. That is the shape the
-            // gpt-6.2 rows would take if the yaml is corrected — and this is
-            // where the spec would then fail, which is the point of reading the
-            // catalog at run time rather than pinning the answer.
+          const expected = await test.step(`${displayName}: the catalog now ACCEPTS the parameter`, async () => {
+            // The premise, and here it is half the test. These two rows carried
+            // no `params.effort` at all in 2.2.148 and the panel correctly
+            // mounted no control; opik#9648 gave them their siblings' block, so
+            // "no control" has stopped being correct behaviour and become the
+            // bug. Read at run time rather than pinned, so the next sync that
+            // moves them back fails here — on the premise — instead of in the
+            // rendering assertion below, where it would read as a frontend
+            // regression.
             expect(
               row.effort.accepted,
-              `'${catalogId}' is in this test because its curated row sets effort.accepted ` +
-                'false — a row that now accepts it must grow a control, and needs a human',
-            ).toBe(false);
+              `'${catalogId}' is in this test because 2.2.151's sync gave its curated row an ` +
+                'effort block — a row that refuses it again must mount no control, and needs a human',
+            ).toBe(true);
             expect(
-              row.effort.levels,
-              'and a row that refuses the parameter curates no levels to offer',
-            ).toEqual([]);
+              row.effort.levels.length,
+              'and a row that accepts the parameter must curate levels to offer',
+            ).toBeGreaterThan(0);
+            return expectedPanelOptions(row);
           });
 
-          await test.step(`${displayName}: the panel mounts no effort control`, async () => {
+          await test.step(`${displayName}: the panel mounts a control offering the catalog's levels`, async () => {
             await playground.selectModel(0, displayName);
             await playground.openModelParameters(0);
 
-            // Zero, not "not the five levels": `supportsOpenAIReasoningEffort`
-            // returning false takes the control out of the DOM rather than
-            // emptying it, and a control rendered with no options would be a
-            // different build — one where a user can open a dropdown that
-            // offers nothing.
             await expect(
               playground.reasoningEffortTrigger(),
-              `the panel must mount no effort control for ${displayName}, whose curated row ` +
-                'refuses the parameter',
-            ).toHaveCount(0);
+              `the panel must mount exactly one effort control for ${displayName}, whose curated ` +
+                'row now accepts the parameter',
+            ).toHaveCount(1);
 
-            // The panel really did render, so the absence above is the control
-            // being gone and not the panel having failed to open. Max output
-            // tokens is on every OpenAI panel, refused effort or not.
-            await expect(
-              playground.modelParameterLabel('Max output tokens'),
-              'the parameters panel itself must have rendered, or "no effort control" says nothing',
-            ).toBeVisible();
+            // The option list, not merely the control's presence: a control
+            // mounted from some default list would satisfy a presence check
+            // while still not reading the row it was generated from, which is
+            // the drift this spec exists to catch. Order included, for the
+            // reason the first test gives.
+            expect(
+              await playground.reasoningEffortOptions(),
+              `the panel must offer exactly what the catalog curates for '${catalogId}'`,
+            ).toEqual(expected);
 
             await playground.closeModelParameters();
           });
@@ -340,12 +342,59 @@ test.describe(
           expectPinApplied(pin);
         }
 
-        await test.step('…and a row that DOES accept effort still mounts one, in the same panel', async () => {
-          // The positive control, inside the same test and the same page. Without
-          // it every assertion above is satisfied by a build whose effort control
-          // never renders for any OpenAI model at all — which is a far bigger
-          // regression than the one this test is about, and would read as five
-          // green steps.
+        await test.step(`${EFFORT_REFUSED_CONTROL.displayName}: the catalog refuses the parameter`, async () => {
+          // The negative half. Without a row the panel must mount NO control
+          // for, every assertion above is satisfied by a build that mounts one
+          // for every OpenAI model — which would be the same drift in the
+          // opposite direction.
+          const row = rowFor(catalog, EFFORT_REFUSED_CONTROL.catalogId);
+          expectLabelPinned(row, EFFORT_REFUSED_CONTROL.displayName);
+          expect(
+            row.effort.accepted,
+            `'${EFFORT_REFUSED_CONTROL.catalogId}' is the negative control here because its row ` +
+              'refuses effort — a row that now accepts it needs a human to re-pick the control',
+          ).toBe(false);
+          expect(
+            row.effort.levels,
+            'and a row that refuses the parameter curates no levels to offer',
+          ).toEqual([]);
+        });
+
+        await test.step(`${EFFORT_REFUSED_CONTROL.displayName}: the panel mounts no effort control`, async () => {
+          await playground.selectModel(0, EFFORT_REFUSED_CONTROL.displayName);
+          await playground.openModelParameters(0);
+
+          // Zero, not "not the five levels": `supportsOpenAIReasoningEffort`
+          // returning false takes the control out of the DOM rather than
+          // emptying it, and a control rendered with no options would be a
+          // different build — one where a user can open a dropdown that
+          // offers nothing.
+          await expect(
+            playground.reasoningEffortTrigger(),
+            `the panel must mount no effort control for ${EFFORT_REFUSED_CONTROL.displayName}, ` +
+              'whose curated row refuses the parameter',
+          ).toHaveCount(0);
+
+          // The panel really did render, so the absence above is the control
+          // being gone and not the panel having failed to open. Max output
+          // tokens is on every OpenAI panel, refused effort or not.
+          await expect(
+            playground.modelParameterLabel('Max output tokens'),
+            'the parameters panel itself must have rendered, or "no effort control" says nothing',
+          ).toBeVisible();
+
+          await playground.closeModelParameters();
+          expectPinApplied(pin);
+        });
+
+        await test.step('…and switching back to an accepting row mounts the control again', async () => {
+          // The closing control, inside the same test and the same page. The
+          // refused row above is the LAST model selected, so without this step
+          // "no control for gpt-4o-mini" is equally satisfied by a panel whose
+          // effort control stopped rendering for anything after a model switch
+          // — a larger regression than the one this test is about, and one that
+          // would read as green steps. Driven on a row neither 9608 nor 9648
+          // touched, so it cannot move with the same sync.
           const { displayName, catalogId } = EFFORT_ACCEPTED_MODELS[0];
           const row = rowFor(catalog, catalogId);
           expectLabelPinned(row, displayName);
@@ -359,7 +408,7 @@ test.describe(
           await expect(
             playground.reasoningEffortTrigger(),
             `${displayName} accepts effort, so this panel must mount exactly one control — ` +
-              'proving the absences above are per-row and not a panel that lost the control',
+              'proving the absence above is per-row and not a panel that lost the control',
           ).toHaveCount(1);
           expect(
             await playground.reasoningEffortOptions(),
