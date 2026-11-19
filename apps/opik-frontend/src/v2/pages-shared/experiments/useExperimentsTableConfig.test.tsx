@@ -5,9 +5,26 @@ import { CellContext, Row as TableRow } from "@tanstack/react-table";
 import { useExperimentsTableConfig } from "./useExperimentsTableConfig";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
+import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import { COLUMN_DATASET_ID, COLUMN_NAME_ID, COLUMN_TYPE } from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
+
+// Radix tooltips only mount their content on hover, so render it inline.
+vi.mock("@/shared/TooltipWrapper/TooltipWrapper", () => ({
+  default: ({
+    content,
+    children,
+  }: {
+    content?: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <>
+      {children}
+      {content && <div data-testid="tooltip">{content}</div>}
+    </>
+  ),
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
@@ -240,6 +257,62 @@ describe("group row stat cells", () => {
         ) as unknown as CellContext<Row, string>)}
       />,
     );
+
+    expect(container.textContent).toBe("");
+  });
+});
+
+describe("group row pass rate", () => {
+  const meta = { custom: { aggregationKey: "pass_rate_avg" } };
+
+  const renderPassRate = (aggregation: Record<string, unknown>) =>
+    render(
+      <PassRateCell.Aggregation
+        {...(groupRowContext(aggregation, meta) as unknown as CellContext<
+          Row,
+          unknown
+        >)}
+      />,
+    );
+
+  it("shows a pass rate below 100% as the red status tag", () => {
+    const { getByText } = renderPassRate({
+      pass_rate_avg: 0.8,
+      passed_count_sum: 12,
+      total_count_sum: 15,
+    });
+
+    expect(getByText("80%").closest("[class*='--tag-red-bg']")).not.toBeNull();
+  });
+
+  it("shows a 100% pass rate as the green status tag", () => {
+    const { getByText } = renderPassRate({
+      pass_rate_avg: 1,
+      passed_count_sum: 15,
+      total_count_sum: 15,
+    });
+
+    expect(
+      getByText("100%").closest("[class*='--tag-green-bg']"),
+    ).not.toBeNull();
+  });
+
+  it("explains the average and the pooled item counts in the tooltip", () => {
+    const { getByTestId } = renderPassRate({
+      pass_rate_avg: 0.5,
+      passed_count_sum: 1,
+      total_count_sum: 10,
+    });
+
+    const tooltip = getByTestId("tooltip");
+    expect(tooltip.textContent).toContain(
+      "Average of the experiments' pass rates",
+    );
+    expect(tooltip.textContent).toContain("1 / 10 items passed in total");
+  });
+
+  it("leaves the cell blank for a group without test-suite experiments", () => {
+    const { container } = renderPassRate({ experiment_count: 3 });
 
     expect(container.textContent).toBe("");
   });
