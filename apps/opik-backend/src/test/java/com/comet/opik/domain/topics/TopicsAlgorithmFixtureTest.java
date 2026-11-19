@@ -99,6 +99,11 @@ class TopicsAlgorithmFixtureTest {
         return values.stream().mapToDouble(Double::doubleValue).average().orElseThrow();
     }
 
+    /** The scikit-learn seed-0 label of every unique text. */
+    private int[] sklearnLabels() {
+        return TopicsFixture.ints(fixture.expected.get("sklearn").get("labels"));
+    }
+
     private static double min(List<Double> values) {
         return values.stream().mapToDouble(Double::doubleValue).min().orElseThrow();
     }
@@ -109,8 +114,7 @@ class TopicsAlgorithmFixtureTest {
         var summaries = summaries();
         var expected = fixture.expected.get("summaries");
         // The fixture's summaries list up to 3 repeated texts, then the nearest ones, 5 in all.
-        var standExamples = GroupSummaries.authorExamples(fixture.intents, fixture.vectors,
-                fixture.sklearnTraceLabels(merged), fixture.centres, D, 3, 2);
+        var standExamples = GroupSummaries.authorExamples(merged, sklearnLabels(), fixture.centres, 3, 2);
         var nightSummaries = GroupSummaries.summarize(fixture.intents, fixture.vectors,
                 fixture.sklearnTraceLabels(merged), fixture.centres, D);
         assertThat(summaries).hasSize(expected.size());
@@ -127,8 +131,7 @@ class TopicsAlgorithmFixtureTest {
             assertThat(night.tightness()).isCloseTo(want.get("coherence").asDouble(), within(1e-9));
             assertThat(night.examples()).containsExactlyElementsOf(TopicsFixture.strings(want.get("examples")));
         }
-        var examples = GroupSummaries.authorExamples(fixture.intents, fixture.vectors,
-                fixture.sklearnTraceLabels(merged), fixture.centres, D, 5, 5);
+        var examples = GroupSummaries.authorExamples(merged, sklearnLabels(), fixture.centres, 5, 5);
         var prompt = TopicPrompts.author(summaries, 10, examples);
         for (var summary : summaries) {
             assertThat(prompt).contains("  cluster " + summary.group() + ": "

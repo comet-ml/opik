@@ -73,7 +73,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         var groups = GroupSummaries.summarize(groupOf, k);
         int perGroup = authorExampleCount(k);
         stats.put("author_examples", perGroup);
-        var examples = GroupSummaries.authorExamples(texts, vectors, groupOf, fit.centres(), DIMENSIONS,
+        var examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(),
                 Math.min(AUTHOR_FREQUENT, perGroup), Math.max(0, perGroup - AUTHOR_FREQUENT));
         var prompt = TopicPrompts.author(groups, maxTopics, examples);
         var answer = context.generate(Call.AUTHOR, AUTHOR_TAG, prompt, TopicPrompts.AUTHOR_SCHEMA, AUTHOR_MAX_TOKENS,
