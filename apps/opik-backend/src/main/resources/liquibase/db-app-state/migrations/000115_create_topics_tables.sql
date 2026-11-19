@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS topics
 --   * backfill_last_done_at: the project's latest done trace_summary status, as last discovered.
 --   * backfill_traces_total, backfill_traces_done: approximate progress, see TopicProject.
 --   List (the save of a run):
---   * rebuilds counts the saved runs; first_built_at is the first save; last_success_at the latest one.
+--   * saved_runs counts the saved runs, the first build included; first_built_at is the first save; last_success_at
+--     the latest one.
 --   * list_run_id: the run whose list is saved. window_until: the end of that run's window.
 --   * labels_complete is false from the save until the labelling pass has given every trace of that window a
 --     trace_topics row of the run; the first-build job resumes the pass while it is false.
@@ -75,7 +76,7 @@ CREATE TABLE IF NOT EXISTS topic_projects
     backfill_traces_total BIGINT       NOT NULL DEFAULT 0,
     backfill_traces_done  BIGINT       NOT NULL DEFAULT 0,
 
-    rebuilds              INT          NOT NULL DEFAULT 0,
+    saved_runs            INT          NOT NULL DEFAULT 0,
     first_built_at        TIMESTAMP(6) NULL,
     last_success_at       TIMESTAMP(6) NULL,
     list_run_id           CHAR(36)     NULL,

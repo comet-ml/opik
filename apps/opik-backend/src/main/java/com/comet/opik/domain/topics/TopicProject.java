@@ -16,7 +16,7 @@ import java.util.UUID;
  * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a first
  * build when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
  * writer updates its own group: the vectors tick the backfill fields, a run the attempt fields ({@code run*},
- * {@code failedRuns}, {@code firstFailedAt}), the save the list fields ({@code rebuilds} to {@code embedModel}),
+ * {@code failedRuns}, {@code firstFailedAt}), the save the list fields ({@code savedRuns} to {@code embedModel}),
  * the night {@code lastNight} and {@code notReachedNights}. For the backfill, ClickHouse stays the only source of
  * which traces have no vector.
  *
@@ -34,7 +34,7 @@ import java.util.UUID;
  *        merges them
  * @param backfillTracesDone about how many of them have a vector, as last discovered, plus the vectors the backfill
  *        wrote since. Never above {@code backfillTracesTotal}. Not kept up once the project is drained
- * @param rebuilds the saved runs, first build or nightly update
+ * @param savedRuns the saved runs, first build or nightly update
  * @param listRunId the run whose list is saved; the save is a compare-and-set on it
  * @param windowUntil the end of that run's window
  * @param labelsComplete false from the save until the labelling pass has given every trace of that window a
@@ -57,7 +57,7 @@ public record TopicProject(
         @Nullable Instant backfillLastDoneAt,
         long backfillTracesTotal,
         long backfillTracesDone,
-        int rebuilds,
+        int savedRuns,
         @Nullable Instant firstBuiltAt,
         @Nullable Instant lastSuccessAt,
         @Nullable UUID listRunId,
