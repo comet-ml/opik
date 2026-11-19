@@ -17,6 +17,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -26,10 +29,12 @@ import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("topics workspace enablement")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -91,25 +96,19 @@ class TopicWorkspaceServiceTest {
         assertThat(service.isEnabled(disabledInTheTable)).isFalse();
     }
 
-    @Test
-    @DisplayName("off: no workspace, though listed and enabled for ai-labels")
-    void toggleOff() {
-        var workspaceId = UUID.randomUUID().toString();
-        upsert(workspaceId, true);
-        config.setEnabled(false);
-        config.setEnabledWorkspaces(workspaceId);
-
-        assertThat(service.enabledWorkspaceIds()).isEmpty();
-        assertThat(service.isEnabled(workspaceId)).isFalse();
+    static Stream<Arguments> noWorkspace() {
+        return Stream.of(
+                arguments("off, though listed and enabled for ai-labels", false, true),
+                arguments("on with an empty list", true, false));
     }
 
-    @Test
-    @DisplayName("on with an empty list: no workspace")
-    void emptyList() {
+    @ParameterizedTest(name = "{0}: no workspace")
+    @MethodSource("noWorkspace")
+    void noWorkspace(String description, boolean enabled, boolean listed) {
         var workspaceId = UUID.randomUUID().toString();
         upsert(workspaceId, true);
-        config.setEnabled(true);
-        config.setEnabledWorkspaces(" , ,");
+        config.setEnabled(enabled);
+        config.setEnabledWorkspaces(listed ? workspaceId : " , ,");
 
         assertThat(service.enabledWorkspaceIds()).isEmpty();
         assertThat(service.isEnabled(workspaceId)).isFalse();
