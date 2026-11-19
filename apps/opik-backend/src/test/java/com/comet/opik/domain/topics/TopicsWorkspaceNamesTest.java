@@ -3,78 +3,49 @@ package com.comet.opik.domain.topics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TopicsWorkspaceNamesTest {
 
-    private static final Instant NOW = Instant.parse("2026-11-02T00:00:00Z");
-
     @Test
-    @DisplayName("The name is looked up once per TTL, paired with the id, and refreshed after the TTL")
-    void nameIsCached() {
-        var calls = new AtomicInteger();
-        var clock = new TopicsTestClock(NOW);
-        var names = new TopicsWorkspaceNames(id -> "name-" + id + "-" + calls.incrementAndGet(), clock);
-
-        assertThat(names.name("ws")).isEqualTo("name-ws-1");
-        assertThat(names.of("ws").get(TopicsWorkspaceNames.WORKSPACE_ID)).isEqualTo("ws");
-        assertThat(names.of("ws").get(TopicsWorkspaceNames.WORKSPACE_NAME)).isEqualTo("name-ws-1");
-        assertThat(calls).hasValue(1);
-
-        clock.advance(TopicsWorkspaceNames.NAME_TTL);
-        assertThat(names.name("ws")).isEqualTo("name-ws-2");
-        assertThat(calls).hasValue(2);
-    }
-
-    @Test
-    @DisplayName("A blank name or a failed lookup falls back to the id and is retried after the failure TTL")
+    @DisplayName("A failed lookup or a blank name falls back to the id")
     void fallsBackToTheId() {
-        var calls = new AtomicInteger();
-        var clock = new TopicsTestClock(NOW);
+        var failing = UUID.randomUUID().toString();
+        var blank = UUID.randomUUID().toString();
         var names = new TopicsWorkspaceNames(id -> {
-            if (calls.incrementAndGet() == 1) {
+            if (id.equals(failing)) {
                 throw new IllegalStateException("react service down");
             }
             return " ";
-        }, clock);
+        }, new TopicsTestClock(Instant.now()));
 
-        assertThat(names.name("ws")).isEqualTo("ws");
-        assertThat(names.name("ws")).isEqualTo("ws");
-        assertThat(calls).hasValue(1);
-
-        clock.advance(TopicsWorkspaceNames.FAILURE_TTL);
-        assertThat(names.name("ws")).isEqualTo("ws");
-        assertThat(calls).hasValue(2);
+        assertThat(names.of(failing).get(TopicsWorkspaceNames.WORKSPACE_NAME)).isEqualTo(failing);
+        assertThat(names.of(blank).get(TopicsWorkspaceNames.WORKSPACE_NAME)).isEqualTo(blank);
     }
 
     @Test
-    @DisplayName("The known name never looks up: the id before any lookup, then the last resolved name, even expired")
-    void knownNameNeverLooksUp() {
+    @DisplayName("A failed lookup is not retried for 10 minutes")
+    void failedLookupBacksOff() {
+        var workspaceId = UUID.randomUUID().toString();
         var calls = new AtomicInteger();
-        var clock = new TopicsTestClock(NOW);
+        var clock = new TopicsTestClock(Instant.now());
         var names = new TopicsWorkspaceNames(id -> {
             calls.incrementAndGet();
-            return "name-" + id;
+            throw new IllegalStateException("react service down");
         }, clock);
 
-        assertThat(names.knownName("ws")).isEqualTo("ws");
-        assertThat(calls).hasValue(0);
-
-        names.name("ws");
-        clock.advance(TopicsWorkspaceNames.NAME_TTL);
-        assertThat(names.knownName("ws")).isEqualTo("name-ws");
+        names.name(workspaceId);
+        clock.advance(Duration.ofMinutes(10).minusMillis(1));
+        names.name(workspaceId);
         assertThat(calls).hasValue(1);
-    }
 
-    @Test
-    @DisplayName("A resolved name passed in is used as is, and a blank one falls back to the id")
-    void staticBuilderFallsBack() {
-        assertThat(TopicsWorkspaceNames.builder("ws", "acme").build().get(TopicsWorkspaceNames.WORKSPACE_NAME))
-                .isEqualTo("acme");
-        assertThat(TopicsWorkspaceNames.builder("ws", "").build().get(TopicsWorkspaceNames.WORKSPACE_NAME))
-                .isEqualTo("ws");
+        clock.advance(Duration.ofMillis(1));
+        names.name(workspaceId);
+        assertThat(calls).hasValue(2);
     }
 }

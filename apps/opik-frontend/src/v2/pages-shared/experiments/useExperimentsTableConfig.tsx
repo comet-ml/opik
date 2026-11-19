@@ -327,6 +327,7 @@ export const useExperimentsTableConfig = <
                   getSearch: (data: Experiment) => ({
                     experiments: [data.id],
                   }),
+                  variant: "text",
                 },
                 headerCheckbox: true,
               },
