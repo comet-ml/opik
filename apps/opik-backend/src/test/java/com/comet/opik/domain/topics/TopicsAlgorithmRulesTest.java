@@ -163,12 +163,12 @@ class TopicsAlgorithmRulesTest {
             int[] labels = {0, 0, 0, 0, 0, 0, 0};
             float[] centres = {1, 0, 0, 1};
 
-            var examples = GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 2, 2);
+            var examples = authorExamples(texts, vectors, labels, centres, 2, 2);
 
             assertThat(examples).hasSize(2);
             assertThat(examples.get(0)).containsExactly("a", "b", "c", "d");
             assertThat(examples.get(1)).isEmpty();
-            assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 5, 0).get(0))
+            assertThat(authorExamples(texts, vectors, labels, centres, 5, 0).get(0))
                     .containsExactly("a", "b", "c", "d", "e");
         }
 
@@ -180,8 +180,19 @@ class TopicsAlgorithmRulesTest {
             int[] labels = {0, 0, 0, 0, 0};
             float[] centres = {1, 0};
 
-            assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 2, 1).get(0))
+            assertThat(authorExamples(texts, vectors, labels, centres, 2, 1).get(0))
                     .containsExactly("b", "a", "d");
+        }
+
+        @Test
+        @DisplayName("examples: a text is as near as its first trace, the vector k-means grouped")
+        void examplesNearnessOfFirstTrace() {
+            String[] texts = {"a", "b", "a"};
+            float[] vectors = {0.6f, 0.8f, 0.8f, 0.6f, 1, 0};
+            int[] labels = {0, 0, 0};
+            float[] centres = {1, 0};
+
+            assertThat(authorExamples(texts, vectors, labels, centres, 0, 2).get(0)).containsExactly("b", "a");
         }
 
         @Test
@@ -192,7 +203,7 @@ class TopicsAlgorithmRulesTest {
             int[] labels = {0, 0, 0, 0, 0, 0};
             float[] centres = {1, 0};
 
-            assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 3, 1).get(0))
+            assertThat(authorExamples(texts, vectors, labels, centres, 3, 1).get(0))
                     .containsExactly("z", "d", "c", "b");
         }
 
@@ -204,9 +215,9 @@ class TopicsAlgorithmRulesTest {
             int[] labels = {0, 0, 0, 0, 0, 0, 0, 0};
             float[] centres = {1, 0};
 
-            assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 2, 1).get(0))
+            assertThat(authorExamples(texts, vectors, labels, centres, 2, 1).get(0))
                     .containsExactly("y", "w", "v");
-            assertThat(GroupSummaries.authorExamples(texts, vectors, labels, centres, 2, 2, 2).get(0))
+            assertThat(authorExamples(texts, vectors, labels, centres, 2, 2).get(0))
                     .containsExactly("y", "w", "v", "x");
         }
 
@@ -487,5 +498,16 @@ class TopicsAlgorithmRulesTest {
             }
             return points;
         }
+    }
+
+    /** {@link GroupSummaries#authorExamples} on 2-dimensional traces, merged as the first build merges them. */
+    private static List<List<String>> authorExamples(String[] texts, float[] vectors, int[] traceLabels,
+            float[] centres, int frequent, int extra) {
+        var merged = IntentMerger.merge(texts, vectors, 2);
+        var labels = new int[merged.size()];
+        for (int u = 0; u < labels.length; u++) {
+            labels[u] = traceLabels[merged.firstIndex()[u]];
+        }
+        return GroupSummaries.authorExamples(merged, labels, centres, frequent, extra);
     }
 }
