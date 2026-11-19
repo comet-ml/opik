@@ -80,6 +80,17 @@ public class RetryUtils {
     }
 
     /**
+     * As {@link #handleHttpErrors}, but logs only the type of the failure's root cause: for a provider URL a
+     * workspace sets, whose transport failures name the destination and how it resolves.
+     */
+    public static RetryBackoffSpec handleProviderHttpErrors(int maxAttempts, Duration minBackoff,
+            Duration maxBackoff) {
+        return exponentialBackoff(maxAttempts, minBackoff, maxBackoff, RetryUtils::isRetriableException)
+                .doBeforeRetry(retrySignal -> log.warn("Retrying provider request, error type '{}'",
+                        Throwables.getRootCause(retrySignal.failure()).getClass().getSimpleName()));
+    }
+
+    /**
      * Retry specification for ClickHouse operations. A retry reruns the whole operation, so for a write it may repeat
      * one that already landed: use it for writes only where a repeat collapses (e.g. a ReplacingMergeTree key).
      * <p>
