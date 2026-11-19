@@ -1598,7 +1598,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     Arguments.of(false, true, "disabled to enabled"));
         }
 
-        Stream<Arguments> updateEvaluator__whenTypeChanges__thenBadRequestAndRuleUnchanged() {
+        Stream<Arguments> updateEvaluator__whenTypeChanges__thenConflictAndRuleUnchanged() {
             return Stream.of(
                     arguments(
                             factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class),
@@ -1619,7 +1619,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
         @ParameterizedTest
         @MethodSource
-        void updateEvaluator__whenTypeChanges__thenBadRequestAndRuleUnchanged(
+        void updateEvaluator__whenTypeChanges__thenConflictAndRuleUnchanged(
                 AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
                 AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
@@ -1631,11 +1631,11 @@ class AutomationRuleEvaluatorsResourceTest {
                     .projectIds(Set.of(projectId))
                     .build();
 
-            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+            var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT,
                     "Evaluator type can't be changed, delete the rule and create a new one with the new type, current type '%s', requested type '%s'"
                             .formatted(evaluatorWithProject.getType().getType(), update.getType().getType()));
             try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
-                    id, WORKSPACE_NAME, update, API_KEY, HttpStatus.SC_BAD_REQUEST)) {
+                    id, WORKSPACE_NAME, update, API_KEY, HttpStatus.SC_CONFLICT)) {
                 assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
             }
 

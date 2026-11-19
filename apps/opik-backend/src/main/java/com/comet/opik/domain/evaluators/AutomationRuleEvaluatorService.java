@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.LogCriteria;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.evaluators.AutomationRule;
@@ -34,7 +35,6 @@ import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.Response;
@@ -496,7 +496,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 .map(AutomationRuleEvaluatorModel::type)
                 .orElseThrow(this::newNotFoundException);
         if (currentType != requestedType) {
-            throw new BadRequestException(
+            throw new ConflictException(
                     "Evaluator type can't be changed, delete the rule and create a new one with the new type, current type '%s', requested type '%s'"
                             .formatted(currentType.getType(), requestedType.getType()));
         }
