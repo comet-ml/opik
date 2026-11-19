@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TraceKeyedTableDeletes;
 import com.comet.opik.utils.JsonUtils;
@@ -19,7 +18,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -73,13 +71,13 @@ public class TopicVectorsDAO {
      * window would drop it. For the same reason the {@code id_at} bound above depends on the data: one such trace in
      * {@code done} widens the output and vector reads back to its week.
      *
-     * <p>ClickHouse does not materialize a CTE, so {@code done} is read three times: for the {@code id_at} bound (a scalar,
-     * computed once and reused by both sides), for the {@code IN} set and for the outer {@code FROM}. Measured on
-     * ClickHouse 26.3 with the real DDL and a synthetic 2.7M-trace workspace with 180 days of history, the 24h window
-     * reads 1.1M rows, about 300k per {@code done} read; without the {@code id_at} bound the output read alone costs more
-     * than the third read saves. Reading {@code done} once into Java and binding its keys back in 1,000-key chunks read
-     * more (1.8M rows in 16 queries for 24h, 17M rows in 101 queries for 7d), because each chunk's ids are spread over the
-     * workspace's granules.
+     * <p>ClickHouse does not materialize a CTE, so {@code done} is read three times: for the {@code id_at} bounds (one
+     * scalar with the oldest and newest trace id times, computed once and reused by both sides, sliced or not), for the
+     * {@code IN} set and for the outer {@code FROM}. Measured on ClickHouse 26.3 with the real DDL and a synthetic
+     * 2.7M-trace workspace with 180 days of history, the 24h window reads 1.1M rows, about 300k per {@code done} read;
+     * without the {@code id_at} bound the output read alone costs more than the third read saves. The read stays one
+     * query, rather than reading {@code done} into Java and binding its keys back, so the fresh window, the long window
+     * and the backfill slices share one read path.
      *
      * <p>Three optional scopes narrow every side alike, so the anti-join stays exact. One project: the read then follows
      * the tables' sort keys, which have {@code project_id} right after {@code workspace_id}. Excluded projects, on
@@ -115,8 +113,8 @@ public class TopicVectorsDAO {
                     <if(project)>AND project_id = :project_id<endif>
                     AND task = :task
                     AND key = 'output'
-                    AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
-                    <if(created_before)>AND id_at \\<= (SELECT max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC')) FROM done)<endif>
+                    AND id_at >= tupleElement(<id_at_bounds>, 1)
+                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
                     ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key
@@ -136,8 +134,8 @@ public class TopicVectorsDAO {
                     AND task = :task
                     AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
                     <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
-                    AND id_at >= (SELECT toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)
-                    <if(created_before)>AND id_at \\<= (SELECT max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC')) FROM done)<endif>
+                    AND id_at >= tupleElement(<id_at_bounds>, 1)
+                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
                 )
@@ -151,6 +149,14 @@ public class TopicVectorsDAO {
             """;
 
     /**
+     * {@code done}'s oldest and newest trace id times, the {@code id_at} bounds of the output and vector sides of
+     * {@link #FIND_UNVECTORED}. One scalar in one text: ClickHouse computes an identical scalar once per query.
+     */
+    private static final String ID_AT_BOUNDS = """
+            (SELECT (toStartOfSecond(min(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))),
+                max(UUIDv7ToDateTime(toUUID(trace_id), 'UTC'))) FROM done)""";
+
+    /**
      * RE2 for "not blank" by opik-inference's rule, Python's {@code str.strip()}: a character outside the ASCII controls
      * tab to carriage return and file to unit separator, U+0085 and {@code \p{Z}}. {@code /v1/embed} rejects a whole
      * call when one of its inputs is blank, so a blank summary must never reach it. Bound as a parameter so the
@@ -160,14 +166,15 @@ public class TopicVectorsDAO {
 
     /**
      * The backfill's discovery, in one slice of trace creation time: the projects with a done status row written in
-     * the window, each with its latest one and its count of such rows of traces created at or after the window's lower
-     * bound. A plain aggregate: no dedup and no join, so its memory grows with the projects, not with the traces. A
-     * trace relabelled since its last merge has more than one done row and counts more than once. A trace is in one
+     * the window, each with its latest one and its count of traces created at or after the window's lower bound that
+     * have such a row. A plain aggregate, no dedup and no join; {@code uniq} keeps a small fixed state per project, so
+     * the memory grows with the projects, not with the traces, and a trace relabelled since its last merge still
+     * counts once. The count is approximate for large projects, which the backfill's progress allows. A trace is in one
      * slice only, so the slices' counts add up. The guards are the window read's.
      */
     private static final String FIND_BACKFILL_PROJECTS = """
             SELECT project_id,
-                countIf(trace_created_at >= parseDateTime64BestEffort(:lower_bound, 6, 'UTC')) AS traces,
+                uniqIf(trace_id, trace_created_at >= parseDateTime64BestEffort(:lower_bound, 6, 'UTC')) AS traces,
                 max(updated_at) AS last_done_at
             FROM ai_label_status
             WHERE workspace_id = :workspace_id
@@ -210,22 +217,6 @@ public class TopicVectorsDAO {
                 log_comment = '<log_comment>'
             """;
 
-    /**
-     * The check after a workspace's inserts: the pairs that still have a status row of the task; see
-     * {@code TopicVectorsTickService.deleteVectorsOfDeletedTraces}. The guards are the window read's.
-     */
-    private static final String FIND_STATUS_KEYS = """
-            SELECT DISTINCT project_id, trace_id
-            FROM ai_label_status
-            WHERE workspace_id = :workspace_id
-            AND task = :task
-            AND id_at >= parseDateTimeBestEffort(:min_id_at, 'UTC')
-            AND (project_id, trace_id) IN arrayZip(:project_ids, :trace_ids)
-            SETTINGS max_threads = <max_threads>, max_rows_to_read = <max_rows_to_read>,
-                max_memory_usage = <max_memory_usage>, max_execution_time = <max_execution_time>,
-                log_comment = '<log_comment>'
-            """;
-
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull TraceKeyedTableDeletes deletes;
@@ -248,16 +239,11 @@ public class TopicVectorsDAO {
     }
 
     /**
-     * A project the backfill's discovery found: {@code traces} done status rows of traces created in the backfill
-     * window, and the latest done status written in it.
+     * A project the backfill's discovery found: about how many traces created in the backfill window have a done
+     * status, and the latest done status written in it.
      */
     @Builder(toBuilder = true)
     public record BackfillProject(@NonNull UUID projectId, long traces, @NonNull Instant lastDoneAt) {
-    }
-
-    /** A trace by its project: a trace id reused in another project is another trace. */
-    @Builder(toBuilder = true)
-    public record ProjectTraceKey(@NonNull UUID projectId, @NonNull UUID traceId) {
     }
 
     /** A half-open slice of trace creation time; {@code before} is null on the newest, open-ended slice. */
@@ -302,6 +288,7 @@ public class TopicVectorsDAO {
                         find.lowerBound(), find.createdAfter(), createdBefore, projectId, excludedProjectIds.size(),
                         find.limit()),
                 find.maxExecutionSeconds())
+                .add("id_at_bounds", ID_AT_BOUNDS)
                 .add("project", projectId != null)
                 .add("excluded", !excludedProjectIds.isEmpty())
                 .add("created_before", createdBefore != null);
@@ -340,7 +327,7 @@ public class TopicVectorsDAO {
 
     /**
      * The backfill's discovery of the traces created from {@code createdAfter} on, one read per slice of
-     * {@code topics.vectors.find.sliceSize}; each read gets {@code maxExecutionSeconds}.
+     * {@code topics.vectors.find.discoverySliceSize}; each read gets {@code maxExecutionSeconds}.
      */
     public Flux<BackfillProject> findBackfillProjects(@NonNull String workspaceId, @NonNull String task,
             @NonNull Instant lowerBound, @NonNull Instant createdAfter, long maxExecutionSeconds) {
@@ -379,7 +366,7 @@ public class TopicVectorsDAO {
 
     /**
      * Per project of {@code projectIds}, its traces created from {@code createdAfter} on with a live vector of
-     * {@code task}, one read per slice of {@code topics.vectors.find.sliceSize}; each read gets
+     * {@code task}, one read per slice of {@code topics.vectors.find.discoverySliceSize}; each read gets
      * {@code maxExecutionSeconds}. A project without one is left out.
      */
     public Mono<Map<UUID, Long>> countTracesWithVectorsByProject(@NonNull String workspaceId, @NonNull String task,
@@ -416,11 +403,11 @@ public class TopicVectorsDAO {
     }
 
     /**
-     * Slices of {@code topics.vectors.find.sliceSize} back from now down to {@code createdAfter}, the newest
+     * Slices of {@code topics.vectors.find.discoverySliceSize} back from now down to {@code createdAfter}, the newest
      * open-ended, so a trace created during the reads is still in one of them.
      */
     private List<Slice> slices(Instant createdAfter) {
-        var size = config.getVectors().getFind().getSliceSize().toJavaDuration();
+        var size = config.getVectors().getFind().getDiscoverySliceSize().toJavaDuration();
         var slices = new ArrayList<Slice>();
         Instant before = null;
         var start = Instant.now();
@@ -446,35 +433,6 @@ public class TopicVectorsDAO {
                 .add("max_execution_time", maxExecutionSeconds);
     }
 
-    public Flux<ProjectTraceKey> findStatusKeys(@NonNull String workspaceId, @NonNull String task,
-            @NonNull Collection<ProjectTraceKey> keys, long maxExecutionSeconds) {
-        if (keys.isEmpty()) {
-            return Flux.empty();
-        }
-        // id_at is derived from the UUIDv7 trace id, so the oldest id bounds the partitions read.
-        // A non-v7 id has no time in it; UUIDv7ToDateTime gives it 1970, so its bound is the epoch as well.
-        var minIdAt = Instant.ofEpochMilli(keys.stream()
-                .mapToLong(key -> key.traceId().version() == 7 ? key.traceId().getMostSignificantBits() >>> 16 : 0)
-                .min()
-                .orElseThrow()).truncatedTo(ChronoUnit.SECONDS);
-        var template = guarded(FIND_STATUS_KEYS, "topics:find_status_keys", workspaceId,
-                "keys=%d".formatted(keys.size()), maxExecutionSeconds);
-        var projectIds = keys.stream().map(key -> key.projectId().toString()).toArray(String[]::new);
-        var traceIds = keys.stream().map(key -> key.traceId().toString()).toArray(String[]::new);
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("task", task)
-                        .bind("min_id_at", minIdAt.toString())
-                        .bind("project_ids", projectIds)
-                        .bind("trace_ids", traceIds)
-                        .execute())
-                .flatMap(result -> result.map((row, metadata) -> ProjectTraceKey.builder()
-                        .projectId(UUID.fromString(row.get("project_id", String.class)))
-                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
-                        .build()));
-    }
-
     /** Traces linked to experiments survive retention, so their vectors do too. */
     public Mono<Long> deleteForRetention(@NonNull List<String> workspaceIds, @NonNull UUID cutoffId,
             @NonNull UUID lowerBound) {
@@ -491,14 +449,4 @@ public class TopicVectorsDAO {
         return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
     }
 
-    /** The vectors of {@code keys}, as the system user: the tick's own deletes, outside any request. */
-    public Mono<Void> deleteByKeys(@NonNull String workspaceId, @NonNull Collection<ProjectTraceKey> keys) {
-        var byProject = keys.stream().collect(Collectors.groupingBy(ProjectTraceKey::projectId,
-                Collectors.mapping(ProjectTraceKey::traceId, Collectors.toSet())));
-        return Flux.fromIterable(byProject.entrySet())
-                .concatMap(entry -> deleteByTraceIds(entry.getValue(), entry.getKey()))
-                .then()
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
-    }
 }
