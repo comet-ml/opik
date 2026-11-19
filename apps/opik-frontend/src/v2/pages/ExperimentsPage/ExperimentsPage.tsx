@@ -4,6 +4,8 @@ import { Plus } from "lucide-react";
 import { JsonParam, useQueryParam } from "use-query-params";
 
 import { Button } from "@/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
+import { Skeleton } from "@/ui/skeleton";
 import { useActiveProjectId } from "@/store/AppStore";
 import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -15,11 +17,17 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import emptyExperimentsLightUrl from "/images/empty-experiments-light.svg";
 import emptyExperimentsDarkUrl from "/images/empty-experiments-dark.svg";
+import { EXPERIMENTS_TABS } from "./experimentsTabs";
+import useExperimentsTab from "./useExperimentsTab";
 
 const ExperimentsPage: React.FC = () => {
   const activeProjectId = useActiveProjectId();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
+  const { activeTab, setTab, isTabPending } = useExperimentsTab(
+    activeProjectId ?? undefined,
+  );
+
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
   );
@@ -85,7 +93,43 @@ const ExperimentsPage: React.FC = () => {
             docsUrl={buildDocsUrl("/evaluation/overview")}
           />
         ) : (
-          <GeneralDatasetsTab isExistencePending={isExistencePending} />
+          <>
+            <PageBodyStickyContainer
+              className="pb-1 pt-3"
+              direction="horizontal"
+              limitWidth
+            >
+              <Tabs value={activeTab.key} onValueChange={setTab}>
+                <TabsList variant="segmented-primary" className="w-fit">
+                  {EXPERIMENTS_TABS.map(({ key, label }) => (
+                    <TabsTrigger
+                      key={key}
+                      variant="segmented-primary"
+                      value={key}
+                      className="px-1.5 py-0"
+                    >
+                      {label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </PageBodyStickyContainer>
+            {isTabPending ? (
+              <PageBodyStickyContainer
+                className="pt-4"
+                direction="horizontal"
+                limitWidth
+              >
+                <Skeleton className="h-[208px] w-full min-w-[400px] rounded-md" />
+              </PageBodyStickyContainer>
+            ) : (
+              <GeneralDatasetsTab
+                key={activeTab.key}
+                evaluationMethod={activeTab.evaluationMethod}
+                isExistencePending={isExistencePending}
+              />
+            )}
+          </>
         )}
         <AddExperimentDialog
           key={resetDialogKeyRef.current}
