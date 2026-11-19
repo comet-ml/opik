@@ -61,6 +61,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "200", description = "Dataset versions", content = @Content(schema = @Schema(implementation = DatasetVersionPage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(DatasetVersion.View.Public.class)
     public Response listVersions(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -85,6 +86,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @RateLimited
     @JsonView(DatasetVersion.View.Public.class)
     public Response retrieveVersion(
@@ -130,6 +132,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "404", description = "Not Found - Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     @JsonView(DatasetVersion.View.Public.class)
     public Response updateVersion(
@@ -153,6 +156,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "404", description = "Not Found - Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response createTag(
             @PathParam("versionHash") String versionHash,
@@ -175,6 +179,7 @@ public class DatasetVersionsResource {
     @Operation(operationId = "deleteVersionTag", summary = "Delete version tag", description = "Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.", responses = {
             @ApiResponse(responseCode = "204", description = "Tag deleted successfully"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response deleteTag(
             @PathParam("versionHash") String versionHash,
@@ -197,6 +202,7 @@ public class DatasetVersionsResource {
     @Operation(operationId = "compareDatasetVersions", summary = "Compare latest version with draft", description = "Compare the latest committed dataset version with the current draft state. This endpoint provides insights into changes made since the last version was committed. The comparison calculates additions, modifications, deletions, and unchanged items between the latest version snapshot and current draft.", responses = {
             @ApiResponse(responseCode = "200", description = "Diff computed successfully", content = @Content(schema = @Schema(implementation = DatasetVersionDiff.class))),
             @ApiResponse(responseCode = "404", description = "Version not found")})
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @RateLimited
     public Response compareVersions() {
         featureFlags.checkDatasetVersioningEnabled();
@@ -220,6 +226,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "200", description = "Version restored successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
             @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Concurrent modification - the latest version changed during the restore; retry", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     @JsonView(DatasetVersion.View.Public.class)
     public Response restoreVersion(

@@ -23,11 +23,13 @@ import java.lang.reflect.Type;
 @Produces("application/x-protobuf")
 public class OtelProtobufValidationErrorMessageBodyWriter implements MessageBodyWriter<ValidationErrorMessage> {
 
+    static final Class<ValidationErrorMessage> ENTITY_CLASS = ValidationErrorMessage.class;
+
     private final Provider<HttpHeaders> requestHeaders;
 
     @Override
     public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        return ValidationErrorMessage.class.isAssignableFrom(type)
+        return ENTITY_CLASS.isAssignableFrom(type)
                 && OtelProtobufErrorMessageBodyWriter.isProtobufRequest(requestHeaders.get());
     }
 

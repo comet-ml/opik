@@ -4,6 +4,7 @@ import com.comet.opik.domain.ailabels.AiLabelItemPlan.JobKey;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.Candidate;
 import com.comet.opik.domain.ailabels.AiLabelSweepDAO.SweepTask;
 import com.comet.opik.infrastructure.AiLabelsConfig;
+import com.comet.opik.infrastructure.InferenceConfig;
 import com.comet.opik.infrastructure.inference.BatchSubmitResponse;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceErrorCode;
@@ -96,6 +97,7 @@ public class AiLabelsTickService {
     private static final Lock HOUSEKEEPING_LOCK = new Lock("ai_labels:housekeeping");
 
     private final AiLabelsConfig config;
+    private final InferenceConfig inference;
     private final TransactionTemplate template;
     private final InferenceClient client;
     private final LockService lockService;
@@ -170,22 +172,25 @@ public class AiLabelsTickService {
 
     @Inject
     public AiLabelsTickService(@NonNull @Config("aiLabels") AiLabelsConfig config,
+            @NonNull @Config("inference") InferenceConfig inference,
             @NonNull TransactionTemplate template, @NonNull InferenceClient client,
             @NonNull LockService lockService, @NonNull AiLabelSweepService sweepService,
             @NonNull AiLabelTaskRegistry registry, @NonNull AiLabelRenderer renderer,
             @NonNull AiLabelItemBuilder itemBuilder, @NonNull AiLabelResultMapper resultMapper,
             @NonNull AiLabelStatusDAO statusDAO, @NonNull AiLabelsDAO labelsDAO) {
-        this(config, template, client, lockService, sweepService, registry, renderer, itemBuilder, resultMapper,
-                statusDAO, labelsDAO, Clock.systemUTC());
+        this(config, inference, template, client, lockService, sweepService, registry, renderer, itemBuilder,
+                resultMapper, statusDAO, labelsDAO, Clock.systemUTC());
     }
 
-    AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull TransactionTemplate template,
+    AiLabelsTickService(@NonNull AiLabelsConfig config, @NonNull InferenceConfig inference,
+            @NonNull TransactionTemplate template,
             @NonNull InferenceClient client, @NonNull LockService lockService,
             @NonNull AiLabelSweepService sweepService, @NonNull AiLabelTaskRegistry registry,
             @NonNull AiLabelRenderer renderer, @NonNull AiLabelItemBuilder itemBuilder,
             @NonNull AiLabelResultMapper resultMapper, @NonNull AiLabelStatusDAO statusDAO,
             @NonNull AiLabelsDAO labelsDAO, @NonNull Clock clock) {
         this.config = config;
+        this.inference = inference;
         this.template = template;
         this.client = client;
         this.lockService = lockService;
@@ -274,7 +279,7 @@ public class AiLabelsTickService {
      */
     public Duration leaderLease() {
         var sweep = config.getSweep().getMaxExecutionTime().toJavaDuration();
-        var send = config.getInference().getReadTimeout().toJavaDuration();
+        var send = inference.getReadTimeout().toJavaDuration();
         return config.getTickBudget().toJavaDuration()
                 .plus(sweep.compareTo(send) >= 0 ? sweep : send)
                 .plusSeconds(5);
@@ -346,7 +351,7 @@ public class AiLabelsTickService {
         var views = new HashMap<String, JobView>();
         try {
             for (var group : Lists.partition(jobs.stream().map(AiLabelJob::jobId).toList(),
-                    InferenceClient.MAX_STATUS_JOB_IDS)) {
+                    inference.getLimits().getMaxStatusJobIds())) {
                 client.getJobs(group, deadline).block().forEach(view -> views.put(view.jobId(), view));
             }
         } catch (InferenceException exception) {
@@ -599,7 +604,7 @@ public class AiLabelsTickService {
                         .add(candidate));
         var ready = new HashMap<String, Deque<Admissible>>();
         // Turns stop at the deadline, and the jobs they filled are sent after it, so sends get one read timeout more.
-        var jobs = new Jobs(start, deadline, deadline.plus(config.getInference().getReadTimeout().toJavaDuration()));
+        var jobs = new Jobs(start, deadline, deadline.plus(inference.getReadTimeout().toJavaDuration()));
 
         var active = new ArrayList<>(queues.keySet());
         Collections.shuffle(active);
@@ -830,7 +835,7 @@ public class AiLabelsTickService {
                 var buffers = open.computeIfAbsent(workspaceId, key -> new LinkedHashMap<>());
                 var buffer = buffers.computeIfAbsent(entry.getKey(), key -> new JobBuffer());
                 if (!buffer.items.isEmpty()
-                        && (buffer.items.size() + entry.getValue().size() > InferenceClient.MAX_BATCH_ITEMS
+                        && (buffer.items.size() + entry.getValue().size() > inference.getLimits().getMaxBatchItems()
                                 || buffer.requestBytes + bytes > config.getMaxJobBytes())) {
                     buffers.remove(entry.getKey());
                     if (!send(workspaceId, entry.getKey(), buffer)) {

@@ -6,12 +6,11 @@ import lombok.NonNull;
 import java.util.List;
 
 /**
- * {@code POST /v1/embed}: 1 to {@value InferenceClient#MAX_EMBED_INPUTS} non-blank texts. Callers set neither
- * {@code request_id} nor {@code deadline_ms}: {@link InferenceClient#embed} sets both for each call.
+ * {@code POST /v1/embed}: 1 to {@value InferenceClient#MAX_EMBED_INPUTS} texts. {@link InferenceClient#embed} adds the
+ * {@code request_id} and {@code deadline_ms} of each call to the body it sends.
  */
 @Builder(toBuilder = true)
-public record EmbedRequest(@NonNull String orgId, String requestId, Long deadlineMs, boolean cache,
-        @NonNull List<String> inputs) {
+public record EmbedRequest(@NonNull String orgId, boolean cache, @NonNull List<String> inputs) {
 
     public EmbedRequest {
         inputs = List.copyOf(inputs);
