@@ -25,12 +25,12 @@ import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.input.BoundedInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.client.ClientProperties;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -430,7 +430,7 @@ public class InferenceClient {
             if (!response.hasEntity()) {
                 throw InferenceException.upstreamError(status, null, null);
             }
-            var body = new CappedStream(response.readEntity(InputStream.class), maxBytes);
+            var body = capped(response, maxBytes);
             value = InferenceJson.MAPPER.readValue(body, call.type());
             body.transferTo(OutputStream.nullOutputStream());
         } catch (OverTheCap exception) {
@@ -457,7 +457,7 @@ public class InferenceClient {
             if (!response.hasEntity()) {
                 return new byte[0];
             }
-            return new CappedStream(response.readEntity(InputStream.class), maxBytes).readAllBytes();
+            return capped(response, maxBytes).readAllBytes();
         } catch (OverTheCap exception) {
             throw overTheCap(status, maxBytes);
         } catch (IOException | ProcessingException exception) {
@@ -501,73 +501,19 @@ public class InferenceClient {
     }
 
     /**
-     * Reads at most {@code maxBytes}, and fails a read that finds a byte past them with {@link OverTheCap}. Closing it
-     * leaves the stream open: the response owns it, and closes it with its connection.
+     * The body, read up to {@code maxBytes}: a read that finds a byte past them fails with {@link OverTheCap}. Closing
+     * it leaves the stream open: the response owns it, and closes it with its connection.
      */
-    private static final class CappedStream extends FilterInputStream {
-
-        private long left;
-
-        CappedStream(InputStream in, long maxBytes) {
-            super(in);
-            this.left = maxBytes;
-        }
-
-        @Override
-        public int read() throws IOException {
-            if (left == 0) {
-                return atTheCap();
-            }
-            var read = super.read();
-            if (read >= 0) {
-                left--;
-            }
-            return read;
-        }
-
-        @Override
-        public int read(byte[] buffer, int offset, int length) throws IOException {
-            if (length == 0) {
-                return 0;
-            }
-            if (left == 0) {
-                return atTheCap();
-            }
-            var read = super.read(buffer, offset, (int) Math.min(length, left));
-            if (read > 0) {
-                left -= read;
-            }
-            return read;
-        }
-
-        @Override
-        public long skip(long count) throws IOException {
-            var skipped = super.skip(Math.min(count, left));
-            left -= skipped;
-            return skipped;
-        }
-
-        @Override
-        public int available() throws IOException {
-            return (int) Math.min(super.available(), left);
-        }
-
-        @Override
-        public boolean markSupported() {
-            return false;
-        }
-
-        @Override
-        public void close() {
-            // the response closes the stream
-        }
-
-        private int atTheCap() throws IOException {
-            if (in.read() >= 0) {
-                throw new OverTheCap();
-            }
-            return -1;
-        }
+    private static InputStream capped(Response response, long maxBytes) throws IOException {
+        return BoundedInputStream.builder()
+                .setInputStream(response.readEntity(InputStream.class))
+                // One byte over: the stream fails only on a read past maxBytes, so a body of exactly maxBytes passes.
+                .setMaxCount(maxBytes + 1)
+                .setPropagateClose(false)
+                .setOnMaxCount((max, count) -> {
+                    throw new OverTheCap();
+                })
+                .get();
     }
 
     @Builder(toBuilder = true)

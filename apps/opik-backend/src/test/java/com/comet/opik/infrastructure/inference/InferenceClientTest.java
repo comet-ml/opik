@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -281,26 +282,36 @@ class InferenceClientTest {
                 .hasSize(InferenceClient.MAX_RETRIES + 1);
     }
 
-    @Test
-    void responseBodyOfExactlyTheCapIsRead() {
+    @ParameterizedTest(name = "chunked {0}")
+    @ValueSource(booleans = {false, true})
+    void responseBodyOfExactlyTheCapIsRead(boolean chunked) {
         client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(EMBEDDED_BODY.length()));
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(embedded()));
+        var response = embedded().withGzipDisabled(true);
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(chunked
+                ? response.withChunkedDribbleDelay(2, 10)
+                : response));
 
         assertThat(client.embed(embedRequest(), later()).block().result().embeddings()).hasSize(2);
     }
 
     static Stream<Arguments> bodiesOverTheCap() {
-        return Stream.of(arguments(200, EMBEDDED_BODY),
-                arguments(503, "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}"));
+        var error = "{\"error\":{\"code\":\"overloaded\",\"message\":\"m\",\"retryable\":true}}";
+        return Stream.of(arguments(200, EMBEDDED_BODY, false), arguments(200, EMBEDDED_BODY, true),
+                arguments(503, error, false), arguments(503, error, true));
     }
 
-    @ParameterizedTest(name = "status {0}")
+    /** Chunked, the body has no Content-Length, so only the capped read can catch the byte over. */
+    @ParameterizedTest(name = "status {0}, chunked {2}")
     @MethodSource("bodiesOverTheCap")
-    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body) {
+    void responseBodyOverTheCapFailsTheCallUnparsed(int status, String body, boolean chunked) {
         client = new InferenceClient(TestHttpClientUtils.client(), maxResponseBytes(body.length() - 1));
-        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withStatus(status)
+        var response = aResponse().withStatus(status)
                 .withHeader("Content-Type", "application/json")
-                .withBody(body)));
+                .withBody(body)
+                .withGzipDisabled(true);
+        server.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(chunked
+                ? response.withChunkedDribbleDelay(2, 10)
+                : response));
 
         assertThatThrownBy(() -> client.embed(embedRequest(), later()).block())
                 .isInstanceOfSatisfying(InferenceException.class, exception -> {
