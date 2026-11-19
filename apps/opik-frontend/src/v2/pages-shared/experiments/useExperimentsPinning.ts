@@ -28,7 +28,10 @@ type UseExperimentsPinningParams = {
   projectId?: string;
   pinnedIds: string[];
   setPinnedIds: Dispatch<SetStateAction<string[]>>;
-  filters?: Filters;
+  // A pin missing from the filtered response is treated as deleted and pruned,
+  // so only pass filters that define which experiments belong to the table
+  // (e.g. the tab's evaluation method), never the user's own filters.
+  evaluationMethodFilters?: Filters;
   enabled: boolean;
   polling?: boolean;
 };
@@ -39,7 +42,7 @@ const useExperimentsPinning = ({
   projectId,
   pinnedIds,
   setPinnedIds,
-  filters,
+  evaluationMethodFilters,
   enabled,
   polling = false,
 }: UseExperimentsPinningParams) => {
@@ -53,7 +56,7 @@ const useExperimentsPinning = ({
       workspaceName,
       projectId,
       experimentIds: missingIds,
-      filters,
+      filters: evaluationMethodFilters,
       page: 1,
       size: MAX_PINNED_FETCH_SIZE,
     },

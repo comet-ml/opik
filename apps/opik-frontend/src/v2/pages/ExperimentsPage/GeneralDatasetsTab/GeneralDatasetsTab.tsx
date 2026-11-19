@@ -503,7 +503,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     projectId: activeProjectId ?? undefined,
     pinnedIds,
     setPinnedIds,
-    filters: evaluationMethodFilters,
+    evaluationMethodFilters,
     enabled: groups.length === 0,
     polling: true,
   });
