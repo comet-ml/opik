@@ -1,13 +1,13 @@
 package com.comet.opik.infrastructure.inference;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.annotation.Nullable;
 import lombok.Builder;
 
-import java.util.List;
-
-/** One vector per input, in the inputs' order. Not checked here: a malformed answer reaches the caller as nulls. */
+/**
+ * One vector per input, in the inputs' order, each {@code dimensions} long. {@link InferenceClient#embed} checks all of
+ * it, and fails an answer that breaks it as {@code upstream_error}.
+ */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record EmbedResult(@Nullable List<List<Float>> embeddings) {
+public record EmbedResult(float[][] embeddings, int dimensions) {
 }

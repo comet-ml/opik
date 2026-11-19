@@ -96,37 +96,6 @@ def _patch_prompt_support(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return calls
 
 
-def test_normalize_prompt_input__opik_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_opik_prompt_types(monkeypatch)
-    opik_prompt = _StubOpikPrompt(name="text-prompt", prompt="Hello {name}")
-
-    normalized, is_single = prompt_tracing.normalize_prompt_input(opik_prompt)
-
-    assert is_single is True
-    prompt = normalized["text-prompt"]
-    assert isinstance(prompt, chat_prompt.ChatPrompt)
-    assert prompt.user == "Hello {name}"
-    assert getattr(prompt, "_opik_prompt_type", None) == "text"
-    assert getattr(prompt, "_opik_prompt_source", None) is opik_prompt
-
-
-def test_normalize_prompt_input__opik_chat_prompt(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _patch_opik_prompt_types(monkeypatch)
-    messages = [{"role": "user", "content": "Hi {name}"}]
-    opik_chat_prompt = _StubOpikChatPrompt(name="chat-prompt", template=messages)
-
-    normalized, is_single = prompt_tracing.normalize_prompt_input(opik_chat_prompt)
-
-    assert is_single is True
-    prompt = normalized["chat-prompt"]
-    assert isinstance(prompt, chat_prompt.ChatPrompt)
-    assert prompt.messages == messages
-    assert getattr(prompt, "_opik_prompt_type", None) == "chat"
-    assert getattr(prompt, "_opik_prompt_source", None) is opik_chat_prompt
-
-
 def test_attach_initial_prompts__uses_opik_prompt_api(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -7,6 +7,8 @@ import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -43,6 +45,8 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private BuildConfig build;
+
+    private AlgorithmConfig algorithm;
 
     /**
      * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
@@ -96,12 +100,6 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration verifyDeadline;
-
-        /** {@code topic_runs} rows are deleted after this. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.DAYS)
-        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
-        private Duration runsRetention;
 
         @JsonIgnore
         @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
@@ -170,18 +168,20 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick;
 
-        /** Texts per embed call; the service takes at most 256. */
+        /** Texts per embed call, up to {@code inference.limits.maxEmbedInputs}. */
         @JsonProperty
-        @Min(1) @Max(256) private int embedBatchSize;
+        @Min(1) private int embedBatchSize;
 
         /** Embed calls in flight at a time; set it to the embed pool's replica count. */
         @JsonProperty
-        @Min(1) @Max(4) private int embedConcurrency = 1;
+        @Min(1) private int embedConcurrency;
 
-        /** Each embed call's deadline; a chunk starts only with at least this much of the tick budget left. */
+        /**
+         * Each embed call's deadline, up to {@code inference.limits.maxEmbedDeadline}; a chunk starts only with at least
+         * this much of the tick budget left.
+         */
         @NotNull @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
         private Duration embedTimeout;
 
         @Valid @NotNull @JsonProperty
@@ -227,6 +227,10 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
 
+        /** ClickHouse threads per read, so the tick stays a small share of the server. */
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
         /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
@@ -243,5 +247,65 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration sliceSize;
+
+        /**
+         * The backfill's discovery and vector count read in slices of this much creation time. Their memory stays
+         * small, so wide slices: each slice re-reads the granules across its edges.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 365, unit = TimeUnit.DAYS)
+        private Duration discoverySliceSize;
+    }
+
+    /**
+     * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
+     * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
+     */
+    @Data
+    public static class AlgorithmConfig {
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int minGroups;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int maxGroups;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int textsPerGroup;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int kmeansMaxIterations;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int kmeansRestarts;
+
+        @JsonProperty
+        @Min(0) @Max(100) private int authorFrequent;
+
+        @JsonProperty
+        @Min(1) @Max(100_000) private int authorBudget;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int authorMinExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int authorMaxExamples;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double assignMinCosine;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
+            return minGroups <= maxGroups;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.authorMinExamples must not be above authorMaxExamples") public boolean isAuthorExamplesOrdered() {
+            return authorMinExamples <= authorMaxExamples;
+        }
     }
 }

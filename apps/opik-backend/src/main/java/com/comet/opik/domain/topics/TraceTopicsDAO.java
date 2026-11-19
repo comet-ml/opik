@@ -34,9 +34,10 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * {@code trace_topics}: the topic of each trace, one row per assignment, the latest per trace wins. Writes are plain
- * batched inserts; {@code last_updated_at} is stamped by ClickHouse. A reader takes each trace's latest row first and
- * then drops it when that row is a tombstone ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do. The
+ * {@code trace_topics}: the topic of each trace, one row per assignment, the latest per trace wins, a run row over an
+ * arrival row stamped at the same time. Writes are plain batched inserts; {@code last_updated_at} is stamped by
+ * ClickHouse. A reader takes each trace's latest row first and then drops it when that row is a tombstone
+ * ({@code is_deleted = 1}), as reads of {@code traces_local_v2} do. The
  * first build writes the table, and reads it once per run for the run's trace counts; the read API and topic on
  * arrival read it too.
  *
@@ -65,7 +66,7 @@ public class TraceTopicsDAO {
     private static final String COUNT_BY_TOPIC = """
             SELECT latest_topic AS topic_id, count() AS traces
             FROM (
-                SELECT argMax(topic_id, (last_updated_at, run_id)) AS latest_topic
+                SELECT argMax(topic_id, (last_updated_at, source = 'run')) AS latest_topic
                 FROM trace_topics
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -82,7 +83,7 @@ public class TraceTopicsDAO {
                     AND visibility_mode = :logs_visibility_mode
                 )
                 GROUP BY trace_id
-                HAVING argMax(is_deleted, (last_updated_at, run_id)) = 0
+                HAVING argMax(is_deleted, (last_updated_at, source = 'run')) = 0
             )
             GROUP BY topic_id
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_memory_usage = <max_memory_usage>,
@@ -160,7 +161,7 @@ public class TraceTopicsDAO {
                     node.put("trace_created_at", row.traceCreatedAt().toString());
                     node.put("topic_id", row.topicId().toString());
                     node.put("source", row.source().getValue());
-                    node.put("run_id", row.runId());
+                    node.put("run_id", row.runId() == null ? null : row.runId().toString());
                     return node;
                 });
     }

@@ -273,7 +273,6 @@ class SpansReadPathPartitionPruningTest {
 
     /** Each trigger reaches its site through the API for an ingested span, and returns the id its statement names. */
     private Stream<Arguments> sites() {
-        // Read at call time: @MethodSource runs before @BeforeAll wires the clients in.
         Function<Span, UUID> getById = span -> {
             spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
             return span.id();

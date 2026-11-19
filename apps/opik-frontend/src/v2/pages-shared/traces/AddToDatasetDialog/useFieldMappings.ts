@@ -11,9 +11,9 @@ import {
 } from "react";
 
 import { EnrichmentOptions } from "./useAddToDatasetForm";
+import { MAX_FIELD_NAME_LENGTH } from "@/constants/datasets";
 import {
   FIXED_MAPPING_FIELDS,
-  MAX_FIELD_NAME_LENGTH,
   MappingRow,
   QUICK_ADD_CHIPS,
   QuickAddChip,
@@ -67,14 +67,14 @@ const useFieldMappings = ({
     [hasOnlySpans],
   );
 
-  const [additionalRows, setAdditionalRows] = useState<MappingRow[]>(() =>
+  const [addedRows, setAddedRows] = useState<MappingRow[]>(() =>
     chips.filter((chip) => enrichmentOptions[chip.option]).map(toManagedRow),
   );
 
   // Enrichment options also change from the basic-mode checkboxes, so the rows
   // follow them here rather than only from setManagedOption.
   useEffect(() => {
-    setAdditionalRows((prev) => {
+    setAddedRows((prev) => {
       const enabled = chips.filter((chip) => enrichmentOptions[chip.option]);
       const enabledIds = new Set<string>(enabled.map((chip) => chip.option));
       const kept = prev.filter(
@@ -91,13 +91,13 @@ const useFieldMappings = ({
   }, [chips, enrichmentOptions]);
 
   const customRows = useMemo(
-    () => additionalRows.filter((row) => row.kind === "custom"),
-    [additionalRows],
+    () => addedRows.filter((row) => row.kind === "custom"),
+    [addedRows],
   );
 
   const managedRows = useMemo(
-    () => additionalRows.filter((row) => row.kind === "managed"),
-    [additionalRows],
+    () => addedRows.filter((row) => row.kind === "managed"),
+    [addedRows],
   );
 
   const availableChips: QuickAddChip[] = useMemo(
@@ -105,20 +105,33 @@ const useFieldMappings = ({
     [chips, enrichmentOptions],
   );
 
-  const datasetChips = useMemo(() => {
+  const [existingPaths, setExistingPaths] = useState<Record<string, string>>(
+    {},
+  );
+
+  // Columns the dataset already has are listed up front: they can't be removed
+  // here, only mapped or left empty for the new items.
+  const existingRows: MappingRow[] = useMemo(() => {
     const reserved = new Set([
       ...FIXED_MAPPING_FIELDS.map(({ key }) => key),
       ...QUICK_ADD_CHIPS.map((chip) => chip.key),
-      ...customRows.map((row) => row.name.trim()),
     ]);
 
-    return datasetColumns.filter((column) => !reserved.has(column));
-  }, [datasetColumns, customRows]);
+    return datasetColumns
+      .filter((column) => !reserved.has(column))
+      .map((column) => ({
+        id: `existing:${column}`,
+        name: column,
+        kind: "existing" as const,
+        path: existingPaths[column],
+      }));
+  }, [datasetColumns, existingPaths]);
 
   const rowErrors = useMemo(() => {
     const taken = new Set([
       ...FIXED_MAPPING_FIELDS.map(({ key }) => key),
       ...managedRows.map((row) => row.name),
+      ...existingRows.map((row) => row.name),
     ]);
     const errors: Record<string, FieldRowError> = {};
 
@@ -144,7 +157,7 @@ const useFieldMappings = ({
     });
 
     return errors;
-  }, [customRows, managedRows]);
+  }, [customRows, managedRows, existingRows]);
 
   const fieldMappings = useMemo(() => {
     const mappings: Record<string, string> = {};
@@ -156,7 +169,7 @@ const useFieldMappings = ({
       }
     });
 
-    customRows.forEach((row) => {
+    [...existingRows, ...customRows].forEach((row) => {
       const path = row.path?.trim();
       if (path && !rowErrors[row.id]) {
         mappings[row.name.trim()] = path;
@@ -164,16 +177,7 @@ const useFieldMappings = ({
     });
 
     return mappings;
-  }, [fixedPaths, customRows, rowErrors]);
-
-  const canUseBasicMode = useMemo(
-    () =>
-      isEmpty(customRows) &&
-      FIXED_MAPPING_FIELDS.every(
-        ({ key, defaultPath }) => fixedPaths[key] === defaultPath,
-      ),
-    [customRows, fixedPaths],
-  );
+  }, [fixedPaths, existingRows, customRows, rowErrors]);
 
   const setFixedPath = useCallback((key: string, path: string) => {
     setFixedPaths((prev) => ({ ...prev, [key]: path }));
@@ -182,7 +186,7 @@ const useFieldMappings = ({
   const addRow = useCallback((path: string) => {
     nextIdRef.current += 1;
     const id = `custom-${nextIdRef.current}`;
-    setAdditionalRows((prev) => [
+    setAddedRows((prev) => [
       ...prev,
       {
         id,
@@ -195,19 +199,21 @@ const useFieldMappings = ({
     return id;
   }, []);
 
-  const addNamedRow = useCallback((name: string) => {
-    nextIdRef.current += 1;
-    const id = `custom-${nextIdRef.current}`;
-    setAdditionalRows((prev) => [...prev, { id, name, kind: "custom" }]);
-    return id;
+  const setExistingPath = useCallback((column: string, path?: string) => {
+    setExistingPaths((prev) => {
+      if (path) return { ...prev, [column]: path };
+      const next = { ...prev };
+      delete next[column];
+      return next;
+    });
   }, []);
 
   const removeRow = useCallback((id: string) => {
-    setAdditionalRows((prev) => prev.filter((row) => row.id !== id));
+    setAddedRows((prev) => prev.filter((row) => row.id !== id));
   }, []);
 
   const renameRow = useCallback((id: string, name: string) => {
-    setAdditionalRows((prev) =>
+    setAddedRows((prev) =>
       prev.map((row) =>
         row.id === id ? { ...row, name, touched: true } : row,
       ),
@@ -215,12 +221,31 @@ const useFieldMappings = ({
   }, []);
 
   const setRowPath = useCallback((id: string, path: string) => {
-    setAdditionalRows((prev) =>
+    setAddedRows((prev) =>
       prev.map((row) =>
         row.id === id ? { ...row, path, touched: true } : row,
       ),
     );
   }, []);
+
+  // Re-pointing an Opik-managed row keeps its column and position but fills it
+  // from the chosen path, so Opik's own enrichment for it is switched off.
+  const remapManagedRow = useCallback(
+    (option: keyof EnrichmentOptions, path: string) => {
+      nextIdRef.current += 1;
+      const id = `custom-${nextIdRef.current}`;
+      setAddedRows((prev) =>
+        prev.map((row) =>
+          row.kind === "managed" && row.option === option
+            ? { id, name: row.name, kind: "custom", path, touched: true }
+            : row,
+        ),
+      );
+      setEnrichmentOptions((prev) => ({ ...prev, [option]: false }));
+      return id;
+    },
+    [setEnrichmentOptions],
+  );
 
   const setManagedOption = useCallback(
     (option: keyof EnrichmentOptions, enabled: boolean) => {
@@ -233,20 +258,20 @@ const useFieldMappings = ({
     fixedRows,
     customRows,
     managedRows,
-    additionalRows,
+    existingRows,
+    additionalRows: [...existingRows, ...addedRows],
     availableChips,
-    datasetChips,
     rowErrors,
     isValid: isEmpty(rowErrors),
-    canUseBasicMode,
     fieldMappings,
     setFixedPath,
     addRow,
-    addNamedRow,
+    setExistingPath,
     removeRow,
     renameRow,
     setRowPath,
     setManagedOption,
+    remapManagedRow,
   };
 };
 

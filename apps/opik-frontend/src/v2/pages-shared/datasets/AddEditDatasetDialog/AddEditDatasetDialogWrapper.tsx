@@ -24,14 +24,13 @@ type AddEditDatasetDialogWrapperProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   form: ReturnType<typeof useDatasetForm>;
-  hideUpload?: boolean;
   idPrefix: string;
   children?: React.ReactNode;
 };
 
 const AddEditDatasetDialogWrapper: React.FunctionComponent<
   AddEditDatasetDialogWrapperProps
-> = ({ open, setOpen, form, hideUpload, idPrefix, children }) => {
+> = ({ open, setOpen, form, idPrefix, children }) => {
   const {
     name,
     setName,
@@ -53,6 +52,7 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
     buttonText,
     submitHandler,
     handleFileSelect,
+    hideUpload,
   } = form;
 
   return (
