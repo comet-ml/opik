@@ -1,4 +1,4 @@
-export { test, expect } from './comparison-stats-filters.fixture';
+export { test, expect } from './otel-reported-cost-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -777,3 +777,8 @@ export type {
   ComparisonStatsFiltersFixtures,
 } from './comparison-stats-filters.fixture';
 export { CSF_ROWS, CSF_SCORE_NAME } from './comparison-stats-filters.fixture';
+export type {
+  OtelReportedCostSeed,
+  OtelReportedCostSpansRef,
+  OtelReportedCostSpansFixtures,
+} from './otel-reported-cost-spans.fixture';

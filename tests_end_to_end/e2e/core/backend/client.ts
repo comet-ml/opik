@@ -621,6 +621,42 @@ export interface SpanCostRef {
    * empty one are different answers.
    */
   usage: Record<string, number> | null;
+  /**
+   * `total_estimated_cost_version` — the price-table version the server stamped
+   * when IT did the pricing, and absent when the cost did not come from the
+   * table at all.
+   *
+   * This is the only field that tells a REPORTED cost apart from a computed
+   * one, and the distinction is invisible in `totalEstimatedCost` alone: an
+   * amount a provider billed and an amount Opik derived are the same number in
+   * the same column. `OpenTelemetryMapper`'s COST outcome sets
+   * `totalEstimatedCost` directly and stamps no version, so a blank version
+   * beside a non-blank one on an otherwise-identical span is the backend saying
+   * "I did not price this myself" — which is exactly what opik#9499 made
+   * assertable. Without it, a regression that quietly re-priced a reported
+   * amount back to Opik's own estimate would be indistinguishable from the
+   * provider happening to agree.
+   *
+   * Null, never `''`: the column is NULL for a span nothing priced, and an
+   * empty-string default would make "no version" and "version ''" the same
+   * answer in a comparison that exists to tell two origins apart.
+   */
+  totalEstimatedCostVersion: string | null;
+  /**
+   * The span's `metadata` as the backend stored it.
+   *
+   * Carried on the COST shape because the currency a reported amount is
+   * denominated in lands there rather than in a column of its own:
+   * `gen_ai.usage.cost.currency` and `gen_ai.usage.cost.source` are METADATA
+   * outcomes, while the amount beside them is a COST one. A reported cost whose
+   * currency was dropped in transit is a figure with no unit — `$1.23` rendered
+   * for an amount the provider billed in euros — and the amount alone cannot
+   * see it.
+   *
+   * Null, not `{}`, for the reason `usage` is: a span carrying no metadata and
+   * one carrying an empty object are different answers.
+   */
+  metadata: Record<string, unknown> | null;
 }
 
 /** A span reduced to the fields a cascade assertion needs: who it is, and whose it is. */
@@ -700,13 +736,15 @@ export interface TrackedSpanRef {
 export interface OtelSpanSeed {
   name: string;
   /**
-   * Numbers are sent as OTLP `intValue`, strings as `stringValue`.
+   * Numbers are sent as OTLP `intValue`, strings as `stringValue`, and a value
+   * wrapped in {@link otelDouble} as `doubleValue`.
    *
-   * There is no float case, and that is not an omission: every numeric
-   * attribute Opik reads off an OTel span is a token count, and
-   * `extractUsageField` only reads `hasIntValue()`.
+   * A float is reachable only through that marker, and that is not an
+   * omission: every numeric attribute Opik reads off an OTel span is a token
+   * count, and `extractUsageField` only reads `hasIntValue()`. The exception is
+   * a reported cost — see {@link OtelDoubleAttribute}.
    */
-  attributes: Record<string, string | number>;
+  attributes: Record<string, OtelAttributeValue>;
 }
 
 /**
@@ -725,9 +763,10 @@ export interface OtelExportSpanSeed {
   name: string;
   /**
    * Span-level attributes, `opik.project_name` among them when the span routes
-   * itself. Sent through the same encoder as the resource attributes.
+   * itself. Sent through the same encoder as the resource attributes, so a
+   * float needs the {@link otelDouble} marker here too.
    */
-  attributes?: Record<string, string | number>;
+  attributes?: Record<string, OtelAttributeValue>;
   /**
    * This span's own OTLP trace id, as lowercase hex.
    *
@@ -2170,19 +2209,52 @@ function hexToBase64(hex: string): string {
 }
 
 /**
+ * An attribute value that must go on the wire as a proto3 `doubleValue`.
+ *
+ * Opt-in, and deliberately not "any non-integer number". The plain `number`
+ * case below is `intValue` because every numeric attribute Opik reads off an
+ * OTel span is a TOKEN COUNT and `extractUsageField` only reads
+ * `hasIntValue()` — so inferring the encoding from whether a number happens to
+ * be whole would silently change how a usage count is sent the first time a
+ * fixture passed `1_000_000.0`, and change it back when the arithmetic that
+ * produced it changed. The one attribute that genuinely needs a float is a
+ * REPORTED COST (`gen_ai.usage.cost[.amount]`), whose `extractCost` handles
+ * `DOUBLE_VALUE`, `INT_VALUE` and `STRING_VALUE` alike — and an amount sent as
+ * `intValue` would be truncated to whole dollars, which is a cost assertion
+ * passing for the wrong reason rather than a failure. Marking it at the call
+ * site keeps that distinction where a reader can see it.
+ */
+export interface OtelDoubleAttribute {
+  readonly otelDouble: number;
+}
+
+/** Marks an OTLP attribute value as a proto3 `doubleValue`. See {@link OtelDoubleAttribute}. */
+export function otelDouble(value: number): OtelDoubleAttribute {
+  return { otelDouble: value };
+}
+
+/** One OTLP attribute value a seed may carry. See {@link OtelDoubleAttribute}. */
+export type OtelAttributeValue = string | number | OtelDoubleAttribute;
+
+/**
  * One attribute value as proto3 JSON `AnyValue`, shared by both OTLP exporters
  * below so there is exactly one encoder to be right about.
  *
  * Numbers become `intValue` carrying a STRING, not a bare JSON number: proto3
  * JSON represents int64 as a string, and a large count sent as a number
- * overflows silently. There is no float case for the reason `OtelSpanSeed`
- * gives — every numeric attribute Opik reads off an OTel span is a token count,
- * and `extractUsageField` only reads `hasIntValue()`.
+ * overflows silently. A float is reachable only through the explicit
+ * {@link otelDouble} marker, for the reason that interface gives.
  */
-function toOtelAnyValue(value: string | number): { intValue: string } | { stringValue: string } {
-  return typeof value === 'number'
-    ? { intValue: String(Math.trunc(value)) }
-    : { stringValue: value };
+function toOtelAnyValue(
+  value: OtelAttributeValue,
+): { intValue: string } | { stringValue: string } | { doubleValue: number } {
+  if (typeof value === 'number') {
+    return { intValue: String(Math.trunc(value)) };
+  }
+  if (typeof value === 'string') {
+    return { stringValue: value };
+  }
+  return { doubleValue: value.otelDouble };
 }
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
@@ -5664,6 +5736,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         provider: s.provider ?? null,
         totalEstimatedCost: s.totalEstimatedCost ?? null,
         usage: s.usage ?? null,
+        totalEstimatedCostVersion: s.totalEstimatedCostVersion ?? null,
+        metadata: (s.metadata ?? null) as Record<string, unknown> | null,
       }));
     },
 
@@ -8181,9 +8255,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      *
      * The endpoint answers 200 with an empty body, not 201: it is an OTLP
      * collector endpoint, and `ExportTraceServiceResponse` is the shape a real
-     * exporter expects. Asserted rather than defaulted, because an export the
-     * backend refused stores nothing and would otherwise surface as an empty
-     * read further down the fixture.
+     * exporter expects. Thrown on by default, because an export the backend
+     * refused stores nothing and would otherwise surface as an empty read
+     * further down the fixture — unless the caller asks for the answer with
+     * `tolerateRefusal`, for which see below.
+     *
+     * The answer is also RETURNED, so a caller that set `tolerateRefusal` can
+     * assert the acceptance itself. Callers that did not can ignore it.
      */
     async postOtelSpans(args: {
       projectName: string;
@@ -8202,7 +8280,27 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * claiming an integration it is not changes which attribute rules apply.
        */
       scopeName?: string;
-    }): Promise<void> {
+      /**
+       * Return a non-200 instead of throwing on it, so the ACCEPTANCE of the
+       * export is a thing the spec asserts rather than a precondition the seed
+       * enforces on its behalf.
+       *
+       * Set by a seed whose export is under test for being accepted at all —
+       * `otel-reported-cost-spans` carries string-valued
+       * `gen_ai.usage.cost.currency`/`.source`, which before opik#9499 reached
+       * the `gen_ai.usage.` prefix rule and had the WHOLE export rejected. A
+       * throwing seed would surface that regression as a fixture error, which
+       * reads like broken test plumbing rather than the product refusing a
+       * valid export; and an `expect(200).toBe(200)` written after a helper
+       * that already threw on anything else is a tautology. Returning the
+       * answer is what makes the assertion real.
+       *
+       * Off by default: for every other caller an export that did not land is
+       * a seeding failure, and failing at the seed is where it is cheapest to
+       * read.
+       */
+      tolerateRefusal?: boolean;
+    }): Promise<{ status: number; message: string }> {
       if (args.spans.length === 0) {
         throw new Error('postOtelSpans: an export with no spans is a no-op the backend answers 200 for');
       }
@@ -8251,12 +8349,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           ],
         },
       );
-      if (status !== 200) {
+      if (status !== 200 && args.tolerateRefusal !== true) {
         throw new Error(
           `postOtelSpans: expected 200 for ${args.spans.length} span(s) into ` +
             `'${args.projectName}', got ${status}: ${message}`,
         );
       }
+      return { status, message };
     },
 
     /**
@@ -8296,7 +8395,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       /** The `projectName` header — the fallback every unrouted span must follow. */
       projectNameHeader: string;
       /** Export-wide attributes, on `resource.attributes`. */
-      resourceAttributes?: Record<string, string | number>;
+      resourceAttributes?: Record<string, OtelAttributeValue>;
       spans: OtelExportSpanSeed[];
       /**
        * The millisecond every span of this export starts at. Absent means
