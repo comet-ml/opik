@@ -1779,6 +1779,10 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: ${CACHE_MANAGER_EXPERIMENT_COMPARE_TARGET_PROJECTS_DURATION:-PT10S}
+    # Default: PT10M
+    # Description: Cache TTL for workspace names read from the React service. A renamed workspace keeps its old name
+    # for up to this long.
+    workspace_name_by_id: ${CACHE_MANAGER_WORKSPACE_NAME_BY_ID_DURATION:-PT10M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
