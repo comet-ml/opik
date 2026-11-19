@@ -310,3 +310,19 @@ def test_pydantic_utilities__import_does_not_emit_v1_py314_warning():
         in str(w.message)
         for w in caught
     )
+
+
+def test_jsonable_encoder__dict_with_tuple_and_frozenset_keys__keys_stringified_and_values_kept():
+    encoded = jsonable_encoder.encode(
+        {
+            (1, 2): {"result": [10, 20]},
+            frozenset({3}): "set-value",
+            "regular_key": 42,
+        }
+    )
+
+    assert encoded == {
+        "(1, 2)": {"result": [10, 20]},
+        "frozenset({3})": "set-value",
+        "regular_key": 42,
+    }

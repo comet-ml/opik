@@ -86,8 +86,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             for key, value in obj.items():
                 if key in allowed_keys:
                     encoded_key = encode(key, seen)
-                    if isinstance(encoded_key, dict):
-                        # Hashable dataclass keys encode to a dict, which cannot be a key.
+                    if isinstance(encoded_key, (dict, list)):
+                        # Hashable dataclass keys encode to a dict, and tuple or
+                        # frozenset keys to a list; neither can be a dict key.
                         encoded_key = str(key)
                     encoded_value = encode(value, seen)
                     encoded_dict[encoded_key] = encoded_value
