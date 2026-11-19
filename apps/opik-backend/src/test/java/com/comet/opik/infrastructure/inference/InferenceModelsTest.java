@@ -25,7 +25,10 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.inference.InferenceContract.BATCH_DECIDE;
 import static com.comet.opik.infrastructure.inference.InferenceContract.BATCH_GENERATE;
+import static com.comet.opik.infrastructure.inference.InferenceContract.CONTRACT;
+import static com.comet.opik.infrastructure.inference.InferenceContract.EMBED;
 import static com.comet.opik.infrastructure.inference.InferenceContract.GET_JOB;
+import static com.comet.opik.infrastructure.inference.InferenceContract.JOBS_STATUS;
 import static com.comet.opik.infrastructure.inference.InferenceContract.resource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -68,7 +71,6 @@ class InferenceModelsTest {
         var request = BatchDecideRequest.builder()
                 .orgId("workspace-1")
                 .workspaceId("workspace-1")
-                .requestId(REQUEST_ID)
                 .cache(false)
                 .items(List.of(BatchDecideItem.builder()
                         .itemId(TRACE_ID)
@@ -92,7 +94,6 @@ class InferenceModelsTest {
         var request = BatchGenerateRequest.builder()
                 .orgId("workspace-1")
                 .workspaceId("workspace-1")
-                .requestId(REQUEST_ID)
                 .cache(true)
                 .items(List.of(BatchGenerateItem.builder()
                         .itemId(TRACE_ID + ":summary")
@@ -159,6 +160,24 @@ class InferenceModelsTest {
                     .isEqualTo(InferenceJson.MAPPER.treeToValue(clean, fixture.getValue()));
         }
         assertThat(visited).containsExactlyInAnyOrderElementsOf(RESPONSE_MODELS);
+    }
+
+    @Test
+    void clientLimitsMatchTheContract() {
+        var endpoints = CONTRACT.path("endpoints");
+
+        assertThat(InferenceClient.MAX_EMBED_INPUTS).isEqualTo(maxItems(endpoints.path(EMBED), "inputs"));
+        assertThat(InferenceClient.MAX_EMBED_DEADLINE.toMillis())
+                .isEqualTo(CONTRACT.path("limits").path("embed_max_deadline_ms").path("value").asLong());
+        assertThat(InferenceClient.MAX_BATCH_ITEMS).isEqualTo(maxItems(endpoints.path(BATCH_DECIDE), "items"))
+                .isEqualTo(maxItems(endpoints.path(BATCH_GENERATE), "items"));
+        assertThat(InferenceClient.MAX_STATUS_JOB_IDS).isEqualTo(maxItems(endpoints.path(JOBS_STATUS), "job_ids"));
+    }
+
+    private static int maxItems(JsonNode endpoint, String property) {
+        var maxItems = endpoint.path("request").path("properties").path(property).path("maxItems");
+        assertThat(maxItems.isInt()).as("maxItems of '%s'", property).isTrue();
+        return maxItems.asInt();
     }
 
     @Test

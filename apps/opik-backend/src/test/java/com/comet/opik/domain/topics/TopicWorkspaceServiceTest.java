@@ -1,72 +1,124 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
-import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.BeforeEach;
+import com.redis.testcontainers.RedisContainer;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
-import ru.vyarus.guicey.jdbi3.tx.TxAction;
 
-import java.util.List;
+import java.util.UUID;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
-/**
- * The opt-in rule over a stubbed {@code ai_label_workspaces}; {@code TopicVectorsTickTest} runs it against MySQL.
- */
-@DisplayName("topic workspace opt-in")
+@DisplayName("topics workspace enablement")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class TopicWorkspaceServiceTest {
 
-    private final TopicsConfig config = new TopicsConfig();
-    private final TransactionTemplate template = mock(TransactionTemplate.class);
-    private final AiLabelWorkspaceDAO dao = mock(AiLabelWorkspaceDAO.class);
-    private final TopicWorkspaceService service = new TopicWorkspaceService(config, template);
+    private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
 
-    @BeforeEach
-    void setUp() {
-        var handle = mock(Handle.class);
-        when(handle.attach(AiLabelWorkspaceDAO.class)).thenReturn(dao);
-        // The action is the service's own lambda, so only its type can be matched.
-        when(template.inTransaction(eq(READ_ONLY), any(TxAction.class)))
-                .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
-        when(dao.enabledWorkspaceIds()).thenReturn(List.of("a", "b", "c"));
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
+
+    {
+        Startables.deepStart(redis, mysql, clickHouse, zookeeper).join();
+        MigrationUtils.runMysqlDbMigration(mysql);
+        MigrationUtils.runClickhouseDbMigration(clickHouse);
+
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
+                .jdbcUrl(mysql.getJdbcUrl())
+                .databaseAnalyticsFactory(ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse,
+                        DATABASE_NAME))
+                .redisUrl(redis.getRedisURI())
+                .build());
+    }
+
+    private TopicWorkspaceService service;
+    private TopicsConfig config;
+    private TransactionTemplate template;
+
+    @BeforeAll
+    void beforeAll(@Jit TopicWorkspaceService service, OpikConfiguration configuration, TransactionTemplate template) {
+        this.service = service;
+        this.config = configuration.getTopics();
+        this.template = template;
     }
 
     @Test
-    @DisplayName("eligible: the listed workspaces enabled in ai_label_workspaces, by id; the list is stripped, blanks "
-            + "and repeats dropped")
-    void eligible() {
-        // b: enabled for ai-labels, not listed; x: listed, not enabled for ai-labels.
-        config.setEnabledWorkspaces(" c, x,, a , c ");
+    @DisplayName("on: the listed workspaces that are enabled in ai_label_workspaces")
+    void listedAndEnabledForAiLabels() {
+        var listedAndEnabled = UUID.randomUUID().toString();
+        var listedTwiceAndEnabled = UUID.randomUUID().toString();
+        var notListed = UUID.randomUUID().toString();
+        var notInTheTable = UUID.randomUUID().toString();
+        var disabledInTheTable = UUID.randomUUID().toString();
+        upsert(listedAndEnabled, true);
+        upsert(listedTwiceAndEnabled, true);
+        upsert(notListed, true);
+        upsert(disabledInTheTable, false);
+        config.setEnabled(true);
+        config.setEnabledWorkspaces(" %s, %s,, %s , %s,%s ".formatted(listedTwiceAndEnabled, notInTheTable,
+                listedAndEnabled, disabledInTheTable, listedTwiceAndEnabled));
 
-        assertThat(service.eligibleWorkspaceIds()).containsExactly("a", "c");
+        assertThat(service.enabledWorkspaceIds()).containsExactlyInAnyOrder(listedAndEnabled, listedTwiceAndEnabled);
+        assertThat(service.isEnabled(listedAndEnabled)).isTrue();
+        assertThat(service.isEnabled(notListed)).isFalse();
+        assertThat(service.isEnabled(notInTheTable)).isFalse();
+        assertThat(service.isEnabled(disabledInTheTable)).isFalse();
     }
 
     @Test
-    @DisplayName("an empty list reads nothing from MySQL, and no workspace is eligible")
+    @DisplayName("off: no workspace, though listed and enabled for ai-labels")
+    void toggleOff() {
+        var workspaceId = UUID.randomUUID().toString();
+        upsert(workspaceId, true);
+        config.setEnabled(false);
+        config.setEnabledWorkspaces(workspaceId);
+
+        assertThat(service.enabledWorkspaceIds()).isEmpty();
+        assertThat(service.isEnabled(workspaceId)).isFalse();
+    }
+
+    @Test
+    @DisplayName("on with an empty list: no workspace")
     void emptyList() {
+        var workspaceId = UUID.randomUUID().toString();
+        upsert(workspaceId, true);
+        config.setEnabled(true);
         config.setEnabledWorkspaces(" , ,");
 
-        assertThat(service.eligibleWorkspaceIds()).isEmpty();
-        verifyNoInteractions(template);
+        assertThat(service.enabledWorkspaceIds()).isEmpty();
+        assertThat(service.isEnabled(workspaceId)).isFalse();
     }
 
-    @Test
-    @DisplayName("the list is read from the config on every call, not cached")
-    void listReadOnEveryCall() {
-        config.setEnabledWorkspaces("a");
-        assertThat(service.eligibleWorkspaceIds()).containsExactly("a");
-
-        config.setEnabledWorkspaces("a,b");
-
-        assertThat(service.eligibleWorkspaceIds()).containsExactly("a", "b");
+    private void upsert(String workspaceId, boolean enabled) {
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(AiLabelWorkspaceDAO.class).upsert(workspaceId, enabled, "operator");
+            return null;
+        });
     }
 }
