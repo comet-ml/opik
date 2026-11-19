@@ -190,6 +190,10 @@ public class GroupSummaries {
         }
     }
 
+    /**
+     * Row {@code i} of {@code a} dotted with row {@code j} of {@code b}. One sum on purpose: it runs once per text, off
+     * the fit's hot loop, and reads float rows, not the fit's double centres as {@code KMeans}' eight-sum dot does.
+     */
     static double dot(float[] a, int i, float[] b, int j, int dimensions) {
         double s = 0;
         int ai = i * dimensions;
