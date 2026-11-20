@@ -630,14 +630,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-3.1-8b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_1B_INSTRUCT,
-      label: "meta-llama/llama-3.2-1b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_2_3B_INSTRUCT,
-      label: "meta-llama/llama-3.2-3b-instruct",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_3_70B_INSTRUCT,
       label: "meta-llama/llama-3.3-70b-instruct",
     },
@@ -1527,10 +1519,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.7",
     },
     {
-      value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
-      label: "x-ai/grok-build-0.1",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
       label: "xiaomi/mimo-v2.5",
     },
@@ -1791,6 +1779,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_HYDROGEN,
       label: "Gemini 4 Hydrogen",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_4_NEON,
+      label: "Gemini 4 Neon",
     },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
