@@ -312,6 +312,7 @@ class FreeFormSqlPostRunCheckTest {
 
     static Stream<Arguments> catalogTableFunctions() {
         return Stream.of(
+                arguments("SELECT toJSONString(map('n', toString(count()))) AS result FROM merge('system', 'tables')"),
                 arguments(
                         "SELECT toJSONString(map('n', toString(count()))) AS result FROM merge('system', '^tables$')"),
                 arguments(
