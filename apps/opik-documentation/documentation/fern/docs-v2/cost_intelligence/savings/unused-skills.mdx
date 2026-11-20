@@ -1,0 +1,116 @@
+---
+headline: Unused skills
+og:description: How Cost Intelligence finds the skills each developer never
+  uses, what removing their descriptions saves, and how a small decision model
+  brings a skill's description back the moment a prompt needs it.
+og:site_name: Opik Documentation
+og:title: Unused skills - Opik
+title: Unused skills
+---
+
+## How unused skills are found, per developer
+
+Cost Intelligence sees every request a developer's coding agent sends. For each developer and each installed skill, over the last 30 days, it measures two things:
+
+- **What the skill cost to carry.** Every installed skill adds its name and description to the skill list sent with each request. Cost Intelligence prices that entry at the model and cache rates the developer's requests actually paid.
+- **How often the skill ran.**
+
+A skill that was carried but ran **zero times in those 30 days** is unused **for that developer**. The same skill can be unused for one developer and essential for another, so the decision is never made fleet-wide. The recommendation's dollar figure is the carrying cost summed over every developer and skill pair that qualifies.
+
+Applying the recommendation writes a **user policy** for each affected developer, listing only the skills that developer left unused. Policies reach devices as described in [Roll out cost policies](/cost-intelligence/roll-out-cost-policies). On the device, an unused skill keeps its name in the skill list and loses its description, which is where almost all of its weight is.
+
+## Why this saves money
+
+The skill list sits near the start of every request, so every request in a conversation carries it again. Caching makes a repeated list cheaper, but cached tokens are still billed each time they are read.
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/unused-skills-cache.svg" alt="Ten turns of one conversation as horizontal bars. The system prompt and unused skills are always present, the same in every request; the conversation grows with each turn, and each turn sends the whole conversation again." />
+</Frame>
+
+## Keeping skills available when they are needed
+
+A name alone is often not enough for the agent to know a skill fits. `review-pr` explains itself; a team-specific name such as `payments-runbook-v2` says little about when to use it. The **skill gate** makes sure a hidden skill is still found when a prompt needs it. It runs on the developer's laptop.
+
+Before Claude reads a prompt, the gate sends it to a small decision model together with the hidden skills, and gets back a yes or a no.
+
+**When a skill fits**, the model answers yes and names it. The gate injects that skill's description into the prompt, and Claude sees the skill as if it had always been listed.
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/skill-gate-yes.svg" alt="When a skill fits: the skill gate sends the prompt and the hidden skills to a decision model, which answers yes: docs. The docs skill description is injected into the prompt, and Claude uses the skill." />
+</Frame>
+
+**When nothing fits**, the model answers no. Nothing is injected, and the prompt reaches Claude unchanged.
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/skill-gate-no.svg" alt="When no skill fits: the decision model answers no. Nothing is injected, and the prompt reaches Claude unchanged." />
+</Frame>
+
+Each skill is added at most once per conversation, and again after the conversation is compacted. The check costs a small fraction of the request it saves on.
+
+### The question the gate asks
+
+One call to the decision model asks two questions about the prompt and the hidden skills: does any skill fit, and which fits best.
+
+```json title="Request" wordWrap
+{
+  "state": "USER MESSAGE:\nTurn these meeting notes into a doc the team can comment on\n\nSKILLS:\n- docs: Editable docs people share and comment on…\n…",
+  "questions": {
+    "any": { "type": "noul", "instructions": "Would any of the listed skills help answer the user's message?" },
+    "skill0": {
+      "type": "choice",
+      "instructions": "Which listed skill would best help answer the user's message?",
+      "criteria": { "docs": null, "skill-creator": null, "…": null }
+    }
+  }
+}
+```
+
+### The decision model's answer
+
+`any` is how likely it is that some skill helps. `skill0` shares the probability across skills, so the gate adds every skill above a small floor, up to three.
+
+```json title="Response" wordWrap
+{
+  "answers": {
+    "any": { "type": "noul", "noul": 0.78 },
+    "skill0": {
+      "type": "choice",
+      "probabilities": { "docs": 0.71, "skill-creator": 0.22, "…": 0.07 }
+    }
+  }
+}
+```
+
+## How much it saves
+
+We measured this on a month of Comet's own coding agent usage, with Cost Intelligence.
+
+- **Skill descriptions are a steady slice of the bill.** They made up about 2% of the month's coding agent spend.
+- **Almost all of it was for skills nobody ran.** Close to 9 in every 10 dollars spent carrying skill descriptions went to skills that developer never used that month. A typical developer carried around 150 of them.
+- **The check is far cheaper than what it removes.** The decision model reads each prompt together with that developer's hidden skills, once per prompt. At typical decision model pricing, checking every prompt for the month costs roughly a fiftieth of what the hidden descriptions cost.
+
+| | Share of monthly coding agent spend |
+| --- | --- |
+| Unused skill descriptions, carried on every request | About 2% |
+| Decision model, checking every prompt | Under 0.05% |
+
+The saving grows with the number of skills a team installs and the number of requests each developer sends. When a hidden skill is needed, its description comes back for that conversation, which adds a little of the cost back.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Find and price the savings on your own traffic.
+  </Card>
+  <Card
+    title="Roll out cost policies"
+    icon="fa-regular fa-sliders"
+    href="/cost-intelligence/roll-out-cost-policies"
+  >
+    How user policies reach devices and stay applied.
+  </Card>
+</CardGroup>
