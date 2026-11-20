@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RowsTable from "./RowsTable";
 
 const ROWS = [
@@ -89,35 +89,13 @@ describe("RowsTable", () => {
     expect(columnValues(0)).toEqual(["gpt-4o", "claude", "llama", "mistral"]);
   });
 
-  it("resizes a column by dragging its border and reports the width once", async () => {
-    const onColumnsWidthChange = vi.fn();
-    render(
-      <RowsTable
-        rows={ROWS}
-        columns={["model", "cost"]}
-        columnsWidth={{ model: 200 }}
-        onColumnsWidthChange={onColumnsWidthChange}
-      />,
-    );
-    // The resizer stops a column at the frame's right edge, which has no layout here.
-    const frame = document.querySelector<HTMLElement>(
-      "[data-table-scroll-container]",
-    )!;
-    frame.getBoundingClientRect = () => ({ right: 1000 }) as DOMRect;
-    const resizer = header("model").querySelector(".cursor-ew-resize")!;
+  describe("column widths", () => {
+    // "model" needs 40 * 8 + 24 = 344px for its longest value; "cost" fits the 80px minimum.
+    const WIDE_ROWS = [
+      { model: "m".repeat(40), cost: "1" },
+      { model: "small", cost: "22" },
+    ];
 
-    fireEvent.mouseDown(resizer, { clientX: 100 });
-    fireEvent.mouseMove(document, { clientX: 130 });
-    fireEvent.mouseMove(document, { clientX: 160 });
-    fireEvent.mouseUp(document, { clientX: 160 });
-
-    await waitFor(() =>
-      expect(onColumnsWidthChange).toHaveBeenCalledWith({ model: 260 }),
-    );
-    expect(onColumnsWidthChange).toHaveBeenCalledTimes(1);
-  });
-
-  describe("widget width", () => {
     // happy-dom never resizes: this observer lets a test report a new widget width.
     let callbacks: Array<() => void> = [];
     const resize = () => callbacks.forEach((callback) => callback());
@@ -129,10 +107,11 @@ describe("RowsTable", () => {
       disconnect() {}
     }
 
+    const scrollFrame = () =>
+      document.querySelector<HTMLElement>("[data-table-scroll-container]")!;
+
     const setWidgetWidth = async (width: number) => {
-      const frame = document.querySelector<HTMLElement>(
-        "[data-table-scroll-container]",
-      )!.parentElement!.parentElement!;
+      const frame = scrollFrame().parentElement!.parentElement!;
       Object.defineProperty(frame, "clientWidth", {
         configurable: true,
         value: width,
@@ -146,55 +125,117 @@ describe("RowsTable", () => {
         (col) => col.style.width,
       );
 
+    const drag = (column: string, from: number, to: number) => {
+      // The resizer's own limit reads the frame's edge, which has no layout here.
+      scrollFrame().getBoundingClientRect = () => ({ right: 10000 }) as DOMRect;
+      const resizer = header(column).querySelector(".cursor-ew-resize")!;
+      fireEvent.mouseDown(resizer, { clientX: from });
+      fireEvent.mouseMove(document, { clientX: (from + to) / 2 });
+      fireEvent.mouseMove(document, { clientX: to });
+      fireEvent.mouseUp(document, { clientX: to });
+    };
+
+    beforeEach(() => {
+      vi.stubGlobal("ResizeObserver", TestResizeObserver);
+    });
+
     afterEach(() => {
       callbacks = [];
       vi.unstubAllGlobals();
     });
 
-    it("draws a saved width no wider than the widget and restores it when the widget widens", async () => {
-      vi.stubGlobal("ResizeObserver", TestResizeObserver);
+    it("sizes columns to their content by default", () => {
+      render(<RowsTable rows={WIDE_ROWS} columns={["model", "cost"]} />);
+      expect(shownWidths()).toEqual(["344px", "80px"]);
+    });
+
+    it("shares a narrow widget, keeping narrow columns whole", async () => {
+      render(<RowsTable rows={WIDE_ROWS} columns={["model", "cost"]} />);
+
+      await setWidgetWidth(300);
+      expect(shownWidths()).toEqual(["220px", "80px"]);
+    });
+
+    it("scrolls only when the widget is narrower than the minimum widths", async () => {
+      render(<RowsTable rows={WIDE_ROWS} columns={["model", "cost"]} />);
+
+      await setWidgetWidth(100);
+      expect(shownWidths()).toEqual(["80px", "80px"]);
+    });
+
+    it("draws a saved width no wider than the widget or the content", async () => {
       render(
         <RowsTable
-          rows={ROWS}
+          rows={WIDE_ROWS}
           columns={["model", "cost"]}
           columnsWidth={{ model: 2000 }}
         />,
       );
 
-      await setWidgetWidth(500);
-      expect(shownWidths()).toEqual(["500px", "150px"]);
+      await setWidgetWidth(300);
+      expect(shownWidths()).toEqual(["300px", "80px"]);
 
       await setWidgetWidth(3000);
-      expect(shownWidths()).toEqual(["2000px", "150px"]);
+      expect(shownWidths()).toEqual(["344px", "80px"]);
     });
 
-    it("saves a drag capped at the widget width and keeps the other saved widths", async () => {
-      vi.stubGlobal("ResizeObserver", TestResizeObserver);
+    it("resizes a column by dragging its border and reports the width once", async () => {
       const onColumnsWidthChange = vi.fn();
       render(
         <RowsTable
-          rows={ROWS}
+          rows={WIDE_ROWS}
+          columns={["model", "cost"]}
+          columnsWidth={{ model: 200 }}
+          onColumnsWidthChange={onColumnsWidthChange}
+        />,
+      );
+
+      drag("model", 100, 160);
+
+      await waitFor(() =>
+        expect(onColumnsWidthChange).toHaveBeenCalledWith({ model: 260 }),
+      );
+      expect(onColumnsWidthChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("saves a drag capped at the content and keeps the other saved widths", async () => {
+      const onColumnsWidthChange = vi.fn();
+      render(
+        <RowsTable
+          rows={WIDE_ROWS}
           columns={["model", "cost"]}
           columnsWidth={{ model: 200, cost: 2000 }}
           onColumnsWidthChange={onColumnsWidthChange}
         />,
       );
-      await setWidgetWidth(500);
-      // The resizer's own limit reads the frame's edge, which has no layout here.
-      document.querySelector<HTMLElement>(
-        "[data-table-scroll-container]",
-      )!.getBoundingClientRect = () => ({ right: 10000 }) as DOMRect;
-      const resizer = header("model").querySelector(".cursor-ew-resize")!;
+      await setWidgetWidth(1000);
 
-      fireEvent.mouseDown(resizer, { clientX: 100 });
-      fireEvent.mouseMove(document, { clientX: 1100 });
-      fireEvent.mouseUp(document, { clientX: 1100 });
+      drag("model", 100, 1100);
 
       await waitFor(() =>
         expect(onColumnsWidthChange).toHaveBeenCalledWith({
-          model: 500,
+          model: 344,
           cost: 2000,
         }),
+      );
+    });
+
+    it("saves a drag capped at the widget width", async () => {
+      const onColumnsWidthChange = vi.fn();
+      render(
+        <RowsTable
+          rows={WIDE_ROWS}
+          columns={["model", "cost"]}
+          columnsWidth={{ model: 100 }}
+          onColumnsWidthChange={onColumnsWidthChange}
+        />,
+      );
+      await setWidgetWidth(250);
+
+      drag("model", 100, 1100);
+
+      await waitFor(() =>
+        expect(onColumnsWidthChange).toHaveBeenCalledWith({ model: 250 }),
       );
     });
   });

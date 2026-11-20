@@ -99,19 +99,45 @@ const usePersistColumnWidths = (
   }, []);
 };
 
-// A column is never saved or drawn wider than the widget, which another viewer's screen may make narrow.
-const capWidths = (
+// A rough measure of the table's 14px text; erring wide keeps short values whole.
+const CHAR_WIDTH = 8;
+const CELL_PADDING = 24;
+const SORT_ICON_WIDTH = 18;
+const MIN_COLUMN_WIDTH = 80;
+
+const textWidth = (text: string) => text.length * CHAR_WIDTH + CELL_PADDING;
+
+// The width that shows a column's header and longest value in full.
+const contentWidths = (keys: string[], rows: Row[]): ColumnSizingState =>
+  Object.fromEntries(
+    keys.map((key) => [
+      key,
+      rows.reduce(
+        (width, row) => Math.max(width, textWidth(formatCell(row[key]))),
+        Math.max(MIN_COLUMN_WIDTH, textWidth(key) + SORT_ICON_WIDTH),
+      ),
+    ]),
+  );
+
+// Narrow columns keep their width and wide ones split the rest, never below the minimum; only then does the table scroll.
+const shareWidth = (
   widths: ColumnSizingState,
-  maxWidth: number,
-): ColumnSizingState =>
-  maxWidth > 0
-    ? Object.fromEntries(
-        Object.entries(widths).map(([id, width]) => [
-          id,
-          Math.min(width, maxWidth),
-        ]),
-      )
-    : widths;
+  available: number,
+): ColumnSizingState => {
+  let remaining = available;
+  let left = Object.keys(widths).length;
+  return Object.fromEntries(
+    Object.entries(widths)
+      .sort(([, a], [, b]) => a - b)
+      .map(([id, width]) => {
+        const share = Math.floor(remaining / left);
+        const shown = Math.min(width, Math.max(MIN_COLUMN_WIDTH, share));
+        remaining -= shown;
+        left -= 1;
+        return [id, shown];
+      }),
+  );
+};
 
 // The default table frame, scrolling inside the widget with the header stuck to its top; it hugs a short table.
 // Its own scrollbar styles keep the scrollbar visible where the OS hides it, so columns past the edge show.
@@ -210,16 +236,46 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
 
   const markWidthsPending = usePersistColumnWidths(onColumnsWidthChange);
 
+  // The scroll frame's inner width leaves out its border and scrollbar; 0 until measured.
   const [frameWidth, setFrameWidth] = useState(0);
   const { ref: frameRef } = useObserveResizeNode<HTMLDivElement>(
-    useCallback((node) => setFrameWidth(node.clientWidth), []),
+    useCallback(
+      (node) =>
+        setFrameWidth(
+          node.querySelector<HTMLElement>("[data-table-scroll-container]")
+            ?.clientWidth || node.clientWidth,
+        ),
+      [],
+    ),
   );
 
-  // Widening the widget brings a capped column back to its saved width.
-  const shownSizing = useMemo(
-    () => capWidths(columnSizing, frameWidth),
-    [columnSizing, frameWidth],
+  const limits = useMemo(() => contentWidths(keys, data), [keys, data]);
+  // A column is never saved or drawn wider than its content or the widget, which another viewer's screen may make narrow.
+  const capWidth = useCallback(
+    (id: string, width: number) =>
+      Math.min(width, limits[id] ?? width, frameWidth || width),
+    [limits, frameWidth],
   );
+
+  // Columns the user sized keep their width; the others share what is left.
+  const shownSizing = useMemo(() => {
+    const sized = Object.fromEntries(
+      keys
+        .filter((key) => key in columnSizing)
+        .map((key) => [key, capWidth(key, columnSizing[key])]),
+    );
+    const used = Object.values(sized).reduce((sum, width) => sum + width, 0);
+    const rest = Object.fromEntries(
+      keys.filter((key) => !(key in sized)).map((key) => [key, limits[key]]),
+    );
+    return {
+      ...sized,
+      ...shareWidth(
+        rest,
+        frameWidth ? Math.max(0, frameWidth - used) : Infinity,
+      ),
+    };
+  }, [keys, columnSizing, limits, frameWidth, capWidth]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -234,15 +290,15 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
             ([id, width]) => width !== shownSizing[id],
           ),
         );
-        const widths = {
-          ...columnSizing,
-          ...capWidths(dragged, frameWidth),
-        };
+        const widths = { ...columnSizing };
+        Object.entries(dragged).forEach(([id, width]) => {
+          widths[id] = capWidth(id, width);
+        });
         markWidthsPending(widths);
         setColumnSizing(widths);
       }) as OnChangeFn<ColumnSizingState>,
     }),
-    [columnSizing, shownSizing, frameWidth, markWidthsPending],
+    [columnSizing, shownSizing, capWidth, markWidthsPending],
   );
 
   return (
