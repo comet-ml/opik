@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.error.ConflictException;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Inject;
@@ -25,6 +24,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -50,8 +50,10 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * with a vector. A project without a list is the first-build job's ({@link TopicsFirstBuildService}). Projects run in
  * {@link #queueOrder}; none starts after {@code topics.nightly.budget}, and those left run the next night.
  *
- * <p>Each night writes its record as it goes: its {@code topic_nights} row when it starts and ends, and one
- * {@code topic_night_projects} row per project as it decides it. The state gauges ({@link TopicsNightlyGauges}) read it.
+ * <p>Each decision on a project is counted in {@code topics.nightly.decisions}, logged, and written to the project's
+ * {@code topic_projects} row: a night that reached it sets {@code last_night}, one that did not adds to
+ * {@code not_reached_nights}. The state gauges ({@link TopicsNightlyGauges}) read those fields; each night is counted in
+ * {@code topics.nightly.nights} by outcome.
  */
 @Slf4j
 @Singleton
@@ -85,11 +87,9 @@ public class TopicsNightlyService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull TopicWorkspaceService workspaceService;
     private final @NonNull TopicWindowDAO windowDAO;
-    private final @NonNull TopicsRebuildService rebuildService;
     private final @NonNull TopicsProjectRunner runner;
     private final @NonNull TopicsMetrics metrics;
     private final @NonNull LockService lockService;
-    private final @NonNull IdGenerator idGenerator;
     /** The time the budget is measured against; tests replace it. */
     Supplier<Instant> now = Instant::now;
 
@@ -102,13 +102,55 @@ public class TopicsNightlyService {
     record Candidate(@NonNull String workspaceId, @NonNull UUID projectId, long vectors) {
     }
 
-    private record Skipped(@NonNull Candidate candidate, @NonNull String reason) {
+    private record Skipped(@NonNull Candidate candidate, @NonNull SkipReason reason) {
     }
 
     private enum Outcome {
         SAVED,
         FAILED,
         SKIPPED
+    }
+
+    /** What the night did with a project: the {@code decision} attribute of {@code topics.nightly.decisions}. */
+    enum Decision {
+        NIGHTLY_UPDATE,
+        SKIP,
+        /** The budget ended before the project. */
+        NOT_REACHED,
+        /** The project's window count read failed; it runs the next night. */
+        COUNT_FAILED;
+
+        String value() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /** Why the night skipped a project: the {@code reason} attribute of a skip. */
+    enum SkipReason {
+        /** Under {@code topics.build.minVectors}. */
+        SMALL,
+        DELETED,
+        PAUSED,
+        /** Its last saved run's window already ends at or after the night's start. */
+        ALREADY_SAVED,
+        /** No topic left by the time its lock was taken. */
+        NO_LIST,
+        /** Its lock, or the pod's run slot, was held by another run. */
+        LOCKED;
+
+        String value() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    enum NightOutcome {
+        FINISHED,
+        /** A read of the workspaces, the lists or the projects failed. */
+        FAILED;
+
+        String value() {
+            return name().toLowerCase(Locale.ROOT);
+        }
     }
 
     /** How long the night's lock must last: its budget, then one whole run that started just before the budget ends. */
@@ -118,72 +160,62 @@ public class TopicsNightlyService {
 
     /**
      * Runs the night {@code start} falls on (UTC). The budget runs from the call, not from {@code start}, so a night
-     * run late, or by hand for an earlier date, still gets all of it. The night's record ends {@code finished}, or
-     * {@code failed} when the night throws: a read of the workspaces, the lists or the projects that fails. A night
-     * whose record cannot start throws before it runs anything: a rerun of the same date would otherwise add its
-     * decisions to the earlier run's rows.
+     * run late, or by hand for an earlier date, still gets all of it. The night is counted {@code finished}, or
+     * {@code failed} when it throws: a read of the workspaces, the lists or the projects that fails.
      */
     public NightResult runNight(@NonNull Instant start) {
         var began = now.get();
         var night = LocalDate.ofInstant(start, ZoneOffset.UTC);
-        var record = new NightRecord(night, began);
-        record.start();
+        for (var outcome : NightOutcome.values()) {
+            metrics.night(outcome.value(), 0);
+        }
         try {
-            var result = runNight(night, began, record);
-            record.end(TopicNight.Outcome.FINISHED);
+            var result = runNight(night, began, new NightRecord(night));
+            metrics.night(NightOutcome.FINISHED.value(), 1);
             return result;
         } catch (RuntimeException exception) {
-            record.end(TopicNight.Outcome.FAILED);
+            metrics.night(NightOutcome.FAILED.value(), 1);
             throw exception;
         }
     }
 
     private NightResult runNight(LocalDate night, Instant began, NightRecord record) {
-        runner.housekeeping(began);
-        nightsHousekeeping(began);
         var budgetEnd = began.plus(config.getNightly().getBudget().toJavaDuration());
         var candidates = new ArrayList<Candidate>();
         var uncounted = new ArrayList<Candidate>();
-        int skipped = eligible(night, budgetEnd, candidates, uncounted, record);
+        int skipped = eligible(night, began, budgetEnd, candidates, uncounted, record);
         log.info("Topics night '{}' started, projects to update '{}', skipped '{}', not counted '{}'", night,
                 candidates.size(), skipped, uncounted.size());
 
         int saved = 0;
         int failed = 0;
-        int notReached = 0;
-        for (var candidate : uncounted) {
-            notReached++;
-            record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
-        }
+        int notReached = uncounted.size();
+        record.decide(uncounted, Decision.NOT_REACHED, null);
         var executor = Executors.newThreadPerTaskExecutor(
                 Thread.ofPlatform().name("topics-nightly-", 0).daemon(true).factory());
         try {
             for (var candidate : candidates) {
                 if (Thread.currentThread().isInterrupted() || !now.get().isBefore(budgetEnd)) {
                     notReached++;
-                    record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
+                    record.decide(candidate, Decision.NOT_REACHED, null, null);
                     continue;
                 }
                 if (!runner.acquireRun(budgetEnd)) {
-                    log.info("Topics night skipped project '{}', another run on this pod held its run slot",
-                            candidate.projectId());
                     skipped++;
-                    record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_LOCKED, null);
+                    record.decide(candidate, Decision.SKIP, SkipReason.LOCKED, null);
                     continue;
                 }
                 try {
                     if (!runner.lockProject(candidate.projectId())) {
-                        log.info("Topics night skipped project '{}', its lock is held by another run or Redis is down",
-                                candidate.projectId());
                         skipped++;
-                        record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_LOCKED, null);
+                        record.decide(candidate, Decision.SKIP, SkipReason.LOCKED, null);
                         continue;
                     }
                     try {
                         // The lock can wait up to its own limit: a run must still start within the budget.
                         if (!now.get().isBefore(budgetEnd)) {
                             notReached++;
-                            record.decide(candidate, TopicNightProject.NOT_REACHED, null, null);
+                            record.decide(candidate, Decision.NOT_REACHED, null, null);
                             continue;
                         }
                         switch (runOne(executor, candidate, night, record)) {
@@ -204,6 +236,7 @@ public class TopicsNightlyService {
         }
         var used = Duration.between(began, now.get());
         metrics.budgetUsed(used);
+        record.end();
         log.info("Topics night '{}' finished, saved '{}', failed '{}', skipped '{}', not reached '{}', seconds '{}'",
                 night, saved, failed, skipped, notReached, used.toSeconds());
         return NightResult.builder().saved(saved).failed(failed).skipped(skipped).notReached(notReached).build();
@@ -277,10 +310,9 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Updates the project under its lock; its night row gets the decision and the run id. Skipped when its last saved
-     * run already covers the night, or when it has no live topic left (a run by hand or a delete since the night listed
-     * it). A run that cannot start (a read before it or its {@code topic_runs} insert fails) has no row to fail, so it
-     * is counted here, as {@code start_failed}.
+     * Updates the project under its lock. Skipped when its last saved run already covers the night, or when it has no
+     * topic left (a run by hand or a delete since the night listed it). A run that cannot start (a read before it or
+     * its start write fails) has no attempt to fail, so it is counted here, as {@code start_failed}.
      */
     private Outcome runOne(ExecutorService executor, Candidate candidate, LocalDate night, NightRecord record) {
         var workspaceId = candidate.workspaceId();
@@ -288,27 +320,25 @@ public class TopicsNightlyService {
         UUID runId = null;
         try {
             if (savedFor(workspaceId, projectId, night)) {
-                log.info("Topics night skipped project '{}', its last saved run already covers the night", projectId);
-                record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_ALREADY_SAVED, null);
+                record.decide(candidate, Decision.SKIP, SkipReason.ALREADY_SAVED, null);
                 return Outcome.SKIPPED;
             }
-            if (!hasLiveTopics(workspaceId, projectId)) {
-                log.info("Topics night skipped project '{}', it has no live topic left", projectId);
-                record.decide(candidate, TopicNightProject.SKIP, TopicNightProject.REASON_NO_LIST, null);
+            if (!hasTopics(workspaceId, projectId)) {
+                record.decide(candidate, Decision.SKIP, SkipReason.NO_LIST, null);
                 return Outcome.SKIPPED;
             }
-            runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.NIGHTLY_UPDATE);
+            runId = runner.start(workspaceId, projectId, TopicProject.RunMode.NIGHTLY_UPDATE);
         } catch (RuntimeException exception) {
             log.error("Topics run could not start, project '{}'", projectId, exception);
         }
-        record.decide(candidate, TopicNightProject.NIGHTLY_UPDATE, null, runId);
+        record.decide(candidate, Decision.NIGHTLY_UPDATE, null, runId);
         if (runId == null) {
-            metrics.run(workspaceId, TopicRun.Status.FAILED, TopicsMetrics.ERROR_START_FAILED);
+            metrics.run(workspaceId, TopicProject.RunStatus.FAILED, TopicsMetrics.ERROR_START_FAILED);
             return Outcome.FAILED;
         }
         log.info("Topics run '{}' started, mode '{}', workspace '{}', project '{}', vectors '{}'", runId,
-                TopicRun.Mode.NIGHTLY_UPDATE.getValue(), workspaceId, projectId, candidate.vectors());
-        return runner.run(executor, runId, workspaceId, projectId, night, TopicRun.Mode.NIGHTLY_UPDATE)
+                TopicProject.RunMode.NIGHTLY_UPDATE.getValue(), workspaceId, projectId, candidate.vectors());
+        return runner.run(executor, runId, workspaceId, projectId, night, TopicProject.RunMode.NIGHTLY_UPDATE)
                 ? Outcome.SAVED
                 : Outcome.FAILED;
     }
@@ -320,36 +350,38 @@ public class TopicsNightlyService {
     private boolean savedFor(String workspaceId, UUID projectId, LocalDate night) {
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findStates(workspaceId, Set.of(projectId))).stream()
-                .anyMatch(state -> state.windowUntil() != null && !state.windowUntil().isBefore(to));
+                handle -> handle.attach(TopicDAO.class).findProjects(workspaceId, Set.of(projectId))).stream()
+                .anyMatch(project -> project.windowUntil() != null && !project.windowUntil().isBefore(to));
     }
 
-    private boolean hasLiveTopics(String workspaceId, UUID projectId) {
+    private boolean hasTopics(String workspaceId, UUID projectId) {
         return !template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findProjectsWithLiveTopics(workspaceId, Set.of(projectId)))
+                handle -> handle.attach(TopicDAO.class).findProjectsWithTopics(workspaceId, Set.of(projectId)))
                 .isEmpty();
     }
 
     /**
      * Fills {@code candidates} with the projects to update, in {@link #queueOrder} order, and returns how many were
-     * skipped: under {@code minVectors}, deleted, or paused. The projects are those of the eligible workspaces with a
-     * live topic. Each is counted on its own: the count's {@code max_rows_to_read} applies to one query, so a large
-     * project fails only its own count, never its workspace's. A project whose count read fails gets a
-     * {@code count_failed} row and is left for the next night. A read that fails otherwise throws, and fails the night.
-     * No count starts after {@code budgetEnd}: the projects left go to {@code uncounted}, and get a {@code not_reached}
-     * row. So the scan ends within the budget, and the night lock's lease (budget + one run) still covers the night.
+     * skipped: under {@code minVectors}, deleted, or paused. The projects are those of the enabled workspaces with a
+     * topic. Each is counted on its own: the count's {@code max_rows_to_read} applies to one query, so a large project
+     * fails only its own count, never its workspace's. A project whose count read fails is decided
+     * {@code count_failed} and left for the next night. A read that fails otherwise throws, and fails the night. No
+     * count starts after {@code budgetEnd}: the projects left go to {@code uncounted}, and are decided
+     * {@code not_reached}. So the scan ends within the budget, and the night lock's lease (budget + one run) still
+     * covers the night.
      */
-    private int eligible(LocalDate night, Instant budgetEnd, List<Candidate> candidates, List<Candidate> uncounted,
-            NightRecord record) {
+    private int eligible(LocalDate night, Instant began, Instant budgetEnd, List<Candidate> candidates,
+            List<Candidate> uncounted, NightRecord record) {
         var build = config.getBuild();
         var to = night.atStartOfDay(ZoneOffset.UTC).toInstant();
         var from = night.minusDays(build.getWindowDays()).atStartOfDay(ZoneOffset.UTC).toInstant();
-        var workspaceIds = workspaceService.eligibleWorkspaceIds();
+        var workspaceIds = workspaceService.enabledWorkspaceIds();
         if (workspaceIds.isEmpty()) {
             return 0;
         }
+        record.begin(workspaceIds);
         var listed = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findProjectsWithLiveTopics(workspaceIds));
+                handle -> handle.attach(TopicDAO.class).findProjectsWithTopics(workspaceIds));
         var skipped = new ArrayList<Skipped>();
         var found = new ArrayList<Candidate>();
         for (var project : listed) {
@@ -365,40 +397,44 @@ public class TopicsNightlyService {
                 if (traces >= build.getMinVectors()) {
                     found.add(candidate);
                 } else {
-                    skipped.add(new Skipped(candidate, TopicNightProject.REASON_SMALL));
+                    skipped.add(new Skipped(candidate, SkipReason.SMALL));
                 }
             } catch (RuntimeException exception) {
                 log.warn("Topics night count read failed, workspace '{}', project '{}'; it runs the next night",
                         project.workspaceId(), project.projectId(), exception);
-                record.countFailed(project);
+                record.decide(Candidate.builder().workspaceId(project.workspaceId())
+                        .projectId(project.projectId()).build(), Decision.COUNT_FAILED, null, null);
             }
         }
         var windowUntil = new HashMap<UUID, Instant>();
         var pausedSince = night.minusDays(PAUSE_NIGHTS).atStartOfDay(ZoneOffset.UTC).toInstant();
+        var abandonedBefore = began.minus(runner.projectLease());
         Set<UUID> paused = new HashSet<>();
         // A deleted project keeps its window vectors until ClickHouse drops them: run only projects that exist.
         Set<UUID> existing = new HashSet<>();
         found.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
                 Collectors.mapping(Candidate::projectId, Collectors.toSet())))
                 .forEach((workspaceId, ids) -> template.inTransaction(READ_ONLY, handle -> {
-                    handle.attach(TopicDAO.class).findStates(workspaceId, ids)
-                            .forEach(state -> windowUntil.put(state.projectId(), state.windowUntil()));
-                    paused.addAll(handle.attach(TopicRunDAO.class)
-                            .findPausedProjectIds(workspaceId, ids, PAUSE_FAILURES, pausedSince));
+                    handle.attach(TopicDAO.class).findProjects(workspaceId, ids)
+                            .forEach(project -> windowUntil.put(project.projectId(), project.windowUntil()));
+                    paused.addAll(handle.attach(TopicRunDAO.class).findPausedProjectIds(workspaceId, ids,
+                            PAUSE_FAILURES, pausedSince, abandonedBefore));
                     existing.addAll(handle.attach(TopicDAO.class).findExistingProjectIds(workspaceId, ids));
                     return null;
                 }));
         for (var candidate : found) {
             if (!existing.contains(candidate.projectId())) {
-                skipped.add(new Skipped(candidate, TopicNightProject.REASON_DELETED));
+                skipped.add(new Skipped(candidate, SkipReason.DELETED));
             } else if (paused.contains(candidate.projectId())) {
-                skipped.add(new Skipped(candidate, TopicNightProject.REASON_PAUSED));
+                skipped.add(new Skipped(candidate, SkipReason.PAUSED));
             } else {
                 candidates.add(candidate);
             }
         }
         candidates.sort(queueOrder(windowUntil));
-        record.skipped(skipped);
+        skipped.stream().collect(Collectors.groupingBy(Skipped::reason,
+                Collectors.mapping(Skipped::candidate, Collectors.toList())))
+                .forEach((reason, projects) -> record.decide(projects, Decision.SKIP, reason));
         return skipped.size();
     }
 
@@ -411,7 +447,8 @@ public class TopicsNightlyService {
 
     /**
      * The night's queue, stalest first: the oldest {@code window_until}, so a project that a night did not reach goes
-     * first the next night; among equals, the fewest vectors first. A project whose state row is gone sorts first.
+     * first the next night; among equals, the fewest vectors first. A project with no {@code window_until} sorts
+     * first.
      */
     static Comparator<Candidate> queueOrder(@NonNull Map<UUID, Instant> windowUntil) {
         return Comparator.<Candidate, Instant>comparing(candidate -> windowUntil.get(candidate.projectId()),
@@ -421,114 +458,81 @@ public class TopicsNightlyService {
     }
 
     /**
-     * Fails the nights left {@code running} past the night's lease (a pod that died), and deletes the nights and their
-     * project rows past {@code topics.build.runsRetention}. A failure is logged, and the night goes on.
-     */
-    private void nightsHousekeeping(Instant start) {
-        try {
-            var before = LocalDate.ofInstant(start.minus(config.getBuild().getRunsRetention().toJavaDuration()),
-                    ZoneOffset.UTC);
-            template.inTransaction(WRITE, handle -> {
-                var nights = handle.attach(TopicNightDAO.class);
-                // This night started after start.minus(lease()): only a night whose lock has expired is failed.
-                int failed = nights.failAbandoned(start.minus(lease()), Instant.now());
-                int deleted = nights.deleteNightsBefore(before);
-                int deletedProjects = nights.deleteProjectsBefore(before);
-                if (failed > 0 || deleted > 0 || deletedProjects > 0) {
-                    log.info("Topics night housekeeping, abandoned nights failed '{}', old nights deleted '{}', old "
-                            + "night projects deleted '{}'", failed, deleted, deletedProjects);
-                }
-                return null;
-            });
-        } catch (RuntimeException exception) {
-            log.warn("Topics night housekeeping of the night records failed", exception);
-        }
-    }
-
-    /**
-     * Its start must succeed, or the night does not run. A later write that fails is logged and the night goes on: the
-     * state gauges then show it, a missing end as a night left running, which the next night's housekeeping fails. The
-     * first failed write of a night is a WARN with its error, the others DEBUG, and the night's end WARNs how many
-     * failed.
+     * Counts, logs and writes the night's decisions. A write that fails is logged and the night goes on: the first
+     * failed write of a night is a WARN with its error, the others DEBUG, and the night's end WARNs how many failed.
      */
     private final class NightRecord {
 
         private final LocalDate night;
-        private final Instant startedAt;
         private int writeFailures;
 
-        NightRecord(LocalDate night, Instant startedAt) {
+        NightRecord(LocalDate night) {
             this.night = night;
-            this.startedAt = startedAt;
         }
 
-        /** Replaces an earlier run of the same night, its project rows included. Throws when it cannot. */
-        void start() {
-            template.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(TopicNightDAO.class);
-                dao.start(night, startedAt);
-                dao.deleteProjects(night);
-                return null;
-            });
-        }
-
-        void countFailed(TopicDAO.ProjectKey project) {
-            write("count failure", dao -> dao.insertProjects(List.of(TopicNightProject.builder()
-                    .id(idGenerator.generateId())
-                    .night(night)
-                    .workspaceId(project.workspaceId())
-                    .projectId(project.projectId())
-                    .decision(TopicNightProject.COUNT_FAILED)
-                    .build())));
+        /** Sets every decision's series of the workspaces at 0, so the first decision of each is seen as a rise. */
+        void begin(List<String> workspaceIds) {
+            for (var workspaceId : workspaceIds) {
+                for (var decision : Decision.values()) {
+                    if (decision != Decision.SKIP) {
+                        metrics.nightlyDecision(workspaceId, decision.value(), null, 0);
+                    }
+                }
+                for (var reason : SkipReason.values()) {
+                    metrics.nightlyDecision(workspaceId, Decision.SKIP.value(), reason.value(), 0);
+                }
+            }
         }
 
         /** {@code reason} is null for a decision other than skip, {@code runId} when no run started. */
-        void decide(Candidate candidate, String decision, String reason, UUID runId) {
-            write("project", dao -> dao.insertProjects(List.of(row(candidate, decision, reason, runId))));
+        void decide(Candidate candidate, Decision decision, SkipReason reason, UUID runId) {
+            log.info("Topics night '{}' decided, workspace '{}', project '{}', decision '{}', reason '{}', run '{}'",
+                    night, candidate.workspaceId(), candidate.projectId(), decision.value(),
+                    reason == null ? null : reason.value(), runId);
+            count(candidate.workspaceId(), decision, reason, 1);
+            write(candidate.workspaceId(), Set.of(candidate.projectId()), decision);
         }
 
-        /** The projects the night listed and skipped, in one write. */
-        void skipped(List<Skipped> skipped) {
-            if (skipped.isEmpty()) {
-                return;
-            }
-            var rows = new ArrayList<TopicNightProject>(skipped.size());
-            for (var skip : skipped) {
-                rows.add(row(skip.candidate(), TopicNightProject.SKIP, skip.reason(), null));
-            }
-            write("skipped projects", dao -> dao.insertProjects(rows));
+        /** The same decision on several projects: one log line and one write per workspace. */
+        void decide(List<Candidate> candidates, Decision decision, SkipReason reason) {
+            candidates.stream().collect(Collectors.groupingBy(Candidate::workspaceId,
+                    Collectors.mapping(Candidate::projectId, Collectors.toSet())))
+                    .forEach((workspaceId, projectIds) -> {
+                        log.info("Topics night '{}' decided, workspace '{}', projects '{}', decision '{}', reason '{}'",
+                                night, workspaceId, projectIds, decision.value(),
+                                reason == null ? null : reason.value());
+                        count(workspaceId, decision, reason, projectIds.size());
+                        write(workspaceId, projectIds, decision);
+                    });
         }
 
-        void end(TopicNight.Outcome outcome) {
-            write("end", dao -> dao.end(new TopicNight(night, startedAt, Instant.now(), outcome)));
+        void end() {
             if (writeFailures > 0) {
-                log.warn("Topics night '{}' could not write '{}' parts of its record", night, writeFailures);
+                log.warn("Topics night '{}' could not write '{}' of its decisions to topic_projects", night,
+                        writeFailures);
             }
         }
 
-        private TopicNightProject row(Candidate candidate, String decision, String reason, UUID runId) {
-            return TopicNightProject.builder()
-                    .id(idGenerator.generateId())
-                    .night(night)
-                    .workspaceId(candidate.workspaceId())
-                    .projectId(candidate.projectId())
-                    .decision(decision)
-                    .reason(reason)
-                    .runId(runId)
-                    .build();
+        private void count(String workspaceId, Decision decision, SkipReason reason, long projects) {
+            metrics.nightlyDecision(workspaceId, decision.value(), reason == null ? null : reason.value(), projects);
         }
 
-        private void write(String what, Consumer<TopicNightDAO> action) {
+        private void write(String workspaceId, Set<UUID> projectIds, Decision decision) {
+            Consumer<TopicProjectNightDAO> action = decision == Decision.NOT_REACHED
+                    ? dao -> dao.markNotReached(workspaceId, projectIds)
+                    : dao -> dao.markLooked(workspaceId, projectIds, night);
             try {
                 template.inTransaction(WRITE, handle -> {
-                    action.accept(handle.attach(TopicNightDAO.class));
+                    action.accept(handle.attach(TopicProjectNightDAO.class));
                     return null;
                 });
             } catch (RuntimeException exception) {
                 if (writeFailures++ == 0) {
-                    log.warn("Topics night '{}' could not write its record, '{}'", night, what, exception);
+                    log.warn("Topics night '{}' could not write its decision '{}', workspace '{}'", night,
+                            decision.value(), workspaceId, exception);
                 } else {
-                    log.debug("Topics night '{}' could not write its record, '{}'", night, what, exception);
+                    log.debug("Topics night '{}' could not write its decision '{}', workspace '{}'", night,
+                            decision.value(), workspaceId, exception);
                 }
             }
         }

@@ -732,6 +732,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().agentsDispatched() - row.get().agentsAmbiguous()
                         - row.get().agentsLinked()).isEqualTo(1);
                 assertThat(row.get().cipxVersion()).isEqualTo("0.0.56");
+                assertThat(row.get().sessionSource()).isEqualTo("fork");
 
                 assertThat(getUserMappings(email)).containsExactly(userUuid);
             });
@@ -991,7 +992,7 @@ class CostIntelligenceIngestionTest {
         }
 
         @Test
-        @DisplayName("a session carrying no agent rollup lands as zeros with an empty cipx_version")
+        @DisplayName("a session carrying no agent rollup lands as zeros with empty cipx_version and session_source")
         void traceWithoutAgentRollupLandsAsZeros() {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
@@ -1012,6 +1013,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().agentsLinked()).isZero();
                 assertThat(row.get().agentsAmbiguous()).isZero();
                 assertThat(row.get().cipxVersion()).isEmpty();
+                assertThat(row.get().sessionSource()).isEmpty();
             });
         }
 
@@ -1331,6 +1333,7 @@ class CostIntelligenceIngestionTest {
                 .agentsLinked(base + 7)
                 .agentsAmbiguous(base + 8)
                 .cipxVersion("sentinel-" + n + "-cipx-version")
+                .sessionSource("sentinel-" + n + "-session-source")
                 .lastUpdatedAt(Instant.ofEpochMilli(1_700_000_000_000L + n))
                 .skillsScope(List.of("repo", "user"))
                 .skillsRoot(List.of("sentinel-" + n + "-root-a", "sentinel-" + n + "-root-b"))
@@ -1381,6 +1384,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.agentsLinked()).as("agents_linked").isEqualTo(expected.agentsLinked());
         assertThat(actual.agentsAmbiguous()).as("agents_ambiguous").isEqualTo(expected.agentsAmbiguous());
         assertThat(actual.cipxVersion()).as("cipx_version").isEqualTo(expected.cipxVersion());
+        assertThat(actual.sessionSource()).as("session_source").isEqualTo(expected.sessionSource());
         assertThat(actual.lastUpdatedMs()).as("last_updated_at").isEqualTo(expected.lastUpdatedAt().toEpochMilli());
         assertThat(actual.skillsScope()).as("skills.scope").isEqualTo(expected.skillsScope());
         assertThat(actual.skillsRoot()).as("skills.root").isEqualTo(expected.skillsRoot());
@@ -1409,7 +1413,7 @@ class CostIntelligenceIngestionTest {
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
-                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version, session_source,
                     toUnixTimestamp64Milli(last_updated_at) AS last_updated_ms,
                     `skills.scope` AS skills_scope, `skills.root` AS skills_root, `skills.name` AS skills_name,
                     `skills.version_id` AS skills_version_id, skills_status,
@@ -1456,6 +1460,7 @@ class CostIntelligenceIngestionTest {
                             .agentsLinked(row.get("agents_linked", Long.class))
                             .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
+                            .sessionSource(row.get("session_source", String.class))
                             .lastUpdatedMs(row.get("last_updated_ms", Long.class))
                             .skillsScope(List.of(row.get("skills_scope", String[].class)))
                             .skillsRoot(List.of(row.get("skills_root", String[].class)))
@@ -1769,6 +1774,7 @@ class CostIntelligenceIngestionTest {
                       "agents_linked": 12,
                       "agents_ambiguous": 4,
                       "cipx_version": "0.0.56",
+                      "session_source": "fork",
                       "repository": {
                         "remote": "%s",
                         "branch": "main",
@@ -1954,7 +1960,7 @@ class CostIntelligenceIngestionTest {
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
-                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version,
+                    agents_dispatched, agents_linked, agents_ambiguous, cipx_version, session_source,
                     `skills.scope` AS skills_scope, `skills.root` AS skills_root, `skills.name` AS skills_name,
                     `skills.version_id` AS skills_version_id, skills_status,
                     `instruction_files.scope` AS instruction_files_scope,
@@ -1998,6 +2004,7 @@ class CostIntelligenceIngestionTest {
                             .agentsLinked(row.get("agents_linked", Long.class))
                             .agentsAmbiguous(row.get("agents_ambiguous", Long.class))
                             .cipxVersion(row.get("cipx_version", String.class))
+                            .sessionSource(row.get("session_source", String.class))
                             .skillsScope(List.of(row.get("skills_scope", String[].class)))
                             .skillsRoot(List.of(row.get("skills_root", String[].class)))
                             .skillsName(List.of(row.get("skills_name", String[].class)))
@@ -2066,7 +2073,7 @@ class CostIntelligenceIngestionTest {
             String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Long commitsInTrace,
             Long filesAdded, Long filesDeleted, Long linesAdded, Long linesDeleted,
-            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion,
+            Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous, String cipxVersion, String sessionSource,
             List<String> skillsScope, List<String> skillsRoot, List<String> skillsName,
             List<String> skillsVersionId, String skillsStatus, List<String> instructionFilesScope,
             List<String> instructionFilesPath, List<String> instructionFilesVersionId,
@@ -2081,7 +2088,7 @@ class CostIntelligenceIngestionTest {
             String organizationType, String seatTier, String billingType, String branch, String headShaStart,
             String headShaEnd, Boolean dirty, Long commitsInTrace, Long filesAdded, Long filesDeleted,
             Long linesAdded, Long linesDeleted, Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous,
-            String cipxVersion, Long lastUpdatedMs,
+            String cipxVersion, String sessionSource, Long lastUpdatedMs,
             List<String> skillsScope, List<String> skillsRoot, List<String> skillsName,
             List<String> skillsVersionId, String skillsStatus, List<String> instructionFilesScope,
             List<String> instructionFilesPath, List<String> instructionFilesVersionId,

@@ -22,6 +22,7 @@ import com.comet.opik.domain.ailabels.AiLabel;
 import com.comet.opik.domain.ailabels.AiLabelStatus;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
+import com.comet.opik.domain.topics.TopicEmbedding;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.domain.topics.TraceTopic;
@@ -896,13 +897,14 @@ class RetentionPolicyServiceTest {
         topicVectorsDAO.insert(List.of(TopicVector.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
+                .task(TopicEmbedding.SUMMARY_TASK)
                 .traceId(traceId)
                 .traceCreatedAt(Instant.now())
                 .taskVersion(1)
                 .embedModel("bge-small-en-v1.5")
                 .embedDimensions(2)
                 .text("summary")
-                .vector(List.of(0.6f, 0.8f))
+                .vector(new float[]{0.6f, 0.8f})
                 .build())).block();
         traceTopicsDAO.insert(List.of(TraceTopic.builder()
                 .workspaceId(workspaceId)
@@ -911,7 +913,7 @@ class RetentionPolicyServiceTest {
                 .traceCreatedAt(Instant.now())
                 .topicId(TraceTopic.OTHER)
                 .source(TraceTopic.Source.RUN)
-                .runId(UUID.randomUUID().toString())
+                .runId(UUID.randomUUID())
                 .build())).block();
     }
 

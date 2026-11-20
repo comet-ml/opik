@@ -18,7 +18,7 @@ public class Lifecycle {
     static final int RETIRE_NIGHTS = 3;
 
     /**
-     * @param labels per trace, a topic index or {@link PrototypeAssigner#OTHER}
+     * @param labels per trace, a topic index or {@link TopicAlgorithm#OTHER}
      */
     public static void retire(@NonNull NightState state, @NonNull NightWindow window, @NonNull int[] labels) {
         int n = window.size();
