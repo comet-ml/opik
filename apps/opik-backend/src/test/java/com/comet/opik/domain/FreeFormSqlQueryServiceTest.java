@@ -118,71 +118,52 @@ class FreeFormSqlQueryServiceTest {
         return config;
     }
 
-    @Test
-    @DisplayName("explicit system table reads are rejected before execution for both accounts")
-    void systemTableReadsAreRejected() {
-        givenClickHouseReturnsOneRow();
-        when(dao.explainAst(any(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
-                "SelectWithUnionQuery (children 1)", "   TableIdentifier system.tables")));
-
-        for (var account : FreeFormSqlAccount.values()) {
-            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
-                    "SELECT toJSONString(count()) AS result FROM system.tables").join())
-                    .cause().satisfies(error -> {
-                        assertThat(error).isInstanceOf(BadRequestException.class);
-                        assertThat(((WebApplicationException) error).getResponse().getEntity())
-                                .isEqualTo(new ErrorMessage(List.of("Query rejected: access denied")));
-                    });
-        }
-        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
-    }
-
-    @Test
-    @DisplayName("identity and environment function reads are rejected before execution for both accounts")
-    void identityFunctionReadsAreRejected() {
-        givenClickHouseReturnsOneRow();
-        when(dao.explainAst(any(), anyString())).thenReturn(CompletableFuture.completedFuture(List.of(
-                "SelectWithUnionQuery (children 1)", "   ExpressionList (children 1)",
-                "    Function currentUser (children 1)")));
-
-        for (var account : FreeFormSqlAccount.values()) {
-            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
-                    "SELECT toJSONString(map('u', currentUser())) AS result").join())
-                    .cause().satisfies(error -> {
-                        assertThat(error).isInstanceOf(BadRequestException.class);
-                        assertThat(((WebApplicationException) error).getResponse().getEntity())
-                                .isEqualTo(new ErrorMessage(List.of("Query rejected: access denied")));
-                    });
-        }
-        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
-    }
-
-    static Stream<Arguments> identityAliases() {
+    static Stream<Arguments> metadataExpressions() {
         return Stream.of(
+                arguments("currentUser()", "Function currentUser"),
                 arguments("database()", "Function database"),
                 arguments("schema()", "Function schema"),
                 arguments("current_database()", "Function current_database"),
                 arguments("current_user()", "Function current_user"),
                 arguments("current_user", "Identifier current_user"),
                 arguments("getMacro('replica')", "Function getMacro"),
-                arguments("getServerPort('tcp_port')", "Function getServerPort"));
+                arguments("getServerPort('tcp_port')", "Function getServerPort"),
+                arguments("displayName()", "Function displayName"),
+                arguments("DISPLAYNAME()", "Function DISPLAYNAME"),
+                arguments("enabledRoles()", "Function enabledRoles"),
+                arguments("defaultRoles()", "Function defaultRoles"),
+                arguments("getOSKernelVersion()", "Function getOSKernelVersion"),
+                arguments("current_database", "Identifier current_database"),
+                arguments("database", "Identifier database"),
+                arguments("schema", "Identifier schema"),
+                arguments("user", "Identifier user"));
     }
 
-    @ParameterizedTest(name = "{0}: {1}")
-    @MethodSource("identityAliases")
-    @DisplayName("verified identity and infrastructure aliases are rejected before execution")
-    void identityAliasesAreRejected(String expression, String astLabel) {
+    static Stream<Arguments> forbiddenAstCases() {
+        var catalogs = Stream.of(
+                "system.tables", "system.columns", "system.databases", "system.settings", "system.one",
+                "information_schema.tables")
+                .map(table -> arguments("SELECT toJSONString(count()) AS result FROM " + table,
+                        "TableIdentifier " + table));
+        var metadata = metadataExpressions().map(shape -> arguments(
+                "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(shape.get()[0]), shape.get()[1]));
+        return Stream.concat(catalogs, metadata);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("forbiddenAstCases")
+    @DisplayName("catalog and metadata reads are rejected before execution for both accounts")
+    void forbiddenAstNodesAreRejected(String query, String astLabel) {
         givenClickHouseReturnsOneRow();
         when(dao.explainAst(any(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  " + astLabel)));
 
         for (var account : FreeFormSqlAccount.values()) {
-            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null,
-                    "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression)).join())
+            assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null, query).join())
                     .cause().satisfies(error -> {
                         assertThat(error).isInstanceOf(BadRequestException.class);
                         assertThat(((WebApplicationException) error).getResponse().getEntity())
-                                .isEqualTo(new ErrorMessage(List.of("Query rejected: access denied")));
+                                .isEqualTo(new ErrorMessage(List.of(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE)));
                     });
         }
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());

@@ -120,21 +120,24 @@ public class FreeFormSqlQueryService {
     private static final Set<String> FORBIDDEN_CATALOG_PREFIXES = Set.of("system.", "information_schema.");
 
     /**
-     * Environment and identity functions that disclose the service account, host or build rather than tenant data.
+     * Environment and identity expressions that disclose the service account, host or build rather than tenant data.
      * They have no use in a workspace-scoped analytics query, so they are rejected before execution to keep infra
      * identity out of both the result and the error surface. Compared lower-cased; ClickHouse function names are
-     * case-insensitive. ClickHouse also exposes SQL-style aliases for the current database and user. Bare
-     * {@code current_user} is represented by an Identifier node, not a Function node, in EXPLAIN AST.
+     * case-insensitive. ClickHouse also exposes SQL-style aliases for the current database and user. Bare names such
+     * as {@code current_user} and {@code database} are Identifier nodes, not Function nodes, in EXPLAIN AST.
      */
     private static final String FUNCTION_AST_PREFIX = "Function ";
     private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
     private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
             "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
             "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
-            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport");
-    private static final Set<String> FORBIDDEN_IDENTIFIERS = Set.of("current_user", "session_user");
+            "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport",
+            "displayname", "enabledroles", "defaultroles", "getoskernelversion");
+    private static final Set<String> FORBIDDEN_IDENTIFIERS = Set.of(
+            "current_user", "session_user", "current_database", "database", "schema", "user");
 
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
+    static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
     static final String SCALAR_SUBQUERY_MESSAGE = """
             Query rejected: a scalar subquery (a subquery used as a value, e.g. SELECT (SELECT count() FROM spans)) \
             cannot read a table; this one reads %s. Compute the value in a CTE and select from it instead, e.g. \
@@ -337,11 +340,11 @@ public class FreeFormSqlQueryService {
                     "Query rejected: SETTINGS/SET clauses are not allowed", null);
         }
         if (containsForbiddenCatalogTableNode(nodeLabels)) {
-            throw reject(Outcome.PERMISSION_DENIED, startMillis, "Query rejected: access denied", null);
+            throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
-        if (containsForbiddenFunctionNode(nodeLabels)) {
+        if (containsForbiddenMetadataNode(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
-            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, "Query rejected: access denied", null);
+            throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
         return nodeLabels;
     }
@@ -479,7 +482,7 @@ public class FreeFormSqlQueryService {
                 .anyMatch(ref -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(ref::startsWith));
     }
 
-    private static boolean containsForbiddenFunctionNode(List<String> nodeLabels) {
+    private static boolean containsForbiddenMetadataNode(List<String> nodeLabels) {
         return nodeLabels.stream().map(String::stripLeading).anyMatch(label -> {
             if (label.startsWith(FUNCTION_AST_PREFIX)) {
                 String name = label.substring(FUNCTION_AST_PREFIX.length()).split("\\s", 2)[0]
@@ -532,7 +535,7 @@ public class FreeFormSqlQueryService {
         }
         if (code == CH_ACCESS_DENIED) {
             return error(Outcome.PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
-                    "Query rejected: access denied", error);
+                    ACCESS_DENIED_MESSAGE, error);
         }
         // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
         return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);

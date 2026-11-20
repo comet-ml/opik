@@ -275,7 +275,7 @@ class FreeFormSqlPostRunCheckTest {
     }
 
     static Stream<Arguments> identityExpressionsAsEachAccount() {
-        return FreeFormSqlQueryServiceTest.identityAliases().flatMap(shape -> Stream.of(FreeFormSqlAccount.values())
+        return FreeFormSqlQueryServiceTest.metadataExpressions().flatMap(shape -> Stream.of(FreeFormSqlAccount.values())
                 .map(account -> arguments(shape.get()[0], account, shape.get()[1])));
     }
 
@@ -295,7 +295,7 @@ class FreeFormSqlPostRunCheckTest {
                 .cause().isInstanceOf(BadRequestException.class)
                 .satisfies(
                         error -> assertThat(String.valueOf(((WebApplicationException) error).getResponse().getEntity()))
-                                .contains("Query rejected: access denied"));
+                                .contains(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE));
     }
 
     @ParameterizedTest(name = "{0}")
