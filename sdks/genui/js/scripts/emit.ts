@@ -1,8 +1,12 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { ENGINE_VERSION } from "../src/contract";
 import { prompt } from "../src/guidance";
 import { TOKENS } from "../src/tokens";
 import { AREAS, LIBRARIES, MAX_HTML_LENGTH } from "../src/view";
+
+const { version } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 const data = new URL("../../python/src/opik_genui/data/", import.meta.url);
 
@@ -10,6 +14,7 @@ const files: Record<string, string> = {
   "engine.json":
     JSON.stringify(
       {
+        version,
         engine_version: ENGINE_VERSION,
         areas: AREAS,
         libraries: LIBRARIES,

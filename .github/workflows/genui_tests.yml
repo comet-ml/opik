@@ -38,6 +38,7 @@ jobs:
       - run: npm ci
       - run: npm run ci
       - run: npm run build:python
+      - run: npm pack -w opik-genui --dry-run
 
   browser:
     runs-on: ubuntu-latest

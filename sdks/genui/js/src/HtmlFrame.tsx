@@ -16,9 +16,9 @@ import {
   PROTOCOL_VERSION,
   buildViewDocument,
   unknownVersionMessage,
-} from "./contract";
-import { TOKENS, type Theme } from "./tokens";
-import { MAX_FRAME_HEIGHT, type ViewData } from "./view";
+} from "./contract.js";
+import { TOKENS, type Theme } from "./tokens.js";
+import { MAX_FRAME_HEIGHT, type ViewData } from "./view.js";
 
 export interface HtmlFrameProps {
   html: string;

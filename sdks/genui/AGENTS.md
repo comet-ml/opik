@@ -17,8 +17,8 @@
   - `guidance.ts`: the authoring prompt per area.
   - `styles.css`: the host-side stylesheet for the frame, the loading and the error state, every rule under `.ov-view`.
 - `js/libraries/`: one entry per library a view may declare, built into `dist/libraries/<name>.js` as one script that sets its globals. The host fetches the file and the contract inlines it after the bootstrap, only for a view that declares it.
-- `js/scripts/`: `emit.ts` writes `python/src/opik_genui/data/` (`engine.json`, `prompt-<area>.txt`); `smoke.ts` is the test suite.
-- `python/`: the `opik-genui` Python package: `ENGINE_VERSION`, `AREAS`, `MAX_HTML_LENGTH`, `TOKENS` and `prompt(area)`, read from `python/src/opik_genui/data/` (git-ignored, written by `npm run build`).
+- `js/scripts/`: `emit.ts` writes `python/src/opik_genui/data/` (`engine.json`, `prompt-<area>.txt`); `licenses.ts` writes `dist/libraries/<name>.licenses.txt`, the licences of every package a library bundle contains; `smoke.ts` is the test suite.
+- `python/`: the `opik-genui` Python package: `__version__`, `ENGINE_VERSION`, `AREAS`, `MAX_HTML_LENGTH`, `TOKENS` and `prompt(area)`, read from `python/src/opik_genui/data/` (git-ignored, written by `npm run build`).
 - `dev-host/`: a page that renders a fixture view through `ViewHost`, and `dev-host/check.mjs`, the browser check.
 
 ## Build, Test, and Development Commands
@@ -47,6 +47,14 @@ Run from `sdks/genui`.
 - A change a stored view could notice is a new contract: the bootstrap, the CSP, the base stylesheet, the message shapes, the `onViewData` and `onViewTheme` callbacks or the meaning of a token name. Add `CONTRACTS[n + 1]` next to the existing ones and leave the old ones as they are; `ENGINE_VERSION` follows. Stored views are never migrated.
 - Not a new contract: a new token, a new token value, a change to the guidance, a host-side change in `HtmlFrame.tsx`, `ViewHost.tsx` or `styles.css` that keeps the messages the same.
 - A new contract ships with Opik first; Ollie and opik-mcp move to it by upgrading their pin of the packages.
+
+## Release
+- Both packages are published by hand with `.github/workflows/genui_publish.yml` ("Run workflow" on `main` with `is_release`), not by the Opik release, so a failed publish cannot block one. Give it the version of an Opik release that already happened: it builds that release's tag once and publishes `opik-genui` to npm and then to PyPI with that version.
+- Without `is_release` (off by default, as in the SDK publish workflows) it builds and checks the branch it is started from, proves the PyPI registration and uploads nothing. Run it that way before the first release and after any change to the workflow or the packaging.
+- `js/package.json` is the only version source. The workflow sets it at build time, the build writes it into `engine.json`, the Python package reads it from there, and the wheel build fails on data built for another version. The version in the repository stays `0.1.0` and is never published.
+- Auth is trusted publishing (OIDC). `genui_publish.yml` is the registered publisher on both registries: npm matches the workflow that starts the run, PyPI the workflow that contains the job. Renaming the file breaks both until the registrations are changed. Moving the publish into the Opik release needs a second npm publisher, `release-wrapper-release-n-deploy.yml`.
+- A version cannot be published twice. A rerun skips a package that is already on its registry.
+- What ships: `js/package.json` `files` and `exports` for npm, `python/pyproject.toml` for PyPI. A new entry point or library needs an `exports` entry; a library bundle ships with its licences file.
 
 ## Areas
 - An area is where a view is shown, such as `widget`, a dashboard grid cell. It is fixed when the view is created, and each area gets its own authoring prompt from `prompt(area)`.
