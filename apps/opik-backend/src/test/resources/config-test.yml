@@ -1067,6 +1067,15 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    nightlyMinCandidate: 20
+    nightlyMinGroups: 2
+    nightlyMaxGroups: 20
+    nightlyTextsPerGroup: 40
+    nightlyFrequent: 3
+    nightlyExamples: 5
+    recentDays: 7
+    retireShare: 0.005
+    retireNights: 3
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -1544,4 +1553,3 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
-

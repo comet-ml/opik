@@ -11,6 +11,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -33,11 +34,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     @Inject
     public KMeansTopicAlgorithm(@NonNull @Config("topics") TopicsConfig topics, @NonNull TopicTasks tasks) {
-        this(topics.getAlgorithm(), tasks);
-    }
-
-    KMeansTopicAlgorithm(@NonNull AlgorithmConfig config, @NonNull TopicTasks tasks) {
-        this.config = config;
+        this.config = Objects.requireNonNull(topics.getAlgorithm(), "topics.algorithm");
         this.tasks = tasks;
     }
 
@@ -116,8 +113,8 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     /** One group per {@code textsPerGroup} unique texts, within the configured bounds and never more than the texts. */
     private int groups(int unique) {
-        return Math.min(Math.min(config.getMaxGroups(),
-                Math.max(config.getMinGroups(), unique / config.getTextsPerGroup())), unique);
+        return KMeans.groupCount(unique, config.getTextsPerGroup(), config.getMinGroups(), config.getMaxGroups(),
+                unique);
     }
 
     /** {@code clamp(round(authorBudget / k), authorMinExamples, authorMaxExamples)}. */
