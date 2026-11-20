@@ -190,9 +190,14 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " <if(project_id)> AND project_id = :project_id <endif>" +
-            " ORDER BY id LIMIT 1")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND name = :name
+            <if(project_id)> AND project_id = :project_id <endif>
+            ORDER BY id
+            LIMIT 1
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,

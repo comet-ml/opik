@@ -7,3 +7,4 @@ ALTER TABLE datasets DROP INDEX `datasets_workspace_id_name_uk`;
 
 --rollback -- Rollback is intentionally a no-op. Reinstating the workspace-wide unique key fails once a workspace
 --rollback -- has the same dataset name in two projects. Rename or remove those duplicates manually first.
+
