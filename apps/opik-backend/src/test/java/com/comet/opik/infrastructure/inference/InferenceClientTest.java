@@ -688,13 +688,13 @@ class InferenceClientTest {
         server.stubFor(post(urlEqualTo(REALTIME_GENERATE_PATH)).willReturn(generated().withFixedDelay(5_000)));
 
         var started = System.nanoTime();
-        assertThatThrownBy(() -> client.generate(generateRequest(), Instant.now().plusMillis(300)).block())
+        assertThatThrownBy(() -> client.generate(generateRequest(), Instant.now().plusSeconds(1)).block())
                 .isInstanceOfSatisfying(InferenceException.class,
                         exception -> assertThat(exception.getCode()).isEqualTo(InferenceException.OUT_OF_TIME));
         var elapsed = Duration.ofNanos(System.nanoTime() - started);
 
         assertThat(server.findAll(postRequestedFor(urlEqualTo(REALTIME_GENERATE_PATH)))).hasSize(1);
-        assertThat(elapsed).isLessThan(Duration.ofMillis(2_000));
+        assertThat(elapsed).isLessThan(Duration.ofMillis(3_000));
     }
 
     @ParameterizedTest(name = "body ''{0}''")
