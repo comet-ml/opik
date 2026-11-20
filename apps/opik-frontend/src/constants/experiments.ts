@@ -1,4 +1,9 @@
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { EVALUATION_METHOD } from "@/types/datasets";
+import {
+  COLUMN_EXPERIMENT_SCORES_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
+} from "@/types/shared";
 import { TagProps } from "@/ui/tag";
 
 export const EXPERIMENT_ITEM_OUTPUT_PREFIX = "output";
@@ -30,3 +35,42 @@ export const STATUS_TO_VARIANT_MAP: Record<
   [OPTIMIZATION_STATUS.INITIALIZED]: "blue",
   [OPTIMIZATION_STATUS.ERROR]: "red",
 };
+
+// Experiments page tabs, kept in the URL as ?tab=.
+export const EXPERIMENTS_PAGE_TAB = {
+  TEST_SUITES: "test_suites",
+  DATASETS: "datasets",
+} as const;
+
+export const COLUMN_DATASET_VERSION_ID = "dataset_version";
+export const COLUMN_PASS_RATE_ID = "pass_rate";
+
+export type ExperimentsTabStorage = {
+  storageKeyPrefix: string;
+  // Columns the tab never shows. An id also covers its per-score columns, so
+  // "feedback_scores" hides "feedback_scores.accuracy" too.
+  excludedColumnIds: string[];
+};
+
+export const EXPERIMENTS_TAB_STORAGE: Record<
+  EVALUATION_METHOD,
+  ExperimentsTabStorage
+> = {
+  [EVALUATION_METHOD.TEST_SUITE]: {
+    storageKeyPrefix: "experiments-test-suites",
+    excludedColumnIds: [COLUMN_FEEDBACK_SCORES_ID, COLUMN_EXPERIMENT_SCORES_ID],
+  },
+  [EVALUATION_METHOD.DATASET]: {
+    storageKeyPrefix: "experiments-datasets",
+    excludedColumnIds: [COLUMN_PASS_RATE_ID],
+  },
+};
+
+export const isExcludedTabColumn = (
+  columnId: string,
+  excludedColumnIds: string[],
+) =>
+  excludedColumnIds.some(
+    (excludedId) =>
+      columnId === excludedId || columnId.startsWith(`${excludedId}.`),
+  );

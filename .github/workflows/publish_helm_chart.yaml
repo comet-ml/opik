@@ -56,13 +56,13 @@ jobs:
             echo "Version validated: $VERSION"
 
         - name: Checkout
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             ref: ${{inputs.version}}
             path: 'src'
 
         - name: Checkout GH Pages branch
-          uses: actions/checkout@v7
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
           with:
             path: 'dest'
             ref: 'gh-pages'
