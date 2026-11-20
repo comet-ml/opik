@@ -15,7 +15,10 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Array;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -58,6 +61,35 @@ public class TopicWindowDAO {
             )
             GROUP BY project_id
             HAVING traces > 0
+            SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
+                max_memory_usage = <max_memory_usage>, priority = 100, optimize_aggregation_in_order = 1,
+                max_block_size = 8192, log_comment = '<log_comment>'
+            """;
+
+    /**
+     * One project's live traces in the window, counted as in {@link #COUNT_BY_PROJECT} and by the same in-order scan,
+     * plus the slice bounds of the labelling pass: every {@code :slice_traces}-th creation time of those traces, in
+     * order. Slices cut at these bounds hold {@code :slice_traces} traces each, however the traffic is spread in time.
+     * The extra state is one creation time per live trace, about 200 MiB in all at 3 million traces.
+     */
+    private static final String COUNT_AND_BOUNDS = """
+            SELECT count() AS traces,
+                arrayMap(t -> toUnixTimestamp64Micro(t),
+                    arrayFilter((t, i) -> i % :slice_traces = 0,
+                        arraySort(groupArray(created)) AS sorted, arrayEnumerate(sorted))) AS bounds
+            FROM (
+                SELECT trace_id, min(trace_created_at) AS created,
+                    arrayExists(x -> x % 2 = 1, (maxMap([task_version],
+                        [toUInt64(toUnixTimestamp64Micro(last_updated_at)) * 2 + (is_deleted = 0)])).2) AS live
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND task = :task
+                AND trace_created_at >= fromUnixTimestamp64Micro(:from_micros, 'UTC')
+                AND trace_created_at \\< fromUnixTimestamp64Micro(:to_micros, 'UTC')
+                GROUP BY trace_id
+            )
+            WHERE live
             SETTINGS max_threads = 2, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, priority = 100, optimize_aggregation_in_order = 1,
                 max_block_size = 8192, log_comment = '<log_comment>'
@@ -207,6 +239,36 @@ public class TopicWindowDAO {
                         ((Number) row.get("traces", Object.class)).longValue())));
     }
 
+    /** The project's traces with a vector created in {@code [from, to)}, and slice bounds of {@code sliceTraces}. */
+    public Mono<WindowBounds> countAndBounds(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant from, @NonNull Instant to, int sliceTraces, long maxExecutionSeconds) {
+        Preconditions.checkArgument(sliceTraces > 0, "a slice holds at least one trace");
+        var find = config.getVectors().getFind();
+        var template = getSTWithLogComment(COUNT_AND_BOUNDS, "topics:count_and_bounds", workspaceId, null,
+                "project_id=%s, from=%s, to=%s, slice_traces=%d".formatted(projectId, from, to, sliceTraces))
+                .add("max_rows_to_read", find.getMaxRowsToRead())
+                .add("max_memory_usage", find.getMaxMemoryUsage())
+                .add("max_execution_time", maxExecutionSeconds);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("task", TopicEmbedding.SUMMARY_TASK)
+                        .bind("project_id", projectId.toString())
+                        .bind("from_micros", toEpochMicros(from))
+                        .bind("to_micros", toEpochMicros(to))
+                        .bind("slice_traces", sliceTraces)
+                        .execute())
+                .flatMap(result -> result.map((row, metadata) -> {
+                    var array = row.get("bounds", Object.class);
+                    var bounds = new ArrayList<Instant>(Array.getLength(array));
+                    for (int i = 0; i < Array.getLength(array); i++) {
+                        bounds.add(Instant.EPOCH.plus(((Number) Array.get(array, i)).longValue(), ChronoUnit.MICROS));
+                    }
+                    return new WindowBounds(((Number) row.get("traces", Object.class)).longValue(), bounds);
+                }))
+                .single();
+    }
+
     /**
      * The project's traces created in {@code [from, to)}, or an even, stable sample of {@code limit} of them when there
      * are more, in no particular order.
@@ -298,6 +360,10 @@ public class TopicWindowDAO {
     }
 
     public record ProjectCount(@NonNull UUID projectId, long traces) {
+    }
+
+    /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */
+    public record WindowBounds(long traces, @NonNull List<Instant> bounds) {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */

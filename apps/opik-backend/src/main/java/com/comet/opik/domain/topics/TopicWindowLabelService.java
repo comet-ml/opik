@@ -39,10 +39,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * stay, and a later call goes on from there. No cursor is kept: the project's {@code labels_complete} is false from the
  * save until a pass ends complete, and the first-build job calls the pass again for every project where it is false.
  *
- * <p>Bounded: the window is read in slices of trace creation time with about {@value #SLICE_TRACES} traces each, and a
- * slice in pages of at most {@value #CHUNK} traces, each read, assigned and inserted before the next, so the heap holds
- * one page of vectors. Every read and insert ends by the deadline, and no page starts with less than
- * {@link #MIN_PAGE_TIME} left.
+ * <p>Bounded: the window is cut at every {@value #SLICE_TRACES}-th trace creation time, so each slice holds that many
+ * traces however the traffic is spread, and a page's read costs about one slice. A slice is read in pages of at most
+ * {@value #CHUNK} traces, each read, assigned and inserted before the next, so the heap holds one page of vectors.
+ * Every read and insert ends by the deadline, and no page starts with less than {@link #MIN_PAGE_TIME} left.
  *
  * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
@@ -138,8 +138,7 @@ public class TopicWindowLabelService {
         }
         var pass = new Labelling(workspaceId, projectId, saved.get(), deadline, chunk);
         try {
-            pass.label(sliceTraces);
-            pass.complete = true;
+            pass.complete = pass.label(sliceTraces);
         } catch (CutException exception) {
             log.info("Topics labelling pass cut, run '{}', project '{}', reason '{}'", saved.get().runId(), projectId,
                     exception.getMessage());
@@ -244,23 +243,30 @@ public class TopicWindowLabelService {
             this.chunk = chunk;
         }
 
-        void label(int sliceTraces) {
+        /** True when every slice was read to its end; a slice stopped by a page check leaves the pass incomplete. */
+        boolean label(int sliceTraces) {
             var left = timeLeft();
-            windowTraces = windowDAO.countByProject(workspaceId, List.of(projectId), saved.from(), saved.to(),
+            var window = windowDAO.countAndBounds(workspaceId, projectId, saved.from(), saved.to(), sliceTraces,
                     Math.min(TopicsRebuildService.COUNT_SECONDS, left.toSeconds()))
-                    .filter(count -> count.projectId().equals(projectId))
-                    .map(TopicWindowDAO.ProjectCount::traces)
-                    .reduce(0L, Long::sum)
                     .block(left);
-            long slices = Math.max(1, (windowTraces + sliceTraces - 1) / sliceTraces);
-            var span = Duration.between(saved.from(), saved.to());
-            for (long slice = 0; slice < slices; slice++) {
-                labelSlice(saved.from().plus(span.multipliedBy(slice).dividedBy(slices)),
-                        saved.from().plus(span.multipliedBy(slice + 1).dividedBy(slices)));
+            windowTraces = window.traces();
+            var bounds = new ArrayList<Instant>();
+            bounds.add(saved.from());
+            bounds.addAll(window.bounds());
+            bounds.add(saved.to());
+            // A full slice takes ceil(sliceTraces / chunk) pages and one empty page; the rest is margin for ties on a
+            // bound and for traces that got their vector after the count.
+            int maxPages = (sliceTraces + chunk - 1) / chunk + 2;
+            boolean whole = true;
+            for (int slice = 0; slice + 1 < bounds.size(); slice++) {
+                if (bounds.get(slice).isBefore(bounds.get(slice + 1))) {
+                    whole &= labelSlice(bounds.get(slice), bounds.get(slice + 1), maxPages);
+                }
             }
-            if (saved.logCounts()) {
+            if (whole && saved.logCounts()) {
                 counts = count();
             }
+            return whole;
         }
 
         /**
@@ -292,23 +298,36 @@ public class TopicWindowLabelService {
             }
         }
 
-        private void labelSlice(Instant from, Instant to) {
+        /**
+         * Labels the slice's unlabelled traces page by page. False when a page check stops it first: a page that does
+         * not move past the last trace id, or more pages than the slice can hold.
+         */
+        private boolean labelSlice(Instant from, Instant to, int maxPages) {
             var after = "";
-            while (true) {
+            for (int pages = 0; pages < maxPages; pages++) {
                 var left = timeLeft();
                 var page = windowDAO.readUnlabelled(workspaceId, projectId, saved.runId(), from, to, after, chunk,
                         Math.min(TopicsRebuildService.READ_SECONDS, left.toSeconds()))
                         .collectList()
                         .block(left);
                 if (page.isEmpty()) {
-                    return;
+                    return true;
+                }
+                var last = page.getLast().traceId().toString();
+                if (last.compareTo(after) <= 0) {
+                    log.warn("Topics labelling pass stopped a slice, run '{}', project '{}', slice '[{}, {})': a page "
+                            + "did not move past trace '{}'", saved.runId(), projectId, from, to, after);
+                    return false;
                 }
                 insert(assign(page));
-                after = page.getLast().traceId().toString();
+                after = last;
                 if (page.size() < chunk) {
-                    return;
+                    return true;
                 }
             }
+            log.warn("Topics labelling pass stopped a slice, run '{}', project '{}', slice '[{}, {})': more than '{}' "
+                    + "pages", saved.runId(), projectId, from, to, maxPages);
+            return false;
         }
 
         private List<TraceTopic> assign(List<TopicWindowDAO.WindowVector> page) {

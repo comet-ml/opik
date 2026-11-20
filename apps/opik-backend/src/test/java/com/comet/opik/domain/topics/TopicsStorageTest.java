@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -100,6 +101,7 @@ class TopicsStorageTest {
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService labelService;
+    private TopicWindowDAO windowDAO;
     private ConnectionFactory connectionFactory;
     private TopicsTestData data;
     private TopicsTestData spreadData;
@@ -108,7 +110,7 @@ class TopicsStorageTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO,
-            @Jit TopicWindowLabelService labelService,
+            @Jit TopicWindowLabelService labelService, @Jit TopicWindowDAO windowDAO,
             ConnectionFactory connectionFactory) {
         this.connectionFactory = connectionFactory;
         this.opikConfig = opikConfig;
@@ -117,6 +119,7 @@ class TopicsStorageTest {
         this.vectorsDAO = vectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
         this.labelService = labelService;
+        this.windowDAO = windowDAO;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, TRACES);
         this.spreadData = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, SPREAD_TRACES);
     }
@@ -234,6 +237,28 @@ class TopicsStorageTest {
                 .containsExactly(List.of("2", String.valueOf(find.getMaxRowsToRead()), "", "120"));
         assertThat(data.queryLogSettings("topics:count_by_topic", workspaceId, "max_memory_usage", "max_threads"))
                 .containsExactly(List.of(String.valueOf(find.getMaxMemoryUsage()), "2"));
+    }
+
+    @Test
+    @DisplayName("the window's slice bounds hold the same number of live traces each, however the traffic is spread in "
+            + "time: most of this window is in its last 20 hours")
+    void sliceBoundsAreEqualInTraces() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        spreadData.seed(workspaceId, projectId, 0, 40);
+        int sliceTraces = 20;
+
+        var window = windowDAO.countAndBounds(workspaceId, projectId, from(), to(), sliceTraces, 60).block();
+
+        var created = Stream.concat(TRACES.createdAt().stream(), SPREAD_TRACES.createdAt().subList(0, 40).stream())
+                .sorted().toList();
+        assertThat(window.traces()).isEqualTo(BUILT + 40);
+        assertThat(window.bounds()).isEqualTo(IntStream.rangeClosed(1, created.size())
+                .filter(i -> i % sliceTraces == 0).mapToObj(i -> created.get(i - 1)).toList());
+        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
+        assertThat(data.queryGuards("topics:count_and_bounds", workspaceId))
+                .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
     }
 
     /**

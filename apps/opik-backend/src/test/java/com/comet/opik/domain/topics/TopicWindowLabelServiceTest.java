@@ -24,8 +24,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -121,9 +123,16 @@ class TopicWindowLabelServiceTest {
         add(from.minusSeconds(1), nudge(billingPrototype, random), billing);
         add(NIGHT, nudge(billingPrototype, random), billing);
 
-        when(windowDAO.countByProject(eq(WORKSPACE_ID), eq(List.of(projectId)), any(), any(), anyLong()))
-                .thenAnswer(invocation -> Flux.just(new TopicWindowDAO.ProjectCount(projectId,
-                        inWindow(invocation.getArgument(2), invocation.getArgument(3)).size())));
+        when(windowDAO.countAndBounds(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
+                .thenAnswer(invocation -> {
+                    // As the query: every sliceTraces-th creation time of the window's traces, in order.
+                    int sliceTraces = invocation.getArgument(4);
+                    var created = inWindow(invocation.getArgument(2), invocation.getArgument(3)).stream()
+                            .map(Trace::createdAt).sorted().toList();
+                    var bounds = IntStream.rangeClosed(1, created.size()).filter(i -> i % sliceTraces == 0)
+                            .mapToObj(i -> created.get(i - 1)).toList();
+                    return Mono.just(new TopicWindowDAO.WindowBounds(created.size(), bounds));
+                });
         when(windowDAO.readUnlabelled(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any(), any(), anyInt(),
                 anyLong())).thenAnswer(invocation -> {
                     Instant pageFrom = invocation.getArgument(3);
@@ -333,7 +342,7 @@ class TopicWindowLabelServiceTest {
 
         assertThat(pass.complete()).isFalse();
         assertThat(pass.labelled()).isZero();
-        verify(windowDAO, never()).countByProject(any(), any(), any(), any(), anyLong());
+        verify(windowDAO, never()).countAndBounds(any(), any(), any(), any(), anyInt(), anyLong());
         verifyNoInteractions(traceTopicsDAO);
         verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
     }
@@ -354,6 +363,52 @@ class TopicWindowLabelServiceTest {
         assertThat(interrupted).isTrue();
         assertThat(pass.complete()).isFalse();
         assertThat(inserted).hasSize(CHUNK);
+    }
+
+    @Test
+    @DisplayName("a page that does not move past the last trace stops its slice; the other slices are labelled and "
+            + "the pass ends incomplete")
+    void stuckPageStopsTheSlice() {
+        // A broken read: every page of a slice is its first page again.
+        when(windowDAO.readUnlabelled(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any(), any(), anyInt(),
+                anyLong())).thenAnswer(
+                        invocation -> Flux.fromIterable(
+                                inWindow(invocation.getArgument(3), invocation.getArgument(4)).stream()
+                                        .limit(invocation.<Integer>getArgument(6))
+                                        .map(trace -> new TopicWindowDAO.WindowVector(trace.traceId(),
+                                                trace.createdAt(),
+                                                trace.vector()))
+                                        .toList()));
+
+        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(pass.complete()).isFalse();
+        int slices = (IN_WINDOW + SLICE_TRACES - 1) / SLICE_TRACES;
+        assertThat(inserted).hasSize(slices * CHUNK);
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
+        assertThat(pass.counts()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a slice stops after the pages it can hold, when every page is full; the pass ends incomplete")
+    void pageCapStopsTheSlice() {
+        // A broken read: every page is full of traces the slice never had.
+        var next = new AtomicLong();
+        when(windowDAO.readUnlabelled(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any(), any(), anyInt(),
+                anyLong())).thenAnswer(
+                        invocation -> Flux.range(0, invocation.<Integer>getArgument(6))
+                                .map(i -> new TopicWindowDAO.WindowVector(
+                                        new UUID(0x7000_0000_0000_7000L + (next.incrementAndGet() << 16),
+                                                0x8000_0000_0000_0000L),
+                                        invocation.getArgument(3), unit(random))));
+
+        var pass = label(Instant.now().plus(Duration.ofMinutes(5)));
+
+        assertThat(pass.complete()).isFalse();
+        int slices = (IN_WINDOW + SLICE_TRACES - 1) / SLICE_TRACES;
+        int maxPages = (SLICE_TRACES + CHUNK - 1) / CHUNK + 2;
+        assertThat(inserted).hasSize(slices * maxPages * CHUNK);
+        verify(topicDAO, never()).markLabelsComplete(any(), any(), any());
     }
 
     @Test
