@@ -1059,6 +1059,7 @@ topics:
     maxVectors: 100000
     llmDeadline: 120s
     readTimeout: 120s
+    countTimeout: 60s
     insertRetries: 3
     insertBackoff: 500ms
   algorithm:

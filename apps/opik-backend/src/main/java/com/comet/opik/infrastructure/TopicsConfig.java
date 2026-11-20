@@ -103,6 +103,12 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration readTimeout;
 
+        /** The labelling pass's count of its window, which also takes the slice bounds. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration countTimeout;
+
         /** Retries of the {@code trace_topics} insert after the save's commit. */
         @JsonProperty
         @Min(0) @Max(10) private int insertRetries;

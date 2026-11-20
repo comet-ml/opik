@@ -2803,6 +2803,10 @@ topics:
     #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
     #  attempt of its trace_topics insert. At most 30m
     readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
+    #  Default: 60s
+    #  Description: The labelling pass's count of its run's window, with its slice bounds, stops after this (or the
+    #  pass's deadline, when sooner). At most 30m
+    countTimeout: ${TOPICS_BUILD_COUNT_TIMEOUT:-60s}
     #  Default: 3
     #  Description: Retries of the trace_topics insert after the save's commit. At most 10
     insertRetries: ${TOPICS_BUILD_INSERT_RETRIES:-3}
