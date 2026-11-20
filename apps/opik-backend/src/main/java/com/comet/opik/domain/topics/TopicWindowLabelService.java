@@ -195,22 +195,30 @@ public class TopicWindowLabelService {
         return true;
     }
 
-    /** The project's saved list, its window and the labeller of its prototypes, read in one transaction. */
+    /**
+     * The project's saved list, its window and the labeller of its prototypes. The project row and its topics are read
+     * in one transaction, so they are of the same save; the rest is built after it.
+     */
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> {
+        var rows = template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
             var project = topicDAO.findProjects(workspaceId, List.of(projectId)).stream().findFirst();
             if (project.isEmpty() || project.get().listRunId() == null || project.get().windowUntil() == null) {
-                return Optional.empty();
+                return Optional.<SavedRows>empty();
             }
-            var to = project.get().windowUntil();
-            var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
-            var topics = topicDAO.findByProject(workspaceId, projectId);
-            var labeller = algorithm.labeller(topics, project.get().otherVectors());
-            return Optional.of(new Saved(project.get().listRunId(), from, to,
-                    labeller.orElse(TopicWindowLabelService::allOther), topics.stream().map(Topic::id).toList(),
-                    labeller.isPresent() && !project.get().labelsComplete()));
+            return Optional.of(new SavedRows(project.get(), topicDAO.findByProject(workspaceId, projectId)));
         });
+        return rows.map(saved -> {
+            var to = saved.project().windowUntil();
+            var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
+            var labeller = algorithm.labeller(saved.topics(), saved.project().otherVectors());
+            return new Saved(saved.project().listRunId(), from, to,
+                    labeller.orElse(TopicWindowLabelService::allOther), saved.topics().stream().map(Topic::id).toList(),
+                    labeller.isPresent() && !saved.project().labelsComplete());
+        });
+    }
+
+    private record SavedRows(TopicProject project, List<Topic> topics) {
     }
 
     /** The labels of a list with no topic: every trace is Other, as its run labelled them. */
