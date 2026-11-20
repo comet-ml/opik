@@ -158,7 +158,7 @@ public class TopicsRebuildService {
             return recorded;
         });
         if (abandoned > 0) {
-            log.warn("Topics project '{}' had an attempt left running past its lease, recorded as abandoned",
+            log.warn("Topics run had an attempt left running past its lease, recorded as abandoned, project '{}'",
                     projectId);
             metrics.run(workspaceId, TopicProject.RunStatus.FAILED, TopicProject.RunError.ABANDONED.getValue());
         }
@@ -341,7 +341,7 @@ public class TopicsRebuildService {
             var retired = stats.putObject("retired");
             for (var topic : state.getTopics()) {
                 if (!topic.isLive()) {
-                    var reason = topic.getRetiredReason().value();
+                    var reason = topic.getRetiredReason().getValue();
                     retired.put(reason, retired.path(reason).asInt() + 1);
                 }
             }
@@ -389,8 +389,8 @@ public class TopicsRebuildService {
             });
         }
 
-        private static NightState.Topic nightTopic(Topic topic) {
-            return NightState.Topic.builder()
+        private static NightTopic nightTopic(Topic topic) {
+            return NightTopic.builder()
                     .id(topic.id())
                     .name(topic.name())
                     .definition(topic.definition())
@@ -678,8 +678,8 @@ public class TopicsRebuildService {
             metrics.saved(workspaceId, "topics", topics.size());
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
             int inserted = insertTraceTopics(traceTopics) ? traceTopics.size() : 0;
-            log.info("Topics run '{}' saved, project '{}', trace topics '{}', topics '{}', stats '{}'", runId,
-                    projectId, inserted, topics.size(), stats);
+            log.info("Topics run '{}' saved, project '{}', trace topics '{}', stats '{}'", runId, projectId, inserted,
+                    stats);
         }
 
         /**
@@ -711,7 +711,7 @@ public class TopicsRebuildService {
             }
             var inserted = new ArrayList<Topic>();
             var updated = new ArrayList<Topic>();
-            var retired = new ArrayList<NightState.Topic>();
+            var retired = new ArrayList<NightTopic>();
             for (var topic : state.getTopics()) {
                 boolean stored = saved.topicIds().contains(topic.getId());
                 if (!topic.isLive()) {
@@ -753,7 +753,7 @@ public class TopicsRebuildService {
                     }
                     if (!retired.isEmpty()) {
                         topicDAO.deleteTopics(workspaceId, projectId,
-                                retired.stream().map(NightState.Topic::getId).toList());
+                                retired.stream().map(NightTopic::getId).toList());
                     }
                     if (!updated.isEmpty()) {
                         topicDAO.updateTopics(updated);
@@ -778,7 +778,7 @@ public class TopicsRebuildService {
             for (var topic : retired) {
                 // Ids only: a name and definition come from trace text and must not reach the logs.
                 log.info("Topics run '{}' retired topic '{}', project '{}', reason '{}', size '{}'", runId,
-                        topic.getId(), projectId, topic.getRetiredReason().value(), topic.getSize());
+                        topic.getId(), projectId, topic.getRetiredReason().getValue(), topic.getSize());
                 metrics.retired(workspaceId, topic.getRetiredReason());
             }
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
