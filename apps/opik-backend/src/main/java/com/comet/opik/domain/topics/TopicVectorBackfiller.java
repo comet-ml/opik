@@ -246,9 +246,10 @@ class TopicVectorBackfiller {
      * write at the end; a failed write only means the projects are read again next tick.
      *
      * @param window the backfill window's bounds and the workspace
+     * @param arrival the tick's arrival steps
      */
     Mono<Done> backfill(@NonNull Collection<Backfill> projects, @NonNull TopicVectorsFind window,
-            @NonNull TickBudget budget) {
+            @NonNull TickBudget budget, @NonNull TopicsArrivalService.Tick arrival) {
         if (projects.isEmpty()) {
             return Mono.just(Done.NONE);
         }
@@ -259,7 +260,7 @@ class TopicVectorBackfiller {
         // repeat() runs the turns one after another, so only one thread at a time touches the run.
         return Mono.defer(() -> {
             var project = run.queue.poll();
-            return turn(project, window, budget).doOnNext(turn -> run.add(project, turn));
+            return turn(project, window, budget, arrival).doOnNext(turn -> run.add(project, turn));
         })
                 .repeat(() -> !run.stopped && !run.queue.isEmpty() && budget.hasTimeForRead(embedTimeout))
                 .then(Mono.fromCallable(() -> {
@@ -302,7 +303,8 @@ class TopicVectorBackfiller {
      * the read failed, or nothing was written and the project is not drained. More: the read stopped at the cap, none
      * was left and vectors were written, so another read now finds the next ones.
      */
-    private Mono<Turn> turn(Backfill project, TopicVectorsFind window, TickBudget budget) {
+    private Mono<Turn> turn(Backfill project, TopicVectorsFind window, TickBudget budget,
+            TopicsArrivalService.Tick arrival) {
         var vectors = config.getVectors();
         var workspaceId = project.workspaceId();
         var sliceSize = project.backfillTracesTotal() > ONE_SLICE_MAX_TRACES
@@ -310,7 +312,7 @@ class TopicVectorBackfiller {
                 : null;
         return WindowRead.read(dao, window.toBuilder().projectId(project.projectId()).build(), sliceSize, budget,
                 vectors.getFind().getMaxExecutionTime().toJavaDuration(), vectors.getEmbedTimeout().toJavaDuration())
-                .flatMap(read -> writer.embedAndWrite(workspaceId, read.candidates(), budget, null)
+                .flatMap(read -> writer.embedAndWrite(workspaceId, read.candidates(), budget, null, arrival)
                         .map(result -> {
                             boolean drained = read.complete() && !result.cut();
                             if (!drained && result.written() == 0) {

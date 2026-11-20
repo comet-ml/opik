@@ -50,6 +50,9 @@ import java.util.stream.Collectors;
  * change loses nothing. Work per tick is bounded per read by {@code maxTracesPerTick} and in total by the tick budget;
  * what is left is found again by the next tick. Workspaces are visited in a new random order every tick, so when the
  * budget does not reach them all, the ones left out differ from tick to tick.
+ *
+ * <p>After each vectors insert, in both phases, {@link TopicsArrivalService} gives the chunk's traces their topic on
+ * arrival, best effort and within {@code topics.arrival.timeout} per tick in all.
  */
 @Slf4j
 @Singleton
@@ -65,6 +68,7 @@ public class TopicVectorsTickService {
     private final @NonNull TopicVectorBackfiller backfiller;
     private final @NonNull LongWindowPass longWindowPass;
     private final @NonNull TopicVectorsMetrics metrics;
+    private final @NonNull TopicsArrivalService arrivalService;
 
     /**
      * Fails with {@link IllegalStateException} when ai-labels has no {@code trace_summary} task: no tick can run, so the
@@ -91,6 +95,7 @@ public class TopicVectorsTickService {
         var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
         // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
         var missedBefore = pass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
+        var arrival = arrivalService.tick();
         return Mono.fromCallable(workspaces::enabledWorkspaceIds)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(TopicVectorsTickService::shuffled)
@@ -100,14 +105,14 @@ public class TopicVectorsTickService {
                         .flatMap(undrained -> Flux.fromIterable(workspaceIds)
                                 .flatMap(workspaceId -> visit(workspaceId,
                                         undrained.getOrDefault(workspaceId, List.of()),
-                                        find(workspaceId, lowerBound, start), pass, missedBefore, budget),
+                                        find(workspaceId, lowerBound, start), pass, missedBefore, budget, arrival),
                                         vectors.getEmbedConcurrency())
                                 .collectList()
                                 .flatMap(visits -> {
                                     var fresh = finish(visits);
                                     var drained = visits.stream().allMatch(Visit::complete) && !fresh.cut();
                                     return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
-                                            .then(backfill(visits, undrained, backfillLowerBound, budget))
+                                            .then(backfill(visits, undrained, backfillLowerBound, budget, arrival))
                                             .map(backfilled -> fresh.plus(backfilled).plus(passResult));
                                 })));
     }
@@ -131,7 +136,7 @@ public class TopicVectorsTickService {
 
     /** One workspace's turn in the fresh phase: its workspace read, then its embed calls and writes. */
     private Mono<Visit> visit(String workspaceId, List<Backfill> undrained, TopicVectorsFind find, boolean pass,
-            @Nullable Instant missedBefore, TickBudget budget) {
+            @Nullable Instant missedBefore, TickBudget budget, TopicsArrivalService.Tick arrival) {
         return Mono.defer(() -> {
             var vectors = config.getVectors();
             var embedTimeout = vectors.getEmbedTimeout().toJavaDuration();
@@ -152,7 +157,8 @@ public class TopicVectorsTickService {
                             .flatMap(served -> {
                                 var readTime = since(readStarted);
                                 long embedStarted = System.nanoTime();
-                                return writer.embedAndWrite(workspaceId, served.candidates(), budget, missedBefore)
+                                return writer
+                                        .embedAndWrite(workspaceId, served.candidates(), budget, missedBefore, arrival)
                                         .map(result -> new Visit(workspaceId, true, read.complete(),
                                                 oldest(served.candidates()), result, served.started(), readTime,
                                                 since(embedStarted)));
@@ -172,7 +178,7 @@ public class TopicVectorsTickService {
      * except in a workspace an embed call failed for in the fresh phase. Publishes what is left undrained.
      */
     private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<Backfill>> undrained,
-            Instant lowerBound, TickBudget budget) {
+            Instant lowerBound, TickBudget budget, TopicsArrivalService.Tick arrival) {
         long started = System.nanoTime();
         return Flux.fromIterable(visits)
                 .flatMap(visit -> {
@@ -181,7 +187,7 @@ public class TopicVectorsTickService {
                     var backfill = visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
                             ? Mono.just(TopicVectorBackfiller.Done.NONE)
                             : backfiller.backfill(projects, find(visit.workspaceId(), lowerBound, budget.start()),
-                                    budget);
+                                    budget, arrival);
                     return backfill.map(done -> Map.entry(visit.workspaceId(), new Backfilled(done.result(),
                             projects.stream().filter(project -> !done.drained().contains(project.projectId()))
                                     .toList())));
