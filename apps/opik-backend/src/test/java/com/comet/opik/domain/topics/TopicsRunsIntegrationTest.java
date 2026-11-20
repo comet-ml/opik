@@ -17,6 +17,8 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.errors.ErrorMessage;
+import org.assertj.core.api.ThrowingConsumer;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -212,7 +214,9 @@ class TopicsRunsIntegrationTest {
         Awaitility.await().atMost(WAIT.multipliedBy(2)).untilAsserted(() -> {
             planner.plan(Instant.now()).block();
             for (var projectId : projects) {
-                assertThat(data.topicProject(projectId).listRunId()).isNotNull();
+                var project = data.topicProject(projectId);
+                assertThat(project).isNotNull();
+                assertThat(project.listRunId()).isNotNull();
             }
         });
     }
@@ -266,13 +270,13 @@ class TopicsRunsIntegrationTest {
         assertNoRun(waiting);
 
         assertThatThrownBy(() -> planner.runByHand(workspaceId, waiting, tomorrow(), false).block())
-                .isInstanceOf(ConflictException.class).hasMessageContaining("vectors backfill");
+                .isInstanceOf(ConflictException.class).satisfies(conflict("vectors backfill"));
         assertThatThrownBy(() -> planner.runByHand(workspaceId, small, tomorrow(), false).block())
-                .isInstanceOf(ConflictException.class).hasMessageContaining("vectors in the window");
+                .isInstanceOf(ConflictException.class).satisfies(conflict("vectors in the window"));
         assertThatThrownBy(() -> planner.runByHand(enabledWorkspace(), waiting, tomorrow(), false).block())
                 .isInstanceOf(ConflictException.class);
         assertThatThrownBy(() -> planner.runByHand(aiLabelsOnlyWorkspace(), waiting, tomorrow(), false).block())
-                .isInstanceOf(ConflictException.class).hasMessageContaining("not opted in");
+                .isInstanceOf(ConflictException.class).satisfies(conflict("not opted in"));
         assertNoRun(waiting);
 
         var runId = planner.runByHand(workspaceId, waiting, tomorrow(), true).block();
@@ -429,5 +433,11 @@ class TopicsRunsIntegrationTest {
             return null;
         });
         return workspaceId;
+    }
+
+    /** A {@link ConflictException} keeps its text in the response's {@link ErrorMessage}, not in getMessage(). */
+    private static ThrowingConsumer<Throwable> conflict(String text) {
+        return error -> assertThat(((ErrorMessage) ((ConflictException) error).getResponse().getEntity()).getMessage())
+                .contains(text);
     }
 }

@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.api.events.RedisSubscriberMessage;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
@@ -16,6 +17,7 @@ import java.util.UUID;
  * @param windowTraces the window's traces with a vector, as the planner counted them; 0 for a labelling pass
  */
 @Builder(toBuilder = true)
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
 public record TopicsRunMessage(@NonNull UUID runId, @NonNull String workspaceId, @NonNull UUID projectId,
         @NonNull TopicProject.RunMode mode, @Nullable LocalDate night, long windowTraces)
         implements
