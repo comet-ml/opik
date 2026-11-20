@@ -12,17 +12,17 @@ import lombok.experimental.UtilityClass;
  * topic retired tonight, or now in a topic born tonight, has changed.
  */
 @UtilityClass
-public class TopicChurn {
+class TopicChurn {
 
     @Builder(toBuilder = true)
-    public record Churn(double churn, double churnAny) {
+    record Churn(double churn, double churnAny) {
     }
 
     /**
      * @param before step a's label per window trace, a topic index or {@link TopicAlgorithm#OTHER}
      * @param after  tonight's final label per window trace, the same way
      */
-    public static Churn of(@NonNull int[] before, @NonNull int[] after) {
+    static Churn of(@NonNull int[] before, @NonNull int[] after) {
         Preconditions.checkArgument(before.length == after.length, "one label per trace on both sides");
         int changed = 0;
         int inTopics = 0;
