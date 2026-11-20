@@ -149,6 +149,17 @@ describe("RowsTable", () => {
       expect(shownWidths()).toEqual(["344px", "80px"]);
     });
 
+    it("sizes a column named like an object property", () => {
+      render(
+        <RowsTable
+          rows={[{ constructor: "small", cost: "1" }]}
+          columns={["constructor", "cost"]}
+          columnsWidth={{ cost: 90 }}
+        />,
+      );
+      expect(shownWidths()).toEqual(["130px", "80px"]);
+    });
+
     it("shares a narrow widget, keeping narrow columns whole", async () => {
       render(<RowsTable rows={WIDE_ROWS} columns={["model", "cost"]} />);
 

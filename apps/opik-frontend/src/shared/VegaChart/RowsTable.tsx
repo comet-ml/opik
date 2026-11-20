@@ -259,14 +259,21 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
 
   // Columns the user sized keep their width; the others share what is left.
   const shownSizing = useMemo(() => {
+    // Own keys only: a column may be named like an object property, such as "constructor".
     const sized = Object.fromEntries(
       keys
-        .filter((key) => key in columnSizing)
+        .filter(
+          (key) =>
+            Object.hasOwn(columnSizing, key) &&
+            typeof columnSizing[key] === "number",
+        )
         .map((key) => [key, capWidth(key, columnSizing[key])]),
     );
     const used = Object.values(sized).reduce((sum, width) => sum + width, 0);
     const rest = Object.fromEntries(
-      keys.filter((key) => !(key in sized)).map((key) => [key, limits[key]]),
+      keys
+        .filter((key) => !Object.hasOwn(sized, key))
+        .map((key) => [key, limits[key]]),
     );
     return {
       ...sized,
@@ -285,15 +292,10 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
         const next =
           typeof updater === "function" ? updater(shownSizing) : updater;
         // Only the dragged column changes; the others keep their saved widths, which may suit a wider screen.
-        const dragged = Object.fromEntries(
-          Object.entries(next).filter(
-            ([id, width]) => width !== shownSizing[id],
-          ),
-        );
-        const widths = { ...columnSizing };
-        Object.entries(dragged).forEach(([id, width]) => {
-          widths[id] = capWidth(id, width);
-        });
+        const dragged = Object.entries(next)
+          .filter(([id, width]) => width !== shownSizing[id])
+          .map(([id, width]) => [id, capWidth(id, width)]);
+        const widths = { ...columnSizing, ...Object.fromEntries(dragged) };
         markWidthsPending(widths);
         setColumnSizing(widths);
       }) as OnChangeFn<ColumnSizingState>,
