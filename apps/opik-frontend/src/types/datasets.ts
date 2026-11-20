@@ -240,9 +240,9 @@ export interface ExperimentsAggregations {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
-  pass_rate?: number;
-  passed_count?: number;
-  total_count?: number;
+  pass_rate_avg?: number;
+  passed_count_sum?: number;
+  total_count_sum?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];

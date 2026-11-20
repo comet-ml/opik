@@ -26,8 +26,7 @@ def hardening_enabled() -> bool:
 
 
 def hardened_daemon_config(config: dict, allow_network: bool) -> dict:
-    # Root in an executor container maps to an unprivileged host uid range.
-    hardened = {**config, "userns-remap": "default"}
+    hardened = dict(config)
     if not allow_network:
         # Executor containers without network access need no bridge or firewall rules in the daemon.
         hardened.update({"bridge": "none", "iptables": False, "ip6tables": False})
