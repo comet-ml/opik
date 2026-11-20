@@ -14,6 +14,9 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.ws.rs.core.Response;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -329,5 +332,162 @@ class DatasetsResourceProjectScopedTest {
         assertThat(page.content())
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(DATASET_IGNORED_FIELDS)
                 .containsExactly(expectedDataset);
+    }
+
+    @Test
+    @DisplayName("Datasets with the same name can exist in different projects")
+    void createDatasetsWithSameNameInDifferentProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String projectNameA = "project-" + UUID.randomUUID();
+        String projectNameB = "project-" + UUID.randomUUID();
+        var projectIdA = projectResourceClient.createProject(projectNameA, apiKey, workspaceName);
+        var projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
+
+        var datasetA = buildDataset().toBuilder().id(null).projectId(projectIdA).build();
+        var datasetB = buildDataset().toBuilder().id(null).name(datasetA.name()).projectId(projectIdB).build();
+        datasetResourceClient.createDataset(datasetA, apiKey, workspaceName);
+        datasetResourceClient.createDataset(datasetB, apiKey, workspaceName);
+
+        var actualA = datasetResourceClient.getDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(datasetA.name()).projectName(projectNameA).build(), apiKey,
+                workspaceName);
+        var actualB = datasetResourceClient.getDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(datasetA.name()).projectName(projectNameB).build(), apiKey,
+                workspaceName);
+
+        assertDataset(actualA, datasetA);
+        assertDataset(actualB, datasetB);
+    }
+
+    @Test
+    @DisplayName("Retrieve by name without a project is rejected when the name exists in several projects")
+    void getDatasetByNameWithoutProjectReturnsConflictWhenNameIsInSeveralProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String datasetName = createDatasetInTwoProjects(apiKey, workspaceName);
+
+        try (var response = datasetResourceClient.callGetDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName)) {
+            assertConflictForAmbiguousName(response, datasetName);
+        }
+    }
+
+    @Test
+    @DisplayName("Delete by name without a project is rejected when the name exists in several projects")
+    void deleteDatasetByNameWithoutProjectReturnsConflictWhenNameIsInSeveralProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String projectNameA = "project-" + UUID.randomUUID();
+        String projectNameB = "project-" + UUID.randomUUID();
+        var projectIdA = projectResourceClient.createProject(projectNameA, apiKey, workspaceName);
+        var projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
+        var datasetA = buildDataset().toBuilder().id(null).projectId(projectIdA).build();
+        var datasetB = buildDataset().toBuilder().id(null).name(datasetA.name()).projectId(projectIdB).build();
+        var idA = datasetResourceClient.createDataset(datasetA, apiKey, workspaceName);
+        var idB = datasetResourceClient.createDataset(datasetB, apiKey, workspaceName);
+
+        try (var response = datasetResourceClient.callDeleteDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(datasetA.name()).build(), apiKey, workspaceName)) {
+            assertConflictForAmbiguousName(response, datasetA.name());
+        }
+
+        assertDataset(datasetResourceClient.getDatasetById(idA, apiKey, workspaceName), datasetA);
+        assertDataset(datasetResourceClient.getDatasetById(idB, apiKey, workspaceName), datasetB);
+    }
+
+    @Test
+    @DisplayName("Put items by name into a project without that dataset is rejected when the name exists in several other projects")
+    void putDatasetItemsReturnsConflictWhenNameIsInSeveralOtherProjects() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String datasetName = createDatasetInTwoProjects(apiKey, workspaceName);
+        String otherProjectName = "project-" + UUID.randomUUID();
+        var otherProjectId = projectResourceClient.createProject(otherProjectName, apiKey, workspaceName);
+
+        var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                .id(null)
+                .build();
+        var batch = DatasetItemBatch.builder()
+                .datasetName(datasetName)
+                .projectName(otherProjectName)
+                .items(List.of(item))
+                .build();
+
+        try (var response = datasetResourceClient.callCreateDatasetItems(batch, workspaceName, apiKey)) {
+            assertConflictForAmbiguousName(response, datasetName);
+        }
+
+        var page = datasetResourceClient.getDatasetsByProjectId(otherProjectId, workspaceName, apiKey);
+        assertThat(page.content()).isEmpty();
+    }
+
+    private String createDatasetInTwoProjects(String apiKey, String workspaceName) {
+        var projectIdA = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var projectIdB = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var datasetA = buildDataset().toBuilder().id(null).projectId(projectIdA).build();
+        var datasetB = buildDataset().toBuilder().id(null).name(datasetA.name()).projectId(projectIdB).build();
+        datasetResourceClient.createDataset(datasetA, apiKey, workspaceName);
+        datasetResourceClient.createDataset(datasetB, apiKey, workspaceName);
+        return datasetA.name();
+    }
+
+    private void assertConflictForAmbiguousName(Response response, String datasetName) {
+        var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT,
+                "Multiple datasets with this name exist in different projects, specify the project. Dataset name: '%s'"
+                        .formatted(datasetName));
+
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+        assertThat(response.readEntity(ErrorMessage.class)).isEqualTo(expectedError);
+    }
+
+    @Test
+    @DisplayName("A dataset name already used in the same project is rejected with conflict")
+    void createDatasetWithSameNameInSameProjectReturnsConflict() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var dataset = buildDataset().toBuilder().id(null).projectId(projectId).build();
+        datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+        try (var response = datasetResourceClient.callCreateDataset(dataset, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(409);
+        }
+    }
+
+    @Test
+    @DisplayName("Delete by name and project deletes only that project's dataset")
+    void deleteDatasetByNameAndProjectKeepsSameNameInOtherProject() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+        String projectNameB = "project-" + UUID.randomUUID();
+        var projectIdA = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+        var projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
+
+        var datasetA = buildDataset().toBuilder().id(null).projectId(projectIdA).build();
+        var datasetB = buildDataset().toBuilder().id(null).name(datasetA.name()).projectId(projectIdB).build();
+        var idA = datasetResourceClient.createDataset(datasetA, apiKey, workspaceName);
+        var idB = datasetResourceClient.createDataset(datasetB, apiKey, workspaceName);
+
+        datasetResourceClient.deleteDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(datasetA.name()).projectName(projectNameB).build(), apiKey,
+                workspaceName);
+
+        assertDataset(datasetResourceClient.getDatasetById(idA, apiKey, workspaceName), datasetA);
+        try (var response = datasetResourceClient.callGetDatasetById(idB, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(404);
+        }
     }
 }

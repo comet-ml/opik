@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
@@ -180,9 +181,9 @@ class DatasetServiceImpl implements DatasetService {
             UUID projectId) {
         var dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
-            var result = dao.findByName(workspaceId, name, projectId);
+            var result = findSingleByName(dao, workspaceId, name, projectId);
             if (result.isEmpty() && projectId != null) {
-                result = dao.findByName(workspaceId, name, null);
+                result = findSingleByName(dao, workspaceId, name, null);
             }
             return result;
         });
@@ -331,12 +332,29 @@ class DatasetServiceImpl implements DatasetService {
         });
     }
 
+    /**
+     * Finds the dataset with this name in the given project, or anywhere in the workspace when {@code projectId} is
+     * null. Dataset names are unique per project, so a workspace-wide lookup can match datasets in several projects:
+     * that case is ambiguous and is rejected with a conflict instead of picking one of them.
+     */
+    private Optional<Dataset> findSingleByName(DatasetDAO dao, String workspaceId, String name, UUID projectId) {
+        List<Dataset> datasets = dao.findByName(workspaceId, name, projectId);
+        if (datasets.size() > 1) {
+            log.info("Found '{}' datasets with name '{}', workspaceId '{}', projectId '{}'", datasets.size(), name,
+                    workspaceId, projectId);
+            throw new ConflictException(
+                    "Multiple datasets with this name exist in different projects, specify the project. Dataset name: '%s'"
+                            .formatted(name));
+        }
+        return datasets.stream().findFirst();
+    }
+
     private Dataset findByNameNoContext(String workspaceId, String name, UUID projectId, Visibility visibility) {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            Dataset d = dao.findByName(workspaceId, name, projectId)
-                    .or(() -> dao.findByName(workspaceId, name, null))
+            Dataset d = findSingleByName(dao, workspaceId, name, projectId)
+                    .or(() -> findSingleByName(dao, workspaceId, name, null))
                     .orElseThrow(this::newNotFoundException);
 
             log.info("Found dataset with name '{}', id '{}', workspaceId '{}'", name, d.id(), workspaceId);
@@ -350,12 +368,12 @@ class DatasetServiceImpl implements DatasetService {
         Dataset dataset = template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetDAO.class);
 
-            return dao.findByName(workspaceId, name, projectId)
+            return findSingleByName(dao, workspaceId, name, projectId)
                     .or(() -> {
                         if (projectId == null) {
                             return Optional.empty();
                         }
-                        return dao.findByName(workspaceId, name, null).map(d -> {
+                        return findSingleByName(dao, workspaceId, name, null).map(d -> {
                             requestContext.get().setWorkspaceFallbackFor("Dataset", name);
                             return d;
                         });
@@ -427,7 +445,7 @@ class DatasetServiceImpl implements DatasetService {
             deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
 
             var datasetDao = handle.attach(DatasetDAO.class);
-            datasetDao.delete(workspaceId, identifier.datasetName());
+            datasetDao.delete(dataset.id(), workspaceId);
             return null;
         });
 
