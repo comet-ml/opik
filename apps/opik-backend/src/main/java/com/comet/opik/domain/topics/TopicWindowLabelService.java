@@ -96,11 +96,11 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * The saved list a pass labels with. The pass labels and counts the traces created in {@code [from, to)}, the run's
-     * window. {@code topicIds} are its live topics. {@code saveCounts} is true when
+     * The saved list a pass labels with. The pass labels the traces created in {@code [from, to)}; the counts cover the
+     * run's window, {@code [from, windowUntil)}. {@code topicIds} are its live topics. {@code saveCounts} is true when
      * a complete pass logs the run's counts: the list has a topic and the run's labels are not complete yet.
      */
-    private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller,
+    private record Saved(UUID runId, Instant from, Instant to, Instant windowUntil, TopicLabeller labeller,
             List<UUID> topicIds, boolean saveCounts) {
     }
 
@@ -215,7 +215,7 @@ public class TopicWindowLabelService {
             var from = windowUntil.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             var topics = topicDAO.findByProject(workspaceId, projectId);
             var labeller = algorithm.labeller(topics, project.get().otherVectors());
-            return Optional.of(new Saved(project.get().listRunId(), from, to,
+            return Optional.of(new Saved(project.get().listRunId(), from, to, windowUntil,
                     labeller.orElse(TopicWindowLabelService::allOther), topics.stream().map(Topic::id).toList(),
                     labeller.isPresent() && !project.get().labelsComplete()));
         });
@@ -280,7 +280,7 @@ public class TopicWindowLabelService {
                 var traces = new LinkedHashMap<UUID, Long>();
                 saved.topicIds().forEach(topicId -> traces.put(topicId, 0L));
                 traces.put(TraceTopic.OTHER, 0L);
-                traceTopicsDAO.countByTopic(workspaceId, projectId, saved.from(), saved.to(),
+                traceTopicsDAO.countByTopic(workspaceId, projectId, saved.from(), saved.windowUntil(),
                         Math.min(TopicsRebuildService.READ_SECONDS, left.toSeconds()))
                         .collectList()
                         .block(left)
