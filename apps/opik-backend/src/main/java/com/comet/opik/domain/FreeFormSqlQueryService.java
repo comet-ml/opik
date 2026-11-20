@@ -137,10 +137,6 @@ public class FreeFormSqlQueryService {
             "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport",
             "displayname", "enabledroles", "defaultroles", "getoskernelversion", "tcpport", "authenticateduser",
             "enabledprofiles", "defaultprofiles");
-    private static final Set<String> FORBIDDEN_IDENTIFIERS = Set.of(
-            "current_user", "session_user", "current_database", "database", "schema", "user",
-            "currentdatabase", "currentuser");
-
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
     static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";
     static final String SCALAR_SUBQUERY_MESSAGE = """
@@ -530,7 +526,7 @@ public class FreeFormSqlQueryService {
         return nodeLabels.stream().map(String::stripLeading)
                 .filter(label -> label.startsWith(IDENTIFIER_AST_PREFIX))
                 .map(label -> firstTokenAfterPrefix(label, IDENTIFIER_AST_PREFIX).toLowerCase(Locale.ROOT))
-                .anyMatch(FORBIDDEN_IDENTIFIERS::contains);
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
     private static boolean containsForbiddenResolvedMetadataFunction(List<String> queryTree) {

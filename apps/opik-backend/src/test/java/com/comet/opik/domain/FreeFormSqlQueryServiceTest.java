@@ -27,6 +27,7 @@ import org.mockito.quality.Strictness;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -204,6 +205,26 @@ class FreeFormSqlQueryServiceTest {
 
         verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
         verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a newly niladic metadata function is rejected when ClickHouse resolves it")
+    void newlyNiladicMetadataFunctionIsRejected() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  Identifier version")));
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  FUNCTION id: 1, function_name: version, result_type: String")));
+
+        assertThatThrownBy(() -> service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null,
+                "SELECT toJSONString(map('n', toString(version))) AS result").join())
+                .isInstanceOf(CompletionException.class)
+                .cause().isInstanceOf(BadRequestException.class)
+                .satisfies(
+                        error -> assertThat(String.valueOf(((WebApplicationException) error).getResponse().getEntity()))
+                                .contains(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE));
+        verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
