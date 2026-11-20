@@ -1718,14 +1718,19 @@ class AutomationRuleEvaluatorsResourceTest {
                     .bind("id", id.toString())
                     .execute());
 
+            AutomationRuleEvaluator<?, ?> actualMismatchedRule;
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
                     id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
-                assertThat(actualResponse.readEntity(AutomationRuleEvaluator.class).getType())
-                        .isEqualTo(evaluatorWithProject.getType());
+                actualMismatchedRule = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualMismatchedRule.getType()).isEqualTo(evaluatorWithProject.getType());
             }
             try (var actualResponse = evaluatorsResourceClient.findEvaluator(
                     projectId, null, 1, 10, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
-                assertThat(actualResponse.hasEntity()).isTrue();
+                var actualPage = actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
+                assertThat(actualPage.content())
+                        .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                                AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
+                        .contains(actualMismatchedRule);
             }
 
             var update = automationRuleEvaluatorUpdate.toBuilder()
