@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -8,6 +9,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.v1.events.TopicsProjectDeletedListener;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -43,6 +45,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -65,9 +68,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * The labelling pass's storage against real ClickHouse and MySQL: the rows a pass writes and its slice bounds. No run
- * builds here: tests seed vectors and a saved list directly and call the label service. {@link TopicsDaoStorageTest}
- * covers the DAO reads.
+ * The labelling pass's storage and the project-delete cleanup against real ClickHouse and MySQL: the rows a pass
+ * writes and its slice bounds, and what deleting a project removes. No run builds here: tests seed vectors and a saved
+ * list directly and call the label service and the listener. {@link TopicsDaoStorageTest} covers the DAO reads.
  */
 @DisplayName("topics storage")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -119,6 +122,7 @@ class TopicsStorageTest {
     private TopicVectorsDAO vectorsDAO;
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService labelService;
+    private TopicsProjectDeletedListener projectDeletedListener;
     private TopicWindowDAO windowDAO;
     private TopicsTestData data;
     private TopicsTestData spreadData;
@@ -129,7 +133,8 @@ class TopicsStorageTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicWindowLabelService labelService,
-            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm) {
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm,
+            @Jit TopicsProjectDeletedListener projectDeletedListener) {
         this.algorithm = algorithm;
         this.opikConfig = opikConfig;
         this.template = template;
@@ -137,6 +142,7 @@ class TopicsStorageTest {
         this.vectorsDAO = vectorsDAO;
         this.traceTopicsDAO = traceTopicsDAO;
         this.labelService = labelService;
+        this.projectDeletedListener = projectDeletedListener;
         this.windowDAO = windowDAO;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, TRACES);
         this.spreadData = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, SPREAD_TRACES);
@@ -148,6 +154,22 @@ class TopicsStorageTest {
         zookeeper.stop();
         mysql.stop();
         network.close();
+    }
+
+    @Test
+    @DisplayName("deleting a project deletes its topics, with their prototype vectors, and keeps another project's")
+    void projectDeleted() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var kept = UUID.randomUUID();
+        data.savedList(workspaceId, projectId, NIGHT, BUILT - 10);
+        data.savedList(workspaceId, kept, NIGHT, BUILT - 10);
+
+        projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(projectId), workspaceId, "test"));
+
+        assertThat(data.topics(projectId)).isEmpty();
+        assertThat(data.topics(kept)).singleElement()
+                .satisfies(topic -> assertThat(topic.vectors().vectors()).hasSize(1));
     }
 
     @Test

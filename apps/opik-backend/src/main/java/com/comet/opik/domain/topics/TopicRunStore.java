@@ -36,7 +36,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  */
 @Slf4j
 @Singleton
-class TopicRunStore {
+public class TopicRunStore {
 
     private static final Duration INSERT_BOUND_SLACK = Duration.ofSeconds(30);
 
@@ -167,7 +167,7 @@ class TopicRunStore {
      * Cancels the projects' runs in flight, for a project delete or an opt-out: a queued run fails at once, a running
      * one stops at its next heartbeat. Returns how many it cancelled.
      */
-    Mono<Integer> cancelProjects(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+    public Mono<Integer> cancelProjects(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull TopicProject.CancelReason reason) {
         if (projectIds.isEmpty()) {
             return Mono.just(0);
