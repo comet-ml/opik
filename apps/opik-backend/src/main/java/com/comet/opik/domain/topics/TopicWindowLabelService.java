@@ -19,7 +19,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -121,8 +120,8 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * What a pass did. {@code skipped} are the traces whose vector is not {@link TopicEmbedding#DIMENSIONS} long, as
-     * the run leaves them out of its window: they get no row, and every later pass reads and skips them again.
+     * What a pass did. {@code skipped} are the traces whose vector is not {@link TopicEmbedding#usable}, as the run
+     * leaves them out of its window: they get no row, and every later pass reads and skips them again.
      * {@code stopped} when a page check ended a slice early.
      */
     private record Totals(long labelled, long other, long skipped, boolean stopped) {
@@ -286,34 +285,25 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass stopped a slice, run '{}', project '{}', slice '[{}, {})': more than '{}' "
                     + "pages", saved.runId(), projectId, page.slice().from(), page.slice().to(), maxPages);
         }
-        var kept = page.rows().stream().filter(row -> row.vector().length == TopicEmbedding.DIMENSIONS).toList();
-        var rows = assign(workspace.id(), projectId, saved, kept);
+        var labels = saved.labeller().label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList());
+        var rows = new ArrayList<TraceTopic>(labels.length);
+        for (int i = 0; i < labels.length; i++) {
+            if (labels[i] != null) {
+                var row = page.rows().get(i);
+                rows.add(TraceTopic.builder()
+                        .workspaceId(workspace.id())
+                        .projectId(projectId)
+                        .traceId(row.traceId())
+                        .traceCreatedAt(row.traceCreatedAt())
+                        .topicId(labels[i])
+                        .source(TraceTopic.Source.RUN)
+                        .runId(saved.runId())
+                        .build());
+            }
+        }
         long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-        var totals = new Totals(rows.size(), other, page.rows().size() - kept.size(), capped);
+        var totals = new Totals(rows.size(), other, labels.length - rows.size(), capped);
         return insert(workspace, rows).thenReturn(totals);
-    }
-
-    private static List<TraceTopic> assign(String workspaceId, UUID projectId, Saved saved,
-            List<TopicWindowDAO.WindowVector> kept) {
-        int dimensions = TopicEmbedding.DIMENSIONS;
-        var vectors = new float[kept.size() * dimensions];
-        for (int i = 0; i < kept.size(); i++) {
-            System.arraycopy(kept.get(i).vector(), 0, vectors, i * dimensions, dimensions);
-        }
-        var labels = saved.labeller().label(vectors);
-        var rows = new ArrayList<TraceTopic>(kept.size());
-        for (int i = 0; i < kept.size(); i++) {
-            rows.add(TraceTopic.builder()
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .traceId(kept.get(i).traceId())
-                    .traceCreatedAt(kept.get(i).traceCreatedAt())
-                    .topicId(labels[i])
-                    .source(TraceTopic.Source.RUN)
-                    .runId(saved.runId())
-                    .build());
-        }
-        return rows;
     }
 
     /**
@@ -385,17 +375,9 @@ public class TopicWindowLabelService {
         return rows.map(saved -> {
             var to = saved.project().windowUntil();
             var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
-            var labeller = algorithm.labeller(saved.topics(), saved.project().otherVectors());
             return new Saved(saved.project().listRunId(), from, to,
-                    labeller.orElse(TopicWindowLabelService::allOther));
+                    algorithm.labeller(saved.topics(), saved.project().otherVectors()));
         });
-    }
-
-    /** The labels of a list with no topic: every trace is Other, as its run labelled them. */
-    private static UUID[] allOther(float[] vectors) {
-        var out = new UUID[vectors.length / TopicEmbedding.DIMENSIONS];
-        Arrays.fill(out, TraceTopic.OTHER);
-        return out;
     }
 
     private <T> Mono<T> jdbi(Callable<T> call) {

@@ -36,7 +36,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -440,8 +439,8 @@ class TopicsRebuildServiceFaultsTest {
             }
 
             @Override
-            public Optional<TopicLabeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
-                return Optional.empty();
+            public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
+                return vectors -> new UUID[vectors.size()];
             }
         };
         answer(FIXTURE.answer);

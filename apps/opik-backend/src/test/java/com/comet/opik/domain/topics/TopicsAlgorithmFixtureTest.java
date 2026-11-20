@@ -236,8 +236,10 @@ class TopicsAlgorithmFixtureTest {
                 .toList();
         assertThat(build.otherPrototypes()).isNotEmpty();
 
-        var labels = FIRST_BUILD.labeller(topics, new PrototypeVectors(build.otherPrototypes())).orElseThrow()
-                .label(fixture.vectors);
+        int d = TopicEmbedding.DIMENSIONS;
+        var vectors = IntStream.range(0, fixture.vectors.length / d)
+                .mapToObj(i -> Arrays.copyOfRange(fixture.vectors, i * d, (i + 1) * d)).toList();
+        var labels = FIRST_BUILD.labeller(topics, new PrototypeVectors(build.otherPrototypes())).label(vectors);
 
         assertThat(labels).containsExactly(Arrays.stream(build.labels())
                 .mapToObj(label -> label == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topics.get(label).id())

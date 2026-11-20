@@ -14,7 +14,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -131,18 +130,31 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
      * owned by the topic's index, then the known-Other ones.
      */
     @Override
-    public Optional<TopicLabeller> labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
+    public TopicLabeller labeller(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
         if (topics.isEmpty()) {
-            return Optional.empty();
+            return vectors -> vectors.stream().map(vector -> TopicEmbedding.usable(vector) ? TraceTopic.OTHER : null)
+                    .toArray(UUID[]::new);
         }
         var assigner = assigner(
                 topics.stream().flatMap(topic -> topic.vectors().vectors().stream()).toList(),
                 ownerOfEach(topics.stream().map(topic -> topic.vectors().size()).toList()),
                 otherVectors == null ? List.of() : otherVectors.vectors());
         var ids = topics.stream().map(Topic::id).toList();
-        return Optional.of(vectors -> Arrays.stream(assigner.assign(vectors))
-                .mapToObj(label -> label == OTHER ? TraceTopic.OTHER : ids.get(label))
-                .toArray(UUID[]::new));
+        return vectors -> {
+            var usable = IntStream.range(0, vectors.size()).filter(i -> TopicEmbedding.usable(vectors.get(i)))
+                    .toArray();
+            int d = TopicEmbedding.DIMENSIONS;
+            var flat = new float[usable.length * d];
+            for (int i = 0; i < usable.length; i++) {
+                System.arraycopy(vectors.get(usable[i]), 0, flat, i * d, d);
+            }
+            var labels = assigner.assign(flat);
+            var out = new UUID[vectors.size()];
+            for (int i = 0; i < usable.length; i++) {
+                out[usable[i]] = labels[i] == OTHER ? TraceTopic.OTHER : ids.get(labels[i]);
+            }
+            return out;
+        };
     }
 
     /** One group per {@code textsPerGroup} unique texts, within the configured bounds and never more than the texts. */
