@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.WorkspaceNameService;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -8,31 +7,23 @@ import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
-import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Function;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * The topic builds' metrics. Every metric carries {@code workspace_id} and {@code workspace_name}.
+ * The topic builds' metrics, on the global meter. Every metric carries {@code workspace_id} and {@code workspace_name}:
+ * the caller resolves the name once, at its boundary, so recording never blocks.
  */
 @Singleton
 public class TopicsMetrics {
 
-    static final String FIRST_BUILD_GATE = "topics.first_build.gate";
-    static final String FIRST_BUILD_LONGEST_WAIT = "topics.first_build.gate.longest_wait_seconds";
-    static final String FIRST_BUILD_WAITING = "topics.first_build.waiting_projects";
-
-    /** The run could not start: its attempt's write on {@code topic_projects}, or the read before it, failed. */
-    static final String ERROR_START_FAILED = "start_failed";
+    /** The workspace a metric is recorded for. */
+    public record Workspace(@NonNull String id, @NonNull String name) {
+    }
 
     private static final AttributeKey<String> WORKSPACE_ID = stringKey("workspace_id");
     private static final AttributeKey<String> WORKSPACE_NAME = stringKey("workspace_name");
@@ -45,79 +36,46 @@ public class TopicsMetrics {
     private static final AttributeKey<String> TRIGGER = stringKey("trigger");
     private static final AttributeKey<String> REASON = stringKey("reason");
 
-    private final Function<String, String> names;
     private final LongCounter runs;
     private final DoubleHistogram runDuration;
-    private final LongCounter qwenCalls;
+    private final LongCounter llmCalls;
     private final LongCounter saveRows;
-    private final DoubleHistogram otherShare;
-    private final LongCounter firstBuildGate;
+    private final LongCounter traceTopicsInserts;
     private final LongCounter labelPasses;
+    private final DoubleHistogram otherShare;
     private final DoubleHistogram liveTopics;
     private final LongCounter retired;
     private final LongCounter born;
     private final DoubleHistogram churn;
     private final DoubleHistogram churnAny;
-    private volatile FirstBuildState firstBuildState;
 
-    /**
-     * What one first-build run saw, per workspace, with the workspace names resolved when the run set it: the longest
-     * backfill wait in seconds, and the projects waiting for a list.
-     */
-    private record FirstBuildState(@NonNull Instant until, @NonNull Map<Attributes, Long> longestWaitSeconds,
-            @NonNull Map<Attributes, Long> waitingProjects) {
+    public TopicsMetrics() {
+        this(GlobalOpenTelemetry.get().getMeter("opik.topics"));
     }
 
-    @Inject
-    public TopicsMetrics(@NonNull WorkspaceNameService names) {
-        this(GlobalOpenTelemetry.get().getMeter("opik.topics"), names::nameOrId);
-    }
-
-    /** Workspace names fall back to the id. */
     TopicsMetrics(@NonNull Meter meter) {
-        this(meter, workspaceId -> workspaceId);
-    }
-
-    TopicsMetrics(@NonNull Meter meter, @NonNull Function<String, String> names) {
-        this.names = names;
         this.runs = meter.counterBuilder("topics.runs")
                 .setDescription("Finished runs, by status (saved, failed) and error code; start_failed when the run "
                         + "could not start, abandoned when the project's next run found one its pod left running")
                 .build();
         this.runDuration = meter.histogramBuilder("topics.run.duration_seconds").setUnit("s")
-                .setDescription("Duration of each phase of a run: window, kmeans, qwen, assign, save (first build); "
-                        + "window, state, update, save (nightly update); label (both)")
+                .setDescription("Duration of each phase of a run: window, cluster, llm, assign, save (first build); "
+                        + "window, state, update, llm, save (nightly update); label (both)")
                 .build();
-        this.qwenCalls = meter.counterBuilder("topics.qwen.calls")
-                .setDescription("Qwen calls, by call (author) and outcome: ok, timeout, error, bad_answer")
+        this.llmCalls = meter.counterBuilder("topics.llm.calls")
+                .setDescription("LLM calls, by call (author) and outcome: ok, timeout, error, bad_answer")
                 .build();
         this.saveRows = meter.counterBuilder("topics.save.rows")
                 .setDescription("Rows a saved run wrote, by table")
                 .build();
-        this.firstBuildGate = meter.counterBuilder(FIRST_BUILD_GATE)
-                .setDescription("Projects without a list each first-build run found, by the outcome of the vectors "
-                        + "backfill gate: open (the project's backfill drained), waiting, timed_out_open (the backfill "
-                        + "ran past topics.firstBuild.backfillMaxWait and at least 99% of its traces have a vector, so "
-                        + "the list is built) or timed_out_waiting (past it with fewer: the project keeps waiting)")
+        this.traceTopicsInserts = meter.counterBuilder("topics.trace_topics.inserts")
+                .setDescription("trace_topics inserts of a saved run, by outcome: ok, failed (after its retries). "
+                        + "The run inserts once after its commit, the labelling pass once per page")
                 .build();
-        meter.gaugeBuilder(FIRST_BUILD_LONGEST_WAIT).ofLongs().setUnit("s")
-                .setDescription("Per workspace, how long the oldest vectors backfill a first build waits for has run, "
-                        + "as the last first-build run on this pod saw it; 0 with no waiting project. Published for "
-                        + "two first-build intervals after a run: aggregate with max")
-                .buildWithCallback(measurement -> firstBuildState()
-                        .ifPresent(state -> state.longestWaitSeconds().forEach(
-                                (attributes, seconds) -> measurement.record(seconds, attributes))));
-        meter.gaugeBuilder(FIRST_BUILD_WAITING).ofLongs()
-                .setDescription("Per workspace, the projects with enough vectors and no list whose first failed first "
-                        + "build started more than a day ago, as the last first-build run on this pod saw them. "
-                        + "Published for two first-build intervals after a run: aggregate with max")
-                .buildWithCallback(measurement -> firstBuildState()
-                        .ifPresent(state -> state.waitingProjects().forEach(
-                                (attributes, projects) -> measurement.record(projects, attributes))));
         this.labelPasses = meter.counterBuilder("topics.label.passes")
                 .setDescription("Labelling passes over a saved run's window, by trigger (run: right after the save; "
                         + "resume: the first-build job going on with a pass that did not finish) and outcome "
-                        + "(complete, or incomplete when the pass was cut or failed)")
+                        + "(complete; cut by its deadline or its caller; failed)")
                 .build();
         this.liveTopics = meter.histogramBuilder("topics.topics.live")
                 .setDescription("Live topics of a project after each saved nightly update")
@@ -143,76 +101,59 @@ public class TopicsMetrics {
                 .build();
     }
 
-    void run(@NonNull String workspaceId, @NonNull TopicProject.RunStatus status, String errorCode) {
-        var attributes = workspace(workspaceId).put(STATUS, status.getValue());
+    void run(@NonNull Workspace workspace, @NonNull TopicProject.RunStatus status, String errorCode) {
+        var attributes = attributes(workspace).put(STATUS, status.getValue());
         if (errorCode != null) {
             attributes.put(ERROR_CODE, errorCode);
         }
         runs.add(1, attributes.build());
     }
 
-    void phase(@NonNull String workspaceId, @NonNull String phase, @NonNull Duration duration) {
-        runDuration.record(duration.toNanos() / 1e9, workspace(workspaceId).put(PHASE, phase).build());
+    void phase(@NonNull Workspace workspace, @NonNull String phase, @NonNull Duration duration) {
+        runDuration.record(duration.toNanos() / 1e9, attributes(workspace).put(PHASE, phase).build());
     }
 
-    void qwen(@NonNull String workspaceId, @NonNull LlmCall call, @NonNull String outcome) {
-        qwenCalls.add(1, workspace(workspaceId).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
+    void llm(@NonNull Workspace workspace, @NonNull LlmCall call, @NonNull String outcome) {
+        llmCalls.add(1, attributes(workspace).put(CALL, call.getValue()).put(OUTCOME, outcome).build());
     }
 
     /** A saved nightly update's live topics and the topics it gave birth to. */
-    void topics(@NonNull String workspaceId, int live, int bornTonight) {
-        liveTopics.record(live, workspace(workspaceId).build());
+    void topics(@NonNull Workspace workspace, int live, int bornTonight) {
+        liveTopics.record(live, attributes(workspace).build());
         if (bornTonight > 0) {
-            born.add(bornTonight, workspace(workspaceId).build());
+            born.add(bornTonight, attributes(workspace).build());
         }
     }
 
-    void retired(@NonNull String workspaceId, @NonNull NightState.RetiredReason reason) {
-        retired.add(1, workspace(workspaceId).put(REASON, reason.getValue()).build());
+    void retired(@NonNull Workspace workspace, @NonNull NightState.RetiredReason reason) {
+        retired.add(1, attributes(workspace).put(REASON, reason.getValue()).build());
     }
 
-    void churn(@NonNull String workspaceId, @NonNull TopicChurn.Churn value) {
-        var attributes = workspace(workspaceId).build();
+    void churn(@NonNull Workspace workspace, @NonNull TopicChurn.Churn value) {
+        var attributes = attributes(workspace).build();
         churn.record(value.churn(), attributes);
         churnAny.record(value.churnAny(), attributes);
     }
 
-    void saved(@NonNull String workspaceId, @NonNull String table, long rows) {
-        saveRows.add(rows, workspace(workspaceId).put(TABLE, table).build());
+    void saved(@NonNull Workspace workspace, @NonNull String table, long rows) {
+        saveRows.add(rows, attributes(workspace).put(TABLE, table).build());
     }
 
-    void labelPass(@NonNull String workspaceId, @NonNull TopicWindowLabelService.Trigger trigger, boolean complete) {
-        labelPasses.add(1, workspace(workspaceId).put(TRIGGER, trigger.getValue())
-                .put(OUTCOME, complete ? "complete" : "incomplete").build());
+    void traceTopicsInsert(@NonNull Workspace workspace, @NonNull String outcome) {
+        traceTopicsInserts.add(1, attributes(workspace).put(OUTCOME, outcome).build());
     }
 
-    void otherShare(@NonNull String workspaceId, double share) {
-        otherShare.record(share, workspace(workspaceId).build());
+    void labelPass(@NonNull Workspace workspace, @NonNull TopicWindowLabelService.Trigger trigger,
+            @NonNull TopicWindowLabelService.PassOutcome outcome) {
+        labelPasses.add(1, attributes(workspace).put(TRIGGER, trigger.getValue()).put(OUTCOME, outcome.getValue())
+                .build());
     }
 
-    private AttributesBuilder workspace(String workspaceId) {
-        return Attributes.builder().put(WORKSPACE_ID, workspaceId).put(WORKSPACE_NAME, names.apply(workspaceId));
+    void otherShare(@NonNull Workspace workspace, double share) {
+        otherShare.record(share, attributes(workspace).build());
     }
 
-    void firstBuildGate(@NonNull String workspaceId, @NonNull TopicsBackfillGate.State state) {
-        firstBuildGate.add(1, workspace(workspaceId).put(OUTCOME, state.getValue()).build());
-    }
-
-    /**
-     * A first-build run's longest backfill wait and its projects waiting for a list, per workspace, published for
-     * {@code kept} from now.
-     */
-    void firstBuildState(@NonNull Map<String, Duration> longestWaits, @NonNull Map<String, Long> waitingProjects,
-            @NonNull Duration kept) {
-        var seconds = new LinkedHashMap<Attributes, Long>();
-        longestWaits.forEach((workspaceId, wait) -> seconds.put(workspace(workspaceId).build(), wait.toSeconds()));
-        var waiting = new LinkedHashMap<Attributes, Long>();
-        waitingProjects.forEach((workspaceId, projects) -> waiting.put(workspace(workspaceId).build(), projects));
-        firstBuildState = new FirstBuildState(Instant.now().plus(kept), seconds, waiting);
-    }
-
-    private Optional<FirstBuildState> firstBuildState() {
-        var state = firstBuildState;
-        return state != null && Instant.now().isBefore(state.until()) ? Optional.of(state) : Optional.empty();
+    private static AttributesBuilder attributes(Workspace workspace) {
+        return Attributes.builder().put(WORKSPACE_ID, workspace.id()).put(WORKSPACE_NAME, workspace.name());
     }
 }

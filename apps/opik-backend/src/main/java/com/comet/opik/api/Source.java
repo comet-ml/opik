@@ -62,4 +62,12 @@ public enum Source {
     public static boolean isLoggingSource(Source source) {
         return source == null || source == SDK;
     }
+
+    /**
+     * {@link #isLoggingSource} as the storage values to bind in a query: {@code sdk} and the legacy {@code unknown}.
+     * A new array each call, so no caller can change another's.
+     */
+    public static String[] loggingSourceDbValues() {
+        return new String[]{SDK.getValue(), UNKNOWN_VALUE};
+    }
 }
