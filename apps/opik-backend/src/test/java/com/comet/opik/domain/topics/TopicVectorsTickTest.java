@@ -19,6 +19,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.extension.ResponseTransformerV2;
@@ -69,8 +70,11 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -90,12 +94,14 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /**
  * The topic vectors tick against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/embed} stubbed in
  * WireMock by {@link EmbedStub}, which answers every input with a deterministic vector of its text. Tests seed
- * {@code ai_label_status} and {@code ai_labels} directly and call {@link TopicVectorsTickService#tick(Instant)}.
+ * {@code ai_label_status} and {@code ai_labels} directly and call {@link TopicVectorsTickService#tick(Instant)}. A
+ * project with no drained backfill row has its traces embedded by the backfill, in the same tick.
  */
 @DisplayName("topic vectors tick")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -155,13 +161,16 @@ class TopicVectorsTickTest {
     private AiLabelsDAO labelsDAO;
     private TopicWorkspaceService workspaceService;
     private TopicVectorsTables tables;
+    private LockService lockService;
+    private TopicVectorBackfillService backfillService;
     private TopicsConfig.VectorsConfig defaults;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
             @Jit TopicVectorsTickService tickService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO,
-            @Jit TopicWorkspaceService workspaceService) {
+            @Jit TopicWorkspaceService workspaceService, @Jit LockService lockService,
+            @Jit TopicVectorBackfillService backfillService) {
         this.opikConfig = opikConfig;
         this.template = template;
         this.templateAsync = templateAsync;
@@ -171,12 +180,16 @@ class TopicVectorsTickTest {
         this.labelsDAO = labelsDAO;
         this.workspaceService = workspaceService;
         this.tables = new TopicVectorsTables(template, templateAsync);
+        this.lockService = lockService;
+        this.backfillService = backfillService;
         var vectors = config();
         this.defaults = new TopicsConfig.VectorsConfig();
         defaults.setTickBudget(vectors.getTickBudget());
         defaults.setEmbedBatchSize(vectors.getEmbedBatchSize());
         defaults.setEmbedTimeout(vectors.getEmbedTimeout());
         defaults.setMaxTracesPerTick(vectors.getMaxTracesPerTick());
+        defaults.setTickInterval(vectors.getTickInterval());
+        defaults.setEmbedConcurrency(vectors.getEmbedConcurrency());
     }
 
     @AfterAll
@@ -198,6 +211,8 @@ class TopicVectorsTickTest {
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withTransformers(EmbedStub.NAME)));
         embedStub.reset();
+        // Every tick a short one unless a test makes the long-window pass due: the first tick of a run would run it.
+        lockService.lockUsingToken(LongWindowPass.LOCK, Duration.ofHours(1)).block();
     }
 
     @AfterEach
@@ -206,6 +221,8 @@ class TopicVectorsTickTest {
         config().setEmbedBatchSize(defaults.getEmbedBatchSize());
         config().setEmbedTimeout(defaults.getEmbedTimeout());
         config().setMaxTracesPerTick(defaults.getMaxTracesPerTick());
+        config().setTickInterval(defaults.getTickInterval());
+        config().setEmbedConcurrency(defaults.getEmbedConcurrency());
     }
 
     @Test
@@ -276,12 +293,149 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a drained project's status older than the short window is found only by the tick on which the daily "
+            + "long-window pass is due")
+    void longWindowPass() {
+        var workspaceId = enabledWorkspace();
+        var traceId = ID_GENERATOR.generateId();
+        var projectId = ID_GENERATOR.generateId();
+        // Not drained, the project would be the backfill's, on any tick.
+        markDrained(workspaceId, projectId);
+        labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
+        tables.insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(2, ChronoUnit.DAYS));
+
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        assertThat(tables.vectors(workspaceId, List.of(traceId))).isEmpty();
+
+        makeLongWindowPassDue();
+        assertThat(tick()).isEqualTo(TickResult.builder().written(1).skipped(Map.of()).longWindowPass(true).build());
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)),
+                List.of(vector(workspaceId, projectId, traceId, 1)));
+    }
+
+    @Test
+    @DisplayName("the daily long-window pass stays on while its ticks reach the cap, and stops once one finds fewer")
+    void longWindowUntilDrained() {
+        config().setMaxTracesPerTick(2);
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        // A drained project: its old statuses are the long-window pass's, not the backfill's.
+        markDrained(workspaceId, projectId);
+        var traceIds = IntStream.range(0, 5).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, 1)).toList())
+                .block();
+        for (int i = 0; i < traceIds.size(); i++) {
+            tables.insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
+                    Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
+        }
+        // An undrained pass is due again after one short tick (1.5 tick intervals): wait for each pass tick.
+        config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
+        makeLongWindowPassDue();
+        var ticks = new ArrayList<TickResult>();
+        for (int pass = 0; pass < 3; pass++) {
+            var result = new AtomicReference<TickResult>();
+            Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(200))
+                    .until(() -> {
+                        result.set(tick());
+                        return result.get().longWindowPass();
+                    });
+            ticks.add(result.get());
+        }
+        // Drained: not due again for longWindowInterval.
+        ticks.add(tick());
+
+        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
+        assertThat(ticks).containsExactly(passTick.written(2).build(), passTick.written(2).build(),
+                passTick.written(1).build(), TickResult.EMPTY);
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+    }
+
+    @Test
+    @DisplayName("a workspace's old traces are embedded project by project in one tick, and each project is marked "
+            + "drained with its counts; a new trace of a drained project is the next tick's workspace read's")
+    void backfillByProject() {
+        var workspaceId = enabledWorkspace();
+        var first = ID_GENERATOR.generateId();
+        var second = ID_GENERATOR.generateId();
+        var firstTraces = IntStream.range(0, 3).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        var secondTraces = IntStream.range(0, 2).mapToObj(i -> ID_GENERATOR.generateId()).toList();
+        var written = Instant.now().minus(2, ChronoUnit.DAYS);
+        Map.of(first, firstTraces, second, secondTraces).forEach((projectId, traceIds) -> {
+            labelsDAO.insert(traceIds.stream().map(traceId -> outputLabel(workspaceId, projectId, traceId, 1))
+                    .toList()).block();
+            traceIds.forEach(traceId -> tables.insertStatusAt(workspaceId, projectId, traceId, 1, written));
+        });
+
+        var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(start).block()).isEqualTo(TickResult.written(5));
+
+        assertVectors(tables.vectors(workspaceId, firstTraces), expectedVectors(workspaceId, first, firstTraces, 1));
+        assertVectors(tables.vectors(workspaceId, secondTraces), expectedVectors(workspaceId, second, secondTraces, 1));
+        var rows = backfillService.findByKeys(workspaceId, List.of(first, second));
+        assertThat(rows.get(first)).usingRecursiveComparison().ignoringFields("backfillLastDoneAt")
+                .isEqualTo(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(first)
+                        .backfillStartedAt(start).backfillDrainedAt(start).backfillTracesTotal(3)
+                        .backfillTracesDone(3).backfillLastDoneAt(written).build());
+        assertThat(rows.get(first).backfillLastDoneAt()).isCloseTo(written, within(1, ChronoUnit.SECONDS));
+        assertThat(rows.get(second)).usingRecursiveComparison().ignoringFields("backfillLastDoneAt")
+                .isEqualTo(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(second)
+                        .backfillStartedAt(start).backfillDrainedAt(start).backfillTracesTotal(2)
+                        .backfillTracesDone(2).backfillLastDoneAt(written).build());
+        assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
+
+        var later = labelTraces(workspaceId, first, 1, 1);
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+        assertVectors(tables.vectors(workspaceId, later), expectedVectors(workspaceId, first, later, 1));
+    }
+
+    @Test
+    @DisplayName("with embedConcurrency 2, two workspaces are embedded at the same time, and every chunk's vectors are "
+            + "written")
+    void workspacesInParallel() {
+        config().setEmbedConcurrency(2);
+        var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
+        var projectId = ID_GENERATOR.generateId();
+        var labeled = new LinkedHashMap<String, List<UUID>>();
+        workspaceIds.forEach(workspaceId -> labeled.put(workspaceId, labelTraces(workspaceId, projectId, 3, 1)));
+        // The first two calls each wait for the other: calls made one after another leave the first waiting alone.
+        var bothInFlight = new CountDownLatch(2);
+        var waitedAlone = new AtomicBoolean();
+        embedStub.beforeAnswer = () -> {
+            bothInFlight.countDown();
+            try {
+                if (!bothInFlight.await(5, TimeUnit.SECONDS)) {
+                    waitedAlone.set(true);
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        TickResult result;
+        try {
+            result = tick();
+        } finally {
+            while (bothInFlight.getCount() > 0) {
+                bothInFlight.countDown();
+            }
+            embedStub.beforeAnswer = null;
+        }
+
+        assertThat(waitedAlone).isFalse();
+        assertThat(result).isEqualTo(TickResult.written(6));
+        labeled.forEach((workspaceId, traceIds) -> assertVectors(tables.vectors(workspaceId, traceIds),
+                expectedVectors(workspaceId, projectId, traceIds, 1)));
+    }
+
+    @Test
     @DisplayName("a 429 on the second chunk: the first chunk is written and the watermark stays behind the second, "
             + "which the next tick completes, moving the watermark to its start")
     void throttledSecondChunk() {
         config().setEmbedBatchSize(10);
         var workspaceId = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
+        // Drained, so its traces are the workspace read's, which keeps the watermark.
+        markDrained(workspaceId, projectId);
         var traceIds = labelTraces(workspaceId, projectId, 15, 1);
         embedStub.throttleCall = 2;
 
@@ -338,8 +492,8 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("the find guards reach the window read: max_rows_to_read 1 trips it and the tick writes and skips "
-            + "nothing; the default reads it")
+    @DisplayName("the find guards reach the discovery and the window read: max_rows_to_read 1 trips both and the tick "
+            + "writes and skips nothing; the default reads it")
     void findGuardsReachTheWindowRead() {
         var workspaceId = enabledWorkspace();
         labelTraces(workspaceId, 3, 1);
@@ -425,11 +579,13 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("with a cap of 5,000, one tick writes 5,000 of a project's 20,000 traces, oldest status first, four "
-            + "ticks write all, and a fifth neither writes nor embeds")
+    @DisplayName("with a cap of 5,000, one tick writes 5,000 of a drained project's 20,000 traces, oldest status "
+            + "first, four ticks write all, and a fifth neither writes nor embeds")
     void cap() {
         var workspaceId = enabledWorkspace();
         var projectId = ID_GENERATOR.generateId();
+        // A drained project: the workspace read serves it, one cap per tick. In backfill it would take turn after turn.
+        markDrained(workspaceId, projectId);
         // Four batches of 5,000, labeled in this order. Each batch's ids are generated after the next one's, so trace id
         // order is the reverse of status order: the ticks can only follow status order if they sort by updated_at.
         var batches = new ArrayList<List<UUID>>();
@@ -475,6 +631,9 @@ class TopicVectorsTickTest {
         var healthy = enabledWorkspace();
         var throttledProject = ID_GENERATOR.generateId();
         var healthyProject = ID_GENERATOR.generateId();
+        // Drained projects: the workspace read's cap applies, not the backfill's turns.
+        markDrained(throttled, throttledProject);
+        markDrained(healthy, healthyProject);
         var throttledTraces = labelTraces(throttled, throttledProject, 6, 1);
         var healthyTraces = labelTraces(healthy, healthyProject, 6, 1);
         embedStub.fail(throttled, status, body);
@@ -539,6 +698,7 @@ class TopicVectorsTickTest {
         volatile int throttleCall;
         volatile Duration delay = Duration.ZERO;
         volatile String zeroText;
+        volatile Runnable beforeAnswer;
         private volatile String failOrg;
         private volatile int failStatus;
         private volatile String failBody;
@@ -549,6 +709,7 @@ class TopicVectorsTickTest {
             throttleCall = 0;
             delay = Duration.ZERO;
             zeroText = null;
+            beforeAnswer = null;
             failOrg = null;
         }
 
@@ -569,6 +730,10 @@ class TopicVectorsTickTest {
             var request = json(serveEvent.getRequest().getBodyAsString());
             var orgId = request.path("org_id").asText();
             callsByOrg.computeIfAbsent(orgId, key -> new AtomicInteger()).incrementAndGet();
+            var hook = beforeAnswer;
+            if (hook != null) {
+                hook.run();
+            }
             if (!delay.isZero()) {
                 Mono.delay(delay).block();
             }
@@ -607,6 +772,21 @@ class TopicVectorsTickTest {
         public boolean applyGlobally() {
             return false;
         }
+    }
+
+    /** Drops the long-window lock, so the next tick runs the pass. */
+    private void makeLongWindowPassDue() {
+        lockService.unlockUsingToken(LongWindowPass.LOCK).block();
+    }
+
+    /** Gives the project a drained backfill row, as a project whose backfill ended earlier has. */
+    private void markDrained(String workspaceId, UUID projectId) {
+        tables.project(workspaceId, projectId);
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        backfillService.start(List.of(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId)
+                .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
+        backfillService.record(List.of(TopicVectorBackfillDAO.Progress.builder().workspaceId(workspaceId)
+                .projectId(projectId).drainedAt(now).build()));
     }
 
     private TopicsConfig.VectorsConfig config() {

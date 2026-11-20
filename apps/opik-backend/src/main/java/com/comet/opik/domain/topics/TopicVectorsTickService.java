@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.ailabels.AiLabelTask;
 import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
+import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
 import com.comet.opik.domain.topics.TopicVectorsDAO.Candidate;
 import com.comet.opik.infrastructure.AiLabelsConfig;
 import com.comet.opik.infrastructure.TopicsConfig;
@@ -24,7 +25,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,23 +32,29 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * One topic vectors tick: for every workspace topics and ai-labels are enabled for, find the traces whose latest
  * {@code trace_summary} status is done and that have no vector yet, embed their summaries and store the unit-length
- * vectors in {@code topic_vectors}. Runs on the leader only.
+ * vectors in {@code topic_vectors}. Runs on the leader only. A tick has two phases, each visiting the workspaces up to
+ * {@code embedConcurrency} at a time, each workspace with one embed call in flight:
+ * <ul>
+ * <li>The fresh phase: per workspace, one read of the done statuses written in {@code window}, all its drained projects
+ * together, up to {@code maxTracesPerTick}, oldest first, then their embed calls and writes. It keeps new traces
+ * served. It starts at the workspace's watermark in {@code topic_vector_watermarks}, less {@code watermarkOverlap}, and
+ * never before the window: the read moves it past the statuses it gave a vector, never will (a refused input, a zero
+ * vector) or left to the backfill, never past one it left for a later try, and saves it when the workspace's turn ends,
+ * so a cancelled tick keeps what its finished turns did. Once per {@code longWindowInterval} ({@link LongWindowPass}) it
+ * reads the long window instead, in slices, for rows it missed, such as a status that became visible more than
+ * {@code watermarkOverlap} after a later one was read, and leaves the watermark as it is.</li>
+ * <li>The backfill phase, with the budget the fresh phase left: per workspace, its projects not drained yet
+ * ({@link TopicVectorBackfiller}).</li>
+ * </ul>
+ * The fresh phase leaves out the projects not drained yet, and the backfill reads only those, so a trace is embedded
+ * by one phase in a tick, and a project's backlog is never embedded mixed with the others'.
  *
- * <p>One workspace at a time: one read of the done statuses written in {@code window}, up to {@code maxTracesPerTick},
- * oldest first, with their summaries; then {@link TopicEmbedder} embeds them chunk by chunk and each chunk's vectors are
- * written as it arrives. A workspace is read only with time left for the read and one embed call, so the tick never
- * spends its budget reading what it cannot embed.
- *
- * <p>ClickHouse alone says which traces have no vector: every read is the done statuses less the keys already in
- * {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing. Each workspace's read starts at its
- * watermark in {@code topic_vector_watermarks}, less {@code watermarkOverlap}, and never before the window. The tick
- * moves it past the statuses it gave a vector or never will (a refused input, a zero vector), never past one it left
- * for a later try, and saves it when the workspace's turn ends, so a cancelled tick keeps what its finished turns did.
- * A status that becomes visible more than {@code watermarkOverlap} after a later one was read is left to the daily
- * pass, which reads the whole long window. Work per
- * tick is bounded per workspace by {@code maxTracesPerTick} and in total by the tick budget; what is left is found
- * again by the next tick. Workspaces are visited in a new random order every tick, so when the budget does not reach
- * them all, the ones left out differ from tick to tick.
+ * <p>A workspace is read only with time left for the read and one embed call, so the tick never spends its budget
+ * reading what it cannot embed. ClickHouse alone says which traces have no vector: every read is the done statuses less
+ * the keys already in {@code topic_vectors}, so a repeated, overlapping or late tick changes nothing, and a leader
+ * change loses nothing. Work per tick is bounded per read by {@code maxTracesPerTick} and in total by the tick budget;
+ * what is left is found again by the next tick. Workspaces are visited in a new random order every tick, so when the
+ * budget does not reach them all, the ones left out differ from tick to tick.
  */
 @Slf4j
 @Singleton
@@ -60,7 +66,9 @@ public class TopicVectorsTickService {
     private final @NonNull TopicWorkspaceService workspaces;
     private final @NonNull TopicVectorsDAO dao;
     private final @NonNull AiLabelTaskRegistry registry;
-    private final @NonNull TopicEmbedder embedder;
+    private final @NonNull TopicVectorWriter writer;
+    private final @NonNull TopicVectorBackfiller backfiller;
+    private final @NonNull LongWindowPass longWindowPass;
     private final @NonNull TopicVectorsMetrics metrics;
 
     /**
@@ -69,78 +77,119 @@ public class TopicVectorsTickService {
      */
     public Mono<TickResult> tick(@NonNull Instant start) {
         return Mono.defer(() -> {
-            var vectors = config.getVectors();
             var task = registry.find(TopicEmbedding.SUMMARY_TASK).orElseThrow(() -> new IllegalStateException(
                     "ai-labels has no task '%s'".formatted(TopicEmbedding.SUMMARY_TASK)));
-            var windowStart = lowerBound(earliestAppliesFrom(task), start, vectors.getWindow().toJavaDuration());
-            if (windowStart.isAfter(start)) {
-                return Mono.just(TickResult.EMPTY);
-            }
-            var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
-            return Mono.fromCallable(() -> {
-                var workspaceIds = workspaces.enabledWorkspaceIds();
-                return new Enabled(shuffled(workspaceIds), workspaces.vectorsWatermarks(workspaceIds));
-            })
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .flatMapMany(enabled -> Flux.fromIterable(enabled.workspaceIds())
-                            .concatMap(workspaceId -> visit(workspaceId,
-                                    readFrom(windowStart, enabled.watermarks().get(workspaceId),
-                                            vectors.getWatermarkOverlap().toJavaDuration()),
-                                    start, budget)))
-                    .collectList()
-                    .flatMap(this::finish);
+            var appliesFrom = earliestAppliesFrom(task);
+            return longWindowPass.startIfDue().flatMap(pass -> tick(start, appliesFrom, pass));
         });
+    }
+
+    private Mono<TickResult> tick(Instant start, Instant appliesFrom, boolean pass) {
+        var vectors = config.getVectors();
+        var lowerBound = lowerBound(appliesFrom, start,
+                (pass ? longWindow(vectors) : vectors.getWindow()).toJavaDuration());
+        var passResult = TickResult.EMPTY.toBuilder().longWindowPass(pass).build();
+        if (lowerBound.isAfter(start)) {
+            return (pass ? longWindowPass.finish(start, true) : Mono.<Void>empty()).thenReturn(passResult);
+        }
+        var backfillLowerBound = lowerBound(appliesFrom, start, longWindow(vectors).toJavaDuration());
+        var budget = TickBudget.of(start, vectors.getTickBudget().toJavaDuration(), Clock.systemUTC());
+        // Only the long-window pass can write a status older than the short window: those are the rows it recovers.
+        var missedBefore = pass ? start.minus(vectors.getWindow().toJavaDuration()) : null;
+        return Mono.fromCallable(() -> {
+            var workspaceIds = workspaces.enabledWorkspaceIds();
+            return new Enabled(shuffled(workspaceIds), workspaces.vectorsWatermarks(workspaceIds));
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(enabled -> backfiller.discover(enabled.workspaceIds(), backfillLowerBound,
+                        createdAfter(backfillLowerBound), budget)
+                        .then(backfiller.undrained(enabled.workspaceIds()))
+                        .flatMap(undrained -> Flux.fromIterable(enabled.workspaceIds())
+                                .flatMap(workspaceId -> visit(workspaceId,
+                                        undrained.getOrDefault(workspaceId, List.of()),
+                                        find(workspaceId, pass
+                                                ? lowerBound
+                                                : readFrom(lowerBound, enabled.watermarks().get(workspaceId),
+                                                        vectors.getWatermarkOverlap().toJavaDuration()),
+                                                start),
+                                        pass, missedBefore, budget),
+                                        vectors.getEmbedConcurrency())
+                                .collectList()
+                                .flatMap(visits -> finish(visits).flatMap(fresh -> {
+                                    var drained = visits.stream().allMatch(Visit::complete) && !fresh.cut();
+                                    return (pass ? longWindowPass.finish(start, drained) : Mono.<Void>empty())
+                                            .then(backfill(visits, undrained, backfillLowerBound, budget))
+                                            .map(backfilled -> fresh.plus(backfilled).plus(passResult));
+                                }))));
     }
 
     private record Enabled(@NonNull List<String> workspaceIds, @NonNull Map<String, Instant> watermarks) {
     }
 
+    /** One workspace's read of the statuses written from {@code lowerBound} to the tick's start. */
+    private TopicVectorsFind find(String workspaceId, Instant lowerBound, Instant start) {
+        return TopicVectorsFind.builder()
+                .workspaceId(workspaceId)
+                .task(TopicEmbedding.SUMMARY_TASK)
+                .lowerBound(lowerBound)
+                .upperBound(start)
+                .createdAfter(createdAfter(lowerBound))
+                .limit(config.getVectors().getMaxTracesPerTick())
+                .build();
+    }
+
+    private Instant createdAfter(Instant lowerBound) {
+        return createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
+                config.getVectors().getFind().getCreatedAtSlack().toJavaDuration());
+    }
+
     /**
-     * One workspace's turn: its window read from {@code lowerBound}, then its embed calls and writes, then its new
-     * watermark saved. Without time left for the read, it skips the workspace name lookup too.
+     * One workspace's turn in the fresh phase: its workspace read, then its embed calls and writes, then its new
+     * watermark saved. A long-window pass ({@code pass}) leaves its watermark as it is. Without time left for the read,
+     * it skips the workspace name lookup too.
      */
-    private Mono<Visit> visit(String workspaceId, Instant lowerBound, Instant start, TickBudget budget) {
+    private Mono<Visit> visit(String workspaceId, List<Backfill> undrained, TopicVectorsFind find, boolean pass,
+            @Nullable Instant missedBefore, TickBudget budget) {
         var embedTimeout = config.getVectors().getEmbedTimeout().toJavaDuration();
         if (!budget.hasTimeForRead(embedTimeout)) {
-            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId)));
+            return Mono.just(Visit.notRead(TopicVectorsMetrics.Workspace.unnamed(workspaceId), false));
         }
         return metrics.workspace(workspaceId).flatMap(workspace -> {
             var vectors = config.getVectors();
-            var find = TopicVectorsFind.builder()
-                    .workspaceId(workspaceId)
-                    .task(TopicEmbedding.SUMMARY_TASK)
-                    .lowerBound(lowerBound)
-                    .upperBound(start)
-                    .createdAfter(createdAfter(lowerBound, aiLabelsConfig.getHorizon().toJavaDuration(),
-                            vectors.getFind().getCreatedAtSlack().toJavaDuration()))
-                    .limit(vectors.getMaxTracesPerTick())
-                    .maxExecutionSeconds(budget.readSeconds(vectors.getFind().getMaxExecutionTime().toJavaDuration(),
-                            embedTimeout))
-                    .build();
+            var readableWithout = backfiller.readableWithout(workspaceId, undrained);
+            if (readableWithout.isEmpty()) {
+                // Its traces are the backfill's for now; it does not hold the long-window pass.
+                return Mono.just(Visit.notRead(workspace, true));
+            }
             long readStarted = System.nanoTime();
-            return dao.findUnvectored(find)
-                    .collectList()
-                    .map(Optional::of)
+            return WindowRead.read(dao,
+                    find.toBuilder().excludedProjectIds(readableWithout.get()).build(),
+                    pass ? vectors.getFind().getSliceSize().toJavaDuration() : null, budget,
+                    vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
+                    .flatMap(read -> backfiller.withoutNewProjects(workspaceId, read.candidates(), budget.start())
+                            .flatMap(served -> {
+                                var readTime = since(readStarted);
+                                long embedStarted = System.nanoTime();
+                                // The traces of the projects it started are the backfill's from now on.
+                                Set<VectorKey> done = ConcurrentHashMap.newKeySet();
+                                read.candidates().stream().map(VectorKey::of).forEach(done::add);
+                                served.candidates().stream().map(VectorKey::of).forEach(done::remove);
+                                return writer.embedAndWrite(workspace, served.candidates(), budget, missedBefore, done)
+                                        .flatMap(result -> {
+                                            var visit = new Visit(workspace, true, read.complete(), result,
+                                                    served.started(), readTime, since(embedStarted));
+                                            return pass
+                                                    ? Mono.just(visit)
+                                                    : saveWatermark(workspaceId, watermark(read.candidates(), done,
+                                                            find.limit(), find.upperBound())).thenReturn(visit);
+                                        });
+                            }))
                     .onErrorResume(exception -> {
                         metrics.readFailure("find", workspace, exception);
                         log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
                                 workspaceId, exception);
-                        return Mono.just(Optional.empty());
-                    })
-                    .flatMap(found -> {
-                        var read = since(readStarted);
-                        if (found.isEmpty()) {
-                            return Mono.just(new Visit(workspace, true, TickResult.EMPTY, read, Duration.ZERO));
-                        }
-                        long embedStarted = System.nanoTime();
-                        Set<VectorKey> done = ConcurrentHashMap.newKeySet();
-                        return embedAndWrite(workspace, found.get(), done, budget)
-                                .flatMap(result -> {
-                                    var embed = since(embedStarted);
-                                    var watermark = watermark(found.get(), done, find.limit(), start);
-                                    return saveWatermark(workspaceId, watermark)
-                                            .thenReturn(new Visit(workspace, true, result, read, embed));
-                                });
+                        return Mono.just(new Visit(workspace, true, false, TickResult.EMPTY, List.of(),
+                                since(readStarted), Duration.ZERO));
                     });
         });
     }
@@ -156,37 +205,25 @@ public class TopicVectorsTickService {
                 });
     }
 
-    private Mono<TickResult> embedAndWrite(TopicVectorsMetrics.Workspace workspace, List<Candidate> found,
-            Set<VectorKey> done, TickBudget budget) {
-        return embedder.embed(workspace, found, budget)
-                .concatMap(outcome -> write(workspace, outcome, done))
-                .reduce(TickResult.EMPTY, TickResult::plus);
-    }
-
-    /** Adds to {@code done} the chunk's traces no later tick would embed, and its vectors once they are written. */
-    private Mono<TickResult> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome,
-            Set<VectorKey> done) {
-        return Mono.defer(() -> {
-            done.addAll(outcome.settled());
-            outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
-            var skipped = new TickResult(0, outcome.skipped());
-            var vectors = outcome.vectors();
-            if (vectors.isEmpty()) {
-                return Mono.just(skipped);
-            }
-            return dao.insert(vectors)
-                    .then(Mono.fromCallable(() -> {
-                        vectors.forEach(vector -> done.add(VectorKey.of(vector)));
-                        metrics.written(workspace, vectors.size());
-                        return skipped.plus(TickResult.written(vectors.size()));
-                    }))
-                    .onErrorResume(exception -> {
-                        log.warn("Topic vectors insert failed, embedding them again next tick, workspace '{}', rows "
-                                + "'{}'", workspace.id(), vectors.size(), exception);
-                        metrics.skipped(workspace, SkipReason.INSERT_FAILED, vectors.size());
-                        return Mono.just(skipped.plus(TickResult.skipped(SkipReason.INSERT_FAILED, vectors.size())));
-                    });
-        });
+    /**
+     * The backfill phase: each workspace's projects not drained yet, the ones its workspace read started included,
+     * except in a workspace an embed call failed for in the fresh phase.
+     */
+    private Mono<TickResult> backfill(List<Visit> visits, Map<String, List<Backfill>> undrained,
+            Instant lowerBound, TickBudget budget) {
+        long started = System.nanoTime();
+        return Flux.fromIterable(visits)
+                .flatMap(visit -> {
+                    var workspaceId = visit.workspace().id();
+                    var projects = new ArrayList<>(undrained.getOrDefault(workspaceId, List.of()));
+                    projects.addAll(visit.started());
+                    return visit.result().skipped().containsKey(SkipReason.EMBED_FAILED)
+                            ? Mono.just(TickResult.EMPTY)
+                            : backfiller.backfill(visit.workspace(), projects,
+                                    find(workspaceId, lowerBound, budget.start()), budget);
+                }, config.getVectors().getEmbedConcurrency())
+                .reduce(TickResult.EMPTY, TickResult::plus)
+                .doOnNext(__ -> metrics.phase("backfill", since(started)));
     }
 
     private Mono<TickResult> finish(List<Visit> visits) {
@@ -204,7 +241,7 @@ public class TopicVectorsTickService {
         }
         if (!notRead.isEmpty()) {
             metrics.workspacesNotRead(notRead);
-            log.warn("Topic vectors tick ran out of budget, workspaces not read '{}' of '{}'", notRead.size(),
+            log.warn("Topic vectors workspace reads did not read workspaces '{}' of '{}'", notRead.size(),
                     visits.size());
         }
         metrics.phase("find", read);
@@ -212,13 +249,23 @@ public class TopicVectorsTickService {
         return Mono.just(result);
     }
 
-    /** One workspace's part of a tick. {@code reached} is false when the budget left no time to read it. */
-    private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean reached,
-            @NonNull TickResult result, @NonNull Duration readTime, @NonNull Duration embedTime) {
+    /**
+     * One workspace's part of the fresh phase. {@code reached} is false when the budget left no time to read it, or it
+     * has too many projects in backfill; {@code complete} when its read saw its whole window or it was left to the
+     * backfill; {@code started} the projects its read saw for the first time.
+     */
+    private record Visit(@NonNull TopicVectorsMetrics.Workspace workspace, boolean reached, boolean complete,
+            @NonNull TickResult result, @NonNull List<Backfill> started, @NonNull Duration readTime,
+            @NonNull Duration embedTime) {
 
-        static Visit notRead(TopicVectorsMetrics.Workspace workspace) {
-            return new Visit(workspace, false, TickResult.EMPTY, Duration.ZERO, Duration.ZERO);
+        static Visit notRead(TopicVectorsMetrics.Workspace workspace, boolean complete) {
+            return new Visit(workspace, false, complete, TickResult.EMPTY, List.of(), Duration.ZERO, Duration.ZERO);
         }
+    }
+
+    /** The long-window pass's and the backfill's window: {@code backfillWindow} when set, else {@code longWindow}. */
+    static io.dropwizard.util.Duration longWindow(@NonNull TopicsConfig.VectorsConfig vectors) {
+        return vectors.getBackfillWindow().toMilliseconds() > 0 ? vectors.getBackfillWindow() : vectors.getLongWindow();
     }
 
     /** A {@code topic_vectors} row's key within a workspace's read. */
@@ -235,9 +282,9 @@ public class TopicVectorsTickService {
 
     /**
      * A workspace's next watermark after a read that found {@code found}, oldest status first, and settled
-     * {@code done} (written, or never to be embedded): the status of the first one it found and did not settle, so the
-     * next read finds it again; with none, the last status found when the read hit {@code limit}, as more may share it,
-     * and else the read's upper bound.
+     * {@code done} (written, never to be embedded, or left to the backfill): the status of the first one not done, so
+     * the next read finds it again; with none, the last status found when the read hit {@code limit}, as more may share
+     * it, and else the read's upper bound.
      */
     static Instant watermark(@NonNull List<Candidate> found, @NonNull Set<VectorKey> done, int limit,
             @NonNull Instant upperBound) {
