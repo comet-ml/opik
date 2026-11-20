@@ -237,6 +237,14 @@ public interface TopicProjectDAO {
             @Bind("runId") UUID runId, @Bind("finishedAt") Instant finishedAt,
             @Bind("code") TopicProject.RunError code);
 
+    /** The run's status, empty unless the project's attempt is {@code runId}. */
+    @SqlQuery("""
+            SELECT run_status FROM topic_projects
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND run_id = :runId
+            """)
+    Optional<TopicProject.RunStatus> findRunStatus(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId, @Bind("runId") UUID runId);
+
     /** The run's error code, empty unless the project's attempt is {@code runId}, failed. */
     @SqlQuery("""
             SELECT run_error_code FROM topic_projects

@@ -153,7 +153,10 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                 Instant.now(), code)).then();
     }
 
-    /** Emits once a heartbeat finds the run no longer running. A heartbeat that fails is retried at the next tick. */
+    /**
+     * Emits once a heartbeat finds the run cancelled, abandoned or requeued; a run that saved its row goes on to its
+     * end. A heartbeat that fails is retried at the next tick.
+     */
     private Mono<Boolean> stopped(TopicsRunMessage message) {
         var interval = config.getRuns().getHeartbeatInterval().toJavaDuration();
         return Flux.interval(interval, interval)
