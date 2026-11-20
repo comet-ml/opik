@@ -35,7 +35,7 @@ class TopicVectorWriter {
         return embedAndWrite(workspace, candidates, budget, missedBefore, ConcurrentHashMap.newKeySet());
     }
 
-    /** As above, adding the key of each vector written to {@code written}. */
+    /** As above, adding to {@code written} the key of each vector written and of each trace never to be embedded. */
     Mono<TickResult> embedAndWrite(@NonNull TopicVectorsMetrics.Workspace workspace,
             @NonNull List<Candidate> candidates, @NonNull TickBudget budget, @Nullable Instant missedBefore,
             @NonNull Set<VectorKey> written) {
@@ -52,6 +52,7 @@ class TopicVectorWriter {
     private Mono<TickResult> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome, Set<VectorKey> missed,
             Set<VectorKey> written) {
         return Mono.defer(() -> {
+            written.addAll(outcome.settled());
             outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
             var skipped = new TickResult(0, outcome.skipped());
             var vectors = outcome.vectors();

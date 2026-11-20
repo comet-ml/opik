@@ -48,10 +48,11 @@ class TopicVectorsTickServiceTest {
         var windowStart = NOW.minus(Duration.ofHours(24));
         var recent = NOW.minus(Duration.ofMinutes(1));
 
-        assertThat(TopicVectorsTickService.readFrom(windowStart, null)).isEqualTo(windowStart);
-        assertThat(TopicVectorsTickService.readFrom(windowStart, recent))
-                .isEqualTo(recent.minus(TopicVectorsTickService.WATERMARK_OVERLAP));
-        assertThat(TopicVectorsTickService.readFrom(windowStart, windowStart.minus(Duration.ofDays(1))))
+        var overlap = Duration.ofMinutes(15);
+
+        assertThat(TopicVectorsTickService.readFrom(windowStart, null, overlap)).isEqualTo(windowStart);
+        assertThat(TopicVectorsTickService.readFrom(windowStart, recent, overlap)).isEqualTo(recent.minus(overlap));
+        assertThat(TopicVectorsTickService.readFrom(windowStart, windowStart.minus(Duration.ofDays(1)), overlap))
                 .isEqualTo(windowStart);
     }
 

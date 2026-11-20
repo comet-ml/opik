@@ -27,7 +27,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * The toggle and the list are read from the config on every call, and {@code ai_label_workspaces} only when both
  * pass. Callers check the toggle on its own only where no workspace is involved, such as registering the jobs.
  *
- * <p>Also keeps the vectors tick's per-workspace watermark in {@code topic_workspaces}.
+ * <p>Also keeps the vectors tick's per-workspace watermark in {@code topic_vector_watermarks}.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -61,17 +61,12 @@ public class TopicWorkspaceService {
             return Map.of();
         }
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicWorkspaceDAO.class).vectorsWatermarks(workspaceIds));
+                handle -> handle.attach(TopicVectorWatermarkDAO.class).watermarks(workspaceIds));
     }
 
-    void setVectorsWatermarks(@NonNull Map<String, Instant> watermarks) {
-        if (watermarks.isEmpty()) {
-            return;
-        }
-        var workspaceIds = List.copyOf(watermarks.keySet());
+    void setVectorsWatermark(@NonNull String workspaceId, @NonNull Instant watermark) {
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicWorkspaceDAO.class).setVectorsWatermarks(workspaceIds,
-                    workspaceIds.stream().map(watermarks::get).toList());
+            handle.attach(TopicVectorWatermarkDAO.class).set(workspaceId, watermark);
             return null;
         });
     }

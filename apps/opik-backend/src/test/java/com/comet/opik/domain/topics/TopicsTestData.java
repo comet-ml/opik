@@ -151,18 +151,18 @@ final class TopicsTestData {
      * {@code night}, and a topic of {@code size} traces. The labels are not complete yet.
      */
     void savedList(String workspaceId, UUID projectId, Instant night, int size) {
-        var runId = UUID.randomUUID();
+        var runId = newId();
         var savedAt = night.plus(Duration.ofHours(2));
         var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
+            var runDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
+            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
-                    .id(UUID.randomUUID())
+                    .id(newId())
                     .workspaceId(workspaceId)
                     .projectId(projectId)
                     .name("Billing")
@@ -175,6 +175,27 @@ final class TopicsTestData {
             return null;
         });
     }
+
+    /**
+     * Puts {@code runId} on the project's row, running since {@code at} with a deadline an hour later, as the
+     * planner's queue and a pod's claim do. The project must have no run in flight.
+     */
+    static void startRun(TopicProjectDAO runDAO, String workspaceId, UUID projectId, UUID runId,
+            TopicProject.RunMode mode, Instant at) {
+        runDAO.ensureRow(workspaceId, projectId);
+        if (runDAO.queue(workspaceId, projectId, runId, mode, at) != 1
+                || runDAO.claim(workspaceId, projectId, runId, at, at.plus(Duration.ofHours(1))) != 1) {
+            throw new IllegalStateException("project '%s' has a run in flight".formatted(projectId));
+        }
+    }
+
+    /** An Opik id: UUID v7. */
+    static UUID newId() {
+        return Generators.timeBasedEpochGenerator().generate();
+    }
+
+    /** The run id of the run rows {@link #insertTraceTopic} writes, so a test can build the rows it expects. */
+    static final UUID RUN_ID = newId();
 
     /** A unit vector along {@code axis}. */
     static float[] unit(int axis) {
@@ -192,7 +213,7 @@ final class TopicsTestData {
     TopicProject topicProject(UUID projectId) {
         var rows = template.inTransaction(READ_ONLY,
                 handle -> workspacesOf(handle, "topic_projects", projectId).stream()
-                        .flatMap(workspaceId -> handle.attach(TopicDAO.class)
+                        .flatMap(workspaceId -> handle.attach(TopicProjectDAO.class)
                                 .findProjects(workspaceId, Set.of(projectId)).stream())
                         .toList());
         return rows.isEmpty() ? null : rows.getFirst();
@@ -268,7 +289,7 @@ final class TopicsTestData {
                 .bind("trace_created_at", traceCreatedAt.toString())
                 .bind("topic_id", topicId.toString())
                 .bind("source", source.getValue())
-                .bind("run_id", source == TraceTopic.Source.RUN ? UUID.randomUUID().toString() : "")
+                .bind("run_id", source == TraceTopic.Source.RUN ? RUN_ID.toString() : "")
                 .bind("last_updated_at", lastUpdatedAt.toString())
                 .bind("is_deleted", isDeleted)
                 .execute())
