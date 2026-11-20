@@ -196,11 +196,10 @@ public interface DatasetDAO {
             AND name = :name
             <if(project_id)> AND project_id = :project_id <endif>
             ORDER BY id
-            LIMIT 1
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
+    List<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
             @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlQuery("SELECT id FROM datasets WHERE workspace_id = :workspace_id AND name LIKE CONCAT('%', :name, '%') ESCAPE '\\\\'")
