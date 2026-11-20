@@ -267,9 +267,11 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
-        @AssertTrue(message = "topics.vectors.embedTimeout must be shorter than topics.vectors.tickBudget") public boolean isEmbedTimeoutValid() {
+        // A read starts only with a whole second plus one embed call left in the tick (TickBudget.hasTimeForRead), so a
+        // shorter budget would read nothing.
+        @AssertTrue(message = "topics.vectors.tickBudget must be at least topics.vectors.embedTimeout plus 1s") public boolean isEmbedTimeoutValid() {
             return embedTimeout == null || tickBudget == null
-                    || embedTimeout.toMilliseconds() < tickBudget.toMilliseconds();
+                    || embedTimeout.toMilliseconds() + 1_000 <= tickBudget.toMilliseconds();
         }
 
         @JsonIgnore
@@ -299,7 +301,7 @@ public class TopicsConfig {
         @JsonProperty
         @Min(1) @Max(16) private int maxThreads;
 
-        /** Cut to the time left in the tick; lengthens the leader lease. At most {@code tickBudget}. */
+        /** Cut to the time left in the tick; adds to the leader lock's lease. At most {@code tickBudget}. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration maxExecutionTime;
