@@ -123,6 +123,8 @@ type GroupCustomMeta = {
   explainer?: Explainer;
   datasetTypeMap?: Record<string, DATASET_TYPE>;
   getIsDeleted?: (cellData: unknown) => boolean;
+  // Set where the type is already implied (e.g. a Test suites or Datasets tab).
+  hidePrefix?: boolean;
 };
 
 const resolveGroupPrefix = (
@@ -165,6 +167,7 @@ export const createItemSourceGroupCell = <TData,>(
       explainer,
       datasetTypeMap,
       getIsDeleted,
+      hidePrefix = false,
     } = (custom ?? {}) as GroupCustomMeta;
 
     const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -227,9 +230,11 @@ export const createItemSourceGroupCell = <TData,>(
             ) : (
               <ChevronRight className="mr-1 size-4 shrink-0" />
             )}
-            <TooltipWrapper content={prefix}>
-              <span className="max-w-56 truncate">{prefix}</span>
-            </TooltipWrapper>
+            {!hidePrefix && (
+              <TooltipWrapper content={prefix}>
+                <span className="max-w-56 truncate">{prefix}</span>
+              </TooltipWrapper>
+            )}
           </Button>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">

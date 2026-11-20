@@ -52,7 +52,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -108,7 +108,7 @@ jobs:
       # with no private plugin source on disk yet.
       - name: Set up Node.js
         if: steps.resolve.outputs.has_token == 'true'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "26"
           cache: npm
@@ -121,7 +121,7 @@ jobs:
 
       - name: Checkout ai-spend plugin (private)
         if: steps.resolve.outputs.has_token == 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: comet-ml/opik-plugin-ai-spend
           ref: ${{ steps.resolve.outputs.ref }}
