@@ -8,11 +8,15 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +29,7 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -39,6 +44,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -46,6 +53,16 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * The labelling pass's storage against real ClickHouse and MySQL: the rows a pass writes and its slice bounds. No run
@@ -58,6 +75,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TopicsStorageTest {
 
     private static final int BUILT = 120;
+    /** The pass's page and slice in config-test.yml. */
+    private static final int PAGE = 7;
+    private static final int SLICE = 20;
+    private static final TimeBasedEpochGenerator IDS = Generators.timeBasedEpochGenerator();
     private static final int WINDOW_DAYS = 30;
     private static final Instant NIGHT = Instant.parse("2026-10-15T00:00:00Z");
     private static final TopicsTestData.Traces TRACES = TopicsTestData.Traces.synthetic(BUILT, NIGHT, 7);
@@ -102,11 +123,14 @@ class TopicsStorageTest {
     private TopicsTestData data;
     private TopicsTestData spreadData;
 
+    private TopicAlgorithm algorithm;
+
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
-            @Jit TraceTopicsDAO traceTopicsDAO,
-            @Jit TopicWindowLabelService labelService, @Jit TopicWindowDAO windowDAO) {
+            @Jit TraceTopicsDAO traceTopicsDAO, @Jit TopicWindowLabelService labelService,
+            @Jit TopicWindowDAO windowDAO, @Jit TopicAlgorithm algorithm) {
+        this.algorithm = algorithm;
         this.opikConfig = opikConfig;
         this.template = template;
         this.clickHouseTemplate = clickHouseTemplate;
@@ -130,30 +154,27 @@ class TopicsStorageTest {
     @DisplayName("the labelling pass gives every window trace exactly one row of the saved run, by its prototypes; a "
             + "trace that has one keeps it, a trace outside the window gets none, and a second pass has nothing left")
     void labellingPassLabelsTheWindow() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
+        var workspaceId = id().toString();
+        var projectId = id();
         data.seed(workspaceId, projectId, 0, BUILT);
         // After the window.
         spreadData.seed(workspaceId, projectId, 0, 20, NIGHT.plus(Duration.ofDays(WINDOW_DAYS + 1)));
-        var runId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
+        var runId = id();
+        var topicId = id();
         int dimensions = TopicEmbedding.DIMENSIONS;
         var vectors = saveList(workspaceId, projectId, runId, topicId);
         // The run's own insert, or an earlier cut pass, labelled 30 traces.
-        var labelledBefore = UUID.randomUUID();
+        var labelledBefore = id();
         insertRunRows(workspaceId, projectId, runId, labelledBefore, TRACES.traceIds().subList(3, 33),
                 TRACES.createdAt().subList(3, 33));
 
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RUN, 7, 20);
+                TopicWindowLabelService.Trigger.RUN).block();
 
-        assertThat(pass.complete()).isTrue();
+        assertThat(pass).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
-        assertThat(pass.runId()).isEqualTo(runId);
-        assertThat(pass.windowTraces()).isEqualTo(BUILT);
-        assertThat(pass.labelled()).isEqualTo(BUILT - 30);
         assertThat(rowsOfRun(workspaceId, projectId, runId))
                 .containsOnlyKeys(TRACES.traceIds())
                 .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
@@ -172,12 +193,13 @@ class TopicsStorageTest {
         assertThat(data.traceTopics(workspaceId, projectId).stream()
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId))).isEqualTo(expected);
 
+        var rowsBefore = data.traceTopics(workspaceId, projectId).size();
         var again = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RESUME, 7, 20);
+                TopicWindowLabelService.Trigger.RESUME).block();
 
-        assertThat(again.complete()).isTrue();
-        assertThat(again.labelled()).isZero();
-        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
+        assertThat(again).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+        assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);
+        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getBuild().getRead().getMaxRowsToRead());
         assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
     }
@@ -186,8 +208,8 @@ class TopicsStorageTest {
     @DisplayName("the window's slice bounds hold the same number of live traces each, however the traffic is spread in "
             + "time: most of this window is in its last 20 hours")
     void sliceBoundsAreEqualInTraces() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
+        var workspaceId = id().toString();
+        var projectId = id();
         data.seed(workspaceId, projectId, 0, BUILT);
         spreadData.seed(workspaceId, projectId, 0, 40);
         int sliceTraces = 20;
@@ -204,6 +226,144 @@ class TopicsStorageTest {
                 .containsExactly(List.of("2", maxRowsToRead, "100", "60"));
     }
 
+    @Test
+    @DisplayName("every live window trace gets one row of the run, whatever its keys hold: a relabelled trace (two "
+            + "task versions), a tombstoned one (none), traces tied on a slice bound, and traces that already have a "
+            + "row of an older run or an arrival row")
+    void labellingPassOverEveryKeyShape() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var runId = id();
+        saveList(workspaceId, projectId, runId, id());
+        data.relabel(workspaceId, projectId, TRACES.traceIds().subList(40, 45));
+        var tombstoned = TRACES.traceIds().subList(50, 55);
+        data.insertVectorTombstones(workspaceId, projectId, tombstoned, 1);
+        // Five more traces created at the same time as trace 19, the first slice's bound.
+        var tied = IntStream.range(0, 5).mapToObj(i -> id()).toList();
+        tied.forEach(traceId -> copyVector(workspaceId, projectId, TRACES.traceIds().get(19), traceId));
+        TRACES.traceIds().subList(60, 65).forEach(traceId -> data.insertTraceTopic(workspaceId, projectId, traceId,
+                createdAt(traceId), id(), Instant.now(), 0));
+        TRACES.traceIds().subList(70, 75).forEach(traceId -> data.insertTraceTopic(workspaceId, projectId, traceId,
+                createdAt(traceId), id(), TraceTopic.Source.ARRIVAL, Instant.now(), 0));
+
+        assertThat(label(labelService, workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+                .isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+
+        var live = Stream.concat(TRACES.traceIds().stream().filter(traceId -> !tombstoned.contains(traceId)),
+                tied.stream()).toList();
+        assertThat(rowsOfRun(workspaceId, projectId, runId))
+                .containsOnlyKeys(live)
+                .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a failed insert fails the pass: the pages before it stay and nothing is marked complete; the next "
+            + "pass labels the rest, every window trace ends with one row, and only then are the labels complete")
+    void failedInsertResumes() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var runId = id();
+        saveList(workspaceId, projectId, runId, id());
+        var failing = spy(traceTopicsDAO);
+        var calls = new AtomicInteger();
+        doAnswer(invocation -> calls.incrementAndGet() == 3
+                ? Mono.error(new IllegalStateException("not a transient error"))
+                : invocation.callRealMethod()).when(failing).insert(any());
+
+        assertThat(label(service(windowDAO, failing), workspaceId, projectId,
+                Instant.now().plus(Duration.ofMinutes(5)))).isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
+
+        assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(2 * PAGE);
+        assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
+
+        assertThat(label(labelService, workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+                .isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
+
+        assertThat(rowsOfRun(workspaceId, projectId, runId))
+                .containsOnlyKeys(TRACES.traceIds())
+                .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a pass past its deadline is cut before it reads; one whose deadline comes mid-pass, or whose caller "
+            + "cancels it, is cut too: the pages inserted stay, and nothing is marked complete")
+    void cutPasses() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var runId = id();
+        saveList(workspaceId, projectId, runId, id());
+
+        assertThat(label(labelService, workspaceId, projectId, Instant.now().minusSeconds(1)))
+                .isEqualTo(TopicWindowLabelService.PassOutcome.CUT);
+        assertThat(rowsOfRun(workspaceId, projectId, runId)).isEmpty();
+
+        // From here, the second page's insert of each pass outlasts the pass.
+        var slow = spy(traceTopicsDAO);
+        var calls = new AtomicInteger();
+        doAnswer(invocation -> calls.incrementAndGet() % 2 == 0
+                ? Mono.delay(Duration.ofSeconds(30)).then(Mono.<Long>empty())
+                : invocation.callRealMethod()).when(slow).insert(any());
+        var service = service(windowDAO, slow);
+
+        assertThat(label(service, workspaceId, projectId, Instant.now().plusSeconds(3)))
+                .isEqualTo(TopicWindowLabelService.PassOutcome.CUT);
+        assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(PAGE);
+
+        var cancelled = service.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
+                TopicWindowLabelService.Trigger.RESUME).timeout(Duration.ofSeconds(3)).onErrorResume(
+                        error -> Mono.empty())
+                .block();
+        assertThat(cancelled).isNull();
+        assertThat(rowsOfRun(workspaceId, projectId, runId)).hasSize(2 * PAGE);
+        assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a broken read stops its slice and fails the pass: a page that does not move past the last trace, or "
+            + "more full pages than the slice can hold")
+    void pageChecksStopTheSlice() {
+        var workspaceId = id().toString();
+        var projectId = id();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var runId = id();
+        saveList(workspaceId, projectId, runId, id());
+
+        // Every page of a slice is its first page again.
+        var stuck = spy(windowDAO);
+        doAnswer(invocation -> windowDAO.readUnlabelled(workspaceId, projectId, runId, invocation.getArgument(3),
+                invocation.getArgument(4), "", invocation.getArgument(6), invocation.getArgument(7)))
+                .when(stuck).readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong());
+        // The traces live in their run's rows from here on, so the stuck read keeps returning them.
+        var labelled = spy(traceTopicsDAO);
+        doReturn(Mono.just(0L)).when(labelled).insert(any());
+
+        assertThat(label(service(stuck, labelled), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+                .isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
+
+        // Every page is full of traces the slice never had.
+        var next = new AtomicLong();
+        var endless = spy(windowDAO);
+        doAnswer(invocation -> Flux.range(0, invocation.<Integer>getArgument(6))
+                .map(i -> new TopicWindowDAO.WindowVector(new UUID(0x7000_0000_0000_7000L
+                        + (next.incrementAndGet() << 16), 0x8000_0000_0000_0000L), invocation.getArgument(3),
+                        TopicsTestData.unit(0))))
+                .when(endless).readUnlabelled(any(), any(), any(), any(), any(), any(), anyInt(), anyLong());
+
+        assertThat(label(service(endless, labelled), workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5))))
+                .isEqualTo(TopicWindowLabelService.PassOutcome.FAILED);
+        // A bound at every 20th trace: the last slice holds the window's last trace alone.
+        int slices = BUILT / SLICE + 1;
+        int maxPages = (SLICE + PAGE - 1) / PAGE + 2;
+        // The stuck pass inserted each slice's first page; the endless one every page of every slice.
+        verify(labelled, times(slices + slices * maxPages)).insert(any());
+        assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
+    }
+
     /**
      * A saved list of one topic, saved by {@code runId}: trace 0 and trace 2 are the topic's prototypes, trace 1 a
      * known-Other one. Returns the three vectors.
@@ -216,11 +376,11 @@ class TopicsStorageTest {
         }
         var savedAt = NIGHT.plus(Duration.ofHours(2));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
+            var runDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
+            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
                     new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(topicId)
@@ -278,5 +438,45 @@ class TopicsStorageTest {
                         .runId(runId)
                         .build())
                 .toList()).block();
+    }
+
+    private TopicWindowLabelService.PassOutcome label(TopicWindowLabelService service, String workspaceId,
+            UUID projectId, Instant deadline) {
+        return service.labelWindow(workspaceId, projectId, deadline, TopicWindowLabelService.Trigger.RUN).block();
+    }
+
+    /** The label service on the given stores, as the app builds it. */
+    private TopicWindowLabelService service(TopicWindowDAO windowDAO, TraceTopicsDAO traceTopicsDAO) {
+        var names = mock(WorkspaceNameService.class);
+        when(names.nameOrId(any())).thenReturn("Acme");
+        return new TopicWindowLabelService(opikConfig.getTopics(), template, windowDAO, traceTopicsDAO,
+                TopicsMetricsReader.metrics(InMemoryMetricReader.create()), names, algorithm);
+    }
+
+    private static UUID id() {
+        return IDS.generate();
+    }
+
+    private static Instant createdAt(UUID traceId) {
+        return TRACES.createdAt().get(TRACES.traceIds().indexOf(traceId));
+    }
+
+    /** A new trace {@code traceId} with the vector row of {@code source}: same time, text and vector. */
+    private void copyVector(String workspaceId, UUID projectId, UUID source, UUID traceId) {
+        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                INSERT INTO topic_vectors (workspace_id, project_id, task, trace_id, trace_created_at, task_version,
+                    embed_model, embed_dimensions, text, vector)
+                SELECT workspace_id, project_id, task, :trace_id, trace_created_at, task_version, embed_model,
+                    embed_dimensions, text, vector
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id AND project_id = :project_id AND trace_id = :source
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .bind("source", source.toString())
+                .bind("trace_id", traceId.toString())
+                .execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())))
+                .block();
     }
 }

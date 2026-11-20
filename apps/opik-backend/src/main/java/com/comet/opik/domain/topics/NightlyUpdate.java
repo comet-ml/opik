@@ -17,7 +17,7 @@ import java.util.stream.IntStream;
 
 /**
  * One nightly update of a project's topic list, on a {@link NightState} read before and written after by the caller.
- * Pure apart from the Qwen calls behind {@link NightLlm}; the state is changed in place. Topic prototypes are frozen: a
+ * Pure: its LLM calls are {@link NightStep.Ask} steps the caller answers; the state is changed in place. Topic prototypes are frozen: a
  * topic keeps the group centres it was born with and the ones a night's decision adds, while they take traces (step
  * g), so its meaning does not drift from its name.
  *
@@ -51,9 +51,9 @@ public class NightlyUpdate {
     private static final int HELD = -10;
     static final int PROMPT_EXAMPLES = 4;
 
-    public static Result run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
-            @NonNull AlgorithmConfig config, @NonNull NightLlm llm) {
-        int d = window.dimensions();
+    /** The night as steps: a to b at once, c's calls as asks, d to g once the naming is done. */
+    public static NightStep<Result> run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
+            @NonNull AlgorithmConfig config) {
         int n = window.size();
         var memory = new ArrayList<>(state.getOtherPrototypes());
         // a. one assignment: topic index, HELD - m for known-Other prototype m, or OTHER
@@ -77,11 +77,19 @@ public class NightlyUpdate {
                 .toList();
         // c. the naming call
         Map<Integer, Integer> map = new LinkedHashMap<>();
-        List<ForcedBirth.Outcome> forced = List.of();
-        if (!candidates.isEmpty()) {
-            forced = ForcedBirth.apply(state, candidates, map, () -> promptTopics(state, window, before, recent),
-                    maxTopics, config.getRecentDays(), llm);
-        }
+        NightStep<List<ForcedBirth.Outcome>> naming = candidates.isEmpty()
+                ? NightStep.done(List.of())
+                : ForcedBirth.apply(state, candidates, map, () -> promptTopics(state, window, before, recent),
+                        maxTopics, config.getRecentDays());
+        return naming.map(forced -> decided(state, window, config, owners, before, grouped, grouping, candidates,
+                big, map, forced, memory));
+    }
+
+    /** Steps d to g, once the naming has decided. */
+    private static Result decided(NightState state, NightWindow window, AlgorithmConfig config, int[] owners,
+            int[] before, int[] grouped, CandidateGrouper.Grouping grouping, List<NightGroup> candidates,
+            List<Integer> big, Map<Integer, Integer> map, List<ForcedBirth.Outcome> forced, List<float[]> memory) {
+        int d = window.dimensions();
         // d. decisions become prototypes
         var placed = new HashSet<Integer>();
         map.forEach((group, topic) -> {

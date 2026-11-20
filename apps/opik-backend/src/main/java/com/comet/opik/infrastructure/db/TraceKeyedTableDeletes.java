@@ -26,7 +26,8 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 
 /**
  * The deletes of the tables keyed by {@code trace_id} and partitioned by the trace's week exactly as
- * {@code traces_local_v2} is ({@code ai_labels}, {@code ai_label_status}, {@code topic_vectors}), so their rows are
+ * {@code traces_local_v2} is ({@code ai_labels}, {@code ai_label_status}, {@code topic_vectors},
+ * {@code trace_topics}), so their rows are
  * deleted with their traces: by retention, with the trace sweep's own workspaces, id range, week predicate and
  * experiment exclusion, and by the trace-delete cascade. {@code queryPrefix} starts each statement's log comment name.
  */

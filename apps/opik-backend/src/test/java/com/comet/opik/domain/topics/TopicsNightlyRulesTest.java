@@ -52,7 +52,7 @@ class TopicsNightlyRulesTest {
     private static final float[] SOUTH = {0, -1};
     private static final float[] WEST = {-1, 0};
     private static final NightLlm NO_LLM = (tag, prompt, schema, maxTokens) -> {
-        throw new AssertionError("unexpected Qwen call '%s'".formatted(tag));
+        throw new AssertionError("unexpected LLM call '%s'".formatted(tag));
     };
 
     @Nested
@@ -66,7 +66,7 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("one call for every pair; a missing or out-of-range pair is not verified")
         void answers() {
-            var verdicts = Verifier.ask("verify_naming", pairs, (tag, prompt, schema, maxTokens) -> {
+            var verdicts = drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> {
                 assertThat(tag).isEqualTo("verify_naming");
                 assertThat(maxTokens).isEqualTo(60 + 25 * 2);
                 assertThat(schema).isEqualTo(TopicPrompts.VERIFY_SCHEMA);
@@ -82,7 +82,7 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("a failed call fails the run: read as 'no pair verified', it would turn sound assigns into new topics")
         void failed() {
-            assertThatThrownBy(() -> Verifier.ask("verify_naming", pairs, (tag, prompt, schema, maxTokens) -> {
+            assertThatThrownBy(() -> drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> {
                 throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
             })).isInstanceOfSatisfying(TopicsRunException.class,
                     exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_TIMEOUT));
@@ -91,7 +91,7 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("a pair answered both ways is not verified; a pair answered twice the same way is")
         void conflictingAnswers() {
-            var verdicts = Verifier.ask("verify_naming", pairs, (tag, prompt, schema, maxTokens) -> json("""
+            var verdicts = drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> json("""
                     {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
                     {"pair": 1, "same": true}]}
                     """));
@@ -104,7 +104,7 @@ class TopicsNightlyRulesTest {
                 "a number|, \"same\": 1"})
         @DisplayName("a same that is missing or not a boolean does not verify the pair")
         void sameNotBoolean(String label, String same) {
-            var verdicts = Verifier.ask("verify_naming", pairs, (tag, prompt, schema, maxTokens) -> json(
+            var verdicts = drive(Verifier.ask("verify_naming", pairs), (tag, prompt, schema, maxTokens) -> json(
                     "{\"answers\": [{\"pair\": 0" + (same == null ? "" : same) + "}, {\"pair\": 1, \"same\": true}]}"));
 
             assertThat(verdicts).containsOnly(Map.entry(1, true));
@@ -478,12 +478,12 @@ class TopicsNightlyRulesTest {
     class Night {
 
         @Test
-        @DisplayName("without an Other group of 20 traces there is no Qwen call, and the memory stays")
+        @DisplayName("without an Other group of 20 traces there is no LLM call, and the memory stays")
         void quiet() {
             var state = state(1, topic("East", EAST));
             state.setOtherPrototypes(List.of(SOUTH));
 
-            var result = NightlyUpdate.run(state, window(three(25, 5, 0)), 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window(three(25, 5, 0)), 10, CONFIG), NO_LLM);
 
             assertThat(result.groupMap()).isEmpty();
             assertThat(result.candidates()).isEmpty();
@@ -509,7 +509,7 @@ class TopicsNightlyRulesTest {
             var window = window(vectors);
             var before = NightlyUpdate.assignFinal(state, window, CONFIG).labels();
 
-            var result = NightlyUpdate.run(state, window, 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window, 10, CONFIG), NO_LLM);
 
             assertThat(result.labels()).containsExactly(before);
             assertThat(Arrays.stream(result.labels()).filter(label -> label == TopicAlgorithm.OTHER).count())
@@ -535,7 +535,7 @@ class TopicsNightlyRulesTest {
             }
             var window = window(vectors);
 
-            var result = NightlyUpdate.run(state, window, 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window, 10, CONFIG), NO_LLM);
 
             // Without the prune: North retires, the gated prototype is open again and holds the 20 traces between.
             var expected = new int[120];
@@ -558,7 +558,7 @@ class TopicsNightlyRulesTest {
             var window = window(vectors);
             var before = NightlyUpdate.assignFinal(state, window, CONFIG).labels();
 
-            var result = NightlyUpdate.run(state, window, 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window, 10, CONFIG), NO_LLM);
 
             assertThat(result.labels()).containsExactly(before);
             assertThat(state.topic(0).getPrototypes()).containsExactly(EAST, near);
@@ -591,7 +591,7 @@ class TopicsNightlyRulesTest {
                 vectors.add(SOUTH);
             }
 
-            var result = NightlyUpdate.run(state, window(vectors), 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window(vectors), 10, CONFIG), NO_LLM);
 
             assertThat(state.liveCount()).isZero();
             assertThat(state.getTopics()).extracting(NightTopic::getRetiredReason)
@@ -623,7 +623,7 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST), topic("North", NORTH));
             var tags = new ArrayList<String>();
 
-            var result = NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG),
                     named(Map.of(
                             "naming", "{\"assign\": [{\"cluster\": 0, \"topic\": 2}, {\"cluster\": 1, \"topic\": 2}],"
                                     + " \"new\": [], \"other\": []}",
@@ -647,7 +647,7 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST), topic("North", NORTH));
             var tags = new ArrayList<String>();
 
-            var result = NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG),
                     named(Map.of(
                             "naming", "{\"assign\": [{\"cluster\": 0, \"topic\": 2}, {\"cluster\": 1, \"topic\": 2}],"
                                     + " \"new\": [], \"other\": []}",
@@ -670,7 +670,7 @@ class TopicsNightlyRulesTest {
         void merged() {
             var state = state(1, topic("East", EAST), topic("North", NORTH));
 
-            var result = NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(twoSmall()), 10, CONFIG),
                     named(Map.of("naming",
                             newTopics("{\"name\": \"Both\", \"definition\": \"B.\", \"clusters\": [0, 1]}"))));
 
@@ -688,7 +688,7 @@ class TopicsNightlyRulesTest {
         void small() {
             var state = state(1, topic("East", EAST));
 
-            var result = NightlyUpdate.run(state, window(three(1980, 20, 0)), 10, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(three(1980, 20, 0)), 10, CONFIG),
                     named(Map.of("naming",
                             newTopics("{\"name\": \"South\", \"definition\": \"S.\", \"clusters\": [0, 1]}"))));
 
@@ -708,7 +708,7 @@ class TopicsNightlyRulesTest {
             state.setOtherPrototypes(List.of(SOUTH));
             var tags = new ArrayList<String>();
 
-            var result = NightlyUpdate.run(state, window(three(20, 40, 40)), 10, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(three(20, 40, 40)), 10, CONFIG),
                     named(Map.of("naming",
                             newTopics("{\"name\": \"Both\", \"definition\": \"B.\", \"clusters\": [0, 1]}")),
                             tags));
@@ -727,7 +727,7 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST));
             state.setOtherPrototypes(List.of(SOUTH));
 
-            var result = NightlyUpdate.run(state, window(memoryHeld(30, 10)), 10, CONFIG, assignGroup(0));
+            var result = drive(NightlyUpdate.run(state, window(memoryHeld(30, 10)), 10, CONFIG), assignGroup(0));
 
             assertThat(result.forced()).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.ASSIGNED, 0));
             assertThat(state.topic(0).getPrototypes()).hasSize(2);
@@ -743,7 +743,7 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST));
             state.setOtherPrototypes(List.of(SOUTH));
 
-            var result = NightlyUpdate.run(state, window(memoryHeld(20, kept)), 10, CONFIG, assignGroup(1));
+            var result = drive(NightlyUpdate.run(state, window(memoryHeld(20, kept)), 10, CONFIG), assignGroup(1));
 
             assertThat(result.forced()).contains(new ForcedBirth.Outcome(1, ForcedBirth.Result.ASSIGNED, 0));
             assertThat(state.topic(0).getPrototypes().get(1)).containsExactly(PLACED, within(1e-5f));
@@ -759,7 +759,7 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST));
             state.setOtherPrototypes(List.of(SOUTH));
 
-            var result = NightlyUpdate.run(state, window(three(20, 40, 40)), 10, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(three(20, 40, 40)), 10, CONFIG),
                     named(Map.of("naming", newTopics(""))));
 
             assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
@@ -781,7 +781,7 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST));
             var tags = new ArrayList<String>();
 
-            var result = NightlyUpdate.run(state, window(vectors), 1, CONFIG,
+            var result = drive(NightlyUpdate.run(state, window(vectors), 1, CONFIG),
                     named(Map.of("naming",
                             newTopics("{\"name\": \"Weather\", \"definition\": \"F.\", \"clusters\": [0]}, "
                                     + "{\"name\": \"Rain\", \"definition\": \"F.\", \"clusters\": [1]}")),
@@ -804,7 +804,8 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST));
             var tags = new ArrayList<String>();
 
-            var result = NightlyUpdate.run(state, window(nearEastAndSouth(30, 25, 45)), 1, CONFIG, assignAndNew(tags));
+            var result = drive(NightlyUpdate.run(state, window(nearEastAndSouth(30, 25, 45)), 1, CONFIG),
+                    assignAndNew(tags));
 
             assertThat(tags).containsExactly("naming", "verify_naming");
             assertThat(result.forced()).containsExactly(new ForcedBirth.Outcome(1, ForcedBirth.Result.ASSIGNED, 0),
@@ -821,7 +822,8 @@ class TopicsNightlyRulesTest {
             var state = state(1, topic("East", EAST));
             var tags = new ArrayList<String>();
 
-            var result = NightlyUpdate.run(state, window(nearEastAndSouth(20, 25, 55)), 1, CONFIG, assignAndNew(tags));
+            var result = drive(NightlyUpdate.run(state, window(nearEastAndSouth(20, 25, 55)), 1, CONFIG),
+                    assignAndNew(tags));
 
             assertThat(tags).containsExactly("naming", "verify_naming");
             assertThat(result.forced()).containsExactly(new ForcedBirth.Outcome(1, ForcedBirth.Result.ASSIGNED, 0),
@@ -844,7 +846,7 @@ class TopicsNightlyRulesTest {
                 vectors.add(i < 30 ? EAST : new float[]{0.95f, 0.31225f});
             }
 
-            var result = NightlyUpdate.run(state, window(vectors), 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window(vectors), 10, CONFIG), NO_LLM);
 
             assertThat(result.labels()).containsOnly(0);
             assertThat(state.topic(0).getPrototypes()).singleElement().isSameAs(tilted);
@@ -932,7 +934,7 @@ class TopicsNightlyRulesTest {
                 vectors.add(i < 1 ? EAST : NORTH);
             }
 
-            var result = NightlyUpdate.run(state, window(vectors), 10, CONFIG, NO_LLM);
+            var result = drive(NightlyUpdate.run(state, window(vectors), 10, CONFIG), NO_LLM);
             var churn = TopicChurn.of(result.before(), result.labels());
 
             assertThat(result.before()[0]).isZero();
@@ -1064,6 +1066,8 @@ class TopicsNightlyRulesTest {
             assertThatThrownBy(() -> force(state, List.of(group(0, 60, 0.95, 0.9)), topics(state), map, 10, failing))
                     .isInstanceOfSatisfying(TopicsRunException.class,
                             exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_ERROR));
+            assertThat(state.liveCount()).isEqualTo(10);
+            assertThat(map).isEmpty();
         }
     }
 
@@ -1160,8 +1164,23 @@ class TopicsNightlyRulesTest {
 
     private static List<ForcedBirth.Outcome> force(NightState state, List<NightGroup> ordered,
             Map<Integer, TopicPrompts.PromptTopic> topics, Map<Integer, Integer> map, int maxTopics, NightLlm llm) {
-        return ForcedBirth.apply(state, ordered, map, () -> List.copyOf(topics.values()), maxTopics,
-                CONFIG.getRecentDays(), llm);
+        return drive(ForcedBirth.apply(state, ordered, map, () -> List.copyOf(topics.values()), maxTopics,
+                CONFIG.getRecentDays()), llm);
+    }
+
+    /** The LLM as a test scripts it: the answer per call, picked by the call's tag. */
+    @FunctionalInterface
+    interface NightLlm {
+
+        JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens);
+    }
+
+    /** Answers each ask of {@code step} with {@code llm}, as the rebuild service does, until the step is done. */
+    private static <T> T drive(NightStep<T> step, NightLlm llm) {
+        while (step instanceof NightStep.Ask<T>(var request, var next)) {
+            step = next.apply(llm.generate(request.tag(), request.prompt(), request.schema(), request.maxTokens()));
+        }
+        return ((NightStep.Done<T>) step).result();
     }
 
     /** A grouped naming answer with these {@code new} entries and no assign. */
@@ -1169,7 +1188,7 @@ class TopicsNightlyRulesTest {
         return "{\"assign\": [], \"new\": [" + entries + "], \"other\": []}";
     }
 
-    /** A Qwen stub that answers each tag with its JSON. */
+    /** An LLM stub that answers each tag with its JSON. */
     private static NightLlm named(Map<String, String> answers) {
         return named(answers, new ArrayList<>());
     }
