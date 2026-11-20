@@ -722,6 +722,39 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("Get dataset by name: when public access and a private dataset shares the name, then return the public one")
+        void getDatasetByName__whenPublicAccessAndPrivateDatasetSharesName__thenReturnPublicDataset() {
+            String name = "dataset-" + UUID.randomUUID();
+            var privateProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), okApikey,
+                    TEST_WORKSPACE);
+            var publicProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), okApikey,
+                    TEST_WORKSPACE);
+            createAndAssert(buildDataset().toBuilder().id(null).name(name).projectId(privateProjectId)
+                    .visibility(PRIVATE).build());
+            var publicDataset = buildDataset().toBuilder().id(null).name(name).projectId(publicProjectId)
+                    .visibility(PUBLIC).build();
+            createAndAssert(publicDataset);
+
+            mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, "")
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(name).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.readEntity(Dataset.class))
+                        .usingRecursiveComparison()
+                        .ignoringFields(DATASET_IGNORED_FIELDS)
+                        .isEqualTo(publicDataset);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset by name: when api key is present, then return proper response")
