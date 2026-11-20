@@ -435,15 +435,15 @@ public class TopicsConfig {
         }
     }
 
-    /** The nightly job: updates the topic list of each project that has one. */
+    /** The nightly update of the topic list of each project that has one: a pass of each plan of the runs. */
     @Data
     public static class NightlyConfig {
 
-        /** Runs only when {@code topics.enabled} is on too. */
+        /** Runs only when {@code topics.enabled} and {@code topics.firstBuild.enabled}, whose job plans, are on too. */
         @JsonProperty
         private boolean enabled;
 
-        /** Quartz cron, UTC. The night is the UTC date the job starts on. */
+        /** Quartz cron, UTC. The night is the UTC date it fires on, and starts at its first fire that day. */
         @NotBlank @JsonProperty
         private String schedule;
 

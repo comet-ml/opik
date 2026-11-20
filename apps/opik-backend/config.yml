@@ -2929,8 +2929,8 @@ topics:
     planBudget: ${TOPICS_RUNS_PLAN_BUDGET:-2m}
   nightly:
     #  Default: true
-    #  Description: Runs the nightly job, which updates the topic list of each project that has one. Needs
-    #  topics.enabled
+    #  Description: Each plan of topics.runs queues the nightly update of each project that has a topic list. Needs
+    #  topics.enabled, and topics.firstBuild.enabled, whose job plans
     enabled: ${TOPICS_NIGHTLY_ENABLED:-true}
     #  Default: 0 0 2 * * ? (02:00 UTC)
     #  Description: Quartz cron in UTC. The night is the UTC date it fires on and starts at its first fire that day;
