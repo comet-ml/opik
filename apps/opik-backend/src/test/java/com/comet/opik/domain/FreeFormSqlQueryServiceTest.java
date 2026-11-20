@@ -164,6 +164,16 @@ class FreeFormSqlQueryServiceTest {
         givenClickHouseReturnsOneRow();
         when(dao.explainAst(any(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  " + astLabel)));
+        if (astLabel.startsWith("Identifier ")) {
+            String resolvedFunction = switch (astLabel.substring("Identifier ".length()).toLowerCase()) {
+                case "current_user", "user", "currentuser" -> "currentUser";
+                default -> "currentDatabase";
+            };
+            when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                    .thenReturn(CompletableFuture.completedFuture(List.of(
+                            "QUERY id: 0", "  FUNCTION id: 1, function_name: " + resolvedFunction
+                                    + ", function_type: ordinary, result_type: String")));
+        }
 
         for (var account : FreeFormSqlAccount.values()) {
             assertThatThrownBy(() -> service.executeQuery(account, WORKSPACE, null, query).join())
@@ -174,6 +184,26 @@ class FreeFormSqlQueryServiceTest {
                     });
         }
         verify(dao, never()).execute(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a metadata-like identifier resolved as a column is allowed")
+    void metadataNamedColumnIsAllowed() {
+        givenClickHouseReturnsOneRow();
+        when(dao.explainAst(any(), anyString()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(List.of("SelectWithUnionQuery", "  Identifier currentUser")));
+        when(dao.explainQueryTree(any(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(List.of(
+                        "QUERY id: 0", "  COLUMN id: 1, column_name: currentUser, result_type: UInt8")));
+
+        service.executeQuery(FreeFormSqlAccount.STANDARD, WORKSPACE, null,
+                "SELECT toJSONString(map('n', toString(currentUser))) AS result FROM "
+                        + "(SELECT 1 AS currentUser)")
+                .join();
+
+        verify(dao).execute(any(), anyString(), anyString(), anyString(), anyString());
+        verify(dao).explainQueryTree(any(), anyString(), anyString(), anyString());
     }
 
     @Test

@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -128,6 +129,8 @@ public class FreeFormSqlQueryService {
      */
     private static final String FUNCTION_AST_PREFIX = "Function ";
     private static final String IDENTIFIER_AST_PREFIX = "Identifier ";
+    private static final String FUNCTION_QUERY_TREE_PREFIX = "FUNCTION ";
+    private static final Pattern RESOLVED_FUNCTION_NAME = Pattern.compile("(?:^|, )function_name: ([^,]+)");
     private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
             "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
             "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
@@ -248,18 +251,42 @@ public class FreeFormSqlQueryService {
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> subqueryReads(account, workspaceId, projectScope, query, startMillis))
+                .thenCompose(nodeLabels -> resolvedMetadataCheck(account, workspaceId, projectScope, query,
+                        nodeLabels, startMillis))
+                .thenCompose(queryTree -> subqueryReads(account, workspaceId, projectScope, query, queryTree,
+                        startMillis))
                 .thenCompose(subqueryReads -> runQuery(account, workspaceId, projectScope, query, subqueryReads,
                         startMillis));
+    }
+
+    /** An AST Identifier can resolve to either a metadata function or a legitimate column/alias. */
+    private CompletableFuture<List<String>> resolvedMetadataCheck(FreeFormSqlAccount account, String workspaceId,
+            String projectScope, String query, List<String> nodeLabels, long startMillis) {
+        if (!containsForbiddenMetadataIdentifierNode(nodeLabels)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
+                .handle((queryTree, error) -> {
+                    if (error != null) {
+                        throw mapExecutionError(error, startMillis);
+                    }
+                    if (containsForbiddenResolvedMetadataFunction(queryTree)) {
+                        throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
+                    }
+                    return queryTree;
+                });
     }
 
     /** Where the query's subqueries read, for the check; unknown when it is off or could not tell in audit. */
     private CompletableFuture<FreeFormSqlSubqueries.SubqueryReads> subqueryReads(FreeFormSqlAccount account,
             String workspaceId,
-            String projectScope, String query, long startMillis) {
+            String projectScope, String query, @Nullable List<String> resolvedTree, long startMillis) {
         if (mode != FreeFormSqlPostRunCheckConfig.Mode.ENFORCE) {
             // Off: nothing to check. Audit: the tree is explained after the response, with the rest of the check.
             return CompletableFuture.completedFuture(FreeFormSqlSubqueries.SubqueryReads.UNKNOWN);
+        }
+        if (resolvedTree != null) {
+            return CompletableFuture.completedFuture(rejectScalarReads(account, resolvedTree, null, startMillis));
         }
         return freeFormSqlQueryDAO.explainQueryTree(account, workspaceId, projectScope, query)
                 .handle((tree, error) -> rejectScalarReads(account, tree, error, startMillis));
@@ -344,7 +371,7 @@ public class FreeFormSqlQueryService {
         if (containsForbiddenCatalogTableNode(nodeLabels)) {
             throw reject(Outcome.PERMISSION_DENIED, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
-        if (containsForbiddenMetadataNode(nodeLabels)) {
+        if (containsForbiddenMetadataFunctionNode(nodeLabels)) {
             // Same generic message as a denied table, so the rejection does not reveal which guard tripped.
             throw reject(Outcome.FORBIDDEN_FUNCTION, startMillis, ACCESS_DENIED_MESSAGE, null);
         }
@@ -484,20 +511,32 @@ public class FreeFormSqlQueryService {
                 .anyMatch(ref -> FORBIDDEN_CATALOG_PREFIXES.stream().anyMatch(ref::startsWith));
     }
 
-    private static boolean containsForbiddenMetadataNode(List<String> nodeLabels) {
+    private static boolean containsForbiddenMetadataFunctionNode(List<String> nodeLabels) {
         return nodeLabels.stream().map(String::stripLeading).anyMatch(label -> {
             if (label.startsWith(FUNCTION_AST_PREFIX)) {
                 String name = label.substring(FUNCTION_AST_PREFIX.length()).split("\\s", 2)[0]
                         .toLowerCase(Locale.ROOT);
                 return FORBIDDEN_FUNCTIONS.contains(name);
             }
-            if (label.startsWith(IDENTIFIER_AST_PREFIX)) {
-                String name = label.substring(IDENTIFIER_AST_PREFIX.length()).split("\\s", 2)[0]
-                        .toLowerCase(Locale.ROOT);
-                return FORBIDDEN_IDENTIFIERS.contains(name);
-            }
             return false;
         });
+    }
+
+    private static boolean containsForbiddenMetadataIdentifierNode(List<String> nodeLabels) {
+        return nodeLabels.stream().map(String::stripLeading)
+                .filter(label -> label.startsWith(IDENTIFIER_AST_PREFIX))
+                .map(label -> label.substring(IDENTIFIER_AST_PREFIX.length()).split("\\s", 2)[0]
+                        .toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_IDENTIFIERS::contains);
+    }
+
+    private static boolean containsForbiddenResolvedMetadataFunction(List<String> queryTree) {
+        return queryTree.stream().map(String::stripLeading)
+                .filter(line -> line.startsWith(FUNCTION_QUERY_TREE_PREFIX))
+                .map(RESOLVED_FUNCTION_NAME::matcher)
+                .filter(java.util.regex.Matcher::find)
+                .map(matcher -> matcher.group(1).toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {

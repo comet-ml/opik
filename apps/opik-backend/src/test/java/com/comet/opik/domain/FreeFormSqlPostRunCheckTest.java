@@ -298,6 +298,41 @@ class FreeFormSqlPostRunCheckTest {
                                 .contains(FreeFormSqlQueryService.ACCESS_DENIED_MESSAGE));
     }
 
+    static Stream<Arguments> metadataNamedColumnsAsEachAccount() {
+        return Stream.of("currentUser", "currentDatabase")
+                .flatMap(name -> Stream.of(FreeFormSqlAccount.values()).map(account -> arguments(name, account)));
+    }
+
+    @ParameterizedTest(name = "{0} as {1}")
+    @MethodSource("metadataNamedColumnsAsEachAccount")
+    @DisplayName("a column with a metadata function name remains queryable")
+    void metadataNamedColumnsAreAllowed(String name, FreeFormSqlAccount account) {
+        String query = "SELECT toJSONString(map('n', toString(%s))) AS result FROM (SELECT 1 AS %s)"
+                .formatted(name, name);
+        assertThat(run(account, query)).isEqualTo("1");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("metadataNamedScalarAliases")
+    @DisplayName("a scalar alias with a metadata function name remains queryable")
+    void metadataNamedScalarAliasesAreAllowed(String name) {
+        assertThat(run("WITH 1 AS %s SELECT toJSONString(map('n', toString(%s))) AS result"
+                .formatted(name, name))).isEqualTo("1");
+    }
+
+    static Stream<Arguments> metadataNamedScalarAliases() {
+        return Stream.of(arguments("currentUser"), arguments("currentDatabase"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("metadataNamedScalarAliases")
+    @DisplayName("a CTE with a metadata function name remains queryable")
+    void metadataNamedCtesAreAllowed(String name) {
+        assertThat(run(("WITH %s AS (SELECT 1 AS n) "
+                + "SELECT toJSONString(map('n', toString(n))) AS result FROM %s")
+                .formatted(name, name))).isEqualTo("1");
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("catalogTableFunctions")
     @DisplayName("the real read-only accounts deny catalog reads through merge table functions")
