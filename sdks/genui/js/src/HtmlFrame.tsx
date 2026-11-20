@@ -90,12 +90,17 @@ export function HtmlFrame({
   const [navigatedFrom, setNavigatedFrom] = useState<string | null>(null);
   const mounted = srcDoc !== null;
   const stopped = mounted && navigatedFrom === srcDoc;
-  const expected = useRef({ doc: "", loads: 0, handshake: false });
+  const expected = useRef({
+    doc: "",
+    loads: 0,
+    answered: false,
+    handshake: false,
+  });
   const reported = useRef(new Set<string>());
   const resize = useRef({ height: 0, timer: 0 });
 
   const stop = () => {
-    expected.current = { doc: "", loads: 0, handshake: false };
+    expected.current = { doc: "", loads: 0, answered: false, handshake: false };
     setInitialized(0);
     setNavigatedFrom(ref.current?.srcdoc ?? null);
   };
@@ -109,7 +114,12 @@ export function HtmlFrame({
   useClientLayoutEffect(() => {
     const current = expected.current;
     if (!mounted) {
-      expected.current = { doc: "", loads: 0, handshake: false };
+      expected.current = {
+        doc: "",
+        loads: 0,
+        answered: false,
+        handshake: false,
+      };
       return;
     }
     if (stopped || current.doc === srcDoc) return;
@@ -117,6 +127,7 @@ export function HtmlFrame({
     expected.current = {
       doc: srcDoc,
       loads: current.doc ? current.loads + 1 : 1,
+      answered: false,
       handshake: false,
     };
   }, [srcDoc, stopped]);
@@ -137,6 +148,7 @@ export function HtmlFrame({
       if (msg.jsonrpc !== "2.0" || typeof msg.method !== "string") return;
       if (msg.method === "ui/initialize" && msg.id != null) {
         if (expected.current.handshake) return stop();
+        expected.current.answered = true;
         setInitialized(0);
         contextTheme.current = theme;
         post({
@@ -150,6 +162,7 @@ export function HtmlFrame({
           },
         });
       } else if (msg.method === "ui/notifications/initialized") {
+        if (!expected.current.answered) return;
         expected.current.handshake = true;
         post({
           jsonrpc: "2.0",

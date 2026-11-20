@@ -1,12 +1,10 @@
 export type Area = "widget";
 export const AREAS: readonly Area[] = ["widget"];
 
-export type ColumnType = "string" | "number" | "boolean" | "datetime" | "json";
-
 export interface QueryInput {
   kind: "query";
   query_id: string;
-  columns?: Record<string, ColumnType>;
+  columns?: Record<string, string>;
 }
 
 export type ViewInput = QueryInput;

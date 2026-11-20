@@ -43,3 +43,4 @@ CREATE TABLE IF NOT EXISTS view_versions
 
 --rollback DROP TABLE IF EXISTS view_versions;
 --rollback DROP TABLE IF EXISTS views;
+

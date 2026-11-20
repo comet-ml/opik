@@ -3,7 +3,7 @@
 ## Scope & Inheritance
 - This file contains generative UI engine specifics only.
 - Follow `../../AGENTS.md` for shared monorepo workflow, PR, and security policy.
-- Skill for this folder: `.agents/skills/genui/SKILL.md`.
+- Skill for this folder: `../../.agents/skills/genui/SKILL.md`.
 
 ## Project Structure & Module Organization
 `sdks/genui` is one npm workspace that builds the engine behind Opik views. A view is model-written HTML, CSS and script `{ type: "html", engine_version, html, inputs, libraries }`; the engine renders it in a sandboxed iframe and gives the authors their guidance. The backend does not depend on the engine.

@@ -225,6 +225,7 @@ class ViewsResourceTest {
                                     .build()))
                             .build()),
                     Arguments.of("html at the size cap", request.toBuilder().html("x".repeat(MAX_HTML_LENGTH)).build()),
+                    Arguments.of("name at 150", request.toBuilder().name("n".repeat(150)).build()),
                     Arguments.of("empty description", request.toBuilder().description("").build()),
                     Arguments.of("blank description", request.toBuilder().description("  ").build()));
         }
@@ -592,6 +593,8 @@ class ViewsResourceTest {
                             (UnaryOperator<View.ViewBuilder>) view -> view.name("Renamed").description("New")),
                     Arguments.of("name only", ViewUpdate.builder().name("Renamed").build(),
                             (UnaryOperator<View.ViewBuilder>) view -> view.name("Renamed")),
+                    Arguments.of("name at 150", ViewUpdate.builder().name("n".repeat(150)).build(),
+                            (UnaryOperator<View.ViewBuilder>) view -> view.name("n".repeat(150))),
                     Arguments.of("description only", ViewUpdate.builder().description("New").build(),
                             (UnaryOperator<View.ViewBuilder>) view -> view.description("New")),
                     Arguments.of("empty description clears it", ViewUpdate.builder().description("").build(),
