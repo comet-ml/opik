@@ -15,7 +15,6 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
@@ -35,7 +34,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -51,15 +49,13 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 /**
- * The labelling pass's storage and the project-delete cleanup against real ClickHouse and MySQL: the rows and run
- * counts a pass writes, and what deleting a project removes. No run builds here: tests seed vectors and a saved list
- * directly and call the label service and the listener. {@link TopicsDaoStorageTest} covers the DAO reads.
+ * The labelling pass's storage and the project-delete cleanup against real ClickHouse and MySQL: the rows a pass
+ * writes and the counts it logs, and what deleting a project removes. No run builds here: tests seed vectors and a
+ * saved list directly and call the label service and the listener. {@link TopicsDaoStorageTest} covers the DAO reads.
  */
 @DisplayName("topics storage")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -74,18 +70,6 @@ class TopicsStorageTest {
     private static final int SPREAD = 600;
     private static final TopicsTestData.Traces SPREAD_TRACES = TopicsTestData.Traces.spread(SPREAD, NIGHT,
             WINDOW_DAYS, 3);
-    /** The runbook's query of a topic's share run by run ("Saving and labelling"). */
-    private static final String SHARE_QUERY = """
-            SELECT r.started_at,
-                JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') AS traces,
-                JSON_EXTRACT(r.stats, '$.topic_counts."<topic_id>"') / SUM(c.traces) AS share
-            FROM topic_runs r,
-                JSON_TABLE(JSON_EXTRACT(r.stats, '$.topic_counts.*'), '$[*]' COLUMNS (traces BIGINT PATH '$')) AS c
-            WHERE r.workspace_id = '<workspace_id>' AND r.project_id = '<project_id>'
-            GROUP BY r.run_id
-            ORDER BY r.started_at
-            """;
-
     // The app needs Redis to start; no test here uses it.
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer(false);
@@ -100,11 +84,7 @@ class TopicsStorageTest {
     {
         Startables.deepStart(redis, mysql, zookeeper, clickHouse).join();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
@@ -155,7 +135,7 @@ class TopicsStorageTest {
     }
 
     @Test
-    @DisplayName("deleting a project deletes its topics, prototypes, state and runs")
+    @DisplayName("deleting a project deletes its topics, with their prototype vectors, and keeps another project's")
     void projectDeleted() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -166,11 +146,8 @@ class TopicsStorageTest {
         projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(projectId), workspaceId, "test"));
 
         assertThat(data.topics(projectId)).isEmpty();
-        assertThat(data.prototypes(projectId)).isEmpty();
-        assertThat(data.state(projectId)).isNull();
-        assertThat(data.runs(projectId)).isEmpty();
-        assertThat(data.topics(kept)).isNotEmpty();
-        assertThat(data.runs(kept)).hasSize(1);
+        assertThat(data.topics(kept)).singleElement()
+                .satisfies(topic -> assertThat(topic.vectors().vectors()).hasSize(1));
     }
 
     @Test
@@ -184,20 +161,20 @@ class TopicsStorageTest {
         spreadData.seed(workspaceId, projectId, 0, 20, NIGHT.plus(Duration.ofDays(WINDOW_DAYS + 1)));
         var runId = UUID.randomUUID();
         var topicId = UUID.randomUUID();
-        int dimensions = TopicAlgorithm.DIMENSIONS;
+        int dimensions = TopicEmbedding.DIMENSIONS;
         var vectors = saveList(workspaceId, projectId, runId, topicId);
         // The run's own insert, or an earlier cut pass, labelled 30 traces.
         var labelledBefore = UUID.randomUUID();
         insertRunRows(workspaceId, projectId, runId, labelledBefore, TRACES.traceIds().subList(3, 33),
                 TRACES.createdAt().subList(3, 33));
 
-        assertThat(data.state(projectId).labelsComplete()).isFalse();
+        assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
                 TopicWindowLabelService.Trigger.RUN, 7, 20);
 
         assertThat(pass.complete()).isTrue();
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
         assertThat(pass.runId()).isEqualTo(runId);
         assertThat(pass.windowTraces()).isEqualTo(BUILT);
         assertThat(pass.labelled()).isEqualTo(BUILT - 30);
@@ -205,13 +182,14 @@ class TopicsStorageTest {
                 .containsOnlyKeys(TRACES.traceIds())
                 .allSatisfy((traceId, rows) -> assertThat(rows).isEqualTo(1));
         var assigner = new PrototypeAssigner(List.of(vectors.get(0), vectors.get(2)), List.of(0, 0),
-                List.of(vectors.get(1)), dimensions);
+                List.of(vectors.get(1)), dimensions, TopicsTestAlgorithm.config().getAssignMinCosine(),
+                TopicsTestAlgorithm.config().getOtherGate());
         var labels = assigner.assign(TRACES.vectors());
         var expected = new HashMap<UUID, UUID>();
         for (int i = 0; i < BUILT; i++) {
             expected.put(TRACES.traceIds().get(i), i >= 3 && i < 33
                     ? labelledBefore
-                    : labels[i] == PrototypeAssigner.OTHER ? TraceTopic.OTHER : topicId);
+                    : labels[i] == TopicAlgorithm.OTHER ? TraceTopic.OTHER : topicId);
         }
         assertThat(expected.get(TRACES.traceIds().get(0))).isEqualTo(topicId);
         assertThat(expected.get(TRACES.traceIds().get(1))).isEqualTo(TraceTopic.OTHER);
@@ -229,7 +207,7 @@ class TopicsStorageTest {
     }
 
     @Test
-    @DisplayName("the pass that ends complete saves the run's counts in its stats, leaving the other keys as they are: "
+    @DisplayName("the pass that ends complete counts the run's traces: "
             + "per topic and Other, each trace by its latest row, only the traces Logs lists, only the run's window; "
             + "a trace from an experiment, a hidden one, or a labelled one just outside the window is left out")
     void runCountsAreOfWhatLogsLists() {
@@ -239,20 +217,6 @@ class TopicsStorageTest {
         var runId = UUID.randomUUID();
         var topicId = UUID.randomUUID();
         saveList(workspaceId, projectId, runId, topicId);
-        var stats = "{\"vectors\": 120, \"other_share\": 0.25, \"task_version_shares\": {\"1\": 1.0}}";
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
-                    .runId(runId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .mode(TopicRun.Mode.FIRST_BUILD)
-                    .status(TopicRun.Status.SAVED)
-                    .startedAt(NIGHT)
-                    .finishedAt(NIGHT)
-                    .stats(stats)
-                    .build());
-            return null;
-        });
         var experiment = TRACES.traceIds().get(5);
         var hidden = TRACES.traceIds().get(6);
         TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, BUILT)
@@ -285,23 +249,7 @@ class TopicsStorageTest {
         assertThat(expected.get(topicId)).isPositive();
         assertThat(expected.get(TraceTopic.OTHER)).isPositive();
         assertThat(expected.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(BUILT - 2);
-        assertThat(data.runCounts(workspaceId, runId)).isEqualTo(expected);
-        // The runbook's query reads the topic's share of the run's counted traces.
-        var share = template.inTransaction(READ_ONLY, handle -> handle.createQuery(SHARE_QUERY
-                .replace("<workspace_id>", workspaceId)
-                .replace("<project_id>", projectId.toString())
-                .replace("<topic_id>", topicId.toString()))
-                .mapToMap()
-                .list());
-        assertThat(share).singleElement().satisfies(row -> {
-            // traces is a JSON value: the driver gives its text.
-            assertThat(Long.parseLong(String.valueOf(row.get("traces")))).isEqualTo(expected.get(topicId));
-            assertThat(Double.parseDouble(String.valueOf(row.get("share"))))
-                    .isCloseTo((double) expected.get(topicId) / (BUILT - 2), within(1e-9));
-        });
-        var saved = (ObjectNode) TopicsTestData.json(data.runs(projectId).getFirst().stats());
-        saved.remove("topic_counts");
-        assertThat(saved).isEqualTo(TopicsTestData.json(stats));
+        assertThat(pass.counts()).isEqualTo(expected);
         var find = opikConfig.getTopics().getVectors().getFind();
         assertThat(data.queryGuards("topics:count_by_topic", workspaceId))
                 .containsExactly(List.of("2", String.valueOf(find.getMaxRowsToRead()), "", "120"));
@@ -310,24 +258,23 @@ class TopicsStorageTest {
     }
 
     /**
-     * A saved list of one topic: its state names {@code runId}, trace 0 and trace 2 are the topic's prototypes, trace 1
-     * a known-Other one. Returns the three vectors.
+     * A saved list of one topic, saved by {@code runId}: trace 0 and trace 2 are the topic's prototypes, trace 1 a
+     * known-Other one. Returns the three vectors.
      */
     private List<float[]> saveList(String workspaceId, UUID projectId, UUID runId, UUID topicId) {
-        int dimensions = TopicAlgorithm.DIMENSIONS;
+        int dimensions = TopicEmbedding.DIMENSIONS;
         var vectors = new ArrayList<float[]>();
         for (int i = 0; i < 3; i++) {
             vectors.add(Arrays.copyOfRange(TRACES.vectors(), i * dimensions, (i + 1) * dimensions));
         }
+        var savedAt = NIGHT.plus(Duration.ofHours(2));
         template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicRunDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            topicDAO.insertState(TopicProjectState.builder()
-                    .projectId(projectId)
-                    .workspaceId(workspaceId)
-                    .rebuilds(1)
-                    .lastRunId(runId)
-                    .windowUntil(NIGHT)
-                    .build());
+            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+                    savedAt.minus(Duration.ofMinutes(1)));
+            topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
+                    new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(topicId)
                     .workspaceId(workspaceId)
@@ -335,25 +282,12 @@ class TopicsStorageTest {
                     .name("Billing")
                     .definition("Requests about invoices")
                     .born(LocalDate.ofInstant(NIGHT, ZoneOffset.UTC))
+                    .vectors(new PrototypeVectors(List.of(vectors.get(0), vectors.get(2))))
                     .build()));
-            topicDAO.insertPrototypes(List.of(
-                    prototype(workspaceId, projectId, 0, topicId, vectors.get(0)),
-                    prototype(workspaceId, projectId, 1, null, vectors.get(1)),
-                    prototype(workspaceId, projectId, 2, topicId, vectors.get(2))));
+            runDAO.markSaved(workspaceId, projectId, runId, savedAt);
             return null;
         });
         return vectors;
-    }
-
-    private static TopicPrototype prototype(String workspaceId, UUID projectId, int position, UUID topicId,
-            float[] vector) {
-        return TopicPrototype.builder()
-                .workspaceId(workspaceId)
-                .projectId(projectId)
-                .position(position)
-                .topicId(topicId)
-                .vector(TopicPrototype.encode(vector))
-                .build();
     }
 
     /** The raw {@code trace_topics} rows of the run per trace, before any merge dedupes them. */
@@ -394,7 +328,7 @@ class TopicsStorageTest {
                         .traceCreatedAt(createdAt.get(i))
                         .topicId(topicId)
                         .source(TraceTopic.Source.RUN)
-                        .runId(runId.toString())
+                        .runId(runId)
                         .build())
                 .toList()).block();
     }

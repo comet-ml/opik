@@ -32,7 +32,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
       open={open}
       setOpen={setOpen}
       form={form}
-      hideUpload={hideUpload}
       idPrefix="dataset"
     />
   );

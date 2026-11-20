@@ -7,9 +7,9 @@ import lombok.NonNull;
 import java.util.List;
 
 /**
- * The MySQL half of a read of a project's topics: its state, null before its first saved run, and its live topics,
- * empty with no state.
+ * The MySQL half of a read of a project's topics: its {@code topic_projects} row, null before the project's first
+ * attempt, and its topics, empty before its first saved run.
  */
 @Builder(toBuilder = true)
-public record TopicReadScope(@NonNull List<Topic> live, @Nullable TopicProjectState state) {
+public record TopicReadScope(@NonNull List<Topic> live, @Nullable TopicProject project) {
 }

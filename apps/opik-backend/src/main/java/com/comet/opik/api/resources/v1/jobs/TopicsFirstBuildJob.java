@@ -14,15 +14,13 @@ import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import org.quartz.UnableToInterruptJobException;
 import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -36,8 +34,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * <li>the run lock, taken by the leader before it runs and never released: it expires one interval (less a small
  * margin for trigger jitter) after the run started, so a pod that fires sooner skips.</li>
  * </ul>
- * The run itself is {@link TopicsFirstBuildService#run(Instant)}. A shutdown interrupts the job: it cancels the run and
- * releases the leader lock, and the job starts no new run.
+ * The run itself is {@link TopicsFirstBuildService#run(Instant)}. A pod shutdown interrupts the job (the lifecycle
+ * listener does it before it stops the scheduler): it cancels every run in flight, which frees the leader lock at once,
+ * and the job starts no new run.
  */
 @Slf4j
 @Singleton
@@ -51,38 +50,38 @@ public class TopicsFirstBuildJob extends Job implements InterruptableJob {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicsFirstBuildService firstBuildService;
     private final @NonNull LockService lockService;
-    private final AtomicBoolean interrupted = new AtomicBoolean(false);
-    private final AtomicReference<Disposable> subscription = new AtomicReference<>();
+    // Every run in flight, not only the last one: a run can outlast the interval, and the next fire must not detach it.
+    private final Disposable.Composite inFlight = Disposables.composite();
 
     @Override
     public void doJob(JobExecutionContext context) {
-        if (!config.isEnabled() || !config.getFirstBuild().isEnabled() || interrupted.get()) {
+        if (!config.isEnabled() || !config.getFirstBuild().isEnabled() || inFlight.isDisposed()) {
+            return;
+        }
+        // The run is added before it is subscribed: an interrupt that comes first disposes it, and the update below
+        // then cancels the subscription.
+        var run = Disposables.swap();
+        if (!inFlight.add(run)) {
             return;
         }
         var start = Instant.now();
-        Disposable disposable = lockService.bestEffortLock(
+        run.update(lockService.bestEffortLock(
                 TopicsFirstBuildService.LEADER_LOCK,
                 Mono.fromRunnable(() -> runIfDue(start)).subscribeOn(Schedulers.boundedElastic()),
                 Mono.fromRunnable(() -> log.debug("Topics first builds skipped, lock '{}' is held by another instance",
                         TopicsFirstBuildService.LEADER_LOCK.key())),
                 firstBuildService.lease(),
                 Duration.ZERO)
+                .doFinally(signal -> inFlight.remove(run))
                 .subscribe(
                         __ -> {
                         },
-                        error -> log.error("Topics first builds failed", error));
-        subscription.set(disposable);
-        // An interrupt between subscribe() and set() found nothing to dispose: dispose here. Whichever of the two
-        // threads takes the subscription out disposes it, so it is disposed exactly once.
-        if (interrupted.get()) {
-            Optional.ofNullable(subscription.getAndSet(null)).ifPresent(Disposable::dispose);
-        }
+                        error -> log.error("Topics first builds failed", error)));
     }
 
     @Override
     public void interrupt() throws UnableToInterruptJobException {
-        interrupted.set(true);
-        Optional.ofNullable(subscription.getAndSet(null)).ifPresent(Disposable::dispose);
+        inFlight.dispose();
         log.info("TopicsFirstBuildJob interrupted, cancelling any in-flight run");
     }
 

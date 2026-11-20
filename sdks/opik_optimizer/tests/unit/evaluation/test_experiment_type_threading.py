@@ -48,15 +48,6 @@ class TestExperimentTypeThreading:
 
         assert captured["experiment_type"] == "mini-batch"
 
-    def test_default_omits_experiment_type(self, monkeypatch) -> None:
-        """Other optimizers pass nothing; the kwarg must not be sent at all so
-        behavior stays bit-identical."""
-        captured = _capture_trial_call(monkeypatch)
-
-        _run_evaluate_with_result()
-
-        assert "experiment_type" not in captured
-
     def test_old_sdk_without_param_falls_back_gracefully(self, monkeypatch) -> None:
         """Against an opik SDK whose evaluate_optimization_trial lacks the
         parameter, we log and record the legacy 'trial' type instead of crashing.

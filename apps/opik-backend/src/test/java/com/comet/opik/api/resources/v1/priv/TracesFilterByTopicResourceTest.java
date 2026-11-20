@@ -72,7 +72,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -93,7 +92,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.savedState;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.saveRun;
 import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.topic;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,11 +128,7 @@ class TracesFilterByTopicResourceTest {
         wireMock = WireMockUtils.startWireMock();
         MigrationUtils.runMysqlDbMigration(mysql);
         // topics.enabled needs ai-labels, which reads only the cut-over traces table.
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
                 .databaseAnalyticsFactory(ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse,
@@ -144,8 +139,8 @@ class TracesFilterByTopicResourceTest {
                         new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
                         new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true"),
                         new CustomConfig("aiLabels.enabled", "true"),
-                        new CustomConfig("aiLabels.inference.url", wireMock.server().baseUrl()),
-                        new CustomConfig("aiLabels.inference.credential", "test-credential"),
+                        new CustomConfig("inference.url", wireMock.server().baseUrl()),
+                        new CustomConfig("inference.credential", "test-credential"),
                         new CustomConfig("aiLabels.tickInterval", "1h"),
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
@@ -239,7 +234,7 @@ class TracesFilterByTopicResourceTest {
                 .traceCreatedAt(now.minus(Duration.ofMinutes(5)))
                 .topicId(seed.labelled().id())
                 .source(TraceTopic.Source.RUN)
-                .runId(seed.saved().toString())
+                .runId(seed.saved())
                 .build())).block();
         TopicsTraces.tombstone(connectionFactory, seed.caller().workspaceId(), seed.projectId(), deleted,
                 now.minus(Duration.ofMinutes(5)), seed.labelled().id());
@@ -474,24 +469,24 @@ class TracesFilterByTopicResourceTest {
 
     /**
      * Seven traces, one per case. The first run's rows come first; the arrival row and the later run's row are
-     * written after them, so they are the latest rows of their traces. Neither run has a topic_runs row: the runs'
-     * retention deleted them, and their rows still count.
+     * written after them, so they are the latest rows of their traces. The project's row names only the first run;
+     * the later run's rows still count.
      */
     private Seed seed() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
-        var labelled = topic(caller.workspaceId(), projectId, today.minusDays(10), null);
-        var arrived = topic(caller.workspaceId(), projectId, today.minusDays(10), null);
-        var retired = topic(caller.workspaceId(), projectId, today.minusDays(10), today.minusDays(1));
+        var labelled = topic(caller.workspaceId(), projectId, today.minusDays(10));
+        var arrived = topic(caller.workspaceId(), projectId, today.minusDays(10));
+        // Retired since: no topics row, its trace_topics rows remain.
+        var retired = topic(caller.workspaceId(), projectId, today.minusDays(10));
+        var saved = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(List.of(labelled, arrived, retired));
-            dao.insertState(savedState(caller.workspaceId(), projectId));
+            handle.attach(TopicDAO.class).insertTopics(List.of(labelled, arrived));
+            saveRun(handle, caller.workspaceId(), projectId, saved, Instant.now().truncatedTo(ChronoUnit.MICROS));
             return null;
         });
-        var saved = ID_GENERATOR.generateId();
         var later = ID_GENERATOR.generateId();
         var cases = List.of("labelled", "labelled again", "arrival over a run", "relabelled by a later run",
                 "retired topic", "other", "no row");
@@ -544,7 +539,7 @@ class TracesFilterByTopicResourceTest {
                     .traceCreatedAt(createdAt)
                     .topicId(i % 2 == 0 ? seed.labelled().id() : TraceTopic.OTHER)
                     .source(TraceTopic.Source.RUN)
-                    .runId(seed.saved().toString())
+                    .runId(seed.saved())
                     .build());
         }
         TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, traces);
@@ -561,7 +556,7 @@ class TracesFilterByTopicResourceTest {
                 .traceCreatedAt(trace.createdAt())
                 .topicId(topicId)
                 .source(runId == null ? TraceTopic.Source.ARRIVAL : TraceTopic.Source.RUN)
-                .runId(runId == null ? "" : runId.toString())
+                .runId(runId)
                 .build();
     }
 

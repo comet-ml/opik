@@ -83,7 +83,7 @@ class TopicDayCountsCacheTest {
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         var workspaces = mock(TopicWorkspaceService.class);
-        when(workspaces.isEligible(WORKSPACE_ID)).thenReturn(true);
+        when(workspaces.isEnabled(WORKSPACE_ID)).thenReturn(true);
         topic = Topic.builder()
                 .id(UUID.randomUUID())
                 .workspaceId(WORKSPACE_ID)
@@ -91,8 +91,9 @@ class TopicDayCountsCacheTest {
                 .name("Topic A")
                 .definition("Definition A")
                 .born(LocalDate.now(ZoneOffset.UTC).minusDays(10))
+                .vectors(new PrototypeVectors(List.of(new float[TopicEmbedding.DIMENSIONS])))
                 .build();
-        when(topicDAO.findLive(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
+        when(topicDAO.findByProject(WORKSPACE_ID, projectId)).thenReturn(List.of(topic));
         savedBy(UUID.randomUUID());
         var cacheConfiguration = shipped();
         service = Guice.createInjector(new AbstractModule() {
@@ -162,12 +163,12 @@ class TopicDayCountsCacheTest {
     }
 
     private void savedBy(UUID lastRunId) {
-        when(topicDAO.findStates(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProjectState.builder()
+        when(topicDAO.findProjects(WORKSPACE_ID, List.of(projectId))).thenReturn(List.of(TopicProject.builder()
                 .projectId(projectId)
                 .workspaceId(WORKSPACE_ID)
-                .rebuilds(1)
+                .savedRuns(1)
                 .firstBuiltAt(Instant.now().minus(Duration.ofDays(20)))
-                .lastRunId(lastRunId)
+                .listRunId(lastRunId)
                 .lastSuccessAt(Instant.now())
                 .build()));
     }
@@ -177,6 +178,7 @@ class TopicDayCountsCacheTest {
         var substitutor = new StringSubstitutor(StringLookupFactory.INSTANCE.mapStringLookup(Map.of()));
         substitutor.setValueDelimiter(":-");
         substitutor.setEnableUndefinedVariableException(false);
+        substitutor.setEnableSubstitutionInVariables(true);
         return new YamlConfigurationFactory<>(OpikConfiguration.class, null, Jackson.newObjectMapper(), "dw")
                 .build(new SubstitutingSourceProvider(new FileConfigurationSourceProvider(), substitutor),
                         Path.of("config.yml").toString())

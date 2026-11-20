@@ -8,11 +8,9 @@ import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguratio
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,10 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @UtilityClass
 class TopicVectorsFixtures {
 
-    /** The ai-labels task whose summaries are embedded. */
-    static final String TASK = "trace_summary";
-    // Vectors are compared whole. ClickHouse parses the JSON text of a Float32 to within one ulp, so a read-back vector
-    // may differ in the last bit: its floats are compared to within 1e-6.
+    static final String TASK = TopicEmbedding.SUMMARY_TASK;
+    // Vectors are compared whole. topic_vectors stores BFloat16, 8 bits of mantissa: a unit vector's components, read
+    // back, are within about 2e-4 of what was written, so they are compared to within 1e-3.
     static final RecursiveComparisonConfiguration VECTORS = RecursiveComparisonConfiguration.builder()
             .withComparatorForFields(TopicVectorsFixtures::compareVectors, "vector")
             .build();
@@ -84,11 +81,12 @@ class TopicVectorsFixtures {
         return TopicVector.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
+                .task(TASK)
                 .traceId(traceId)
                 .traceCreatedAt(traceCreatedAt(traceId))
                 .taskVersion(taskVersion)
-                .embedModel("bge-small-en-v1.5")
-                .embedDimensions(384)
+                .embedModel(TopicEmbedding.MODEL)
+                .embedDimensions(TopicEmbedding.DIMENSIONS)
                 .text(text)
                 .vector(expectedVector(text))
                 .build();
@@ -99,12 +97,14 @@ class TopicVectorsFixtures {
         return traceIds.stream().map(traceId -> vector(workspaceId, projectId, traceId, taskVersion)).toList();
     }
 
-    /** A deterministic, non-unit vector of 384 numbers per text. */
-    static List<Float> rawVector(String text) {
+    /** A deterministic, non-unit vector of {@link TopicEmbedding#DIMENSIONS} numbers per text. */
+    static float[] rawVector(String text) {
         int seed = text.hashCode();
-        return IntStream.range(0, 384)
-                .mapToObj(i -> (float) (Math.floorMod(seed + i * 31, 1_000) + 1) / 100f)
-                .toList();
+        var vector = new float[TopicEmbedding.DIMENSIONS];
+        for (int i = 0; i < vector.length; i++) {
+            vector[i] = (float) (Math.floorMod(seed + i * 31, 1_000) + 1) / 100f;
+        }
+        return vector;
     }
 
     /** Whole vectors, in any order; the floats of {@code vector} as {@link #VECTORS} compares them. */
@@ -113,16 +113,15 @@ class TopicVectorsFixtures {
                 .containsExactlyInAnyOrderElementsOf(expected);
     }
 
-    /** 0 when both vectors have the same length and their floats agree to within 1e-6, else 1. */
-    @SuppressWarnings("unchecked")
+    /** 0 when both vectors have the same length and their floats agree to within 1e-3, else 1. */
     private static int compareVectors(Object actual, Object expected) {
-        var left = (List<Float>) actual;
-        var right = (List<Float>) expected;
-        if (left.size() != right.size()) {
+        var left = (float[]) actual;
+        var right = (float[]) expected;
+        if (left.length != right.length) {
             return 1;
         }
-        for (int i = 0; i < right.size(); i++) {
-            if (Math.abs(left.get(i) - right.get(i)) > 1e-6f) {
+        for (int i = 0; i < right.length; i++) {
+            if (Math.abs(left[i] - right[i]) > 1e-3f) {
                 return 1;
             }
         }
@@ -130,16 +129,16 @@ class TopicVectorsFixtures {
     }
 
     /** {@link #rawVector} of the text, scaled to length 1. */
-    static List<Float> expectedVector(String text) {
+    static float[] expectedVector(String text) {
         var raw = rawVector(text);
         double sum = 0;
         for (var value : raw) {
             sum += (double) value * value;
         }
         double norm = Math.sqrt(sum);
-        var unit = new ArrayList<Float>(raw.size());
-        for (var value : raw) {
-            unit.add((float) (value / norm));
+        var unit = new float[raw.length];
+        for (int i = 0; i < raw.length; i++) {
+            unit[i] = (float) (raw[i] / norm);
         }
         return unit;
     }

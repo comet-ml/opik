@@ -24,9 +24,9 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.topics.TopicDAO;
-import com.comet.opik.domain.topics.TopicProjectState;
+import com.comet.opik.domain.topics.TopicEmbedding;
+import com.comet.opik.domain.topics.TopicProject;
 import com.comet.opik.domain.topics.TopicReadService;
-import com.comet.opik.domain.topics.TopicRun;
 import com.comet.opik.domain.topics.TopicRunDAO;
 import com.comet.opik.domain.topics.TopicVector;
 import com.comet.opik.domain.topics.TopicVectorsDAO;
@@ -63,7 +63,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -71,14 +70,12 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.savedState;
+import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.saveRun;
 import static com.comet.opik.api.resources.utils.TopicsReadTestUtils.topic;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -119,11 +116,7 @@ class TopicsReadResourceTest {
         wireMock = WireMockUtils.startWireMock();
         MigrationUtils.runMysqlDbMigration(mysql);
         // topics.enabled needs ai-labels, which reads only the cut-over traces table.
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
                 .databaseAnalyticsFactory(ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouse,
@@ -140,8 +133,8 @@ class TopicsReadResourceTest {
                         new CustomConfig("databaseAnalyticsDataModel.traceColumnsNonNullable", "true"),
                         new CustomConfig("databaseAnalyticsDataModel.tracesDistributedWrapEnabled", "true"),
                         new CustomConfig("aiLabels.enabled", "true"),
-                        new CustomConfig("aiLabels.inference.url", wireMock.server().baseUrl()),
-                        new CustomConfig("aiLabels.inference.credential", "test-credential"),
+                        new CustomConfig("inference.url", wireMock.server().baseUrl()),
+                        new CustomConfig("inference.credential", "test-credential"),
                         new CustomConfig("aiLabels.tickInterval", "1h"),
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
@@ -195,25 +188,21 @@ class TopicsReadResourceTest {
         topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
         var firstBuild = today.minusDays(20);
-        var first = topic(caller.workspaceId(), projectId, firstBuild, null);
-        var newborn = topic(caller.workspaceId(), projectId, today.minusDays(3), null);
-        var largest = topic(caller.workspaceId(), projectId, firstBuild, null);
-        var retired = topic(caller.workspaceId(), projectId, firstBuild, today.minusDays(1));
+        var first = topic(caller.workspaceId(), projectId, firstBuild);
+        var newborn = topic(caller.workspaceId(), projectId, today.minusDays(3));
+        var largest = topic(caller.workspaceId(), projectId, firstBuild);
+        // Retired since: no topics row, its trace_topics rows remain.
+        var retired = topic(caller.workspaceId(), projectId, firstBuild);
         var lastRun = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        // No topic_runs row: the runs' retention deleted it, and its trace_topics rows still count.
         var saved = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
+            var firstRun = ID_GENERATOR.generateId();
+            saveRun(handle, caller.workspaceId(), projectId, firstRun,
+                    firstBuild.atTime(2, 0).toInstant(ZoneOffset.UTC));
             var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(List.of(first, newborn, largest, retired));
-            dao.insertState(TopicProjectState.builder()
-                    .projectId(projectId)
-                    .workspaceId(caller.workspaceId())
-                    .rebuilds(1)
-                    .firstBuiltAt(firstBuild.atTime(2, 0).toInstant(ZoneOffset.UTC))
-                    .lastRunId(saved)
-                    .lastSuccessAt(lastRun)
-                    .windowUntil(today.atStartOfDay().toInstant(ZoneOffset.UTC))
-                    .build());
+            dao.saveList(caller.workspaceId(), projectId, firstRun, saved, lastRun,
+                    today.atStartOfDay().toInstant(ZoneOffset.UTC), null, TopicEmbedding.MODEL);
+            dao.insertTopics(List.of(first, newborn, largest));
             return null;
         });
         var rows = new ArrayList<TraceTopic>();
@@ -287,16 +276,15 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("collecting, building: the newest run is running, so attempt is running; an older failed run does "
-            + "not count")
+    @DisplayName("collecting, building: the project's attempt is running, so attempt is running; the failed attempt "
+            + "before it does not count")
     void collectingBuilding() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
         var startedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.FAILED,
-                startedAt.minus(Duration.ofDays(1)));
-        topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.RUNNING, startedAt);
+        attempt(caller.workspaceId(), projectId, TopicProject.RunStatus.FAILED, startedAt.minus(Duration.ofDays(1)));
+        attempt(caller.workspaceId(), projectId, TopicProject.RunStatus.RUNNING, startedAt);
 
         var json = json(caller, projectId);
 
@@ -306,18 +294,13 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("collecting, failed: the newest run failed, so attempt is failed; of two runs started at the same "
-            + "instant, the greater run id is the newest")
+    @DisplayName("collecting, failed: the project's attempt failed, so attempt is failed")
     void collectingFailed() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
-        var startedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        var runIds = Stream.of(UUID.randomUUID(), UUID.randomUUID())
-                .sorted(Comparator.comparing(UUID::toString))
-                .toList();
-        topicRun(caller.workspaceId(), projectId, runIds.getLast(), TopicRun.Status.FAILED, startedAt);
-        topicRun(caller.workspaceId(), projectId, runIds.getFirst(), TopicRun.Status.RUNNING, startedAt);
+        attempt(caller.workspaceId(), projectId, TopicProject.RunStatus.FAILED,
+                Instant.now().truncatedTo(ChronoUnit.MICROS));
 
         var json = json(caller, projectId);
 
@@ -327,18 +310,16 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("collecting, built with no topics: the newest run saved and left no live topic, so no attempt and "
-            + "last_run_at set; an older failed run does not count")
+    @DisplayName("collecting, built with no topics: the project's attempt saved and left no live topic, so no attempt "
+            + "and last_run_at set; the failed attempt before it does not count")
     void collectingBuiltWithNoTopics() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
         var savedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var saved = ID_GENERATOR.generateId();
-        topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.FAILED,
-                savedAt.minus(Duration.ofDays(1)));
-        topicRun(caller.workspaceId(), projectId, saved, TopicRun.Status.SAVED, savedAt.minus(Duration.ofMinutes(5)));
-        saveState(caller, projectId, saved, savedAt);
+        attempt(caller.workspaceId(), projectId, TopicProject.RunStatus.FAILED, savedAt.minus(Duration.ofDays(1)));
+        savedRun(caller.workspaceId(), projectId, saved, savedAt);
 
         var json = json(caller, projectId);
 
@@ -348,8 +329,8 @@ class TopicsReadResourceTest {
     }
 
     @Test
-    @DisplayName("collecting, failed after saved: a run saved and left no live topic, then the newest run failed, so "
-            + "attempt is failed and last_run_at is set")
+    @DisplayName("collecting, failed after saved: a run saved and left no live topic, then the project's attempt "
+            + "failed, so attempt is failed and last_run_at is set")
     void collectingFailedAfterSaved() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
@@ -357,9 +338,8 @@ class TopicsReadResourceTest {
         var startedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var savedAt = startedAt.minus(Duration.ofDays(1));
         var saved = ID_GENERATOR.generateId();
-        topicRun(caller.workspaceId(), projectId, saved, TopicRun.Status.SAVED, savedAt.minus(Duration.ofMinutes(5)));
-        topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.FAILED, startedAt);
-        saveState(caller, projectId, saved, savedAt);
+        savedRun(caller.workspaceId(), projectId, saved, savedAt);
+        attempt(caller.workspaceId(), projectId, TopicProject.RunStatus.FAILED, startedAt);
 
         var json = json(caller, projectId);
 
@@ -370,20 +350,21 @@ class TopicsReadResourceTest {
 
     @Test
     @DisplayName("disabled, also with live topics: no topics, other, vectors_in_window or attempt; ready has no "
-            + "attempt either, also while the project's newest run is running")
+            + "attempt either, also while the project's attempt is running")
     void noAttemptUnlessCollecting() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicDAO.class);
             dao.insertTopics(List.of(
-                    topic(caller.workspaceId(), projectId, LocalDate.now(ZoneOffset.UTC).minusDays(1), null)));
-            dao.insertState(savedState(caller.workspaceId(), projectId));
+                    topic(caller.workspaceId(), projectId, LocalDate.now(ZoneOffset.UTC).minusDays(1))));
+            saveRun(handle, caller.workspaceId(), projectId, ID_GENERATOR.generateId(),
+                    Instant.now().truncatedTo(ChronoUnit.MICROS));
             // In ai-labels, not yet in topics.enabledWorkspaces: disabled.
             handle.attach(AiLabelWorkspaceDAO.class).upsert(caller.workspaceId(), true, "test");
             return null;
         });
-        topicRun(caller.workspaceId(), projectId, ID_GENERATOR.generateId(), TopicRun.Status.RUNNING,
+        attempt(caller.workspaceId(), projectId, TopicProject.RunStatus.RUNNING,
                 Instant.now().truncatedTo(ChronoUnit.MICROS));
 
         var disabled = json(caller, projectId);
@@ -547,15 +528,14 @@ class TopicsReadResourceTest {
         var projectId = topics.project(caller);
         topics.optIn(caller.workspaceId());
         var today = LocalDate.now(ZoneOffset.UTC);
-        var live = topic(caller.workspaceId(), projectId, today.minusDays(5), null);
-        var state = savedState(caller.workspaceId(), projectId);
+        var live = topic(caller.workspaceId(), projectId, today.minusDays(5));
+        var saved = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(List.of(live));
-            dao.insertState(state);
+            handle.attach(TopicDAO.class).insertTopics(List.of(live));
+            saveRun(handle, caller.workspaceId(), projectId, saved, Instant.now().truncatedTo(ChronoUnit.MICROS));
             return null;
         });
-        insertShown(run(caller.workspaceId(), projectId, live.id(), today, 3, state.lastRunId()));
+        insertShown(run(caller.workspaceId(), projectId, live.id(), today, 3, saved));
         return projectId;
     }
 
@@ -582,31 +562,24 @@ class TopicsReadResourceTest {
         assertThat(attempt.size()).isEqualTo(1);
     }
 
-    /** The project's state as run {@code runId} saved it at {@code savedAt}. */
-    private void saveState(Caller caller, UUID projectId, UUID runId, Instant savedAt) {
+    /** What run {@code runId} leaves in the project's row when it saves at {@code savedAt}. */
+    private void savedRun(String workspaceId, UUID projectId, UUID runId, Instant savedAt) {
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicDAO.class).insertState(savedState(caller.workspaceId(), projectId).toBuilder()
-                    .lastRunId(runId)
-                    .lastSuccessAt(savedAt)
-                    .build());
+            saveRun(handle, workspaceId, projectId, runId, savedAt);
             return null;
         });
     }
 
-    /** A {@code topic_runs} row of the project as a run with {@code status} leaves it. */
-    private void topicRun(String workspaceId, UUID projectId, UUID runId, TopicRun.Status status, Instant startedAt) {
-        boolean ended = status != TopicRun.Status.RUNNING;
+    /** A new attempt of the project started at {@code startedAt}, left running or failed. */
+    private void attempt(String workspaceId, UUID projectId, TopicProject.RunStatus status, Instant startedAt) {
+        var runId = ID_GENERATOR.generateId();
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicRunDAO.class).insert(TopicRun.builder()
-                    .runId(runId)
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .mode(TopicRun.Mode.FIRST_BUILD)
-                    .status(status)
-                    .startedAt(startedAt)
-                    .finishedAt(ended ? startedAt.plus(Duration.ofMinutes(5)) : null)
-                    .errorCode(status == TopicRun.Status.FAILED ? "abandoned" : null)
-                    .build());
+            var runDAO = handle.attach(TopicRunDAO.class);
+            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, startedAt);
+            if (status == TopicProject.RunStatus.FAILED) {
+                runDAO.markFailed(workspaceId, projectId, runId, startedAt.plus(Duration.ofMinutes(5)),
+                        TopicProject.RunError.ABANDONED);
+            }
             return null;
         });
     }
@@ -622,7 +595,7 @@ class TopicsReadResourceTest {
                         .traceCreatedAt(day.atTime(12, 0).toInstant(ZoneOffset.UTC))
                         .topicId(topicId)
                         .source(TraceTopic.Source.RUN)
-                        .runId(runId.toString())
+                        .runId(runId)
                         .build())
                 .toList();
     }
@@ -635,7 +608,6 @@ class TopicsReadResourceTest {
                 .traceCreatedAt(day.atTime(12, 0).toInstant(ZoneOffset.UTC))
                 .topicId(topicId)
                 .source(TraceTopic.Source.ARRIVAL)
-                .runId("")
                 .build();
     }
 
@@ -643,13 +615,14 @@ class TopicsReadResourceTest {
         return TopicVector.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
+                .task(TopicEmbedding.SUMMARY_TASK)
                 .traceId(ID_GENERATOR.generateId())
                 .traceCreatedAt(day.atTime(12, 0).toInstant(ZoneOffset.UTC))
                 .taskVersion(1)
                 .embedModel("bge-small")
                 .embedDimensions(3)
                 .text("an intent")
-                .vector(List.of(0.1f, 0.2f, 0.3f))
+                .vector(new float[]{0.1f, 0.2f, 0.3f})
                 .build();
     }
 }
