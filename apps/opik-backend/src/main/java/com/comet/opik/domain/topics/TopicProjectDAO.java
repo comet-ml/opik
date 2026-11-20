@@ -172,7 +172,7 @@ public interface TopicProjectDAO {
 
     @SqlQuery("SELECT * FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     List<TopicProject> findProjects(@Bind("workspaceId") String workspaceId,
-            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
+            @BindList("projectIds") Collection<UUID> projectIds);
 
     /**
      * Of the projects of {@code workspaceIds}, those with no saved list and a trace written at or after {@code since}:
