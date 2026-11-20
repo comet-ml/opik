@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * A project's topic list: its {@code topics} rows and the list fields of its {@code topic_projects} row, which a run's
@@ -94,17 +95,26 @@ public interface TopicDAO {
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,
             @BindList("projectIds") Collection<UUID> projectIds);
 
-    /** Deletes the workspaces' topics whose project no longer exists. */
-    @SqlUpdate("""
-            DELETE t FROM topics t
+    /**
+     * Deletes the workspaces' topics whose project no longer exists. A plain read finds those projects and the delete
+     * goes by their ids: a delete that joined {@code projects} would lock the rows it read there, and every topics row
+     * it scanned. A deleted project id never comes back, so the read needs no lock.
+     */
+    default int deleteTopicsOfMissingProjects(Collection<String> workspaceIds) {
+        return findTopicProjectsOfMissingProjects(workspaceIds).stream()
+                .collect(Collectors.groupingBy(ProjectKey::workspaceId,
+                        Collectors.mapping(ProjectKey::projectId, Collectors.toList())))
+                .entrySet().stream()
+                .mapToInt(entry -> deleteTopicsByProjects(entry.getKey(), entry.getValue()))
+                .sum();
+    }
+
+    @SqlQuery("""
+            SELECT DISTINCT t.workspace_id, t.project_id FROM topics t
             LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
             WHERE t.workspace_id IN (<workspaceIds>) AND p.id IS NULL
             """)
-    int deleteTopicsOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    /** Holds a shared lock on the project's row until the transaction ends, so a project delete waits for it. */
-    @SqlQuery("SELECT COUNT(*) FROM projects WHERE workspace_id = :workspaceId AND id = :projectId FOR SHARE")
-    int lockProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
+    List<ProjectKey> findTopicProjectsOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
 
     /**
      * Of the projects of {@code workspaceIds}, those with no saved list and a trace written at or after {@code since}:

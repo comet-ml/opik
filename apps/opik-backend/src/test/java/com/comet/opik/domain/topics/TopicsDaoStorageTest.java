@@ -554,6 +554,34 @@ class TopicsDaoStorageTest {
     }
 
     @Test
+    @DisplayName("the missing-projects sweep deletes the topics of the listed workspaces' deleted projects only")
+    void sweepDeletesTopicsOfMissingProjectsOnly() {
+        var workspaceId = UUID.randomUUID().toString();
+        var otherWorkspaceId = UUID.randomUUID().toString();
+        var live = UUID.randomUUID();
+        var deleted = UUID.randomUUID();
+        var otherDeleted = UUID.randomUUID();
+        data.savedList(workspaceId, live, NIGHT, BUILT);
+        data.savedList(workspaceId, deleted, NIGHT, BUILT);
+        data.savedList(otherWorkspaceId, otherDeleted, NIGHT, BUILT);
+        template.inTransaction(WRITE, handle -> handle.execute(
+                "INSERT INTO projects (id, name, workspace_id) VALUES (?, ?, ?)",
+                live.toString(), "topics-" + live, workspaceId));
+
+        int swept = template.inTransaction(WRITE,
+                handle -> handle.attach(TopicDAO.class).deleteTopicsOfMissingProjects(List.of(workspaceId)));
+
+        assertThat(swept).isEqualTo(1);
+        template.inTransaction(READ_ONLY, handle -> {
+            var topicDAO = handle.attach(TopicDAO.class);
+            assertThat(topicDAO.findByProject(workspaceId, live)).hasSize(1);
+            assertThat(topicDAO.findByProject(workspaceId, deleted)).isEmpty();
+            assertThat(topicDAO.findByProject(otherWorkspaceId, otherDeleted)).hasSize(1);
+            return null;
+        });
+    }
+
+    @Test
     @DisplayName("a save is a compare-and-set on the saved run: a second first build of a saved project saves nothing, "
             + "a run that read the saved list replaces it")
     void saveComparesTheSavedRun() {
