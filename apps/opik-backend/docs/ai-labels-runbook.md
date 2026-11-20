@@ -645,9 +645,10 @@ their prototype vectors, the project's known-Other prototypes, `rebuilds`), then
    that took none of them is dropped; a topic keeps at least its first prototype.
 
 A retired topic's row is deleted. The save logs one line per retired topic, `Topics run '<run_id>' retired topic
-'<topic_id>'`, with the project, the name, the definition, the reason and the size, and counts it in
-`topics.retired`. The reason is `low_share` or `replaced` (replaced by a new topic on a full list). This log line is
-the only record of a retired topic. A new topic's `born` is the night, or the day of the run if that is earlier.
+'<topic_id>'`, with the project, the reason and the size, and counts it in `topics.retired`. The reason is
+`low_share` or `replaced` (replaced by a new topic on a full list). The line holds ids only: a name and definition
+come from trace text and are never logged. This line is the only record of a retired topic, so its name and definition
+are gone with its row. A new topic's `born` is the night, or the day of the run if that is earlier.
 
 Most nights make no Qwen call. A night with a candidate makes one to three: the naming, the verify of its assigns, and
 the second naming for the rejected ones.
@@ -716,8 +717,8 @@ A nightly update's `saved` or `failed` log line holds its `stats`. Besides `vect
 Prompts and Qwen's answers hold users' trace text, so no log level prints them. The run logs each naming and verify
 prompt and each answer at INFO as its length and SHA-256, with `call '<call>'`: `naming`, `naming_new` or
 `verify_naming`. The call's request id is `<run_id>:<call>`, so the call can be found in opik-inference's logs. In
-`topics.qwen.calls`, `call` is `naming` (both namings) or `verify`. Topic names and definitions are in the retire log
-line only (see "Nightly update"). Search the logs for `Topics run '<run_id>'`.
+`topics.qwen.calls`, `call` is `naming` (both namings) or `verify`. Topic names and definitions are never logged; read a
+live topic's from `topics`. Search the logs for `Topics run '<run_id>'`.
 
 ### Running by hand
 
