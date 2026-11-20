@@ -2539,6 +2539,11 @@ inference:
   #  aiLabels.loadConcurrency (when ai-labels is on) and topics.vectors.embedConcurrency (when Topics is on) must be
   #  below jerseyClient.maxConnectionsPerRoute
   maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
+  #  Default: 4
+  #  Description: Most synchronous generate calls (Topics builds) in flight from one backend instance, each on a thread
+  #  of its own while the model answers. They share the jerseyClient connection pool with the other calls to
+  #  opik-inference
+  maxConcurrentGenerates: ${OPIK_INFERENCE_MAX_CONCURRENT_GENERATES:-4}
   #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
   #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
   #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
@@ -2554,6 +2559,13 @@ inference:
     #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
     #  topics.vectors.embedTimeout must not be above it
     maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 60s
+    #  Description: The most deadline_ms a realtime-lane generate call sends (the service's limit for that lane)
+    maxGenerateRealtimeDeadline: ${OPIK_INFERENCE_MAX_GENERATE_REALTIME_DEADLINE:-60s}
+    #  Default: 300s
+    #  Description: The most deadline_ms a batch-lane generate call sends (the service's limit for that lane).
+    #  topics.build.llmDeadline must not be above it
+    maxGenerateBatchDeadline: ${OPIK_INFERENCE_MAX_GENERATE_BATCH_DEADLINE:-300s}
     #  Default: 10000
     #  Description: Items in one batch submit
     maxBatchItems: ${OPIK_INFERENCE_MAX_BATCH_ITEMS:-10000}
@@ -2729,8 +2741,41 @@ topics:
     #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
     #  topic's traces into Other. Depends on the embedding model's cosine spread
     otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 10
+    #  Description: Most topics in a project's list. At most 100
+    maxTopics: ${TOPICS_ALGORITHM_MAX_TOPICS:-10}
+    #  Default: 1000
+    #  Description: A first build over fewer traces is marked provisional in its stats
+    provisionalBelow: ${TOPICS_ALGORITHM_PROVISIONAL_BELOW:-1000}
   #  A topic list build's settings: a first build, a nightly update and their labelling pass
   build:
+    #  Default: 15m
+    #  Description: One project's build is stopped and failed with timeout after this. At most 2h
+    projectTimeout: ${TOPICS_BUILD_PROJECT_TIMEOUT:-15m}
+    #  Default: 100
+    #  Description: A project is built when its window holds at least this many traces with a vector. At most 100000
+    minVectors: ${TOPICS_BUILD_MIN_VECTORS:-100}
+    #  Default: 30
+    #  Description: The window: this many whole UTC days before the day it ends on. The first-build job's window ends at
+    #  tomorrow's start, so it holds today's traces so far. At most 90
+    windowDays: ${TOPICS_BUILD_WINDOW_DAYS:-30}
+    #  Default: 100000
+    #  Description: A larger window is sampled: the build finds topics on this many of its traces, spread evenly by a
+    #  hash of the trace id, and then labels every trace of the window. At least minVectors, at most 100000
+    maxVectors: ${TOPICS_BUILD_MAX_VECTORS:-100000}
+    #  Default: 120s
+    #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
+    llmDeadline: ${TOPICS_BUILD_LLM_DEADLINE:-120s}
+    #  Default: 120s
+    #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
+    #  attempt of its trace_topics insert. At most 30m
+    readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
+    #  Default: 3
+    #  Description: Retries of the trace_topics insert after the save's commit. At most 10
+    insertRetries: ${TOPICS_BUILD_INSERT_RETRIES:-3}
+    #  Default: 500ms
+    #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
+    insertBackoff: ${TOPICS_BUILD_INSERT_BACKOFF:-500ms}
     #  The ClickHouse guards of the build's reads (window count, window read, unlabelled read, topic counts), apart
     #  from the vectors tick's: the build reads a whole window, the window read about three times
     read:

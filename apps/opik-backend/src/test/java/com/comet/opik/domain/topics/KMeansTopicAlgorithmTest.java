@@ -30,13 +30,11 @@ class KMeansTopicAlgorithmTest {
     @DisplayName("a first build makes one group per 30 unique texts, at least 30, at most 50 or the unique texts, and "
             + "shows round(250 / k) texts per group, from 5 to 10")
     void sizing(int uniqueTexts, int expectedGroups, int expectedExamples) throws IOException {
-        var context = new TopicsTestAlgorithm.StubContext(emptyAnswer());
+        var stats = algorithm.cluster(randomWindow(uniqueTexts), 10).stats();
 
-        algorithm.firstBuild(randomWindow(uniqueTexts), 10, context);
-
-        assertThat(context.stats().get("unique_texts").asInt()).isEqualTo(uniqueTexts);
-        assertThat(context.stats().get("k").asInt()).isEqualTo(expectedGroups);
-        assertThat(context.stats().get("author_examples").asInt()).isEqualTo(expectedExamples);
+        assertThat(stats.get("unique_texts").asInt()).isEqualTo(uniqueTexts);
+        assertThat(stats.get("k").asInt()).isEqualTo(expectedGroups);
+        assertThat(stats.get("author_examples").asInt()).isEqualTo(expectedExamples);
     }
 
     @Test
@@ -44,19 +42,18 @@ class KMeansTopicAlgorithmTest {
             + "version")
     void authorCall() throws IOException {
         var task = new TopicTasks().author();
-        var context = new TopicsTestAlgorithm.StubContext(emptyAnswer());
+        var clustering = algorithm.cluster(randomWindow(40), 3);
 
-        var build = algorithm.firstBuild(randomWindow(40), 3, context);
+        var build = clustering.finish(AuthorAnswer.parse(emptyAnswer()));
 
-        assertThat(context.calls).singleElement().satisfies(call -> {
+        assertThat(clustering.author()).satisfies(call -> {
             assertThat(call.call()).isEqualTo(LlmCall.AUTHOR);
-            assertThat(call.tag()).isEqualTo(LlmCall.AUTHOR.getValue());
             assertThat(call.schema()).isEqualTo(task.schema());
             assertThat(call.maxTokens()).isEqualTo(task.effectiveMaxTokens());
             assertThat(call.prompt()).contains("at most 3 topics", "  cluster 0: ")
                     .doesNotContain(TopicTasks.MAX_TOPICS_PLACEHOLDER, TopicTasks.CLUSTERS_PLACEHOLDER);
         });
-        assertThat(context.stats().get("author_task_version").asInt()).isEqualTo(task.version());
+        assertThat(clustering.stats().get("author_task_version").asInt()).isEqualTo(task.version());
         assertThat(build.topics()).isEmpty();
         assertThat(build.labels()).containsOnly(TopicAlgorithm.OTHER);
     }

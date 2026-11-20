@@ -300,7 +300,7 @@ public class TopicWindowDAO {
     }
 
     /** One trace of a run's window: its highest live task version, with that version's text and vector. */
-    @Builder
+    @Builder(toBuilder = true)
     record WindowRow(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, int taskVersion,
             @NonNull String text, float @NonNull [] vector) {
     }
