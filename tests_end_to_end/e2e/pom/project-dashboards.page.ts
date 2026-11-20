@@ -157,6 +157,45 @@ export class ProjectDashboardsPage {
   }
 
   /**
+   * Arms a waiter for the dashboard auto-save writing one view back, and
+   * returns a promise that resolves once it has SUCCEEDED.
+   *
+   * Armed before the interaction and awaited after it, rather than awaited
+   * inline:
+   *
+   * ```ts
+   * const saved = dashboards.autoSaveLanded(view.id);
+   * await widget.sortByColumn('cost');
+   * await saved;
+   * ```
+   *
+   * `useDashboardPersistence` debounces the save by two seconds and sends it as
+   * a PATCH of the whole config, so a spec that read the stored config straight
+   * after the click would read the config as it was before. The alternative
+   * signal is the "Saved" indicator, which is deliberately not used: it clears
+   * itself three seconds later, so an assertion on it is a race against its own
+   * timer rather than a wait.
+   *
+   * Matched on the method and the URL and asserted on the status afterwards,
+   * the same way `goto` treats the view list: a refused save then fails saying
+   * what came back, instead of as an opaque "no response matched" timeout. The
+   * timeout is generous because the debounce is two seconds and the mutation
+   * retries once, four seconds later, before it gives up.
+   */
+  async autoSaveLanded(viewId: string): Promise<void> {
+    const response = await this.page.waitForResponse(
+      (res) =>
+        res.request().method() === 'PATCH' &&
+        res.url().includes(`/v1/private/insights-views/${viewId}`),
+      { timeout: 30_000 },
+    );
+    expect(
+      response.ok(),
+      `the dashboard auto-save must succeed — got ${response.status()} from ${response.url()}`,
+    ).toBe(true);
+  }
+
+  /**
    * The view picker's trigger, addressed by the view name it is displaying.
    *
    * Deliberately not a bare "the picker" locator: the trigger's only stable,

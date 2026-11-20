@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { ExperimentGroupRows } from './experiment-group-rows';
 
 export class PromptDetailPage {
   constructor(private readonly page: Page) {}
@@ -61,6 +62,35 @@ export class PromptDetailPage {
         `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
       );
     });
+  }
+
+  /**
+   * Open the prompt's Experiments tab on its DEFAULT view — grouped by Item
+   * source — by sending no `groups` param.
+   *
+   * The counterpart of `gotoExperimentsTab` above, which pins `groups=[]`
+   * because its row locators need the flat list. Same reasoning as
+   * `ExperimentsPage.gotoGrouped`: the view under test is the one a user lands
+   * on, so the spec must not post the grouping itself.
+   */
+  async gotoExperimentsTabGrouped(projectId: string, promptId: string): Promise<void> {
+    return test.step(`open prompt ${promptId} Experiments tab, grouped by Item source`, async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?tab=experiments`,
+      );
+    });
+  }
+
+  /**
+   * The grouped table's rows on the Experiments tab.
+   *
+   * The same object `ExperimentsPage` exposes: this tab is the second call site
+   * of the same grouped `DataTable` and the same aggregated cells, and
+   * opik#9646 had to fix both. See `ExperimentGroupRows`.
+   */
+  get experimentGroups(): ExperimentGroupRows {
+    return new ExperimentGroupRows(this.page);
   }
 
   /** Wait until the Experiments tab has rendered `expected` rows. */

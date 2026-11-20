@@ -1,4 +1,4 @@
-export { test, expect } from './otel-reported-cost-spans.fixture';
+export { test, expect } from './ollie-table-widget.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -782,3 +782,22 @@ export type {
   OtelReportedCostSpansRef,
   OtelReportedCostSpansFixtures,
 } from './otel-reported-cost-spans.fixture';
+export type {
+  PassRateExperimentRef,
+  PassRateGroupRef,
+  GroupedPassRateExperimentsRef,
+  GroupedPassRateExperimentsFixtures,
+} from './grouped-pass-rate-experiments.fixture';
+export {
+  OLLIE_TABLE_COLUMNS,
+  OLLIE_TABLE_ROWS,
+  OLLIE_TABLE_COST_AS_STORED,
+  OLLIE_TABLE_COST_ASCENDING,
+  OLLIE_TABLE_COST_DESCENDING,
+  OVERSIZED_SAVED_COLUMN_WIDTH,
+} from './ollie-table-widget.fixture';
+export type {
+  OllieTableWidgetSeed,
+  OllieTableWidgetRef,
+  OllieTableWidgetFixtures,
+} from './ollie-table-widget.fixture';

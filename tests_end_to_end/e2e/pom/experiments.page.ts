@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { ExperimentDetailPage } from './experiment-detail.page';
+import { ExperimentGroupRows } from './experiment-group-rows';
 
 export class ExperimentsPage {
   private projectId: string | null = null;
@@ -30,6 +31,40 @@ export class ExperimentsPage {
     await this.page.goto(
       `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments?${query}`,
     );
+  }
+
+  /**
+   * Open a project's Experiments page on its DEFAULT view — grouped by Item
+   * source — by sending no `groups` param at all.
+   *
+   * The opposite of `goto` above, which pins `groups=[]` because its row
+   * locators need the flat list. Deliberately NOT sending the default grouping
+   * explicitly: what a group-row spec is about is the view a user lands on, and
+   * a spec that posted the grouping itself could pass against a page that had
+   * stopped defaulting to it. The grouping is self-verifying — with it off there
+   * are no group rows to find, and `ExperimentGroupRows` fails saying so.
+   *
+   * The groups then come from `DEFAULT_GROUPS` because `groups` is also backed
+   * by localStorage, which a fresh browser context leaves empty.
+   */
+  async gotoGrouped(projectId: string): Promise<void> {
+    return test.step(`open project ${projectId} Experiments, grouped by Item source`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments`,
+      );
+    });
+  }
+
+  /**
+   * The grouped table's rows, when the page is on a grouped view.
+   *
+   * The same object the prompt detail page's Experiments tab exposes, because
+   * the two render the same component — see `ExperimentGroupRows`.
+   */
+  get groups(): ExperimentGroupRows {
+    return new ExperimentGroupRows(this.page);
   }
 
   async waitForReady(): Promise<void> {

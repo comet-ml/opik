@@ -96,6 +96,30 @@ export interface InsightsViewDetail extends InsightsViewRef {
   sections: InsightsViewSectionRef[];
 }
 
+/**
+ * One widget out of an insights view's stored `config`, with its `config`
+ * handed back RAW.
+ *
+ * `InsightsViewSectionRef` above reduces a widget to its title, which is all a
+ * "which widgets landed where" assertion needs. This is the other question: a
+ * spec asserting what the dashboard auto-save actually wrote into one widget —
+ * a table widget's `sorting` and `columnsWidth` — has to see the whole config
+ * object, including the parts it expects to be untouched. Reducing it would
+ * defeat the point: the failure worth catching is the auto-save dropping
+ * `rows` or `version` while storing the sort correctly, and a mapper that only
+ * kept the keys the spec names could not see that.
+ *
+ * So the config is `Record<string, unknown>` rather than a typed widget shape.
+ * It is whatever the dashboards API stored, which is the subject, and a caller
+ * compares it whole against what it seeded.
+ */
+export interface InsightsViewWidgetRef {
+  id: string;
+  type: string | null;
+  title: string | null;
+  config: Record<string, unknown>;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -1890,6 +1914,76 @@ export interface OptimizationPageRef {
   content: OptimizationRef[];
 }
 
+/**
+ * One assertion verdict against one trace, as `PUT /v1/private/assertion-results`
+ * takes it — the rows a test-suite run's judge would have written.
+ *
+ * This is the only route to a chosen pass rate. A real `opik.run_tests` run
+ * decides pass/fail with an LLM judge, which cannot be steered to a ratio, so
+ * any spec about what a pass-rate CELL renders has to write the verdicts
+ * directly. `ExperimentDAO`'s `pass_rate_agg` then computes off these rows
+ * exactly as it would for a judged run: an item passes when every assertion on
+ * its trace passed, and an experiment's `pass_rate` is its passing items over
+ * its items carrying assertions at all.
+ *
+ * `name` must be non-empty: the query counts an item as having assertions via
+ * `countIf(ar.name != '')`, so a blank name writes a row the pass rate cannot
+ * see.
+ */
+export interface AssertionResultSeed {
+  /** The trace the verdict is attached to — an experiment item's `trace_id`. */
+  traceId: string;
+  /** The assertion's name. Must be non-empty; see above. */
+  name: string;
+  status: 'passed' | 'failed';
+}
+
+/**
+ * One group of `GET /v1/private/experiments/groups/aggregations`, keyed in the
+ * answer by the grouped field's value (the item source's dataset id, under the
+ * Experiments page's default grouping).
+ *
+ * `aggregations` is kept as the server sent it rather than mapped onto named
+ * fields, because ABSENCE is part of the contract: the endpoint omits
+ * `pass_rate_avg` / `passed_count_sum` / `total_count_sum` entirely for a group
+ * holding no evaluation-suite experiment, and opik#9646 was a frontend reading
+ * three keys (`pass_rate`, `passed_count`, `total_count`) this endpoint has
+ * never answered. A mapped shape would turn "the key is not there" into
+ * `undefined` and lose the distinction a rename assertion needs.
+ */
+export interface ExperimentGroupAggregationRef {
+  /** The group's own label — the item source's name. Null when unlabelled. */
+  label: string | null;
+  /** The group's aggregation map, verbatim. */
+  aggregations: Record<string, unknown>;
+}
+
+/**
+ * One grouping level for the experiment group reads, as `GroupingFactory`
+ * parses it off the `groups` query param.
+ *
+ * `key` is the sub-path a dictionary grouping (Configuration) addresses and is
+ * the empty string for the scalar fields; it is required rather than optional
+ * so a caller cannot omit it and silently get a grouping the page would not
+ * produce.
+ */
+export interface ExperimentGroupBy {
+  field: string;
+  key: string;
+  type: 'string' | 'number' | 'list' | 'dictionary';
+}
+
+/**
+ * Grouping by item source — the one the Experiments page and the prompt detail
+ * page's Experiments tab both land on when the URL carries no `groups` param
+ * (`DEFAULT_GROUPS`, OPIK-8654).
+ */
+export const GROUP_BY_ITEM_SOURCE: ExperimentGroupBy = {
+  field: 'dataset_id',
+  key: '',
+  type: 'string',
+};
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -2449,6 +2543,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     // "the write landed", so the expectation is a parameter rather than a
     // second near-identical helper.
     expectedStatus = 201,
+    // `PUT` for the batch-ingest endpoints that upsert rather than create
+    // (`/assertion-results`). Same retry contract: those are idempotent on the
+    // ids in the body, which is what makes retrying a 5xx safe.
+    method: 'POST' | 'PUT' = 'POST',
   ): Promise<void> => {
     const backoffMs = [1_000, 3_000, 8_000];
     let last: RawApiResult = { status: 0, message: '<no response>', location: null };
@@ -2460,7 +2558,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
       attempted++;
-      const { status, message, location } = await rawFetch('POST', path, { body });
+      const { status, message, location } = await rawFetch(method, path, { body });
       if (status === expectedStatus) return;
       last = { status, message, location };
       if (status < 500) break;
@@ -2973,6 +3071,55 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             ),
           })),
         };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * Every widget an insights view's stored `config` holds, in section order
+     * and then in each section's own widget order, with each config raw.
+     *
+     * The companion to `getInsightsView` above: that one answers "which widgets
+     * are in which section", this one answers "what is stored IN a widget".
+     * They are separate reads rather than one wider mapper so that neither
+     * spec pays for the other's payload — a copy-of-a-template assertion
+     * compares a dozen widget titles across three sections and never looks at a
+     * config, while an auto-save assertion compares one config in full and does
+     * not care which section it is in.
+     *
+     * Flattened across sections rather than nested, because a widget id is
+     * unique within a view: the caller already knows which widget it seeded and
+     * wants that one, not a walk down the section tree. A widget stored without
+     * a `type` or `title` comes back with null rather than being skipped — a
+     * save that dropped a widget's type is a real failure, and it must be
+     * visible as one rather than as a missing list entry.
+     *
+     * Returns null for a view that is not there, the same as `getInsightsView`,
+     * so a caller can tell "the view is gone" from "the view holds no widgets".
+     */
+    async listInsightsViewWidgets(id: string): Promise<InsightsViewWidgetRef[] | null> {
+      try {
+        const view = await withReadRetry(() => opik.api.insightsViews.getInsightsViewById(id));
+        const config = (view.config ?? {}) as {
+          sections?: Array<{
+            widgets?: Array<{
+              id?: unknown;
+              type?: unknown;
+              title?: unknown;
+              config?: unknown;
+            }>;
+          }>;
+        };
+        return (config.sections ?? []).flatMap((section) =>
+          (section.widgets ?? []).map((widget) => ({
+            id: String(widget.id ?? ''),
+            type: typeof widget.type === 'string' ? widget.type : null,
+            title: typeof widget.title === 'string' ? widget.title : null,
+            config: (widget.config ?? {}) as Record<string, unknown>,
+          })),
+        );
       } catch (err) {
         if (isNotFoundError(err)) return null;
         throw err;
@@ -5544,6 +5691,110 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           .sort((a, b) => a.promptIndex - b.promptIndex),
         totalItems: typeof body?.total_items === 'number' ? body.total_items : null,
       };
+    },
+
+    /**
+     * `PUT /v1/private/assertion-results` — the batch a test-suite run's judge
+     * writes, with the verdicts chosen rather than judged.
+     *
+     * The only way to put a suite experiment on a KNOWN pass rate. See
+     * `AssertionResultSeed`.
+     *
+     * One request, not chunked: the endpoint caps a batch at 1000 and a seed
+     * that silently became two writes is no longer atomic, which is the worst
+     * possible input to a spec whose subject is an aggregate over all of them.
+     */
+    async writeAssertionResults(args: {
+      projectName: string;
+      results: AssertionResultSeed[];
+    }): Promise<void> {
+      if (args.results.length < 1 || args.results.length > 1000) {
+        throw new Error(
+          `writeAssertionResults: the endpoint accepts 1..1000 results, got ${args.results.length}`,
+        );
+      }
+      const blank = args.results.find((result) => result.name === '');
+      if (blank) {
+        throw new Error(
+          `writeAssertionResults: trace ${blank.traceId} was given a blank assertion name — ` +
+            "the pass-rate query counts assertions with `name != ''`, so such a row is invisible " +
+            'to the very aggregate a caller writes these for',
+        );
+      }
+      await postSeedWrite(
+        '/v1/private/assertion-results',
+        `writeAssertionResults of ${args.results.length} into '${args.projectName}'`,
+        {
+          entity_type: 'trace',
+          assertion_results: args.results.map((result) => ({
+            entity_id: result.traceId,
+            project_name: args.projectName,
+            name: result.name,
+            status: result.status,
+            // `sdk` is what a real `opik.run_tests` run writes, and the
+            // pass-rate query does not filter on source — so this keeps the
+            // seeded rows indistinguishable from judged ones rather than
+            // exercising a path no run takes.
+            source: 'sdk',
+          })),
+        },
+        204,
+        'PUT',
+      );
+    },
+
+    /**
+     * `GET /v1/private/experiments/groups/aggregations` — the read behind every
+     * aggregated cell on an Experiments group row.
+     *
+     * Keyed in the answer by the grouped value, so under the default item-source
+     * grouping the key is the dataset id. `types` mirrors what the frontend
+     * sends (`["regular"]`), so what a spec reads here is the same population
+     * the page renders rather than a superset that happened to agree.
+     */
+    async experimentGroupAggregations(args: {
+      projectId: string;
+      groupBy?: ExperimentGroupBy[];
+      types?: string[];
+    }): Promise<Record<string, ExperimentGroupAggregationRef>> {
+      const query = new URLSearchParams({
+        groups: JSON.stringify(args.groupBy ?? [GROUP_BY_ITEM_SOURCE]),
+        project_id: args.projectId,
+        types: JSON.stringify(args.types ?? ['regular']),
+      });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/experiments/groups/aggregations',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `experimentGroupAggregations(${args.projectId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: Record<string, unknown> } | null)?.content;
+      if (typeof content !== 'object' || content === null) {
+        throw new Error(
+          `experimentGroupAggregations(${args.projectId}): the answer carried no 'content' map: ` +
+            JSON.stringify(json),
+        );
+      }
+      const groups: Record<string, ExperimentGroupAggregationRef> = {};
+      for (const [value, node] of Object.entries(content)) {
+        const group = node as { label?: unknown; aggregations?: unknown };
+        const aggregations = group.aggregations;
+        groups[value] = {
+          label: typeof group.label === 'string' ? group.label : null,
+          // `{}` only for a group the server sent no aggregations for at all,
+          // which is a different answer from one whose aggregations omit the
+          // pass-rate keys — both are readable here, neither is invented.
+          aggregations:
+            typeof aggregations === 'object' && aggregations !== null
+              ? (aggregations as Record<string, unknown>)
+              : {},
+        };
+      }
+      return groups;
     },
 
     async findTestSuiteByName(name: string, projectName?: string): Promise<TestSuiteRef | null> {

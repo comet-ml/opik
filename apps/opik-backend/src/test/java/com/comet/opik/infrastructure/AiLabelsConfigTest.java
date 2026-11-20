@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.TestConfigUtils;
 import io.dropwizard.util.Duration;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -22,32 +23,22 @@ class AiLabelsConfigTest {
 
     static Stream<Arguments> inferenceSettings() {
         return Stream.of(
-                arguments("disabled, nothing set", false, true, null, null, List.of()),
-                // The block itself is always required; config.yml always provides it.
-                arguments("disabled, no inference block", false, false, null, null, List.of("inference")),
-                arguments("enabled, blank url", true, true, " ", CREDENTIAL, List.of("inferenceConfigured")),
-                arguments("enabled, no credential", true, true, URL, null, List.of("inferenceConfigured")));
+                arguments("disabled, nothing set", false, null, null, true),
+                arguments("enabled, url and credential", true, URL, CREDENTIAL, true),
+                arguments("enabled, blank url", true, " ", CREDENTIAL, false),
+                arguments("enabled, no credential", true, URL, null, false));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("inferenceSettings")
-    void inferenceBlockIsAlwaysRequiredAndItsSettingsWhenEnabled(String description, boolean enabled,
-            boolean inferenceBlock, String url,
-            String credential, List<String> expectedViolations) {
-        var config = new AiLabelsConfig();
-        config.setEnabled(enabled);
-        if (inferenceBlock) {
-            config.getInference().setUrl(url);
-            config.getInference().setCredential(credential);
-        } else {
-            config.setInference(null);
-        }
+    void enabledRequiresTheInferenceUrlAndCredential(String description, boolean enabled, String url,
+            String credential, boolean valid) {
+        var config = TestConfigUtils.loadConfigTest();
+        config.getAiLabels().setEnabled(enabled);
+        config.getInference().setUrl(url);
+        config.getInference().setCredential(credential);
 
-        var violations = VALIDATOR.validate(config).stream()
-                .map(violation -> violation.getPropertyPath().toString())
-                .toList();
-
-        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
+        assertThat(VALIDATOR.validateProperty(config, "aiLabelsInferenceConfigured")).hasSize(valid ? 0 : 1);
     }
 
     @Test
@@ -66,30 +57,6 @@ class AiLabelsConfigTest {
         assertThat(VALIDATOR.validateProperty(config, "aiLabelsDataModelSupported")).isEmpty();
     }
 
-    static Stream<Arguments> decideConnectionSettings() {
-        return Stream.of(
-                arguments("the defaults", Duration.seconds(30), Duration.minutes(5), List.of()),
-                arguments("no keep-alive", Duration.milliseconds(0), Duration.minutes(5), List.of()),
-                arguments("no keep-alive set", null, Duration.minutes(5), List.of("inference.decideKeepAlive")),
-                arguments("a time to live under a second", Duration.seconds(30), Duration.milliseconds(999),
-                        List.of("inference.decideTimeToLive")));
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("decideConnectionSettings")
-    void decideConnectionSettingsAreValidated(String description, Duration decideKeepAlive,
-            Duration decideTimeToLive, List<String> expectedViolations) {
-        var config = new AiLabelsConfig();
-        config.getInference().setDecideKeepAlive(decideKeepAlive);
-        config.getInference().setDecideTimeToLive(decideTimeToLive);
-
-        var violations = VALIDATOR.validate(config).stream()
-                .map(violation -> violation.getPropertyPath().toString())
-                .toList();
-
-        assertThat(violations).containsExactlyInAnyOrderElementsOf(expectedViolations);
-    }
-
     static Stream<Arguments> renderMaxExecutionTimes() {
         return Stream.of(
                 arguments(Duration.seconds(1), List.of()),
@@ -102,7 +69,7 @@ class AiLabelsConfigTest {
     @MethodSource("renderMaxExecutionTimes")
     void renderMaxExecutionTimeIsAtLeastASecondAndAtMostTheTickBudget(Duration renderMaxExecutionTime,
             List<String> expectedViolations) {
-        var config = new AiLabelsConfig();
+        var config = TestConfigUtils.loadConfigTest().getAiLabels();
         config.setTickBudget(Duration.seconds(25));
         config.setRenderMaxExecutionTime(renderMaxExecutionTime);
 
