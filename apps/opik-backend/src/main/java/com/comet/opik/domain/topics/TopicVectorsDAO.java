@@ -448,5 +448,4 @@ public class TopicVectorsDAO {
     public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         return deletes.deleteByTraceIds(TABLE, QUERY_PREFIX, traceIds, projectId);
     }
-
 }
