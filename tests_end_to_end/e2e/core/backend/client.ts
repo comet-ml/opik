@@ -425,6 +425,40 @@ export interface ExperimentRefDetail {
 }
 
 /**
+ * One row of the project-scoped experiments list, carrying the two fields the
+ * Experiments page's Test suites / Datasets tabs are built out of.
+ *
+ * `evaluationMethod` is the field the tabs filter on server-side, and
+ * `datasetVersionName` is `dataset_version_summary.version_name` — what the
+ * tab's version column renders. Neither is on `ExperimentRefDetail`, and
+ * neither is reachable through the pinned SDK's `findExperiments` projection.
+ *
+ * Both are `| null` rather than defaulted, because "the server sent no
+ * evaluation method" and "the server sent no linked version" are exactly the
+ * states a caller here is distinguishing — a `?? 'dataset'` would make an
+ * experiment the backend had stopped classifying read as a correctly-classified
+ * one, which is the regression a tab-partition assertion exists to catch.
+ */
+export interface ProjectExperimentRef {
+  id: string;
+  name: string;
+  evaluationMethod: string | null;
+  datasetId: string | null;
+  datasetVersionName: string | null;
+}
+
+/** A page of {@link ProjectExperimentRef} plus the server's own total. */
+export interface ProjectExperimentPage {
+  /**
+   * The server's `total`, which is NOT `experiments.length` — it counts every
+   * match, not the page. A closed-set assertion wants both: the page to hold
+   * the expected rows AND the total to say there are no others beyond it.
+   */
+  total: number;
+  experiments: ProjectExperimentRef[];
+}
+
+/**
  * An experiment's lifecycle, read off `GET /v1/private/experiments/{id}`.
  *
  * `status` and `finishedAt` are the pair `/experiments/cancel` writes, and the
@@ -4302,6 +4336,97 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         name: e.name as string,
         datasetId: e.datasetId ? String(e.datasetId) : null,
       }));
+    },
+
+    /**
+     * `GET /v1/private/experiments?project_id=…` — the read behind the project
+     * Experiments page, optionally narrowed by the `evaluation_method` filter
+     * its Test suites / Datasets tabs send.
+     *
+     * Raw rather than through the pinned SDK's `findExperiments`, for two
+     * reasons that both matter to a tab assertion. The projection drops
+     * `evaluation_method` and `dataset_version_summary` entirely, which are the
+     * two fields the tabs are made of; and `filters` is a JSON-encoded query
+     * param the generated client has no binding for, so the tab's own
+     * server-side narrowing could not be reproduced at all.
+     *
+     * `evaluationMethod` takes an operator as well as a value because the two
+     * tabs do not mirror each other: Test suites sends `= evaluation_suite`
+     * while Datasets sends `!= evaluation_suite`, so that a legacy experiment
+     * stored under any other method still shows somewhere. Hard-coding `=` here
+     * would make the Datasets half of a partition assertion test a query the
+     * page never sends.
+     */
+    async listExperimentsForProject(args: {
+      projectId: string;
+      evaluationMethod?: { operator: '=' | '!='; value: string };
+      /** Deliberately explicit: a membership assertion must not inherit a page size. */
+      size?: number;
+    }): Promise<ProjectExperimentPage> {
+      const query = new URLSearchParams({
+        project_id: args.projectId,
+        size: String(args.size ?? 100),
+      });
+      if (args.evaluationMethod) {
+        query.set(
+          'filters',
+          JSON.stringify([
+            {
+              id: 'evaluation_method',
+              field: 'evaluation_method',
+              type: 'string',
+              operator: args.evaluationMethod.operator,
+              value: args.evaluationMethod.value,
+            },
+          ]),
+        );
+      }
+      const { status, message, json } = await rawFetch('GET', '/v1/private/experiments', { query });
+      if (status !== 200) {
+        throw new Error(
+          `listExperimentsForProject(${args.projectId}): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const body = (json ?? {}) as {
+        total?: unknown;
+        content?: Array<Record<string, unknown>>;
+      };
+      if (typeof body.total !== 'number') {
+        throw new Error(
+          `listExperimentsForProject(${args.projectId}): the answer carried no numeric 'total' — ` +
+            'cannot assert a closed set against a page of unknown completeness',
+        );
+      }
+      const content = Array.isArray(body.content) ? body.content : [];
+      return {
+        total: body.total,
+        experiments: content.map((row) => {
+          const summary = row.dataset_version_summary as { version_name?: unknown } | null;
+          return {
+            id: String(row.id),
+            name: String(row.name),
+            evaluationMethod:
+              typeof row.evaluation_method === 'string' ? row.evaluation_method : null,
+            datasetId: typeof row.dataset_id === 'string' ? row.dataset_id : null,
+            datasetVersionName:
+              typeof summary?.version_name === 'string' ? summary.version_name : null,
+          };
+        }),
+      };
+    },
+
+    /**
+     * The EXPERIMENT feedback score names a project has, sorted.
+     *
+     * A third endpoint over a third table, beside the trace and thread readers
+     * below: it is the one behind the per-score columns the Experiments table
+     * offers (`useExperimentsFeedbackScoresNames`). Reading it is what makes an
+     * assertion about those columns a claim about the tab rather than about the
+     * project's data — a score that this endpoint never reported could not have
+     * produced a column either way, so a picker missing it would pass.
+     */
+    async listExperimentFeedbackScoreNames(projectId: string): Promise<string[]> {
+      return feedbackScoreNames('/v1/private/experiments/feedback-scores/names', projectId);
     },
 
     async deleteExperiment(id: string): Promise<void> {

@@ -1,4 +1,4 @@
-export { test, expect } from './ollie-table-widget.fixture';
+export { test, expect } from './experiments-tab-split.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -659,3 +659,9 @@ export type {
   OllieTableWidgetRef,
   OllieTableWidgetFixtures,
 } from './ollie-table-widget.fixture';
+export type {
+  TabSplitExperimentRef,
+  TabSplitProjectRef,
+  ExperimentsTabSplitRef,
+  ExperimentsTabSplitFixtures,
+} from './experiments-tab-split.fixture';

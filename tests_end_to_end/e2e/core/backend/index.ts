@@ -33,6 +33,8 @@ export {
   type ProjectStatsRef,
   type ExperimentLifecycle,
   type ExperimentRefDetail,
+  type ProjectExperimentRef,
+  type ProjectExperimentPage,
   type AssertionResultSeed,
   type ExperimentGroupAggregationRef,
   type ExperimentGroupBy,
