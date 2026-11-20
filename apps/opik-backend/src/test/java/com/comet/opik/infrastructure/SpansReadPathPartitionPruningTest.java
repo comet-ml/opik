@@ -1,12 +1,5 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.api.Alert;
-import com.comet.opik.api.AlertEventType;
-import com.comet.opik.api.AlertTrigger;
-import com.comet.opik.api.AlertTriggerConfig;
-import com.comet.opik.api.AlertTriggerConfigType;
-import com.comet.opik.api.AlertType;
-import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DataPoint;
 import com.comet.opik.api.DatasetItem;
@@ -22,9 +15,6 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.TimeInterval;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
-import com.comet.opik.api.Webhook;
-import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
-import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.MetricType;
@@ -111,13 +101,6 @@ import java.util.stream.StreamSupport;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.get;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -137,6 +120,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
  * <p>The trace stats' {@code scored_span_ids} is covered here too: its bound is a subquery over the scored span ids
  * rather than a set bound from Java, so it has no fallback to observe, and instead is shown to read only the weeks of
  * the spans that carry scores, far-future and past-ceiling ones included, while returning every one of their scores.
+ *
+ * <p>So is the exists probe: it reads only the recent weeks, and every week only for a project with no span in them.
  *
  * <p>Rows, including far-future ids on the legacy table, are {@link SpansReadPathWeekBoundTest}'s job.
  */
@@ -200,6 +185,9 @@ class SpansReadPathPartitionPruningTest {
     private static final Pattern PARTITION_KEY_SELECTION = Pattern
             .compile("Selected (\\d+)/(\\d+) parts by partition key");
 
+    /** The query name of the statement {@link #assertNoStatementFor} awaits before it looks for an absent one. */
+    private static final String QUERY_LOG_MARKER = "query_log_marker";
+
     private static final String PARTITION_PREFIX = "%s.spans.".formatted(DATABASE_NAME);
 
     private static final String FAST_LOG_FLUSH_CONFIG = "clickhouse-fast-log-flush.xml";
@@ -254,7 +242,7 @@ class SpansReadPathPartitionPruningTest {
     private ProjectMetricsResourceClient projectMetricsResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync template;
-    private AlertResourceClient alertResourceClient;
+    private TraceCostAlerts traceCostAlerts;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport, TransactionTemplateAsync template) {
@@ -267,7 +255,7 @@ class SpansReadPathPartitionPruningTest {
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(clientSupport, baseUrl);
         this.traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         this.template = template;
-        this.alertResourceClient = new AlertResourceClient(clientSupport);
+        this.traceCostAlerts = new TraceCostAlerts(wireMock.server(), new AlertResourceClient(clientSupport));
         // One batch, so each filler week is one part holding two traces the primary key cannot exclude by id.
         spanResourceClient.batchCreateSpans(FILLER_MONDAYS.stream()
                 .flatMap(monday -> Stream.of(0, 1).map(_ -> newSpan(
@@ -285,7 +273,6 @@ class SpansReadPathPartitionPruningTest {
 
     /** Each trigger reaches its site through the API for an ingested span, and returns the id its statement names. */
     private Stream<Arguments> sites() {
-        // Read at call time: @MethodSource runs before @BeforeAll wires the clients in.
         Function<Span, UUID> getById = span -> {
             spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY);
             return span.id();
@@ -621,9 +608,70 @@ class SpansReadPathPartitionPruningTest {
         // The alert window bounds trace_id only, so the far-future week must come from the span-weeks pre-pass.
         var expected = totalCost(createTraceWithAFarFutureSpan(projectName, now).spans());
 
-        var actual = fireTraceCostAlert(projectId);
+        var actual = traceCostAlerts.totalCost(projectId, API_KEY, WORKSPACE_NAME, WORKSPACE_ID);
 
-        assertThat(new BigDecimal(actual.metricValue())).isEqualByComparingTo(expected);
+        assertThat(actual).isEqualByComparingTo(expected);
+    }
+
+    private Stream<Arguments> recentEras() {
+        var thisMonday = THIS_MONDAY.atStartOfDay(ZoneOffset.UTC).toInstant();
+        return Stream.of(
+                arguments(Named.of("this week", randomInstant(thisMonday, Instant.now()))),
+                arguments(Named.of("previous week", randomInstant(thisMonday.minus(Duration.ofDays(7)), thisMonday))));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("recentEras")
+    void existsReadsOnlyRecentWeeksForAProjectWithARecentSpan(Instant idAt) {
+        // A project of its own, so its only span is the one in the week under test.
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.createSpan(newSpan(idAt, ID_GENERATOR.generateId()).toBuilder()
+                .projectName(projectName).build(), API_KEY, WORKSPACE_NAME);
+
+        var actualExists = spanResourceClient.existsSpans(projectName, API_KEY, WORKSPACE_NAME);
+
+        assertThat(actualExists).isTrue();
+        assertThat(spansPartitionsRead("exists_spans_by_project_id", projectId))
+                .contains(yyyymmdd(mondayOf(idAt)))
+                .isSubsetOf(yyyymmdd(THIS_MONDAY.minusWeeks(1)), THIS_WEEK, yyyymmdd(THIS_MONDAY.plusWeeks(1)));
+        assertNoStatementFor("exists_spans_by_project_id_all_weeks", projectId);
+    }
+
+    /** A span on either side of the recent weeks: before the previous week, or a far-future id from a bad clock. */
+    private Stream<Arguments> nonRecentEras() {
+        var oldMonday = THIS_MONDAY.minusWeeks(RandomUtils.secure().randomInt(2, 105));
+        return Stream.of(
+                arguments(Named.of("before the recent weeks", randomInstant(
+                        oldMonday.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                        oldMonday.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant()))),
+                arguments(Named.of("far future", farFutureInstant())));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("nonRecentEras")
+    void existsReadsEveryWeekForAProjectWithNoRecentSpan(Instant idAt) {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.createSpan(newSpan(idAt, ID_GENERATOR.generateId()).toBuilder()
+                .projectName(projectName).build(), API_KEY, WORKSPACE_NAME);
+
+        var actualExists = spanResourceClient.existsSpans(projectName, API_KEY, WORKSPACE_NAME);
+
+        assertThat(actualExists).isTrue();
+        assertThat(spansPartitionsRead("exists_spans_by_project_id_all_weeks", projectId))
+                .contains(yyyymmdd(mondayOf(idAt)));
+    }
+
+    @Test
+    void existsFallsBackToEveryWeekAndIsFalseForAProjectWithNoSpan() {
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var actualExists = spanResourceClient.existsSpans(projectName, API_KEY, WORKSPACE_NAME);
+
+        assertThat(actualExists).isFalse();
+        assertStatementFor("exists_spans_by_project_id_all_weeks", projectId);
     }
 
     /** Each read takes the project name and the trace id, and returns the traces it read. */
@@ -670,55 +718,6 @@ class SpansReadPathPartitionPruningTest {
     /** A trace and the spans written for it. */
     @Builder(toBuilder = true)
     private record TraceWithSpans(Trace trace, List<Span> spans) {
-    }
-
-    /**
-     * The alert job is the only reader of the alert total cost, so it is driven through a cost alert: a zero threshold
-     * fires on the first run, and the webhook carries the total the job read.
-     */
-    private MetricsAlertPayload fireTraceCostAlert(UUID projectId) {
-        var webhookPath = "/alert-webhook-" + RandomStringUtils.secure().nextAlphanumeric(12);
-        wireMock.server().stubFor(post(urlEqualTo(webhookPath)).willReturn(aResponse().withStatus(200)));
-        // The webhook sender names the workspace in the payload.
-        wireMock.server().stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
-                .withQueryParam("id", equalTo(WORKSPACE_ID))
-                .willReturn(aResponse().withStatus(200).withBody(WORKSPACE_NAME)));
-        var alert = Alert.builder()
-                .name("cost-" + RandomStringUtils.secure().nextAlphanumeric(12))
-                .enabled(true)
-                .alertType(AlertType.GENERAL)
-                .projectId(projectId)
-                .webhook(Webhook.builder()
-                        .url("http://localhost:%d%s".formatted(wireMock.server().port(), webhookPath))
-                        .secretToken(UUID.randomUUID().toString())
-                        .build())
-                .triggers(List.of(AlertTrigger.builder()
-                        .eventType(AlertEventType.TRACE_COST)
-                        .triggerConfigs(List.of(AlertTriggerConfig.builder()
-                                .type(AlertTriggerConfigType.THRESHOLD_COST)
-                                .configValue(Map.of(
-                                        AlertTriggerConfig.THRESHOLD_CONFIG_KEY, "0",
-                                        AlertTriggerConfig.WINDOW_CONFIG_KEY, "3600"))
-                                .build()))
-                        .build()))
-                .build();
-        var alertId = alertResourceClient.createAlert(alert, API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
-
-        String body;
-        try {
-            body = Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
-                    .until(() -> wireMock.server().findAll(postRequestedFor(urlEqualTo(webhookPath))),
-                            requests -> !requests.isEmpty())
-                    .getFirst().getBodyAsString();
-        } finally {
-            // The scheduler re-fires an enabled alert on every run, so it must not outlive this test.
-            alertResourceClient.deleteAlertBatch(BatchDelete.builder().ids(Set.of(alertId)).build(), API_KEY,
-                    WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
-        }
-        @SuppressWarnings("unchecked")
-        WebhookEvent<Map<String, Object>> event = JsonUtils.readValue(body, WebhookEvent.class);
-        var metadata = (List<?>) event.getPayload().get("metadata");
-        return JsonUtils.readValue(JsonUtils.writeValueAsString(metadata.getFirst()), MetricsAlertPayload.class);
     }
 
     /** A trace at {@code now} with one span beside it and one a bad clock files under a far-future week. */
@@ -971,18 +970,61 @@ class SpansReadPathPartitionPruningTest {
                 .alias("query_log holds a %s statement mentioning id %s".formatted(queryName, mentionedId))
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(200))
-                .until(() -> template.nonTransaction(connection -> Mono.from(connection
-                        .createStatement(SPANS_PARTITIONS_READ)
-                        .bind("prefix", PARTITION_PREFIX)
-                        .bind("op", queryName)
-                        .bind("span_id", mentionedId.toString())
-                        .execute())
-                        .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
-                        .block(), Objects::nonNull);
+                .until(() -> partitionsReadOrNull(queryName, mentionedId), Objects::nonNull);
         return Arrays.stream(partitions.split(","))
                 .filter(partition -> !partition.isEmpty())
                 .map(partition -> partition.substring(PARTITION_PREFIX.length()))
                 .collect(Collectors.toSet());
+    }
+
+    /** That ClickHouse logged a {@code queryName} statement mentioning the id; see {@link #awaitQueryLogMarker}. */
+    private void assertStatementFor(String queryName, UUID mentionedId) {
+        awaitQueryLogMarker();
+
+        assertThat(partitionsReadOrNull(queryName, mentionedId))
+                .as("%s statement mentioning %s", queryName, mentionedId)
+                .isNotNull();
+    }
+
+    /** That ClickHouse logged no {@code queryName} statement mentioning the id; see {@link #awaitQueryLogMarker}. */
+    private void assertNoStatementFor(String queryName, UUID mentionedId) {
+        awaitQueryLogMarker();
+
+        assertThat(partitionsReadOrNull(queryName, mentionedId))
+                .as("%s statement mentioning %s", queryName, mentionedId)
+                .isNull();
+    }
+
+    /**
+     * Sends a marker statement and awaits its row: a finished request's statements were queued before the marker,
+     * which is sent after its response, and {@code query_log} writes rows in the order they were queued, so whether
+     * such a statement was logged can be read once the marker's row is there.
+     */
+    private void awaitQueryLogMarker() {
+        var marker = UUID.randomUUID();
+        sendQueryLogMarker(marker);
+        spansPartitionsRead(QUERY_LOG_MARKER, marker);
+    }
+
+    private void sendQueryLogMarker(UUID marker) {
+        template.nonTransaction(connection -> Mono.from(connection
+                .createStatement("SELECT '%s' SETTINGS log_comment = '%s:'".formatted(marker, QUERY_LOG_MARKER))
+                .execute())
+                .flatMapMany(result -> result.map((row, _) -> row.get(0, String.class)))
+                .then())
+                .block();
+    }
+
+    /** The partition list of the latest such statement, or null when {@code query_log} holds none yet. */
+    private String partitionsReadOrNull(String queryName, UUID mentionedId) {
+        return template.nonTransaction(connection -> Mono.from(connection
+                .createStatement(SPANS_PARTITIONS_READ)
+                .bind("prefix", PARTITION_PREFIX)
+                .bind("op", queryName)
+                .bind("span_id", mentionedId.toString())
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, _) -> row.get(0, String.class)))))
+                .block();
     }
 
     private static LocalDate mondayOf(Instant instant) {

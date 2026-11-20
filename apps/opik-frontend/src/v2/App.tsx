@@ -10,7 +10,6 @@ import SentryErrorBoundary from "@/v2/layout/SentryErrorBoundary/SentryErrorBoun
 import { TooltipProvider } from "@/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
-import DatasetExportPanel from "@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
 import {
   TOOLTIP_DELAY_DURATION,
   TOOLTIP_SKIP_DELAY_DURATION,
@@ -38,7 +37,6 @@ function App() {
                 skipDelayDuration={TOOLTIP_SKIP_DELAY_DURATION}
               >
                 <RouterProvider router={router} />
-                <DatasetExportPanel />
               </TooltipProvider>
               <Toaster />
             </ThemeProvider>

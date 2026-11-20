@@ -98,7 +98,7 @@ const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const projectId =
     runtimeContext.projectId ||
     localProjectIds[0] ||
-    (allProjects ? workspaceProjects[0]?.id ?? "" : "");
+    (allProjects ? (workspaceProjects[0]?.id ?? "") : "");
   const isTraceSource = source === TRACE_DATA_TYPE.traces;
 
   // Selecting more than one project (or "all projects") aggregates across projects, which only supports span totals.

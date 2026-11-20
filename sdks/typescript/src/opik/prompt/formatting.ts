@@ -75,10 +75,12 @@ function resolveFilterAttr(obj: unknown, key: string | number): unknown {
 // Jinja2 templates render through a dedicated Environment with an empty loader
 // list, which closes {% include %} / {% import %} / {% extends %} (no filesystem
 // access; an empty array, not null, since null falls back to a default loader).
-// autoescape stays on so rendered output is unchanged. The attribute-resolving
-// filters read members directly, so they go through the same safe-property guard
-// as the member lookups in renderJinja2Template.
-const jinja2Env = new nunjucks.Environment([], { autoescape: true });
+// autoescape is off, as in the Python SDK's SandboxedEnvironment and the mustache
+// path below: a prompt goes to a model, not an HTML page, so values must render
+// as given. The attribute-resolving filters read members directly, so they go
+// through the same safe-property guard as the member lookups in
+// renderJinja2Template.
+const jinja2Env = new nunjucks.Environment([], { autoescape: false });
 jinja2Env.addFilter("selectattr", (arr: unknown[], attr: string) =>
   arr.filter((item) => Boolean(resolveFilterAttr(item, attr)))
 );

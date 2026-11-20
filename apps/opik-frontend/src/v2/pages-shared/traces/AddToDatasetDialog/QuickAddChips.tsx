@@ -1,33 +1,19 @@
 import React from "react";
 
 import { Tag } from "@/ui/tag";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import { EnrichmentOptions } from "./useAddToDatasetForm";
 import { QuickAddChip } from "./fieldMappingTypes";
 
-const MAX_DATASET_CHIPS = 6;
-
-const DATASET_CHIP_TOOLTIP =
-  "Already used in this dataset — map a field to fill the same column.";
-
 type QuickAddChipsProps = {
-  managedChips: QuickAddChip[];
-  datasetChips: string[];
-  onAddManaged: (option: keyof EnrichmentOptions) => void;
-  onAddDatasetColumn: (column: string) => void;
+  chips: QuickAddChip[];
+  onAdd: (option: keyof EnrichmentOptions) => void;
 };
 
 const QuickAddChips: React.FunctionComponent<QuickAddChipsProps> = ({
-  managedChips,
-  datasetChips,
-  onAddManaged,
-  onAddDatasetColumn,
+  chips,
+  onAdd,
 }) => {
-  if (managedChips.length === 0 && datasetChips.length === 0) return null;
-
-  const visibleColumns = datasetChips.slice(0, MAX_DATASET_CHIPS);
-  const overflowColumns = datasetChips.slice(MAX_DATASET_CHIPS);
+  if (chips.length === 0) return null;
 
   return (
     <div
@@ -35,41 +21,12 @@ const QuickAddChips: React.FunctionComponent<QuickAddChipsProps> = ({
       className="flex flex-wrap items-center gap-2"
     >
       <span className="comet-body-xs text-muted-slate">Quick add:</span>
-
-      {visibleColumns.map((column) => (
-        <TooltipWrapper key={column} content={DATASET_CHIP_TOOLTIP}>
-          <button
-            type="button"
-            className="flex"
-            onClick={() => onAddDatasetColumn(column)}
-          >
-            <Tag variant="blue">{column}</Tag>
-          </button>
-        </TooltipWrapper>
-      ))}
-
-      {overflowColumns.length > 0 && (
-        <LoadableSelectBox
-          options={overflowColumns.map((column) => ({
-            value: column,
-            label: column,
-          }))}
-          onChange={onAddDatasetColumn}
-          searchPlaceholder="Search columns"
-          trigger={
-            <button type="button" className="flex">
-              <Tag variant="blue">+{overflowColumns.length} more</Tag>
-            </button>
-          }
-        />
-      )}
-
-      {managedChips.map((chip) => (
+      {chips.map((chip) => (
         <button
           key={chip.option}
           type="button"
-          className="flex"
-          onClick={() => onAddManaged(chip.option)}
+          className="flex rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary-active/40"
+          onClick={() => onAdd(chip.option)}
         >
           <Tag variant="gray" className="text-foreground">
             {chip.label}

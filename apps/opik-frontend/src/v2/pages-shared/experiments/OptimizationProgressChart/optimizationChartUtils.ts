@@ -509,7 +509,6 @@ export const computeCandidateStatuses = (
   candidates: AggregatedCandidate[],
   // Status no longer depends on the run type — pruning applies to dataset runs
   // too — but the arg is kept so existing call sites stay unchanged.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isTestSuite = true,
   isInProgress = false,
   inProgressInfo?: InProgressInfo,

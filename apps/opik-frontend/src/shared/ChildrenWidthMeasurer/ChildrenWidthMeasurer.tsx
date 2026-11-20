@@ -17,8 +17,7 @@ type ChildrenWidthMeasurerProps = {
 const measureChildren = (node: HTMLElement): number[] =>
   map(node.children, (tag) => tag.getBoundingClientRect().width);
 
-const hasValidWidths = (widths: number[]) =>
-  widths.length > 0 && widths.some((w) => w > 0);
+const hasValidWidths = (widths: number[]) => widths.some((w) => w > 0);
 
 const ChildrenWidthMeasurer: React.FC<ChildrenWidthMeasurerProps> = ({
   children,

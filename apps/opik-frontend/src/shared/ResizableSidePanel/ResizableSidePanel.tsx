@@ -119,23 +119,31 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
       keyboardEvent.preventDefault();
       switch (keyboardEvent.code) {
         case "ArrowLeft":
-          isFunction(horizontalNavigation?.onChange) &&
-            horizontalNavigation?.hasPrevious &&
+          if (
+            isFunction(horizontalNavigation?.onChange) &&
+            horizontalNavigation?.hasPrevious
+          )
             horizontalNavigation.onChange(-1);
           break;
         case "ArrowRight":
-          isFunction(horizontalNavigation?.onChange) &&
-            horizontalNavigation?.hasNext &&
+          if (
+            isFunction(horizontalNavigation?.onChange) &&
+            horizontalNavigation?.hasNext
+          )
             horizontalNavigation?.onChange(1);
           break;
         case "ArrowUp":
-          isFunction(verticalNavigation?.onChange) &&
-            verticalNavigation?.hasPrevious &&
+          if (
+            isFunction(verticalNavigation?.onChange) &&
+            verticalNavigation?.hasPrevious
+          )
             verticalNavigation.onChange(-1);
           break;
         case "ArrowDown":
-          isFunction(verticalNavigation?.onChange) &&
-            verticalNavigation?.hasNext &&
+          if (
+            isFunction(verticalNavigation?.onChange) &&
+            verticalNavigation?.hasNext
+          )
             verticalNavigation.onChange(1);
           break;
         case "Escape":

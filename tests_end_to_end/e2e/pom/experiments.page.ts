@@ -16,15 +16,19 @@ export class ExperimentsPage {
    * instead of inheriting `UI_DEFAULT_PAGE_SIZE` — which is deployment
    * configuration, not a constant, and would silently turn a membership
    * assertion into one about whatever fitted on page 1.
+   *
+   * `groups=[]` opens the list ungrouped. The page groups by Item source by
+   * default (OPIK-8654), which adds a group row per item source and gives each
+   * experiment row a composite `data-row-id` (`<experimentId>|<group>`), so the
+   * id-based locators here only hold on the flat list.
    */
   async goto(projectId: string, opts: { size?: number } = {}): Promise<void> {
     this.projectId = projectId;
     const env = loadEnvConfig();
-    const query = new URLSearchParams();
+    const query = new URLSearchParams({ groups: '[]' });
     if (opts.size !== undefined) query.set('size', String(opts.size));
-    const suffix = query.size > 0 ? `?${query}` : '';
     await this.page.goto(
-      `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments${suffix}`,
+      `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments?${query}`,
     );
   }
 

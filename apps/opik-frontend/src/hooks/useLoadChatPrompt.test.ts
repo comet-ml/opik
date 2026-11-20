@@ -93,8 +93,8 @@ beforeEach(() => {
       const template =
         options?.enabled === false
           ? undefined
-          : NON_ARRAY_TEMPLATES[versionId] ??
-            (TEMPLATES[versionId] && JSON.stringify(TEMPLATES[versionId]));
+          : (NON_ARRAY_TEMPLATES[versionId] ??
+            (TEMPLATES[versionId] && JSON.stringify(TEMPLATES[versionId])));
       return {
         data: template && {
           id: versionId,

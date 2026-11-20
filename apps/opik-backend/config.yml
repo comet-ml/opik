@@ -1594,7 +1594,8 @@ llmProviderTokenAuth:
   # Description: Timeout for the token fetch call to the configured auth service. Capped at 1m
   fetchTimeout: ${LLM_PROVIDER_TOKEN_AUTH_FETCH_TIMEOUT:-10s}
   # Default: 15s
-  # Description: Lease time for the cross-pod single-flight lock around a token fetch
+  # Description: Lease time for the cross-pod single-flight lock around a token fetch, on top of fetchTimeout:
+  # the lease is lockTimeout + fetchTimeout, so a fetch always ends inside it
   lockTimeout: ${LLM_PROVIDER_TOKEN_AUTH_LOCK_TIMEOUT:-15s}
   # Default: 1000000
   # Description: Maximum accepted size (in characters) of a token endpoint reply. Capped at 10000000
@@ -1733,20 +1734,32 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: ${LLM_PROVIDER_VERTEXAI_SCOPE:-https://www.googleapis.com/auth/cloud-platform}
-    # Description: API endpoint per multi-region location, keyed by lower-case location. The SDK derives the endpoint
-    # from the location as '<location>-aiplatform.googleapis.com', which is only correct for single-region locations, so
-    # multi-region locations need their endpoint set explicitly. Single-region locations are not listed and keep the SDK
-    # default. Required: these endpoints exist only here, the application defines no fallback for them.
+    # Default: unset, for every location
+    # Description: API endpoint override per location, keyed by lower-case location. Unset, the SDK derives the
+    # endpoint itself: https://aiplatform.googleapis.com for global, https://aiplatform.<eu|us>.rep.googleapis.com for
+    # the eu and us multi-regions, and https://<location>-aiplatform.googleapis.com otherwise.
     # Values may be a bare host or an https:// URL; https:// is assumed when no scheme is given.
     multiRegionApiEndpoints:
-      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-https://aiplatform.googleapis.com}
-      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-https://aiplatform.eu.rep.googleapis.com}
-      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-https://aiplatform.us.rep.googleapis.com}
+      global: ${LLM_PROVIDER_VERTEXAI_GLOBAL_ENDPOINT:-}
+      eu: ${LLM_PROVIDER_VERTEXAI_EU_ENDPOINT:-}
+      us: ${LLM_PROVIDER_VERTEXAI_US_ENDPOINT:-}
     # Description: the only token_uri values a service-account key may carry. The credentials refresh by posting to it,
     # and the key file is user-supplied, so any other value is refused.
     tokenUris:
       - ${LLM_PROVIDER_VERTEXAI_TOKEN_URI:-https://oauth2.googleapis.com/token}
       - https://accounts.google.com/o/oauth2/token
+    # Default: 15m
+    # Description: How long a service-account key's credentials are kept in memory after its last call. Capped at 1d
+    credentialsCacheExpireAfterAccess: ${LLM_PROVIDER_VERTEXAI_CREDENTIALS_CACHE_EXPIRE_AFTER_ACCESS:-15m}
+    # Default: 0.25
+    # Description: Refresh the OAuth token shared by every pod once its remaining lifetime drops below this fraction
+    # of the total lifetime, and at the latest tokenCacheMinRefreshAhead before it expires
+    tokenCacheRefreshFraction: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_REFRESH_FRACTION:-0.25}
+    # Default: 5m
+    # Description: How long before its expiry the shared OAuth token leaves Redis at the latest. It has to leave before
+    # the auth library refreshes it (3m45s before expiry), or a refreshing pod is handed back the same expiring token.
+    # Between 3m45s and 30m
+    tokenCacheMinRefreshAhead: ${LLM_PROVIDER_VERTEXAI_TOKEN_CACHE_MIN_REFRESH_AHEAD:-5m}
 
 # Configuration for cache manager
 cacheManager:
@@ -1779,6 +1792,14 @@ cacheManager:
     # One read of a large experiment is dozens of requests that differ only by page, so the entry only has to
     # survive a single read.
     experiment_compare_target_projects: ${CACHE_MANAGER_EXPERIMENT_COMPARE_TARGET_PROJECTS_DURATION:-PT10S}
+    # Default: PT10M
+    # Description: Cache TTL for workspace names read from the React service. A renamed workspace keeps its old name
+    # for up to this long.
+    workspace_name_by_id: ${CACHE_MANAGER_WORKSPACE_NAME_BY_ID_DURATION:-PT10M}
+    # Default: PT10M
+    # Description: How long a failed workspace name lookup is remembered: the id stands in for the name, and the React
+    # service isn't asked again for that workspace until it expires.
+    workspace_name_lookup_failures: ${CACHE_MANAGER_WORKSPACE_NAME_LOOKUP_FAILURES_DURATION:-PT10M}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -1911,6 +1932,10 @@ jerseyClient:
   # Default: 5m
   # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
   timeToLive: ${JERSEY_CLIENT_TIME_TO_LIVE:-5m}
+  # Default: 30s
+  # Description: How long an idle connection is kept for reuse, so a call doesn't pay a new TCP and TLS handshake.
+  # Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
+  keepAlive: ${JERSEY_CLIENT_KEEP_ALIVE:-30s}
   # Default: 256
   # Description: The maximum number of concurrent open connections.
   maxConnections: ${JERSEY_CLIENT_MAX_CONNECTIONS:-256}
@@ -2492,6 +2517,62 @@ redaction:
   # anchored rule is still the difference between exact masking and a value withheld whole.
   rules: '${OPIK_REDACTION_RULES:-[]}'
 
+# opik-inference: the client that ai-labels, guardrail checks and Topics call it with. Each variable that existed
+# before under the AI_LABELS_INFERENCE_* name still falls back to it, so deployments that set the old name keep working.
+inference:
+  #  Description: opik-inference base URL. Required when ai-labels, guardrail checks or Topics are on. Whenever set: https,
+  #  or http only to localhost or a loopback address; the backend refuses to start with any other URL
+  url: ${OPIK_INFERENCE_URL:-${AI_LABELS_INFERENCE_URL:-}}
+  #  Description: opik-inference deployment credential, from a secret. Required with url. Never logged.
+  credential: ${OPIK_INFERENCE_CREDENTIAL:-${AI_LABELS_INFERENCE_CREDENTIAL:-}}
+  #  Default: 5s
+  #  Description: Per call to opik-inference, cut to the time left before the call's deadline
+  connectTimeout: ${OPIK_INFERENCE_CONNECT_TIMEOUT:-${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}}
+  #  Default: 30s
+  #  Description: Per call to opik-inference, cut to the time left before the call's deadline. Also the time an ai-labels
+  #  tick's sends get past aiLabels.tickBudget, so it lengthens the leader lease
+  readTimeout: ${OPIK_INFERENCE_READ_TIMEOUT:-${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}}
+  #  Default: 48
+  #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance, each on a thread
+  #  of its own. A call over it retries after a short backoff, then fails. Decide calls share the jerseyClient connection
+  #  pool with the other calls to opik-inference, so when guardrail validations are on, this plus
+  #  aiLabels.loadConcurrency (when ai-labels is on) and topics.vectors.embedConcurrency (when Topics is on) must be
+  #  below jerseyClient.maxConnectionsPerRoute
+  maxConcurrentDecides: ${OPIK_INFERENCE_MAX_CONCURRENT_DECIDES:-${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-48}}
+  #  Default: 33554432 (32 MiB; a full embed call or a page of job results is a few MiB)
+  #  Description: The most of a response body, success or error, a call reads; a longer one fails the call as
+  #  upstream_error, and its connection is closed without reading the rest. At most 67108864 (64 MiB): every call in
+  #  flight can hold this much heap
+  maxResponseBytes: ${OPIK_INFERENCE_MAX_RESPONSE_BYTES:-33554432}
+  # What the service accepts in one call. The defaults are the opik-inference contract's limits; set them to match a
+  # service configured otherwise, since a call over its limit is rejected
+  limits:
+    #  Default: 256
+    #  Description: Inputs in one /v1/embed call. topics.vectors.embedBatchSize must not be above it
+    maxEmbedInputs: ${OPIK_INFERENCE_MAX_EMBED_INPUTS:-256}
+    #  Default: 60s
+    #  Description: The most deadline_ms an embed call sends (the service's embed_max_deadline_ms).
+    #  topics.vectors.embedTimeout must not be above it
+    maxEmbedDeadline: ${OPIK_INFERENCE_MAX_EMBED_DEADLINE:-60s}
+    #  Default: 10000
+    #  Description: Items in one batch submit
+    maxBatchItems: ${OPIK_INFERENCE_MAX_BATCH_ITEMS:-10000}
+    #  Default: 1000
+    #  Description: Job ids in one batch status call
+    maxStatusJobIds: ${OPIK_INFERENCE_MAX_STATUS_JOB_IDS:-1000}
+  retry:
+    #  Default: 2
+    #  Description: Retries after the first attempt, for a retryable failure. A submit or embed answered with
+    #  quota_exceeded is never retried
+    maxRetries: ${OPIK_INFERENCE_RETRY_MAX_RETRIES:-2}
+    #  Default: 100ms
+    #  Description: The wait before the first retry, doubled for each one after, unless the service sends Retry-After
+    baseBackoff: ${OPIK_INFERENCE_RETRY_BASE_BACKOFF:-100ms}
+    #  Default: 1048576 (1 MiB)
+    #  Description: The service reads a submit's whole body before it answers, so its read timeout grows by a second
+    #  per this many bytes sent
+    submitBytesPerSecond: ${OPIK_INFERENCE_RETRY_SUBMIT_BYTES_PER_SECOND:-1048576}
+
 # ai-labels: AI-generated labels (e.g. a trace summary) for every ended trace in opted-in workspaces, computed by
 # opik-inference. Off by default and on only in Comet-hosted deployments; opt-in is the ai_label_workspaces table.
 # Requires databaseAnalyticsDataModel.traceColumnsNonNullable (the cut-over traces table).
@@ -2502,30 +2583,6 @@ aiLabels:
   #  Default: unset (the tasks bundled under ai-labels/tasks/)
   #  Description: Directory of task YAML to load instead of the bundled tasks
   tasksDir: ${AI_LABELS_TASKS_DIR:-}
-  inference:
-    #  Description: opik-inference base URL. Required when enabled.
-    url: ${AI_LABELS_INFERENCE_URL:-}
-    #  Description: opik-inference deployment credential, from a secret. Required when enabled. Never logged.
-    credential: ${AI_LABELS_INFERENCE_CREDENTIAL:-}
-    #  Default: 5s
-    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline
-    connectTimeout: ${AI_LABELS_INFERENCE_CONNECT_TIMEOUT:-5s}
-    #  Default: 30s
-    #  Description: Per call to opik-inference, cut to the time left before the tick's deadline. Also the time a tick's
-    #  sends get past tickBudget, so it lengthens the leader lease
-    readTimeout: ${AI_LABELS_INFERENCE_READ_TIMEOUT:-30s}
-    #  Default: 256
-    #  Description: Most synchronous decide calls (guardrail checks) in flight from one backend instance. A call over it
-    #  retries after a short backoff, then fails
-    maxConcurrentDecides: ${AI_LABELS_INFERENCE_MAX_CONCURRENT_DECIDES:-256}
-    #  Default: 30s
-    #  Description: How long an idle connection for decide calls is kept for reuse, so a check doesn't pay a new TCP and
-    #  TLS handshake. Under a load balancer's idle timeout (usually 60s). 0 closes each connection after a single call
-    decideKeepAlive: ${AI_LABELS_INFERENCE_DECIDE_KEEP_ALIVE:-30s}
-    #  Default: 5m
-    #  Description: Longest a connection for decide calls is reused before it is recycled, so calls move to new
-    #  upstream instances after a rollout
-    decideTimeToLive: ${AI_LABELS_INFERENCE_DECIDE_TIME_TO_LIVE:-5m}
   #  Default: 16777216 (16 MiB, about 3 minutes of one L40S on the 4B model at 22K tokens/s)
   #  Description: Global in-flight work: the cost of submitted items not yet loaded. Set as throughput x the queue time accepted
   budgetBytes: ${AI_LABELS_BUDGET_BYTES:-16777216}
@@ -2630,7 +2687,82 @@ aiLabels:
     #  lease when over readTimeout
     maxExecutionTime: ${AI_LABELS_SWEEP_MAX_EXECUTION_TIME:-50s}
 
-# Guardrail checks the backend runs on opik-inference (url and credential: aiLabels.inference). Thresholds are
+# Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
+# trace_summary in ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for.
+# Calls opik-inference's /v1/embed through the inference block.
+topics:
+  #  Default: false
+  #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
+  #  never exposed to the UI
+  enabled: ${TOPICS_ENABLED:-false}
+  #  Default: empty (no workspace)
+  #  Description: Comma-separated workspace ids topics run for. A listed workspace runs only while it is also enabled in
+  #  the ai_label_workspaces table. Set in Helm, so a change needs a deploy
+  enabledWorkspaces: ${TOPICS_ENABLED_WORKSPACES:-""}
+  vectors:
+    #  Default: 1m
+    #  Description: How often the leader ticks: finds labeled traces without a vector, embeds and stores them. Each
+    #  tick runs the fresh phase (window), or the daily pass in its place when that is due (longWindow, in slices),
+    #  then the backfill phase (longWindow or backfillWindow, progress in the MySQL table topic_vector_backfills).
+    #  At most 1h
+    tickInterval: ${TOPICS_VECTORS_TICK_INTERVAL:-1m}
+    #  Default: 50s
+    #  Description: Every ClickHouse query and embed call of a tick ends within this. Under tickInterval, at most 30m
+    tickBudget: ${TOPICS_VECTORS_TICK_BUDGET:-50s}
+    #  Default: 24h
+    #  Description: The fresh phase's window: how far back, by ai_label_status write time, each tick looks for done
+    #  traces without a vector. Never before the task's applies_from
+    window: ${TOPICS_VECTORS_WINDOW:-24h}
+    #  Default: 7d
+    #  Description: The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. At least
+    #  window
+    longWindow: ${TOPICS_VECTORS_LONG_WINDOW:-7d}
+    #  Default: 1d
+    #  Description: How often the daily pass starts (a cluster-wide Redis lock). A pass that cannot read everything
+    #  runs every second tick until one tick drains it; the interval runs from that tick. Also how often the tick
+    #  discovers each workspace's projects for the backfill. At most 7d
+    longWindowInterval: ${TOPICS_VECTORS_LONG_WINDOW_INTERVAL:-1d}
+    #  Default: 0 (off)
+    #  Description: When above zero, the backfill phase and the daily pass use this window instead of longWindow, to
+    #  embed the traces summarised before topics were enabled. 0 or at least window; at most 365d
+    backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
+    #  Default: 5000
+    #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
+    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read, and
+    #  summaries are read 1000 at a time
+    maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
+    #  Default: 256 (inference.limits.maxEmbedInputs)
+    #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs
+    embedBatchSize: ${TOPICS_VECTORS_EMBED_BATCH_SIZE:-256}
+    #  Default: 1
+    #  Description: Embed calls in flight at a time, within one workspace's or project's read. Set it to the embed
+    #  pool's replica count: the pool computes one call at a time per replica, so more only makes each call wait
+    #  longer, toward embedTimeout, and a call over the service's queue is answered with quota_exceeded (429)
+    embedConcurrency: ${TOPICS_VECTORS_EMBED_CONCURRENCY:-1}
+    #  Default: 10s
+    #  Description: Each embed call's deadline. A chunk starts only with at least this much of tickBudget left. Under
+    #  tickBudget, at most inference.limits.maxEmbedDeadline
+    embedTimeout: ${TOPICS_VECTORS_EMBED_TIMEOUT:-10s}
+    find:
+      #  Default: 30000000
+      #  Description: Per window read; a trip fails that workspace's read for the tick. At most 1000000000
+      maxRowsToRead: ${TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ:-30000000}
+      #  Default: 1073741824 (1 GiB)
+      #  Description: Per window read; a trip fails that workspace's read for the tick. At most 8589934592 (8 GiB)
+      maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
+      #  Default: 30s
+      #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
+      maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
+      #  Default: 1d
+      #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
+      #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
+      createdAtSlack: ${TOPICS_VECTORS_FIND_CREATED_AT_SLACK:-1d}
+      #  Default: 1d
+      #  Description: The daily pass, and the backfill of a large project, read their window in slices of this much
+      #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
+      sliceSize: ${TOPICS_VECTORS_FIND_SLICE_SIZE:-1d}
+
+# Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
 guardrails:
   # Default: 0.5

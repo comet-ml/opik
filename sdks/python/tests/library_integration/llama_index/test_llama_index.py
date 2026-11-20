@@ -1374,3 +1374,36 @@ def test_llama_index__concurrent_pipelines__thread_safe(
     # Verify all traces have different IDs (no collision)
     trace_ids = {tree.id for tree in fake_backend.trace_trees}
     assert len(trace_ids) == 3
+
+
+def test_llama_index__chunking_event__payload_left_intact_and_chunk_count_logged(
+    fake_backend,
+):
+    from llama_index.core import Document
+    from llama_index.core.callbacks import CBEventType, LlamaDebugHandler
+    from llama_index.core.node_parser import SentenceSplitter
+
+    debug_handler = LlamaDebugHandler()
+    opik_callback_handler = LlamaIndexCallbackHandler()
+    callback_manager = CallbackManager([debug_handler, opik_callback_handler])
+    splitter = SentenceSplitter(
+        chunk_size=50, chunk_overlap=0, callback_manager=callback_manager
+    )
+
+    with callback_manager.as_trace("split"):
+        nodes = splitter.get_nodes_from_documents([Document(text="Hello world. " * 30)])
+
+    opik_callback_handler.flush()
+
+    chunking_end_event = debug_handler.get_event_pairs(CBEventType.CHUNKING)[0][1]
+    assert len(chunking_end_event.payload["chunks"]) == len(nodes)
+
+    chunking_spans = [
+        span
+        for trace_tree in fake_backend.trace_trees
+        for node_parsing_span in trace_tree.spans
+        for span in node_parsing_span.spans
+        if span.name == "chunking"
+    ]
+    assert len(chunking_spans) == 1
+    assert chunking_spans[0].output == {"output": {"num_chunks": len(nodes)}}

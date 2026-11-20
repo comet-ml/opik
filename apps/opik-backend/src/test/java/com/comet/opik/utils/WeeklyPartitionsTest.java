@@ -11,7 +11,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
 
+import static java.time.DayOfWeek.MONDAY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -365,9 +368,38 @@ class WeeklyPartitionsTest {
         assertThat(actualPreviousWeek).isEqualTo(20261019L);
     }
 
+    @Test
+    void recentWeeksAreTheGivenWeekAndTheTwoAfterIt() {
+        var monday = randomIdAt().atZone(ZoneOffset.UTC).toLocalDate().with(TemporalAdjusters.previousOrSame(MONDAY));
+        var expectedWeeks = Stream.of(monday, monday.plusWeeks(1), monday.plusWeeks(2))
+                .map(week -> Long.parseLong(week.format(DateTimeFormatter.BASIC_ISO_DATE)))
+                .toList();
+
+        var actualWeeks = WeeklyPartitions.recentWeeks(monday.atStartOfDay(ZoneOffset.UTC).toInstant());
+
+        assertThat(actualWeeks).isEqualTo(expectedWeeks);
+    }
+
+    @Test
+    void previousMondayStartsTheWeekBeforeTodaysInUtc() {
+        var expectedBefore = startOfPreviousWeek(LocalDate.now(ZoneOffset.UTC));
+
+        var actualMonday = WeeklyPartitions.previousMonday();
+
+        // Read on both sides of the call, so a run crossing midnight UTC accepts either day's answer.
+        var expectedAfter = startOfPreviousWeek(LocalDate.now(ZoneOffset.UTC));
+        assertThat(actualMonday).isIn(expectedBefore, expectedAfter);
+    }
+
+    private static Instant startOfPreviousWeek(LocalDate today) {
+        return today.minusDays(today.getDayOfWeek().getValue() - 1L + 7)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant();
+    }
+
     /**
      * An {@code id_at} inside both column types, so an id minted at it resolves to a single week. Random, because no
-     * case that uses it names a week: each builds its expectation from {@link #weekOf}.
+     * case that uses it names a week: each derives its expectation from the instant.
      */
     private Instant randomIdAt() {
         return Instant.now().minus(ThreadLocalRandom.current().nextInt(1, 3_650), ChronoUnit.DAYS);
