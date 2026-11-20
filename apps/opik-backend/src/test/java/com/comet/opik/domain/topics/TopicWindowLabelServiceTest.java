@@ -99,6 +99,8 @@ class TopicWindowLabelServiceTest {
         var workspaceNames = mock(WorkspaceNameService.class);
         when(workspaceNames.nameOrId(WORKSPACE_ID)).thenReturn("Acme");
         config.getBuild().setWindowDays(WINDOW_DAYS);
+        config.getBuild().setLabelPageTraces(CHUNK);
+        config.getBuild().setLabelSliceTraces(SLICE_TRACES);
         service = new TopicWindowLabelService(config, template, windowDAO, traceTopicsDAO,
                 TopicsMetricsReader.metrics(InMemoryMetricReader.create()), workspaceNames,
                 TopicsTestAlgorithm.algorithm());
@@ -366,8 +368,7 @@ class TopicWindowLabelServiceTest {
     }
 
     private TopicWindowLabelService.PassOutcome label(Instant deadline) {
-        return service.labelWindow(WORKSPACE_ID, projectId, deadline, TopicWindowLabelService.Trigger.RUN, CHUNK,
-                SLICE_TRACES).block();
+        return service.labelWindow(WORKSPACE_ID, projectId, deadline, TopicWindowLabelService.Trigger.RUN).block();
     }
 
     private void assertExactlyOneRowPerWindowTrace() {

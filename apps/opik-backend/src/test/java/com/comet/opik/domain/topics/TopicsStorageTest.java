@@ -147,7 +147,7 @@ class TopicsStorageTest {
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
         var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RUN, 7, 20).block();
+                TopicWindowLabelService.Trigger.RUN).block();
 
         assertThat(pass).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
@@ -171,7 +171,7 @@ class TopicsStorageTest {
 
         var rowsBefore = data.traceTopics(workspaceId, projectId).size();
         var again = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RESUME, 7, 20).block();
+                TopicWindowLabelService.Trigger.RESUME).block();
 
         assertThat(again).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
         assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);

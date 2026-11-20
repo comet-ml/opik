@@ -40,10 +40,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * the rows written stay, and a later pass goes on from there. No cursor is kept: the project's {@code labels_complete}
  * is false from the save until a pass ends complete, and the first-build job calls the pass again while it is false.
  *
- * <p>Bounded: the window is cut at every {@value #SLICE_TRACES}-th trace creation time, so each slice holds that many
- * traces however the traffic is spread, and a page's read costs about one slice. A slice is read in pages of at most
- * {@value #CHUNK} traces, each read, assigned and inserted before the next, so the heap holds one page of vectors. The
- * count, every read and every insert have their own timeout, and the whole pass ends at the caller's deadline.
+ * <p>Bounded: the window is cut at every {@code topics.build.labelSliceTraces}-th trace creation time, so each
+ * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
+ * in pages of at most {@code topics.build.labelPageTraces} traces, each read, assigned and inserted before the next, so
+ * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
+ * pass ends at the caller's deadline.
  *
  * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
@@ -52,11 +53,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicWindowLabelService {
-
-    /** Traces per page: about 15 MiB of vectors. */
-    static final int CHUNK = 10_000;
-    /** The traces a slice of the window holds on average. A page's read costs about its slice's keys. */
-    static final int SLICE_TRACES = 50_000;
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -142,11 +138,8 @@ public class TopicWindowLabelService {
      */
     Mono<PassOutcome> labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline,
             @NonNull Trigger trigger) {
-        return labelWindow(workspaceId, projectId, deadline, trigger, CHUNK, SLICE_TRACES);
-    }
-
-    Mono<PassOutcome> labelWindow(String workspaceId, UUID projectId, Instant deadline, Trigger trigger, int chunk,
-            int sliceTraces) {
+        int chunk = config.getBuild().getLabelPageTraces();
+        int sliceTraces = config.getBuild().getLabelSliceTraces();
         return jdbi(() -> workspace(workspaceId)).flatMap(workspace -> jdbi(() -> readSaved(workspaceId, projectId))
                 .flatMap(saved -> saved
                         .map(found -> pass(workspace, projectId, found, deadline, trigger, chunk, sliceTraces))

@@ -1060,6 +1060,9 @@ topics:
     llmDeadline: 120s
     readTimeout: 120s
     countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
   algorithm:
