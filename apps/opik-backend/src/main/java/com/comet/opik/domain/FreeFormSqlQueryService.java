@@ -499,8 +499,16 @@ public class FreeFormSqlQueryService {
 
     private static boolean containsSetNode(List<String> nodeLabels) {
         return nodeLabels.stream()
-                .map(label -> label.stripLeading().split("\\s", 2)[0])
+                .map(FreeFormSqlQueryService::firstToken)
                 .anyMatch(SETTINGS_AST_NODES::contains);
+    }
+
+    private static String firstToken(String label) {
+        return label.stripLeading().split("\\s", 2)[0];
+    }
+
+    private static String firstTokenAfterPrefix(String label, String prefix) {
+        return firstToken(label.substring(prefix.length()));
     }
 
     private static boolean containsForbiddenCatalogTableNode(List<String> nodeLabels) {
@@ -512,21 +520,16 @@ public class FreeFormSqlQueryService {
     }
 
     private static boolean containsForbiddenMetadataFunctionNode(List<String> nodeLabels) {
-        return nodeLabels.stream().map(String::stripLeading).anyMatch(label -> {
-            if (label.startsWith(FUNCTION_AST_PREFIX)) {
-                String name = label.substring(FUNCTION_AST_PREFIX.length()).split("\\s", 2)[0]
-                        .toLowerCase(Locale.ROOT);
-                return FORBIDDEN_FUNCTIONS.contains(name);
-            }
-            return false;
-        });
+        return nodeLabels.stream().map(String::stripLeading)
+                .filter(label -> label.startsWith(FUNCTION_AST_PREFIX))
+                .map(label -> firstTokenAfterPrefix(label, FUNCTION_AST_PREFIX).toLowerCase(Locale.ROOT))
+                .anyMatch(FORBIDDEN_FUNCTIONS::contains);
     }
 
     private static boolean containsForbiddenMetadataIdentifierNode(List<String> nodeLabels) {
         return nodeLabels.stream().map(String::stripLeading)
                 .filter(label -> label.startsWith(IDENTIFIER_AST_PREFIX))
-                .map(label -> label.substring(IDENTIFIER_AST_PREFIX.length()).split("\\s", 2)[0]
-                        .toLowerCase(Locale.ROOT))
+                .map(label -> firstTokenAfterPrefix(label, IDENTIFIER_AST_PREFIX).toLowerCase(Locale.ROOT))
                 .anyMatch(FORBIDDEN_IDENTIFIERS::contains);
     }
 

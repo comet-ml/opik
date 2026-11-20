@@ -313,19 +313,19 @@ class FreeFormSqlPostRunCheckTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("metadataNamedScalarAliases")
+    @MethodSource("metadataNamedBindingNames")
     @DisplayName("a scalar alias with a metadata function name remains queryable")
     void metadataNamedScalarAliasesAreAllowed(String name) {
         assertThat(run("WITH 1 AS %s SELECT toJSONString(map('n', toString(%s))) AS result"
                 .formatted(name, name))).isEqualTo("1");
     }
 
-    static Stream<Arguments> metadataNamedScalarAliases() {
+    static Stream<Arguments> metadataNamedBindingNames() {
         return Stream.of(arguments("currentUser"), arguments("currentDatabase"));
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("metadataNamedScalarAliases")
+    @MethodSource("metadataNamedBindingNames")
     @DisplayName("a CTE with a metadata function name remains queryable")
     void metadataNamedCtesAreAllowed(String name) {
         assertThat(run(("WITH %s AS (SELECT 1 AS n) "
