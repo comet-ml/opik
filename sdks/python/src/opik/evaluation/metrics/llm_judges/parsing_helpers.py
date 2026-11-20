@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Iterator
 import json
 import opik.exceptions as exceptions
 
@@ -49,6 +49,66 @@ def reason_to_text(value: Any) -> str:
     return str(value)
 
 
+def _json_values_equal(left: Any, right: Any) -> bool:
+    """Compare two decoded JSON values with type-aware semantics.
+
+    Plain ``==`` is not enough here: in Python ``True == 1`` and
+    ``False == 0``, so ``{"score": true}`` and ``{"score": 1}`` would be
+    treated as the same verdict. Booleans must only equal booleans;
+    numbers compare by value (``1`` and ``1.0`` are the same score);
+    dicts and lists compare recursively.
+    """
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(
+            _json_values_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(
+            _json_values_equal(l_item, r_item) for l_item, r_item in zip(left, right)
+        )
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return left == right
+    return type(left) is type(right) and left == right
+
+
+def _iter_top_level_json_objects(content: str) -> Iterator[Any]:
+    """Yield every complete top-level JSON object in ``content``, one at a time.
+
+    The scan restarts at each ``{`` so prose between objects cannot hide a
+    later one, and it resumes past the end of each decoded object, so a
+    ``{`` nested inside a decoded object is never re-scanned as a verdict
+    candidate. Objects are yielded as they are decoded instead of being
+    accumulated, so a huge response is never fully retained in memory.
+
+    Fail-closed: a ``{`` that starts a top-level object but fails to decode
+    raises ``JSONParsingError`` immediately instead of being skipped. A
+    malformed outer object could otherwise hide a nested fragment that
+    decodes cleanly (``{"score": 10, "note": {"score": 2}, broken``), and
+    treating that nested fragment as the judge's verdict would revive the
+    planted-verdict override from #7848. Refusing to guess is the safe
+    outcome: every judge-metric parser converts the error into a failed
+    score rather than scoring an attacker's verdict.
+    """
+    decoder = json.JSONDecoder()
+    pos = 0
+    while True:
+        start = content.find("{", pos)
+        if start == -1:
+            return
+        try:
+            obj, end = decoder.raw_decode(content[start:])
+        except json.JSONDecodeError:
+            raise exceptions.JSONParsingError(
+                "Failed to extract presumably JSON dictionary: "
+                "malformed JSON object in content, "
+                "refusing to guess which object is the judge's verdict"
+            )
+        yield obj
+        pos = start + end
+
+
 def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     first_paren = content.find("{")
     last_paren = content.rfind("}")
@@ -68,13 +128,27 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
 
     # Fallback: under reasoning models with response_format the LLM
     # occasionally emits multiple complete JSON objects glued together
-    # (e.g. ``{...}\n{...}``). Streaming-decode the first complete object
-    # so the call doesn't fail when the model duplicates its answer.
-    decoder = json.JSONDecoder()
-    try:
-        obj, _ = decoder.raw_decode(content[first_paren:])
-        return obj
-    except json.JSONDecodeError as e:
+    # (e.g. ``{...}\n{...}``). Decode every complete top-level object and
+    # compare each one against the first as it is decoded, so a huge
+    # response is never retained in memory: identical duplicates (the known
+    # reasoning-model behaviour) still return the verdict, but conflicting
+    # objects are ambiguous — trusting the first one lets quoted candidate
+    # content override the judge's real verdict (#7848), so fail loud
+    # instead of guessing. Duplicates compare with type-aware semantics,
+    # so ``{"score": true}`` and ``{"score": 1}`` conflict instead of
+    # comparing equal.
+    objects = _iter_top_level_json_objects(content[first_paren:])
+    first = next(objects, None)
+    if first is None:
         raise exceptions.JSONParsingError(
-            f"Failed to extract presumably JSON dictionary: {str(e)}"
-        ) from e
+            "Failed to extract presumably JSON dictionary: "
+            "no complete JSON object found in content"
+        )
+    for obj in objects:
+        if not _json_values_equal(obj, first):
+            raise exceptions.JSONParsingError(
+                "Failed to extract presumably JSON dictionary: "
+                "multiple conflicting JSON objects found in content, "
+                "refusing to guess which one is the judge's verdict"
+            )
+    return first
