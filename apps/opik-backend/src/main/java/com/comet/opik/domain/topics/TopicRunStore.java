@@ -87,9 +87,19 @@ public class TopicRunStore {
     }
 
     /** False when the run is no longer running: cancelled, abandoned or requeued, so it stops. */
+    /**
+     * True while the run should go on: its row is still running, or the run saved it itself. A saved run still has
+     * its {@code trace_topics} insert and its labels run to queue, so a heartbeat between the save and the end of the
+     * run must not stop it. False once the row was cancelled, abandoned or requeued.
+     */
     Mono<Boolean> heartbeat(@NonNull TopicsRunMessage message) {
-        return write(dao -> dao.heartbeat(message.workspaceId(), message.projectId(), message.runId(),
-                Instant.now()));
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicProjectDAO.class);
+            return dao.heartbeat(message.workspaceId(), message.projectId(), message.runId(), Instant.now()) == 1
+                    || dao.findRunStatus(message.workspaceId(), message.projectId(), message.runId())
+                            .filter(status -> status == TopicProject.RunStatus.SAVED)
+                            .isPresent();
+        }));
     }
 
     /** {@code running -> queued}, for a pod that stops: another pod runs it again, and it is not a failure. */
