@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Sync reactions to Opik
-        uses: comet-ml/scout-repo-agent/actions/feedback@main
+        uses: comet-ml/scout-repo-agent/actions/feedback@00ed3e41746d3ae49ecff2089f68a18a5790225e # main
         with:
           github_token: ${{ github.token }}
           since_days: ${{ github.event.inputs.since_days || '7' }}

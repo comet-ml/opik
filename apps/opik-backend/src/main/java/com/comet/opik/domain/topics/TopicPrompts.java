@@ -101,12 +101,12 @@ public class TopicPrompts {
     }
 
     /** The grouped naming prompt. With {@code allowAssign} false, the second call's prompt: new and other only. */
-    public static String namingGroup(@NonNull List<PromptTopic> topics, @NonNull List<GroupSummary> groups,
-            boolean allowAssign) {
-        var topicBlock = topics.stream().map(TopicPrompts::topicBlock).collect(Collectors.joining("\n"));
+    public static String namingGroup(@NonNull List<PromptTopic> topics, @NonNull List<NightGroup> groups,
+            boolean allowAssign, int recentDays) {
+        var topicBlock = topics.stream().map(topic -> topicBlock(topic, recentDays)).collect(Collectors.joining("\n"));
         var groupBlock = groups.stream()
                 .sorted(Comparator.comparingInt(group -> -group.size()))
-                .map(TopicPrompts::groupBlock)
+                .map(group -> groupBlock(group, recentDays))
                 .collect(Collectors.joining("\n"));
         return fill(allowAssign ? NAMING_GROUP : NAMING_GROUP_NEW, Map.of(
                 "topics", topicBlock.isEmpty() ? "  (none)" : topicBlock,
@@ -128,9 +128,9 @@ public class TopicPrompts {
         return out.toString();
     }
 
-    static String topicBlock(PromptTopic topic) {
+    static String topicBlock(PromptTopic topic, int recentDays) {
         return "  topic " + topic.id() + ": " + topic.name() + " — " + topic.definition() + "\n    share "
-                + TopicText.fixed(100 * topic.share(), 1) + "% (last 7 days "
+                + TopicText.fixed(100 * topic.share(), 1) + "% (last " + recentDays + " days "
                 + TopicText.fixed(100 * topic.recentShare(), 1) + "%)\n" + bullets(topic.examples(), 4);
     }
 
@@ -149,15 +149,15 @@ public class TopicPrompts {
 
     /** One verify pair: a live topic and a candidate group given to it. */
     @Builder(toBuilder = true)
-    public record VerifyPair(@NonNull PromptTopic topic, @NonNull GroupSummary group) {
+    public record VerifyPair(@NonNull PromptTopic topic, @NonNull NightGroup group) {
     }
 
-    static String groupBlock(GroupSummary group) {
+    static String groupBlock(NightGroup group, int recentDays) {
         var examples = group.examples().stream().map(example -> "    - " + example)
                 .collect(Collectors.joining("\n"));
         // Concatenation, not String.format: %d would follow the default locale's digits.
         return "  cluster " + group.group() + ": share " + TopicText.fixed(100 * group.share(), 1)
-                + "% (last 7 days " + TopicText.fixed(100 * group.recentShare(), 1) + "%), tightness "
+                + "% (last " + recentDays + " days " + TopicText.fixed(100 * group.recentShare(), 1) + "%), tightness "
                 + TopicText.fixed(group.tightness(), 2) + "\n" + examples;
     }
 
