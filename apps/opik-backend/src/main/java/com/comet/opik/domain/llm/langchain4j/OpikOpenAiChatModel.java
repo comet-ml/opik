@@ -47,7 +47,8 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
 
     // Hardcoded defaults for fields we need (matching OpenAiChatModel defaults)
     private final OpenAiClient client;
-    private final Integer maxRetries = 2;
+    // The builder's value, read from the parent like the client, so a judge that retries on its own can turn it off
+    private final Integer maxRetries;
     private final Boolean strictTools = false;
     private final Boolean strictJsonSchema = false;
     private final Boolean returnThinking = false;
@@ -76,6 +77,9 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
             var clientField = OpenAiChatModel.class.getDeclaredField("client");
             clientField.setAccessible(true);
             this.client = (OpenAiClient) clientField.get(this);
+            var maxRetriesField = OpenAiChatModel.class.getDeclaredField("maxRetries");
+            maxRetriesField.setAccessible(true);
+            this.maxRetries = (Integer) maxRetriesField.get(this);
         } catch (Exception e) {
             log.error("Failed to extract client from OpenAiChatModel", e);
             throw new RuntimeException("Failed to initialize OpikOpenAiChatModel", e);
