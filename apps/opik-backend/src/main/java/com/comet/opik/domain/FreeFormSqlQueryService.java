@@ -132,9 +132,11 @@ public class FreeFormSqlQueryService {
             "currentuser", "current_user", "session_user", "user", "currentdatabase", "current_database",
             "current_schema", "database", "schema", "currentschemas", "currentroles", "currentprofiles",
             "hostname", "fqdn", "uptime", "version", "serveruuid", "buildid", "getmacro", "getserverport",
-            "displayname", "enabledroles", "defaultroles", "getoskernelversion");
+            "displayname", "enabledroles", "defaultroles", "getoskernelversion", "tcpport", "authenticateduser",
+            "enabledprofiles", "defaultprofiles");
     private static final Set<String> FORBIDDEN_IDENTIFIERS = Set.of(
-            "current_user", "session_user", "current_database", "database", "schema", "user");
+            "current_user", "session_user", "current_database", "database", "schema", "user",
+            "currentdatabase", "currentuser");
 
     /** Returned to the caller, an LLM agent, so it says what to change and how. */
     static final String ACCESS_DENIED_MESSAGE = "Query rejected: access denied";

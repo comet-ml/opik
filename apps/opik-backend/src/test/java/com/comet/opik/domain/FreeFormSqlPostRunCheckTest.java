@@ -274,15 +274,15 @@ class FreeFormSqlPostRunCheckTest {
         assertThat(run("SELECT toJSONString(map('n', toString((SELECT 1)))) AS result")).isEqualTo("1");
     }
 
-    static Stream<Arguments> identityExpressionsAsEachAccount() {
+    static Stream<Arguments> metadataExpressionsAsEachAccount() {
         return FreeFormSqlQueryServiceTest.metadataExpressions().flatMap(shape -> Stream.of(FreeFormSqlAccount.values())
                 .map(account -> arguments(shape.get()[0], account, shape.get()[1])));
     }
 
     @ParameterizedTest(name = "{0} as {1}")
-    @MethodSource("identityExpressionsAsEachAccount")
-    @DisplayName("real ClickHouse AST causes identity and infrastructure reads to be rejected")
-    void identityExpressionsAreRejectedFromRealAst(String expression, FreeFormSqlAccount account, String expectedNode) {
+    @MethodSource("metadataExpressionsAsEachAccount")
+    @DisplayName("real ClickHouse AST causes metadata reads to be rejected")
+    void metadataExpressionsAreRejectedFromRealAst(String expression, FreeFormSqlAccount account, String expectedNode) {
         String query = "SELECT toJSONString(map('n', toString(%s))) AS result".formatted(expression);
         // The service uses these exact labels from the real DAO. Pinning them catches a parser-label change that
         // hand-written service-test labels cannot catch.

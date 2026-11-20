@@ -133,10 +133,17 @@ class FreeFormSqlQueryServiceTest {
                 arguments("enabledRoles()", "Function enabledRoles"),
                 arguments("defaultRoles()", "Function defaultRoles"),
                 arguments("getOSKernelVersion()", "Function getOSKernelVersion"),
+                arguments("tcpPort()", "Function tcpPort"),
+                arguments("TCPPORT()", "Function TCPPORT"),
+                arguments("authenticatedUser()", "Function authenticatedUser"),
+                arguments("enabledProfiles()", "Function enabledProfiles"),
+                arguments("defaultProfiles()", "Function defaultProfiles"),
                 arguments("current_database", "Identifier current_database"),
                 arguments("database", "Identifier database"),
                 arguments("schema", "Identifier schema"),
-                arguments("user", "Identifier user"));
+                arguments("user", "Identifier user"),
+                arguments("currentDatabase", "Identifier currentDatabase"),
+                arguments("currentUser", "Identifier currentUser"));
     }
 
     static Stream<Arguments> forbiddenAstCases() {
