@@ -27,6 +27,14 @@ final class TopicsTestAlgorithm {
         return config;
     }
 
+    /** {@link #config()} with exactly {@code k} groups, as the fixture's reference grouping has. */
+    static AlgorithmConfig fixedGroups(int k) {
+        var config = config();
+        config.setMinGroups(k);
+        config.setMaxGroups(k);
+        return config;
+    }
+
     static KMeansTopicAlgorithm algorithm(AlgorithmConfig config) {
         return new KMeansTopicAlgorithm(config, new TopicTasks());
     }

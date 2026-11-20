@@ -34,7 +34,8 @@ class TopicsAlgorithmFixtureTest {
     private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
     private static final UUID PROJECT_ID = UUID.randomUUID();
     /** The first build at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
-    private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm.algorithm(fixedGroups(15));
+    private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm
+            .algorithm(TopicsTestAlgorithm.fixedGroups(15));
 
     private TopicsFixture fixture;
     private MergedIntents merged;
@@ -285,13 +286,6 @@ class TopicsAlgorithmFixtureTest {
         double expected = rowSum * colSum / choose2(a.length);
         double max = (rowSum + colSum) / 2;
         return max == expected ? 1.0 : (index - expected) / (max - expected);
-    }
-
-    private static TopicsConfig.AlgorithmConfig fixedGroups(int k) {
-        var config = TopicsTestAlgorithm.config();
-        config.setMinGroups(k);
-        config.setMaxGroups(k);
-        return config;
     }
 
     private static double choose2(long n) {
