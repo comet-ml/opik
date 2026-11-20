@@ -1058,6 +1058,12 @@ navigation:
       - page: Roll out cost policies
         path: ./docs-v2/cost_intelligence/roll-out-cost-policies.mdx
         slug: roll-out-cost-policies
+      - section: Savings strategies
+        slug: savings
+        contents:
+          - page: Unused skills
+            path: ./docs-v2/cost_intelligence/savings/unused-skills.mdx
+            slug: unused-skills
       - page: Query spend with MCP
         path: ./docs-v2/cost_intelligence/mcp-server.mdx
         slug: mcp-server

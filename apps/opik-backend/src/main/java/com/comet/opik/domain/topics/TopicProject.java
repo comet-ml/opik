@@ -126,7 +126,7 @@ public record TopicProject(
         WINDOW_READ("window_read"),
         /** A check before the save failed: nothing is written. */
         INVARIANT("invariant"),
-        /** The run outlasted {@code topics.build.projectTimeout}. */
+        /** The run outlasted its time limit. */
         TIMEOUT("timeout"),
         SAVE("save"),
         INTERNAL("internal"),

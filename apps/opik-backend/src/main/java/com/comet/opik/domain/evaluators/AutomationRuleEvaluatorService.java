@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.LogCriteria;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.evaluators.AutomationRule;
@@ -286,6 +287,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var ruleDAO = handle.attach(AutomationRuleDAO.class);
 
             try {
+                validateTypeUnchanged(dao, id, workspaceId, evaluatorUpdate.getType());
+
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
                 // Only resolve a unique name on an actual rename. A non-name edit (sampling rate, enabled,
@@ -476,6 +479,21 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             dao.deleteBaseRules(ids, workspaceId, AutomationRule.AutomationRuleAction.EVALUATOR.getAction());
             return null;
         });
+    }
+
+    /**
+     * A rule keeps its type for life: changing it means deleting the rule and creating a new one.
+     */
+    private void validateTypeUnchanged(AutomationRuleEvaluatorDAO dao, UUID id, String workspaceId,
+            AutomationRuleEvaluatorType requestedType) {
+        var currentType = dao.findTypeById(id, workspaceId)
+                .map(AutomationRuleEvaluatorType::fromString)
+                .orElseThrow(this::newNotFoundException);
+        if (currentType != requestedType) {
+            throw new ConflictException(
+                    "Evaluator type can't be changed, delete the rule and create a new one with the new type, current type '%s', requested type '%s'"
+                            .formatted(currentType.getType(), requestedType.getType()));
+        }
     }
 
     private NotFoundException newNotFoundException() {
