@@ -2753,6 +2753,10 @@ topics:
       #  Default: 30s
       #  Description: Per window read, cut to the time left in the tick. Lengthens the leader lease. At most tickBudget
       maxExecutionTime: ${TOPICS_VECTORS_FIND_MAX_EXECUTION_TIME:-30s}
+      #  Default: 2
+      #  Description: ClickHouse threads per topic vectors read, so the tick stays a small share of the server. From 1
+      #  to 16
+      maxThreads: ${TOPICS_VECTORS_FIND_MAX_THREADS:-2}
       #  Default: 1d
       #  Description: The window read skips traces created before its lower bound minus aiLabels.horizon minus this
       #  margin, which covers the time from the ai-labels sweep to the status write. At most 7d
@@ -2761,6 +2765,10 @@ topics:
       #  Description: The daily pass, and the backfill of a large project, read their window in slices of this much
       #  trace creation time, one query each, so a query's cost follows the slice and not the window. From 1h to 365d
       sliceSize: ${TOPICS_VECTORS_FIND_SLICE_SIZE:-1d}
+      #  Default: 7d
+      #  Description: The backfill's discovery and vector count read in slices of this much trace creation time. Their
+      #  memory stays small, so the slices are wide: each slice re-reads the granules across its edges. From 1h to 365d
+      discoverySliceSize: ${TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE:-7d}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.
