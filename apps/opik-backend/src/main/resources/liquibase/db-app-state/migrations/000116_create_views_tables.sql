@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS views
     last_updated_by VARCHAR(100)        NOT NULL DEFAULT 'admin',
     deleted_at      TIMESTAMP(6)        NULL,
 
-    CONSTRAINT views_pk PRIMARY KEY (id)
+    CONSTRAINT views_pk PRIMARY KEY (id),
+    INDEX views_workspace_id_idx (workspace_id, id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;

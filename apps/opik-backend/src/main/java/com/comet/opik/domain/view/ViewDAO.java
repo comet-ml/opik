@@ -79,6 +79,13 @@ interface ViewDAO {
             @Bind("version") int version, @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlUpdate("""
+            UPDATE views SET last_updated_at = CURRENT_TIMESTAMP(6), last_updated_by = :lastUpdatedBy
+            WHERE id = :id AND workspace_id = :workspaceId AND deleted_at IS NULL
+            """)
+    int updateLastUpdatedAt(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
+
+    @SqlUpdate("""
             UPDATE views SET deleted_at = CURRENT_TIMESTAMP(6), last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId AND deleted_at IS NULL
             """)
@@ -111,6 +118,13 @@ interface ViewDAO {
             """)
     int deleteVersion(@Bind("viewId") UUID viewId, @Bind("version") int version,
             @Bind("workspaceId") String workspaceId);
+
+    @SqlUpdate("""
+            DELETE vv FROM view_versions vv
+            JOIN views v ON v.id = vv.view_id
+            WHERE vv.view_id = :viewId AND v.workspace_id = :workspaceId
+            """)
+    int deleteVersions(@Bind("viewId") UUID viewId, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
             SELECT vv.view_id, vv.version, vv.author, vv.summary, vv.type, vv.engine_version, vv.inputs, vv.libraries,

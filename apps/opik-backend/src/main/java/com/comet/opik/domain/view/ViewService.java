@@ -91,15 +91,15 @@ class ViewServiceImpl implements ViewService {
                 .lastUpdatedBy(userName)
                 .build();
 
-        template.inTransaction(WRITE, handle -> {
+        View created = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(ViewDAO.class);
             dao.save(view, workspaceId);
             dao.saveVersion(version, workspaceId);
-            return null;
+            return loadView(dao, id, workspaceId);
         });
         log.info("Created view, id '{}', area '{}', author '{}', engineVersion '{}', workspaceId '{}'", id,
                 request.area(), version.author(), version.engineVersion(), workspaceId);
-        return get(id);
+        return created;
     }
 
     @Override
@@ -135,13 +135,7 @@ class ViewServiceImpl implements ViewService {
     @Override
     public View get(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        return template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(ViewDAO.class);
-            View view = findView(dao, id, workspaceId);
-            return view.toBuilder()
-                    .version(dao.findVersion(id, view.currentVersion(), workspaceId).orElseThrow())
-                    .build();
-        });
+        return template.inTransaction(READ_ONLY, handle -> loadView(handle.attach(ViewDAO.class), id, workspaceId));
     }
 
     @Override
@@ -174,16 +168,16 @@ class ViewServiceImpl implements ViewService {
     @Override
     public View setCurrentVersion(@NonNull UUID id, int version) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        template.inTransaction(WRITE, handle -> {
+        View view = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(ViewDAO.class);
             lockView(dao, id, workspaceId);
             dao.findVersion(id, version, workspaceId)
                     .orElseThrow(() -> new NotFoundException(VIEW_VERSION_NOT_FOUND));
             dao.setCurrentVersion(id, workspaceId, version, requestContext.get().getUserName());
-            return null;
+            return loadView(dao, id, workspaceId);
         });
         log.info("Selected view version, id '{}', version '{}', workspaceId '{}'", id, version, workspaceId);
-        return get(id);
+        return view;
     }
 
     @Override
@@ -202,6 +196,7 @@ class ViewServiceImpl implements ViewService {
             if (dao.deleteVersion(id, version, workspaceId) == 0) {
                 throw new NotFoundException(VIEW_VERSION_NOT_FOUND);
             }
+            dao.updateLastUpdatedAt(id, workspaceId, requestContext.get().getUserName());
             return null;
         });
         log.info("Deleted view version, id '{}', version '{}', workspaceId '{}'", id, version, workspaceId);
@@ -213,13 +208,15 @@ class ViewServiceImpl implements ViewService {
             return get(id);
         }
         String workspaceId = requestContext.get().getWorkspaceId();
-        int updated = template.inTransaction(WRITE, handle -> handle.attach(ViewDAO.class)
-                .update(id, workspaceId, update, requestContext.get().getUserName()));
-        if (updated == 0) {
-            throw new NotFoundException(VIEW_NOT_FOUND);
-        }
+        View view = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(ViewDAO.class);
+            if (dao.update(id, workspaceId, update, requestContext.get().getUserName()) == 0) {
+                throw new NotFoundException(VIEW_NOT_FOUND);
+            }
+            return loadView(dao, id, workspaceId);
+        });
         log.info("Updated view, id '{}', workspaceId '{}'", id, workspaceId);
-        return get(id);
+        return view;
     }
 
     @Override
@@ -228,9 +225,17 @@ class ViewServiceImpl implements ViewService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(ViewDAO.class);
             lockView(dao, id, workspaceId);
+            dao.deleteVersions(id, workspaceId);
             return dao.softDelete(id, workspaceId, requestContext.get().getUserName());
         });
         log.info("Deleted view, id '{}', workspaceId '{}'", id, workspaceId);
+    }
+
+    private static View loadView(ViewDAO dao, UUID id, String workspaceId) {
+        View view = findView(dao, id, workspaceId);
+        return view.toBuilder()
+                .version(dao.findVersion(id, view.currentVersion(), workspaceId).orElseThrow())
+                .build();
     }
 
     private static View findView(ViewDAO dao, UUID id, String workspaceId) {

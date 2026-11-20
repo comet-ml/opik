@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
-import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -35,6 +34,7 @@ import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -46,8 +46,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -57,6 +55,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -64,7 +69,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.view.ViewVersion.MAX_HTML_LENGTH;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
@@ -93,8 +97,6 @@ class ViewsResourceTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
 
     private final WireMockUtils.WireMockRuntime wireMock;
 
@@ -102,28 +104,26 @@ class ViewsResourceTest {
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE, ZOOKEEPER).join();
+        Startables.deepStart(REDIS, MYSQL).join();
 
         wireMock = WireMockUtils.startWireMock();
 
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
-
         MigrationUtils.runMysqlDbMigration(MYSQL);
-        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
-                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .build());
     }
 
     private ViewsResourceClient viewsResourceClient;
+    private Jdbi jdbi;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, Jdbi jdbi) {
+        this.jdbi = jdbi;
         ClientSupportUtils.config(client);
         this.viewsResourceClient = new ViewsResourceClient(client, TestUtils.getBaseUrl(client));
 
@@ -239,6 +239,9 @@ class ViewsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields("createdAt", "lastUpdatedAt", "version.createdAt")
                     .isEqualTo(expectedView(created.id(), request));
+            assertThat(created.createdAt()).isNotNull();
+            assertThat(created.lastUpdatedAt()).isNotNull();
+            assertThat(created.version().createdAt()).isNotNull();
             assertThat(viewsResourceClient.get(created.id(), API_KEY_A, WORKSPACE_NAME_A)).isEqualTo(created);
         }
 
@@ -353,6 +356,8 @@ class ViewsResourceTest {
                     .ignoringFields(VERSION_IGNORED_FIELDS)
                     .isEqualTo(expectedVersion(view.id(), 2, ViewAuthor.AGENT, "Latency instead of cost", 1, inputs,
                             "<p>Latency</p>").toBuilder().createdBy(EDITOR).build());
+            assertThat(second.createdAt()).isAfter(view.version().createdAt());
+            assertThat(afterSecond.lastUpdatedAt()).isAfter(view.lastUpdatedAt());
             assertThat(afterSecond.currentVersion()).isEqualTo(2);
             assertThat(afterSecond.lastUpdatedBy()).isEqualTo(EDITOR);
             assertThat(afterSecond.version()).isEqualTo(second);
@@ -413,11 +418,26 @@ class ViewsResourceTest {
             ViewCreate request = widgetRequest();
             View view = viewsResourceClient.create(request, API_KEY_A, WORKSPACE_NAME_A);
 
-            List<Integer> numbers = IntStream.range(0, 5).parallel()
-                    .mapToObj(i -> viewsResourceClient
-                            .createVersion(view.id(), versionOf(request), API_KEY_A, WORKSPACE_NAME_A)
-                            .version())
-                    .toList();
+            int writers = 5;
+            CyclicBarrier barrier = new CyclicBarrier(writers);
+            List<Integer> numbers;
+            try (ExecutorService executor = Executors.newFixedThreadPool(writers)) {
+                numbers = IntStream.range(0, writers)
+                        .mapToObj(i -> CompletableFuture.supplyAsync(() -> {
+                            try {
+                                barrier.await(30, TimeUnit.SECONDS);
+                            } catch (InterruptedException | BrokenBarrierException | TimeoutException e) {
+                                throw new IllegalStateException(e);
+                            }
+                            return viewsResourceClient
+                                    .createVersion(view.id(), versionOf(request), API_KEY_A, WORKSPACE_NAME_A)
+                                    .version();
+                        }, executor))
+                        .toList()
+                        .stream()
+                        .map(CompletableFuture::join)
+                        .toList();
+            }
 
             assertThat(numbers).containsExactlyInAnyOrder(2, 3, 4, 5, 6);
             assertThat(viewsResourceClient.getVersions(view.id(), API_KEY_A, WORKSPACE_NAME_A).total())
@@ -620,6 +640,7 @@ class ViewsResourceTest {
                         .usingRecursiveComparison()
                         .ignoringFields("lastUpdatedAt")
                         .isEqualTo(expected.toBuilder().lastUpdatedBy(EDITOR).build());
+                assertThat(updated.lastUpdatedAt()).isAfter(view.lastUpdatedAt());
             }
             assertThat(viewsResourceClient.get(view.id(), API_KEY_A, WORKSPACE_NAME_A)).isEqualTo(updated);
         }
@@ -654,6 +675,21 @@ class ViewsResourceTest {
                     API_KEY_A, WORKSPACE_NAME_A));
             assertNotFound(viewsResourceClient.callCreateVersion(view.id(), versionOf(request), API_KEY_A,
                     WORKSPACE_NAME_A));
+            assertThat(countVersionRows(view.id())).isZero();
+        }
+
+        @Test
+        void deleteViewVersionRecordsWhoChangedTheView() {
+            ViewCreate request = widgetRequest();
+            View view = viewsResourceClient.create(request, API_KEY_A, WORKSPACE_NAME_A);
+            viewsResourceClient.createVersion(view.id(), versionOf(request), API_KEY_A, WORKSPACE_NAME_A);
+            View before = viewsResourceClient.get(view.id(), API_KEY_A, WORKSPACE_NAME_A);
+
+            viewsResourceClient.deleteVersion(view.id(), 1, EDITOR_API_KEY_A, WORKSPACE_NAME_A);
+
+            View after = viewsResourceClient.get(view.id(), API_KEY_A, WORKSPACE_NAME_A);
+            assertThat(after.lastUpdatedBy()).isEqualTo(EDITOR);
+            assertThat(after.lastUpdatedAt()).isAfter(before.lastUpdatedAt());
         }
 
         @Test
@@ -785,6 +821,13 @@ class ViewsResourceTest {
     private static String errorOf(Response response) {
         JsonNode body = response.readEntity(JsonNode.class);
         return body.has("errors") ? body.get("errors").get(0).asText() : body.get("message").asText();
+    }
+
+    private long countVersionRows(UUID viewId) {
+        return jdbi.withHandle(handle -> handle.createQuery("SELECT COUNT(*) FROM view_versions WHERE view_id = :id")
+                .bind("id", viewId.toString())
+                .mapTo(Long.class)
+                .one());
     }
 
     private static void assertNotFound(Response response) {

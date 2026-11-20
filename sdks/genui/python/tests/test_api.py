@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,12 @@ def test_prompt__returns_the_emitted_prompt_per_area():
 
 def test_prompt__lists_every_token_and_the_size_cap():
     text = opik_genui.prompt("widget")
-    assert all(name in text for name in opik_genui.TOKENS["light"])
+    missing = [
+        name
+        for name in opik_genui.TOKENS["light"]
+        if not re.search(rf"{re.escape(name)}(?![\w-])", text)
+    ]
+    assert not missing, missing
     assert f"{opik_genui.MAX_HTML_LENGTH:,} characters" in text
 
 
