@@ -12,7 +12,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Collectors;
@@ -124,6 +126,27 @@ class AiLabelTaskLoaderTest {
                 .hasStackTraceContaining("must be under modelInputBudgetBytes");
     }
 
+    /** Another feature's tasks: its own placeholders instead of the state, no ai-labels budget, names it knows. */
+    @Test
+    void anotherFeatureChecksItsOwnPlaceholders() {
+        var rules = new AiLabelTaskLoader.Rules("topics", Map.of("summary", new TaskPlaceholders(
+                Set.of("{{groups}}"), Set.of(), Set.of("{{limit}}")))::get, null);
+        var task = GENERATE.replace("{{state}}", "{{groups}} at most {{limit}}, {{limit}}")
+                .replace("Summarize this trace:", "x".repeat(20_000));
+
+        assertThat(parse(task, rules).prompt().user()).contains("{{groups}}");
+        assertThatThrownBy(() -> parse(task.replace("{{groups}}", ""), rules))
+                .hasMessageContaining("invalid topics task, file 'test.yaml'")
+                .satisfies(exception -> assertThat(fullMessage(exception))
+                        .contains("{{groups}} must appear exactly once in prompt.user"));
+        assertThatThrownBy(() -> parse(task.replace("{{limit}}", ""), rules))
+                .satisfies(exception -> assertThat(fullMessage(exception))
+                        .contains("{{limit}} must appear in prompt.user"));
+        assertThatThrownBy(() -> parse(task.replace("name: summary", "name: other"), rules))
+                .satisfies(exception -> assertThat(fullMessage(exception))
+                        .contains("no topics task is named 'other'"));
+    }
+
     @Test
     void duplicateNamesAcrossFilesAreRejected(@TempDir Path directory) throws IOException {
         Files.writeString(directory.resolve("a.yaml"), GENERATE);
@@ -193,6 +216,11 @@ class AiLabelTaskLoaderTest {
         config.setTasksDir(directory.toString());
 
         new AiLabelTaskRegistry(config).start();
+    }
+
+    private static AiLabelTask parse(String yaml, AiLabelTaskLoader.Rules rules) {
+        return AiLabelTaskLoader.parse("test.yaml", new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)),
+                rules);
     }
 
     private static AiLabelTask parse(String yaml) {

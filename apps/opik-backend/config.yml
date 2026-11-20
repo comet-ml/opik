@@ -2689,8 +2689,47 @@ aiLabels:
 
 # Topics: groups traces by the intent ai-labels summarizes. The vectors job stores a bge-small vector of every
 # trace_summary in ClickHouse topic_vectors, for the workspaces in enabledWorkspaces that ai-labels is enabled for.
-# Calls opik-inference's /v1/embed through the inference block.
+# Calls opik-inference's /v1/embed through the inference block. The k-means topic algorithm's tunables are under
+# algorithm; its LLM call is the author task in topics/tasks/author.yaml.
 topics:
+  algorithm:
+    #  Default: 30
+    #  Description: Fewest k-means groups a first build makes (never more than its unique texts)
+    minGroups: ${TOPICS_ALGORITHM_MIN_GROUPS:-30}
+    #  Default: 50
+    #  Description: Most k-means groups a first build makes; the author prompt lists every group. At least minGroups
+    maxGroups: ${TOPICS_ALGORITHM_MAX_GROUPS:-50}
+    #  Default: 30
+    #  Description: Unique texts per group: k = unique texts / textsPerGroup, within minGroups and maxGroups
+    textsPerGroup: ${TOPICS_ALGORITHM_TEXTS_PER_GROUP:-30}
+    #  Default: 150
+    #  Description: Lloyd iterations one k-means restart may take; a fit that reaches it stops there
+    kmeansMaxIterations: ${TOPICS_ALGORITHM_KMEANS_MAX_ITERATIONS:-150}
+    #  Default: 3
+    #  Description: k-means++ starts; the one with the lowest weighted inertia is kept. Fit time grows with it
+    kmeansRestarts: ${TOPICS_ALGORITHM_KMEANS_RESTARTS:-3}
+    #  Default: 5
+    #  Description: Most repeated texts the author sees per group before the ones nearest the group's centre
+    authorFrequent: ${TOPICS_ALGORITHM_AUTHOR_FREQUENT:-5}
+    #  Default: 250
+    #  Description: Example texts in the author prompt over all groups: per group round(authorBudget / k), within
+    #  authorMinExamples and authorMaxExamples. Keeps the prompt about as long as the longest one known to work
+    authorBudget: ${TOPICS_ALGORITHM_AUTHOR_BUDGET:-250}
+    #  Default: 5
+    #  Description: Fewest example texts per group in the author prompt
+    authorMinExamples: ${TOPICS_ALGORITHM_AUTHOR_MIN_EXAMPLES:-5}
+    #  Default: 10
+    #  Description: Most example texts per group in the author prompt. At least authorMinExamples
+    authorMaxExamples: ${TOPICS_ALGORITHM_AUTHOR_MAX_EXAMPLES:-10}
+    #  Default: 0.75
+    #  Description: A trace takes its nearest prototype's topic when their cosine is at least this, else it is Other.
+    #  Higher labels fewer traces with more precision. Depends on the embedding model's cosine spread
+    assignMinCosine: ${TOPICS_ALGORITHM_ASSIGN_MIN_COSINE:-0.75}
+    #  Default: 0.95
+    #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
+    #  topic's traces into Other. Depends on the embedding model's cosine spread
+    otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+
   #  Default: false
   #  Description: Runs the topic vectors job. Requires aiLabels.enabled and inference.url. Server-side only,
   #  never exposed to the UI
