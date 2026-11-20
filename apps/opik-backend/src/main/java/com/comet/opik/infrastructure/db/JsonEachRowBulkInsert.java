@@ -56,8 +56,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
  * the client with {@code useAsyncRequests(true)}: {@link Client#insert} returns a deferred future that
  * {@link Mono#fromFuture} consumes without parking a thread of ours on it, and serialization stays off the reactive
  * event loop. The thread is the one the insert holds for its HTTP round trip anyway, so writing the rows there adds
- * none; and the work alternates with socket writes that block on the server, which is what a platform thread is
- * for.
+ * none.
  *
  * <p>The client calls the writer again on a retry, which maps and serializes the items again. That gives identical
  * bytes as long as the row mapper is a pure function of the item; callers resolve values such as the batch
@@ -104,8 +103,8 @@ public class JsonEachRowBulkInsert {
     @Inject
     public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper) {
         this.clickHouseClient = clickHouseClient;
-        // One nesting level above the mapper's: the row object wraps the payloads JsonRowValues embeds raw, so a
-        // payload as deep as a request body may be still fits once inside the row.
+        // One nesting level above the mapper's, so a payload node.toString() can serialize still fits inside the row
+        // object that JsonRowValues embeds it in.
         this.rowFactory = objectMapper.getFactory().rebuild()
                 .streamWriteConstraints(StreamWriteConstraints.builder()
                         .maxNestingDepth(objectMapper.getFactory().streamWriteConstraints().getMaxNestingDepth() + 1)
@@ -131,8 +130,8 @@ public class JsonEachRowBulkInsert {
             return Mono.just(0L);
         }
 
-        // Deferred so the segment opens at subscription, not at assembly. It times serialization with the
-        // statement, since the rows are now written while the body is sent. Named for the table, so spans report
+        // Deferred so the segment opens at subscription, not at assembly. It times row mapping and serialization
+        // with the statement, as the rows are written while the body is sent. Named for the table, so spans report
         // custom-reactive-spans / batch_insert.
         return Mono.defer(() -> {
             Segment segment = startSegment(table, "Clickhouse", "batch_insert");
