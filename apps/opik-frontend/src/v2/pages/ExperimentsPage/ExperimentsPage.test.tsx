@@ -13,19 +13,24 @@ vi.mock("./GeneralDatasetsTab/GeneralDatasetsTab", () => ({
 }));
 
 let testSuiteTotal = 1;
+let isTestSuitePending = false;
+let activeProjectId: string | null = "project-id";
 
 // The page asks once for any experiment (empty state) and once for test-suite
 // experiments only (default tab); the second call is the one with filters.
 vi.mock("@/api/datasets/useExperimentsList", () => ({
   default: (params: { filters?: unknown[] }) => ({
-    data: { total: params.filters ? testSuiteTotal : 1 },
-    isPending: false,
+    data:
+      params.filters && isTestSuitePending
+        ? undefined
+        : { total: params.filters ? testSuiteTotal : 1 },
+    isPending: Boolean(params.filters) && isTestSuitePending,
     isError: false,
   }),
 }));
 
 vi.mock("@/store/AppStore", () => ({
-  useActiveProjectId: () => "project-id",
+  useActiveProjectId: () => activeProjectId,
 }));
 
 vi.mock("@/contexts/PermissionsContext", () => ({
@@ -53,6 +58,28 @@ describe("ExperimentsPage tabs", () => {
     window.history.replaceState(null, "", "/");
     localStorage.clear();
     testSuiteTotal = 1;
+    isTestSuitePending = false;
+    activeProjectId = "project-id";
+  });
+
+  it("hides the tabs while the default tab is still being chosen", () => {
+    isTestSuitePending = true;
+    renderPage();
+
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByTestId("experiments-tab")).toBeNull();
+  });
+
+  it("hides the tabs until the project is known, since the saved tab is per project", () => {
+    activeProjectId = null;
+    localStorage.setItem(
+      "experiments-tab-project-id",
+      JSON.stringify("datasets"),
+    );
+    renderPage();
+
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByTestId("experiments-tab")).toBeNull();
   });
 
   it("opens the Test suites tab by default when the project has test suite experiments", () => {

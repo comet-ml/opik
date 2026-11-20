@@ -88,10 +88,15 @@ const useExperimentsTab = (projectId?: string) => {
     [setQuery, setStoredTab],
   );
 
+  // Until the project id is known the saved tab can't be read (its key
+  // includes the id), so only a URL tab can be trusted before then.
+  const isTabPending =
+    !urlTab && (!projectId || (needsDefault && isPending && !isError));
+
   return {
     activeTab,
     setTab,
-    isTabPending: needsDefault && !!projectId && isPending && !isError,
+    isTabPending,
   };
 };
 

@@ -99,20 +99,26 @@ const ExperimentsPage: React.FC = () => {
               direction="horizontal"
               limitWidth
             >
-              <Tabs value={activeTab.key} onValueChange={setTab}>
-                <TabsList variant="segmented-primary" className="w-fit">
-                  {EXPERIMENTS_TABS.map(({ key, label }) => (
-                    <TabsTrigger
-                      key={key}
-                      variant="segmented-primary"
-                      value={key}
-                      className="px-1.5 py-0"
-                    >
-                      {label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+              {isTabPending ? (
+                // Hidden until the tab is chosen, so it doesn't flash the
+                // fallback tab first.
+                <Skeleton className="h-8 w-48 rounded-md" />
+              ) : (
+                <Tabs value={activeTab.key} onValueChange={setTab}>
+                  <TabsList variant="segmented-primary" className="w-fit">
+                    {EXPERIMENTS_TABS.map(({ key, label }) => (
+                      <TabsTrigger
+                        key={key}
+                        variant="segmented-primary"
+                        value={key}
+                        className="px-1.5 py-0"
+                      >
+                        {label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              )}
             </PageBodyStickyContainer>
             {isTabPending ? (
               <PageBodyStickyContainer
