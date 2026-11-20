@@ -2081,6 +2081,141 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
+     * The runbook's "Retrying the cutover after a stage B/C rollback — without re-backfilling" procedure. It rests on
+     * one physical claim: {@code spans_post_rollback_backup} IS the object Liquibase created as {@code spans_local_v2}
+     * (a ReplicatedMergeTree's replica path is fixed at CREATE and survives renames), so renaming it back yields a
+     * usable shadow and the retry needs only a delta, not a second full backfill. The procedure is deliberately manual,
+     * but an operator follows it under pressure, so the mechanism it depends on is pinned rather than taken on trust.
+     *
+     * <p>It also pins the consequences the runbook has to warn about, because each looks like a fault if unexpected:
+     * <ul>
+     * <li>the reused shadow is a <b>superset</b> of the restored original by exactly the post-cutover writes the
+     * rollback discarded, so a fidelity compare legitimately differs there;</li>
+     * <li>after the retry's {@code EXCHANGE} those writes are <b>live again</b>;</li>
+     * <li>except an id <b>deleted and then re-created</b> after {@code cutover_start}, which does NOT come back: the
+     * rollback's guard-less reverse replay masked it on the restored original, so the retry's forward replay finds it
+     * not live on the source and masks the re-creation on the shadow too. Pinned so a change to the resurrection guard
+     * cannot silently alter it.</li>
+     * </ul>
+     */
+    @Test
+    void rollbackBackupIsReusableAsTheShadowForARetryWithoutRebackfilling() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+        var survivors = mintIds(SURVIVORS_PER_WEEK);
+        seedSpans(survivors, workspaceId, projectId);
+        seedFidelityCohort(workspaceId, projectId);
+
+        var backfillStart = nowMicros();
+        for (int week = 0; week < SEED_WEEKS; week++) {
+            backfillWeek(week);
+        }
+        deltaInsert(backfillStart);
+
+        // Walk the chain the reuse claim depends on, so a failure localizes itself instead of only showing a wrong end
+        // state: the first backfill populated the shadow...
+        assertThat(liveCount("spans_local_v2", idStrings(survivors), workspaceId))
+                .as("the first backfill populated the shadow")
+                .isEqualTo(survivors.size());
+
+        // Written to the original after the last delta and before the EXCHANGE, and not swept forward here — so the
+        // shadow never receives it, and only a retry delta anchored before it (the ORIGINAL backfill_start) catches it.
+        var gapWrite = mintIdsAt(1, Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros())));
+        insertRows(gapWrite, workspaceId, projectId, "gap", _ -> gapWrite.getFirst().createdAt());
+
+        var cutoverStart = nowMicros();
+        exchangeTables();
+        assertThat(liveCount("spans", idStrings(survivors), workspaceId))
+                .as("...and the EXCHANGE made that copy live")
+                .isEqualTo(survivors.size());
+
+        // Accepted by the successor after cutover_start, so the stage-B promote makes it non-live. It is the row whose
+        // fate the runbook has to be explicit about on a retry.
+        var postCutover = mintIdsAt(3, Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros())));
+        postCutover.forEach(span -> insertSuccessorSpan(span, workspaceId, projectId, "post-cutover"));
+        // Deleted by the trace-delete cascade after cutover_start, then re-created under the SAME full key on the
+        // successor: bridged as deleted, yet live in the copy the rollback parks.
+        var recreated = survivors.getFirst();
+        var recreatedId = Set.of(recreated.id().toString());
+        var untouched = idStrings(survivors.subList(1, survivors.size()));
+        recordDeletionEvents(recreatedId, workspaceId, projectId.toString(), "cascade");
+        lightweightDeleteScoped(recreatedId, workspaceId, projectId);
+        insertSuccessorSpan(recreated, workspaceId, projectId, "recreated-after-cutover");
+
+        // Fingerprint the shadow while it is still live. Row counts alone would accept a parked copy holding the right
+        // ids with mangled or missing field values, which is not a reusable shadow — and reuse is the whole claim here.
+        var parkedCopy = fingerprint("spans", Shape.NEW, workspaceId);
+
+        rollbackExchangeBack();
+        reverseReplay(cutoverStart);
+
+        // ...and the rollback parked that same copy rather than discarding it. This is the assertion the whole
+        // procedure rests on: if the parked backup were empty (or recycled), reuse would be a re-backfill wearing a
+        // rename.
+        assertThat(liveCount("spans_post_rollback_backup", untouched, workspaceId))
+                .as("...and the rollback parked that copy intact, which is what makes it reusable")
+                .isEqualTo(untouched.size());
+        assertThat(liveCount("spans", idStrings(postCutover), workspaceId))
+                .as("baseline: the promote made the post-cutover writes non-live on the restored original")
+                .isZero();
+        assertThat(liveCount("spans", recreatedId, workspaceId))
+                .as("baseline: the reverse replay masked the deleted-then-re-created id on the restored original")
+                .isZero();
+
+        // The documented reuse: hand the parked successor back to the shadow name. No re-backfill.
+        execute("RENAME TABLE spans_post_rollback_backup TO spans_local_v2 ON CLUSTER '{cluster}'", _ -> {
+        });
+
+        assertThat(fingerprint("spans_local_v2", Shape.NEW, workspaceId))
+                .as("""
+                        the reused shadow holds the parked copy field-for-field, so the rename yields a shadow the \
+                        delta can resume onto rather than one that has to be rebuilt""")
+                .isEqualTo(parkedCopy);
+        assertThat(liveCount("spans_local_v2", idStrings(gapWrite), workspaceId))
+                .as("negative control: the gap write never reached the shadow, so it is the delta's to bring back")
+                .isZero();
+        assertThat(newestNames("spans_local_v2", recreatedId, workspaceId))
+                .as("""
+                        negative control: the shadow still serves the re-creation, so its absence after the retry is \
+                        the forward replay's doing rather than something the shadow simply lacked""")
+                .containsExactly("recreated-after-cutover");
+
+        // Resume the normal forward flow — delta_replay.sh — from the ORIGINAL anchor, as the runbook prescribes.
+        deltaInsert(backfillStart);
+        replayDeletions(backfillStart);
+
+        assertThat(liveCount("spans_local_v2", idStrings(gapWrite), workspaceId))
+                .as("the delta from the original backfill_start catches what the first cutover left on the original")
+                .isEqualTo(1L);
+        assertThat(liveCount("spans_local_v2", untouched, workspaceId))
+                .as("survivors reconcile after the delta")
+                .isEqualTo(untouched.size());
+        assertThat(liveCount("spans_local_v2", idStrings(postCutover), workspaceId))
+                .as("the reused shadow is a SUPERSET: it still carries the writes the rollback discarded")
+                .isEqualTo(postCutover.size());
+        assertThat(destinationLogicalRows(workspaceId))
+                .as("...by exactly those writes and nothing else — hence the expected one-sided fidelity difference")
+                .isEqualTo(sourceLogicalRows(workspaceId) + postCutover.size());
+
+        exchangeTables();
+
+        assertThat(columnType("spans", "end_time"))
+                .as("the retry's EXCHANGE lands the successor schema, from a shadow that was never re-backfilled")
+                .doesNotStartWith("Nullable");
+        assertThat(liveCount("spans", union(untouched, idStrings(gapWrite)), workspaceId))
+                .as("every row live on the original is live after the retry")
+                .isEqualTo(untouched.size() + gapWrite.size());
+        assertThat(liveCount("spans", idStrings(postCutover), workspaceId))
+                .as("and the discarded post-cutover writes are LIVE AGAIN — the caveat the runbook must state")
+                .isEqualTo(postCutover.size());
+        assertThat(liveCount("spans", recreatedId, workspaceId))
+                .as("""
+                        except the deleted-then-re-created id, which stays absent: the delete is honoured and the \
+                        re-creation is lost with the other discarded writes""")
+                .isZero();
+    }
+
+    /**
      * The rollback's sentinel repair ({@code 000004_rollback_sentinel_repair.sql}) and the counts that verify it
      * ({@code 000004_rollback_verify_sentinels.sql}) — the one shipped rollback statement nothing else exercises.
      *
@@ -2089,46 +2224,93 @@ class SpansLocalV2CutoverTest {
      * {@code end_time IS NOT NULL} and so computed a large NEGATIVE value from the epoch sentinel — is RECOMPUTED by
      * the mutation rather than left stale. {@code stale_duration} in the verify block exists for exactly that doubt;
      * asserting it reaches 0 is what makes the documented repair sufficient on its own.
+     *
+     * <p>The repair carries two commands with different predicates in one mutation, so a row carrying only one
+     * sentinel must get only that column restored. On spans that is the common shape — a finished span that made no
+     * LLM call has a real {@code end_time} and no {@code ttft} — so merging the two commands would null real end times
+     * across the whole window.
+     *
+     * <p>The window is what keeps the repair off client data, so the controls sit on both sides of it. Inside it, a
+     * <b>genuine</b> negative duration — a client that really sent {@code end_time} before {@code start_time} —
+     * matches neither predicate. Before it, a row carrying both sentinels holds values a client sent, not flag damage.
+     * Both must come through unchanged: an over-matching repair would null client data in place, and the window-scoped
+     * counts would still report success. A row created before the window and updated inside it is the opposite case —
+     * its sentinels came from that update — and must be repaired, which pins the {@code last_updated_at} arm.
      */
     @Test
-    void sentinelRepairRestoresNullAndRecomputesTheNegativeDuration() {
+    void sentinelRepairRestoresNullAndRecomputesDurationLeavingGenuineNegativesAlone() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
 
         // What the flag writes while spanColumnsNonNullable is live: the epoch / NaN sentinels, stored in the still-
         // Nullable ORIGINAL. Planted directly, because that is the state a rollback inherits rather than creates.
         var at = weekInstant(0, 7);
-        var affected = mintIdsInWeek(0, 1).getFirst();
-        execute("""
-                INSERT INTO spans (id, workspace_id, project_id, trace_id, name, start_time, end_time, ttft,
-                                   created_at, last_updated_at)
-                VALUES (:id, :workspace_id, :project_id, :trace_id, 'sentinel-bearing',
-                        toDateTime64(:at, 9), toDateTime64('1970-01-01 00:00:00', 9), toFloat64('nan'),
-                        toDateTime64(:at, 9), toDateTime64(:at_micros, 6))
-                """, statement -> statement
-                .bind("id", affected.id().toString())
-                .bind("workspace_id", workspaceId)
-                .bind("project_id", projectId)
-                .bind("trace_id", affected.traceId().toString())
-                .bind("at", ClickHouseDateTimeFormat.formatNanos(at))
-                .bind("at_micros", ClickHouseDateTimeFormat.formatMicros(at)));
+        // An hour before the window opens, so no bound is anywhere near it.
+        var earlier = at.minusSeconds(3600);
+        var ended = at.plusMillis(100);
+        // A real end_time 5 s BEFORE start_time, with a real ttft: a negative duration owed to the client.
+        var endedEarly = at.minusSeconds(5);
+        var spans = mintIdsInWeek(0, 6);
+        insertShapedSpan(spans.get(0), workspaceId, projectId, "sentinel-both", at, Instant.EPOCH, "nan", at, at);
+        insertShapedSpan(spans.get(1), workspaceId, projectId, "sentinel-end-time-only", at, Instant.EPOCH, "1.5", at,
+                at);
+        insertShapedSpan(spans.get(2), workspaceId, projectId, "sentinel-ttft-only", at, ended, "nan", at, at);
+        insertShapedSpan(spans.get(3), workspaceId, projectId, "genuine-negative", at, endedEarly, "2.5", at, at);
+        insertShapedSpan(spans.get(4), workspaceId, projectId, "updated-in-window", earlier, Instant.EPOCH, "nan",
+                earlier, at);
+        insertShapedSpan(spans.get(5), workspaceId, projectId, "outside-window", earlier, Instant.EPOCH, "nan",
+                earlier, earlier);
 
         var windowFrom = ClickHouseDateTimeFormat.formatMicros(at.minusSeconds(60));
         var windowTo = ClickHouseDateTimeFormat.formatMicros(at.plusSeconds(60));
+        var epoch = ClickHouseDateTimeFormat.formatNanos(Instant.EPOCH);
+        // What the original's duration computes from an epoch end_time: start_time's distance from 1970, negated.
+        var negativeFromSentinelAt = (double) -at.toEpochMilli();
+        var negativeFromSentinelEarlier = (double) -earlier.toEpochMilli();
+        var sentinelBoth = SentinelColumns.builder()
+                .endTime(epoch)
+                .ttft(Double.NaN)
+                .duration(negativeFromSentinelAt)
+                .build();
+        var sentinelEndTimeOnly = sentinelBoth.toBuilder().ttft(1.5).build();
+        var sentinelTtftOnly = SentinelColumns.builder()
+                .endTime(ClickHouseDateTimeFormat.formatNanos(ended))
+                .ttft(Double.NaN)
+                .duration(100.0)
+                .build();
+        var genuineNegative = SentinelColumns.builder()
+                .endTime(ClickHouseDateTimeFormat.formatNanos(endedEarly))
+                .ttft(2.5)
+                .duration(-5000.0)
+                .build();
+        var sentinelBothEarlier = sentinelBoth.toBuilder().duration(negativeFromSentinelEarlier).build();
+        assertThat(sentinelColumns(workspaceId))
+                .as("precondition: every row is stored as planted, each epoch end_time with a large negative duration")
+                .isEqualTo(Map.of(
+                        "sentinel-both", sentinelBoth,
+                        "sentinel-end-time-only", sentinelEndTimeOnly,
+                        "sentinel-ttft-only", sentinelTtftOnly,
+                        "genuine-negative", genuineNegative,
+                        "updated-in-window", sentinelBothEarlier,
+                        "outside-window", sentinelBothEarlier));
 
         var before = sentinelCounts(windowFrom, windowTo, workspaceId);
-        assertThat(before.sentinelEndTime()).as("precondition: the epoch sentinel is stored").isEqualTo(1L);
-        assertThat(before.sentinelTtft()).as("and the NaN one").isEqualTo(1L);
+        assertThat(before.sentinelEndTime())
+                .as("precondition: the window holds three epoch sentinels, one of them only updated in it")
+                .isEqualTo(3L);
+        assertThat(before.sentinelTtft()).as("and three NaN ones").isEqualTo(3L);
         assertThat(before.negativeFromSentinel())
                 .as("""
-                        and the original's MATERIALIZED duration turned it into a large negative — the failure the \
-                        repair exists for, and why restoring the two columns is not the whole job""")
-                .isEqualTo(1L);
+                        and the original's MATERIALIZED duration turned each epoch end_time into a large negative — \
+                        the failure the repair exists for, and why restoring the two columns is not the whole job""")
+                .isEqualTo(3L);
 
         sentinelRepair(windowFrom, windowTo);
 
         var after = sentinelCounts(windowFrom, windowTo, workspaceId);
-        assertThat(after.sentinelEndTime()).as("the repair restores NULL on end_time").isZero();
+        assertThat(after.sentinelEndTime())
+                .as("the repair restores NULL on end_time, including on the row only updated inside the window")
+                .isZero();
         assertThat(after.sentinelTtft()).as("and on ttft").isZero();
         assertThat(after.negativeFromSentinel()).as("so no row carries a sentinel-derived negative duration").isZero();
         assertThat(after.staleDuration())
@@ -2136,6 +2318,18 @@ class SpansLocalV2CutoverTest {
                         and duration was RECOMPUTED by the mutation rather than left stale — which is what makes the \
                         ALTER UPDATE sufficient, where a MATERIALIZE COLUMN would re-evaluate the same expression""")
                 .isZero();
+        assertThat(sentinelColumns(workspaceId))
+                .as("""
+                        each in-window sentinel is restored to NULL — only on the column that carried it — and \
+                        duration is recomputed from the result, while the genuine negative and the row written before \
+                        the window keep every value exactly""")
+                .isEqualTo(Map.of(
+                        "sentinel-both", SentinelColumns.builder().build(),
+                        "sentinel-end-time-only", sentinelEndTimeOnly.toBuilder().endTime(null).duration(null).build(),
+                        "sentinel-ttft-only", sentinelTtftOnly.toBuilder().ttft(null).build(),
+                        "genuine-negative", genuineNegative,
+                        "updated-in-window", SentinelColumns.builder().build(),
+                        "outside-window", sentinelBothEarlier));
     }
 
     // --- schema parity -------------------------------------------------------------------------------------------
@@ -3315,6 +3509,51 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
+     * A row in the ORIGINAL schema with explicit {@code end_time} and {@code ttft}, as the flag or a client left it.
+     * {@code ttft} is a Float64 literal, so {@code "nan"} plants the sentinel.
+     */
+    private void insertShapedSpan(SeededSpan span, String workspaceId, UUID projectId, String name, Instant startTime,
+            Instant endTime, String ttft, Instant createdAt, Instant lastUpdatedAt) {
+        execute("""
+                INSERT INTO spans (id, workspace_id, project_id, trace_id, name, start_time, end_time, ttft,
+                                   created_at, last_updated_at)
+                VALUES (:id, :workspace_id, :project_id, :trace_id, :name,
+                        toDateTime64(:start_time, 9, 'UTC'), toDateTime64(:end_time, 9, 'UTC'), toFloat64(:ttft),
+                        toDateTime64(:created_at, 9, 'UTC'), toDateTime64(:last_updated_at, 6, 'UTC'))
+                """, statement -> statement
+                .bind("id", span.id().toString())
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId)
+                .bind("trace_id", span.traceId().toString())
+                .bind("name", name)
+                .bind("start_time", ClickHouseDateTimeFormat.formatNanos(startTime))
+                .bind("end_time", ClickHouseDateTimeFormat.formatNanos(endTime))
+                .bind("ttft", ttft)
+                .bind("created_at", ClickHouseDateTimeFormat.formatNanos(createdAt))
+                .bind("last_updated_at", ClickHouseDateTimeFormat.formatMicros(lastUpdatedAt)));
+    }
+
+    /** {@code end_time}, {@code ttft} and {@code duration} of every span in the workspace, keyed by name. */
+    private Map<String, SentinelColumns> sentinelColumns(String workspaceId) {
+        return template.stream(connection -> Flux.from(connection.createStatement("""
+                SELECT name, toString(end_time) AS end_time, ttft, duration
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                """)
+                .bind("workspace_id", workspaceId)
+                .execute())
+                .flatMap(result -> result.map((row, ignored) -> Map.entry(
+                        row.get("name", String.class),
+                        SentinelColumns.builder()
+                                .endTime(row.get("end_time", String.class))
+                                .ttft(row.get("ttft", Double.class))
+                                .duration(row.get("duration", Double.class))
+                                .build()))))
+                .collectList().block().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /**
      * The four counts of 000004_rollback_verify_sentinels, workspace-scoped and without the cluster function the
      * shipped block uses — a single-node container has one replica, and that function is about reach, not arithmetic.
      */
@@ -3939,6 +4178,14 @@ class SpansLocalV2CutoverTest {
     /** One seeded span: the ids and the {@code created_at} the backfill slices on. */
     @Builder(toBuilder = true)
     private record SeededSpan(UUID id, UUID traceId, Instant createdAt) {
+    }
+
+    /**
+     * The columns the sentinel repair rewrites, as stored. {@code endTime} is text so {@code NULL} and the epoch stay
+     * distinct, and boxed {@code Double} equality treats NaN as equal to itself, so the sentinel compares by value.
+     */
+    @Builder(toBuilder = true)
+    private record SentinelColumns(String endTime, Double ttft, Double duration) {
     }
 
     /** The rollback sentinel repair's four verification counts. */
