@@ -26,7 +26,7 @@ from opik.evaluation.metrics.heuristics.distribution_metrics import (
 from opik.evaluation.metrics.heuristics.meteor import METEOR
 from opik.evaluation.metrics.heuristics.gleu import GLEU
 from opik.evaluation.metrics.heuristics.bertscore import BERTScore
-from opik.evaluation.metrics.heuristics.chrf import ChrF
+from opik.evaluation.metrics.heuristics.chrf import ChrF, _effective_char_order
 from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
 from opik.evaluation.metrics.heuristics.readability import Readability
@@ -968,6 +968,113 @@ def test_chrf_metric__multiple_references__scores_against_best_match():
     # reference alone (the pre-fix bug returned a middling value here).
     single = metric.score(output="hello world", reference="hello world").value
     assert match_second == pytest.approx(single)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["a", "hello", "a b", "  a  "],
+)
+@pytest.mark.parametrize("ignore_whitespace", [True, False])
+def test_chrf_metric__identical_strings__score_is_one(text, ignore_whitespace):
+    # Orders longer than the text have no n-grams. They used to be averaged in as
+    # zeros, so identical short strings scored well below 1.0 (e.g. "a" -> 0.1667).
+    pytest.importorskip("nltk")
+
+    result = ChrF(ignore_whitespace=ignore_whitespace, track=False).score(
+        output=text, reference=text
+    )
+
+    assert result.value == pytest.approx(1.0)
+
+
+def test_chrf_metric__identical_short_strings_with_custom_char_order__score_is_one():
+    pytest.importorskip("nltk")
+
+    for char_order in (1, 2, 3, 10):
+        result = ChrF(char_order=char_order, track=False).score(
+            output="hello", reference="hello"
+        )
+        assert result.value == pytest.approx(1.0)
+
+
+def test_chrf_metric__only_one_side_is_short__orders_clamped_to_shorter_side():
+    # The shorter side ("h") only has unigrams, so only order 1 applies:
+    # F = (1 + beta^2) * P * R / (beta^2 * P + R) with beta = 2.
+    pytest.importorskip("nltk")
+    metric = ChrF(track=False)
+
+    # hypothesis "hello": P = 1/5, R = 1/1
+    assert metric.score(output="hello", reference="h").value == pytest.approx(
+        5 * 0.2 * 1.0 / (4 * 0.2 + 1.0)
+    )
+    # hypothesis "h": P = 1/1, R = 1/5
+    assert metric.score(output="h", reference="hello").value == pytest.approx(
+        5 * 1.0 * 0.2 / (4 * 1.0 + 0.2)
+    )
+
+
+@pytest.mark.parametrize(
+    "candidate,reference,char_order,ignore_whitespace,expected",
+    [
+        ("hello world", "hello world", 6, True, 6),
+        ("hello", "hello world", 6, True, 5),
+        ("hello world", "abc", 6, True, 3),
+        ("a b", "a b", 6, True, 2),
+        ("a b", "a b", 6, False, 3),
+        ("hello", "hello", 2, True, 2),
+        ("", "hello", 6, True, 1),
+        ("   ", "hello", 6, True, 1),
+    ],
+)
+def test_chrf_effective_char_order__clamped_to_shorter_side(
+    candidate, reference, char_order, ignore_whitespace, expected
+):
+    assert (
+        _effective_char_order(
+            candidate,
+            reference,
+            char_order=char_order,
+            ignore_whitespace=ignore_whitespace,
+        )
+        == expected
+    )
+
+
+def test_chrf_metric__short_strings_partial_overlap__scored_on_available_orders():
+    # "abc" vs "abd": orders 1..3 apply. Order 1: 2/3 both ways -> F = 2/3.
+    # Order 2: 1/2 both ways -> F = 1/2. Order 3: no match -> epsilon (~0).
+    pytest.importorskip("nltk")
+
+    result = ChrF(track=False).score(output="abc", reference="abd")
+
+    assert result.value == pytest.approx((2 / 3 + 1 / 2 + 0.0) / 3)
+
+
+def test_chrf_metric__normal_length_strings__scores_unchanged():
+    # Strings with at least char_order non-whitespace characters keep the
+    # historical scores, pinned here from the pre-fix behaviour.
+    pytest.importorskip("nltk")
+    metric = ChrF(track=False)
+
+    assert metric.score(
+        output="The quick brown fox", reference="The quick brown fox jumps"
+    ).value == pytest.approx(0.7692151129457631)
+    assert metric.score(output="the cat", reference="the dog").value == pytest.approx(
+        0.19166666666666674
+    )
+    assert metric.score(
+        output="the quick brown fox", reference="the quick brown fox"
+    ).value == pytest.approx(1.0)
+
+
+def test_chrf_metric__multiple_references__each_clamped_independently():
+    pytest.importorskip("nltk")
+
+    result = ChrF(track=False).score(
+        output="hello", reference=["a much longer reference", "hello"]
+    )
+
+    assert result.value == pytest.approx(1.0)
 
 
 def test_spearman_ranking_metric():
