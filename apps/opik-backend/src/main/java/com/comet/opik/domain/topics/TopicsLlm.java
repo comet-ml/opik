@@ -43,11 +43,13 @@ class TopicsLlm {
 
     /**
      * The answer, turned by {@code read} into what the algorithm needs; when it cannot, {@code read} throws an
-     * {@code llm_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}.
+     * {@code llm_bad_answer} {@link TopicsRunException}, and the call counts as {@code bad_answer}. A {@code read} that
+     * returns null instead counts the call as {@code bad_answer} too, and the run goes on: the Mono completes empty. A
+     * failed call errors with its code.
      */
     <T> Mono<T> generate(@NonNull TopicRun run, @NonNull LlmRequest call, @NonNull Function<JsonNode, T> read) {
         return Mono.defer(() -> {
-            var tag = call.call().getValue();
+            var tag = call.tag();
             log.info("Topics run '{}' prompt, call '{}', project '{}', chars '{}', sha256 '{}'", run.runId(), tag,
                     run.projectId(), call.prompt().length(), sha256(call.prompt()));
             var request = GenerateRequest.builder()
@@ -64,12 +66,12 @@ class TopicsLlm {
             run.add("llm_calls", 1);
             return client.generate(request, Instant.now().plus(deadline(call.call())))
                     .onErrorMap(InferenceException.class, exception -> failed(run, call.call(), exception))
-                    .map(response -> answer(run, call.call(), response, read));
+                    .mapNotNull(response -> answer(run, call, response, read));
         });
     }
 
-    private <T> T answer(TopicRun run, LlmCall call, GenerateResponse response, Function<JsonNode, T> read) {
-        var tag = call.getValue();
+    private <T> T answer(TopicRun run, LlmRequest call, GenerateResponse response, Function<JsonNode, T> read) {
+        var tag = call.tag();
         var output = response.result().output();
         log.info(
                 "Topics run '{}' answer, call '{}', project '{}', input tokens '{}', output tokens '{}', cache hit '{}'",
@@ -84,10 +86,16 @@ class TopicsLlm {
         try {
             // Counted once the answer is read: an answer that cannot be read is bad_answer, not ok.
             var answer = read.apply(output);
-            metrics.llm(run.workspace(), call, "ok");
+            if (answer == null) {
+                metrics.llm(run.workspace(), call.call(), "bad_answer");
+                log.warn("Topics run '{}' answer could not be read, call '{}', project '{}'", run.runId(), tag,
+                        run.projectId());
+                return null;
+            }
+            metrics.llm(run.workspace(), call.call(), "ok");
             return answer;
         } catch (TopicsRunException exception) {
-            metrics.llm(run.workspace(), call, "bad_answer");
+            metrics.llm(run.workspace(), call.call(), "bad_answer");
             throw exception;
         }
     }
@@ -110,6 +118,8 @@ class TopicsLlm {
     private Duration deadline(LlmCall call) {
         return switch (call) {
             case AUTHOR -> config.getBuild().getLlmDeadline().toJavaDuration();
+            case NAMING -> config.getBuild().getNamingDeadline().toJavaDuration();
+            case VERIFY -> config.getBuild().getVerifyDeadline().toJavaDuration();
         };
     }
 

@@ -1058,6 +1058,8 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
+    namingDeadline: 30s
+    verifyDeadline: 60s
     readTimeout: 120s
     insertRetries: 3
     insertBackoff: 500ms

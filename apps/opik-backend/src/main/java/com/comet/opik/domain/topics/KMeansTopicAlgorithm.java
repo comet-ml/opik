@@ -14,6 +14,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,8 +24,8 @@ import java.util.stream.IntStream;
  * The topic algorithm in use. A first build merges identical texts, k-means them into fine groups, has the LLM name
  * topics over the groups ({@link TopicTasks#author()}), and assigns every trace to its nearest prototype with
  * {@link PrototypeAssigner}: the topic prototypes are the centres of each topic's groups, the known-Other ones the
- * centres of the Other groups. The labeller applies the same assigner to a saved list. Its tunables are
- * {@code topics.algorithm}.
+ * centres of the Other groups. A nightly update is {@link NightlyUpdate}. The labeller applies the same assigner to a
+ * saved list. Its tunables are {@code topics.algorithm}.
  */
 @Singleton
 public class KMeansTopicAlgorithm implements TopicAlgorithm {
@@ -121,6 +122,26 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                     .stats(finishStats)
                     .build();
         }
+    }
+
+    /**
+     * {@link NightlyUpdate} over the saved list. An answer that is not a JSON object (null) leaves its groups in Other;
+     * for the verify call, it verifies no pair.
+     */
+    @Override
+    public NightStep<TopicUpdate> update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics) {
+        return NightlyUpdate.run(state, window, maxTopics, config).map(result -> {
+            var stats = JsonUtils.createObjectNode();
+            stats.put("unassigned", result.unassigned());
+            stats.put("candidates", result.candidates().size());
+            stats.put("big", result.big().size());
+            var forced = stats.putObject("forced");
+            result.forced().forEach(outcome -> {
+                var key = outcome.result().name().toLowerCase(Locale.ROOT);
+                forced.put(key, forced.path(key).asInt() + 1);
+            });
+            return TopicUpdate.builder().before(result.before()).labels(result.labels()).stats(stats).build();
+        });
     }
 
     /**

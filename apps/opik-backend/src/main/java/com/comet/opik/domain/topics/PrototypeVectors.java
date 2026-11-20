@@ -38,7 +38,12 @@ public record PrototypeVectors(@NonNull List<float @NonNull []> vectors) {
 
     /** {@value TopicEmbedding#DIMENSIONS} values of unit length; a NaN or infinite value fails. */
     static boolean isUnit(@NonNull float[] values) {
-        return values.length == TopicEmbedding.DIMENSIONS && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
+        return isUnit(values, TopicEmbedding.DIMENSIONS);
+    }
+
+    /** As {@link #isUnit(float[])}, for {@code dimensions} values: the night's check of its prototypes. */
+    static boolean isUnit(@NonNull float[] values, int dimensions) {
+        return values.length == dimensions && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
     }
 
     static double norm(@NonNull float[] values) {

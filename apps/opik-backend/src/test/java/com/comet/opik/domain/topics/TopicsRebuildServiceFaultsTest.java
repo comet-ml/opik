@@ -440,6 +440,11 @@ class TopicsRebuildServiceFaultsTest {
             }
 
             @Override
+            public NightStep<TopicUpdate> update(NightState state, NightWindow window, int maxTopics) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public Optional<TopicLabeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
                 return Optional.empty();
             }

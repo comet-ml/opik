@@ -22,14 +22,16 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
 /**
  * One project's first build, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
- * author call ({@link TopicsLlm}), finish the list, check the prototypes and save ({@link TopicRunStore}). The CPU
- * steps run on one small bounded scheduler; the run's time limit is a {@code timeout} that cancels the step in flight.
+ * author call ({@link TopicsLlm}), finish the list, check the prototypes and save ({@link TopicRunStore}). It also drives
+ * a nightly update's steps ({@link #update}). The CPU steps run on one small bounded scheduler; the run's time limit is
+ * a {@code timeout} that cancels the step in flight.
  *
  * <p>The save commits one MySQL transaction first: the list on the project's {@code topic_projects} row, the new topics
  * with their prototype vectors, and the run as {@code saved}. The run's time limit ends at that commit. Then it inserts
@@ -123,6 +125,31 @@ public class TopicsRebuildService {
                             .flatMap(answer -> timed(run, "assign", cpu(() -> clustering.finish(answer)))))
                     .map(built -> built(run, traces, built));
         });
+    }
+
+    /**
+     * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's pure steps on the CPU
+     * scheduler, and each LLM call they ask for through {@link TopicsLlm}, with that call's deadline. An answer that is
+     * not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a failed call errors with its
+     * code and ends the night. The night's stats go to the run's.
+     */
+    Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
+        return cpu(() -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
+                .flatMap(step -> night(run, step))
+                .doOnNext(update -> run.stats().setAll(update.stats()));
+    }
+
+    /** Answers each {@link NightStep.Ask} in turn, one call at a time, until the night is done. */
+    private Mono<TopicUpdate> night(TopicRun run, NightStep<TopicUpdate> step) {
+        return switch (step) {
+            case NightStep.Done<TopicUpdate> done -> Mono.just(done.result());
+            case NightStep.Ask<TopicUpdate> ask ->
+                timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
+                        .map(Optional::of)
+                        .defaultIfEmpty(Optional.empty())
+                        .flatMap(answer -> cpu(() -> ask.next().apply(answer.orElse(null))))
+                        .flatMap(next -> night(run, next));
+        };
     }
 
     /** Checks the list and turns it into the rows the save writes. */

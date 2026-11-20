@@ -91,7 +91,7 @@ public class AuthorApplier {
     }
 
     /** Python's {@code " ".join(name.split()).lower()}: no outer whitespace, inner runs as one space, lower case. */
-    private static String nameKey(String name) {
+    static String nameKey(String name) {
         var out = new StringBuilder(name.length());
         boolean space = false;
         for (int i = 0; i < name.length();) {
@@ -111,7 +111,7 @@ public class AuthorApplier {
     }
 
     /** {@link #CATCH_ALL_NAME} on the name normalised by {@link #nameKey}. */
-    private static boolean isCatchAllName(String name) {
+    static boolean isCatchAllName(String name) {
         return CATCH_ALL_NAME.matcher(nameKey(name)).matches();
     }
 

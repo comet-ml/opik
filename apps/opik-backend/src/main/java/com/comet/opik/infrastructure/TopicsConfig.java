@@ -178,6 +178,18 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration llmDeadline;
 
+        /** The deadline of a nightly update's naming calls ({@code naming}, {@code naming_new}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration namingDeadline;
+
+        /** The deadline of a nightly update's verify call ({@code verify_naming}). */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
+        private Duration verifyDeadline;
+
         /**
          * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
          * of its {@code trace_topics} insert.
@@ -201,6 +213,18 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.llmDeadline must be shorter than topics.build.projectTimeout") public boolean isLlmDeadlineValid() {
             return llmDeadline == null || projectTimeout == null
                     || llmDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.namingDeadline must be shorter than topics.build.projectTimeout") public boolean isNamingDeadlineValid() {
+            return namingDeadline == null || projectTimeout == null
+                    || namingDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.build.verifyDeadline must be shorter than topics.build.projectTimeout") public boolean isVerifyDeadlineValid() {
+            return verifyDeadline == null || projectTimeout == null
+                    || verifyDeadline.toMilliseconds() < projectTimeout.toMilliseconds();
         }
 
         /** A sample of {@code maxVectors} traces must still hold the {@code minVectors} a build needs. */
