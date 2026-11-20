@@ -7,6 +7,7 @@ import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
+import com.comet.opik.domain.topics.TopicVectorsDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.RetentionConfig.CatchUpConfig;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -61,6 +62,7 @@ public class RetentionCatchUpService {
     private final SpanDAO spanDAO;
     private final AiLabelsDAO aiLabelsDAO;
     private final AiLabelStatusDAO aiLabelStatusDAO;
+    private final TopicVectorsDAO topicVectorsDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
 
@@ -75,6 +77,7 @@ public class RetentionCatchUpService {
             @NonNull SpanDAO spanDAO,
             @NonNull AiLabelsDAO aiLabelsDAO,
             @NonNull AiLabelStatusDAO aiLabelStatusDAO,
+            @NonNull TopicVectorsDAO topicVectorsDAO,
             @NonNull InstantToUUIDMapper uuidMapper,
             @NonNull @Config("retention") RetentionConfig config) {
         this.template = template;
@@ -82,6 +85,7 @@ public class RetentionCatchUpService {
         this.spanDAO = spanDAO;
         this.aiLabelsDAO = aiLabelsDAO;
         this.aiLabelStatusDAO = aiLabelStatusDAO;
+        this.topicVectorsDAO = topicVectorsDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
 
@@ -242,6 +246,8 @@ public class RetentionCatchUpService {
                                     cutoffId, finalGlobalLowerBound)),
                             skipOnError("ai_label_status", aiLabelStatusDAO.deleteForRetentionBounded(
                                     workspaceMinIds, cutoffId, finalGlobalLowerBound)),
+                            skipOnError("topic_vectors", topicVectorsDAO.deleteForRetentionBounded(
+                                    workspaceMinIds, cutoffId, finalGlobalLowerBound)),
                             spanDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, finalGlobalLowerBound),
                             traceDAO.deleteForRetentionBounded(workspaceMinIds, cutoffId, finalGlobalLowerBound));
                 })
@@ -307,6 +313,7 @@ public class RetentionCatchUpService {
                         .then(Mono.empty()),
                 skipOnError("ai_labels", aiLabelsDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)),
                 skipOnError("ai_label_status", aiLabelStatusDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)),
+                skipOnError("topic_vectors", topicVectorsDAO.deleteForRetention(workspaceIds, chunkEnd, cursor)),
                 spanDAO.deleteForRetention(workspaceIds, chunkEnd, cursor),
                 traceDAO.deleteForRetention(workspaceIds, chunkEnd, cursor))
                 .reduce(0L, Long::sum)
