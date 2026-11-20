@@ -20,7 +20,7 @@ public class PostCutoverTraces {
 
     private static final String SPLICE_POINT = "000114_recreate_traces_local_v2_id_at_datetime64.sql";
 
-    public static void migrate(ClickHouseContainer clickHouse) throws SQLException {
+    public static void migrate(ClickHouseContainer clickHouse) {
         MigrationUtils.runClickhouseDbMigrationThrough(clickHouse, SPLICE_POINT);
         try (var connection = clickHouse.createConnection(""); var statement = connection.createStatement()) {
             statement.execute("EXCHANGE TABLES %1$s.traces AND %1$s.traces_local_v2 ON CLUSTER '{cluster}'"
@@ -35,6 +35,8 @@ public class PostCutoverTraces {
             statement.execute("""
                     RENAME TABLE %1$s.traces TO %1$s.%2$s, %1$s.traces_dist TO %1$s.traces ON CLUSTER '{cluster}'
                     """.formatted(DATABASE_NAME, SHARD));
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to cut over and wrap ClickHouse traces", exception);
         }
         MigrationUtils.runClickhouseDbMigration(clickHouse);
     }

@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.TopicsRunException.Code;
+import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import jakarta.inject.Inject;
@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -30,7 +31,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
  * How one project's build runs, whoever starts it: under the project's lock, on its own thread, stopped and failed with
- * {@code timeout} after {@code topics.build.projectTimeout}. Also the runs' housekeeping.
+ * {@code timeout} after {@code topics.build.projectTimeout}. Also the delete of deleted projects' topics.
  */
 @Slf4j
 @Singleton
@@ -47,7 +48,6 @@ public class TopicsProjectRunner {
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
     private final @NonNull TopicsRebuildService rebuildService;
-    private final @NonNull TopicsMetrics metrics;
     private final @NonNull LockService lockService;
 
     /**
@@ -111,8 +111,16 @@ public class TopicsProjectRunner {
 
     /** Whether the project has a saved list. Read under the project's lock, so a list built meanwhile is seen. */
     public boolean hasList(@NonNull String workspaceId, @NonNull UUID projectId) {
-        return !template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findStates(workspaceId, Set.of(projectId))).isEmpty();
+        return project(workspaceId, projectId).map(TopicProject::listRunId).isPresent();
+    }
+
+    /**
+     * Starts a first build of the project and returns its run id, recording first an attempt its pod left running past
+     * a lock's lease. The caller holds the project's lock.
+     */
+    public UUID startFirstBuild(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return rebuildService.startRun(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD,
+                Instant.now().minus(projectLease()));
     }
 
     /**
@@ -124,17 +132,17 @@ public class TopicsProjectRunner {
         var future = executor.submit(() -> rebuildService.firstBuild(runId, workspaceId, projectId, night));
         var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
         try {
-            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicRun.Status.SAVED;
+            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS).status() == TopicProject.RunStatus.SAVED;
         } catch (TimeoutException exception) {
-            return stop(runId, workspaceId, projectId, future, Code.TIMEOUT,
+            return stop(runId, workspaceId, projectId, future, RunError.TIMEOUT,
                     "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            return stop(runId, workspaceId, projectId, future, Code.TIMEOUT, "the job was interrupted");
+            return stop(runId, workspaceId, projectId, future, RunError.TIMEOUT, "the job was interrupted");
         } catch (ExecutionException exception) {
             // firstBuild records its own failures; this is a bug in it.
             log.error("Topics run '{}' threw, project '{}'", runId, projectId, exception.getCause());
-            return stop(runId, workspaceId, projectId, future, Code.INTERNAL, String.valueOf(exception.getCause()));
+            return stop(runId, workspaceId, projectId, future, RunError.INTERNAL, String.valueOf(exception.getCause()));
         }
     }
 
@@ -144,13 +152,14 @@ public class TopicsProjectRunner {
      * and its insert is waited for (it ends within {@link TopicsRebuildService#INSERT_BOUND}), so the project's locks
      * are released only after it.
      */
-    private boolean stop(UUID runId, String workspaceId, UUID projectId, Future<?> future, Code code,
+    private boolean stop(UUID runId, String workspaceId, UUID projectId, Future<?> future, RunError code,
             String message) {
         boolean saved = false;
         try {
-            if (rebuildService.fail(runId, workspaceId, code, message, null)) {
-                log.warn("Topics run '{}' failed, code '{}': {}", runId, code.getValue(), message);
-            } else if (savedRun(runId, workspaceId)) {
+            if (rebuildService.fail(runId, workspaceId, projectId, code)) {
+                log.warn("Topics run '{}' failed, project '{}', code '{}': {}", runId, projectId, code.getValue(),
+                        message);
+            } else if (savedRun(runId, workspaceId, projectId)) {
                 saved = true;
                 log.warn("Topics run '{}' saved, project '{}', but its trace_topics insert outlasted the stop: {}",
                         runId, projectId, message);
@@ -176,63 +185,35 @@ public class TopicsProjectRunner {
         }
     }
 
-    /** Whether the run's row says saved. A run that failed on its own logged its failure already. */
-    private boolean savedRun(UUID runId, String workspaceId) {
-        var run = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicRunDAO.class).findById(workspaceId, runId));
-        return run != null && run.status() == TopicRun.Status.SAVED;
+    /** Whether the project's attempt is the run, saved. A run that failed on its own logged its failure already. */
+    private boolean savedRun(UUID runId, String workspaceId, UUID projectId) {
+        return project(workspaceId, projectId)
+                .filter(project -> runId.equals(project.runId())
+                        && project.runStatus() == TopicProject.RunStatus.SAVED)
+                .isPresent();
+    }
+
+    private Optional<TopicProject> project(String workspaceId, UUID projectId) {
+        return template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicDAO.class).findProjects(workspaceId, Set.of(projectId))).stream()
+                .findFirst();
     }
 
     /**
-     * Fails runs left {@code running} by a pod that died, and deletes runs past {@code topics.build.runsRetention}. A
-     * run counts as left only once it is older than a project's lease: a younger one may be live, guarded only by its
-     * project's lock. Each run failed so is counted, as {@code abandoned}, once the transaction commits. A failure is
-     * logged, and the caller goes on.
-     */
-    public void housekeeping(@NonNull Instant now) {
-        try {
-            var abandoned = template.inTransaction(WRITE, handle -> {
-                var runs = handle.attach(TopicRunDAO.class);
-                var startedBefore = now.minus(projectLease());
-                var workspaceIds = runs.findAbandonedWorkspaceIds(startedBefore);
-                int failed = runs.failAbandoned(startedBefore, Instant.now());
-                int deleted = runs.deleteStartedBefore(
-                        now.minus(config.getBuild().getRunsRetention().toJavaDuration()));
-                if (failed > 0 || deleted > 0) {
-                    log.info("Topics runs housekeeping, abandoned runs failed '{}', old runs deleted '{}'", failed,
-                            deleted);
-                }
-                return workspaceIds;
-            });
-            abandoned.forEach(workspaceId -> metrics.run(workspaceId, TopicRun.Status.FAILED,
-                    TopicsMetrics.ERROR_ABANDONED));
-        } catch (RuntimeException exception) {
-            log.warn("Topics runs housekeeping failed", exception);
-        }
-    }
-
-    /**
-     * Deletes the topics, prototypes, states and runs of the workspaces' projects that no longer exist: what a failed
-     * delete on {@code ProjectsDeleted} left behind, or a save that committed after its project was deleted. A
-     * failure is logged, and the caller goes on.
+     * Deletes the topics of the workspaces' projects that no longer exist: what a failed delete on
+     * {@code ProjectsDeleted} left behind, or a save that committed after its project was deleted. Their
+     * {@code topic_projects} rows go with the vectors tick's delete. A failure is logged, and the caller goes on.
      */
     public void deleteOfMissingProjects(@NonNull Collection<String> workspaceIds) {
         if (workspaceIds.isEmpty()) {
             return;
         }
         try {
-            template.inTransaction(WRITE, handle -> {
-                var topicDAO = handle.attach(TopicDAO.class);
-                int topics = topicDAO.deleteTopicsOfMissingProjects(workspaceIds);
-                int prototypes = topicDAO.deletePrototypesOfMissingProjects(workspaceIds);
-                int states = topicDAO.deleteStatesOfMissingProjects(workspaceIds);
-                int runs = handle.attach(TopicRunDAO.class).deleteOfMissingProjects(workspaceIds);
-                if (topics + prototypes + states + runs > 0) {
-                    log.info("Deleted the topic data of deleted projects, topics '{}', prototypes '{}', states '{}', "
-                            + "runs '{}'", topics, prototypes, states, runs);
-                }
-                return null;
-            });
+            int topics = template.inTransaction(WRITE,
+                    handle -> handle.attach(TopicDAO.class).deleteTopicsOfMissingProjects(workspaceIds));
+            if (topics > 0) {
+                log.info("Deleted the topics of deleted projects, topics '{}'", topics);
+            }
         } catch (RuntimeException exception) {
             log.warn("Topics delete of deleted projects' data failed", exception);
         }

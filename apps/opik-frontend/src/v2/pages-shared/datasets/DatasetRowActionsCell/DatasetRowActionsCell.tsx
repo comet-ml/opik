@@ -15,13 +15,12 @@ import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import useIsDatasetExportEnabled from "@/hooks/useIsDatasetExportEnabled";
 import {
   useAddExportJob,
   useSetPanelExpanded,
 } from "@/store/DatasetExportStore";
 import { Dataset } from "@/types/datasets";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CreateDatasetRowActionsCellConfig = {
@@ -52,9 +51,7 @@ export const createDatasetRowActionsCell = ({
     const addExportJob = useAddExportJob();
     const setPanelExpanded = useSetPanelExpanded();
     const { toast } = useToast();
-    const isDatasetExportEnabled = useIsFeatureEnabled(
-      FeatureToggleKeys.DATASET_EXPORT_ENABLED,
-    );
+    const isDatasetExportEnabled = useIsDatasetExportEnabled();
 
     const {
       permissions: { canEditDatasets, canDeleteDatasets },

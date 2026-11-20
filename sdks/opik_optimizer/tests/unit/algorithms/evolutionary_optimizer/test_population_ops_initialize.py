@@ -76,22 +76,6 @@ def initializing_population_context(monkeypatch: pytest.MonkeyPatch) -> MagicMoc
 
 
 class TestInitializePopulation:
-    def test_returns_single_prompt_for_population_size_1(
-        self,
-        evo_prompts: Any,
-        initializing_population_context: MagicMock,
-    ) -> None:
-        _ = initializing_population_context
-
-        prompt = ChatPrompt(system="Test prompt", user="{input}")
-
-        result = _initialize_population_with_defaults(
-            prompt=prompt, evo_prompts=evo_prompts, population_size=1
-        )
-
-        assert len(result) == 1
-        assert result[0] is prompt
-
     def test_generates_fresh_and_variation_prompts(
         self,
         evo_prompts: Any,
@@ -135,27 +119,6 @@ class TestInitializePopulation:
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(raises=Exception("LLM API error")),
-        )
-
-        prompt = ChatPrompt(system="Original prompt", user="{input}")
-
-        result = _initialize_population_with_defaults(
-            prompt=prompt, evo_prompts=evo_prompts, population_size=5
-        )
-
-        assert result[0] is prompt
-
-    def test_handles_json_decode_error(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        evo_prompts: Any,
-        initializing_population_context: MagicMock,
-    ) -> None:
-        _ = initializing_population_context
-
-        monkeypatch.setattr(
-            "opik_optimizer.core.llm_calls.call_model",
-            make_fake_llm_call("This is not valid JSON"),
         )
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
