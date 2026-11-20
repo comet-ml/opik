@@ -346,6 +346,9 @@ describe("isLooseEqual", () => {
     expect(isLooseEqual(a, { rows: [{ toString: 2, valueOf: "x" }] })).toBe(
       false,
     );
+    expect(isLooseEqual(a, { rows: [{ toString: 1, valueOf: "y" }] })).toBe(
+      false,
+    );
   });
 
   it("should return true for objects with all undefined vs empty object", () => {

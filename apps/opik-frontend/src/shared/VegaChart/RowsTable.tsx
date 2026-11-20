@@ -107,13 +107,29 @@ const SORT_ICON_WIDTH = 18;
 const MIN_COLUMN_WIDTH = 80;
 const FALLBACK_CHAR_WIDTH = 8;
 
-// Without a canvas to measure with (tests, locked-down browsers), a rough 8px a character.
+// Without a canvas to measure with (tests, locked-down browsers), the old rough 8px a character; it under-measures CJK.
 const measureTexts = (texts: string[]): number[] => {
   try {
     return getTextWidth(texts, { font: TEXT_FONT });
   } catch {
     return texts.map((text) => [...text].length * FALLBACK_CHAR_WIDTH);
   }
+};
+
+// Widths measured before the web font loads use fallback metrics; true once it has, so they are measured again.
+const useFontsLoaded = () => {
+  const [loaded, setLoaded] = useState(
+    () => !document.fonts || document.fonts.status === "loaded",
+  );
+  useEffect(() => {
+    if (loaded) return;
+    let active = true;
+    document.fonts.ready.then(() => active && setLoaded(true));
+    return () => {
+      active = false;
+    };
+  }, [loaded]);
+  return loaded;
 };
 
 // The width that shows a column's header and longest value in full.
@@ -268,7 +284,12 @@ const RowsTable: React.FunctionComponent<RowsTableProps> = ({
     ),
   );
 
-  const limits = useMemo(() => contentWidths(keys, data), [keys, data]);
+  const fontsLoaded = useFontsLoaded();
+  const limits = useMemo(
+    () => contentWidths(keys, data),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- measure again once the font loads
+    [keys, data, fontsLoaded],
+  );
   // A column is never saved or drawn wider than its content or the widget, which another viewer's screen may make narrow,
   // nor narrower than the minimum.
   const capWidth = useCallback(

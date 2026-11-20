@@ -7,18 +7,22 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getTextWidth } from "@/lib/utils";
 import RowsTable from "./RowsTable";
 
 // happy-dom has no canvas: 8px per character, 14px per wide (CJK) one.
-vi.mock("@/lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/utils")>()),
-  getTextWidth: (texts: string[]) =>
+const { measureByChars } = vi.hoisted(() => ({
+  measureByChars: (texts: string[]) =>
     texts.map((text) =>
       [...text].reduce(
         (width, char) => width + (/[\u3000-\u9fff]/.test(char) ? 14 : 8),
         0,
       ),
     ),
+}));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getTextWidth: vi.fn(measureByChars),
 }));
 
 const ROWS = [
@@ -39,6 +43,7 @@ const header = (name: string) => screen.getByText(name).closest("th")!;
 describe("RowsTable", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.mocked(getTextWidth).mockImplementation(measureByChars);
   });
 
   it("sorts numbers as numbers and keeps empty cells last", () => {
@@ -165,6 +170,15 @@ describe("RowsTable", () => {
       render(<RowsTable rows={[{ 用户满意度评分: "高" }]} />);
       // 7 * 14 + 24 + 18 = 140px; a flat 8px per character cut it at 98px.
       expect(shownWidths()).toEqual(["140px"]);
+    });
+
+    it("falls back to 8px a character without a canvas", () => {
+      vi.mocked(getTextWidth).mockImplementation(() => {
+        throw new TypeError("no canvas");
+      });
+      render(<RowsTable rows={[{ 用户满意度评分: "高" }]} />);
+      // 7 * 8 + 24 + 18: the old estimate, which under-measures CJK.
+      expect(shownWidths()).toEqual(["98px"]);
     });
 
     it("sizes a column named like an object property", () => {
