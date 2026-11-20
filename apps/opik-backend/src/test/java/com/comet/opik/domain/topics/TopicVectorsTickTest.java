@@ -276,7 +276,8 @@ class TopicVectorsTickTest {
     }
 
     @Test
-    @DisplayName("a 429 on the second chunk: the first chunk is written, the next tick completes the second")
+    @DisplayName("a 429 on the second chunk: the first chunk is written and the watermark stays behind the second, "
+            + "which the next tick completes, moving the watermark to its start")
     void throttledSecondChunk() {
         config().setEmbedBatchSize(10);
         var workspaceId = enabledWorkspace();
@@ -284,11 +285,21 @@ class TopicVectorsTickTest {
         var traceIds = labelTraces(workspaceId, projectId, 15, 1);
         embedStub.throttleCall = 2;
 
-        assertThat(tick()).isEqualTo(new TickResult(10, Map.of(SkipReason.EMBED_FAILED, 5)));
+        // MySQL keeps microseconds.
+        var first = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(first).block())
+                .isEqualTo(new TickResult(10, Map.of(SkipReason.EMBED_FAILED, 5)));
         assertThat(countRows(workspaceId)).isEqualTo(10);
+        assertThat(watermark(workspaceId)).isBefore(first);
 
-        assertThat(tick()).isEqualTo(TickResult.written(5));
+        var second = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        assertThat(tickService.tick(second).block()).isEqualTo(TickResult.written(5));
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+        assertThat(watermark(workspaceId)).isEqualTo(second);
+    }
+
+    private Instant watermark(String workspaceId) {
+        return workspaceService.vectorsWatermarks(List.of(workspaceId)).get(workspaceId);
     }
 
     @Test

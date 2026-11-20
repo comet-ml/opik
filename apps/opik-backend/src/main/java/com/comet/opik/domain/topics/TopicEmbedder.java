@@ -38,18 +38,20 @@ class TopicEmbedder {
     private final @NonNull TopicVectorsMetrics metrics;
 
     /** Each chunk's outcome, in order. Every candidate is in exactly one outcome. */
-    Flux<ChunkOutcome> embed(@NonNull String workspaceId, @NonNull List<Candidate> candidates,
+    Flux<ChunkOutcome> embed(@NonNull TopicVectorsMetrics.Workspace workspace, @NonNull List<Candidate> candidates,
             @NonNull TickBudget budget) {
         int size = config.getVectors().getEmbedBatchSize();
         var chunks = Lists.partition(candidates, size);
         return Flux.range(0, chunks.size())
-                .concatMap(index -> embedChunk(workspaceId, index, chunks.get(index), budget))
+                .concatMap(index -> embedChunk(workspace, index, chunks.get(index), budget))
                 .onErrorResume(BackedOff.class, backedOff -> Mono.just(ChunkOutcome.skipped(SkipReason.EMBED_FAILED,
-                        candidates.size() - backedOff.chunk * size)));
+                        candidates.size() - backedOff.index * size)));
     }
 
-    private Mono<ChunkOutcome> embedChunk(String workspaceId, int index, List<Candidate> chunk, TickBudget budget) {
+    private Mono<ChunkOutcome> embedChunk(TopicVectorsMetrics.Workspace workspace, int index, List<Candidate> chunk,
+            TickBudget budget) {
         return Mono.defer(() -> {
+            var workspaceId = workspace.id();
             var timeout = config.getVectors().getEmbedTimeout().toJavaDuration();
             if (!budget.hasTimeFor(timeout)) {
                 return Mono.just(ChunkOutcome.skipped(SkipReason.OVER_BUDGET, chunk.size()));
@@ -64,11 +66,11 @@ class TopicEmbedder {
             long started = System.nanoTime();
             return client.embed(request, budget.clock().instant().plus(timeout))
                     .map(response -> {
-                        metrics.embedCall(workspaceId, Duration.ofNanos(System.nanoTime() - started), null);
+                        metrics.embedCall(workspace, Duration.ofNanos(System.nanoTime() - started), null);
                         return vectors(workspaceId, chunk, response);
                     })
                     .onErrorResume(InferenceException.class, exception -> {
-                        metrics.embedCall(workspaceId, Duration.ofNanos(System.nanoTime() - started), exception);
+                        metrics.embedCall(workspace, Duration.ofNanos(System.nanoTime() - started), exception);
                         if (backsOff(exception)) {
                             log.warn("Topic embed failed, workspace '{}', code '{}', status '{}', traces '{}'; no more "
                                     + "calls for it this tick", workspaceId, exception.getCode(),
@@ -96,14 +98,14 @@ class TopicEmbedder {
                 || status >= 500;
     }
 
-    /** Ends a workspace's chunk stream; {@code chunk} is the index of the chunk whose call backed off. */
+    /** Ends a workspace's chunk stream; {@code index} is the index of the chunk whose call backed off. */
     private static final class BackedOff extends RuntimeException {
 
-        private final int chunk;
+        private final int index;
 
-        private BackedOff(int chunk) {
+        private BackedOff(int index) {
             super(null, null, false, false);
-            this.chunk = chunk;
+            this.index = index;
         }
     }
 
