@@ -1,0 +1,19 @@
+<!--
+    Logging before Dropwizard configures it: all of a unit test, and an integration test until its app starts
+    (container start, migrations). Without this file Logback logs everything at DEBUG, mostly Jetty, ArchUnit and
+    HTTP wire traffic, which made the unit tests ~3x slower and their CI log ~70 MB. Once an app starts,
+    config-test.yml's logging section applies instead.
+-->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.comet" level="DEBUG"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

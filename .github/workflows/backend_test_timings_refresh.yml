@@ -1,0 +1,94 @@
+name: "Refresh Backend Test Timings"
+
+# backend-test-timings.tsv balances the Backend Tests integration groups. Tests added since it was last
+# refreshed are estimated from their size, so the groups slowly drift apart. Once a week, re-measure
+# every class as the median over the last successful main runs, and open (or update) one pull request
+# when the times moved enough to matter.
+on:
+  schedule:
+    - cron: "0 4 * * 1" # Mondays at 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Successful main runs of Backend Tests to take the median over"
+        type: number
+        default: 5
+      min_drift_percent:
+        description: "Open the pull request only if the measured times moved at least this much (% of total)"
+        type: number
+        default: 10
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.repository == 'comet-ml/opik'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Lists the Backend Tests runs and downloads their test report artifacts
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Reports are kept 14 days, so a run older than that, or from before the upload existed, is skipped
+      - name: Re-measure from the last successful main runs
+        id: refresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNS: ${{ inputs.runs || 5 }}
+        run: |
+          mapfile -t runs < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow backend_tests.yml \
+            --branch main --event push --status success --limit "$RUNS" --json databaseId --jq '.[].databaseId')
+          echo "Runs: ${runs[*]}"
+          status=0
+          .github/scripts/update-backend-test-timings.sh "${runs[@]}" || status=$?
+          if [[ $status -eq 2 ]]; then
+            echo "::notice::None of these runs uploaded test reports yet; nothing to refresh"
+            printf 'runs=0\ndrift_percent=0\n' >> "$GITHUB_OUTPUT"
+          elif [[ $status -ne 0 ]]; then
+            exit "$status"
+          fi
+          git diff --stat
+
+      # Three runs at least, so one stalled job can't set the times
+      - name: Create Pull Request
+        if: >-
+          fromJSON(steps.refresh.outputs.runs) >= 3 &&
+          fromJSON(steps.refresh.outputs.drift_percent) >= fromJSON(inputs.min_drift_percent || 10)
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          branch: github-actions/NA-refresh-backend-test-timings
+          add-paths: .github/scripts/backend-test-timings.tsv
+          commit-message: "[NA] [BE] Refresh backend test timings"
+          title: "[NA] [BE] Refresh backend test timings"
+          body: |
+            ## Details
+            Automated refresh of `.github/scripts/backend-test-timings.tsv`, which `discover-backend-tests.sh`
+            uses to balance the Backend Tests integration groups. Each class's time is its median over the last
+            ${{ steps.refresh.outputs.runs }} successful Backend Tests runs on `main`; together the measured
+            times moved ${{ steps.refresh.outputs.drift_percent }}% since the last refresh.
+
+            Only the split of classes into groups changes: every test still runs.
+
+            ## Change checklist
+            - [ ] User facing change
+            - [ ] Documentation update
+
+            ## Issues
+            N/A
+
+            ## Testing
+            - The Backend Tests run on this pull request shows the new groups in its "Test Split Summary".
+          base: main

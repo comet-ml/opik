@@ -7,6 +7,7 @@ on:
       - "apps/opik-backend/**"
       - ".github/workflows/backend_tests.yml"
       - ".github/scripts/discover-backend-tests.sh"
+      - ".github/scripts/backend-test-timings.tsv"
   push:
     branches:
       - 'main'
@@ -14,6 +15,7 @@ on:
       - "apps/opik-backend/**"
       - ".github/workflows/backend_tests.yml"
       - ".github/scripts/discover-backend-tests.sh"
+      - ".github/scripts/backend-test-timings.tsv"
 
   workflow_dispatch:
 
@@ -74,19 +76,67 @@ jobs:
               with:
                 java-version: '25'
                 distribution: 'corretto'
-                cache: maven
+
+            # Not setup-java's `cache: maven`: its key hashes every pom.xml, so it is shared with the lint
+            # workflow's spotless leg, which saves a near-empty repository first and every job here then
+            # downloads the dependencies again. This key holds what `mvn test` here actually resolves.
+            # Every job restores; only main saves (see "Save Maven repository"), so pull requests read
+            # main's entry instead of each saving their own copy.
+            - name: Restore Maven repository
+              id: maven-cache
+              uses: actions/cache/restore@v6
+              with:
+                path: ~/.m2/repository
+                key: backend-tests-maven-${{ runner.os }}-${{ hashFiles('apps/opik-backend/pom.xml') }}
+                restore-keys: backend-tests-maven-${{ runner.os }}-
+
+            # Testcontainers would pull these when the first test class starts; pulling them while Maven
+            # compiles takes the pull off the critical path. Best effort: a failed pull is retried by
+            # Testcontainers itself.
+            - name: Pull test container images in the background
+              if: matrix.pullImages
+              run: |
+                grep -rhoE 'DockerImageName\.parse\("[^"]+"\)' src/test/java \
+                  | sed -E 's/.*\("([^"]+)"\)/\1/' | sort -u | tee "$RUNNER_TEMP/test-images.txt"
+                nohup xargs -P 0 -n 1 docker pull -q < "$RUNNER_TEMP/test-images.txt" > "$RUNNER_TEMP/image-pull.log" 2>&1 &
 
             - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
+                TESTS: ${{ matrix.tests }}
+                TEST_TIMEOUT: ${{ matrix.testTimeout }}
+                FORK_COUNT: ${{ matrix.forkCount }}
               run: >-
                 mvn clean test
                 -Dspotless.skip=true
                 -Dresolve.skip=true
-                -Dtest="${{ matrix.tests }}"
+                -Dtest="$TESTS"
+                -DforkCount="$FORK_COUNT"
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
-                -Djunit.jupiter.execution.timeout.testable.method.default="${{ matrix.testTimeout }}"
+                -Djunit.jupiter.execution.timeout.testable.method.default="$TEST_TIMEOUT"
+
+            # One job saves, on main, when this pom.xml has no entry yet; a pull request that changes the
+            # pom.xml restores main's previous entry and downloads only what's new.
+            - name: Save Maven repository
+              if: >-
+                github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.id == 'unit' &&
+                steps.maven-cache.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v6
+              with:
+                path: ~/.m2/repository
+                key: ${{ steps.maven-cache.outputs.cache-primary-key }}
+
+            # The per-class times in these reports refresh backend-test-timings.tsv, which balances the
+            # integration groups: .github/scripts/update-backend-test-timings.sh <run id>
+            - name: Upload test reports
+              uses: actions/upload-artifact@v7
+              if: always()
+              with:
+                name: backend-test-reports-${{ matrix.id }}
+                path: apps/opik-backend/target/surefire-reports/TEST-*.xml
+                retention-days: 14
+                if-no-files-found: ignore
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@da5b7be67623cd59bbbd1a0ce4f022050a55605f # v2
