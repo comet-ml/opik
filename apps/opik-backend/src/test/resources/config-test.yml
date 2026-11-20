@@ -1061,6 +1061,14 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+  build:
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 8192
+      countSlice: 1d
 
 # Python evaluator configuration
 pythonEvaluator:
