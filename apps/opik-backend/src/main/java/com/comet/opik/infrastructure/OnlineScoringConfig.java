@@ -51,6 +51,18 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) @Max(10) private int maxRetries;
 
+    /**
+     * How many times a Python online-scoring job may be put back on its stream after Redis delivery
+     * retries are exhausted. 0 drops the job on the first exhaustion (visible user-facing log, no
+     * score). Default 1: one extra generation covers a typical python-backend outage of
+     * {@code pendingMessageDuration × maxRetries} (20–30 min at production defaults) without
+     * multiplying evaluator load. Each re-queue is a new stream entry, so that pending window is
+     * still the backoff per generation — no extra delay is stacked on XADD. Field initializer so
+     * the key is optional in YAML.
+     */
+    @JsonProperty
+    @Min(0) @Max(20) private int maxRequeueAttempts = 1;
+
     @JsonProperty
     @Min(1000) @Max(10_000_000) private int streamMaxLen;
 

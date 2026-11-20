@@ -49,4 +49,16 @@ public interface RedisSubscriberMessage {
     default RedisSubscriberMessage withWorkspaceName(String workspaceName) {
         return this;
     }
+
+    /**
+     * How many times this job has already been put back on its stream after Redis delivery retries
+     * were exhausted. Absent on messages produced before the field existed, which must read as 0.
+     */
+    default int requeueAttempt() {
+        return 0;
+    }
+
+    default RedisSubscriberMessage withRequeueAttempt(int requeueAttempt) {
+        return this;
+    }
 }
