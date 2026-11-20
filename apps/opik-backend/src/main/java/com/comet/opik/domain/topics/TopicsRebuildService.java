@@ -42,11 +42,6 @@ import java.util.concurrent.Callable;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicsRebuildService {
 
-    static final int DIMENSIONS = TopicEmbedding.DIMENSIONS;
-    static final int MAX_TOPICS = 10;
-    /** A first build over fewer traces is marked provisional in its stats. */
-    static final int PROVISIONAL_BELOW = 1_000;
-    static final double UNIT_TOLERANCE = 1e-3;
     /**
      * Failure codes whose exceptions can carry trace-derived text: of Qwen's answer, or the topic names and definitions
      * a failed save statement quotes in its bound arguments.
@@ -72,19 +67,6 @@ public class TopicsRebuildService {
 
     /** What a built run saves. */
     private record Built(List<Topic> topics, PrototypeVectors otherVectors, List<TraceTopic> traceTopics) {
-    }
-
-    /** A NaN or infinite value fails too. */
-    static boolean isUnit(@NonNull float[] values) {
-        return values.length == DIMENSIONS && Math.abs(norm(values) - 1) <= UNIT_TOLERANCE;
-    }
-
-    private static double norm(float[] values) {
-        double sum = 0;
-        for (float value : values) {
-            sum += (double) value * value;
-        }
-        return Math.sqrt(sum);
     }
 
     /**
@@ -118,9 +100,10 @@ public class TopicsRebuildService {
             window.versions().forEach((version, count) -> versionShares.put(String.valueOf(version),
                     (double) count / n));
             stats.put("vectors", n);
-            stats.put("provisional", n < PROVISIONAL_BELOW);
+            stats.put("provisional", n < config.getAlgorithm().getProvisionalBelow());
             var traces = window.traces();
-            return timed(run, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(), MAX_TOPICS)))
+            return timed(run, "cluster", cpu(() -> algorithm.cluster(window.topicWindow(),
+                    config.getAlgorithm().getMaxTopics())))
                     .doOnNext(clustering -> stats.setAll(clustering.stats()))
                     .flatMap(clustering -> timed(run, "qwen", llm.generate(run, clustering.author(),
                             AuthorAnswer::parse))
@@ -193,16 +176,16 @@ public class TopicsRebuildService {
         return topics;
     }
 
-    /** Before anything is written: every prototype has {@value #DIMENSIONS} values and unit length. */
+    /** Before anything is written: every prototype has {@value TopicEmbedding#DIMENSIONS} values and unit length. */
     private void checkPrototypes(FirstBuild built) {
         var all = new ArrayList<float[]>();
         built.topics().forEach(topic -> all.addAll(topic.prototypes()));
         all.addAll(built.otherPrototypes());
         for (int p = 0; p < all.size(); p++) {
             var values = all.get(p);
-            if (!isUnit(values)) {
+            if (!PrototypeVectors.isUnit(values)) {
                 throw invariant("prototype '%s' has '%s' values and norm '%s'".formatted(p, values.length,
-                        norm(values)));
+                        PrototypeVectors.norm(values)));
             }
         }
     }

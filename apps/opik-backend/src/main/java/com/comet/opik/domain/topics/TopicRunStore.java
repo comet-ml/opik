@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.topics.TopicProject.RunError;
+import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -10,6 +11,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
@@ -30,13 +32,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Singleton
 class TopicRunStore {
 
-    /** The {@code trace_topics} insert after the commit: retries, and the first backoff (it doubles each time). */
-    static final int INSERT_RETRIES = 3;
-    static final Duration INSERT_BACKOFF = Duration.ofMillis(500);
-    /** The longest the insert after the commit takes: every attempt to its stop, plus the backoffs and some slack. */
-    static final Duration INSERT_BOUND = Duration.ofSeconds(
-            TopicWindowReader.READ_SECONDS * (INSERT_RETRIES + 1) + 30);
+    private static final Duration INSERT_BOUND_SLACK = Duration.ofSeconds(30);
 
+    private final TopicsConfig.BuildConfig build;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
     private final IdGenerator idGenerator;
@@ -44,8 +42,10 @@ class TopicRunStore {
     private final Scheduler jdbi = Schedulers.boundedElastic();
 
     @Inject
-    TopicRunStore(@NonNull TransactionTemplate template, @NonNull TraceTopicsDAO traceTopicsDAO,
+    TopicRunStore(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
+            @NonNull TraceTopicsDAO traceTopicsDAO,
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics) {
+        this.build = config.getBuild();
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
         this.idGenerator = idGenerator;
@@ -148,15 +148,23 @@ class TopicRunStore {
         }
     }
 
+    /** The longest the insert after the commit takes: every attempt to its stop, the backoffs, and some slack. */
+    static Duration insertBound(@NonNull TopicsConfig.BuildConfig build) {
+        int retries = build.getInsertRetries();
+        var backoffs = build.getInsertBackoff().toJavaDuration().multipliedBy((1L << retries) - 1);
+        return build.getReadTimeout().toJavaDuration().multipliedBy(retries + 1L).plus(backoffs)
+                .plus(INSERT_BOUND_SLACK);
+    }
+
     /**
-     * Inserts the saved run's trace topics, retried up to {@value #INSERT_RETRIES} times: a repeat writes the same
-     * rows, one per trace. Each attempt stops after {@value TopicWindowReader#READ_SECONDS} s. False when it still
-     * failed: the labelling pass gives the window's traces their topics.
+     * Inserts the saved run's trace topics, retried up to {@code topics.build.insertRetries} times: a repeat writes the
+     * same rows, one per trace. Each attempt stops after {@code topics.build.readTimeout}. False when it still failed:
+     * the labelling pass gives the window's traces their topics.
      */
     Mono<Boolean> insertTraceTopics(@NonNull TopicRun run, @NonNull List<TraceTopic> traceTopics) {
         return traceTopicsDAO.insert(traceTopics)
-                .timeout(Duration.ofSeconds(TopicWindowReader.READ_SECONDS))
-                .retryWhen(Retry.backoff(INSERT_RETRIES, INSERT_BACKOFF)
+                .timeout(build.getReadTimeout().toJavaDuration())
+                .retryWhen(Retry.backoff(build.getInsertRetries(), build.getInsertBackoff().toJavaDuration())
                         .doBeforeRetry(signal -> log.warn("Topics run '{}' retries its trace_topics insert, "
                                 + "project '{}', attempt '{}'", run.runId(), run.projectId(),
                                 signal.totalRetries() + 2, signal.failure()))

@@ -2787,6 +2787,16 @@ topics:
     #  Default: 120s
     #  Description: The deadline of the Qwen call that names the groups. At most 300s, under projectTimeout
     qwenDeadline: ${TOPICS_BUILD_QWEN_DEADLINE:-120s}
+    #  Default: 120s
+    #  Description: A run's ClickHouse window read stops after this (or projectTimeout, when shorter); so does each
+    #  attempt of its trace_topics insert. At most 30m
+    readTimeout: ${TOPICS_BUILD_READ_TIMEOUT:-120s}
+    #  Default: 3
+    #  Description: Retries of the trace_topics insert after the save's commit. At most 10
+    insertRetries: ${TOPICS_BUILD_INSERT_RETRIES:-3}
+    #  Default: 500ms
+    #  Description: The first backoff before an insert retry; it doubles each time. At most 1m
+    insertBackoff: ${TOPICS_BUILD_INSERT_BACKOFF:-500ms}
   #  The k-means topic algorithm's tunables. The LLM call it makes is the author task in topics/tasks/author.yaml
   #  (prompt, schema, max tokens, version)
   algorithm:
@@ -2826,6 +2836,12 @@ topics:
     #  Description: A known-Other prototype within this cosine of a topic prototype is dropped, so it cannot pull the
     #  topic's traces into Other. Depends on the embedding model's cosine spread
     otherGate: ${TOPICS_ALGORITHM_OTHER_GATE:-0.95}
+    #  Default: 10
+    #  Description: Most topics in a project's list. At most 100
+    maxTopics: ${TOPICS_ALGORITHM_MAX_TOPICS:-10}
+    #  Default: 1000
+    #  Description: A first build over fewer traces is marked provisional in its stats
+    provisionalBelow: ${TOPICS_ALGORITHM_PROVISIONAL_BELOW:-1000}
 
 # Guardrail checks the backend runs on opik-inference (url and credential: inference). Thresholds are
 # server-side only; the validations endpoint rejects a threshold sent by the caller.

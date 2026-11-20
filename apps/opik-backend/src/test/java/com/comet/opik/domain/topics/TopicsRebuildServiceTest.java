@@ -63,6 +63,8 @@ class TopicsRebuildServiceTest {
     private static final int TRACES = 120;
     private static final String WORKSPACE_ID = "ws-1";
     private static final String WORKSPACE_NAME = "Acme";
+    private static final int INSERT_RETRIES = 3;
+    private static final java.time.Duration READ_TIMEOUT = java.time.Duration.ofSeconds(120);
 
     private final UUID projectId = UUID.randomUUID();
     private final UUID runId = UUID.randomUUID();
@@ -102,7 +104,7 @@ class TopicsRebuildServiceTest {
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         var metrics = new TopicsMetrics(meter.meter, workspaceId -> WORKSPACE_NAME);
         var config = TestConfigUtils.loadConfigTest().getTopics();
-        store = new TopicRunStore(template, traceTopicsDAO, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
         serviceWith = algorithm -> new TopicsRebuildService(config, reader, llm, store, idGenerator, metrics,
@@ -269,7 +271,7 @@ class TopicsRebuildServiceTest {
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        assertThat(attempts).hasValue(1 + TopicRunStore.INSERT_RETRIES);
+        assertThat(attempts).hasValue(1 + INSERT_RETRIES);
         verify(runDAO, never()).markFailed(any(), any(), any(), any(), any());
         assertThat(meter.points("topics.runs")).singleElement()
                 .satisfies(point -> assertThat(point.get("status")).isEqualTo("saved"));
@@ -294,7 +296,7 @@ class TopicsRebuildServiceTest {
             var run = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).toFuture();
             // The run reaches the insert in real time; each step of virtual time then ends a stalled attempt.
             Awaitility.await().atMost(java.time.Duration.ofSeconds(30)).until(() -> {
-                scheduler.advanceTimeBy(java.time.Duration.ofSeconds(TopicWindowReader.READ_SECONDS));
+                scheduler.advanceTimeBy(READ_TIMEOUT);
                 return run.isDone();
             });
             outcome = run.get();
@@ -303,9 +305,9 @@ class TopicsRebuildServiceTest {
         }
 
         assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
-        assertThat(attempts).hasValue(1 + TopicRunStore.INSERT_RETRIES);
+        assertThat(attempts).hasValue(1 + INSERT_RETRIES);
         assertThat(cancelled).as("every stalled attempt is cancelled")
-                .hasValue(1 + TopicRunStore.INSERT_RETRIES);
+                .hasValue(1 + INSERT_RETRIES);
         assertThat(meter.sum("topics.save.rows", "table", "trace_topics")).isZero();
     }
 
@@ -380,7 +382,7 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("the gated Other prototypes are not saved, and the saved rows assign as the build did")
     void gatedOtherIsNotSaved() throws Exception {
-        int d = TopicsRebuildService.DIMENSIONS;
+        int d = TopicEmbedding.DIMENSIONS;
         var alpha = unit(d, 0, 1, 0, 0);
         var gated = List.of(unit(d, 0, 0.97, 1, Math.sqrt(1 - 0.97 * 0.97)),
                 unit(d, 0, 0.96, 2, Math.sqrt(1 - 0.96 * 0.96)));
@@ -461,7 +463,7 @@ class TopicsRebuildServiceTest {
     @DisplayName("the service saves what the bound algorithm returns: its topics with their prototypes, labels and "
             + "stats")
     void savesWhatTheAlgorithmReturns() throws Exception {
-        int d = TopicsRebuildService.DIMENSIONS;
+        int d = TopicEmbedding.DIMENSIONS;
         var first = unit(d, 0, 1, 1, 0);
         var second = unit(d, 1, 1, 0, 0);
         var other = unit(d, 2, 1, 0, 0);
@@ -530,7 +532,7 @@ class TopicsRebuildServiceTest {
                 Collectors.counting()))).isEqualTo(Map.of(firstId, (long) TRACES / 3, secondId, (long) TRACES / 3,
                         TraceTopic.OTHER, (long) TRACES / 3));
         var json = outcome.stats();
-        assertThat(json.get("stub_stat").asInt()).isEqualTo(TopicsRebuildService.MAX_TOPICS);
+        assertThat(json.get("stub_stat").asInt()).isEqualTo(10);
         assertThat(json.get("topics").asInt()).isEqualTo(2);
         assertThat(json.get("other_share").asDouble()).isEqualTo(1.0 / 3);
     }
@@ -554,35 +556,38 @@ class TopicsRebuildServiceTest {
     @Test
     @DisplayName("a prototype passes the check before the save only with 384 values and unit length, NaN fails")
     void unitPrototype() {
-        int d = TopicsRebuildService.DIMENSIONS;
+        int d = TopicEmbedding.DIMENSIONS;
         // The embedding model's output size, independent of the constant the code reads.
         assertThat(d).isEqualTo(384);
         var unit = unit(d, 0, 0.6, 1, 0.8);
-        assertThat(TopicsRebuildService.isUnit(unit)).isTrue();
+        assertThat(PrototypeVectors.isUnit(unit)).isTrue();
         var nearUnit = unit.clone();
         nearUnit[0] *= 1.0005f;
-        assertThat(TopicsRebuildService.isUnit(nearUnit)).isTrue();
+        assertThat(PrototypeVectors.isUnit(nearUnit)).isTrue();
 
         var tooLong = unit.clone();
         tooLong[0] = 0.7f;
-        assertThat(TopicsRebuildService.isUnit(tooLong)).isFalse();
+        assertThat(PrototypeVectors.isUnit(tooLong)).isFalse();
         var nan = unit.clone();
         nan[2] = Float.NaN;
-        assertThat(TopicsRebuildService.isUnit(nan)).isFalse();
+        assertThat(PrototypeVectors.isUnit(nan)).isFalse();
         var infinite = unit.clone();
         infinite[2] = Float.POSITIVE_INFINITY;
-        assertThat(TopicsRebuildService.isUnit(infinite)).isFalse();
-        assertThat(TopicsRebuildService.isUnit(new float[]{0.6f, 0.8f})).isFalse();
+        assertThat(PrototypeVectors.isUnit(infinite)).isFalse();
+        assertThat(PrototypeVectors.isUnit(new float[]{0.6f, 0.8f})).isFalse();
     }
 
     @Test
-    @DisplayName("the window read stops after 120 s, or after a shorter run timeout")
-    void readSeconds() {
+    @DisplayName("the window read stops after topics.build.readTimeout, or after a shorter run timeout; the insert's "
+            + "bound covers every attempt and backoff")
+    void readTimeoutAndInsertBound() {
         var build = TestConfigUtils.loadConfigTest().getTopics().getBuild();
-        assertThat(TopicWindowReader.readSeconds(build)).isEqualTo(120);
+        assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(READ_TIMEOUT);
+        assertThat(TopicRunStore.insertBound(build))
+                .isEqualTo(java.time.Duration.ofMillis(4 * 120_000 + 3_500 + 30_000));
 
         build.setProjectTimeout(Duration.minutes(1));
-        assertThat(TopicWindowReader.readSeconds(build)).isEqualTo(60);
+        assertThat(TopicWindowReader.readTimeout(build)).isEqualTo(java.time.Duration.ofMinutes(1));
     }
 
     private void answer(JsonNode output) {

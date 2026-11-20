@@ -28,17 +28,6 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TopicWindowReader {
 
-    /**
-     * A run's ClickHouse read stops after this, so one slow read does not hold the server for the whole run; so does
-     * each attempt of its {@code trace_topics} insert.
-     */
-    static final long READ_SECONDS = 120;
-    /**
-     * ClickHouse {@code max_execution_time} of one window count: the labelling pass's, and the first-build job's (a
-     * workspace's projects, or one project's by hand).
-     */
-    static final long COUNT_SECONDS = 60;
-
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TopicWindowDAO windowDAO;
 
@@ -53,8 +42,11 @@ class TopicWindowReader {
     record WindowTrace(UUID traceId, Instant traceCreatedAt) {
     }
 
-    static long readSeconds(@NonNull TopicsConfig.BuildConfig build) {
-        return Math.min(READ_SECONDS, build.getProjectTimeout().toSeconds());
+    /** {@code topics.build.readTimeout}, or the project timeout when shorter. */
+    static Duration readTimeout(@NonNull TopicsConfig.BuildConfig build) {
+        var read = build.getReadTimeout().toJavaDuration();
+        var project = build.getProjectTimeout().toJavaDuration();
+        return read.compareTo(project) < 0 ? read : project;
     }
 
     /**
@@ -63,14 +55,15 @@ class TopicWindowReader {
      */
     Mono<Window> read(@NonNull TopicRun run, long windowTraces) {
         int limit = config.getBuild().getMaxVectors();
-        long readSeconds = readSeconds(config.getBuild());
+        var readTimeout = readTimeout(config.getBuild());
         return Mono.defer(() -> {
             var builder = new Builder((int) Math.max(1, Math.min(windowTraces, limit)));
-            return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit, readSeconds)
+            return windowDAO.readWindow(run.workspaceId(), run.projectId(), run.from(), run.to(), limit,
+                    readTimeout.toSeconds())
                     .doOnNext(builder::add)
                     .then(Mono.fromCallable(() -> builder.build(run, windowTraces)));
         })
-                .timeout(Duration.ofSeconds(readSeconds))
+                .timeout(readTimeout)
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.WINDOW_READ, "the window read failed", error));
     }

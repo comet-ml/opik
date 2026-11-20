@@ -1055,6 +1055,9 @@ topics:
     windowDays: 30
     maxVectors: 100000
     qwenDeadline: 120s
+    readTimeout: 120s
+    insertRetries: 3
+    insertBackoff: 500ms
   algorithm:
     minGroups: 30
     maxGroups: 50
@@ -1067,6 +1070,8 @@ topics:
     authorMaxExamples: 10
     assignMinCosine: 0.75
     otherGate: 0.95
+    maxTopics: 10
+    provisionalBelow: 1000
 
 # Python evaluator configuration
 pythonEvaluator:

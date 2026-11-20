@@ -91,6 +91,25 @@ public class TopicsConfig {
         @MaxDuration(value = 300, unit = TimeUnit.SECONDS)
         private Duration qwenDeadline;
 
+        /**
+         * A run's ClickHouse window read stops after this (or the project timeout, when shorter); so does each attempt
+         * of its {@code trace_topics} insert.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration readTimeout;
+
+        /** Retries of the {@code trace_topics} insert after the save's commit. */
+        @JsonProperty
+        @Min(0) @Max(10) private int insertRetries;
+
+        /** The first backoff before an insert retry; it doubles each time. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration insertBackoff;
+
         @JsonIgnore
         @AssertTrue(message = "topics.build.qwenDeadline must be shorter than topics.build.projectTimeout") public boolean isQwenDeadlineValid() {
             return qwenDeadline == null || projectTimeout == null
@@ -275,6 +294,14 @@ public class TopicsConfig {
 
         @JsonProperty
         @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
+
+        /** Most topics in a project's list. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxTopics;
+
+        /** A first build over fewer traces is marked provisional in its stats. */
+        @JsonProperty
+        @Min(0) @Max(100_000) private int provisionalBelow;
 
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
