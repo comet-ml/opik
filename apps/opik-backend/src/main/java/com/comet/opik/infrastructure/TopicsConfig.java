@@ -33,6 +33,77 @@ import java.util.stream.Collectors;
 @Data
 public class TopicsConfig {
 
+    @Valid @NotNull @JsonProperty
+    private AlgorithmConfig algorithm;
+
+    @Valid @NotNull @JsonProperty
+    private BuildConfig build;
+
+    @Valid @NotNull @JsonProperty
+    private FirstBuildConfig firstBuild;
+
+    @Valid @NotNull @JsonProperty
+    private RunsConfig runs;
+
+    /**
+     * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
+     * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
+     */
+    @Data
+    public static class AlgorithmConfig {
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int minGroups;
+
+        @JsonProperty
+        @Min(2) @Max(1_000) private int maxGroups;
+
+        @JsonProperty
+        @Min(1) @Max(10_000) private int textsPerGroup;
+
+        @JsonProperty
+        @Min(1) @Max(1_000) private int kmeansMaxIterations;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int kmeansRestarts;
+
+        @JsonProperty
+        @Min(0) @Max(100) private int authorFrequent;
+
+        @JsonProperty
+        @Min(1) @Max(100_000) private int authorBudget;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int authorMinExamples;
+
+        @JsonProperty
+        @Min(1) @Max(100) private int authorMaxExamples;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double assignMinCosine;
+
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
+
+        /** Most topics in a project's list. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxTopics;
+
+        /** A first build over fewer traces is marked provisional in its stats. */
+        @JsonProperty
+        @Min(0) @Max(100_000) private int provisionalBelow;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
+            return minGroups <= maxGroups;
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.authorMinExamples must not be above authorMaxExamples") public boolean isAuthorExamplesOrdered() {
+            return authorMinExamples <= authorMaxExamples;
+        }
+    }
+
     @JsonProperty
     private boolean enabled;
 
@@ -47,32 +118,12 @@ public class TopicsConfig {
     @Valid @NotNull @JsonProperty
     private VectorsConfig vectors;
 
-    @Valid @NotNull @JsonProperty
-    private BuildConfig build;
-
-    @Valid @NotNull @JsonProperty
-    private FirstBuildConfig firstBuild;
-
-    @Valid @NotNull @JsonProperty
-    private RunsConfig runs;
-
-    @Valid @NotNull @JsonProperty
-    private AlgorithmConfig algorithm;
-
-    /**
-     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
-     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
-     * would keep an empty list for the life of the process.
-     */
-    public Set<String> enabledWorkspaceIds() {
-        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
-    }
-
+    /** A topic list build's settings: a first build, a nightly update and their labelling pass. */
     @Data
     public static class BuildConfig {
+
+        @Valid @NotNull @JsonProperty
+        private BuildReadConfig read;
 
         /** One project's run is stopped and failed with {@code timeout} after this. */
         @NotNull @JsonProperty
@@ -116,6 +167,14 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration countTimeout;
 
+        /** The labelling pass's page: traces read, labelled and inserted at once. */
+        @JsonProperty
+        @Min(1) @Max(100_000) private int labelPageTraces;
+
+        /** The labelling pass's slice of the window: a page's read costs about one slice of keys. */
+        @JsonProperty
+        @Min(1) @Max(1_000_000) private int labelSliceTraces;
+
         /** Retries of the {@code trace_topics} insert after the save's commit. */
         @JsonProperty
         @Min(0) @Max(10) private int insertRetries;
@@ -137,6 +196,49 @@ public class TopicsConfig {
         @AssertTrue(message = "topics.build.maxVectors must be at least topics.build.minVectors") public boolean isMaxVectorsValid() {
             return maxVectors >= minVectors;
         }
+    }
+
+    /**
+     * The ClickHouse guards of the build's reads: the window count, the window read, the unlabelled read and the topic
+     * counts. Their own, not the vectors tick's: the build reads a whole window, the window read about three times.
+     */
+    @Data
+    public static class BuildReadConfig {
+
+        @JsonProperty
+        @Min(1) @Max(1_000_000_000L) private long maxRowsToRead;
+
+        @JsonProperty
+        @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonProperty
+        @Min(1) @Max(16) private int maxThreads;
+
+        /** ClickHouse query priority; a higher number yields to lower ones. 0 is none. */
+        @JsonProperty
+        @Min(0) @Max(1000) private int priority;
+
+        /** Rows per block of the window count, whose in-flight per-trace arrays grow with it. */
+        @JsonProperty
+        @Min(1024) @Max(1_048_576) private int maxBlockSize;
+
+        /** The topic counts read the window in slices of this much creation time, one query each. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration countSlice;
+    }
+
+    /**
+     * The parsed, stripped, blank-free set of listed workspace ids. Deliberately neither cached nor named as a bean
+     * getter: Lombok's toString/equals/hashCode and Jackson call getters, and a parse cached before the field was bound
+     * would keep an empty list for the life of the process.
+     */
+    public Set<String> enabledWorkspaceIds() {
+        return Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
+                .map(String::strip)
+                .filter(workspaceId -> !workspaceId.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /** Which projects without a list the planner queues a first build for. */
@@ -382,64 +484,5 @@ public class TopicsConfig {
         @MinDuration(value = 1, unit = TimeUnit.HOURS)
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration discoverySliceSize;
-    }
-
-    /**
-     * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
-     * model and the deployment, so they live here; values fixed by the algorithm stay in its code.
-     */
-    @Data
-    public static class AlgorithmConfig {
-
-        @JsonProperty
-        @Min(2) @Max(1_000) private int minGroups;
-
-        @JsonProperty
-        @Min(2) @Max(1_000) private int maxGroups;
-
-        @JsonProperty
-        @Min(1) @Max(10_000) private int textsPerGroup;
-
-        @JsonProperty
-        @Min(1) @Max(1_000) private int kmeansMaxIterations;
-
-        @JsonProperty
-        @Min(1) @Max(100) private int kmeansRestarts;
-
-        @JsonProperty
-        @Min(0) @Max(100) private int authorFrequent;
-
-        @JsonProperty
-        @Min(1) @Max(100_000) private int authorBudget;
-
-        @JsonProperty
-        @Min(1) @Max(100) private int authorMinExamples;
-
-        @JsonProperty
-        @Min(1) @Max(100) private int authorMaxExamples;
-
-        @JsonProperty
-        @DecimalMin("0.0") @DecimalMax("1.0") private double assignMinCosine;
-
-        @JsonProperty
-        @DecimalMin("0.0") @DecimalMax("1.0") private double otherGate;
-
-        /** Most topics in a project's list. */
-        @JsonProperty
-        @Min(1) @Max(100) private int maxTopics;
-
-        /** A first build over fewer traces is marked provisional in its stats. */
-        @JsonProperty
-        @Min(0) @Max(100_000) private int provisionalBelow;
-
-        @JsonIgnore
-        @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
-            return minGroups <= maxGroups;
-        }
-
-        @JsonIgnore
-        @AssertTrue(message = "topics.algorithm.authorMinExamples must not be above authorMaxExamples") public boolean isAuthorExamplesOrdered() {
-            return authorMinExamples <= authorMaxExamples;
-        }
     }
 }

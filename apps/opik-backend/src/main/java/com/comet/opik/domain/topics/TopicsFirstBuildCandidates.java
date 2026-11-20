@@ -32,7 +32,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 
 /**
  * The projects a first build is due for. One MySQL read finds the projects of the opted-in workspaces with no list,
- * no run in flight and a trace written in the window ({@link TopicRunDAO#findListless}); the retry policy and the
+ * no run in flight and a trace written in the window ({@link TopicProjectDAO#findListless}); the retry policy and the
  * backfill gate ({@link TopicsBackfillGate}) filter them; then one ClickHouse count per workspace keeps those with at
  * least {@code topics.build.minVectors} traces with a vector in the window.
  */
@@ -64,7 +64,7 @@ class TopicsFirstBuildCandidates {
         var from = windowFrom(night);
         var to = windowTo(night);
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicRunDAO.class).findListless(workspaceIds, from)))
+                handle -> handle.attach(TopicProjectDAO.class).findListless(workspaceIds, from)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(listless -> open(listless, now))
                 .flatMapMany(open -> {
@@ -92,7 +92,7 @@ class TopicsFirstBuildCandidates {
     Mono<Optional<ListlessProject>> findListless(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull LocalDate night) {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicRunDAO.class).findListless(List.of(workspaceId), windowFrom(night))))
+                handle -> handle.attach(TopicProjectDAO.class).findListless(List.of(workspaceId), windowFrom(night))))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(rows -> rows.stream().filter(row -> row.projectId().equals(projectId)).findFirst());
     }

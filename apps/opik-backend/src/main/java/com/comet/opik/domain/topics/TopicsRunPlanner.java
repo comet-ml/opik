@@ -134,15 +134,15 @@ public class TopicsRunPlanner {
                         .thenReturn(runId));
     }
 
-    private Mono<List<TopicDAO.ProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
+    private Mono<List<TopicProjectKey>> labelsDue(List<String> workspaceIds, Instant now) {
         var failedAfter = now.minus(config.getFirstBuild().getRetryDelays().getFirst().toJavaDuration());
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicRunDAO.class).findLabelsDue(workspaceIds, failedAfter)))
+                handle -> handle.attach(TopicProjectDAO.class).findLabelsDue(workspaceIds, failedAfter)))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     /** One labelling pass, then one first build, in turn. */
-    private static List<Planned> interleave(List<TopicDAO.ProjectKey> labels,
+    private static List<Planned> interleave(List<TopicProjectKey> labels,
             List<TopicsFirstBuildCandidates.Candidate> builds, LocalDate night) {
         var result = new ArrayList<Planned>();
         for (int i = 0; i < Math.max(labels.size(), builds.size()); i++) {

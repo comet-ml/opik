@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.UUID;
 
 /**
@@ -94,6 +95,13 @@ public record TopicProject(
         LABELS("labels");
 
         private final String value;
+
+        public static RunMode fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run mode '%s'".formatted(value)));
+        }
     }
 
     /**
@@ -116,6 +124,13 @@ public record TopicProject(
         public boolean inFlight() {
             return this == QUEUED || this == RUNNING || this == CANCELLING;
         }
+
+        public static RunStatus fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run status '%s'".formatted(value)));
+        }
     }
 
     /** Why a run was cancelled. Only {@link #DEADLINE} is the run's fault: it ends as {@code timeout}. */
@@ -127,6 +142,14 @@ public record TopicProject(
         WORKSPACE_DISABLED("workspace_disabled");
 
         private final String value;
+
+        public static CancelReason fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(
+                            () -> new IllegalArgumentException("Unknown topic cancel reason '%s'".formatted(value)));
+        }
     }
 
     /**
@@ -145,7 +168,7 @@ public record TopicProject(
         WINDOW_READ("window_read"),
         /** A check before the save failed: nothing is written. */
         INVARIANT("invariant"),
-        /** The run outlasted {@code topics.build.projectTimeout}. */
+        /** The run outlasted its time limit. */
         TIMEOUT("timeout"),
         SAVE("save"),
         INTERNAL("internal"),
@@ -155,5 +178,12 @@ public record TopicProject(
         CANCELLED("cancelled");
 
         private final String value;
+
+        public static RunError fromString(String value) {
+            return Arrays.stream(values())
+                    .filter(candidate -> candidate.value.equals(value))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown topic run error '%s'".formatted(value)));
+        }
     }
 }

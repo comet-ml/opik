@@ -36,7 +36,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,7 +82,7 @@ class TopicsRebuildServiceFaultsTest {
     private final LocalDate night = LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
 
     private InMemoryMetricReader metricReader;
-    private TopicRunDAO runDAO;
+    private TopicProjectDAO runDAO;
     private TopicDAO topicDAO;
     private ProjectService projectService;
     private TraceTopicsDAO traceTopicsDAO;
@@ -96,12 +95,12 @@ class TopicsRebuildServiceFaultsTest {
     @BeforeEach
     void setUp() throws Exception {
         metricReader = InMemoryMetricReader.create();
-        runDAO = mock(TopicRunDAO.class);
+        runDAO = mock(TopicProjectDAO.class);
         topicDAO = mock(TopicDAO.class);
         traceTopicsDAO = mock(TraceTopicsDAO.class);
         client = mock(InferenceClient.class);
         var handle = mock(Handle.class);
-        when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
+        when(handle.attach(TopicProjectDAO.class)).thenReturn(runDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
         projectService = mock(ProjectService.class);
         when(projectService.findByIds(workspaceId, Set.of(projectId)))
@@ -112,7 +111,7 @@ class TopicsRebuildServiceFaultsTest {
         windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.readWindow(eq(workspaceId), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
-        when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(runDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
         var idGenerator = mock(IdGenerator.class);
@@ -175,7 +174,7 @@ class TopicsRebuildServiceFaultsTest {
     @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
     void failedSaveWritesNoLabels() {
         when(runDAO.markFailed(eq(workspaceId), eq(projectId), eq(runId), any(), any())).thenReturn(1);
-        when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(runDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
@@ -358,7 +357,7 @@ class TopicsRebuildServiceFaultsTest {
         ArgumentCaptor<List<Topic>> savedTopics = ArgumentCaptor.forClass(List.class);
         verify(topicDAO).insertTopics(savedTopics.capture());
         var savedOther = ArgumentCaptor.forClass(PrototypeVectors.class);
-        verify(topicDAO).saveList(any(), any(), any(), any(), any(), any(), savedOther.capture(), any());
+        verify(runDAO).saveList(any(), any(), any(), any(), any(), any(), savedOther.capture(), any());
         var topicRows = savedTopics.getValue().stream().flatMap(topic -> topic.vectors().vectors().stream())
                 .toList();
         var otherRows = savedOther.getValue().vectors();
@@ -441,8 +440,8 @@ class TopicsRebuildServiceFaultsTest {
             }
 
             @Override
-            public Optional<TopicLabeller> labeller(List<Topic> topics, PrototypeVectors otherVectors) {
-                return Optional.empty();
+            public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
+                return vectors -> new UUID[vectors.size()];
             }
         };
         answer(FIXTURE.answer);
@@ -456,7 +455,7 @@ class TopicsRebuildServiceFaultsTest {
         var saved = topics.getValue();
         assertThat(saved).usingRecursiveFieldByFieldElementComparatorIgnoringFields("id").containsExactly(
                 topic("First", "one", first), topic("Second", "two", second));
-        verify(topicDAO).saveList(eq(workspaceId), eq(projectId), isNull(), eq(runId), any(), any(),
+        verify(runDAO).saveList(eq(workspaceId), eq(projectId), isNull(), eq(runId), any(), any(),
                 eq(new PrototypeVectors(List.of(other))), eq(TopicEmbedding.MODEL));
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<TraceTopic>> traceTopics = ArgumentCaptor.forClass(List.class);

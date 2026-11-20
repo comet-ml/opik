@@ -298,7 +298,7 @@ class TopicsRunsIntegrationTest {
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var lostRun = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicRunDAO.class);
+            var dao = handle.attach(TopicProjectDAO.class);
             TopicsTestData.startRun(dao, workspaceId, stale, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD,
                     now.minus(Duration.ofMinutes(10)));
             TopicsTestData.startRun(dao, workspaceId, late, UUID.randomUUID(), TopicProject.RunMode.FIRST_BUILD,
@@ -375,7 +375,7 @@ class TopicsRunsIntegrationTest {
         var finishedAt = Instant.now().minus(finishedAgo);
         var runId = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicRunDAO.class);
+            var dao = handle.attach(TopicProjectDAO.class);
             TopicsTestData.startRun(dao, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     finishedAt.minus(Duration.ofMinutes(1)));
             return dao.markFailed(workspaceId, projectId, runId, finishedAt, TopicProject.RunError.LLM_ERROR);
@@ -409,12 +409,12 @@ class TopicsRunsIntegrationTest {
     private void backfill(String workspaceId, UUID projectId, boolean drained) {
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicVectorBackfillDAO.class);
-            dao.checked(workspaceId, now);
-            dao.start(List.of(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId)
+            handle.attach(TopicVectorBackfillDAO.class).checked(workspaceId, now);
+            var dao = handle.attach(TopicProjectDAO.class);
+            dao.startBackfills(List.of(TopicProjectDAO.Backfill.builder().workspaceId(workspaceId)
                     .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
             if (drained) {
-                dao.record(List.of(TopicVectorBackfillDAO.Progress.builder().workspaceId(workspaceId)
+                dao.recordBackfills(List.of(TopicProjectDAO.Progress.builder().workspaceId(workspaceId)
                         .projectId(projectId).drainedAt(now).build()));
             }
             return null;

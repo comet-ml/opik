@@ -19,7 +19,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,10 +40,11 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  * the rows written stay, and a later pass goes on from there. No cursor is kept: the project's {@code labels_complete}
  * is false from the save until a pass ends complete, and the first-build job calls the pass again while it is false.
  *
- * <p>Bounded: the window is cut at every {@value #SLICE_TRACES}-th trace creation time, so each slice holds that many
- * traces however the traffic is spread, and a page's read costs about one slice. A slice is read in pages of at most
- * {@value #CHUNK} traces, each read, assigned and inserted before the next, so the heap holds one page of vectors. The
- * count, every read and every insert have their own timeout, and the whole pass ends at the caller's deadline.
+ * <p>Bounded: the window is cut at every {@code topics.build.labelSliceTraces}-th trace creation time, so each
+ * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
+ * in pages of at most {@code topics.build.labelPageTraces} traces, each read, assigned and inserted before the next, so
+ * the heap holds one page of vectors. The count, every read and every insert have their own timeout, and the whole
+ * pass ends at the caller's deadline.
  *
  * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
@@ -53,11 +53,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicWindowLabelService {
-
-    /** Traces per page: about 15 MiB of vectors. */
-    static final int CHUNK = 10_000;
-    /** The traces a slice of the window holds on average. A page's read costs about its slice's keys. */
-    static final int SLICE_TRACES = 50_000;
 
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull TransactionTemplate template;
@@ -121,8 +116,8 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * What a pass did. {@code skipped} are the traces whose vector is not {@link TopicEmbedding#DIMENSIONS} long, as
-     * the run leaves them out of its window: they get no row, and every later pass reads and skips them again.
+     * What a pass did. {@code skipped} are the traces whose vector is not {@link TopicEmbedding#usable}, as the run
+     * leaves them out of its window: they get no row, and every later pass reads and skips them again.
      * {@code stopped} when a page check ended a slice early.
      */
     private record Totals(long labelled, long other, long skipped, boolean stopped) {
@@ -139,16 +134,13 @@ public class TopicWindowLabelService {
      * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
      * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never errors: how it
      * ended is the outcome. A project with no saved list is complete. The caller runs it as a claimed run of the project
-     * ({@link TopicRunDAO#claim}), so no build of the project saves meanwhile: that would make this pass label with a
+     * ({@link TopicProjectDAO#claim}), so no build of the project saves meanwhile: that would make this pass label with a
      * list that is no longer the project's.
      */
     Mono<PassOutcome> labelWindow(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant deadline,
             @NonNull Trigger trigger) {
-        return labelWindow(workspaceId, projectId, deadline, trigger, CHUNK, SLICE_TRACES);
-    }
-
-    Mono<PassOutcome> labelWindow(String workspaceId, UUID projectId, Instant deadline, Trigger trigger, int chunk,
-            int sliceTraces) {
+        int chunk = config.getBuild().getLabelPageTraces();
+        int sliceTraces = config.getBuild().getLabelSliceTraces();
         return jdbi(() -> workspace(workspaceId)).flatMap(workspace -> jdbi(() -> readSaved(workspaceId, projectId))
                 .flatMap(saved -> saved
                         .map(found -> pass(workspace, projectId, found, deadline, trigger, chunk, sliceTraces))
@@ -287,34 +279,25 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass stopped a slice, run '{}', project '{}', slice '[{}, {})': more than '{}' "
                     + "pages", saved.runId(), projectId, page.slice().from(), page.slice().to(), maxPages);
         }
-        var kept = page.rows().stream().filter(row -> row.vector().length == TopicEmbedding.DIMENSIONS).toList();
-        var rows = assign(workspace.id(), projectId, saved, kept);
+        var labels = saved.labeller().label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList());
+        var rows = new ArrayList<TraceTopic>(labels.length);
+        for (int i = 0; i < labels.length; i++) {
+            if (labels[i] != null) {
+                var row = page.rows().get(i);
+                rows.add(TraceTopic.builder()
+                        .workspaceId(workspace.id())
+                        .projectId(projectId)
+                        .traceId(row.traceId())
+                        .traceCreatedAt(row.traceCreatedAt())
+                        .topicId(labels[i])
+                        .source(TraceTopic.Source.RUN)
+                        .runId(saved.runId())
+                        .build());
+            }
+        }
         long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-        var totals = new Totals(rows.size(), other, page.rows().size() - kept.size(), capped);
+        var totals = new Totals(rows.size(), other, labels.length - rows.size(), capped);
         return insert(workspace, rows).thenReturn(totals);
-    }
-
-    private static List<TraceTopic> assign(String workspaceId, UUID projectId, Saved saved,
-            List<TopicWindowDAO.WindowVector> kept) {
-        int dimensions = TopicEmbedding.DIMENSIONS;
-        var vectors = new float[kept.size() * dimensions];
-        for (int i = 0; i < kept.size(); i++) {
-            System.arraycopy(kept.get(i).vector(), 0, vectors, i * dimensions, dimensions);
-        }
-        var labels = saved.labeller().label(vectors);
-        var rows = new ArrayList<TraceTopic>(kept.size());
-        for (int i = 0; i < kept.size(); i++) {
-            rows.add(TraceTopic.builder()
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .traceId(kept.get(i).traceId())
-                    .traceCreatedAt(kept.get(i).traceCreatedAt())
-                    .topicId(labels[i])
-                    .source(TraceTopic.Source.RUN)
-                    .runId(saved.runId())
-                    .build());
-        }
-        return rows;
     }
 
     /**
@@ -354,7 +337,7 @@ public class TopicWindowLabelService {
      */
     private Mono<Void> markComplete(String workspaceId, UUID projectId, UUID runId) {
         return jdbi(() -> template.inTransaction(WRITE,
-                handle -> handle.attach(TopicDAO.class).markLabelsComplete(workspaceId, projectId, runId)))
+                handle -> handle.attach(TopicProjectDAO.class).markLabelsComplete(workspaceId, projectId, runId)))
                 .doOnNext(updated -> {
                     if (updated == 0) {
                         log.info("Topics labelling pass complete, but run '{}' is no longer the saved run of project "
@@ -377,7 +360,8 @@ public class TopicWindowLabelService {
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         var rows = template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
-            var project = topicDAO.findProjects(workspaceId, List.of(projectId)).stream().findFirst();
+            var project = handle.attach(TopicProjectDAO.class).findProjects(workspaceId, List.of(projectId)).stream()
+                    .findFirst();
             if (project.isEmpty() || project.get().listRunId() == null || project.get().windowUntil() == null) {
                 return Optional.<SavedRows>empty();
             }
@@ -386,17 +370,9 @@ public class TopicWindowLabelService {
         return rows.map(saved -> {
             var to = saved.project().windowUntil();
             var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
-            var labeller = algorithm.labeller(saved.topics(), saved.project().otherVectors());
             return new Saved(saved.project().listRunId(), from, to,
-                    labeller.orElse(TopicWindowLabelService::allOther));
+                    algorithm.labeller(saved.topics(), saved.project().otherVectors()));
         });
-    }
-
-    /** The labels of a list with no topic: every trace is Other, as its run labelled them. */
-    private static UUID[] allOther(float[] vectors) {
-        var out = new UUID[vectors.length / TopicEmbedding.DIMENSIONS];
-        Arrays.fill(out, TraceTopic.OTHER);
-        return out;
     }
 
     private <T> Mono<T> jdbi(Callable<T> call) {

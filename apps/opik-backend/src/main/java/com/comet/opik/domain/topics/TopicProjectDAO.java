@@ -1,42 +1,96 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.infrastructure.db.AbstractEnumColumnMapper;
-import com.comet.opik.infrastructure.db.HasValue;
+import com.comet.opik.infrastructure.db.PrototypeVectorsArgumentFactory;
+import com.comet.opik.infrastructure.db.PrototypeVectorsColumnMapper;
+import com.comet.opik.infrastructure.db.TopicCancelReasonMapper;
+import com.comet.opik.infrastructure.db.TopicRunErrorMapper;
+import com.comet.opik.infrastructure.db.TopicRunModeMapper;
+import com.comet.opik.infrastructure.db.TopicRunStatusMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import jakarta.annotation.Nullable;
+import lombok.Builder;
+import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The attempt fields of a project's {@code topic_projects} row: the current or last run, first build, nightly update
- * or labelling pass. A run moves {@code queued -> running -> saved | failed}, or through {@code cancelling} to
- * {@code failed}; every statement here is a compare-and-set on the project, the run id and the status it expects, so
- * one writer wins and a run that lost its row writes nothing. {@code failed_runs} and {@code first_failed_at} count the
- * failed first builds and nightly updates since the last saved one: a labelling pass, a cancel that is not the run's
- * fault and a stopped pod's requeue do not count.
+ * Every statement on {@code topic_projects}, a project's current topics state, never its history. Each group of
+ * columns has its own writer and is never set by another: the run fields (the current or last run, first build,
+ * nightly update or labelling pass), the list fields (the saved list, written by a run's save), and the backfill fields
+ * (the topic vectors tick). A run moves {@code queued -> running -> saved | failed}, or through {@code cancelling} to
+ * {@code failed}; every run statement is a compare-and-set on the project, the run id and the status it expects, so
+ * one writer wins and a run that lost its row writes nothing. {@code failed_runs} and {@code first_failed_at} count
+ * the failed first builds and nightly updates since the last saved one: a labelling pass, a cancel that is not the
+ * run's fault and a stopped pod's requeue do not count. A row without {@code backfill_started_at} has no backfill yet; ClickHouse stays the only source of
+ * which traces have no vector.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-@RegisterArgumentFactory(TopicRunDAO.RunModeMapper.class)
-@RegisterArgumentFactory(TopicRunDAO.RunErrorMapper.class)
-@RegisterArgumentFactory(TopicRunDAO.CancelReasonMapper.class)
-@RegisterColumnMapper(TopicRunDAO.RunModeMapper.class)
-@RegisterColumnMapper(TopicRunDAO.RunStatusMapper.class)
-@RegisterColumnMapper(TopicRunDAO.RunErrorMapper.class)
+@RegisterArgumentFactory(PrototypeVectorsArgumentFactory.class)
+@RegisterArgumentFactory(TopicRunModeMapper.class)
+@RegisterArgumentFactory(TopicRunErrorMapper.class)
+@RegisterArgumentFactory(TopicCancelReasonMapper.class)
+@RegisterColumnMapper(PrototypeVectorsColumnMapper.class)
+@RegisterColumnMapper(TopicRunModeMapper.class)
+@RegisterColumnMapper(TopicRunStatusMapper.class)
+@RegisterColumnMapper(TopicRunErrorMapper.class)
+@RegisterColumnMapper(TopicCancelReasonMapper.class)
 @RegisterConstructorMapper(InFlightRun.class)
 @RegisterConstructorMapper(ListlessProject.class)
-@RegisterConstructorMapper(TopicDAO.ProjectKey.class)
-public interface TopicRunDAO {
+@RegisterConstructorMapper(TopicProject.class)
+@RegisterConstructorMapper(TopicProjectDAO.Backfill.class)
+@RegisterConstructorMapper(TopicProjectKey.class)
+public interface TopicProjectDAO {
+
+    /**
+     * A project's backfill columns.
+     *
+     * @param backfillStartedAt when this backfill began: the tick first saw the project, or reset the backfill because
+     *        it did not run for the workspace for 2 x {@code topics.vectors.longWindowInterval}
+     * @param backfillDrainedAt the start of the tick that drained the project since {@code backfillStartedAt}, null
+     *        until one does. Drained: the tick read the project's whole backfill window, found fewer than
+     *        {@code maxTracesPerTick} traces, and left none of them for want of time, a read, a back-off or an insert.
+     *        So every trace with a done status in the window up to that instant, and a usable summary, had a vector
+     *        when the tick ended, but for those the embed service refuses or answers with an invalid vector
+     * @param backfillLastDoneAt the project's latest done status, as last discovered
+     * @param backfillTracesTotal about how many traces of the project can get a vector: its traces created in the
+     *        backfill window with a done status, as last discovered. Too high by the traces whose summary is blank or
+     *        missing and by those the embed service refuses
+     * @param backfillTracesDone about how many of them have a vector, as last discovered, plus the vectors the
+     *        backfill wrote since. Never above {@code backfillTracesTotal}. Not kept up once the project is drained
+     */
+    @Builder(toBuilder = true)
+    record Backfill(
+            @NonNull String workspaceId,
+            @NonNull UUID projectId,
+            @NonNull Instant backfillStartedAt,
+            @Nullable Instant backfillDrainedAt,
+            @NonNull Instant backfillLastDoneAt,
+            long backfillTracesTotal,
+            long backfillTracesDone) {
+
+        /** The traces still to embed, as the counts have them: approximate, never negative. */
+        public long remaining() {
+            return Math.max(0, backfillTracesTotal - backfillTracesDone);
+        }
+    }
+
+    /** What one tick's backfill did for a project: drained it, or not ({@code drainedAt} null), and wrote vectors. */
+    @Builder(toBuilder = true)
+    record Progress(@NonNull String workspaceId, @NonNull UUID projectId, @Nullable Instant drainedAt, long written) {
+    }
 
     @SqlUpdate("INSERT IGNORE INTO topic_projects (workspace_id, project_id) VALUES (:workspaceId, :projectId)")
     void ensureRow(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
@@ -232,37 +286,133 @@ public interface TopicRunDAO {
             AND NOT (run_mode <=> 'labels' AND run_status <=> 'failed' AND run_finished_at > :failedAfter)
             ORDER BY last_success_at, project_id
             """)
-    List<TopicDAO.ProjectKey> findLabelsDue(@BindList("workspaceIds") Collection<String> workspaceIds,
+    List<TopicProjectKey> findLabelsDue(@BindList("workspaceIds") Collection<String> workspaceIds,
             @Bind("failedAfter") Instant failedAfter);
 
-    class RunModeMapper extends AbstractEnumColumnMapper<TopicProject.RunMode> {
-        public RunModeMapper() {
-            super(value -> byValue(TopicProject.RunMode.values(), value), "topic_run_mode");
-        }
+    /**
+     * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
+     * {@code expectedListRunId}, null for a first build. 0 when another run saved the project meanwhile, or the row is
+     * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects
+            SET saved_runs = saved_runs + 1, first_built_at = COALESCE(first_built_at, :savedAt),
+                last_success_at = :savedAt, list_run_id = :runId, window_until = :windowUntil,
+                labels_complete = FALSE, other_vectors = :otherVectors, embed_model = :embedModel
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
+            """)
+    int saveList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Nullable @Bind("expectedListRunId") UUID expectedListRunId, @Bind("runId") UUID runId,
+            @Bind("savedAt") Instant savedAt, @Bind("windowUntil") Instant windowUntil,
+            @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
+
+    /**
+     * Marks the labels of the project's saved list complete. Only while the row still names {@code runId}: a pass that
+     * labelled an older run never marks a newer one. 0 when the row names another run or is gone.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects SET labels_complete = TRUE
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id = :runId
+            """)
+    int markLabelsComplete(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
+            @Bind("runId") UUID runId);
+
+    @SqlQuery("SELECT * FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    List<TopicProject> findProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
+
+    @SqlQuery("""
+            SELECT workspace_id, project_id, backfill_started_at, backfill_drained_at, backfill_last_done_at,
+                backfill_traces_total, backfill_traces_done
+            FROM topic_projects
+            WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>) AND backfill_started_at IS NOT NULL
+            """)
+    List<Backfill> findBackfills(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
+
+    @SqlQuery("""
+            SELECT workspace_id, project_id, backfill_started_at, backfill_drained_at, backfill_last_done_at,
+                backfill_traces_total, backfill_traces_done
+            FROM topic_projects
+            WHERE workspace_id IN (<workspaceIds>) AND backfill_drained_at IS NULL AND backfill_started_at IS NOT NULL
+            """)
+    List<Backfill> findUndrainedBackfills(@BindList("workspaceIds") Collection<String> workspaceIds);
+
+    /**
+     * Starts a backfill for each project that has none; a started one is left as it is. MySQL applies the assignments
+     * in order, so {@code backfill_started_at} goes last: the others still see whether it was null.
+     */
+    @SqlBatch("""
+            INSERT INTO topic_projects (workspace_id, project_id, backfill_started_at, backfill_last_done_at,
+                backfill_traces_total, backfill_traces_done)
+            VALUES (:workspaceId, :projectId, :backfillStartedAt, :backfillLastDoneAt, :backfillTracesTotal,
+                :backfillTracesDone)
+            ON DUPLICATE KEY UPDATE
+                backfill_last_done_at = IF(backfill_started_at IS NULL, :backfillLastDoneAt, backfill_last_done_at),
+                backfill_traces_total = IF(backfill_started_at IS NULL, :backfillTracesTotal, backfill_traces_total),
+                backfill_traces_done = IF(backfill_started_at IS NULL, :backfillTracesDone, backfill_traces_done),
+                backfill_started_at = COALESCE(backfill_started_at, :backfillStartedAt)
+            """)
+    void startBackfills(@BindMethods List<Backfill> backfills);
+
+    /**
+     * A workspace the tick did not discover since {@code staleBefore}: its backfills start again, not drained and not
+     * counted.
+     */
+    @SqlUpdate("""
+            UPDATE topic_projects p
+            JOIN topic_workspaces w ON w.workspace_id = p.workspace_id
+            SET p.backfill_started_at = :now, p.backfill_drained_at = NULL, p.backfill_traces_total = 0,
+                p.backfill_traces_done = 0
+            WHERE p.workspace_id = :workspaceId AND p.backfill_started_at IS NOT NULL
+            AND w.vectors_checked_at < :staleBefore
+            """)
+    int resetStaleBackfills(@Bind("workspaceId") String workspaceId, @Bind("staleBefore") Instant staleBefore,
+            @Bind("now") Instant now);
+
+    /** The projects a discovery found; a started backfill keeps its start and drained mark. */
+    @SqlBatch("""
+            INSERT INTO topic_projects (workspace_id, project_id, backfill_started_at, backfill_last_done_at,
+                backfill_traces_total, backfill_traces_done)
+            VALUES (:workspaceId, :projectId, :backfillStartedAt, :backfillLastDoneAt, :backfillTracesTotal,
+                :backfillTracesDone)
+            ON DUPLICATE KEY UPDATE
+                backfill_last_done_at = :backfillLastDoneAt,
+                backfill_traces_total = :backfillTracesTotal,
+                backfill_traces_done = :backfillTracesDone,
+                backfill_started_at = COALESCE(backfill_started_at, :backfillStartedAt)
+            """)
+    void discoverBackfills(@BindMethods List<Backfill> backfills);
+
+    /** What a tick's backfill did: marks the drained projects and adds the vectors written, up to the total. */
+    @SqlBatch("""
+            UPDATE topic_projects
+            SET backfill_drained_at = COALESCE(:drainedAt, backfill_drained_at),
+                backfill_traces_done = LEAST(backfill_traces_done + :written,
+                    GREATEST(backfill_traces_total, backfill_traces_done))
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            """)
+    void recordBackfills(@BindMethods List<Progress> progress);
+
+    /** The projects' whole rows: a deleted project has no topics state left. */
+    @SqlUpdate("DELETE FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
+    int deleteByProjects(@Bind("workspaceId") String workspaceId,
+            @BindList("projectIds") Collection<UUID> projectIds);
+
+    /**
+     * Removes the workspace's rows whose project no longer exists: a row a tick wrote for a project deleted meanwhile,
+     * or one a failed delete on {@code ProjectsDeleted} left behind. A plain read finds them and the delete goes by
+     * their ids, so nothing in {@code projects} is locked.
+     */
+    default int deleteOfMissingProjects(String workspaceId) {
+        var missing = findOfMissingProjects(workspaceId);
+        return missing.isEmpty() ? 0 : deleteByProjects(workspaceId, missing);
     }
 
-    class RunStatusMapper extends AbstractEnumColumnMapper<TopicProject.RunStatus> {
-        public RunStatusMapper() {
-            super(value -> byValue(TopicProject.RunStatus.values(), value), "topic_run_status");
-        }
-    }
-
-    class CancelReasonMapper extends AbstractEnumColumnMapper<TopicProject.CancelReason> {
-        public CancelReasonMapper() {
-            super(value -> byValue(TopicProject.CancelReason.values(), value), "topic_cancel_reason");
-        }
-    }
-
-    class RunErrorMapper extends AbstractEnumColumnMapper<TopicProject.RunError> {
-        public RunErrorMapper() {
-            super(value -> byValue(TopicProject.RunError.values(), value), "topic_run_error");
-        }
-    }
-
-    private static <T extends HasValue> T byValue(T[] values, String value) {
-        return Arrays.stream(values)
-                .filter(candidate -> candidate.getValue().equals(value))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown value '%s'".formatted(value)));
-    }
+    @SqlQuery("""
+            SELECT t.project_id FROM topic_projects t
+            LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
+            WHERE t.workspace_id = :workspaceId AND p.id IS NULL
+            """)
+    List<UUID> findOfMissingProjects(@Bind("workspaceId") String workspaceId);
 }

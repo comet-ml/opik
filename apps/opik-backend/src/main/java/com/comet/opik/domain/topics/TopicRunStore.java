@@ -31,7 +31,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
  * A run's writes: its attempt on the project's {@code topic_projects} row (queue, claim, heartbeat, requeue, cancel,
- * fail; each a compare-and-set, see {@link TopicRunDAO}), the save transaction and the {@code trace_topics} insert
+ * fail; each a compare-and-set, see {@link TopicProjectDAO}), the save transaction and the {@code trace_topics} insert
  * after it. MySQL calls are blocking JDBI, each wrapped once on a bounded-elastic thread.
  */
 @Slf4j
@@ -72,7 +72,7 @@ class TopicRunStore {
         return jdbi(() -> {
             var runId = idGenerator.generateId();
             int queued = template.inTransaction(WRITE, handle -> {
-                var runDAO = handle.attach(TopicRunDAO.class);
+                var runDAO = handle.attach(TopicProjectDAO.class);
                 runDAO.ensureRow(workspaceId, projectId);
                 return runDAO.queue(workspaceId, projectId, runId, mode, Instant.now());
             });
@@ -103,7 +103,7 @@ class TopicRunStore {
      */
     Mono<Optional<RunError>> endCancelled(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull UUID runId) {
         return jdbi(() -> template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicRunDAO.class);
+            var dao = handle.attach(TopicProjectDAO.class);
             return dao.endCancelled(workspaceId, projectId, runId, Instant.now()) == 1
                     ? dao.findRunError(workspaceId, projectId, runId)
                     : Optional.<RunError>empty();
@@ -162,20 +162,20 @@ class TopicRunStore {
         if (projectIds.isEmpty()) {
             return Mono.just(0);
         }
-        return jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class)
+        return jdbi(() -> template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .cancelProjects(workspaceId, projectIds, reason, Instant.now())));
     }
 
     /** Every run in flight, of any workspace. */
     Mono<List<InFlightRun>> findInFlight() {
-        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class)
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                 .findInFlight()));
     }
 
     /** One compare-and-set on a run's row, in its own transaction: true when it moved the row. */
-    Mono<Boolean> write(@NonNull ToIntFunction<TopicRunDAO> statement) {
+    Mono<Boolean> write(@NonNull ToIntFunction<TopicProjectDAO> statement) {
         return jdbi(() -> template.inTransaction(WRITE, handle -> statement.applyAsInt(
-                handle.attach(TopicRunDAO.class))) == 1);
+                handle.attach(TopicProjectDAO.class))) == 1);
     }
 
     /**
@@ -187,7 +187,7 @@ class TopicRunStore {
     Mono<Boolean> fail(@NonNull UUID runId, @NonNull TopicsMetrics.Workspace workspace, @NonNull UUID projectId,
             @NonNull RunError code) {
         return jdbi(() -> {
-            int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class)
+            int updated = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                     .markFailed(workspace.id(), projectId, runId, Instant.now(), code));
             if (updated == 1) {
                 metrics.run(workspace, TopicProject.RunStatus.FAILED, code.getValue());
@@ -198,7 +198,7 @@ class TopicRunStore {
 
     /** Whether the project's attempt is the run, saved. */
     Mono<Boolean> isSaved(@NonNull TopicRun run) {
-        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicDAO.class)
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
                 .findProjects(run.workspaceId(), Set.of(run.projectId()))).stream()
                 .anyMatch(project -> run.runId().equals(project.runId())
                         && project.runStatus() == TopicProject.RunStatus.SAVED));
@@ -219,15 +219,16 @@ class TopicRunStore {
             var now = Instant.now();
             template.inTransaction(WRITE, handle -> {
                 var topicDAO = handle.attach(TopicDAO.class);
+                var projectDAO = handle.attach(TopicProjectDAO.class);
                 // First, so a run that saved this project meanwhile fails the save before anything else.
-                if (topicDAO.saveList(run.workspaceId(), run.projectId(), null, run.runId(), now, run.to(),
+                if (projectDAO.saveList(run.workspaceId(), run.projectId(), null, run.runId(), now, run.to(),
                         otherVectors, TopicEmbedding.MODEL) != 1) {
                     throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
                 }
                 if (!topics.isEmpty()) {
                     topicDAO.insertTopics(topics);
                 }
-                if (handle.attach(TopicRunDAO.class).markSaved(run.workspaceId(), run.projectId(), run.runId(),
+                if (projectDAO.markSaved(run.workspaceId(), run.projectId(), run.runId(),
                         now) != 1) {
                     throw new TopicsRunException(RunError.TIMEOUT, "the run ended before its save committed");
                 }

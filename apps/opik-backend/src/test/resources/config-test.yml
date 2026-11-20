@@ -1060,8 +1060,18 @@ topics:
     llmDeadline: 120s
     readTimeout: 120s
     countTimeout: 60s
+    # Small, so a test's pass takes many pages and slices.
+    labelPageTraces: 7
+    labelSliceTraces: 20
     insertRetries: 3
     insertBackoff: 500ms
+    read:
+      maxRowsToRead: 300000000
+      maxMemoryUsage: 1073741824
+      maxThreads: 2
+      priority: 100
+      maxBlockSize: 8192
+      countSlice: 1d
   firstBuild:
     backfillMaxWait: 72h
     timedOutShare: 0.99
@@ -1573,4 +1583,3 @@ annotationQueueRouting:
   # Default: 1000
   # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
   streamTrimLimit: 1000
-

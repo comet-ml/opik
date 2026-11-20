@@ -48,7 +48,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set version
         id: version
@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Create git tag
         env:
@@ -199,13 +199,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{needs.set-version.outputs.version}}
           generate_release_notes: true
 
       - name: Delete Release Draft
-        uses: hugo19941994/delete-draft-releases@v3.0.0
+        uses: hugo19941994/delete-draft-releases@3f19a25abf2ce87850c2268938f98f14e4d3d1f1 # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -229,13 +229,13 @@ jobs:
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup Node.js for TypeScript version update
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "26"
           registry-url: "https://registry.npmjs.org"
@@ -276,7 +276,7 @@ jobs:
       # Same action + inputs as update_helm_readme.yaml, keeping CI and the
       # local pre-commit hook in agreement.
       - name: Regenerate Helm chart README
-        uses: losisin/helm-docs-github-action@v2
+        uses: losisin/helm-docs-github-action@9e0787c426fdec38be6288bb5c0559dcb388412c # v2
         with:
           chart-search-root: deployment/helm_chart/opik
           git-push: false
