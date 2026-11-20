@@ -117,6 +117,12 @@ public class DatabaseAnalyticsFactory {
      */
     private boolean coldStorageDiskHealthCheckEnabled;
 
+    /**
+     * Whether {@code JsonEachRowBulkInsert} writes rows straight into the request body on the client's threads (true),
+     * or serializes the batch into a buffer on {@code boundedElastic} before taking a connection (false).
+     */
+    private boolean bulkInsertStreamRows;
+
     public ConnectionFactory build() {
         var queryParametersOverrides = getQueryParametersOverrides(queryParameters, r2dbcOnlyServerSettings());
         var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);

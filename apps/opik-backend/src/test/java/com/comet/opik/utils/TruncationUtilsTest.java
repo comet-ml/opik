@@ -1,7 +1,12 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.utils.TruncationUtils.JsonWithSlim;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -10,11 +15,17 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class TruncationUtilsTest {
+public class TruncationUtilsTest {
 
     @Nested
     @DisplayName("createSlimJson with JsonNode")
@@ -229,6 +240,153 @@ class TruncationUtilsTest {
             String result = TruncationUtils.createSlimJsonString(input, 100);
             // Should not throw and should produce valid output
             assertThat(result).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("toJsonWithSlim")
+    public class ToJsonWithSlimTests {
+
+        private static final int MAX = TruncationUtils.DEFAULT_SLIM_STRING_MAX_LENGTH;
+
+        private static String randomText(int length) {
+            return RandomStringUtils.secure().next(length);
+        }
+
+        private static String randomAscii(int length) {
+            return RandomStringUtils.secure().nextAlphanumeric(length);
+        }
+
+        private static JsonNode parse(String json) {
+            return JsonUtils.getJsonNodeFromString(json);
+        }
+
+        private static JsonWithSlim expectedFromReparse(JsonNode node) {
+            String json = TruncationUtils.toJsonString(node);
+            return JsonWithSlim.builder()
+                    .json(json)
+                    .slim(TruncationUtils.createSlimJsonString(json))
+                    .build();
+        }
+
+        public static Stream<JsonNode> parsedPayloads() {
+            var emojiAtBoundary = "%s\uD83D\uDE00%s".formatted("a".repeat(MAX - 1), randomAscii(10));
+            return Stream.of(
+                    parse("{}"),
+                    parse("[]"),
+                    parse("null"),
+                    parse("true"),
+                    parse(String.valueOf(RandomUtils.secure().randomInt())),
+                    parse("\"%s\"".formatted(randomAscii(10))),
+                    parse("\"%s\"".formatted(randomAscii(MAX))),
+                    parse("\"%s\"".formatted(randomAscii(MAX + 1))),
+                    parse("{\"short\":\"%s\",\"n\":%d}".formatted(randomAscii(20), RandomUtils.secure().randomInt())),
+                    parse(JsonUtils.writeValueAsString(Map.of("text", randomText(MAX + 500)))),
+                    parse(JsonUtils.writeValueAsString(Map.of("text", randomText(MAX - 1)))),
+                    parse(JsonUtils.writeValueAsString(Map.of("emoji", emojiAtBoundary))),
+                    parse(JsonUtils.writeValueAsString(Map.of(
+                            "escapes", "quote \" backslash \\ newline \n tab \t control \u0001 %s"
+                                    .formatted(randomAscii(MAX))))),
+                    parse("""
+                            {"messages":[{"role":"user","content":"%s"},{"role":"assistant","content":"%s"}],
+                             "model":"%s","usage":{"prompt_tokens":%d,"completion_tokens":%d},
+                             "tools":[],"meta":{"nested":{"deeper":["%s",null,true,false,1.5,-0.0,1e300]}}}
+                            """.formatted(randomAscii(5000), randomAscii(30), randomAscii(8),
+                            RandomUtils.secure().randomInt(), RandomUtils.secure().randomInt(),
+                            randomAscii(MAX + 1))),
+                    parse("""
+                            {"numbers":[0,-1,2147483648,9223372036854775808,123456789012345678901234567890,
+                             0.1,1.0E10,1.7976931348623157E308,4.9E-324,NaN,Infinity,-Infinity],
+                             "long":"%s"}
+                            """.formatted(randomAscii(MAX * 3))),
+                    parse("[%s]".formatted(String.join(",",
+                            Stream.generate(() -> "\"%s\"".formatted(randomAscii(MAX + 7))).limit(50).toList()))),
+                    parse(JsonUtils.writeValueAsString(Map.of("output", randomText(2_000_000)))),
+                    parse(JsonUtils.writeValueAsString(largeTree(3000, 0))),
+                    parse(JsonUtils.writeValueAsString(largeTree(2200, 10))));
+        }
+
+        private static List<Map<String, Object>> largeTree(int records, int longEvery) {
+            return IntStream.range(0, records)
+                    .mapToObj(index -> {
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        row.put("name", randomText(40));
+                        row.put("attributes", Map.of("a", randomAscii(20), "b", index, "c", randomText(20)));
+                        row.put("tags", List.of(randomAscii(8), randomAscii(8), randomAscii(8)));
+                        row.put("children", List.of(Map.of("k", randomAscii(12), "v", index * 0.5)));
+                        if (longEvery > 0 && index % longEvery == 0) {
+                            row.put("body", randomText(3000));
+                        }
+                        return row;
+                    })
+                    .toList();
+        }
+
+        @ParameterizedTest
+        @MethodSource("parsedPayloads")
+        @DisplayName("should match serializing and reparsing for parsed payloads")
+        void shouldMatchReparseForParsedPayloads(JsonNode node) {
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            assertThat(actual).isEqualTo(expectedFromReparse(node));
+        }
+
+        public static Stream<JsonNode> builtPayloads() {
+            var factory = JsonNodeFactory.instance;
+            return Stream.of(
+                    factory.objectNode()
+                            .put("decimal", new BigDecimal("1E+10"))
+                            .put("text", randomAscii(MAX + 1)),
+                    factory.objectNode()
+                            .put("float", 0.1f)
+                            .put("text", randomAscii(10)),
+                    factory.objectNode()
+                            .put("binary", randomAscii(MAX * 2).getBytes())
+                            .put("text", randomAscii(10)),
+                    factory.objectNode()
+                            .put("long_decimal", new BigDecimal("1".repeat(1001)))
+                            .put("text", randomAscii(MAX + 1)),
+                    factory.objectNode()
+                            .put("big_integer", new BigInteger("123456789012345678901234567890"))
+                            .put("short", (short) 7)
+                            .put("double", 2.5d)
+                            .put("text", randomAscii(MAX + 1)),
+                    factory.arrayNode()
+                            .add(factory.objectNode().putNull("missing_value"))
+                            .add(randomAscii(MAX + 1)));
+        }
+
+        @ParameterizedTest
+        @MethodSource("builtPayloads")
+        @DisplayName("should truncate the strings of programmatically built payloads, keeping every other value")
+        void shouldTruncateStringsOfBuiltPayloads(JsonNode node) {
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            var expected = JsonWithSlim.builder()
+                    .json(TruncationUtils.toJsonString(node))
+                    .slim(JsonUtils.writeValueAsString(TruncationUtils.createSlimJson(node)))
+                    .build();
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("should return empty json and slim for null")
+        void shouldReturnEmptyForNull() {
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(null);
+
+            assertThat(actual).isEqualTo(JsonWithSlim.builder().json("").slim("").build());
+        }
+
+        @Test
+        @DisplayName("should reuse the full json as slim when no string exceeds the max length")
+        void shouldReuseJsonWhenNothingIsTruncated() {
+            ObjectNode node = JsonNodeFactory.instance.objectNode()
+                    .put("text", randomAscii(MAX))
+                    .put("number", 1);
+
+            JsonWithSlim actual = TruncationUtils.toJsonWithSlim(node);
+
+            assertThat(actual.slim()).isSameAs(actual.json());
         }
     }
 
