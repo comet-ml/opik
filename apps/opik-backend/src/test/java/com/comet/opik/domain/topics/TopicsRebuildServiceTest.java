@@ -1,7 +1,9 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.TestConfigUtils;
+import com.comet.opik.api.Project;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.inference.GenerateRequest;
 import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceJson;
@@ -31,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -42,7 +45,6 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
@@ -73,6 +75,7 @@ class TopicsRebuildServiceTest {
     private TopicsTestMeter meter;
     private TopicRunDAO runDAO;
     private TopicDAO topicDAO;
+    private ProjectService projectService;
     private TraceTopicsDAO traceTopicsDAO;
     private InferenceClient client;
     private TopicWindowDAO windowDAO;
@@ -90,13 +93,15 @@ class TopicsRebuildServiceTest {
         var handle = mock(Handle.class);
         when(handle.attach(TopicRunDAO.class)).thenReturn(runDAO);
         when(handle.attach(TopicDAO.class)).thenReturn(topicDAO);
+        projectService = mock(ProjectService.class);
+        when(projectService.findByIds(WORKSPACE_ID, Set.of(projectId)))
+                .thenReturn(List.of(Project.builder().id(projectId).name("p").build()));
         var template = mock(TransactionTemplate.class);
         when(template.inTransaction(any(TxConfig.class), any()))
                 .thenAnswer(invocation -> invocation.<TxAction<?>>getArgument(1).execute(handle));
         windowDAO = mock(TopicWindowDAO.class);
         when(windowDAO.readWindow(eq(WORKSPACE_ID), eq(projectId), any(), any(), anyInt(), anyLong()))
                 .thenReturn(Flux.fromIterable(window()));
-        when(topicDAO.lockProject(anyString(), any())).thenReturn(1);
         when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         when(runDAO.markSaved(any(), any(), any(), any())).thenReturn(1);
         when(traceTopicsDAO.insert(any())).thenReturn(Mono.just((long) TRACES));
@@ -104,7 +109,7 @@ class TopicsRebuildServiceTest {
         when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         var metrics = new TopicsMetrics(meter.meter, workspaceId -> WORKSPACE_NAME);
         var config = TestConfigUtils.loadConfigTest().getTopics();
-        store = new TopicRunStore(config, template, traceTopicsDAO, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
         var reader = new TopicWindowReader(config, windowDAO);
         var llm = new TopicsLlm(config, client, metrics);
         serviceWith = algorithm -> new TopicsRebuildService(config, reader, llm, store, idGenerator, metrics,
@@ -207,7 +212,8 @@ class TopicsRebuildServiceTest {
     @DisplayName("a MySQL save that fails writes no trace_topics row and counts the run failed once")
     void failedSaveWritesNoLabels() {
         when(runDAO.markFailed(eq(WORKSPACE_ID), eq(projectId), eq(runId), any(), any())).thenReturn(1);
-        when(topicDAO.lockProject(anyString(), any())).thenThrow(new IllegalStateException("MySQL down"));
+        when(topicDAO.saveList(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("MySQL down"));
         answer(FIXTURE.answer);
 
         var outcome = service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
@@ -237,6 +243,23 @@ class TopicsRebuildServiceTest {
         verify(runDAO, never()).markSaved(any(), any(), any(), any());
         verify(traceTopicsDAO, never()).insert(any());
         assertThat(meter.sum("topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a run whose project was deleted before its commit keeps no topics and inserts no trace_topics; the "
+            + "project's row is never locked")
+    void projectDeletedDuringTheRunIsDiscarded() {
+        when(projectService.findByIds(WORKSPACE_ID, Set.of(projectId))).thenReturn(List.of());
+        answer(FIXTURE.answer);
+
+        service.firstBuild(runId, WORKSPACE_ID, projectId, night, TRACES).block();
+
+        var order = inOrder(runDAO, projectService, topicDAO);
+        order.verify(runDAO).markSaved(eq(WORKSPACE_ID), eq(projectId), eq(runId), any());
+        order.verify(projectService).findByIds(WORKSPACE_ID, Set.of(projectId));
+        order.verify(topicDAO).deleteTopicsByProjects(WORKSPACE_ID, List.of(projectId));
+        verify(traceTopicsDAO, never()).insert(any());
+        verify(topicDAO, never()).lockProject(any(), any());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.topics.TopicProject.RunError;
 import com.comet.opik.infrastructure.TopicsConfig;
 import jakarta.inject.Inject;
@@ -37,17 +38,19 @@ class TopicRunStore {
     private final TopicsConfig.BuildConfig build;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
+    private final ProjectService projectService;
     private final IdGenerator idGenerator;
     private final TopicsMetrics metrics;
     private final Scheduler jdbi = Schedulers.boundedElastic();
 
     @Inject
     TopicRunStore(@NonNull @Config("topics") TopicsConfig config, @NonNull TransactionTemplate template,
-            @NonNull TraceTopicsDAO traceTopicsDAO,
+            @NonNull TraceTopicsDAO traceTopicsDAO, @NonNull ProjectService projectService,
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics) {
         this.build = config.getBuild();
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
+        this.projectService = projectService;
         this.idGenerator = idGenerator;
         this.metrics = metrics;
     }
@@ -108,14 +111,21 @@ class TopicRunStore {
      * and the run as {@code saved}. The list is a compare-and-set on an empty {@code list_run_id}, as a first build
      * saves a project that has no list: if another run saved the project anyway (a Redis failover, or a timed-out run
      * that outlives its lock), the save is a conflict. A run failed meanwhile, by its timeout, rolls the save back.
+     *
+     * <p>The project's row is not locked. After the commit the save reads it: when the project is gone, the run's topics
+     * are deleted and the result is false, so the caller skips the {@code trace_topics} insert. A delete that commits
+     * after that read leaves the topics to the first-build job's sweep of deleted projects.
      */
-    Mono<Void> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
+    Mono<Boolean> save(@NonNull TopicRun run, @NonNull List<Topic> topics, PrototypeVectors otherVectors) {
         return jdbi(() -> {
             var now = Instant.now();
             template.inTransaction(WRITE, handle -> {
                 var topicDAO = handle.attach(TopicDAO.class);
                 // First, so a run that saved this project meanwhile fails the save before anything else.
-                saveList(run, topicDAO, now, otherVectors);
+                if (topicDAO.saveList(run.workspaceId(), run.projectId(), null, run.runId(), now, run.to(),
+                        otherVectors, TopicEmbedding.MODEL) != 1) {
+                    throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
+                }
                 if (!topics.isEmpty()) {
                     topicDAO.insertTopics(topics);
                 }
@@ -131,21 +141,26 @@ class TopicRunStore {
         })
                 .onErrorMap(error -> !(error instanceof TopicsRunException),
                         error -> new TopicsRunException(RunError.SAVE, "the save failed", error))
-                .then();
+                .flatMap(saved -> keepIfProjectExists(run));
     }
 
-    /**
-     * It first locks the project's row: a project deleted during the run fails the save, and a delete that comes later
-     * waits for this transaction, so its cleanup removes what the run saved.
-     */
-    private void saveList(TopicRun run, TopicDAO topicDAO, Instant savedAt, PrototypeVectors otherVectors) {
-        if (topicDAO.lockProject(run.workspaceId(), run.projectId()) == 0) {
-            throw new TopicsRunException(RunError.SAVE, "the project was deleted during the run");
-        }
-        if (topicDAO.saveList(run.workspaceId(), run.projectId(), null, run.runId(), savedAt, run.to(), otherVectors,
-                TopicEmbedding.MODEL) != 1) {
-            throw new TopicsRunException(RunError.SAVE, "another run saved this project meanwhile");
-        }
+    /** False, after deleting the run's topics, when the project was deleted during the run. */
+    private Mono<Boolean> keepIfProjectExists(TopicRun run) {
+        return jdbi(() -> {
+            boolean exists = !projectService.findByIds(run.workspaceId(), Set.of(run.projectId())).isEmpty();
+            if (!exists) {
+                int deleted = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+                        .deleteTopicsByProjects(run.workspaceId(), List.of(run.projectId())));
+                log.warn("Topics run '{}' saved after its project was deleted, project '{}': its result is discarded, "
+                        + "topics deleted '{}'", run.runId(), run.projectId(), deleted);
+            }
+            return exists;
+        }).onErrorResume(error -> {
+            // The run is saved: a failed check leaves a deleted project's topics to the sweep.
+            log.warn("Topics run '{}' could not check its project after the save, project '{}'", run.runId(),
+                    run.projectId(), error);
+            return Mono.just(true);
+        });
     }
 
     /** The longest the insert after the commit takes: every attempt to its stop, the backoffs, and some slack. */

@@ -67,6 +67,11 @@ public class TopicsRebuildService {
 
     /** What a built run saves. */
     private record Built(List<Topic> topics, PrototypeVectors otherVectors, List<TraceTopic> traceTopics) {
+
+        /** Saved, but its project was deleted meanwhile: nothing more to write. */
+        Built discarded() {
+            return new Built(topics, otherVectors, List.of());
+        }
     }
 
     /**
@@ -83,7 +88,7 @@ public class TopicsRebuildService {
             var timeout = config.getBuild().getProjectTimeout().toJavaDuration();
             return build(run, windowTraces)
                     .flatMap(built -> timed(run, "save", store.save(run, built.topics(), built.otherVectors()))
-                            .thenReturn(built))
+                            .map(kept -> kept ? built : built.discarded()))
                     .timeout(timeout, Mono.error(() -> new TopicsRunException(RunError.TIMEOUT,
                             "the run outlasted topics.build.projectTimeout '%s'".formatted(timeout))))
                     .flatMap(built -> saved(run, built))
@@ -192,7 +197,10 @@ public class TopicsRebuildService {
 
     private Mono<Outcome> saved(TopicRun run, Built built) {
         metrics.otherShare(run.workspaceId(), run.stats().path("other_share").asDouble());
-        return store.insertTraceTopics(run, built.traceTopics()).map(inserted -> {
+        var insert = built.traceTopics().isEmpty()
+                ? Mono.just(false)
+                : store.insertTraceTopics(run, built.traceTopics());
+        return insert.map(inserted -> {
             log.info("Topics run '{}' saved, project '{}', trace topics '{}', stats '{}'", run.runId(),
                     run.projectId(), inserted ? built.traceTopics().size() : 0, run.stats());
             return outcome(run, TopicProject.RunStatus.SAVED, null);
