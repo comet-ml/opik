@@ -73,6 +73,9 @@ public class TopicsNightlyService {
         return new Lock("topics:nightly:run:" + night);
     }
 
+    /** The night lock's time after its last run: the projects the budget did not reach are written then. */
+    static final Duration LEASE_TAIL = Duration.ofMinutes(5);
+
     /** How long a night started by hand waits to learn whether it got the night lock. */
     private static final Duration LOCK_WAIT = Duration.ofSeconds(10);
 
@@ -153,9 +156,12 @@ public class TopicsNightlyService {
         }
     }
 
-    /** How long the night's lock must last: its budget, then one whole run that started just before the budget ends. */
+    /**
+     * How long the night's lock must last: its budget, one whole run that started just before the budget ends, and
+     * {@link #LEASE_TAIL} for the decisions written after it.
+     */
     public Duration lease() {
-        return config.getNightly().getBudget().toJavaDuration().plus(runner.projectLease());
+        return config.getNightly().getBudget().toJavaDuration().plus(runner.projectLease()).plus(LEASE_TAIL);
     }
 
     /**
@@ -194,11 +200,13 @@ public class TopicsNightlyService {
         var executor = Executors.newThreadPerTaskExecutor(
                 Thread.ofPlatform().name("topics-nightly-", 0).daemon(true).factory());
         try {
-            for (var candidate : candidates) {
+            for (int i = 0; i < candidates.size(); i++) {
+                var candidate = candidates.get(i);
                 if (Thread.currentThread().isInterrupted() || !now.get().isBefore(budgetEnd)) {
-                    notReached++;
-                    record.decide(candidate, Decision.NOT_REACHED, null, null);
-                    continue;
+                    var left = candidates.subList(i, candidates.size());
+                    notReached += left.size();
+                    record.decide(left, Decision.NOT_REACHED, null);
+                    break;
                 }
                 if (!runner.acquireRun(budgetEnd)) {
                     skipped++;
@@ -367,7 +375,7 @@ public class TopicsNightlyService {
      * fails only its own count, never its workspace's. A project whose count read fails is decided
      * {@code count_failed} and left for the next night. A read that fails otherwise throws, and fails the night. No
      * count starts after {@code budgetEnd}: the projects left go to {@code uncounted}, and are decided
-     * {@code not_reached}. So the scan ends within the budget, and the night lock's lease (budget + one run) still
+     * {@code not_reached}. So the scan ends within the budget, and the night lock's {@link #lease} still
      * covers the night.
      */
     private int eligible(LocalDate night, Instant began, Instant budgetEnd, List<Candidate> candidates,

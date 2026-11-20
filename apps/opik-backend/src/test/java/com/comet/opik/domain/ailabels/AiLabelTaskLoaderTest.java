@@ -129,7 +129,7 @@ class AiLabelTaskLoaderTest {
     /** Another feature's tasks: its own placeholders instead of the state, no ai-labels budget, names it knows. */
     @Test
     void anotherFeatureChecksItsOwnPlaceholders() {
-        var rules = new AiLabelTaskLoader.Rules("topics", Map.of("summary", new AiLabelTaskLoader.Placeholders(
+        var rules = new AiLabelTaskLoader.Rules("topics", Map.of("summary", new TaskPlaceholders(
                 Set.of("{{groups}}"), Set.of(), Set.of("{{limit}}")))::get, null);
         var task = GENERATE.replace("{{state}}", "{{groups}} at most {{limit}}, {{limit}}")
                 .replace("Summarize this trace:", "x".repeat(20_000));
