@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.utils.TruncationUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
@@ -29,15 +30,17 @@ public class StreamedPayload {
     }
 
     /**
-     * Binds the streamed row. A {@code null} value binds {@code ''} and an empty slim; a non-null one gets its slim
-     * copy computed here, so callers cannot let the two drift.
+     * Binds the streamed row. A {@code null} node binds {@code ''} and an empty slim; a non-null one gets its JSON
+     * and slim copy serialized together here, so callers cannot let the two drift.
      */
-    public static void bind(@NonNull Statement statement, @Nullable String input, @Nullable String output,
+    public static void bind(@NonNull Statement statement, @Nullable JsonNode input, @Nullable JsonNode output,
             @Nullable String metadata) {
-        statement.bind("input", StringUtils.defaultString(input))
-                .bind("output", StringUtils.defaultString(output))
+        var inputColumns = TruncationUtils.toJsonWithSlim(input);
+        var outputColumns = TruncationUtils.toJsonWithSlim(output);
+        statement.bind("input", inputColumns.json())
+                .bind("output", outputColumns.json())
                 .bind("metadata", StringUtils.defaultString(metadata))
-                .bind("input_slim", input == null ? "" : TruncationUtils.createSlimJsonString(input))
-                .bind("output_slim", output == null ? "" : TruncationUtils.createSlimJsonString(output));
+                .bind("input_slim", inputColumns.slim())
+                .bind("output_slim", outputColumns.slim());
     }
 }
