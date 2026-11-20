@@ -156,7 +156,8 @@ class TopicsRebuildServiceTest {
         // The app's beans with a meter of the test's own, so each test reads only what its run recorded.
         metricReader = InMemoryMetricReader.create();
         var metrics = metrics(metricReader);
-        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics);
+        store = new TopicRunStore(config, template, traceTopicsDAO, projectService, idGenerator, metrics,
+                workspaceNames);
         service = new TopicsRebuildService(config, new TopicWindowReader(config, windowDAO),
                 new TopicsLlm(config, client, metrics), store, idGenerator, metrics, workspaceNames,
                 FIXTURE_ALGORITHM);
@@ -271,26 +272,6 @@ class TopicsRebuildServiceTest {
     }
 
     @Test
-    @DisplayName("a start that finds an attempt left running past the lease records it abandoned and counts it once")
-    void startRecordsAnAbandonedAttempt() {
-        var first = start();
-
-        var second = store.startRun(workspace(), projectId, TopicProject.RunMode.FIRST_BUILD,
-                Instant.now().plusSeconds(1)).block();
-
-        assertThat(second).isNotEqualTo(first);
-        assertThat(data.topicProject(projectId)).satisfies(project -> {
-            assertThat(project.runId()).isEqualTo(second);
-            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
-        });
-        assertThat(points(metricReader, "topics.runs")).singleElement().satisfies(point -> {
-            assertThat(point.value()).isEqualTo(1);
-            assertThat(point.get("status")).isEqualTo("failed");
-            assertThat(point.get("error_code")).isEqualTo("abandoned");
-        });
-    }
-
-    @Test
     @DisplayName("failing a run that already ended changes nothing and is not counted again")
     void alreadyEndedIsNotCounted() {
         var runId = start();
@@ -302,8 +283,13 @@ class TopicsRebuildServiceTest {
         assertThat(sum(metricReader, "topics.runs", "status", "failed")).isEqualTo(1);
     }
 
+    /** Queues and claims a first build, as the planner and a pod's subscriber do. */
     private UUID start() {
-        return store.startRun(workspace(), projectId, TopicProject.RunMode.FIRST_BUILD, Instant.EPOCH).block();
+        var runId = store.queue(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD).block().orElseThrow();
+        var message = TopicsRunMessage.builder().runId(runId).workspaceId(workspaceId).projectId(projectId)
+                .mode(TopicProject.RunMode.FIRST_BUILD).night(NIGHT).windowTraces(FIXTURE.size()).build();
+        assertThat(store.claim(message, Instant.now().plusSeconds(3600)).block()).isTrue();
+        return runId;
     }
 
     /** The workspace as the run records it: no name service runs in the test app, so the name is the id. */

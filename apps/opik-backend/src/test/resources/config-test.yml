@@ -1062,6 +1062,26 @@ topics:
     countTimeout: 60s
     insertRetries: 3
     insertBackoff: 500ms
+  firstBuild:
+    backfillMaxWait: 72h
+    timedOutShare: 0.99
+    retryDelays: [1h, 6h, 1d]
+  runs:
+    streamName: topics-runs
+    consumerGroupName: topics-runs-consumers
+    consumerBatchSize: 1
+    poolingInterval: 5s
+    longPollingDuration: 5s
+    claimIntervalRatio: 2
+    pendingMessageDuration: 5m
+    maxRetries: 3
+    streamMaxLen: 10000
+    streamTrimLimit: 100
+    maxInFlight: 2
+    heartbeatInterval: 20s
+    abandonGrace: 60s
+    republishAfter: 10m
+    planBudget: 2m
   algorithm:
     minGroups: 30
     maxGroups: 50

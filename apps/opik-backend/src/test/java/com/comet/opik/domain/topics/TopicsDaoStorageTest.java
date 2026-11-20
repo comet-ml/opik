@@ -42,6 +42,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -512,7 +513,7 @@ class TopicsDaoStorageTest {
         data.savedList(UUID.randomUUID().toString(), UUID.randomUUID(), NIGHT.minus(Duration.ofDays(5)), BUILT);
 
         var unfinished = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findLabelsIncomplete(List.of(workspaceId)));
+                handle -> handle.attach(TopicRunDAO.class).findLabelsDue(List.of(workspaceId), NIGHT));
 
         assertThat(unfinished).extracting(TopicDAO.ProjectKey::projectId).containsExactly(oldest, middle, newest);
     }
@@ -549,8 +550,8 @@ class TopicsDaoStorageTest {
     }
 
     @Test
-    @DisplayName("failed attempts count from the first one's start until a save; an attempt left running counts as "
-            + "abandoned only once it is older than the lease")
+    @DisplayName("failed first builds count from the first one's start until a save; a run whose heartbeat went stale "
+            + "is recorded abandoned and counts, only once its heartbeat is older than the cutoff")
     void failedAttemptsCountUntilASave() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -559,15 +560,19 @@ class TopicsDaoStorageTest {
         var leftRun = UUID.randomUUID();
         var leftStart = NIGHT.plus(Duration.ofHours(1));
         var savedRun = UUID.randomUUID();
+        var abandonedAt = leftStart.plus(Duration.ofHours(1));
+
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicRunDAO.class);
-            runDAO.start(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
+            TopicsTestData.startRun(runDAO, workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD,
+                    firstStart);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
                     TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
                     TopicProject.RunError.TIMEOUT)).isZero();
-            runDAO.start(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
-            assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart, leftStart)).isZero();
+            TopicsTestData.startRun(runDAO, workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD,
+                    leftStart);
+            assertThat(runDAO.abandon(workspaceId, projectId, leftRun, leftStart, abandonedAt)).isZero();
             return null;
         });
 
@@ -575,10 +580,9 @@ class TopicsDaoStorageTest {
                 TopicProject::failedRuns, TopicProject::firstFailedAt)
                 .containsExactly(leftRun, TopicProject.RunStatus.RUNNING, 1, firstStart);
 
-        var abandonedAt = leftStart.plus(Duration.ofHours(1));
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicRunDAO.class);
-            assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart.plusSeconds(1), abandonedAt))
+            assertThat(runDAO.abandon(workspaceId, projectId, leftRun, leftStart.plusSeconds(1), abandonedAt))
                     .isEqualTo(1);
             return null;
         });
@@ -590,7 +594,8 @@ class TopicsDaoStorageTest {
 
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicRunDAO.class);
-            runDAO.start(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
+            TopicsTestData.startRun(runDAO, workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD,
+                    abandonedAt);
             assertThat(runDAO.markSaved(workspaceId, projectId, savedRun, abandonedAt.plusSeconds(60)))
                     .isEqualTo(1);
             return null;
@@ -599,6 +604,164 @@ class TopicsDaoStorageTest {
         assertThat(data.topicProject(projectId)).extracting(TopicProject::runStatus, TopicProject::runErrorCode,
                 TopicProject::failedRuns, TopicProject::firstFailedAt)
                 .containsExactly(TopicProject.RunStatus.SAVED, null, 0, null);
+    }
+
+    @Test
+    @DisplayName("each move of a run is a compare-and-set on its id and the status it expects: a second queue, a "
+            + "second claim, a stale run id and a save after a cancel change nothing")
+    void runMovesAreCompareAndSet() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var runId = UUID.randomUUID();
+        var otherRun = UUID.randomUUID();
+        var queuedAt = NIGHT;
+        var claimedAt = NIGHT.plusSeconds(10);
+        var deadline = claimedAt.plus(Duration.ofMinutes(30));
+
+        var moves = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicRunDAO.class);
+            dao.ensureRow(workspaceId, projectId);
+            return List.of(
+                    dao.queue(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD, queuedAt),
+                    dao.queue(workspaceId, projectId, otherRun, TopicProject.RunMode.FIRST_BUILD, queuedAt),
+                    dao.heartbeat(workspaceId, projectId, runId, claimedAt),
+                    dao.claim(workspaceId, projectId, otherRun, claimedAt, deadline),
+                    dao.claim(workspaceId, projectId, runId, claimedAt, deadline),
+                    dao.claim(workspaceId, projectId, runId, claimedAt, deadline),
+                    dao.heartbeat(workspaceId, projectId, runId, claimedAt.plusSeconds(20)),
+                    dao.requeue(workspaceId, projectId, runId, claimedAt.plusSeconds(30)),
+                    dao.heartbeat(workspaceId, projectId, runId, claimedAt.plusSeconds(40)),
+                    dao.claim(workspaceId, projectId, runId, claimedAt.plusSeconds(50), deadline),
+                    dao.cancel(workspaceId, projectId, runId, TopicProject.CancelReason.DEADLINE),
+                    dao.heartbeat(workspaceId, projectId, runId, claimedAt.plusSeconds(60)),
+                    dao.markSaved(workspaceId, projectId, runId, claimedAt.plusSeconds(70)),
+                    dao.markFailed(workspaceId, projectId, runId, claimedAt.plusSeconds(70),
+                            TopicProject.RunError.SAVE),
+                    dao.endCancelled(workspaceId, projectId, runId, claimedAt.plusSeconds(80)),
+                    dao.endCancelled(workspaceId, projectId, runId, claimedAt.plusSeconds(90)));
+        });
+
+        assertThat(moves).containsExactly(1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0);
+        // A deadline cancel is the run's fault: it ends as timeout and counts; the requeue did not count.
+        assertThat(data.topicProject(projectId)).extracting(TopicProject::runId, TopicProject::runStatus,
+                TopicProject::runErrorCode, TopicProject::cancelReason, TopicProject::runStartedAt,
+                TopicProject::deadlineAt, TopicProject::runFinishedAt, TopicProject::failedRuns,
+                TopicProject::firstFailedAt)
+                .containsExactly(runId, TopicProject.RunStatus.FAILED, TopicProject.RunError.TIMEOUT,
+                        TopicProject.CancelReason.DEADLINE, claimedAt.plusSeconds(50), deadline,
+                        claimedAt.plusSeconds(80), 1, claimedAt.plusSeconds(50));
+        Optional<TopicProject.RunError> runError = template.inTransaction(READ_ONLY,
+                handle -> handle.attach(TopicRunDAO.class).findRunError(workspaceId, projectId, runId));
+        assertThat(runError).contains(TopicProject.RunError.TIMEOUT);
+    }
+
+    @Test
+    @DisplayName("a project delete or an opt-out cancels without counting: a queued run fails at once, a running "
+            + "one goes to cancelling and its pod ends it as cancelled")
+    void cancelsThatAreNotTheRunsFaultDoNotCount() {
+        var workspaceId = UUID.randomUUID().toString();
+        var queuedProject = UUID.randomUUID();
+        var runningProject = UUID.randomUUID();
+        var droppedProject = UUID.randomUUID();
+        var queuedRun = UUID.randomUUID();
+        var runningRun = UUID.randomUUID();
+        var droppedRun = UUID.randomUUID();
+        var now = NIGHT.plusSeconds(100);
+
+        var moves = template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicRunDAO.class);
+            dao.ensureRow(workspaceId, queuedProject);
+            dao.queue(workspaceId, queuedProject, queuedRun, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            TopicsTestData.startRun(dao, workspaceId, runningProject, runningRun, TopicProject.RunMode.FIRST_BUILD,
+                    NIGHT);
+            dao.ensureRow(workspaceId, droppedProject);
+            dao.queue(workspaceId, droppedProject, droppedRun, TopicProject.RunMode.LABELS, NIGHT);
+            return List.of(
+                    dao.cancelProjects(workspaceId, List.of(queuedProject, runningProject),
+                            TopicProject.CancelReason.PROJECT_DELETED, now),
+                    dao.dropQueued(workspaceId, droppedProject, droppedRun,
+                            TopicProject.CancelReason.WORKSPACE_DISABLED, now),
+                    dao.endCancelled(workspaceId, runningProject, runningRun, now.plusSeconds(5)));
+        });
+
+        assertThat(moves).containsExactly(2, 1, 1);
+        assertThat(List.of(queuedProject, runningProject, droppedProject)).map(data::topicProject)
+                .extracting(TopicProject::runStatus, TopicProject::runErrorCode, TopicProject::cancelReason,
+                        TopicProject::runFinishedAt, TopicProject::failedRuns)
+                .containsExactly(
+                        tuple(TopicProject.RunStatus.FAILED, TopicProject.RunError.CANCELLED,
+                                TopicProject.CancelReason.PROJECT_DELETED, now, 0),
+                        tuple(TopicProject.RunStatus.FAILED, TopicProject.RunError.CANCELLED,
+                                TopicProject.CancelReason.PROJECT_DELETED, now.plusSeconds(5), 0),
+                        tuple(TopicProject.RunStatus.FAILED, TopicProject.RunError.CANCELLED,
+                                TopicProject.CancelReason.WORKSPACE_DISABLED, now, 0));
+    }
+
+    @Test
+    @DisplayName("a labelling pass never counts toward the first build's retry wait, and its save keeps that count")
+    void labellingPassesDoNotCount() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = UUID.randomUUID();
+        var buildRun = UUID.randomUUID();
+        var failedPass = UUID.randomUUID();
+        var abandonedPass = UUID.randomUUID();
+        var savedPass = UUID.randomUUID();
+
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicRunDAO.class);
+            TopicsTestData.startRun(dao, workspaceId, projectId, buildRun, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            dao.markFailed(workspaceId, projectId, buildRun, NIGHT.plusSeconds(1), TopicProject.RunError.LLM_ERROR);
+            TopicsTestData.startRun(dao, workspaceId, projectId, failedPass, TopicProject.RunMode.LABELS,
+                    NIGHT.plusSeconds(10));
+            dao.markFailed(workspaceId, projectId, failedPass, NIGHT.plusSeconds(11), TopicProject.RunError.INTERNAL);
+            TopicsTestData.startRun(dao, workspaceId, projectId, abandonedPass, TopicProject.RunMode.LABELS,
+                    NIGHT.plusSeconds(20));
+            dao.abandon(workspaceId, projectId, abandonedPass, NIGHT.plusSeconds(21), NIGHT.plusSeconds(22));
+            TopicsTestData.startRun(dao, workspaceId, projectId, savedPass, TopicProject.RunMode.LABELS,
+                    NIGHT.plusSeconds(30));
+            dao.markSaved(workspaceId, projectId, savedPass, NIGHT.plusSeconds(31));
+            return null;
+        });
+
+        assertThat(data.topicProject(projectId)).extracting(TopicProject::runId, TopicProject::runStatus,
+                TopicProject::failedRuns, TopicProject::firstFailedAt)
+                .containsExactly(savedPass, TopicProject.RunStatus.SAVED, 1, NIGHT);
+    }
+
+    @Test
+    @DisplayName("the planner reads the runs in flight with whether their project still exists, and the listless "
+            + "projects with no run in flight and a trace in the window")
+    void plannerReads() {
+        var workspaceId = UUID.randomUUID().toString();
+        var listless = UUID.randomUUID();
+        var inFlight = UUID.randomUUID();
+        var deleted = UUID.randomUUID();
+        var quiet = UUID.randomUUID();
+        var inFlightRun = UUID.randomUUID();
+        var deletedRun = UUID.randomUUID();
+        data.seed(workspaceId, listless, 0, 1);
+        data.seed(workspaceId, inFlight, 1, 1);
+        data.project(workspaceId, quiet);
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(TopicRunDAO.class);
+            dao.ensureRow(workspaceId, inFlight);
+            dao.queue(workspaceId, inFlight, inFlightRun, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            TopicsTestData.startRun(dao, workspaceId, deleted, deletedRun, TopicProject.RunMode.FIRST_BUILD, NIGHT);
+            return null;
+        });
+
+        var runs = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class).findInFlight())
+                .stream().filter(run -> run.workspaceId().equals(workspaceId)).toList();
+        var found = template.inTransaction(READ_ONLY, handle -> handle.attach(TopicRunDAO.class)
+                .findListless(List.of(workspaceId), TRACES.night().minus(Duration.ofDays(30))));
+
+        assertThat(runs).containsExactlyInAnyOrder(
+                new InFlightRun(workspaceId, inFlight, inFlightRun, TopicProject.RunMode.FIRST_BUILD,
+                        TopicProject.RunStatus.QUEUED, NIGHT, null, null, false),
+                new InFlightRun(workspaceId, deleted, deletedRun, TopicProject.RunMode.FIRST_BUILD,
+                        TopicProject.RunStatus.RUNNING, NIGHT, NIGHT.plus(Duration.ofHours(1)), NIGHT, true));
+        assertThat(found).containsExactly(ListlessProject.builder().workspaceId(workspaceId)
+                .projectId(listless).build());
     }
 
     private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {

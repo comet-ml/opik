@@ -218,7 +218,7 @@ class TopicsStorageTest {
         template.inTransaction(WRITE, handle -> {
             var runDAO = handle.attach(TopicRunDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            TopicsTestData.startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
             topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
                     new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
