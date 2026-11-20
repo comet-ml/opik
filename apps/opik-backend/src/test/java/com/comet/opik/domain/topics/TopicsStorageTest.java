@@ -8,14 +8,11 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
-import com.comet.opik.api.resources.utils.TopicsTraces;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
-import io.r2dbc.spi.ConnectionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -51,9 +48,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The labelling pass's storage against real ClickHouse and MySQL: the rows a pass writes and the counts it logs. No run builds
- * here: tests seed vectors and a saved list directly and call the label service. {@link TopicsDaoStorageTest} covers
- * the DAO reads.
+ * The labelling pass's storage against real ClickHouse and MySQL: the rows a pass writes and its slice bounds. No run
+ * builds here: tests seed vectors and a saved list directly and call the label service. {@link TopicsDaoStorageTest}
+ * covers the DAO reads.
  */
 @DisplayName("topics storage")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -102,7 +99,6 @@ class TopicsStorageTest {
     private TraceTopicsDAO traceTopicsDAO;
     private TopicWindowLabelService labelService;
     private TopicWindowDAO windowDAO;
-    private ConnectionFactory connectionFactory;
     private TopicsTestData data;
     private TopicsTestData spreadData;
 
@@ -110,9 +106,7 @@ class TopicsStorageTest {
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, @Jit TopicVectorsDAO vectorsDAO,
             @Jit TraceTopicsDAO traceTopicsDAO,
-            @Jit TopicWindowLabelService labelService, @Jit TopicWindowDAO windowDAO,
-            ConnectionFactory connectionFactory) {
-        this.connectionFactory = connectionFactory;
+            @Jit TopicWindowLabelService labelService, @Jit TopicWindowDAO windowDAO) {
         this.opikConfig = opikConfig;
         this.template = template;
         this.clickHouseTemplate = clickHouseTemplate;
@@ -186,57 +180,6 @@ class TopicsStorageTest {
         var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
         assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
-    }
-
-    @Test
-    @DisplayName("the pass that ends complete counts the run's traces: "
-            + "per topic and Other, each trace by its latest row, only the traces Logs lists, only the run's window; "
-            + "a trace from an experiment, a hidden one, or a labelled one just outside the window is left out")
-    void runCountsAreOfWhatLogsLists() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        data.seed(workspaceId, projectId, 0, BUILT);
-        var runId = UUID.randomUUID();
-        var topicId = UUID.randomUUID();
-        saveList(workspaceId, projectId, runId, topicId);
-        var experiment = TRACES.traceIds().get(5);
-        var hidden = TRACES.traceIds().get(6);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, BUILT)
-                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, TRACES.traceIds().get(i),
-                        TRACES.createdAt().get(i)))
-                .map(row -> row.id().equals(experiment) ? row.toBuilder().source("experiment").build() : row)
-                .map(row -> row.id().equals(hidden) ? row.toBuilder().visibilityMode("hidden").build() : row)
-                .toList());
-        // Logs lists them and they have a row of the run, but they are outside its window: one created at its end
-        // (labelled before the save, as a nightly update's pass does), one just before its start.
-        var atEnd = NIGHT;
-        var beforeStart = from().minusSeconds(1);
-        var outside = List.of(Generators.timeBasedEpochGenerator().construct(atEnd.toEpochMilli()),
-                Generators.timeBasedEpochGenerator().construct(beforeStart.toEpochMilli()));
-        var outsideAt = List.of(atEnd, beforeStart);
-        TopicsTraces.insert(connectionFactory, PostCutoverTraces.SHARD, IntStream.range(0, 2)
-                .mapToObj(i -> TopicsTraces.TraceRow.shown(workspaceId, projectId, outside.get(i), outsideAt.get(i)))
-                .toList());
-        insertRunRows(workspaceId, projectId, runId, topicId, outside, outsideAt);
-
-        var pass = labelService.labelWindow(workspaceId, projectId, Instant.now().plus(Duration.ofMinutes(5)),
-                TopicWindowLabelService.Trigger.RUN, 7, 20);
-
-        assertThat(pass.complete()).isTrue();
-        var expected = new HashMap<UUID, Long>(Map.of(topicId, 0L, TraceTopic.OTHER, 0L));
-        data.traceTopics(workspaceId, projectId).stream()
-                .filter(row -> !row.traceId().equals(experiment) && !row.traceId().equals(hidden))
-                .filter(row -> !outside.contains(row.traceId()))
-                .forEach(row -> expected.merge(row.topicId(), 1L, Long::sum));
-        assertThat(expected.get(topicId)).isPositive();
-        assertThat(expected.get(TraceTopic.OTHER)).isPositive();
-        assertThat(expected.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(BUILT - 2);
-        assertThat(pass.counts()).isEqualTo(expected);
-        var find = opikConfig.getTopics().getVectors().getFind();
-        assertThat(data.queryGuards("topics:count_by_topic", workspaceId))
-                .containsExactly(List.of("2", String.valueOf(find.getMaxRowsToRead()), "", "120"));
-        assertThat(data.queryLogSettings("topics:count_by_topic", workspaceId, "max_memory_usage", "max_threads"))
-                .containsExactly(List.of(String.valueOf(find.getMaxMemoryUsage()), "2"));
     }
 
     @Test

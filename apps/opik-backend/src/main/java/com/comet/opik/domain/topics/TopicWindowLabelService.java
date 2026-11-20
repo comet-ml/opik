@@ -1,7 +1,6 @@
 package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
-import com.comet.opik.utils.JsonUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -18,9 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,15 +43,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
  *
  * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
- *
- * <p>Counted: the pass that ends complete counts the window's traces per topic and logs the counts with the run's id.
- * Later runs relabel the window, so this log line is the only record of the run's counts. It is written once per run,
- * when the pass marks the labels complete, and not for a list with no topic. A failed count read is logged and the
- * labels are still marked complete.
- *
- * <p>The counts cover the run's window exactly, {@code [window_until - windowDays, window_until)}, so two runs' counts
- * compare like with like. The Topics page counts a sliding window that includes today, so its counts can differ from a
- * run's by the traces of the days at the window's edges.
  */
 @Slf4j
 @Singleton
@@ -87,21 +75,14 @@ public class TopicWindowLabelService {
     /**
      * What a pass did. {@code runId} is null when the project has no saved list. {@code windowTraces} is the
      * window's exact count. {@code complete} is true when no trace of the window is left without a row of the run; false when the
-     * pass was cut, and a later call finishes it. {@code counts} are the run's traces per topic id and Other that this
-     * pass logged, empty when it logged none.
+     * pass was cut, and a later call finishes it.
      */
     @Builder(toBuilder = true)
-    public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete,
-            Map<UUID, Long> counts) {
+    public record Pass(UUID runId, long windowTraces, long labelled, long other, int skipped, boolean complete) {
     }
 
-    /**
-     * The saved list a pass labels with. The pass labels and counts the traces created in {@code [from, to)}, the run's
-     * window. {@code topicIds} are its live topics. {@code logCounts} is true when
-     * a complete pass logs the run's counts: the list has a topic and the run's labels are not complete yet.
-     */
-    private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller,
-            List<UUID> topicIds, boolean logCounts) {
+    /** The saved list a pass labels with: the traces created in {@code [from, to)}, the run's window. */
+    private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller) {
     }
 
     /** Ends a pass early: the deadline is too close or the thread was interrupted. */
@@ -131,10 +112,10 @@ public class TopicWindowLabelService {
         } catch (RuntimeException exception) {
             log.warn("Topics labelling pass could not read the saved list, project '{}'", projectId, exception);
             metrics.labelPass(workspaceId, trigger, false);
-            return Pass.builder().complete(false).counts(Map.of()).build();
+            return Pass.builder().complete(false).build();
         }
         if (saved.isEmpty()) {
-            return Pass.builder().complete(true).counts(Map.of()).build();
+            return Pass.builder().complete(true).build();
         }
         var pass = new Labelling(workspaceId, projectId, saved.get(), deadline, chunk);
         try {
@@ -149,8 +130,8 @@ public class TopicWindowLabelService {
             log.warn("Topics labelling pass failed, run '{}', project '{}'; a later pass labels the rest",
                     saved.get().runId(), projectId, exception);
         }
-        if (pass.complete && !markComplete(workspaceId, projectId, saved.get().runId(), pass.counts)) {
-            pass.counts = Map.of();
+        if (pass.complete) {
+            markComplete(workspaceId, projectId, saved.get().runId());
         }
         var duration = Duration.ofNanos(System.nanoTime() - started);
         metrics.phase(workspaceId, "label", duration);
@@ -166,11 +147,10 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * Sets {@code labels_complete} for the run, only while the project still names it, then logs its counts. False when
-     * nothing was marked. A failed write leaves it unset: the job's next run calls the pass again, which finds nothing
-     * left, counts and logs again.
+     * Sets {@code labels_complete} for the run, only while the project still names it. A failed write leaves it unset:
+     * the job's next run calls the pass again, which finds nothing left and marks it.
      */
-    private boolean markComplete(String workspaceId, UUID projectId, UUID runId, Map<UUID, Long> counts) {
+    private void markComplete(String workspaceId, UUID projectId, UUID runId) {
         int updated;
         try {
             updated = template.inTransaction(WRITE,
@@ -180,19 +160,12 @@ public class TopicWindowLabelService {
                     + "first-build job runs the pass again", runId, projectId,
                     ExceptionUtils
                             .getThrowableList(exception).stream().map(TopicsRebuildService::formatError).toList());
-            return false;
+            return;
         }
         if (updated == 0) {
             log.info("Topics labelling pass complete, but run '{}' is no longer the saved run of project '{}'; its "
                     + "labels stay as the newer run left them", runId, projectId);
-            return false;
         }
-        if (!counts.isEmpty()) {
-            var topicCounts = JsonUtils.createObjectNode();
-            counts.forEach((topicId, traces) -> topicCounts.put(topicId.toString(), traces));
-            log.info("Topics run '{}' counts, project '{}', topic_counts '{}'", runId, projectId, topicCounts);
-        }
-        return true;
     }
 
     /**
@@ -213,8 +186,7 @@ public class TopicWindowLabelService {
             var from = to.minus(Duration.ofDays(config.getBuild().getWindowDays()));
             var labeller = algorithm.labeller(saved.topics(), saved.project().otherVectors());
             return new Saved(saved.project().listRunId(), from, to,
-                    labeller.orElse(TopicWindowLabelService::allOther), saved.topics().stream().map(Topic::id).toList(),
-                    labeller.isPresent() && !saved.project().labelsComplete());
+                    labeller.orElse(TopicWindowLabelService::allOther));
         });
     }
 
@@ -240,8 +212,6 @@ public class TopicWindowLabelService {
         private long other;
         private int skipped;
         private boolean complete;
-        /** The run's traces per topic id, read once every trace is labelled; empty when the pass saves none. */
-        private Map<UUID, Long> counts = Map.of();
 
         Labelling(String workspaceId, UUID projectId, Saved saved, Instant deadline, int chunk) {
             this.workspaceId = workspaceId;
@@ -271,39 +241,7 @@ public class TopicWindowLabelService {
                     whole &= labelSlice(bounds.get(slice), bounds.get(slice + 1), maxPages);
                 }
             }
-            if (whole && saved.logCounts()) {
-                counts = count();
-            }
             return whole;
-        }
-
-        /**
-         * The run's window's traces per live topic and Other, zero for one with none. Too little time left cuts the
-         * pass, as a page does, so a later pass counts.
-         */
-        private Map<UUID, Long> count() {
-            var left = timeLeft();
-            try {
-                var traces = new LinkedHashMap<UUID, Long>();
-                saved.topicIds().forEach(topicId -> traces.put(topicId, 0L));
-                traces.put(TraceTopic.OTHER, 0L);
-                traceTopicsDAO.countByTopic(workspaceId, projectId, saved.from(), saved.to(),
-                        Math.min(TopicsRebuildService.READ_SECONDS, left.toSeconds()))
-                        .collectList()
-                        .block(left)
-                        .forEach(count -> traces.merge(count.topicId(), count.traces(), Long::sum));
-                return traces;
-            } catch (RuntimeException exception) {
-                if (ExceptionUtils.indexOfType(exception, InterruptedException.class) >= 0) {
-                    Thread.currentThread().interrupt();
-                    throw new CutException("interrupted");
-                }
-                log.warn("Topics labelling pass could not count run '{}', project '{}', errors '{}'; the run's "
-                        + "counts are not logged", saved.runId(), projectId,
-                        ExceptionUtils.getThrowableList(exception).stream().map(TopicsRebuildService::formatError)
-                                .toList());
-                return Map.of();
-            }
         }
 
         /**
@@ -403,7 +341,6 @@ public class TopicWindowLabelService {
                     .other(other)
                     .skipped(skipped)
                     .complete(complete)
-                    .counts(counts)
                     .build();
         }
     }
