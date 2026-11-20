@@ -129,6 +129,16 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration window;
 
+        /**
+         * How far before its watermark a workspace's read starts: covers a done status that becomes visible after a
+         * later status was read, such as one written to a lagging replica or before its output row. A status later than
+         * this is left to the daily pass. At most {@code window}.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 0, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
+        private Duration watermarkOverlap;
+
         /** The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
@@ -183,6 +193,11 @@ public class TopicsConfig {
         }
 
         @JsonIgnore
+        @AssertTrue(message = "topics.vectors.watermarkOverlap must not be longer than topics.vectors.window") public boolean isWatermarkOverlapValid() {
+            return watermarkOverlap == null || window == null
+                    || watermarkOverlap.toMilliseconds() <= window.toMilliseconds();
+        }
+
         @AssertTrue(message = "topics.vectors.longWindow must not be shorter than topics.vectors.window") public boolean isLongWindowValid() {
             return window == null || longWindow == null || longWindow.toMilliseconds() >= window.toMilliseconds();
         }

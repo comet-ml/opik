@@ -477,17 +477,20 @@ class TopicVectorsTickTest {
 
     @Test
     @DisplayName("a rejected chunk (a non-retryable 4xx) costs only its own traces: the workspace's next chunk is "
-            + "still sent")
+            + "still sent, and the watermark moves past the refused traces")
     void rejectedChunk() {
         config().setEmbedBatchSize(2);
         var workspaceId = enabledWorkspace();
         labelTraces(workspaceId, 4, 1);
         embedStub.fail(workspaceId, 400, "{\"error\":{\"code\":\"invalid_request\",\"message\":\"m\"}}");
 
-        var result = tick();
+        // MySQL keeps microseconds.
+        var start = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var result = tickService.tick(start).block();
 
         assertThat(embedStub.callsFor(workspaceId)).isEqualTo(2);
         assertThat(result).isEqualTo(TickResult.skipped(SkipReason.EMBED_FAILED, 4));
+        assertThat(watermark(workspaceId)).isEqualTo(start);
     }
 
     @Test
