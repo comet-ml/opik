@@ -217,7 +217,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         scheduleRepeatingJob(TopicsFirstBuildJob.class,
-                topicsConfig.getFirstBuild().getInterval().toJavaDuration(), null);
+                topicsConfig.getFirstBuild().getPlanInterval().toJavaDuration(), null);
     }
 
     private void setLocalRunnerReaperJob() {
