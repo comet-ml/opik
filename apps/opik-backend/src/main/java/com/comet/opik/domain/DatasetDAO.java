@@ -190,23 +190,17 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    /**
-     * Returns at most two datasets with this name: enough for the caller to tell a unique match from an ambiguous one.
-     */
     @SqlQuery("""
             SELECT * FROM datasets
             WHERE workspace_id = :workspace_id
             AND name = :name
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(visibility)> AND visibility = :visibility <endif>
             ORDER BY id
-            LIMIT 2
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,
-            @Define("project_id") @Bind("project_id") UUID projectId,
-            @Define("visibility") @Bind("visibility") Visibility visibility);
+            @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlQuery("SELECT id FROM datasets WHERE workspace_id = :workspace_id AND name LIKE CONCAT('%', :name, '%') ESCAPE '\\\\'")
     List<UUID> findIdsByPartialName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);

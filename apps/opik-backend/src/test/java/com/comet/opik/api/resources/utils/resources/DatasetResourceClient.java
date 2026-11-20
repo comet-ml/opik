@@ -26,6 +26,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
@@ -83,6 +84,21 @@ public class DatasetResourceClient {
                 .projectId(null)
                 .projectName(null)
                 .build();
+    }
+
+    /**
+     * Asserts the status and the whole error body. The body is read as the expected error's type, since endpoints
+     * return either the Opik or the Dropwizard error shape.
+     */
+    public static void assertErrorResponse(Response response, int expectedStatus, Object expectedError) {
+        assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        assertThat(response.readEntity(expectedError.getClass())).isEqualTo(expectedError);
+    }
+
+    public static ErrorMessage buildAmbiguousDatasetNameError(String datasetName) {
+        return new ErrorMessage(HttpStatus.SC_CONFLICT,
+                "Multiple datasets with this name exist in different projects, specify a project that contains it or use the dataset id. Dataset name: '%s'"
+                        .formatted(datasetName));
     }
 
     public Response callCreateDataset(Dataset dataset, String apiKey, String workspaceName) {

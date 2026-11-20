@@ -335,16 +335,19 @@ class DatasetServiceImpl implements DatasetService {
     /**
      * Finds the dataset with this name in the given project, or anywhere in the workspace when {@code projectId} is
      * null. Dataset names are unique per project, so a workspace-wide lookup can match datasets in several projects:
-     * that case is ambiguous and is rejected with a conflict instead of picking one of them. Only datasets the caller
-     * can see count, so a public-only request never conflicts with a private dataset.
+     * that case is ambiguous and is rejected with a conflict instead of picking one of them. A public-only workspace
+     * lookup counts only public datasets, so a private dataset can't make it ambiguous. A project lookup is not
+     * filtered, so the caller's visibility check still rejects a private match there.
      */
     private Optional<Dataset> findSingleByName(DatasetDAO dao, String workspaceId, String name, UUID projectId,
             Visibility visibility) {
-        Visibility visibilityFilter = visibility == Visibility.PUBLIC ? Visibility.PUBLIC : null;
-        List<Dataset> datasets = dao.findByName(workspaceId, name, projectId, visibilityFilter);
+        boolean publicOnly = projectId == null && visibility == Visibility.PUBLIC;
+        List<Dataset> datasets = dao.findByName(workspaceId, name, projectId).stream()
+                .filter(dataset -> !publicOnly || dataset.visibility() == Visibility.PUBLIC)
+                .toList();
         if (datasets.size() > 1) {
             throw new ConflictException(
-                    "Multiple datasets with this name exist in different projects, specify the project. Dataset name: '%s'"
+                    "Multiple datasets with this name exist in different projects, specify a project that contains it or use the dataset id. Dataset name: '%s'"
                             .formatted(name));
         }
         return datasets.stream().findFirst();

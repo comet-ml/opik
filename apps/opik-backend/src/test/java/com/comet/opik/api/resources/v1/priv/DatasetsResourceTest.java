@@ -755,6 +755,36 @@ class DatasetsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("Get dataset by name: when public access names a project whose dataset is private, then return not found")
+        void getDatasetByName__whenPublicAccessAndNamedProjectDatasetIsPrivate__thenReturnNotFound() {
+            String name = "dataset-" + UUID.randomUUID();
+            String privateProjectName = "project-" + UUID.randomUUID();
+            var privateProjectId = projectResourceClient.createProject(privateProjectName, okApikey, TEST_WORKSPACE);
+            var publicProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), okApikey,
+                    TEST_WORKSPACE);
+            createAndAssert(buildDataset().toBuilder().id(null).name(name).projectId(privateProjectId)
+                    .visibility(PRIVATE).build());
+            createAndAssert(buildDataset().toBuilder().id(null).name(name).projectId(publicProjectId)
+                    .visibility(PUBLIC).build());
+
+            mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, "")
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .post(Entity.json(DatasetIdentifier.builder().datasetName(name).projectName(privateProjectName)
+                            .build()))) {
+
+                DatasetResourceClient.assertErrorResponse(actualResponse, HttpStatus.SC_NOT_FOUND,
+                        new ErrorMessage(List.of("Dataset not found")));
+            }
+        }
+
         @ParameterizedTest
         @MethodSource("getDatasetPublicCredentials")
         @DisplayName("Get dataset by name: when api key is present, then return proper response")
