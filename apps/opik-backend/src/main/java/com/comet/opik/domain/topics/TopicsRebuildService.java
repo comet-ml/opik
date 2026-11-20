@@ -776,9 +776,9 @@ public class TopicsRebuildService {
             metrics.saved(workspaceId, "topics", inserted.size() + updated.size() + retired.size());
             metrics.topics(workspaceId, state.liveCount(), bornTonight);
             for (var topic : retired) {
-                log.info("Topics run '{}' retired topic '{}', project '{}', name '{}', definition '{}', reason '{}', "
-                        + "size '{}'", runId, topic.getId(), projectId, topic.getName(), topic.getDefinition(),
-                        topic.getRetiredReason().value(), topic.getSize());
+                // Ids only: a name and definition come from trace text and must not reach the logs.
+                log.info("Topics run '{}' retired topic '{}', project '{}', reason '{}', size '{}'", runId,
+                        topic.getId(), projectId, topic.getRetiredReason().value(), topic.getSize());
                 metrics.retired(workspaceId, topic.getRetiredReason());
             }
             metrics.otherShare(workspaceId, stats.path("other_share").asDouble());
