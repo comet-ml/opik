@@ -911,7 +911,7 @@ class RetentionPolicyServiceTest {
                 .traceCreatedAt(Instant.now())
                 .topicId(TraceTopic.OTHER)
                 .source(TraceTopic.Source.RUN)
-                .runId(UUID.randomUUID().toString())
+                .runId(UUID.randomUUID())
                 .build())).block();
     }
 

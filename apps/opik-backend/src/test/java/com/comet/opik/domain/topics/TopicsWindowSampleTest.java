@@ -34,7 +34,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,13 +41,11 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
-import static com.comet.opik.domain.topics.TopicsTestData.json;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -89,11 +86,7 @@ class TopicsWindowSampleTest {
         wireMock = new WireMockServer(wireMockConfig().dynamicPort());
         wireMock.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
@@ -142,7 +135,7 @@ class TopicsWindowSampleTest {
 
     @Test
     @DisplayName("a window over maxVectors builds on an even sample that sees weekdays and weekends, then every trace "
-            + "of the window gets a row of the run, and the run's counts are of the whole window, not of the sample")
+            + "of the window gets a row of the run, not only the sampled ones")
     void sampleSeesTheWholeWindow() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -154,12 +147,13 @@ class TopicsWindowSampleTest {
                 .toList());
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(oneTopic(), 0)));
 
-        var runId = rebuildService.startRun(workspaceId, projectId, TopicRun.Mode.FIRST_BUILD);
+        var runId = rebuildService.startRun(workspaceId, projectId, TopicProject.RunMode.FIRST_BUILD,
+                Instant.now().minus(Duration.ofHours(1)));
         var outcome = rebuildService.firstBuild(runId, workspaceId, projectId,
                 LocalDate.ofInstant(NIGHT, ZoneOffset.UTC));
 
-        assertThat(outcome.status()).isEqualTo(TopicRun.Status.SAVED);
-        var stats = json(data.runs(projectId).getFirst().stats());
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        var stats = outcome.stats();
         assertThat(stats.path("window_traces").asInt()).isEqualTo(count);
         assertThat(stats.path("sample_traces").asInt()).isEqualTo(MAX_VECTORS);
         assertThat(stats.path("vectors").asInt()).isEqualTo(MAX_VECTORS);
@@ -172,15 +166,14 @@ class TopicsWindowSampleTest {
         var rows = data.traceTopics(workspaceId, projectId);
         assertThat(rows).extracting(TraceTopic::traceId).containsExactlyInAnyOrderElementsOf(traces.traceIds());
         assertThat(rows).allSatisfy(row -> {
-            assertThat(row.runId()).isEqualTo(runId.toString());
+            assertThat(row.runId()).isEqualTo(runId);
             assertThat(row.source()).isEqualTo(TraceTopic.Source.RUN);
             // Every trace is near a centre of its kind, and every group is the one topic's.
             assertThat(row.topicId()).isEqualTo(topics.getFirst().id());
         });
-        // The topic's size is the sample's; the run's counts are the window's, with Other's row at zero.
+        // The topic's size is the sample's; the labelling pass covered the whole window.
         assertThat(topics.getFirst().size()).isEqualTo(MAX_VECTORS);
-        assertThat(data.runCounts(workspaceId, runId))
-                .isEqualTo(Map.of(topics.getFirst().id(), (long) count, TraceTopic.OTHER, 0L));
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
     }
 
     /** One topic that takes every group. */
@@ -190,7 +183,8 @@ class TopicsWindowSampleTest {
                 .put("name", "Plan questions")
                 .put("definition", "Questions about the user's plan");
         var assignment = answer.putArray("assignment");
-        for (int cluster = 0; cluster < KMeansTopicAlgorithm.groups(MAX_VECTORS); cluster++) {
+        // k is never more than the sample's texts, so this covers every group.
+        for (int cluster = 0; cluster < MAX_VECTORS; cluster++) {
             assignment.addObject().put("cluster", cluster).put("topic", 0);
         }
         return answer;
@@ -201,7 +195,7 @@ class TopicsWindowSampleTest {
      * weekday texts and vectors near one direction, weekend traces weekend texts and vectors near another.
      */
     private static TopicsTestData.Traces weeklyTraces() {
-        int dimensions = TopicAlgorithm.DIMENSIONS;
+        int dimensions = TopicEmbedding.DIMENSIONS;
         var random = new Random(5);
         var ids = Generators.timeBasedEpochGenerator(random);
         var weekday = unit(random, dimensions);

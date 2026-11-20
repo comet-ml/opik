@@ -46,11 +46,11 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
@@ -58,8 +58,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
-import static com.comet.opik.domain.topics.TopicsTestData.json;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -96,11 +96,7 @@ class TopicsFirstBuildJobIntegrationTest {
         wireMock = new WireMockServer(wireMockConfig().dynamicPort());
         wireMock.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
@@ -126,6 +122,7 @@ class TopicsFirstBuildJobIntegrationTest {
     private OpikConfiguration opikConfig;
     private TransactionTemplate template;
     private TopicsFirstBuildService firstBuildService;
+    private TopicsProjectRunner runner;
     private TopicsTestData data;
     private GuiceJobManager jobManager;
     private ClientSupport client;
@@ -134,13 +131,15 @@ class TopicsFirstBuildJobIntegrationTest {
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
             TransactionTemplateAsync clickHouseTemplate, GuiceJobManager jobManager,
-            @Jit TopicsFirstBuildService firstBuildService, @Jit TopicVectorsDAO vectorsDAO) {
+            @Jit TopicsFirstBuildService firstBuildService, @Jit TopicsProjectRunner runner,
+            @Jit TopicVectorsDAO vectorsDAO) {
         this.client = client;
         this.opikConfig = opikConfig;
         this.baseUrl = TestUtils.getBaseUrl(client);
         this.template = template;
         this.jobManager = jobManager;
         this.firstBuildService = firstBuildService;
+        this.runner = runner;
         this.data = new TopicsTestData(template, clickHouseTemplate, vectorsDAO, new TopicsTestData.Traces(
                 FIXTURE.traceIds, FIXTURE.createdAt, FIXTURE.intents, FIXTURE.vectors, FIXTURE.night));
     }
@@ -199,16 +198,8 @@ class TopicsFirstBuildJobIntegrationTest {
         }
         data.seed(workspaceId, small, BUILT, SMALL, tomorrowStart());
         data.seed(aiLabelsOnlyWorkspace(), notOptedIn, 0, BUILT, tomorrowStart());
+        data.savedList(workspaceId, withList, tomorrowStart(), BUILT);
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicDAO.class).insertState(TopicProjectState.builder()
-                    .projectId(withList)
-                    .workspaceId(workspaceId)
-                    .rebuilds(1)
-                    .firstBuiltAt(Instant.now())
-                    .lastRunId(UUID.randomUUID())
-                    .lastSuccessAt(Instant.now())
-                    .windowUntil(tomorrowStart())
-                    .build());
             // Its vectors are in the window, but its last trace was written before it.
             handle.execute("UPDATE projects SET last_updated_trace_at = ? WHERE id = ?",
                     tomorrowStart().minus(Duration.ofDays(31)), quiet.toString());
@@ -222,25 +213,28 @@ class TopicsFirstBuildJobIntegrationTest {
 
         runUntilBuilt(built);
 
-        assertThat(data.runs(built)).singleElement().satisfies(run -> {
-            assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED);
-            assertThat(run.mode()).isEqualTo(TopicRun.Mode.FIRST_BUILD);
-            assertThat(json(run.stats()).path("vectors").asInt()).isEqualTo(BUILT);
-        });
+        var project = data.topicProject(built);
+        assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.FIRST_BUILD);
+        assertThat(project.savedRuns()).isEqualTo(1);
+        assertThat(project.listRunId()).isEqualTo(project.runId());
         // The run is for tomorrow's window, but its topics are born today (UTC), never in the future.
         var topics = data.topics(built);
         assertThat(topics).isNotEmpty()
                 .allSatisfy(topic -> assertThat(topic.born()).isEqualTo(LocalDate.now(ZoneOffset.UTC)));
-        assertThat(data.state(built).windowUntil()).isEqualTo(tomorrowStart());
+        assertThat(project.windowUntil()).isEqualTo(tomorrowStart());
         // The window is under maxVectors: the run labels it whole, and its pass finds nothing left.
-        assertThat(data.state(built).labelsComplete()).isTrue();
-        for (var skipped : List.of(withList, small, quiet, notOptedIn, deleted)) {
-            assertThat(data.runs(skipped)).isEmpty();
+        assertThat(project.labelsComplete()).isTrue();
+        for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
+            assertNoRun(skipped);
         }
+        assertThat(data.topicProject(withList).savedRuns()).isEqualTo(1);
 
         firstBuildService.run(Instant.now());
 
-        assertThat(data.runs(built)).hasSize(1);
+        assertThat(data.topicProject(built)).satisfies(again -> {
+            assertThat(again.savedRuns()).isEqualTo(1);
+            assertThat(again.runId()).isEqualTo(project.runId());
+        });
         assertThat(data.topics(built)).hasSameSizeAs(topics);
     }
 
@@ -264,20 +258,19 @@ class TopicsFirstBuildJobIntegrationTest {
             build.setProjectTimeout(projectTimeout);
         }
 
-        var timedOut = data.runs(first).getFirst().status() == TopicRun.Status.FAILED ? first : second;
+        var timedOut = data.topicProject(first).runStatus() == TopicProject.RunStatus.FAILED ? first : second;
         var saved = timedOut.equals(first) ? second : first;
-        assertThat(data.runs(saved)).singleElement().extracting(TopicRun::status).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(data.topicProject(saved).runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(saved)).isNotEmpty();
         // The interrupted build may still get its slow answer: past it, a save that raced the timeout would show.
         Awaitility.await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            assertThat(data.runs(timedOut)).singleElement().satisfies(run -> {
-                assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
-                assertThat(run.errorCode()).isEqualTo("timeout");
-                assertThat(run.errorMessage()).contains("projectTimeout");
+            assertThat(data.topicProject(timedOut)).satisfies(project -> {
+                assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
+                assertThat(project.runErrorCode()).isEqualTo(TopicProject.RunError.TIMEOUT);
+                assertThat(project.failedRuns()).isEqualTo(1);
+                assertThat(project.listRunId()).isNull();
             });
             assertThat(data.topics(timedOut)).isEmpty();
-            assertThat(data.prototypes(timedOut)).isEmpty();
-            assertThat(data.state(timedOut)).isNull();
             assertThat(data.traceTopics(workspaceId, timedOut)).isEmpty();
         });
     }
@@ -302,7 +295,7 @@ class TopicsFirstBuildJobIntegrationTest {
         for (var daysAgo : List.of(5, 4, 3)) {
             insertFailedRun(workspaceId, savedBetween, Duration.ofDays(daysAgo));
         }
-        insertRun(savedRun(workspaceId, savedBetween, Instant.now().minus(Duration.ofDays(2))));
+        insertSavedRun(workspaceId, savedBetween, Instant.now().minus(Duration.ofDays(2)));
         insertFailedRun(workspaceId, savedBetween, Duration.ofMinutes(70));
         stubAnswer(FIXTURE.answer);
 
@@ -310,21 +303,24 @@ class TopicsFirstBuildJobIntegrationTest {
                 .extracting(TopicsFirstBuildService.Candidate::projectId)
                 .containsExactlyInAnyOrder(failedAnHourAgo, savedBetween);
 
-        runUntilBuilt(failedAnHourAgo, 2);
-        runUntilBuilt(savedBetween, 6);
+        runUntilBuilt(failedAnHourAgo);
+        runUntilBuilt(savedBetween);
 
-        assertThat(data.runs(failedAnHourAgo)).hasSize(2).last()
-                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED));
-        assertThat(data.runs(savedBetween)).last()
-                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED));
-        assertThat(data.runs(failedRecently)).hasSize(1);
-        assertThat(data.runs(failedTwiceRecently)).hasSize(2);
+        // A save resets the failures.
+        for (var built : List.of(failedAnHourAgo, savedBetween)) {
+            assertThat(data.topicProject(built)).satisfies(project -> {
+                assertThat(project.failedRuns()).isZero();
+                assertThat(project.firstFailedAt()).isNull();
+            });
+        }
+        assertFailures(failedRecently, 1);
+        assertFailures(failedTwiceRecently, 2);
 
         try (var response = rebuild(workspaceId, failedRecently, tomorrow().toString())) {
             assertThat(response.getStatus()).isEqualTo(202);
         }
-        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.runs(failedRecently))
-                .hasSize(2).last().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(
+                data.topicProject(failedRecently).runStatus()).isEqualTo(TopicProject.RunStatus.SAVED));
     }
 
     @Test
@@ -345,10 +341,10 @@ class TopicsFirstBuildJobIntegrationTest {
         }
 
         assertThat(runIdStatus).isEqualTo(202);
-        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.runs(projectId))
-                .singleElement().satisfies(run -> {
-                    assertThat(run.runId().toString()).isEqualTo(runId);
-                    assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.topicProject(projectId))
+                .satisfies(project -> {
+                    assertThat(project.runId()).hasToString(runId);
+                    assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
                 }));
         assertThat(data.topics(projectId)).isNotEmpty().allSatisfy(topic -> assertThat(topic.born())
                 .isEqualTo(LocalDate.now(ZoneOffset.UTC)));
@@ -378,8 +374,7 @@ class TopicsFirstBuildJobIntegrationTest {
         try (var response = rebuild(workspaceId, projectId, fixtureNight().toString())) {
             assertThat(response.getStatus()).isEqualTo(202);
         }
-        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.runs(projectId))
-                .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
+        awaitSaved(projectId);
         assertThat(data.topics(projectId)).isNotEmpty()
                 .allSatisfy(topic -> assertThat(topic.born()).isEqualTo(fixtureNight()));
     }
@@ -402,19 +397,18 @@ class TopicsFirstBuildJobIntegrationTest {
 
         runUntilBuilt(drained);
 
-        assertThat(data.runs(waiting)).isEmpty();
-        assertThat(data.runs(byHand)).isEmpty();
+        assertNoRun(waiting);
+        assertNoRun(byHand);
         try (var response = rebuild(workspaceId, byHand, tomorrow().toString())) {
             assertThat(response.getStatus()).isEqualTo(409);
             assertThat(response.readEntity(String.class)).contains("vectors backfill");
         }
-        assertThat(data.runs(byHand)).isEmpty();
+        assertNoRun(byHand);
         try (var response = rebuild(workspaceId, byHand, tomorrow().toString(), true)) {
             assertThat(response.getStatus()).isEqualTo(202);
         }
-        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(data.runs(byHand))
-                .singleElement().satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED)));
-        assertThat(data.runs(waiting)).isEmpty();
+        awaitSaved(byHand);
+        assertNoRun(waiting);
     }
 
     @Test
@@ -439,58 +433,59 @@ class TopicsFirstBuildJobIntegrationTest {
         try (var response = rebuild(notOptedInWorkspace, notOptedIn, fixtureNight().toString())) {
             assertThat(response.getStatus()).isEqualTo(409);
         }
-        assertThat(data.runs(small)).isEmpty();
-        assertThat(data.runs(foreign)).isEmpty();
-        assertThat(data.runs(notOptedIn)).isEmpty();
+        for (var refused : List.of(small, foreign, notOptedIn)) {
+            assertNoRun(refused);
+        }
     }
 
     @Test
-    @DisplayName("housekeeping leaves a run younger than a run can last: it may be a live run started by hand")
-    void housekeepingSparesALiveRun() {
+    @DisplayName("a project whose run by hand holds its lock is left to that run: its attempt stays running")
+    void liveRunIsLeftAlone() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
-        insertRun(runningRun(workspaceId, projectId, Instant.now().minus(Duration.ofMinutes(2))));
+        data.seed(workspaceId, projectId, 0, BUILT, tomorrowStart());
+        var runId = insertRunningRun(workspaceId, projectId, Instant.now().minus(Duration.ofMinutes(2)));
+        stubAnswer(FIXTURE.answer);
+        assertThat(runner.lockProject(projectId)).isTrue();
+        try {
+            firstBuildService.run(Instant.now());
+        } finally {
+            runner.unlockProject(projectId);
+        }
 
-        firstBuildService.run(Instant.now());
-
-        assertThat(data.runs(projectId)).singleElement()
-                .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.RUNNING));
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(runId);
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.RUNNING);
+            assertThat(project.failedRuns()).isZero();
+        });
+        assertThat(data.topics(projectId)).isEmpty();
     }
 
     @Test
-    @DisplayName("a run left running by a pod that died is failed as abandoned")
+    @DisplayName("an attempt a dead pod left running past the lease is recorded as failed with abandoned when the "
+            + "project's next run starts, and counts as a failure")
     void abandonedRun() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
-        insertRun(runningRun(workspaceId, projectId, Instant.now().minus(Duration.ofDays(1))));
+        data.seed(workspaceId, projectId, 0, BUILT, tomorrowStart());
+        var startedAt = Instant.now().minus(Duration.ofDays(1)).truncatedTo(ChronoUnit.MICROS);
+        insertRunningRun(workspaceId, projectId, startedAt);
+        // The next run fails too, so the row still shows the abandoned attempt among its failures.
+        wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)));
 
         firstBuildService.run(Instant.now());
 
-        assertThat(data.runs(projectId)).singleElement().satisfies(run -> {
-            assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
-            assertThat(run.errorCode()).isEqualTo("abandoned");
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
+            assertThat(project.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_ERROR);
+            assertThat(project.failedRuns()).isEqualTo(2);
+            assertThat(project.firstFailedAt()).isEqualTo(startedAt);
         });
     }
 
     @Test
-    @DisplayName("housekeeping deletes the runs started before the runs retention and keeps newer ones")
-    void housekeepingDeletesOldRuns() {
-        var workspaceId = enabledWorkspace();
-        var projectId = UUID.randomUUID();
-        var cut = Instant.now().minus(opikConfig.getTopics().getBuild().getRunsRetention().toJavaDuration());
-        var old = savedRun(workspaceId, projectId, cut.minus(Duration.ofMinutes(1)));
-        var recent = savedRun(workspaceId, projectId, Instant.now().minus(Duration.ofDays(1)));
-        insertRun(old);
-        insertRun(recent);
-
-        firstBuildService.run(Instant.now());
-
-        assertThat(data.runs(projectId)).extracting(TopicRun::runId).containsExactly(recent.runId());
-    }
-
-    @Test
     @DisplayName("a job run finishes the labelling pass of a saved list whose labels are not complete, marks them "
-            + "complete and saves the run's counts; a project of a workspace not opted in or with AI labels off is "
+            + "complete; a project of a workspace not opted in or with AI labels off is "
             + "left as it is")
     void resumesAnUnfinishedPass() {
         var workspaceId = enabledWorkspace();
@@ -510,24 +505,22 @@ class TopicsFirstBuildJobIntegrationTest {
         });
         data.seed(aiLabelsOffWorkspace, aiLabelsOff, 0, BUILT, tomorrowStart());
         data.savedList(aiLabelsOffWorkspace, aiLabelsOff, tomorrowStart(), BUILT);
-        var runId = data.state(unfinished).lastRunId();
+        var runId = data.topicProject(unfinished).listRunId();
 
         firstBuildService.run(Instant.now());
 
         assertThat(data.traceTopics(workspaceId, unfinished)).hasSize(BUILT)
-                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(runId.toString()));
-        assertThat(data.state(unfinished).labelsComplete()).isTrue();
-        assertThat(data.runCounts(workspaceId, runId))
-                .containsOnlyKeys(data.topics(unfinished).getFirst().id(), TraceTopic.OTHER);
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(runId));
+        assertThat(data.topicProject(unfinished).labelsComplete()).isTrue();
         for (var left : List.of(notOptedIn, aiLabelsOff)) {
-            assertThat(data.state(left).labelsComplete()).isFalse();
+            assertThat(data.topicProject(left).labelsComplete()).isFalse();
         }
         assertThat(data.traceTopics(notOptedInWorkspace, notOptedIn)).isEmpty();
         assertThat(data.traceTopics(aiLabelsOffWorkspace, aiLabelsOff)).isEmpty();
     }
 
     @Test
-    @DisplayName("a job run deletes the topics, prototypes, state and runs of a project that no longer exists, and "
+    @DisplayName("a job run deletes the topics of a project that no longer exists, with their prototype vectors, and "
             + "keeps an existing project's")
     void deletedProjectsDataGoes() {
         var workspaceId = enabledWorkspace();
@@ -540,56 +533,76 @@ class TopicsFirstBuildJobIntegrationTest {
         firstBuildService.run(Instant.now());
 
         assertThat(data.topics(deleted)).isEmpty();
-        assertThat(data.prototypes(deleted)).isEmpty();
-        assertThat(data.state(deleted)).isNull();
-        assertThat(data.runs(deleted)).isEmpty();
-        assertThat(data.topics(kept)).hasSize(1);
-        assertThat(data.prototypes(kept)).hasSize(2);
-        assertThat(data.state(kept)).isNotNull();
-        assertThat(data.runs(kept)).hasSize(1);
+        assertThat(data.topics(kept)).singleElement()
+                .satisfies(topic -> assertThat(topic.vectors().vectors()).hasSize(1));
+        assertThat(data.topicProject(kept).listRunId()).isNotNull();
     }
 
     /**
-     * Runs the job's run until the project has {@code runs} runs: a project whose lock a run by hand of an earlier test
+     * Runs the job's run until the project's last run is saved: a project whose lock a run by hand of an earlier test
      * still holds for a moment is skipped, and the next run takes it.
      */
-    private void runUntilBuilt(UUID projectId, int runs) {
+    private void runUntilBuilt(UUID projectId) {
         Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             firstBuildService.run(Instant.now());
-            assertThat(data.runs(projectId)).hasSize(runs);
+            assertSaved(projectId);
         });
     }
 
-    private void runUntilBuilt(UUID projectId) {
-        runUntilBuilt(projectId, 1);
+    private void awaitSaved(UUID projectId) {
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertSaved(projectId));
+    }
+
+    private void assertSaved(UUID projectId) {
+        assertThat(data.topicProject(projectId)).isNotNull().satisfies(project -> {
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
+            assertThat(project.listRunId()).isEqualTo(project.runId());
+        });
+    }
+
+    /** No run started for the project: it has no row, or only the vectors tick's backfill columns. */
+    private void assertNoRun(UUID projectId) {
+        var project = data.topicProject(projectId);
+        assertThat(project == null ? null : project.runId()).isNull();
+    }
+
+    private void assertFailures(UUID projectId, int failures) {
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.FAILED);
+            assertThat(project.failedRuns()).isEqualTo(failures);
+            assertThat(project.listRunId()).isNull();
+        });
     }
 
     /** A failed first build of the project, started a minute before it finished {@code finishedAgo} ago. */
     private void insertFailedRun(String workspaceId, UUID projectId, Duration finishedAgo) {
         var finishedAt = Instant.now().minus(finishedAgo);
-        insertRun(TopicRun.builder().runId(UUID.randomUUID()).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicRun.Mode.FIRST_BUILD).status(TopicRun.Status.FAILED).errorCode("qwen_error")
-                .startedAt(finishedAt.minus(Duration.ofMinutes(1))).finishedAt(finishedAt).build());
+        var runId = startRun(workspaceId, projectId, finishedAt.minus(Duration.ofMinutes(1)));
+        template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markFailed(workspaceId, projectId,
+                runId, finishedAt, TopicProject.RunError.LLM_ERROR));
     }
 
-    private static TopicRun runningRun(String workspaceId, UUID projectId, Instant startedAt) {
-        return TopicRun.builder().runId(UUID.randomUUID()).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicRun.Mode.FIRST_BUILD).status(TopicRun.Status.RUNNING).startedAt(startedAt).build();
+    /** A first build of the project that saved, its list since deleted by hand: it resets the failures. */
+    private void insertSavedRun(String workspaceId, UUID projectId, Instant startedAt) {
+        var runId = startRun(workspaceId, projectId, startedAt);
+        template.inTransaction(WRITE, handle -> handle.attach(TopicRunDAO.class).markSaved(workspaceId, projectId,
+                runId, startedAt.plus(Duration.ofMinutes(1))));
     }
 
-    private static TopicRun savedRun(String workspaceId, UUID projectId, Instant startedAt) {
-        return TopicRun.builder().runId(UUID.randomUUID()).workspaceId(workspaceId).projectId(projectId)
-                .mode(TopicRun.Mode.FIRST_BUILD).status(TopicRun.Status.SAVED).startedAt(startedAt)
-                .finishedAt(startedAt.plus(Duration.ofMinutes(1))).build();
+    private UUID insertRunningRun(String workspaceId, UUID projectId, Instant startedAt) {
+        return startRun(workspaceId, projectId, startedAt);
     }
 
-    /** Inserts the run, and its project's row: the job deletes the runs of projects that no longer exist. */
-    private void insertRun(TopicRun run) {
-        data.project(run.workspaceId(), run.projectId());
+    /** Starts a first build on the project's row, and makes its project row: the job deletes the data of the rest. */
+    private UUID startRun(String workspaceId, UUID projectId, Instant startedAt) {
+        data.project(workspaceId, projectId);
+        var runId = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicRunDAO.class).insert(run);
+            handle.attach(TopicRunDAO.class).start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+                    startedAt);
             return null;
         });
+        return runId;
     }
 
     /** The job's window end: tomorrow (UTC). */
@@ -620,15 +633,19 @@ class TopicsFirstBuildJobIntegrationTest {
         return workspaceId;
     }
 
-    /** The project's {@code topic_vector_backfills} row as the vectors tick writes it, started now. */
+    /**
+     * The project's backfill as the vectors tick writes it on its {@code topic_projects} row, started now, and its
+     * workspace checked now.
+     */
     private void backfill(String workspaceId, UUID projectId, boolean drained) {
         var now = Instant.now();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicVectorBackfillDAO.class);
-            dao.start(List.of(TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(projectId)
-                    .startedAt(now).checkedAt(now).lastDoneAt(now).build()));
+            dao.checked(workspaceId, now);
+            dao.start(List.of(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId)
+                    .projectId(projectId).backfillStartedAt(now).backfillLastDoneAt(now).build()));
             if (drained) {
-                dao.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId)
+                dao.record(List.of(TopicVectorBackfillDAO.Progress.builder().workspaceId(workspaceId)
                         .projectId(projectId).drainedAt(now).build()));
             }
             return null;

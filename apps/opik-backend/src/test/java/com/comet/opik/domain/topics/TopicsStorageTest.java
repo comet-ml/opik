@@ -135,7 +135,7 @@ class TopicsStorageTest {
     }
 
     @Test
-    @DisplayName("deleting a project deletes its topics, prototypes, state and runs")
+    @DisplayName("deleting a project deletes its topics, with their prototype vectors, and keeps another project's")
     void projectDeleted() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -146,11 +146,8 @@ class TopicsStorageTest {
         projectDeletedListener.onProjectsDeleted(new ProjectsDeleted(Set.of(projectId), workspaceId, "test"));
 
         assertThat(data.topics(projectId)).isEmpty();
-        assertThat(data.prototypes(projectId)).isEmpty();
-        assertThat(data.state(projectId)).isNull();
-        assertThat(data.runs(projectId)).isEmpty();
-        assertThat(data.topics(kept)).isNotEmpty();
-        assertThat(data.runs(kept)).hasSize(1);
+        assertThat(data.topics(kept)).singleElement()
+                .satisfies(topic -> assertThat(topic.vectors().vectors()).hasSize(1));
     }
 
     @Test
