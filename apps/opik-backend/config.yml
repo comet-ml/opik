@@ -2903,6 +2903,12 @@ topics:
     #  Description: The fresh phase's window: how far back, by ai_label_status write time, each tick looks for done
     #  traces without a vector. Never before the task's applies_from
     window: ${TOPICS_VECTORS_WINDOW:-24h}
+    #  Default: 15m
+    #  Description: How far before its watermark each workspace's fresh read starts. Covers a done status that becomes
+    #  visible after a later one was read: a write to a lagging replica, or a status visible before its output row.
+    #  Each tick re-reads this much of the window, less the traces that have a vector. A status visible later than this
+    #  is left to the daily pass. At most window
+    watermarkOverlap: ${TOPICS_VECTORS_WATERMARK_OVERLAP:-15m}
     #  Default: 7d
     #  Description: The window of the daily pass, for rows the fresh phase missed, and of a project's backfill. At least
     #  window
