@@ -43,6 +43,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -296,7 +297,7 @@ class TopicsNightlyServiceTest {
     }
 
     @Test
-    @DisplayName("projects the night does not reach add one to their not_reached_nights")
+    @DisplayName("projects the night does not reach add one to their not_reached_nights, in one write per workspace")
     void notReached() {
         Thread.currentThread().interrupt();
         try {
@@ -308,6 +309,7 @@ class TopicsNightlyServiceTest {
         }
         assertThat(meter.points("topics.runs")).isEmpty();
         assertThat(notReached(WORKSPACE_ID)).containsExactlyInAnyOrder(built, locked, started);
+        verify(nightDAO, times(1)).markNotReached(eq(WORKSPACE_ID), any());
         assertThat(decisions(WORKSPACE_ID, "not_reached")).isEqualTo(3);
     }
 

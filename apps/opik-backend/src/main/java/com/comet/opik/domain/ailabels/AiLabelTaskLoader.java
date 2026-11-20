@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -43,7 +42,8 @@ import java.util.stream.Stream;
 @UtilityClass
 public class AiLabelTaskLoader {
 
-    public static final String CLASSPATH_DIRECTORY = "ai-labels/tasks";
+    static final String AI_LABELS = "ai-labels";
+    public static final String CLASSPATH_DIRECTORY = tasksDirectory(AI_LABELS);
 
     static final Pattern NAME_PATTERN = Pattern.compile("[a-z0-9_]{1,32}");
 
@@ -56,27 +56,9 @@ public class AiLabelTaskLoader {
             // One task per file: a second YAML document would otherwise be ignored.
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
-    /**
-     * The placeholders of a generate task's {@code prompt.user}: each {@code required} one exactly once, each
-     * {@code optional} one at most once, each {@code repeated} one at least once; none of them in
-     * {@code prompt.system}.
-     */
-    public record Placeholders(@NonNull Set<String> required, @NonNull Set<String> optional,
-            @NonNull Set<String> repeated) {
-
-        /** ai-labels' rule: the trace's state, and its earlier turns when the task wants them. */
-        public static final Placeholders AI_LABELS = new Placeholders(Set.of(AiLabelTask.STATE_PLACEHOLDER),
-                Set.of(AiLabelTask.HISTORY_PLACEHOLDER), Set.of());
-
-        public Placeholders {
-            required = Set.copyOf(required);
-            optional = Set.copyOf(optional);
-            repeated = Set.copyOf(repeated);
-        }
-
-        Stream<String> all() {
-            return Stream.of(required, optional, repeated).flatMap(Set::stream).sorted();
-        }
+    /** A feature's bundled task folder: {@code <label>/tasks}, as ai-labels' own. */
+    private static String tasksDirectory(String label) {
+        return label + "/tasks";
     }
 
     /**
@@ -84,24 +66,23 @@ public class AiLabelTaskLoader {
      * each task's placeholder rule by task name (null for a name the set does not know), and {@code budgets}, when not
      * null, is the model input the prompt must fit with a full-budget state.
      */
-    record Rules(@NonNull String label, @NonNull Function<String, Placeholders> placeholders,
+    record Rules(@NonNull String label, @NonNull Function<String, TaskPlaceholders> placeholders,
             @Nullable Budgets budgets) {
 
         static Rules aiLabels(Budgets budgets) {
-            return new Rules("ai-labels", name -> Placeholders.AI_LABELS, budgets);
+            return new Rules(AI_LABELS, name -> TaskPlaceholders.AI_LABELS, budgets);
         }
     }
 
     /**
-     * The generate tasks bundled under {@code classpathDirectory} for a feature other than ai-labels, which fills its
-     * own placeholders: {@code placeholders} gives each task's rule by name, and a file whose task it does not name
-     * fails. The ai-labels model input budget does not apply: the feature sizes its own prompts.
+     * The generate tasks bundled under {@code <label>/tasks} for a feature other than ai-labels, which fills its own
+     * placeholders: {@code placeholders} gives each task's rule by name, and a file whose task it does not name fails.
+     * The ai-labels model input budget does not apply: the feature sizes its own prompts.
      */
-    public static List<AiLabelTask> loadBundled(@NonNull String classpathDirectory, @NonNull String label,
-            @NonNull Map<String, Placeholders> placeholders) {
-        var rules = new Rules(label, placeholders::get, null);
+    public static List<AiLabelTask> loadBundled(@NonNull String label,
+            @NonNull Map<String, TaskPlaceholders> placeholders) {
         try {
-            return loadBundled(codeSource(), classpathDirectory, rules);
+            return loadBundled(codeSource(), new Rules(label, placeholders::get, null));
         } catch (URISyntaxException exception) {
             throw new IllegalStateException(exception);
         }
@@ -129,10 +110,11 @@ public class AiLabelTaskLoader {
      * which would miss a jar written without directory entries and would let another classpath root shadow it.
      */
     static List<AiLabelTask> loadBundled(Path codeSource, Budgets budgets) {
-        return loadBundled(codeSource, CLASSPATH_DIRECTORY, Rules.aiLabels(budgets));
+        return loadBundled(codeSource, Rules.aiLabels(budgets));
     }
 
-    static List<AiLabelTask> loadBundled(Path codeSource, String classpathDirectory, Rules rules) {
+    static List<AiLabelTask> loadBundled(Path codeSource, Rules rules) {
+        var classpathDirectory = tasksDirectory(rules.label());
         if (Files.isDirectory(codeSource)) {
             return loadDirectory(codeSource.resolve(classpathDirectory), rules);
         }
@@ -256,7 +238,7 @@ public class AiLabelTaskLoader {
         }
     }
 
-    private static void validateGenerate(AiLabelTask task, Placeholders placeholders, @Nullable Budgets budgets) {
+    private static void validateGenerate(AiLabelTask task, TaskPlaceholders placeholders, @Nullable Budgets budgets) {
         require(task.questions() == null, "a generate task has a prompt and schema, no questions");
         require(task.prompt() != null, "a generate task needs a prompt");
         require(task.schema() != null && task.schema().isObject(), "a generate task needs an object schema");

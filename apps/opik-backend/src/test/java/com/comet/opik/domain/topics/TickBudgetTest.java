@@ -1,6 +1,5 @@
 package com.comet.opik.domain.topics;
 
-import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("tick budget")
 class TickBudgetTest {
 
-    private final Instant start = Instant.ofEpochSecond(RandomUtils.secure().randomLong(0, 4_000_000_000L));
+    private final Instant start = TopicsTestClock.randomInstant();
 
     @Test
     @DisplayName("a read needs a whole second plus the embed reserve left, and its max_execution_time is the whole "

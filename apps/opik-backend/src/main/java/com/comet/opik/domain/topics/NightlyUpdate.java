@@ -32,8 +32,8 @@ import java.util.stream.IntStream;
  * memory keeps its prototypes whose held traces mostly stayed in Other, then the centre of every group the naming left
  * in Other (not a loose one), unless one kept is within {@value #SAME_MEMORY} of it;</li>
  * <li>the final assignment, as the first build's ({@link PrototypeAssigner}, with the 0.95 Other gate);</li>
- * <li>{@link Lifecycle}: retirements on the share of the whole window, then a reassignment when one happened, then the
- * sizes;</li>
+ * <li>the lifecycle ({@link NightState#retireLowShare}): retirements on the share of the whole window, then a
+ * reassignment when one happened, then the sizes;</li>
  * <li>{@link #dropIdle}: a prototype that won no trace leaves, a live topic keeping at least one. The window is a
  * prototype's lifetime. A retired topic keeps no prototypes: a theme that comes back later is born as a new topic.</li>
  * </ol>
@@ -62,17 +62,17 @@ public class NightlyUpdate {
         for (int i = 0; i < n; i++) {
             before[i] = owners[i] >= 0 ? owners[i] : TopicAlgorithm.OTHER;
         }
-        var recent = window.recent();
+        var recent = window.recent(config.getRecentDays());
         // b. the Other groups
         var grouped = other(owners);
         var grouping = CandidateGrouper.group(window, grouped, state.getRebuilds(), config);
         var candidates = grouping.candidates().stream()
-                .sorted(Comparator.comparingInt((GroupSummary group) -> -group.size())
-                        .thenComparingInt(GroupSummary::group))
+                .sorted(Comparator.comparingInt((NightGroup group) -> -group.size())
+                        .thenComparingInt(NightGroup::group))
                 .toList();
         var big = candidates.stream()
                 .filter(group -> group.share() >= BIG_SHARE)
-                .map(GroupSummary::group)
+                .map(NightGroup::group)
                 .sorted()
                 .toList();
         // c. the naming call
@@ -80,7 +80,7 @@ public class NightlyUpdate {
         List<ForcedBirth.Outcome> forced = List.of();
         if (!candidates.isEmpty()) {
             forced = ForcedBirth.apply(state, candidates, map, () -> promptTopics(state, window, before, recent),
-                    maxTopics, llm);
+                    maxTopics, config.getRecentDays(), llm);
         }
         // d. decisions become prototypes
         var placed = new HashSet<Integer>();
@@ -96,19 +96,19 @@ public class NightlyUpdate {
         // e. final assignment; f. lifecycle
         var last = assignFinal(state, window, config);
         int liveBefore = state.liveCount();
-        Lifecycle.retire(state, window, last.labels());
+        state.retireLowShare(last.labels(), config.getRetireShare(), config.getRetireNights());
         if (state.liveCount() < liveBefore) {
             last = assignFinal(state, window, config);
         }
         var labels = last.labels();
-        Lifecycle.sizes(state, labels);
+        state.recordSizes(labels);
         // g. prototypes that won no trace in the last final assignment
         dropIdle(state, last);
         return Result.builder()
                 .labels(labels)
                 .before(before)
                 .unassigned(grouped.length)
-                .candidates(candidates.stream().map(GroupSummary::group).sorted().toList())
+                .candidates(candidates.stream().map(NightGroup::group).sorted().toList())
                 .big(big)
                 .forced(forced)
                 .groupMap(Map.copyOf(map))
@@ -133,7 +133,7 @@ public class NightlyUpdate {
         for (int m = 0; m < memory.size(); m++) {
             boolean gated = false;
             for (int p = 0; p < topicCount && !gated; p++) {
-                gated = dot(memory.get(m), vectors.get(p), d) >= config.getOtherGate();
+                gated = VectorMath.dot(memory.get(m), 0, vectors.get(p), 0, d) >= config.getOtherGate();
             }
             if (!gated) {
                 vectors.add(memory.get(m));
@@ -175,11 +175,12 @@ public class NightlyUpdate {
             CandidateGrouper.Grouping grouping, Set<Integer> placed, List<ForcedBirth.Outcome> forced, int d) {
         var held = new int[memory.size()];
         var placedHeld = new int[memory.size()];
+        var labels = grouping.labels();
         for (int r = 0; r < grouped.length; r++) {
             int owner = owners[grouped[r]];
             if (owner <= HELD) {
                 held[HELD - owner]++;
-                if (grouping.labels().length > 0 && placed.contains(grouping.labels()[r])) {
+                if (labels.length > 0 && placed.contains(labels[r])) {
                     placedHeld[HELD - owner]++;
                 }
             }
@@ -197,7 +198,7 @@ public class NightlyUpdate {
                 continue;
             }
             var centre = grouping.centre(outcome.group(), d);
-            if (out.stream().noneMatch(kept -> dot(kept, centre, d) >= SAME_MEMORY)) {
+            if (out.stream().noneMatch(kept -> VectorMath.dot(kept, 0, centre, 0, d) >= SAME_MEMORY)) {
                 out.add(centre);
             }
         }
@@ -271,7 +272,7 @@ public class NightlyUpdate {
 
     /**
      * The live topics as the naming and verify prompts show them, from the step a labels: prompt id = position in the
-     * live list, share of the window, share of the last 7 days and {@value #PROMPT_EXAMPLES} member texts, picked as a
+     * live list, share of the window, share of the recent days and {@value #PROMPT_EXAMPLES} member texts, picked as a
      * group's ({@link GroupSummaries#pick}): texts that repeat first, most frequent first (ties by code point order),
      * then the most typical ones, nearest to any of the topic's prototypes (ties by trace order).
      */
@@ -320,19 +321,11 @@ public class NightlyUpdate {
         for (int u = 0; u < sims.length; u++) {
             sims[u] = Double.NEGATIVE_INFINITY;
             for (var prototype : prototypes) {
-                sims[u] = Math.max(sims[u], GroupSummaries.dot(merged.vectors(), u, prototype, 0, d));
+                sims[u] = Math.max(sims[u], VectorMath.dot(merged.vectors(), u * d, prototype, 0, d));
             }
         }
         return GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0, merged.size(),
                 merged.weights(), sims, PROMPT_EXAMPLES, PROMPT_EXAMPLES);
-    }
-
-    private static double dot(float[] a, float[] b, int dimensions) {
-        double s = 0;
-        for (int t = 0; t < dimensions; t++) {
-            s += (double) a[t] * b[t];
-        }
-        return s;
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.comet.opik.domain.topics;
 
+import org.apache.commons.lang3.RandomUtils;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,6 +15,11 @@ final class TopicsTestClock extends Clock {
 
     TopicsTestClock(Instant now) {
         this.now = now;
+    }
+
+    /** A random instant up to about 2096, so a test never depends on the wall clock's date. */
+    static Instant randomInstant() {
+        return Instant.ofEpochSecond(RandomUtils.secure().randomLong(0, 4_000_000_000L));
     }
 
     void advance(Duration duration) {

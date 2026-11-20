@@ -2,13 +2,13 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -29,7 +29,8 @@ class TopicsAlgorithmFixtureTest {
 
     private static final int D = TopicsFixture.DIMENSIONS;
     private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
-    private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final String WORKSPACE_ID = RandomStringUtils.secure().nextAlphanumeric(10);
+    private static final UUID PROJECT_ID = TopicsTestAlgorithm.ID_GENERATOR.generateId();
     /** The first build at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
     private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm.algorithm(fixedGroups(15));
 
@@ -123,7 +124,7 @@ class TopicsAlgorithmFixtureTest {
         // The fixture's summaries list up to 3 repeated texts, then the nearest ones, 5 in all.
         var labels = TopicsFixture.ints(fixture.expected.get("sklearn").get("labels"));
         var standExamples = GroupSummaries.authorExamples(merged, labels, fixture.centres, 3, 2);
-        var nightSummaries = GroupSummaries.summarize(merged, labels, fixture.centres);
+        var nightSummaries = GroupSummaries.summarize(merged, labels, fixture.centres, 3, 5);
         assertThat(summaries).hasSize(expected.size());
         for (int j = 0; j < summaries.size(); j++) {
             var actual = summaries.get(j);
@@ -221,13 +222,9 @@ class TopicsAlgorithmFixtureTest {
         var build = FIRST_BUILD.firstBuild(window(), 10,
                 new TopicsTestAlgorithm.StubContext(fixture.firstBuildAnswer));
         var topics = IntStream.range(0, build.topics().size())
-                .mapToObj(t -> Topic.builder()
-                        .id(UUID.randomUUID())
-                        .workspaceId("ws-1")
-                        .projectId(PROJECT_ID)
+                .mapToObj(t -> TopicsTestAlgorithm.topic(WORKSPACE_ID, PROJECT_ID)
                         .name(build.topics().get(t).name())
                         .definition(build.topics().get(t).definition())
-                        .born(LocalDate.of(2026, 11, 19))
                         .vectors(new PrototypeVectors(IntStream.range(0, build.owners().size())
                                 .filter(p -> build.owners().get(p) == t)
                                 .mapToObj(build.topicPrototypes()::get)

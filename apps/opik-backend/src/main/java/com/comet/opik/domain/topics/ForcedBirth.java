@@ -8,6 +8,7 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,13 +51,13 @@ public class ForcedBirth {
      * @param map         the group map, filled in place: candidate group to topic index or {@link NightlyUpdate#OTHER}
      * @param shownTopics the live topics as a prompt shows them now, read again for each naming call
      */
-    public static List<Outcome> apply(@NonNull NightState state, @NonNull List<GroupSummary> ordered,
+    public static List<Outcome> apply(@NonNull NightState state, @NonNull List<NightGroup> ordered,
             @NonNull Map<Integer, Integer> map, @NonNull Supplier<List<TopicPrompts.PromptTopic>> shownTopics,
-            int maxTopics, @NonNull NightLlm llm) {
+            int maxTopics, int recentDays, @NonNull NightLlm llm) {
         var outcomes = new ArrayList<Outcome>();
         var groupShares = new HashMap<Integer, Double>();
         ordered.forEach(group -> groupShares.put(group.group(), group.share()));
-        var forced = new ArrayList<GroupSummary>();
+        var forced = new ArrayList<NightGroup>();
         for (var candidate : ordered) {
             if (candidate.tightness() < MIN_TIGHTNESS) {
                 map.put(candidate.group(), NightlyUpdate.OTHER);
@@ -66,13 +67,14 @@ public class ForcedBirth {
             forced.add(candidate);
         }
         if (!forced.isEmpty()) {
-            name(state, forced, map, shownTopics, maxTopics, llm, true, groupShares, outcomes);
+            name(state, forced, map, shownTopics, maxTopics, recentDays, llm, true, groupShares, outcomes);
         }
         return outcomes;
     }
 
-    private static void name(NightState state, List<GroupSummary> forced, Map<Integer, Integer> map,
-            Supplier<List<TopicPrompts.PromptTopic>> shownTopics, int maxTopics, NightLlm llm, boolean allowAssign,
+    private static void name(NightState state, List<NightGroup> forced, Map<Integer, Integer> map,
+            Supplier<List<TopicPrompts.PromptTopic>> shownTopics, int maxTopics, int recentDays, NightLlm llm,
+            boolean allowAssign,
             Map<Integer, Double> groupShares, List<Outcome> outcomes) {
         var shown = shownTopics.get();
         var byPromptId = new HashMap<Integer, Integer>();
@@ -81,20 +83,20 @@ public class ForcedBirth {
             byPromptId.put(topic.id(), topic.topic());
             byTopic.put(topic.topic(), topic);
         });
-        var byGroup = new LinkedHashMap<Integer, GroupSummary>();
+        var byGroup = new LinkedHashMap<Integer, NightGroup>();
         forced.forEach(group -> byGroup.put(group.group(), group));
         var answer = allowAssign
-                ? llm.generate(NAMING_TAG, TopicPrompts.namingGroup(shown, forced, true),
+                ? llm.generate(NAMING_TAG, TopicPrompts.namingGroup(shown, forced, true, recentDays),
                         TopicPrompts.NAMING_GROUP_SCHEMA, NAMING_TOKENS)
-                : llm.generate(NAMING_NEW_TAG, TopicPrompts.namingGroup(shown, forced, false),
+                : llm.generate(NAMING_NEW_TAG, TopicPrompts.namingGroup(shown, forced, false, recentDays),
                         TopicPrompts.NAMING_GROUP_NEW_SCHEMA, NAMING_TOKENS);
         var done = new HashSet<Integer>();
-        var rejected = new ArrayList<GroupSummary>();
+        var rejected = new ArrayList<NightGroup>();
         if (allowAssign) {
             assign(state, answer, byPromptId, byTopic, byGroup, map, llm, done, rejected, outcomes);
         }
         var live = new HashMap<String, Integer>();
-        state.live().forEach(t -> live.put(AuthorApplier.nameKey(state.topic(t).getName()), t));
+        Arrays.stream(state.live()).forEach(t -> live.put(AuthorApplier.nameKey(state.topic(t).getName()), t));
         var groups = new LinkedHashMap<String, NewGroup>();
         for (var entry : NightJson.objects(answer == null ? null : answer.get("new"))) {
             var name = TopicText.name(text(entry.get("name")));
@@ -171,7 +173,7 @@ public class ForcedBirth {
             }
         }
         if (!rejected.isEmpty()) {
-            name(state, rejected, map, shownTopics, maxTopics, llm, false, groupShares, outcomes);
+            name(state, rejected, map, shownTopics, maxTopics, recentDays, llm, false, groupShares, outcomes);
         }
         for (int id : byGroup.keySet()) {
             if (!map.containsKey(id)) {
@@ -183,8 +185,8 @@ public class ForcedBirth {
 
     /** The answer's assigns to a live topic, one per group, through one batched verify; a group not verified is rejected. */
     private static void assign(NightState state, JsonNode answer, Map<Integer, Integer> byPromptId,
-            Map<Integer, TopicPrompts.PromptTopic> byTopic, Map<Integer, GroupSummary> byGroup,
-            Map<Integer, Integer> map, NightLlm llm, Set<Integer> done, List<GroupSummary> rejected,
+            Map<Integer, TopicPrompts.PromptTopic> byTopic, Map<Integer, NightGroup> byGroup,
+            Map<Integer, Integer> map, NightLlm llm, Set<Integer> done, List<NightGroup> rejected,
             List<Outcome> outcomes) {
         var pairs = new ArrayList<int[]>();
         var prompts = new ArrayList<TopicPrompts.VerifyPair>();
