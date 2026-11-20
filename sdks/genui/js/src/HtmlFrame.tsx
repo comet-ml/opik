@@ -18,7 +18,7 @@ import {
   unknownVersionMessage,
 } from "./contract";
 import { TOKENS, type Theme } from "./tokens";
-import type { ViewData } from "./view";
+import { MAX_FRAME_HEIGHT, type ViewData } from "./view";
 
 export interface HtmlFrameProps {
   html: string;
@@ -73,7 +73,7 @@ export function HtmlFrame({
   data,
   theme,
   initialHeight = 120,
-  maxHeight = 1200,
+  maxHeight = MAX_FRAME_HEIGHT,
   onError,
 }: HtmlFrameProps) {
   const ref = useRef<HTMLIFrameElement>(null);

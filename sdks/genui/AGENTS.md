@@ -13,7 +13,7 @@
   - `HtmlFrame.tsx`: the iframe host. It speaks the MCP Apps message shapes (initialize, initialized, tool-result for the data, host-context-changed for the theme, size-changed, teardown) and stops a view that navigates away.
   - `ViewHost.tsx`: the host wrapper. It refuses an unsupported type, `engine_version`, input kind or library, resolves the inputs and loads the declared libraries through the host adapter in parallel and mounts `HtmlFrame`. A new `fetchInput` or `fetchLibrary` identity means fetch again, so a host keeps them stable with `useCallback` and changes them only when it wants new data, such as a new date range; a host that creates them on every render refetches forever.
   - `tokens.ts`: the `--ov-` token values for light and dark, sent to the view on initialize and on every theme change.
-  - `view.ts`: the view and input types, the areas, the libraries and the size cap.
+  - `view.ts`: the view and input types, the areas, the libraries, the size cap and the frame height cap.
   - `guidance.ts`: the authoring prompt per area.
   - `styles.css`: the host-side stylesheet for the frame, the loading and the error state, every rule under `.ov-view`.
 - `js/libraries/`: one entry per library a view may declare, built into `dist/libraries/<name>.js` as one script that sets its globals. The host fetches the file and the contract inlines it after the bootstrap, only for a view that declares it.
@@ -47,6 +47,16 @@ Run from `sdks/genui`.
 - A change a stored view could notice is a new contract: the bootstrap, the CSP, the base stylesheet, the message shapes, the `onViewData` and `onViewTheme` callbacks or the meaning of a token name. Add `CONTRACTS[n + 1]` next to the existing ones and leave the old ones as they are; `ENGINE_VERSION` follows. Stored views are never migrated.
 - Not a new contract: a new token, a new token value, a change to the guidance, a host-side change in `HtmlFrame.tsx`, `ViewHost.tsx` or `styles.css` that keeps the messages the same.
 - A new contract ships with Opik first; Ollie and opik-mcp move to it by upgrading their pin of the packages.
+
+## Areas
+- An area is where a view is shown, such as `widget`, a dashboard grid cell. It is fixed when the view is created, and each area gets its own authoring prompt from `prompt(area)`.
+- The sandbox, data, style and size rules in `guidance.ts` are the same for every area, because the sandbox is the same. An area only sets the target sentence (where the view sits and how wide it is) and any rules that apply to that area alone.
+- To add an area:
+  - add it to `AREAS` in `js/src/view.ts`;
+  - add its target in `AREA_TARGETS` in `js/src/guidance.ts`, plus its own rules if it has any;
+  - add the value to the backend `ViewArea` enum and run `mvn -q test-compile -DskipTests` in `apps/opik-backend`;
+  - update the `AREAS` assertion in `python/tests/test_api.py`.
+- `npm run build` then writes `prompt-<area>.txt`, Python `prompt(area)` picks it up, and the smoke checks run on every area's prompt.
 
 ## Invariants (a red check here is a contract, not a flake)
 - `js/src/` imports nothing from Opik: `smoke: no imports from outside the package`.

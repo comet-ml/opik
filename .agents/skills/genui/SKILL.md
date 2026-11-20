@@ -14,7 +14,7 @@ sdks/genui/js/src/HtmlFrame.tsx   the iframe host, MCP Apps message shapes
 sdks/genui/js/src/ViewHost.tsx    the host wrapper: refuses unsupported views, resolves inputs
 sdks/genui/js/src/tokens.ts       --ov- token values for light and dark
 sdks/genui/js/src/guidance.ts     the authoring prompt per area
-sdks/genui/js/src/view.ts         view and input types, areas, libraries, size cap
+sdks/genui/js/src/view.ts         view and input types, areas, libraries, size and height caps
 sdks/genui/js/libraries/          one entry per library a view may declare
 sdks/genui/js/scripts/smoke.ts    the test suite
 sdks/genui/dev-host/check.mjs     the browser check of the sandbox
@@ -28,6 +28,9 @@ A change a stored view could notice (bootstrap, CSP, base stylesheet, message sh
 
 ### The view is contained, not validated
 Nobody parses or lints the HTML. Safety comes from `sandbox="allow-scripts"`, the CSP with no network and no eval, the message source checks and the host page's `frame-src`, which alone stops a view navigating itself with data in the URL. Trusted Types is not enforced inside a view, so the guidance tells the author to render data as text. Never loosen them to make a view work; `dev-host/check.mjs` proves each forbidden path stays closed.
+
+### Guidance is per area, the rules are shared
+`prompt(area)` builds one prompt per area. Only the target sentence and an area's own rules vary; the sandbox, data, style and size rules apply to every area, because the sandbox does. View data is untrusted whatever its source. Steps to add an area: `sdks/genui/AGENTS.md`, section "Areas".
 
 ### Nothing from Opik
 `js/src/` imports nothing from `apps/`. The backend does not depend on the engine either; the only shared value is the size cap, `MAX_HTML_LENGTH` here and `ViewVersion.MAX_HTML_LENGTH` in the backend. The backend checks library names for shape only; which libraries exist is the engine's business, like `engine_version`.

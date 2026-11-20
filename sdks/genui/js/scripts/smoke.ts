@@ -16,6 +16,7 @@ import { ViewHost, unsupportedReason } from "../src/ViewHost";
 import {
   AREAS,
   LIBRARIES,
+  MAX_FRAME_HEIGHT,
   MAX_HTML_LENGTH,
   type Library,
   type View,
@@ -218,6 +219,14 @@ const checks: [string, boolean][] = [
   [
     "prompt describes the theme callback",
     prompts.every((p) => p.includes("onViewTheme(function (theme)")),
+  ],
+  [
+    "prompt asks for a fluid layout and states the frame height cap",
+    prompts.every(
+      (p) =>
+        p.includes("## Layout") &&
+        p.includes(`${MAX_FRAME_HEIGHT.toLocaleString("en-US")} px`),
+    ),
   ],
   [
     "prompt states the size cap",

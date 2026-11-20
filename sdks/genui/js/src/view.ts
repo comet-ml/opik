@@ -28,3 +28,4 @@ export type ViewData = Record<string, unknown>;
 
 export const MAX_HTML_LENGTH = 1_000_000;
 export const RECOMMENDED_HTML_KB = 20;
+export const MAX_FRAME_HEIGHT = 1200;
