@@ -8,9 +8,10 @@ import java.util.Optional;
 
 /**
  * The topic algorithm: how a project's window of vectors becomes its topic list, and the rule that labels a trace by a
- * saved list. The rebuild service does everything around a build: it reads the window, makes the LLM calls the
- * algorithm asks for, checks the prototypes, saves and counts. The labelling pass labels the window's other traces
- * with {@link #labeller}. To try another algorithm, implement this interface and bind it in place of
+ * saved list. A first build is two pure steps around one LLM call: {@link #cluster}, then {@link Clustering#finish}.
+ * {@link TopicsRebuildService} does everything around them: it reads the window, makes the call, checks the
+ * prototypes, saves and counts. {@link TopicWindowLabelService} labels the window's
+ * other traces with {@link #labeller}. To try another algorithm, implement this interface and bind it in place of
  * {@link KMeansTopicAlgorithm}.
  *
  * <p>The limit of this seam: an algorithm leaves its list in the saved format the service owns. That is the topics
@@ -30,8 +31,8 @@ public interface TopicAlgorithm {
     /** The label of a trace in no topic. */
     int OTHER = -1;
 
-    /** Builds the first list of a project that has none. */
-    FirstBuild firstBuild(TopicWindow window, int maxTopics, TopicRunContext context);
+    /** The first step of the first list of a project that has none: the groups and the author request. */
+    Clustering cluster(TopicWindow window, int maxTopics);
 
     /**
      * The rule that labels vectors by a project's saved list. Empty when the list has no topic: then it labels nothing.
