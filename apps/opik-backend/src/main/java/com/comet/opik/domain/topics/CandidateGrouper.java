@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
+import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -25,7 +25,8 @@ public class CandidateGrouper {
     /**
      * @param unassigned the window's traces without an owner, in window order
      */
-    public static Grouping group(@NonNull NightWindow window, @NonNull int[] unassigned, long seed) {
+    public static Grouping group(@NonNull NightWindow window, @NonNull int[] unassigned, long seed,
+            @NonNull AlgorithmConfig config) {
         if (unassigned.length < MIN_CANDIDATE) {
             return Grouping.builder().unassigned(unassigned).labels(new int[0]).centres(new float[0])
                     .groups(List.of()).candidates(List.of()).build();
@@ -36,10 +37,11 @@ public class CandidateGrouper {
         var merged = IntentMerger.merge(texts, vectors, d);
         int k = Math.min(Math.min(MAX_GROUPS, Math.max(2, unassigned.length / TRACES_PER_GROUP)), merged.size());
         var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
-        var result = KMeans.fit(merged.vectors(), weights, d, k, seed);
+        var result = KMeans.fit(merged.vectors(), weights, d, k, seed, config.getKmeansMaxIterations(),
+                config.getKmeansRestarts());
         var labels = new int[unassigned.length];
         for (int r = 0; r < labels.length; r++) {
-            labels[r] = result.labels()[merged.inverse()[r]];
+            labels[r] = result.labels()[merged.textOfTrace()[r]];
         }
         var windowRecent = window.recent();
         var recent = new boolean[unassigned.length];
@@ -58,7 +60,7 @@ public class CandidateGrouper {
         }
         int n = window.size();
         int recentDenominator = Math.max(1, recentTotal);
-        var groups = GroupSummaries.summarize(texts, vectors, labels, result.centres(), d).stream()
+        var groups = GroupSummaries.summarize(merged, result.labels(), result.centres()).stream()
                 .map(group -> group.toBuilder()
                         .share((double) group.size() / n)
                         .recentShare((double) recentPerGroup[group.group()] / recentDenominator)

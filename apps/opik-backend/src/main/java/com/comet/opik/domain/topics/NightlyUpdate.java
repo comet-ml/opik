@@ -1,6 +1,6 @@
 package com.comet.opik.domain.topics;
 
-import com.comet.opik.domain.topics.GroupSummaries.GroupSummary;
+import com.comet.opik.infrastructure.TopicsConfig.AlgorithmConfig;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -52,20 +52,20 @@ public class NightlyUpdate {
     static final int PROMPT_EXAMPLES = 4;
 
     public static Result run(@NonNull NightState state, @NonNull NightWindow window, int maxTopics,
-            @NonNull NightLlm llm) {
+            @NonNull AlgorithmConfig config, @NonNull NightLlm llm) {
         int d = window.dimensions();
         int n = window.size();
         var memory = new ArrayList<>(state.getOtherPrototypes());
         // a. one assignment: topic index, HELD - m for known-Other prototype m, or OTHER
-        var owners = assign(state, window, memory);
+        var owners = assign(state, window, memory, config);
         var before = new int[n];
         for (int i = 0; i < n; i++) {
-            before[i] = owners[i] >= 0 ? owners[i] : PrototypeAssigner.OTHER;
+            before[i] = owners[i] >= 0 ? owners[i] : TopicAlgorithm.OTHER;
         }
         var recent = window.recent();
         // b. the Other groups
         var grouped = other(owners);
-        var grouping = CandidateGrouper.group(window, grouped, state.getRebuilds());
+        var grouping = CandidateGrouper.group(window, grouped, state.getRebuilds(), config);
         var candidates = grouping.candidates().stream()
                 .sorted(Comparator.comparingInt((GroupSummary group) -> -group.size())
                         .thenComparingInt(GroupSummary::group))
@@ -94,11 +94,11 @@ public class NightlyUpdate {
         });
         state.setOtherPrototypes(memory(memory, owners, grouped, grouping, placed, forced, d));
         // e. final assignment; f. lifecycle
-        var last = assignFinal(state, window);
+        var last = assignFinal(state, window, config);
         int liveBefore = state.liveCount();
         Lifecycle.retire(state, window, last.labels());
         if (state.liveCount() < liveBefore) {
-            last = assignFinal(state, window);
+            last = assignFinal(state, window, config);
         }
         var labels = last.labels();
         Lifecycle.sizes(state, labels);
@@ -117,9 +117,9 @@ public class NightlyUpdate {
 
     /**
      * Step a: per trace its topic index, {@code HELD - m} when known-Other prototype {@code m} takes it, or
-     * {@link PrototypeAssigner#OTHER}. The same assignment as {@link #assignFinal}, the Other gate included.
+     * {@link TopicAlgorithm#OTHER}. The same assignment as {@link #assignFinal}, the Other gate included.
      */
-    static int[] assign(NightState state, NightWindow window, List<float[]> memory) {
+    static int[] assign(NightState state, NightWindow window, List<float[]> memory, AlgorithmConfig config) {
         int d = window.dimensions();
         var vectors = new ArrayList<float[]>();
         var owners = new ArrayList<Integer>();
@@ -133,7 +133,7 @@ public class NightlyUpdate {
         for (int m = 0; m < memory.size(); m++) {
             boolean gated = false;
             for (int p = 0; p < topicCount && !gated; p++) {
-                gated = dot(memory.get(m), vectors.get(p), d) >= PrototypeAssigner.OTHER_GATE;
+                gated = dot(memory.get(m), vectors.get(p), d) >= config.getOtherGate();
             }
             if (!gated) {
                 vectors.add(memory.get(m));
@@ -143,14 +143,15 @@ public class NightlyUpdate {
         if (vectors.isEmpty()) {
             return allOther(window.size());
         }
-        return new PrototypeAssigner(vectors, owners, List.of(), d).assign(window.vectors());
+        return new PrototypeAssigner(vectors, owners, List.of(), d, config.getAssignMinCosine(),
+                config.getOtherGate()).assign(window.vectors());
     }
 
     /**
-     * Step e: topic index or {@link PrototypeAssigner#OTHER} per trace, with the Other gate, and the prototype that won
+     * Step e: topic index or {@link TopicAlgorithm#OTHER} per trace, with the Other gate, and the prototype that won
      * each trace.
      */
-    static FinalAssignment assignFinal(NightState state, NightWindow window) {
+    static FinalAssignment assignFinal(NightState state, NightWindow window, AlgorithmConfig config) {
         var vectors = new ArrayList<float[]>();
         var owners = new ArrayList<Integer>();
         for (int t : state.live()) {
@@ -159,7 +160,8 @@ public class NightlyUpdate {
                 owners.add(t);
             }
         }
-        var assigner = new PrototypeAssigner(vectors, owners, state.getOtherPrototypes(), window.dimensions());
+        var assigner = new PrototypeAssigner(vectors, owners, state.getOtherPrototypes(), window.dimensions(),
+                config.getAssignMinCosine(), config.getOtherGate());
         var winners = assigner.winners(window.vectors());
         return FinalAssignment.builder().assigner(assigner).labels(assigner.owners(winners)).winners(winners).build();
     }
@@ -248,7 +250,7 @@ public class NightlyUpdate {
 
     private static int[] allOther(int n) {
         var out = new int[n];
-        Arrays.fill(out, PrototypeAssigner.OTHER);
+        Arrays.fill(out, TopicAlgorithm.OTHER);
         return out;
     }
 
@@ -280,10 +282,7 @@ public class NightlyUpdate {
         for (boolean r : recent) {
             recentTotal += r ? 1 : 0;
         }
-        int d = window.dimensions();
         var out = new ArrayList<TopicPrompts.PromptTopic>();
-        // One array for all topics: a topic's pick reads only its own members' scores, which it writes first.
-        var sims = new double[n];
         int id = 0;
         for (int t : state.live()) {
             var topic = state.topic(t);
@@ -293,10 +292,6 @@ public class NightlyUpdate {
                 if (before[i] == t) {
                     members.add(i);
                     recentCount += recent[i] ? 1 : 0;
-                    sims[i] = Double.NEGATIVE_INFINITY;
-                    for (var prototype : topic.getPrototypes()) {
-                        sims[i] = Math.max(sims[i], GroupSummaries.dot(window.vectors(), i, prototype, 0, d));
-                    }
                 }
             }
             int count = members.size();
@@ -307,10 +302,29 @@ public class NightlyUpdate {
                     .definition(topic.getDefinition())
                     .share((double) count / n)
                     .recentShare((double) recentCount / Math.max(1, recentTotal))
-                    .examples(GroupSummaries.pick(window.texts(), members, sims, PROMPT_EXAMPLES, PROMPT_EXAMPLES))
+                    .examples(examples(window, members.stream().mapToInt(Integer::intValue).toArray(),
+                            topic.getPrototypes()))
                     .build());
         }
         return out;
+    }
+
+    /** A topic's {@value #PROMPT_EXAMPLES} prompt texts among its member traces, picked as a group's. */
+    private static List<String> examples(NightWindow window, int[] members, List<float[]> prototypes) {
+        if (members.length == 0) {
+            return List.of();
+        }
+        int d = window.dimensions();
+        var merged = IntentMerger.merge(window.texts(members), window.rows(members), d);
+        var sims = new double[merged.size()];
+        for (int u = 0; u < sims.length; u++) {
+            sims[u] = Double.NEGATIVE_INFINITY;
+            for (var prototype : prototypes) {
+                sims[u] = Math.max(sims[u], GroupSummaries.dot(merged.vectors(), u, prototype, 0, d));
+            }
+        }
+        return GroupSummaries.pick(merged, IntStream.range(0, merged.size()).toArray(), 0, merged.size(),
+                merged.weights(), sims, PROMPT_EXAMPLES, PROMPT_EXAMPLES);
     }
 
     private static double dot(float[] a, float[] b, int dimensions) {
@@ -331,7 +345,7 @@ public class NightlyUpdate {
 
     /**
      * What the night decided, for the save, the run's stats and the tests: the final labels (topic index or
-     * {@link PrototypeAssigner#OTHER} per trace), step a's labels by the list saved before tonight (a trace a
+     * {@link TopicAlgorithm#OTHER} per trace), step a's labels by the list saved before tonight (a trace a
      * known-Other prototype holds is Other), the Other count before the night's decisions, the candidates and the big
      * ones, the naming outcomes and the group map at the end.
      */

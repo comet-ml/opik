@@ -14,6 +14,7 @@ import {
 import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
 import { DATASET_EXPORT_STATUS } from "@/types/datasets";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import ExportJobItem from "./ExportJobItem";
 import { isJobLoading } from "./utils";
 
@@ -26,10 +27,13 @@ const DatasetExportPanel: React.FC = () => {
   const hydrateFromApi = useHydrateFromApi();
   const isHydrated = useIsHydrated();
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
 
   // Fetch all export jobs on mount to restore state after page refresh
   const { data: apiJobs } = useDatasetExportJobs({
-    enabled: !isHydrated,
+    enabled: !isHydrated && canViewDatasets,
   });
 
   // Hydrate store from API data
@@ -39,7 +43,7 @@ const DatasetExportPanel: React.FC = () => {
     }
   }, [apiJobs, isHydrated, hydrateFromApi]);
 
-  if (!hasActiveJobs) {
+  if (!canViewDatasets || !hasActiveJobs) {
     return null;
   }
 

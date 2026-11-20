@@ -28,13 +28,15 @@ import java.lang.reflect.Type;
 @Produces("application/x-protobuf")
 public class OtelProtobufErrorMessageBodyWriter implements MessageBodyWriter<ErrorMessage> {
 
+    static final Class<ErrorMessage> ENTITY_CLASS = ErrorMessage.class;
+
     private static final MediaType PROTOBUF = MediaType.valueOf("application/x-protobuf");
 
     private final Provider<HttpHeaders> requestHeaders;
 
     @Override
     public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        return ErrorMessage.class.isAssignableFrom(type) && isProtobufRequest(requestHeaders.get());
+        return ENTITY_CLASS.isAssignableFrom(type) && isProtobufRequest(requestHeaders.get());
     }
 
     @Override

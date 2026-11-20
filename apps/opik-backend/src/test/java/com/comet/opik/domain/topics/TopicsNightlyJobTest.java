@@ -36,8 +36,8 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.awaitility.Awaitility;
-import org.jdbi.v3.core.mapper.reflect.ConstructorMapper;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,7 +60,6 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -68,19 +67,18 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
-import static com.comet.opik.domain.topics.TopicsTestData.json;
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
@@ -89,13 +87,13 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * The topics nightly job against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/generate} stubbed
  * in WireMock. Each test builds a project's first list through the first-build path, a run by hand for the fixture's
  * night, then runs the next night with {@link TopicsNightlyService#runNight(Instant)}. A planted theme comes from
- * {@link TopicsNightlyFixture}. The scheduled job fires at 02:00 UTC only.
+ * {@link TopicsNightlyFixture}. The scheduled job fires at 02:00 UTC only. A run's stats, its retired topics and its
+ * counts are read from its log lines, as an operator reads them.
  */
 @DisplayName("topics nightly job")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -132,11 +130,7 @@ class TopicsNightlyJobTest {
         wireMock = new WireMockServer(wireMockConfig().dynamicPort());
         wireMock.start();
         MigrationUtils.runMysqlDbMigration(mysql);
-        try {
-            PostCutoverTraces.migrate(clickHouse);
-        } catch (SQLException exception) {
-            throw new IllegalStateException(exception);
-        }
+        PostCutoverTraces.migrate(clickHouse);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
                 .jdbcUrl(mysql.getJdbcUrl())
@@ -173,6 +167,11 @@ class TopicsNightlyJobTest {
     private LockService lockService;
     private ClientSupport client;
     private String baseUrl;
+    /** The run, runner and night log lines of the test. */
+    private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    private final List<Logger> loggers = Stream.of(TopicsRebuildService.class, TopicsProjectRunner.class,
+            TopicWindowLabelService.class, TopicsNightlyService.class)
+            .map(type -> (Logger) LoggerFactory.getLogger(type)).toList();
 
     @BeforeAll
     void beforeAll(ClientSupport client, OpikConfiguration opikConfig, TransactionTemplate template,
@@ -215,6 +214,14 @@ class TopicsNightlyJobTest {
         });
         opikConfig.getTopics().setEnabledWorkspaces("");
         wireMock.resetAll();
+        appender.list.clear();
+        appender.start();
+        loggers.forEach(logger -> logger.addAppender(appender));
+    }
+
+    @AfterEach
+    void tearDown() {
+        loggers.forEach(logger -> logger.detachAppender(appender));
     }
 
     @Test
@@ -248,7 +255,7 @@ class TopicsNightlyJobTest {
 
         assertThat(result.saved()).isEqualTo(1);
         var update = nightlyRun(projectId);
-        var stats = json(update.stats());
+        var stats = update.stats();
         assertThat(stats.path("candidates").asInt()).isPositive();
         assertThat(stats.path("big").asInt()).isPositive();
         assertThat(stats.path("forced").path("born").asInt()).isPositive();
@@ -272,22 +279,18 @@ class TopicsNightlyJobTest {
                 });
         var liveIds = live.stream().map(Topic::id).collect(Collectors.toSet());
 
-        var prototypes = data.prototypes(projectId);
-        assertThat(prototypes).extracting(TopicPrototype::position)
-                .containsExactlyElementsOf(IntStream.range(0, prototypes.size()).boxed().toList());
-        assertThat(prototypes).allSatisfy(prototype -> assertThat(
-                prototype.topicId() == null || liveIds.contains(prototype.topicId())).isTrue());
-
         var labels = labels(workspaceId, projectId, update.runId());
         assertThat(labels).hasSize(stats.path("vectors").asInt())
                 .allSatisfy(row -> assertThat(row.topicId().equals(TraceTopic.OTHER)
                         || liveIds.contains(row.topicId())).isTrue());
         live.forEach(topic -> assertThat(labels.stream().filter(row -> row.topicId().equals(topic.id())))
                 .hasSize(topic.size()));
-        assertThat(data.state(projectId)).satisfies(state -> {
-            assertThat(state.rebuilds()).isEqualTo(2);
-            assertThat(state.lastRunId()).isEqualTo(update.runId());
-            assertThat(state.labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.savedRuns()).isEqualTo(2);
+            assertThat(project.listRunId()).isEqualTo(update.runId());
+            assertThat(project.labelsComplete()).isTrue();
+            assertThat(project.lastNight()).isEqualTo(secondNight());
+            assertThat(project.notReachedNights()).isZero();
         });
     }
 
@@ -311,12 +314,12 @@ class TopicsNightlyJobTest {
 
         assertThat(result.saved()).isEqualTo(1);
         var update = nightlyRun(projectId);
-        var stats = json(update.stats());
+        var stats = update.stats();
         int windowTraces = stats.path("window_traces").asInt();
         assertThat(windowTraces).isGreaterThan(100);
         assertThat(stats.path("sample_traces").asInt()).isEqualTo(100);
         assertThat(labels(workspaceId, projectId, update.runId())).hasSize(windowTraces);
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
     }
 
     @Test
@@ -340,19 +343,19 @@ class TopicsNightlyJobTest {
         // Read as "no pair verified", a failed verify would turn the naming's assigns into new topics.
         assertThat(result.failed()).isEqualTo(1);
         var update = nightlyRun(projectId);
-        assertThat(update.status()).isEqualTo(TopicRun.Status.FAILED);
-        assertThat(update.errorCode()).isEqualTo("qwen_error");
+        assertThat(update.status()).isEqualTo(TopicProject.RunStatus.FAILED);
+        assertThat(update.errorCode()).isEqualTo("llm_error");
         assertThat(data.topics(projectId)).isEqualTo(topics);
-        assertThat(data.state(projectId).rebuilds()).isEqualTo(1);
+        assertThat(data.topicProject(projectId).savedRuns()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("a failing naming call fails the run and leaves the previous night's list, prototypes and labels")
+    @DisplayName("a failing naming call fails the run and leaves the previous night's list, its prototypes and labels")
     void namingFails() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
         var topics = data.topics(projectId);
-        var prototypes = data.prototypes(projectId);
+        var otherVectors = data.topicProject(projectId).otherVectors();
         var labels = data.traceTopics(workspaceId, projectId);
         plant(workspaceId, projectId);
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(aResponse().withStatus(500)));
@@ -361,15 +364,13 @@ class TopicsNightlyJobTest {
 
         assertThat(result.failed()).isEqualTo(1);
         var update = nightlyRun(projectId);
-        assertThat(update.status()).isEqualTo(TopicRun.Status.FAILED);
-        assertThat(update.errorCode()).isEqualTo("qwen_error");
+        assertThat(update.status()).isEqualTo(TopicProject.RunStatus.FAILED);
+        assertThat(update.errorCode()).isEqualTo("llm_error");
         assertThat(data.topics(projectId)).isEqualTo(topics);
-        assertThat(data.prototypes(projectId))
-                .extracting(TopicPrototype::position, TopicPrototype::topicId, TopicPrototype::vector)
-                .containsExactlyElementsOf(prototypes.stream()
-                        .map(prototype -> tuple(prototype.position(), prototype.topicId(), prototype.vector()))
-                        .toList());
-        assertThat(data.state(projectId).rebuilds()).isEqualTo(1);
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.otherVectors()).isEqualTo(otherVectors);
+            assertThat(project.savedRuns()).isEqualTo(1);
+        });
         assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(labels);
     }
 
@@ -384,7 +385,7 @@ class TopicsNightlyJobTest {
 
         assertThat(runNight(secondStart()).saved()).isEqualTo(1);
 
-        var stats = json(nightlyRun(projectId).stats());
+        var stats = nightlyRun(projectId).stats();
         assertThat(stats.path("born").asInt()).isZero();
         assertThat(stats.path("forced").path("born").asInt()).isZero();
         assertThat(stats.path("qwen_calls").asInt()).isEqualTo(1);
@@ -423,92 +424,49 @@ class TopicsNightlyJobTest {
     }
 
     @Test
-    @DisplayName("when a retired topic's traffic returns, a new topic is born with a new id; the retired topic stays "
-            + "retired and the save leaves none of its prototypes")
-    void retiredTrafficReturns() {
-        var workspaceId = enabledWorkspace();
-        var projectId = firstBuilt(workspaceId);
-        // A tire topic was retired for low share the night before, with a prototype row left from an earlier save.
-        var retired = Topic.builder()
-                .id(ID_GENERATOR.generateId())
-                .workspaceId(workspaceId)
-                .projectId(projectId)
-                .name("Tire Questions")
-                .definition("Questions about the car's tires.")
-                .born(night())
-                .retiredAt(secondNight().minusDays(1))
-                .retiredReason("low_share")
-                .lowNights(3)
-                .build();
-        int position = data.prototypes(projectId).size();
-        template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(List.of(retired));
-            dao.insertPrototypes(List.of(TopicPrototype.builder()
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .position(position)
-                    .topicId(retired.id())
-                    .vector(TopicPrototype.encode(tireCentre()))
-                    .build()));
-            return null;
-        });
-        plant(workspaceId, projectId);
-        stubNightly(NAMED, sameAnswers());
-
-        assertThat(runNight(secondStart()).saved()).isEqualTo(1);
-
-        assertThat(data.topics(projectId)).filteredOn(topic -> topic.name().equals(NEW_THEME))
-                .singleElement().satisfies(topic -> {
-                    assertThat(topic.id()).isNotEqualTo(retired.id());
-                    assertThat(topic.born()).isEqualTo(secondNight());
-                });
-        assertThat(allTopics(projectId)).filteredOn(topic -> topic.id().equals(retired.id())).singleElement()
-                .satisfies(topic -> {
-                    assertThat(topic.retiredAt()).isEqualTo(secondNight().minusDays(1));
-                    assertThat(topic.retiredReason()).isEqualTo("low_share");
-                });
-        assertThat(data.prototypes(projectId)).extracting(TopicPrototype::topicId).doesNotContain(retired.id());
-        assertThat(json(nightlyRun(projectId).stats()).path("born").asInt()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("a nightly update that retires every topic deletes the list's state and prototypes and writes no "
-            + "labels; the project has no list, so the first-build path builds it again")
+    @DisplayName("a nightly update that retires every topic deletes them, clears the list and writes no labels; the "
+            + "project has no list, so the first-build path builds it again with new topic ids")
     void allRetiredIsBuiltAgain() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        var firstRun = data.state(projectId).lastRunId();
-        // The topics keep no prototype, so they hold no trace tonight and retire; the naming call births nothing.
-        template.inTransaction(WRITE, handle -> handle.execute(
-                "DELETE FROM topic_prototypes WHERE project_id = ?", projectId.toString()));
+        var firstRun = data.topicProject(projectId).listRunId();
+        var before = data.topics(projectId);
+        // The topics' prototypes point away from every trace, so they hold no trace tonight and retire; the naming
+        // call births nothing.
+        moveAway(before);
         stubAnswer(emptyNaming(), null, 0);
 
         assertThat(runNight(secondStart()).saved()).isEqualTo(1);
 
         var update = nightlyRun(projectId);
-        assertThat(update.status()).isEqualTo(TopicRun.Status.SAVED);
-        assertThat(data.state(projectId)).isNull();
-        assertThat(data.prototypes(projectId)).isEmpty();
+        assertThat(update.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         assertThat(data.topics(projectId)).isEmpty();
-        assertThat(allTopics(projectId)).isNotEmpty()
-                .allSatisfy(topic -> assertThat(topic.retiredAt()).isEqualTo(secondNight()));
+        assertThat(retired(update.runId())).containsOnlyKeys(before.stream().map(Topic::id).toList())
+                .allSatisfy((topicId, reason) -> assertThat(reason).isEqualTo("low_share"));
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.listRunId()).isNull();
+            assertThat(project.windowUntil()).isNull();
+            assertThat(project.otherVectors()).isNull();
+        });
         assertThat(labels(workspaceId, projectId, update.runId())).isEmpty();
         assertThat(data.traceTopics(workspaceId, projectId))
-                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(firstRun.toString()));
+                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(firstRun));
 
         wireMock.resetAll();
         stubAnswer(FIXTURE.answer, null, 0);
         var rebuilt = buildByHand(workspaceId, projectId, secondNight());
 
-        assertThat(data.state(projectId).lastRunId()).isEqualTo(rebuilt);
+        assertThat(data.topicProject(projectId).listRunId()).isEqualTo(rebuilt);
         assertThat(data.topics(projectId)).isNotEmpty()
-                .allSatisfy(topic -> assertThat(topic.born()).isEqualTo(secondNight()));
+                .allSatisfy(topic -> {
+                    assertThat(topic.born()).isEqualTo(secondNight());
+                    assertThat(before).extracting(Topic::id).doesNotContain(topic.id());
+                });
     }
 
     @Test
-    @DisplayName("a topic's low-share streak is saved and read back over three nights: it retires on the third, and "
-            + "the save leaves none of its prototypes")
+    @DisplayName("a topic's low-share streak is saved and read back over three nights: it retires on the third, its "
+            + "row is deleted and its retirement logged")
     void threeNights() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
@@ -527,18 +485,10 @@ class TopicsNightlyJobTest {
                 .definition("Questions about the car's tires.")
                 .born(night())
                 .lowNights(0)
+                .vectors(new PrototypeVectors(List.of(tireCentre())))
                 .build();
-        int position = data.prototypes(projectId).size();
         template.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(TopicDAO.class);
-            dao.insertTopics(List.of(tire));
-            dao.insertPrototypes(List.of(TopicPrototype.builder()
-                    .workspaceId(workspaceId)
-                    .projectId(projectId)
-                    .position(position)
-                    .topicId(tire.id())
-                    .vector(TopicPrototype.encode(tireCentre()))
-                    .build()));
+            handle.attach(TopicDAO.class).insertTopics(List.of(tire));
             return null;
         });
         plant(workspaceId, projectId, nearestToTireCentre(), 1);
@@ -546,18 +496,16 @@ class TopicsNightlyJobTest {
 
         for (int night = 1; night <= 3; night++) {
             assertThat(runNight(secondStart().plus(Duration.ofDays(night - 1))).saved()).isEqualTo(1);
-            var saved = allTopics(projectId).stream().filter(topic -> topic.id().equals(tire.id())).findFirst()
-                    .orElseThrow();
-            assertThat(saved.lowNights()).as("night %d", night).isEqualTo(night);
+            var saved = data.topics(projectId).stream().filter(topic -> topic.id().equals(tire.id())).findFirst();
             if (night < 3) {
-                assertThat(saved.retiredAt()).as("night %d", night).isNull();
+                assertThat(saved).as("night %d", night).hasValueSatisfying(
+                        topic -> assertThat(topic.lowNights()).isEqualTo(data.topicProject(projectId).savedRuns() - 1));
             } else {
-                assertThat(saved.retiredAt()).isEqualTo(secondNight().plusDays(2));
-                assertThat(saved.retiredReason()).isEqualTo("low_share");
+                assertThat(saved).isEmpty();
+                assertThat(retired(nightlyRun(projectId).runId())).containsEntry(tire.id(), "low_share");
             }
         }
-        assertThat(data.prototypes(projectId)).extracting(TopicPrototype::topicId).doesNotContain(tire.id());
-        assertThat(data.state(projectId).rebuilds()).isEqualTo(4);
+        assertThat(data.topicProject(projectId).savedRuns()).isEqualTo(4);
     }
 
     @Test
@@ -575,16 +523,16 @@ class TopicsNightlyJobTest {
                         .formatted(lost.runId()))
                 .execute()).flatMap(result -> Mono.from(result.getRowsUpdated()))).block();
         template.inTransaction(WRITE, handle -> handle.execute(
-                "UPDATE topic_project_states SET labels_complete = FALSE WHERE project_id = ?", projectId.toString()));
+                "UPDATE topic_projects SET labels_complete = FALSE WHERE project_id = ?", projectId.toString()));
         assertThat(labels(workspaceId, projectId, lost.runId())).isEmpty();
 
         firstBuildService.run(Instant.now());
 
-        var state = data.state(projectId);
-        assertThat(state.lastRunId()).isEqualTo(lost.runId());
-        assertThat(state.labelsComplete()).isTrue();
+        var project = data.topicProject(projectId);
+        assertThat(project.listRunId()).isEqualTo(lost.runId());
+        assertThat(project.labelsComplete()).isTrue();
         assertThat(labels(workspaceId, projectId, lost.runId()))
-                .hasSize(json(lost.stats()).path("window_traces").asInt());
+                .hasSize(lost.stats().path("window_traces").asInt());
     }
 
     @Test
@@ -593,11 +541,10 @@ class TopicsNightlyJobTest {
     void passLabelsUpToTheSave() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        var firstRun = data.state(projectId).lastRunId();
-        // One topic keeps no prototype, so it holds no trace tonight and retires.
+        var firstRun = data.topicProject(projectId).listRunId();
+        // One topic's prototype points away from every trace, so it holds no trace tonight and retires.
         var retiring = data.topics(projectId).getFirst();
-        template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM topic_prototypes WHERE topic_id = ?",
-                retiring.id().toString()));
+        moveAway(List.of(retiring));
         // A trace created an hour after the night's window ends, with a vector and the arrival row the old list gave.
         var late = vectorAfterTheWindow(workspaceId, projectId);
         var traceId = late.traceId();
@@ -609,35 +556,34 @@ class TopicsNightlyJobTest {
                 .traceCreatedAt(createdAt)
                 .topicId(retiring.id())
                 .source(TraceTopic.Source.ARRIVAL)
-                .runId(firstRun.toString())
+                .runId(firstRun)
                 .build())).block();
         stubNightly(emptyNaming(), sameAnswers());
 
         assertThat(runNight(secondStart()).saved()).isEqualTo(1);
 
         var update = nightlyRun(projectId);
-        assertThat(allTopics(projectId)).filteredOn(topic -> topic.id().equals(retiring.id())).singleElement()
-                .satisfies(topic -> assertThat(topic.retiredAt()).isEqualTo(secondNight()));
+        assertThat(retired(update.runId())).containsOnlyKeys(retiring.id());
+        assertThat(data.topics(projectId)).extracting(Topic::id).doesNotContain(retiring.id());
         assertThat(data.traceTopics(workspaceId, projectId)).filteredOn(row -> row.traceId().equals(traceId))
                 .singleElement().satisfies(row -> {
-                    assertThat(row.runId()).isEqualTo(update.runId().toString());
+                    assertThat(row.runId()).isEqualTo(update.runId());
                     assertThat(row.source()).isEqualTo(TraceTopic.Source.RUN);
                     assertThat(row.topicId()).isNotEqualTo(retiring.id());
                 });
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
     }
 
     @Test
-    @DisplayName("a nightly update whose pass completes saves its window's traces per topic in the run's "
-            + "stats.topic_counts: the topic born that night counted, the topic retired that night absent, and a trace "
-            + "after the window's end left out")
+    @DisplayName("a nightly update whose pass completes logs its window's traces per topic in its topic_counts line: "
+            + "the topic born that night counted, the topic retired that night absent, and a trace after the window's "
+            + "end left out")
     void nightSavesTheWindowCounts() {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
-        // One topic keeps no prototype, so it holds no trace tonight and retires.
+        // One topic's prototype points away from every trace, so it holds no trace tonight and retires.
         var retiring = data.topics(projectId).getFirst();
-        template.inTransaction(WRITE, handle -> handle.execute("DELETE FROM topic_prototypes WHERE topic_id = ?",
-                retiring.id().toString()));
+        moveAway(List.of(retiring));
         var planted = plant(workspaceId, projectId);
         var late = vectorAfterTheWindow(workspaceId, projectId);
         // The counts read only the traces Logs lists: every trace gets its traces row.
@@ -652,12 +598,11 @@ class TopicsNightlyJobTest {
         assertThat(runNight(secondStart()).saved()).isEqualTo(1);
 
         var update = nightlyRun(projectId);
-        var stats = json(update.stats());
+        var stats = update.stats();
         var from = Instant.parse(stats.path("window_from").asText());
         var until = Instant.parse(stats.path("window_until").asText());
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
-        assertThat(allTopics(projectId)).filteredOn(topic -> topic.id().equals(retiring.id())).singleElement()
-                .satisfies(topic -> assertThat(topic.retiredAt()).isEqualTo(secondNight()));
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
+        assertThat(retired(update.runId())).containsOnlyKeys(retiring.id());
         var live = data.topics(projectId);
         var born = live.stream().filter(topic -> topic.name().equals(NEW_THEME)).findFirst().orElseThrow();
         // Each trace of the window by its latest row, as the count reads it; zero for a live topic with none.
@@ -668,17 +613,17 @@ class TopicsNightlyJobTest {
                 .filter(row -> !row.traceCreatedAt().isBefore(from) && row.traceCreatedAt().isBefore(until))
                 .forEach(row -> expected.merge(row.topicId(), 1L, Long::sum));
 
-        var counts = data.runCounts(workspaceId, update.runId());
+        var counts = counts(update.runId());
         assertThat(counts).isEqualTo(expected).doesNotContainKey(retiring.id());
         assertThat(counts.get(born.id())).isPositive();
         assertThat(counts.values().stream().mapToLong(Long::longValue).sum())
                 .isEqualTo(stats.path("window_traces").asLong());
         assertThat(data.traceTopics(workspaceId, projectId)).filteredOn(row -> row.traceId().equals(late.traceId()))
-                .singleElement().satisfies(row -> assertThat(row.runId()).isEqualTo(update.runId().toString()));
+                .singleElement().satisfies(row -> assertThat(row.runId()).isEqualTo(update.runId()));
     }
 
     @Test
-    @DisplayName("a project without a list is not the night's: no run, no night row")
+    @DisplayName("a project without a list is not the night's: no attempt, and the night does not mark it")
     void noListSkip() {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
@@ -686,8 +631,7 @@ class TopicsNightlyJobTest {
 
         runNight(secondStart());
 
-        assertThat(data.runs(projectId)).isEmpty();
-        assertThat(nightRows(secondNight(), workspaceId)).isEmpty();
+        assertNotTheNights(projectId);
     }
 
     @Test
@@ -696,7 +640,7 @@ class TopicsNightlyJobTest {
         var workspaceId = enabledWorkspace();
         var projectId = firstBuilt(workspaceId);
         var topics = data.topics(projectId);
-        var prototypes = data.prototypes(projectId);
+        var otherVectors = data.topicProject(projectId).otherVectors();
         var labels = data.traceTopics(workspaceId, projectId);
         plant(workspaceId, projectId);
         stubAnswer(NAMED, NAMING_PROMPT, 3_000);
@@ -708,23 +652,21 @@ class TopicsNightlyJobTest {
                 wireMock.findAll(postRequestedFor(urlEqualTo(GENERATE_PATH)))).hasSize(1));
         var other = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> handle.execute(
-                "UPDATE topic_project_states SET last_run_id = ? WHERE project_id = ?", other.toString(),
+                "UPDATE topic_projects SET list_run_id = ? WHERE project_id = ?", other.toString(),
                 projectId.toString()));
 
         assertThat(night.join().failed()).isEqualTo(1);
         assertThat(nightlyRun(projectId)).satisfies(run -> {
-            assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
+            assertThat(run.status()).isEqualTo(TopicProject.RunStatus.FAILED);
             assertThat(run.errorCode()).isEqualTo("save");
-            assertThat(run.errorMessage()).contains("another run saved this project meanwhile");
+            assertThat(runLog(run.runId())).anyMatch(line -> line.contains("another run saved this project meanwhile"));
         });
         assertThat(data.topics(projectId)).isEqualTo(topics);
-        assertThat(data.prototypes(projectId))
-                .extracting(TopicPrototype::position, TopicPrototype::topicId, TopicPrototype::vector)
-                .containsExactlyElementsOf(prototypes.stream()
-                        .map(prototype -> tuple(prototype.position(), prototype.topicId(), prototype.vector()))
-                        .toList());
-        assertThat(data.state(projectId).lastRunId()).isEqualTo(other);
-        assertThat(data.state(projectId).rebuilds()).isEqualTo(1);
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.otherVectors()).isEqualTo(otherVectors);
+            assertThat(project.listRunId()).isEqualTo(other);
+            assertThat(project.savedRuns()).isEqualTo(1);
+        });
         assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(labels);
     }
 
@@ -752,20 +694,20 @@ class TopicsNightlyJobTest {
 
         assertThat(result.saved()).isEqualTo(1);
         assertThat(result.failed()).isEqualTo(1);
-        var timedOut = nightlyRun(first).status() == TopicRun.Status.FAILED ? first : second;
+        var timedOut = nightlyRun(first).status() == TopicProject.RunStatus.FAILED ? first : second;
         var saved = timedOut.equals(first) ? second : first;
-        assertThat(nightlyRun(saved).status()).isEqualTo(TopicRun.Status.SAVED);
-        assertThat(data.state(saved).rebuilds()).isEqualTo(2);
+        assertThat(nightlyRun(saved).status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(data.topicProject(saved).savedRuns()).isEqualTo(2);
         var topics = data.topics(timedOut);
         // The interrupted update may still get its slow answer: past it, a save that raced the timeout would show.
         Awaitility.await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             assertThat(nightlyRun(timedOut)).satisfies(run -> {
-                assertThat(run.status()).isEqualTo(TopicRun.Status.FAILED);
+                assertThat(run.status()).isEqualTo(TopicProject.RunStatus.FAILED);
                 assertThat(run.errorCode()).isEqualTo("timeout");
-                assertThat(run.errorMessage()).contains("projectTimeout");
+                assertThat(runLog(run.runId())).anyMatch(line -> line.contains("projectTimeout"));
             });
             assertThat(data.topics(timedOut)).isEqualTo(topics);
-            assertThat(data.state(timedOut).rebuilds()).isEqualTo(1);
+            assertThat(data.topicProject(timedOut).savedRuns()).isEqualTo(1);
             assertThat(labels(workspaceId, timedOut, nightlyRun(timedOut).runId())).isEmpty();
         });
     }
@@ -783,9 +725,9 @@ class TopicsNightlyJobTest {
             assertThat(response.readEntity(JsonNode.class).path("night").asText())
                     .isEqualTo(secondNight().toString());
         }
-        // The night runs in the background: its run row may not exist yet at the first poll.
-        Awaitility.await().atMost(Duration.ofSeconds(60)).ignoreExceptions()
-                .untilAsserted(() -> assertThat(nightlyRun(projectId).status()).isEqualTo(TopicRun.Status.SAVED));
+        // The night runs in the background: its attempt may not have started yet at the first poll.
+        Awaitility.await().atMost(Duration.ofSeconds(60)).ignoreExceptions().untilAsserted(
+                () -> assertThat(nightlyRun(projectId).status()).isEqualTo(TopicProject.RunStatus.SAVED));
         assertThat(lockService.lockUsingToken(TopicsNightlyService.runLock(secondNight()), Duration.ofMinutes(1))
                 .block()).isFalse();
         // Released when the night ended: a second night can start.
@@ -809,35 +751,34 @@ class TopicsNightlyJobTest {
 
         runNight(secondStart());
 
-        assertThat(data.runs(projectId)).noneMatch(run -> run.mode() == TopicRun.Mode.NIGHTLY_UPDATE);
-        assertThat(nightRows(secondNight(), workspaceId)).isEmpty();
+        assertThat(data.topicProject(projectId)).satisfies(project -> {
+            assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.FIRST_BUILD);
+            assertThat(project.lastNight()).isNull();
+        });
     }
 
     @Test
-    @DisplayName("a project whose last 3 runs failed is skipped as paused; one with 2 failed runs is updated")
+    @DisplayName("a project whose last 3 attempts failed is skipped as paused, and the night still marks it; one with 2 "
+            + "failed attempts is updated")
     void pauseAfterThreeFailures() {
         var workspaceId = enabledWorkspace();
         var paused = firstBuilt(workspaceId);
         var twoFailures = firstBuilt(workspaceId);
-        var now = Instant.now();
-        for (int i = 1; i <= 3; i++) {
-            insertFailedRun(workspaceId, paused, now.plusSeconds(i));
-        }
-        for (int i = 1; i <= 2; i++) {
-            insertFailedRun(workspaceId, twoFailures, now.plusSeconds(i));
-        }
+        var pausedRun = failedAttempts(paused, 3);
+        failedAttempts(twoFailures, 2);
         stubAnswer(emptyNaming(), null, 0);
 
         var result = runNight(secondStart());
 
         assertThat(result.saved()).isEqualTo(1);
-        assertThat(nightRows(secondNight(), workspaceId))
-                .extracting(TopicNightProject::projectId, TopicNightProject::decision, TopicNightProject::reason)
-                .containsExactlyInAnyOrder(
-                        tuple(paused, "skip", "paused"),
-                        tuple(twoFailures, "nightly_update", null));
-        assertThat(data.runs(paused)).hasSize(4);
-        assertThat(nightlyRun(twoFailures).status()).isEqualTo(TopicRun.Status.SAVED);
+        assertThat(data.topicProject(paused)).satisfies(project -> {
+            assertThat(project.runId()).isEqualTo(pausedRun);
+            assertThat(project.failedRuns()).isEqualTo(3);
+            assertThat(project.lastNight()).isEqualTo(secondNight());
+        });
+        assertThat(nightLog()).anyMatch(line -> line.contains(paused.toString()) && line.contains("reason 'paused'"));
+        assertThat(nightlyRun(twoFailures).status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(data.topicProject(twoFailures).failedRuns()).isZero();
     }
 
     /**
@@ -849,7 +790,7 @@ class TopicsNightlyJobTest {
         data.seed(workspaceId, projectId, 0, BUILT);
         stubAnswer(FIXTURE.answer, null, 0);
         buildByHand(workspaceId, projectId, night());
-        assertThat(data.state(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
         wireMock.resetAll();
         return projectId;
     }
@@ -863,8 +804,10 @@ class TopicsNightlyJobTest {
         Awaitility.await().atMost(Duration.ofSeconds(60)).ignoreExceptions()
                 .untilAsserted(() -> runId.set(firstBuildService.runNow(workspaceId, projectId, night, false)));
         Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
-            assertThat(data.runs(projectId)).filteredOn(run -> run.runId().equals(runId.get())).singleElement()
-                    .satisfies(run -> assertThat(run.status()).isEqualTo(TopicRun.Status.SAVED));
+            assertThat(data.topicProject(projectId)).satisfies(project -> {
+                assertThat(project.runId()).isEqualTo(runId.get());
+                assertThat(project.runStatus()).isEqualTo(TopicProject.RunStatus.SAVED);
+            });
             assertThat(runner.lockProject(projectId)).isTrue();
         });
         runner.unlockProject(projectId);
@@ -873,28 +816,32 @@ class TopicsNightlyJobTest {
 
     /**
      * Runs the night until no project of it is skipped as locked: a run by hand of this or an earlier test may still
-     * hold a project's lock for a moment. A rerun of the same night replaces its record.
+     * hold a project's lock for a moment.
      */
     private TopicsNightlyService.NightResult runNight(Instant start) {
         var result = new AtomicReference<TopicsNightlyService.NightResult>();
-        var night = LocalDate.ofInstant(start, ZoneOffset.UTC);
         Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            int from = logEvents().size();
             result.set(nightlyService.runNight(start));
-            assertThat(nightRows(night, null)).noneMatch(row -> TopicNightProject.REASON_LOCKED.equals(row.reason()));
+            assertThat(logEvents().subList(from, logEvents().size())).extracting(ILoggingEvent::getFormattedMessage)
+                    .noneMatch(line -> line.startsWith("Topics night") && line.contains("reason 'locked'"));
         });
         return result.get();
     }
 
-    /** The night's project rows, of one workspace or all when {@code workspaceId} is null. */
-    private List<TopicNightProject> nightRows(LocalDate night, String workspaceId) {
-        return template.inTransaction(READ_ONLY, handle -> handle.attach(TopicNightDAO.class).findProjects(night))
-                .stream().filter(row -> workspaceId == null || workspaceId.equals(row.workspaceId())).toList();
+    /** The project has no nightly attempt and no night marked it. */
+    private void assertNotTheNights(UUID projectId) {
+        var project = data.topicProject(projectId);
+        if (project != null) {
+            assertThat(project.runMode()).isNotEqualTo(TopicProject.RunMode.NIGHTLY_UPDATE);
+            assertThat(project.lastNight()).isNull();
+        }
     }
 
     /** The trace_topics rows the run wrote. */
     private List<TraceTopic> labels(String workspaceId, UUID projectId, UUID runId) {
         return data.traceTopics(workspaceId, projectId).stream()
-                .filter(row -> row.runId().equals(runId.toString())).toList();
+                .filter(row -> runId.equals(row.runId())).toList();
     }
 
     /** The {@value #PLANTED} traces of the nightly fixture's theme, created the day before the second night. */
@@ -908,18 +855,15 @@ class TopicsNightlyJobTest {
         var day = secondNight().minusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         var rows = new ArrayList<TopicVector>(count);
         for (int i = from; i < from + count; i++) {
-            var vector = new ArrayList<Float>(d);
-            for (int t = 0; t < d; t++) {
-                vector.add(NIGHTLY.vectors[i * d + t]);
-            }
+            var vector = Arrays.copyOfRange(NIGHTLY.vectors, i * d, (i + 1) * d);
             rows.add(TopicVector.builder()
                     .workspaceId(workspaceId)
                     .projectId(projectId)
                     .traceId(ID_GENERATOR.generateId())
                     .traceCreatedAt(day.plus(Duration.ofMinutes(i)))
                     .taskVersion(1)
-                    .embedModel(TopicsTestData.EMBED_MODEL)
-                    .embedDimensions(TopicAlgorithm.DIMENSIONS)
+                    .embedModel(TopicEmbedding.MODEL)
+                    .embedDimensions(TopicEmbedding.DIMENSIONS)
                     .text(NIGHTLY.intents[i])
                     .vector(vector)
                     .build());
@@ -931,18 +875,15 @@ class TopicsNightlyJobTest {
     /** The vector of a trace created an hour after the second night's window ends. */
     private TopicVector vectorAfterTheWindow(String workspaceId, UUID projectId) {
         int d = TopicsNightlyFixture.DIMENSIONS;
-        var vector = new ArrayList<Float>(d);
-        for (int t = 0; t < d; t++) {
-            vector.add(NIGHTLY.vectors[t]);
-        }
+        var vector = Arrays.copyOf(NIGHTLY.vectors, d);
         var row = TopicVector.builder()
                 .workspaceId(workspaceId)
                 .projectId(projectId)
                 .traceId(ID_GENERATOR.generateId())
                 .traceCreatedAt(secondNight().atStartOfDay(ZoneOffset.UTC).toInstant().plus(Duration.ofHours(1)))
                 .taskVersion(1)
-                .embedModel(TopicsTestData.EMBED_MODEL)
-                .embedDimensions(TopicAlgorithm.DIMENSIONS)
+                .embedModel(TopicEmbedding.MODEL)
+                .embedDimensions(TopicEmbedding.DIMENSIONS)
                 .text(NIGHTLY.intents[0])
                 .vector(vector)
                 .build();
@@ -1028,26 +969,100 @@ class TopicsNightlyJobTest {
         return answer;
     }
 
-    private TopicRun nightlyRun(UUID projectId) {
-        return data.runs(projectId).stream().filter(run -> run.mode() == TopicRun.Mode.NIGHTLY_UPDATE).findFirst()
-                .orElseThrow();
+    /** A project's nightly attempt, read from {@code topic_projects}, with the stats its log line holds. */
+    private record NightlyRun(UUID runId, TopicProject.RunStatus status, String errorCode, JsonNode stats) {
     }
 
-    private List<Topic> allTopics(UUID projectId) {
-        return template.inTransaction(READ_ONLY, handle -> handle.createQuery(
-                "SELECT * FROM topics WHERE project_id = :projectId").bind("projectId", projectId.toString())
-                .map(ConstructorMapper.of(Topic.class)).list());
+    private NightlyRun nightlyRun(UUID projectId) {
+        var project = data.topicProject(projectId);
+        assertThat(project.runMode()).isEqualTo(TopicProject.RunMode.NIGHTLY_UPDATE);
+        return new NightlyRun(project.runId(), project.runStatus(),
+                project.runErrorCode() == null ? null : project.runErrorCode().getValue(), stats(project.runId()));
     }
 
-    /** A failed nightly update of the project, started at {@code startedAt}. */
-    private void insertFailedRun(String workspaceId, UUID projectId, Instant startedAt) {
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(TopicRunDAO.class).insert(TopicRun.builder().runId(UUID.randomUUID())
-                    .workspaceId(workspaceId).projectId(projectId).mode(TopicRun.Mode.NIGHTLY_UPDATE)
-                    .status(TopicRun.Status.FAILED).errorCode("timeout").startedAt(startedAt)
-                    .finishedAt(startedAt.plusSeconds(1)).build());
-            return null;
+    /** The test's captured log lines, copied under the appender's lock: runs log from their own threads. */
+    private List<ILoggingEvent> logEvents() {
+        synchronized (appender) {
+            return List.copyOf(appender.list);
+        }
+    }
+
+    /** The stats of the run's {@code saved} or {@code failed} line; null when it logged none. */
+    private JsonNode stats(UUID runId) {
+        return logEvents().stream().filter(event -> isRun(event, runId))
+                .flatMap(event -> Arrays.stream(event.getArgumentArray()))
+                .filter(JsonNode.class::isInstance).map(JsonNode.class::cast)
+                .reduce((first, second) -> second).orElse(null);
+    }
+
+    /** The run's retired topics, by id, with their reason, from its retire lines. */
+    private Map<UUID, String> retired(UUID runId) {
+        return logEvents().stream()
+                .filter(event -> isRun(event, runId) && event.getMessage().contains("retired topic"))
+                .collect(Collectors.toMap(event -> (UUID) event.getArgumentArray()[1],
+                        event -> (String) event.getArgumentArray()[5]));
+    }
+
+    /** The run's traces per topic, from its labelling pass's {@code topic_counts} line. */
+    private Map<UUID, Long> counts(UUID runId) {
+        var line = logEvents().stream()
+                .filter(event -> isRun(event, runId) && event.getMessage().contains("topic_counts"))
+                .reduce((first, second) -> second).orElseThrow();
+        var counts = new HashMap<UUID, Long>();
+        var node = (JsonNode) line.getArgumentArray()[2];
+        for (Iterator<Map.Entry<String, JsonNode>> fields = node.fields(); fields.hasNext();) {
+            var field = fields.next();
+            counts.put(UUID.fromString(field.getKey()), field.getValue().asLong());
+        }
+        return counts;
+    }
+
+    /** The run's log lines, with the messages of their exceptions and causes. */
+    private List<String> runLog(UUID runId) {
+        var lines = new ArrayList<String>();
+        logEvents().stream().filter(event -> isRun(event, runId)).forEach(event -> {
+            lines.add(event.getFormattedMessage());
+            for (var cause = event.getThrowableProxy(); cause != null; cause = cause.getCause()) {
+                lines.add(String.valueOf(cause.getMessage()));
+            }
         });
+        return lines;
+    }
+
+    private List<String> nightLog() {
+        return logEvents().stream().map(ILoggingEvent::getFormattedMessage)
+                .filter(line -> line.startsWith("Topics night")).toList();
+    }
+
+    private static boolean isRun(ILoggingEvent event, UUID runId) {
+        return event.getMessage().startsWith("Topics run '{}'") && event.getArgumentArray() != null
+                && runId.equals(event.getArgumentArray()[0]);
+    }
+
+    /** Points the topics' prototypes along an axis no trace is near, so they hold no trace on the next night. */
+    private void moveAway(List<Topic> topics) {
+        template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class).updateTopics(topics.stream()
+                .map(topic -> topic.toBuilder()
+                        .vectors(new PrototypeVectors(List.of(TopicsTestData.unit(TopicEmbedding.DIMENSIONS - 1))))
+                        .build())
+                .toList()));
+    }
+
+    /**
+     * Records {@code failures} failed nightly attempts in a row on the project, the last one started now, and returns
+     * its run id.
+     */
+    private UUID failedAttempts(UUID projectId, int failures) {
+        var runId = UUID.randomUUID();
+        var now = Instant.now();
+        template.inTransaction(WRITE, handle -> handle.execute("""
+                UPDATE topic_projects SET run_id = ?, run_mode = 'nightly_update', run_status = 'failed',
+                    run_error_code = 'timeout', run_started_at = ?, run_finished_at = ?, failed_runs = ?,
+                    first_failed_at = ?
+                WHERE project_id = ?
+                """, runId.toString(), now, now.plusSeconds(1), failures, now.minusSeconds(failures),
+                projectId.toString()));
+        return runId;
     }
 
     /** The fixture's night: its window holds all of the fixture's traces. */
@@ -1077,9 +1092,10 @@ class TopicsNightlyJobTest {
         var other = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(TopicVectorBackfillDAO.class);
-            dao.start(List.of(TopicVectorBackfill.builder().workspaceId(workspaceId).projectId(other)
-                    .startedAt(now).checkedAt(now).lastDoneAt(now).build()));
-            dao.record(List.of(TopicVectorBackfill.Progress.builder().workspaceId(workspaceId).projectId(other)
+            dao.checked(workspaceId, now);
+            dao.start(List.of(TopicVectorBackfillDAO.Backfill.builder().workspaceId(workspaceId).projectId(other)
+                    .backfillStartedAt(now).backfillLastDoneAt(now).build()));
+            dao.record(List.of(TopicVectorBackfillDAO.Progress.builder().workspaceId(workspaceId).projectId(other)
                     .drainedAt(now).build()));
             return null;
         });
