@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.TopicsConfig;
 import com.comet.opik.infrastructure.inference.InferenceJson;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -9,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,7 +32,8 @@ class TopicsAlgorithmFixtureTest {
 
     private static final int D = TopicsFixture.DIMENSIONS;
     private static final TopicsConfig.AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
-    private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final String WORKSPACE_ID = RandomStringUtils.secure().nextAlphanumeric(10);
+    private static final UUID PROJECT_ID = TopicsTestAlgorithm.ID_GENERATOR.generateId();
     /** The first build at the fixture's 15 groups: config.yml's bounds would make 30 of its 257 texts. */
     private static final KMeansTopicAlgorithm FIRST_BUILD = TopicsTestAlgorithm
             .algorithm(TopicsTestAlgorithm.fixedGroups(15));
@@ -224,13 +225,9 @@ class TopicsAlgorithmFixtureTest {
     void labellerMatchesFirstBuild() {
         var build = FIRST_BUILD.cluster(window(), 10).finish(AuthorAnswer.parse(fixture.firstBuildAnswer));
         var topics = IntStream.range(0, build.topics().size())
-                .mapToObj(t -> Topic.builder()
-                        .id(UUID.randomUUID())
-                        .workspaceId("ws-1")
-                        .projectId(PROJECT_ID)
+                .mapToObj(t -> TopicsTestAlgorithm.topic(WORKSPACE_ID, PROJECT_ID)
                         .name(build.topics().get(t).name())
                         .definition(build.topics().get(t).definition())
-                        .born(LocalDate.of(2026, 11, 19))
                         .vectors(new PrototypeVectors(build.topics().get(t).prototypes()))
                         .build())
                 .toList();

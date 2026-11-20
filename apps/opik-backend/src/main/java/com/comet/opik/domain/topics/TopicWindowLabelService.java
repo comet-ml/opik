@@ -336,7 +336,7 @@ public class TopicWindowLabelService {
      */
     private Mono<Void> markComplete(String workspaceId, UUID projectId, UUID runId) {
         return jdbi(() -> template.inTransaction(WRITE,
-                handle -> handle.attach(TopicDAO.class).markLabelsComplete(workspaceId, projectId, runId)))
+                handle -> handle.attach(TopicProjectDAO.class).markLabelsComplete(workspaceId, projectId, runId)))
                 .doOnNext(updated -> {
                     if (updated == 0) {
                         log.info("Topics labelling pass complete, but run '{}' is no longer the saved run of project "
@@ -359,7 +359,8 @@ public class TopicWindowLabelService {
     private Optional<Saved> readSaved(String workspaceId, UUID projectId) {
         var rows = template.inTransaction(READ_ONLY, handle -> {
             var topicDAO = handle.attach(TopicDAO.class);
-            var project = topicDAO.findProjects(workspaceId, List.of(projectId)).stream().findFirst();
+            var project = handle.attach(TopicProjectDAO.class).findProjects(workspaceId, List.of(projectId)).stream()
+                    .findFirst();
             if (project.isEmpty() || project.get().listRunId() == null || project.get().windowUntil() == null) {
                 return Optional.<SavedRows>empty();
             }

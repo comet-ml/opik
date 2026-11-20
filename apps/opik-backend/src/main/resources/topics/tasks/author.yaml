@@ -1,12 +1,11 @@
 # The author call of a first build: names topics over the k-means groups and assigns every group to one of them or to
 # Other. TopicPrompts fills {{max_topics}} and {{clusters}}; KMeansTopicAlgorithm reads the answer with AuthorAnswer.
-# Bump version when the prompt or the schema changes: the run's stats record it.
+# Bump version when the prompt or the schema changes: the run's stats record it. Topics ignores applies_from: the
+# ai-labels task format requires it, so leave it as it is.
 name: author
 endpoint: generate
-cache: false
 version: 2
 applies_from: 2026-11-19T00:00:00Z
-history: []
 prompt:
   user: |
     You organise the traffic of one AI application into topics for its product owner. The owner will see each topic's name, definition and how many requests fall into it, so topics must be real, distinct kinds of requests.

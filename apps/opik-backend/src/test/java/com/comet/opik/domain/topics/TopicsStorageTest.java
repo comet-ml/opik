@@ -199,7 +199,7 @@ class TopicsStorageTest {
 
         assertThat(again).isEqualTo(TopicWindowLabelService.PassOutcome.COMPLETE);
         assertThat(data.traceTopics(workspaceId, projectId)).hasSize(rowsBefore);
-        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getVectors().getFind().getMaxRowsToRead());
+        var maxRowsToRead = String.valueOf(opikConfig.getTopics().getBuild().getRead().getMaxRowsToRead());
         assertThat(data.queryGuards("topics:read_unlabelled", workspaceId))
                 .containsExactly(List.of("2", maxRowsToRead, "100", "120"));
     }
@@ -376,11 +376,11 @@ class TopicsStorageTest {
         }
         var savedAt = NIGHT.plus(Duration.ofHours(2));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
+            var runDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
+            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, NIGHT,
                     new PrototypeVectors(List.of(vectors.get(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(topicId)

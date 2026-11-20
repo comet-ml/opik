@@ -4,7 +4,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -32,7 +32,12 @@ import static com.comet.opik.domain.evaluators.UserDefinedMetricPythonAutomation
  */
 public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    /**
+     * Unknown fields in the stored code are ignored, so a rule always reads as its stored type: rows written by a
+     * newer release, or holding code of another evaluator type, still load instead of failing the whole list.
+     */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     @Override
     public AutomationRuleEvaluatorModel<?> map(ResultSet rs, StatementContext ctx) throws SQLException {
@@ -72,8 +77,6 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         String codeJson = rs.getString("code");
 
         try {
-            JsonNode codeNode = OBJECT_MAPPER.readTree(codeJson);
-
             // Build the appropriate model type based on evaluator type
             return switch (type) {
                 case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.builder()
@@ -87,7 +90,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .enabled(enabled)
                         .triggerScope(triggerScope)
                         .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode, LlmAsJudgeCode.class))
+                        .code(OBJECT_MAPPER.readValue(codeJson, LlmAsJudgeCode.class))
                         .createdAt(createdAt)
                         .createdBy(createdBy)
                         .lastUpdatedAt(lastUpdatedAt)
@@ -105,7 +108,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .enabled(enabled)
                         .triggerScope(triggerScope)
                         .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode, UserDefinedMetricPythonCode.class))
+                        .code(OBJECT_MAPPER.readValue(codeJson, UserDefinedMetricPythonCode.class))
                         .createdAt(createdAt)
                         .createdBy(createdBy)
                         .lastUpdatedAt(lastUpdatedAt)
@@ -123,7 +126,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .enabled(enabled)
                         .triggerScope(triggerScope)
                         .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode, TraceThreadLlmAsJudgeCode.class))
+                        .code(OBJECT_MAPPER.readValue(codeJson, TraceThreadLlmAsJudgeCode.class))
                         .createdAt(createdAt)
                         .createdBy(createdBy)
                         .lastUpdatedAt(lastUpdatedAt)
@@ -142,7 +145,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                             .enabled(enabled)
                             .triggerScope(triggerScope)
                             .filters(filters)
-                            .code(OBJECT_MAPPER.treeToValue(codeNode, TraceThreadUserDefinedMetricPythonCode.class))
+                            .code(OBJECT_MAPPER.readValue(codeJson, TraceThreadUserDefinedMetricPythonCode.class))
                             .createdAt(createdAt)
                             .createdBy(createdBy)
                             .lastUpdatedAt(lastUpdatedAt)
@@ -160,7 +163,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                         .enabled(enabled)
                         .triggerScope(triggerScope)
                         .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode, SpanLlmAsJudgeCode.class))
+                        .code(OBJECT_MAPPER.readValue(codeJson, SpanLlmAsJudgeCode.class))
                         .createdAt(createdAt)
                         .createdBy(createdBy)
                         .lastUpdatedAt(lastUpdatedAt)
@@ -179,7 +182,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
                             .enabled(enabled)
                             .triggerScope(triggerScope)
                             .filters(filters)
-                            .code(OBJECT_MAPPER.treeToValue(codeNode, SpanUserDefinedMetricPythonCode.class))
+                            .code(OBJECT_MAPPER.readValue(codeJson, SpanUserDefinedMetricPythonCode.class))
                             .createdAt(createdAt)
                             .createdBy(createdBy)
                             .lastUpdatedAt(lastUpdatedAt)
