@@ -151,7 +151,7 @@ final class TopicsTestData {
      * {@code night}, and a topic of {@code size} traces. The labels are not complete yet.
      */
     void savedList(String workspaceId, UUID projectId, Instant night, int size) {
-        var runId = UUID.randomUUID();
+        var runId = newId();
         var savedAt = night.plus(Duration.ofHours(2));
         var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
@@ -162,7 +162,7 @@ final class TopicsTestData {
             runDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
-                    .id(UUID.randomUUID())
+                    .id(newId())
                     .workspaceId(workspaceId)
                     .projectId(projectId)
                     .name("Billing")
@@ -175,6 +175,14 @@ final class TopicsTestData {
             return null;
         });
     }
+
+    /** An Opik id: UUID v7. */
+    static UUID newId() {
+        return Generators.timeBasedEpochGenerator().generate();
+    }
+
+    /** The run id of the run rows {@link #insertTraceTopic} writes, so a test can build the rows it expects. */
+    static final UUID RUN_ID = newId();
 
     /** A unit vector along {@code axis}. */
     static float[] unit(int axis) {
@@ -268,7 +276,7 @@ final class TopicsTestData {
                 .bind("trace_created_at", traceCreatedAt.toString())
                 .bind("topic_id", topicId.toString())
                 .bind("source", source.getValue())
-                .bind("run_id", source == TraceTopic.Source.RUN ? UUID.randomUUID().toString() : "")
+                .bind("run_id", source == TraceTopic.Source.RUN ? RUN_ID.toString() : "")
                 .bind("last_updated_at", lastUpdatedAt.toString())
                 .bind("is_deleted", isDeleted)
                 .execute())
