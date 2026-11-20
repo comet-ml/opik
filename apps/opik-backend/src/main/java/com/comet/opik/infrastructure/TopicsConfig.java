@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
@@ -12,11 +13,14 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
+import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +52,9 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private FirstBuildConfig firstBuild;
+
+    @Valid @NotNull @JsonProperty
+    private RunsConfig runs;
 
     @Valid @NotNull @JsonProperty
     private AlgorithmConfig algorithm;
@@ -103,7 +110,7 @@ public class TopicsConfig {
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
         private Duration readTimeout;
 
-        /** The labelling pass's count of its window, which also takes the slice bounds. */
+        /** A ClickHouse count of a window: the labelling pass's, which also takes the slice bounds, and the planner's. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
@@ -132,38 +139,116 @@ public class TopicsConfig {
         }
     }
 
-    /** The first-build job: builds the list of a project that has none yet. */
+    /** Which projects without a list the planner queues a first build for. */
     @Data
     public static class FirstBuildConfig {
 
-        /** Runs only when {@code topics.enabled} is on too. */
-        @JsonProperty
-        private boolean enabled;
-
-        /** How often every pod fires the job; one run per interval across the cluster. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
-        private Duration interval;
-
-        /** No project starts after this much of a run has passed; the rest wait for the next run. */
-        @NotNull @JsonProperty
-        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        @MaxDuration(value = 1, unit = TimeUnit.DAYS)
-        private Duration budget;
-
         /**
          * A project's first build waits for its vectors backfill to drain. Past this long since the backfill started,
-         * it is built anyway once at least 99% of the backfill's traces have a vector; with fewer it keeps waiting.
+         * it is built anyway once {@code timedOutShare} of the backfill's traces have a vector; with fewer it keeps
+         * waiting.
          */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration backfillMaxWait;
 
+        @JsonProperty
+        @DecimalMin("0.5") @DecimalMax("1.0") private double timedOutShare;
+
+        /** The wait after a project's first, second, ... failed first build; the last applies to every later one. */
+        @NotNull @JsonProperty
+        @Size(min = 1, max = 10) private List<@NotNull Duration> retryDelays;
+    }
+
+    /**
+     * Topics runs across pods. The leader's planner queues runs on {@code topic_projects}, capped at
+     * {@code maxInFlight} across the cluster, and publishes each on this stream; any pod claims one with a
+     * compare-and-set on the row and runs it, {@code consumerBatchSize} at a time.
+     */
+    @Data
+    public static class RunsConfig implements StreamConfiguration {
+
+        public static final String PAYLOAD_FIELD = "message";
+
+        @NotNull @JsonProperty
+        private String streamName;
+
+        @NotNull @JsonProperty
+        private String consumerGroupName;
+
+        /** Runs one pod runs at a time: each holds a window in memory. */
+        @JsonProperty
+        @Min(1) @Max(8) private int consumerBatchSize;
+
+        @NotNull @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        private Duration poolingInterval;
+
+        @NotNull @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+        private Duration longPollingDuration;
+
+        @JsonProperty
+        @Min(2) private int claimIntervalRatio;
+
+        /**
+         * A delivered message no pod acked for this long goes to another pod: a stopped pod's runs, put back to
+         * {@code queued}, run there. A run still going keeps its row {@code running}, so that pod's claim fails and
+         * it only acks the message.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration pendingMessageDuration;
+
+        @JsonProperty
+        @Min(1) @Max(10) private int maxRetries;
+
+        @JsonProperty
+        @Min(1000) @Max(10_000_000) private int streamMaxLen;
+
+        @JsonProperty
+        @Min(0) @Max(10_000) private int streamTrimLimit;
+
+        /** Runs queued, running or cancelling across the cluster: each reads a window from ClickHouse and calls the LLM. */
+        @JsonProperty
+        @Min(1) @Max(100) private int maxInFlight;
+
+        /** How often a running run writes its heartbeat; a write that updates no row stops it. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
+        private Duration heartbeatInterval;
+
+        /** A run whose heartbeat is older than this lost its pod, and is recorded {@code abandoned}. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration abandonGrace;
+
+        /** A run queued this long ago and not claimed is published again: its message was lost. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration republishAfter;
+
+        /** The planner stops counting candidates after this, and queues what it found. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 30, unit = TimeUnit.MINUTES)
+        private Duration planBudget;
+
+        @Override
         @JsonIgnore
-        @AssertTrue(message = "topics.firstBuild.budget must be shorter than topics.firstBuild.interval") public boolean isBudgetValid() {
-            return budget == null || interval == null || budget.toMilliseconds() < interval.toMilliseconds();
+        public Codec getCodec() {
+            return RedisStreamCodec.JAVA.getCodec();
+        }
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.runs.abandonGrace must be above topics.runs.heartbeatInterval") public boolean isAbandonGraceValid() {
+            return abandonGrace == null || heartbeatInterval == null
+                    || abandonGrace.toMilliseconds() > heartbeatInterval.toMilliseconds();
         }
     }
 

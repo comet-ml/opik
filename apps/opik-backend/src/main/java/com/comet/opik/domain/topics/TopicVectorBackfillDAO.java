@@ -27,19 +27,7 @@ import java.util.UUID;
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(TopicVectorBackfillDAO.Backfill.class)
-@RegisterConstructorMapper(TopicVectorBackfillDAO.Workspace.class)
 public interface TopicVectorBackfillDAO {
-
-    /**
-     * A workspace's {@code topic_workspaces} row.
-     *
-     * @param vectorsCheckedAt the last time the topic vectors tick discovered the workspace's projects, about once per
-     *        {@code topics.vectors.longWindowInterval}. Older than twice that: the tick has stopped for the workspace,
-     *        and the projects' {@code backfillDrainedAt} says nothing about the traces since
-     */
-    @Builder(toBuilder = true)
-    record Workspace(@NonNull String workspaceId, @NonNull Instant vectorsCheckedAt) {
-    }
 
     /**
      * A project's backfill columns.
@@ -95,17 +83,6 @@ public interface TopicVectorBackfillDAO {
             WHERE workspace_id IN (<workspaceIds>) AND backfill_drained_at IS NULL AND backfill_started_at IS NOT NULL
             """)
     List<Backfill> findUndrained(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    @SqlQuery("""
-            SELECT workspace_id, project_id, backfill_started_at, backfill_drained_at, backfill_last_done_at,
-                backfill_traces_total, backfill_traces_done
-            FROM topic_projects
-            WHERE workspace_id IN (<workspaceIds>) AND backfill_started_at IS NOT NULL
-            """)
-    List<Backfill> findByWorkspaceIds(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    @SqlQuery("SELECT workspace_id, vectors_checked_at FROM topic_workspaces WHERE workspace_id IN (<workspaceIds>)")
-    List<Workspace> findWorkspaces(@BindList("workspaceIds") Collection<String> workspaceIds);
 
     /**
      * Starts a backfill for each project that has none; a started one is left as it is. MySQL applies the assignments

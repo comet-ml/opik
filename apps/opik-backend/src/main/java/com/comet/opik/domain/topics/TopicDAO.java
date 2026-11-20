@@ -31,6 +31,7 @@ import java.util.UUID;
 @RegisterColumnMapper(TopicRunDAO.RunModeMapper.class)
 @RegisterColumnMapper(TopicRunDAO.RunStatusMapper.class)
 @RegisterColumnMapper(TopicRunDAO.RunErrorMapper.class)
+@RegisterColumnMapper(TopicRunDAO.CancelReasonMapper.class)
 @RegisterConstructorMapper(Topic.class)
 @RegisterConstructorMapper(TopicProject.class)
 @RegisterConstructorMapper(TopicDAO.ProjectKey.class)
@@ -78,14 +79,6 @@ public interface TopicDAO {
     int markLabelsComplete(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("runId") UUID runId);
 
-    /** The projects with a saved list whose labels are not complete, the oldest save first. */
-    @SqlQuery("""
-            SELECT workspace_id, project_id FROM topic_projects
-            WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL AND labels_complete = FALSE
-            ORDER BY last_success_at, project_id
-            """)
-    List<ProjectKey> findLabelsIncomplete(@BindList("workspaceIds") Collection<String> workspaceIds);
-
     @SqlQuery("SELECT * FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     List<TopicProject> findProjects(@Bind("workspaceId") String workspaceId,
             @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
@@ -105,21 +98,6 @@ public interface TopicDAO {
     /** Holds a shared lock on the project's row until the transaction ends, so a project delete waits for it. */
     @SqlQuery("SELECT COUNT(*) FROM projects WHERE workspace_id = :workspaceId AND id = :projectId FOR SHARE")
     int lockProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
-
-    /**
-     * Of the projects of {@code workspaceIds}, those with no saved list and a trace written at or after {@code since}:
-     * the ones a first build may be due for.
-     */
-    @SqlQuery("""
-            SELECT p.workspace_id, p.id AS project_id FROM projects p
-            WHERE p.workspace_id IN (<workspaceIds>) AND p.last_updated_trace_at >= :since
-            AND NOT EXISTS (
-                SELECT 1 FROM topic_projects s
-                WHERE s.workspace_id = p.workspace_id AND s.project_id = p.id AND s.list_run_id IS NOT NULL
-            )
-            """)
-    List<ProjectKey> findListlessProjects(@BindList("workspaceIds") Collection<String> workspaceIds,
-            @Bind("since") Instant since);
 
     record ProjectKey(@NonNull String workspaceId, @NonNull UUID projectId) {
     }

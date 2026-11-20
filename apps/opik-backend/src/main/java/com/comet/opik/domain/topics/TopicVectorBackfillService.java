@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Backfill;
 import com.comet.opik.domain.topics.TopicVectorBackfillDAO.Progress;
+import com.comet.opik.infrastructure.TopicsConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -9,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -23,6 +25,14 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 /** The topic vectors tick's reads and writes of its backfill state ({@link TopicVectorBackfillDAO}). */
 @ImplementedBy(TopicVectorBackfillServiceImpl.class)
 public interface TopicVectorBackfillService {
+
+    /**
+     * A workspace the tick has not discovered for this long is stale: the tick stopped for it, so its backfills restart
+     * and its drained marks say nothing about the traces since. Twice {@code topics.vectors.longWindowInterval}.
+     */
+    static Duration staleAfter(@NonNull TopicsConfig.VectorsConfig vectors) {
+        return vectors.getLongWindowInterval().toJavaDuration().multipliedBy(2);
+    }
 
     /** The started backfills not drained yet, by workspace. */
     Map<String, List<Backfill>> findUndrained(Collection<String> workspaceIds);
