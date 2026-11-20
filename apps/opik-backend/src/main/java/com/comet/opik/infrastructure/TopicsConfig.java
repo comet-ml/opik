@@ -241,9 +241,25 @@ public class TopicsConfig {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    /** Which projects without a list the planner queues a first build for. */
+    /** The first-build job, and which projects without a list the planner queues a first build for. */
     @Data
     public static class FirstBuildConfig {
+
+        /** Schedules the first-build job: the leader plans the Topics runs and sweeps topics of deleted projects. */
+        @JsonProperty
+        private boolean enabled;
+
+        /** How often the leader plans the Topics runs. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 10, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration planInterval;
+
+        /** How often the leader deletes the topics of deleted projects that the delete listener missed. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.HOURS)
+        @MaxDuration(value = 7, unit = TimeUnit.DAYS)
+        private Duration sweepInterval;
 
         /**
          * A project's first build waits for its vectors backfill to drain. Past this long since the backfill started,

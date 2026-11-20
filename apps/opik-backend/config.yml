@@ -2814,6 +2814,17 @@ topics:
       #  a query's memory follows the slice and not the window. From 1h to 7d
       countSlice: ${TOPICS_BUILD_READ_COUNT_SLICE:-1d}
   firstBuild:
+    #  Default: false
+    #  Description: Schedules the first-build job. The leader plans the Topics runs every planInterval and deletes
+    #  the topics of deleted projects every sweepInterval
+    enabled: ${TOPICS_FIRST_BUILD_ENABLED:-false}
+    #  Default: 5m
+    #  Description: How often the leader plans the Topics runs. At least 10s, at most 1h
+    planInterval: ${TOPICS_FIRST_BUILD_PLAN_INTERVAL:-5m}
+    #  Default: 24h
+    #  Description: How often the leader deletes the topics of deleted projects that the project delete missed. At
+    #  least 1h, at most 7d
+    sweepInterval: ${TOPICS_FIRST_BUILD_SWEEP_INTERVAL:-24h}
     #  Default: 72h
     #  Description: A project's first build waits for its vectors backfill to drain. Past this long since the backfill
     #  started, it is built anyway once timedOutShare of the backfill's traces have a vector; with fewer it keeps
