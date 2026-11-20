@@ -155,11 +155,11 @@ final class TopicsTestData {
         var savedAt = night.plus(Duration.ofHours(2));
         var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
+            var runDAO = handle.attach(TopicProjectDAO.class);
             var topicDAO = handle.attach(TopicDAO.class);
-            runDAO.start(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
+            runDAO.startRun(workspaceId, projectId, runId, TopicProject.RunMode.FIRST_BUILD,
                     savedAt.minus(Duration.ofMinutes(1)));
-            topicDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
+            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, night,
                     new PrototypeVectors(List.of(unit(1))), TopicEmbedding.MODEL);
             topicDAO.insertTopics(List.of(Topic.builder()
                     .id(UUID.randomUUID())
@@ -192,7 +192,7 @@ final class TopicsTestData {
     TopicProject topicProject(UUID projectId) {
         var rows = template.inTransaction(READ_ONLY,
                 handle -> workspacesOf(handle, "topic_projects", projectId).stream()
-                        .flatMap(workspaceId -> handle.attach(TopicDAO.class)
+                        .flatMap(workspaceId -> handle.attach(TopicProjectDAO.class)
                                 .findProjects(workspaceId, Set.of(projectId)).stream())
                         .toList());
         return rows.isEmpty() ? null : rows.getFirst();

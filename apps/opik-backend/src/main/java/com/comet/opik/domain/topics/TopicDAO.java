@@ -3,7 +3,6 @@ package com.comet.opik.domain.topics;
 import com.comet.opik.infrastructure.db.PrototypeVectorsArgumentFactory;
 import com.comet.opik.infrastructure.db.PrototypeVectorsColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
-import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
@@ -15,25 +14,19 @@ import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * A project's topic list: its {@code topics} rows and the list fields of its {@code topic_projects} row, which a run's
- * save writes in one transaction. The attempt fields are {@link TopicRunDAO}'s, the backfill fields and the row's
- * delete {@link TopicVectorBackfillDAO}'s. An empty id list matches nothing.
+ * A project's topics, the {@code topics} rows. A run's save writes them in one transaction with the list fields of the
+ * project's {@code topic_projects} row ({@link TopicProjectDAO}).
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(PrototypeVectorsArgumentFactory.class)
 @RegisterColumnMapper(PrototypeVectorsColumnMapper.class)
-@RegisterColumnMapper(TopicRunDAO.RunModeMapper.class)
-@RegisterColumnMapper(TopicRunDAO.RunStatusMapper.class)
-@RegisterColumnMapper(TopicRunDAO.RunErrorMapper.class)
 @RegisterConstructorMapper(Topic.class)
-@RegisterConstructorMapper(TopicProject.class)
 @RegisterConstructorMapper(TopicDAO.ProjectKey.class)
 public interface TopicDAO {
 
@@ -50,46 +43,6 @@ public interface TopicDAO {
             ORDER BY born, id
             """)
     List<Topic> findByProject(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId);
-
-    /**
-     * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
-     * {@code expectedListRunId}, null for a first build. 0 when another run saved the project meanwhile, or the row is
-     * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
-     */
-    @SqlUpdate("""
-            UPDATE topic_projects
-            SET saved_runs = saved_runs + 1, first_built_at = COALESCE(first_built_at, :savedAt),
-                last_success_at = :savedAt, list_run_id = :runId, window_until = :windowUntil,
-                labels_complete = FALSE, other_vectors = :otherVectors, embed_model = :embedModel
-            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
-            """)
-    int saveList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
-            @Nullable @Bind("expectedListRunId") UUID expectedListRunId, @Bind("runId") UUID runId,
-            @Bind("savedAt") Instant savedAt, @Bind("windowUntil") Instant windowUntil,
-            @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
-
-    /**
-     * Marks the labels of the project's saved list complete. Only while the row still names {@code runId}: a pass that
-     * labelled an older run never marks a newer one. 0 when the row names another run or is gone.
-     */
-    @SqlUpdate("""
-            UPDATE topic_projects SET labels_complete = TRUE
-            WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id = :runId
-            """)
-    int markLabelsComplete(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
-            @Bind("runId") UUID runId);
-
-    /** The projects with a saved list whose labels are not complete, the oldest save first. */
-    @SqlQuery("""
-            SELECT workspace_id, project_id FROM topic_projects
-            WHERE workspace_id IN (<workspaceIds>) AND list_run_id IS NOT NULL AND labels_complete = FALSE
-            ORDER BY last_success_at, project_id
-            """)
-    List<ProjectKey> findLabelsIncomplete(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    @SqlQuery("SELECT * FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
-    List<TopicProject> findProjects(@Bind("workspaceId") String workspaceId,
-            @BindList(value = "projectIds", onEmpty = BindList.EmptyHandling.NULL_STRING) Collection<UUID> projectIds);
 
     @SqlUpdate("DELETE FROM topics WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     int deleteTopicsByProjects(@Bind("workspaceId") String workspaceId,
@@ -115,21 +68,6 @@ public interface TopicDAO {
             WHERE t.workspace_id IN (<workspaceIds>) AND p.id IS NULL
             """)
     List<ProjectKey> findTopicProjectsOfMissingProjects(@BindList("workspaceIds") Collection<String> workspaceIds);
-
-    /**
-     * Of the projects of {@code workspaceIds}, those with no saved list and a trace written at or after {@code since}:
-     * the ones a first build may be due for.
-     */
-    @SqlQuery("""
-            SELECT p.workspace_id, p.id AS project_id FROM projects p
-            WHERE p.workspace_id IN (<workspaceIds>) AND p.last_updated_trace_at >= :since
-            AND NOT EXISTS (
-                SELECT 1 FROM topic_projects s
-                WHERE s.workspace_id = p.workspace_id AND s.project_id = p.id AND s.list_run_id IS NOT NULL
-            )
-            """)
-    List<ProjectKey> findListlessProjects(@BindList("workspaceIds") Collection<String> workspaceIds,
-            @Bind("since") Instant since);
 
     record ProjectKey(@NonNull String workspaceId, @NonNull UUID projectId) {
     }

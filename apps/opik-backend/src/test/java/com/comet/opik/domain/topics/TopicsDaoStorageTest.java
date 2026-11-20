@@ -516,13 +516,13 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, projectId, NIGHT, BUILT);
         var lastRunId = data.topicProject(projectId).listRunId();
 
-        int older = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+        int older = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .markLabelsComplete(workspaceId, projectId, UUID.randomUUID()));
 
         assertThat(older).isZero();
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
-        int last = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+        int last = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .markLabelsComplete(workspaceId, projectId, lastRunId));
 
         assertThat(last).isEqualTo(1);
@@ -543,12 +543,12 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, middle, NIGHT.minus(Duration.ofDays(1)), BUILT);
         data.savedList(workspaceId, complete, NIGHT.minus(Duration.ofDays(4)), BUILT);
         var completeRunId = data.topicProject(complete).listRunId();
-        template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+        template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .markLabelsComplete(workspaceId, complete, completeRunId));
         data.savedList(UUID.randomUUID().toString(), UUID.randomUUID(), NIGHT.minus(Duration.ofDays(5)), BUILT);
 
         var unfinished = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(TopicDAO.class).findLabelsIncomplete(List.of(workspaceId)));
+                handle -> handle.attach(TopicProjectDAO.class).findLabelsIncomplete(List.of(workspaceId)));
 
         assertThat(unfinished).extracting(TopicDAO.ProjectKey::projectId).containsExactly(oldest, middle, newest);
     }
@@ -592,7 +592,7 @@ class TopicsDaoStorageTest {
         var savedAt = NIGHT.plus(Duration.ofDays(1));
         var other = new PrototypeVectors(List.of(TopicsTestData.unit(2)));
 
-        int secondFirstBuild = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+        int secondFirstBuild = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .saveList(workspaceId, projectId, null, UUID.randomUUID(), savedAt, savedAt, other,
                         TopicEmbedding.MODEL));
 
@@ -600,7 +600,7 @@ class TopicsDaoStorageTest {
         assertThat(data.topicProject(projectId)).isEqualTo(first);
 
         var nextRunId = UUID.randomUUID();
-        int next = template.inTransaction(WRITE, handle -> handle.attach(TopicDAO.class)
+        int next = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
                 .saveList(workspaceId, projectId, first.listRunId(), nextRunId, savedAt, savedAt, other,
                         TopicEmbedding.MODEL));
 
@@ -624,13 +624,13 @@ class TopicsDaoStorageTest {
         var leftStart = NIGHT.plus(Duration.ofHours(1));
         var savedRun = UUID.randomUUID();
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
-            runDAO.start(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
+            var runDAO = handle.attach(TopicProjectDAO.class);
+            runDAO.startRun(workspaceId, projectId, firstRun, TopicProject.RunMode.FIRST_BUILD, firstStart);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(60),
                     TopicProject.RunError.LLM_TIMEOUT)).isEqualTo(1);
             assertThat(runDAO.markFailed(workspaceId, projectId, firstRun, firstStart.plusSeconds(90),
                     TopicProject.RunError.TIMEOUT)).isZero();
-            runDAO.start(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
+            runDAO.startRun(workspaceId, projectId, leftRun, TopicProject.RunMode.FIRST_BUILD, leftStart);
             assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart, leftStart)).isZero();
             return null;
         });
@@ -641,7 +641,7 @@ class TopicsDaoStorageTest {
 
         var abandonedAt = leftStart.plus(Duration.ofHours(1));
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
+            var runDAO = handle.attach(TopicProjectDAO.class);
             assertThat(runDAO.recordAbandoned(workspaceId, projectId, leftStart.plusSeconds(1), abandonedAt))
                     .isEqualTo(1);
             return null;
@@ -653,8 +653,8 @@ class TopicsDaoStorageTest {
                         firstStart);
 
         template.inTransaction(WRITE, handle -> {
-            var runDAO = handle.attach(TopicRunDAO.class);
-            runDAO.start(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
+            var runDAO = handle.attach(TopicProjectDAO.class);
+            runDAO.startRun(workspaceId, projectId, savedRun, TopicProject.RunMode.FIRST_BUILD, abandonedAt);
             assertThat(runDAO.markSaved(workspaceId, projectId, savedRun, abandonedAt.plusSeconds(60)))
                     .isEqualTo(1);
             return null;
